@@ -1,0 +1,31 @@
+name: Create Upstream Branch
+on: [push]
+
+jobs:  
+  upstream-branch:
+    name: Create / Sync Upstream Branch
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/develop' 
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          
+      - name: Check if we are changing workflow files
+        id: files
+        run: echo ::set-output name=FILES_CHANGED::$(git diff --stat origin/develop...${GITHUB_REF})
+      
+      - name: Rebase upstream branch
+        if: ${{ !contains(steps.files.outputs.FILES_CHANGED, '.github/workflows') }}
+        run: |
+          BRANCH=$(echo $GITHUB_REF | sed 's|refs/heads/||')
+          
+          git fetch origin
+          git checkout ${BRANCH}
+          
+          git config user.name "$(git log -1 --pretty=%aN)"
+          git config user.email "$(git log -1 --pretty=%aE)"
+          
+          git rebase --committer-date-is-author-date --onto origin/upstream-develop origin/develop ${BRANCH}
+          git push --force origin ${BRANCH}:upstream/${BRANCH}
