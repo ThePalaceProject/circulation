@@ -1,0 +1,20 @@
+name: Delete dockerhub tag
+on: [delete]
+
+jobs:
+  delete-tags:
+    name: Delete tags for removed branches
+    runs-on: ubuntu-latest
+    if: github.event.ref != 'develop'
+
+    steps:
+      # This one is a bit ugly. Dockerhub doesn't directly provide a way to delete tags. You have to do it 
+      # by callint out to their API. This docker image does it. Would be nice to replace it with a github
+      # action at some point. Tied it to a particular image hash so no one changes it to upload a malicious one.
+      - name: Delete
+        run: >
+          docker run --rm lumir/remove-dockerhub-tag@sha256:9d5a167f76969cb22059f6accd191329856891cac2dcac5b2bfae84f746f1b4b
+          --user ${{ secrets.DOCKERHUB_USERNAME }}
+          --password ${{ secrets.DOCKERHUB_PASSWORD }}
+          ${{ github.repository_owner }}/circ-webapp:${{ github.event.ref }}
+          ${{ github.repository_owner }}/circ-scripts:${{ github.event.ref }}
