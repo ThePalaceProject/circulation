@@ -1,0 +1,33 @@
+name: Sync With Upstream
+
+on:
+  schedule:
+    - cron:  '*/20 * * * *'
+  workflow_dispatch:
+
+jobs:
+  sync_with_upstream:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout develop
+      uses: actions/checkout@v2
+      with:
+        ref: develop
+        fetch-depth: 0
+
+    - name: Sync with upstream repo
+      run: |
+        git remote add upstream-repo https://github.com/NYPL-Simplified/circulation.git
+        
+        git config user.name "Action - Fork Sync"
+        git config user.email "action@github.com"
+
+        git checkout upstream/develop
+        git pull --ff-only upstream-repo develop
+        git push origin upstream/develop
+
+        git checkout develop
+        git pull --rebase upstream-repo develop
+        git push --force origin develop
+ 
