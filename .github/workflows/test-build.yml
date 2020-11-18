@@ -1,0 +1,134 @@
+name: Test Circulation & Build Docker Images
+on: [push]
+env:
+  APT_PACKAGES: postgresql-client-9.6 libxmlsec1-dev libxml2-dev
+  POSTGRES_USER: simplified_test
+  POSTGRES_PASSWORD: test
+  POSTGRES_DB: simplified_circulation_test
+  SIMPLIFIED_TEST_DATABASE: postgres://simplified_test:test@localhost:5432/simplified_circulation_test
+
+jobs:
+  test-circulation:
+    name: Run Circulation Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:9.6
+        env:
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ env.POSTGRES_DB }} 
+        ports: 
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive 
+      
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 2.7
+        
+      - name: Install Apt Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ${{ env.APT_PACKAGES }}
+        
+      - name: Pip Package Cache
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Python Packages
+        run: |
+          pip install --upgrade pip
+          pip install wheel
+          pip install -r requirements.txt
+          python -m textblob.download_corpora
+        
+      - name: Run Circulation Tests
+        run: nosetests -v tests
+        env:
+          TESTING: true
+          PYTHONWARNINGS: ignore
+
+
+  test-core:
+    name: Run Core Tests
+    runs-on: ubuntu-latest
+
+    env:
+      SIMPLIFIED_TEST_ELASTICSEARCH: http://localhost:9200
+      SIMPLIFIED_TEST_MINIO_ENDPOINT_URL: http://localhost:9000
+      SIMPLIFIED_TEST_MINIO_USER: simplified
+      SIMPLIFIED_TEST_MINIO_PASSWORD: 12345678901234567890
+    
+    services:
+      postgres:
+        image: postgres:9.6
+        env:
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ env.POSTGRES_DB }} 
+        ports: 
+          - 5432:5432
+      elasticsearch:
+        image: elasticsearch:6.4.0
+        env:
+          discovery.type: single-node
+        ports: 
+          - 9200:9200
+      minio:
+        image: bitnami/minio:latest
+        ports: 
+          - 9000:9000
+        env:
+          MINIO_ACCESS_KEY: ${{ env.SIMPLIFIED_TEST_MINIO_USER }}
+          MINIO_SECRET_KEY: ${{ env.SIMPLIFIED_TEST_MINIO_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive 
+        
+      - name: Configure Elasticsearch Container
+        run: |
+          docker exec ${{ job.services.elasticsearch.id }} elasticsearch-plugin install analysis-icu
+          docker restart ${{ job.services.elasticsearch.id }}
+      
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 2.7
+
+      - name: Install Apt Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ${{ env.APT_PACKAGES }}
+        
+      - name: Pip Package Cache
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Python Packages
+        run: |
+          pip install --upgrade pip
+          pip install wheel
+          pip install -r requirements.txt
+          python -m textblob.download_corpora
+    
+      - name: Run Core Tests
+        run: nosetests -v core/tests
+        env:
+          TESTING: true
+          PYTHONWARNINGS: ignore
