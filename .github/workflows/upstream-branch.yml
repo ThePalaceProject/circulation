@@ -27,5 +27,5 @@ jobs:
           git config user.name "$(git log -1 --pretty=%aN)"
           git config user.email "$(git log -1 --pretty=%aE)"
           
-          git rebase --committer-date-is-author-date --onto origin/upstream-develop origin/develop ${BRANCH}
+          git rebase --committer-date-is-author-date --onto origin/upstream/develop origin/develop ${BRANCH}
           git push --force origin ${BRANCH}:upstream/${BRANCH}
