@@ -1,11 +1,12 @@
-name: Delete dockerhub tag
+name: Cleanup on Branch Delete
 on: [delete]
 
 jobs:
+  # deletes the dockerhub tag for a deleted branch
   delete-tags:
     name: Delete tags for removed branches
     runs-on: ubuntu-latest
-    if: github.event.ref != 'develop'
+    if: github.event.ref != 'develop' && !startsWith(github.event.ref, 'upstream/')
 
     steps:
       # This one is a bit ugly. Dockerhub doesn't directly provide a way to delete tags. You have to do it 
@@ -18,3 +19,15 @@ jobs:
           --password ${{ secrets.DOCKERHUB_PASSWORD }}
           ${{ github.repository_owner }}/circ-webapp:${{ github.event.ref }}
           ${{ github.repository_owner }}/circ-scripts:${{ github.event.ref }}
+  
+  # deletes the automatically created upstream/ branch for deleting a branch
+  delete-branch:
+    name: Delete upstream branch
+    runs-on: ubuntu-latest
+    if: github.event.ref != 'develop' && !startsWith(github.event.ref, 'upstream/')
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Delete branch
+        run: |
+          git push --delete origin upstream/${{ github.event.ref }}
