@@ -28,6 +28,6 @@ jobs:
         git push origin upstream/develop
 
         git checkout develop
-        git pull --rebase upstream-repo develop
+        git pull --rebase --committer-date-is-author-date upstream-repo develop
         git push --force origin develop
  
