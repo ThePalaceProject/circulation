@@ -11,32 +11,34 @@ jobs:
   test-circulation:
     name: Run Circulation Tests
     runs-on: ubuntu-latest
-    
+
     services:
       postgres:
         image: postgres:9.6
         env:
           POSTGRES_USER: ${{ env.POSTGRES_USER }}
           POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
-          POSTGRES_DB: ${{ env.POSTGRES_DB }} 
-        ports: 
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+          POSTGRES_INITDB_ARGS: "--nosync"
+        ports:
           - 5432:5432
+        options: --tmpfs /var/lib/postgresql/data:rw
 
     steps:
       - uses: actions/checkout@v2
         with:
-          submodules: recursive 
-      
+          submodules: recursive
+
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
           python-version: 2.7
-        
+
       - name: Install Apt Packages
         run: |
           sudo apt-get update
           sudo apt-get install --yes ${{ env.APT_PACKAGES }}
-        
+
       - name: Pip Package Cache
         uses: actions/cache@v2
         with:
@@ -51,7 +53,7 @@ jobs:
           pip install wheel
           pip install -r requirements.txt
           python -m textblob.download_corpora
-        
+
       - name: Run Circulation Tests
         run: nosetests -v tests
         env:
@@ -68,25 +70,27 @@ jobs:
       SIMPLIFIED_TEST_MINIO_ENDPOINT_URL: http://localhost:9000
       SIMPLIFIED_TEST_MINIO_USER: simplified
       SIMPLIFIED_TEST_MINIO_PASSWORD: 12345678901234567890
-    
+
     services:
       postgres:
         image: postgres:9.6
         env:
           POSTGRES_USER: ${{ env.POSTGRES_USER }}
           POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
-          POSTGRES_DB: ${{ env.POSTGRES_DB }} 
-        ports: 
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+          POSTGRES_INITDB_ARGS: "--nosync"
+        ports:
           - 5432:5432
+        options: --tmpfs /var/lib/postgresql/data:rw
       elasticsearch:
         image: elasticsearch:6.4.0
         env:
           discovery.type: single-node
-        ports: 
+        ports:
           - 9200:9200
       minio:
         image: bitnami/minio:latest
-        ports: 
+        ports:
           - 9000:9000
         env:
           MINIO_ACCESS_KEY: ${{ env.SIMPLIFIED_TEST_MINIO_USER }}
@@ -95,13 +99,13 @@ jobs:
     steps:
       - uses: actions/checkout@v2
         with:
-          submodules: recursive 
-        
+          submodules: recursive
+
       - name: Configure Elasticsearch Container
         run: |
           docker exec ${{ job.services.elasticsearch.id }} elasticsearch-plugin install analysis-icu
           docker restart ${{ job.services.elasticsearch.id }}
-      
+
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
@@ -111,7 +115,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes ${{ env.APT_PACKAGES }}
-        
+
       - name: Pip Package Cache
         uses: actions/cache@v2
         with:
@@ -126,7 +130,7 @@ jobs:
           pip install wheel
           pip install -r requirements.txt
           python -m textblob.download_corpora
-    
+
       - name: Run Core Tests
         run: nosetests -v core/tests
         env:
@@ -138,13 +142,13 @@ jobs:
     name: Build and push docker images
     runs-on: ubuntu-latest
     needs: [test-circulation, test-core]
-    
+
     steps:
       - uses: actions/checkout@v2
-        
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
-        
+
       - name: Cache Docker layers
         uses: actions/cache@v2
         with:
@@ -152,13 +156,13 @@ jobs:
           key: ${{ runner.os }}-buildx-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-buildx-
-        
+
       - name: Login to DockerHub
-        uses: docker/login-action@v1 
+        uses: docker/login-action@v1
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-          
+
       - name: Branch name
         id: branch_name
         run: |
@@ -177,7 +181,7 @@ jobs:
             version=${{ github.sha }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
-            
+
       - name: Build and push circ-scripts image
         uses: docker/build-push-action@v2
         with:
