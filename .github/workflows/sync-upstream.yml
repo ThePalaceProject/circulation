@@ -15,6 +15,7 @@ jobs:
       with:
         ref: develop
         fetch-depth: 0
+        token: ${{ secrets.LYRASIS_GITHUB_TOKEN }}
 
     - name: Sync with upstream repo
       run: |
