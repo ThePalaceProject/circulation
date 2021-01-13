@@ -46,6 +46,14 @@ jobs:
           key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
+            
+      # This prevents issues when we get a cache miss because the cache upload was 
+      # broken somehow. This seems like a known issue with the actions/cache plugin.
+      # Some details about it are outlined here: 
+      # https://github.com/actions/cache/issues/267
+      - name: Clear files on cache miss
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: rm -Rf ~/.cache/pip
 
       - name: Install Python Packages
         run: |
@@ -123,6 +131,14 @@ jobs:
           key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
+
+      # This prevents issues when we get a cache miss because the cache upload was 
+      # broken somehow. This seems like a known issue with the actions/cache plugin.
+      # Some details about it are outlined here: 
+      # https://github.com/actions/cache/issues/267
+      - name: Clear files on cache miss
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: rm -Rf ~/.cache/pip
 
       - name: Install Python Packages
         run: |
