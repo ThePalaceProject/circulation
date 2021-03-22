@@ -4,6 +4,7 @@ env:
   POSTGRES_USER: simplified_test
   POSTGRES_PASSWORD: test
   POSTGRES_DB: simplified_circulation_test
+  SIMPLIFIED_TEST_DATABASE: postgres://simplified_test:test@localhost:5432/simplified_circulation_test
 
 jobs:
   test-circulation:
@@ -44,12 +45,17 @@ jobs:
 
       - name: Run Circulation Tests
         run: tox
-        env:
-          SIMPLIFIED_TEST_DATABASE: postgres://simplified_test:test@localhost:5432/simplified_circulation_test
+
 
   test-core:
     name: Run Core Tests
     runs-on: ubuntu-latest
+
+    env:
+      SIMPLIFIED_TEST_ELASTICSEARCH: http://localhost:9200
+      SIMPLIFIED_TEST_MINIO_ENDPOINT_URL: http://localhost:9000
+      SIMPLIFIED_TEST_MINIO_USER: simplified
+      SIMPLIFIED_TEST_MINIO_PASSWORD: "12345678901234567890"
 
     services:
       postgres:
@@ -99,12 +105,6 @@ jobs:
       - name: Run Core Tests
         run: tox
         working-directory: core
-        env:
-          SIMPLIFIED_TEST_ELASTICSEARCH: http://localhost:9200
-          SIMPLIFIED_TEST_MINIO_ENDPOINT_URL: http://localhost:9000
-          SIMPLIFIED_TEST_MINIO_USER: simplified
-          SIMPLIFIED_TEST_MINIO_PASSWORD: 12345678901234567890
-          SIMPLIFIED_TEST_DATABASE: postgres://simplified_test:test@localhost:5432/simplified_circulation_test
 
   build-docker:
     name: Build and push docker images
