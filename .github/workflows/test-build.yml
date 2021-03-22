@@ -1,11 +1,9 @@
 name: Test Circulation & Build Docker Images
 on: [push]
 env:
-  APT_PACKAGES: postgresql-client-9.6 libxmlsec1-dev libxml2-dev
   POSTGRES_USER: simplified_test
   POSTGRES_PASSWORD: test
   POSTGRES_DB: simplified_circulation_test
-  SIMPLIFIED_TEST_DATABASE: postgres://simplified_test:test@localhost:5432/simplified_circulation_test
 
 jobs:
   test-circulation:
@@ -37,47 +35,21 @@ jobs:
       - name: Install Apt Packages
         run: |
           sudo apt-get update
-          sudo apt-get install --yes ${{ env.APT_PACKAGES }}
-
-      - name: Pip Package Cache
-        uses: actions/cache@v2
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-            
-      # This prevents issues when we get a cache miss because the cache upload was 
-      # broken somehow. This seems like a known issue with the actions/cache plugin.
-      # Some details about it are outlined here: 
-      # https://github.com/actions/cache/issues/267
-      - name: Clear files on cache miss
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: rm -Rf ~/.cache/pip
+          sudo apt-get install --yes libxmlsec1-dev libxml2-dev
 
       - name: Install Python Packages
         run: |
           pip install --upgrade pip
-          pip install wheel
-          pip install -r requirements.txt
-          python -m textblob.download_corpora
+          pip install tox
 
       - name: Run Circulation Tests
-        run: nosetests -v tests
+        run: tox
         env:
-          TESTING: true
-          PYTHONWARNINGS: ignore
-
+          SIMPLIFIED_TEST_DATABASE: postgres://simplified_test:test@localhost:5432/simplified_circulation_test
 
   test-core:
     name: Run Core Tests
     runs-on: ubuntu-latest
-
-    env:
-      SIMPLIFIED_TEST_ELASTICSEARCH: http://localhost:9200
-      SIMPLIFIED_TEST_MINIO_ENDPOINT_URL: http://localhost:9000
-      SIMPLIFIED_TEST_MINIO_USER: simplified
-      SIMPLIFIED_TEST_MINIO_PASSWORD: 12345678901234567890
 
     services:
       postgres:
@@ -119,40 +91,20 @@ jobs:
         with:
           python-version: 2.7
 
-      - name: Install Apt Packages
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes ${{ env.APT_PACKAGES }}
-
-      - name: Pip Package Cache
-        uses: actions/cache@v2
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
-      # This prevents issues when we get a cache miss because the cache upload was 
-      # broken somehow. This seems like a known issue with the actions/cache plugin.
-      # Some details about it are outlined here: 
-      # https://github.com/actions/cache/issues/267
-      - name: Clear files on cache miss
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: rm -Rf ~/.cache/pip
-
       - name: Install Python Packages
         run: |
           pip install --upgrade pip
-          pip install wheel
-          pip install -r requirements.txt
-          python -m textblob.download_corpora
+          pip install tox
 
       - name: Run Core Tests
-        run: nosetests -v core/tests
+        run: tox
+        working-directory: core
         env:
-          TESTING: true
-          PYTHONWARNINGS: ignore
-
+          SIMPLIFIED_TEST_ELASTICSEARCH: http://localhost:9200
+          SIMPLIFIED_TEST_MINIO_ENDPOINT_URL: http://localhost:9000
+          SIMPLIFIED_TEST_MINIO_USER: simplified
+          SIMPLIFIED_TEST_MINIO_PASSWORD: 12345678901234567890
+          SIMPLIFIED_TEST_DATABASE: postgres://simplified_test:test@localhost:5432/simplified_circulation_test
 
   build-docker:
     name: Build and push docker images
@@ -164,14 +116,6 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
-
-      - name: Cache Docker layers
-        uses: actions/cache@v2
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
 
       - name: Login to DockerHub
         uses: docker/login-action@v1
@@ -195,8 +139,6 @@ jobs:
           build-args: |
             repo=${{ github.repository }}
             version=${{ github.sha }}
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
 
       - name: Build and push circ-scripts image
         uses: docker/build-push-action@v2
@@ -208,5 +150,3 @@ jobs:
           build-args: |
             repo=${{ github.repository }}
             version=${{ github.sha }}
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
