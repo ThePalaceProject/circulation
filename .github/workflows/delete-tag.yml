@@ -20,14 +20,3 @@ jobs:
           ${{ github.repository_owner }}/circ-webapp:${{ github.event.ref }}
           ${{ github.repository_owner }}/circ-scripts:${{ github.event.ref }}
   
-  # deletes the automatically created upstream/ branch for deleting a branch
-  delete-branch:
-    name: Delete upstream branch
-    runs-on: ubuntu-latest
-    if: github.event.ref != 'develop' && !startsWith(github.event.ref, 'upstream/')
-
-    steps:
-      - uses: actions/checkout@v2
-      - name: Delete branch
-        run: |
-          git push --delete origin upstream/${{ github.event.ref }}
