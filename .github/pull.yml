@@ -1,0 +1,8 @@
+# Docs here for this file:
+# https://github.com/wei/pull#readme
+
+version: "1"
+rules:
+  - base: develop
+    upstream: NYPL-Simplified:develop
+    mergeMethod: merge
