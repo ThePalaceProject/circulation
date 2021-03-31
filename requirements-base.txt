@@ -32,7 +32,7 @@ ipaddress==1.0.23
 isbnlib==3.10.3
 isodate==0.6.0
 itsdangerous==1.1.0
-Jinja2==2.11.2
+Jinja2==2.11.3
 jmespath==0.10.0
 loggly-python-handler==1.0.1
 lxml==4.6.2
