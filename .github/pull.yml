@@ -5,4 +5,4 @@ version: "1"
 rules:
   - base: develop
     upstream: NYPL-Simplified:develop
-    mergeMethod: merge
+    mergeMethod: none   # don't automatically merge, let us manually review first
