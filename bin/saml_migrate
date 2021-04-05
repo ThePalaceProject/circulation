@@ -1,0 +1,16 @@
+#!/usr/bin/env python
+"""Allows to change unique IDs of SAML patrons."""
+
+import os
+import sys
+
+bin_dir = os.path.split(__file__)[0]
+package_dir = os.path.join(bin_dir, "..")
+sys.path.append(os.path.abspath(package_dir))
+
+from api.saml.migration import SAMLMigrationScript, SAMLMigrationManagerFactory
+
+
+saml_migration_manager_factory = SAMLMigrationManagerFactory()
+saml_migration_script = SAMLMigrationScript(saml_migration_manager_factory)
+saml_migration_script.run()

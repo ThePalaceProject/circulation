@@ -1288,6 +1288,33 @@ class SAMLSubjectPatronIDExtractor(object):
 
     PATRON_ID_REGULAR_EXPRESSION_NAMED_GROUP = "patron_id"
 
+    @property
+    def use_name_id(self):
+        """Return the boolean value indicating whether NameID should be searched for a unique patron ID.
+
+        :return: Boolean value indicating whether NameID should be searched for a unique patron ID
+        :rtype: bool
+        """
+        return self._use_name_id
+
+    @property
+    def patron_id_attributes(self):
+        """Return the list of SAML attributes which should be searched for a unique patron ID.
+
+        :return: List of SAML attributes which should be searched for a unique patron ID
+        :rtype: List[str]
+        """
+        return self._patron_id_attributes
+
+    @property
+    def patron_id_regular_expression(self):
+        """Return the regular expression used to extract a unique patron ID from SAML attributes.
+
+        :return: Regular expression used to extract a unique patron ID from SAML attributes
+        :rtype: str
+        """
+        return self._patron_id_regular_expression
+
     def __init__(self, use_name_id=True, attributes=None, regular_expression=None):
         """Initialize a new instance of SAMLSubjectPatronIDExtractor class.
 
@@ -1295,10 +1322,10 @@ class SAMLSubjectPatronIDExtractor(object):
         :type use_name_id: bool
 
         :param attributes: List of SAML attributes which should be searched for a unique patron ID
-        :type attributes: List[SAMLAttributeType]
+        :type attributes: Optional[List[str]]
 
         :param regular_expression: Regular expression used to extract a unique patron ID from SAML attributes
-        :type regular_expression: str
+        :type regular_expression: Optional[str]
         """
         # To keep backward compatibility, we assume that use_name_id is True by default.
         self._use_name_id = bool(use_name_id) if use_name_id is not None else True
@@ -1363,10 +1390,10 @@ class SAMLSubjectPatronIDExtractor(object):
         patron_id = None
 
         if subject.attribute_statement:
-            for patron_id_attribute in self._patron_id_attributes:
-                if patron_id_attribute in subject.attribute_statement.attributes:
+            for patron_id_attribute_name in self._patron_id_attributes:
+                if patron_id_attribute_name in subject.attribute_statement.attributes:
                     patron_id_attribute = subject.attribute_statement.attributes[
-                        patron_id_attribute
+                        patron_id_attribute_name
                     ]
 
                     # NOTE: It takes the first value.
