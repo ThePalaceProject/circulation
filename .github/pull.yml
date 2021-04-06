@@ -1,0 +1,13 @@
+# Configuration for the pull bot this keeps our repo in sync
+# with the upstream NYPL repo by creating PRs when there are
+# changes upstream.
+#
+# Docs here for this file:
+# https://github.com/wei/pull#readme
+
+version: "1"
+rules:
+  - base: develop
+    upstream: NYPL-Simplified:develop
+    # don't automatically merge, let us manually review first
+    mergeMethod: none
