@@ -17,7 +17,7 @@ FROM phusion/baseimage:bionic-1.0.0
 COPY --from=builder /go/bin/lcpencrypt /go/bin/lcpencrypt
 
 ARG version
-ARG repo="NYPL-Simplified/circulation"
+ARG repo="lyrasis/circulation"
 
 ENV SIMPLIFIED_DB_TASK "auto"
 ENV SIMPLIFIED_SCRIPT_NAME ""
