@@ -1,78 +1,67 @@
 
-import base64
 import json
-import uuid
-import datetime
-from flask_babel import lazy_gettext as _
-import urlparse
-from collections import defaultdict
-import flask
-from flask import Response
-import feedparser
-from lxml import etree
-from problem_details import NO_LICENSES
 from StringIO import StringIO
-import re
+
+import base64
+import datetime
+import feedparser
+import flask
+import uuid
+from flask import url_for
+from flask_babel import lazy_gettext as _
+from lxml import etree
+from sqlalchemy.sql.expression import or_
 from uritemplate import URITemplate
 
-from sqlalchemy.sql.expression import or_
-
-from core.opds_import import (
-    OPDSXMLParser,
-    OPDSImporter,
-    OPDSImportMonitor,
-)
-from core.monitor import (
-    CollectionMonitor,
-    TimelineMonitor,
-)
-from core.model import (
-    Collection,
-    ConfigurationSetting,
-    Credential,
-    DataSource,
-    DeliveryMechanism,
-    Edition,
-    ExternalIntegration,
-    Hold,
-    Hyperlink,
-    Identifier,
-    IntegrationClient,
-    LicensePool,
-    Loan,
-    MediaTypes,
-    RightsStatus,
-    Session,
-    create,
-    get_one,
-    get_one_or_create,
-)
-from core.metadata_layer import (
-    CirculationData,
-    FormatData,
-    IdentifierData,
-    LicenseData,
-    TimestampData,
-)
 from circulation import (
     BaseCirculationAPI,
     LoanInfo,
     FulfillmentInfo,
     HoldInfo,
 )
+from circulation_exceptions import *
 from core.analytics import Analytics
+from core.metadata_layer import (
+    FormatData,
+    LicenseData,
+    TimestampData,
+)
+from core.model import (
+    Collection,
+    ConfigurationSetting,
+    DataSource,
+    DeliveryMechanism,
+    Edition,
+    ExternalIntegration,
+    Hold,
+    Hyperlink,
+    LicensePool,
+    Loan,
+    MediaTypes,
+    RightsStatus,
+    Session,
+    get_one,
+    get_one_or_create,
+)
+from core.monitor import (
+    CollectionMonitor,
+)
+from core.opds_import import (
+    OPDSXMLParser,
+    OPDSImporter,
+    OPDSImportMonitor,
+)
+from core.testing import (
+    DatabaseTest,
+    MockRequestsResponse,
+)
 from core.util.http import (
     HTTP,
     BadResponseException,
     RemoteIntegrationException,
 )
-from flask import url_for
-from core.testing import (
-    DatabaseTest,
-    MockRequestsResponse,
-)
-from circulation_exceptions import *
 from shared_collection import BaseSharedCollectionAPI
+
 
 class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI):
     """ODL (Open Distribution to Libraries) is a specification that allows
