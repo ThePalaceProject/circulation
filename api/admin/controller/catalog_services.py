@@ -85,7 +85,9 @@ class CatalogServicesController(SettingsController):
         if isinstance(result, ProblemDetail):
             return result
 
-        external_integration_link = self._set_external_integration_link(service)
+        external_integration_link = self._set_storage_external_integration_link(
+            service, ExternalIntegrationLink.MARC, S3UploaderConfiguration.MARC_BUCKET_KEY
+        )
         if isinstance(external_integration_link, ProblemDetail):
             return external_integration_link
 
