@@ -1,38 +1,58 @@
 import flask
 from flask import Response
+
 from api.admin.problem_details import *
 from api.google_analytics_provider import GoogleAnalyticsProvider
+from api.s3_analytics_provider import S3AnalyticsProvider
 from core.local_analytics_provider import LocalAnalyticsProvider
-from core.model import (
-    ExternalIntegration,
-    get_one,
-)
+from core.model import ExternalIntegration, ExternalIntegrationLink
+from core.s3 import S3UploaderConfiguration
+from core.util import first_or_default
 from core.util.problem_detail import ProblemDetail
+
 from . import SettingsController
 
-class AnalyticsServicesController(SettingsController):
 
+class AnalyticsServicesController(SettingsController):
     def __init__(self, manager):
         super(AnalyticsServicesController, self).__init__(manager)
-        provider_apis = [GoogleAnalyticsProvider,
-                         LocalAnalyticsProvider,
-                        ]
+        provider_apis = [
+            GoogleAnalyticsProvider,
+            LocalAnalyticsProvider,
+            S3AnalyticsProvider,
+        ]
         self.protocols = self._get_integration_protocols(provider_apis)
         self.goal = ExternalIntegration.ANALYTICS_GOAL
 
+    def update_protocol_settings(self):
+        """Update configuration settings of the providers."""
+        s3_analytics_provider = first_or_default([
+            protocol
+            for protocol in self.protocols
+            if protocol["name"] == S3AnalyticsProvider.__module__
+        ])
+
+        if s3_analytics_provider:
+            s3_analytics_provider["settings"] = S3AnalyticsProvider.get_storage_settings(
+                self._db
+            )
+
     def process_analytics_services(self):
-        if flask.request.method == 'GET':
+        if flask.request.method == "GET":
             return self.process_get()
         else:
             return self.process_post()
 
     def process_get(self):
-        if flask.request.method == 'GET':
+        if flask.request.method == "GET":
             services = self._get_integration_info(self.goal, self.protocols)
+
+            self.update_protocol_settings()
+
             # Librarians should be able to see, but not modify local analytics services.
             # Setting the level to 2 will communicate that to the front end.
             for x in services:
-                if (x["protocol"] == 'core.local_analytics_provider'):
+                if x["protocol"] == "core.local_analytics_provider":
                     x["level"] = 2
             return dict(
                 analytics_services=services,
@@ -46,7 +66,7 @@ class AnalyticsServicesController(SettingsController):
         fields = {"name": name, "protocol": protocol, "url": url}
 
         # Don't let librarians create local analytics services.
-        if protocol == 'core.local_analytics_provider':
+        if protocol == "core.local_analytics_provider":
             self.require_higher_than_librarian()
 
         form_field_error = self.validate_form_fields(**fields)
@@ -79,6 +99,15 @@ class AnalyticsServicesController(SettingsController):
             return protocol_error
 
         service.name = name
+
+        external_integration_link = self._set_storage_external_integration_link(
+            service,
+            ExternalIntegrationLink.ANALYTICS,
+            S3UploaderConfiguration.ANALYTICS_BUCKET_KEY,
+        )
+        if isinstance(external_integration_link, ProblemDetail):
+            return external_integration_link
+
         if is_new:
             return Response(unicode(service.id), 201)
         else:
@@ -109,6 +138,4 @@ class AnalyticsServicesController(SettingsController):
             return INCOMPLETE_CONFIGURATION
 
     def process_delete(self, service_id):
-        return self._delete_integration(
-            service_id, self.goal
-        )
+        return self._delete_integration(service_id, self.goal)

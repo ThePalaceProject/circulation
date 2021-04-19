@@ -78,7 +78,9 @@ class CatalogServicesController(SettingsController):
         if isinstance(result, ProblemDetail):
             return result
 
-        external_integration_link = self._set_external_integration_link(service)
+        external_integration_link = self._set_storage_external_integration_link(
+            service, ExternalIntegrationLink.MARC, S3UploaderConfiguration.MARC_BUCKET_KEY
+        )
         if isinstance(external_integration_link, ProblemDetail):
             return external_integration_link
 
@@ -92,34 +94,6 @@ class CatalogServicesController(SettingsController):
         else:
             return Response(unicode(service.id), 200)
     
-    def _set_external_integration_link(self, service):
-        """Either set or delete the external integration link between the
-        service and the storage integration.
-        """
-        mirror_integration_id = flask.request.form.get('mirror_integration_id')
-        
-        # If no storage integration was selected, then delete the existing
-        # external integration link.
-        current_integration_link, ignore = get_one_or_create(
-            self._db, ExternalIntegrationLink,
-            library_id=None,
-            external_integration_id=service.id,
-            purpose=ExternalIntegrationLink.MARC
-        )
-
-        if mirror_integration_id == self.NO_MIRROR_INTEGRATION:
-            if current_integration_link:
-                self._db.delete(current_integration_link)
-        else:
-            storage_integration = get_one(
-                self._db, ExternalIntegration, id=mirror_integration_id
-            )
-            # Only get storage integrations that have a MARC file option set
-            if not storage_integration or \
-                    not storage_integration.setting(S3UploaderConfiguration.MARC_BUCKET_KEY).value:
-                return MISSING_INTEGRATION
-            current_integration_link.other_integration_id=storage_integration.id
-
     def validate_form_fields(self, protocol):
         """Verify that the protocol which the user has selected is in the list
         of recognized protocol options."""
