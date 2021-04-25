@@ -109,7 +109,7 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI):
             "type": "number",
             "default": Collection.STANDARD_DEFAULT_RESERVATION_PERIOD,
         },
-    ] + BaseSharedCollectionAPI.SETTINGS
+    ] + OPDSImporter.PRIMARY_IDENTIFIER_SOURCE_SETTINGS + BaseSharedCollectionAPI.SETTINGS
 
     LIBRARY_SETTINGS = BaseCirculationAPI.LIBRARY_SETTINGS + [
         BaseCirculationAPI.EBOOK_LOAN_DURATION_SETTING
