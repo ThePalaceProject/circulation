@@ -38,6 +38,7 @@ from core.model import (
     LicensePool,
     Loan,
     MediaTypes,
+    Representation,
     RightsStatus,
     Session,
     get_one,
@@ -783,8 +784,8 @@ class ODLImporter(OPDSImporter):
     LICENSE_INFO_DOCUMENT_MEDIA_TYPE = 'application/vnd.odl.info+json'
 
     @classmethod
-    def _detail_for_elementtree_entry(cls, parser, entry_tag, feed_url=None, do_get=None):
-        do_get = do_get or Representation.cautious_http_get
+    def _detail_for_elementtree_entry(cls, parser, entry_tag, feed_url=None,
+                                      do_get=Representation.cautious_http_get):
 
         # TODO: Review for consistency when updated ODL spec is ready.
         subtag = parser.text_of_optional_subtag
