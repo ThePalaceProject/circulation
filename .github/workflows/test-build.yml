@@ -130,17 +130,18 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
 
-      - name: Login to DockerHub
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v1
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate tags for circ-exec image
         id: exec-tags
         uses: crazy-max/ghaction-docker-meta@v2
         with:
-          images: ${{ github.repository_owner }}/circ-exec
+          images: ghcr.io/${{ github.repository_owner }}/${{ github.repository }}/circ-exec
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
@@ -182,11 +183,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
 
-      - name: Login to DockerHub
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v1
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build circ-scripts image
         uses: docker/build-push-action@v2
@@ -217,7 +219,7 @@ jobs:
         id: scripts-tags
         uses: crazy-max/ghaction-docker-meta@v2
         with:
-          images: ${{ github.repository_owner }}/circ-scripts
+          images: ghcr.io/${{ github.repository_owner }}/${{ github.repository }}/circ-scripts
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
@@ -259,11 +261,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
 
-      - name: Login to DockerHub
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v1
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build circ-webapp image
         uses: docker/build-push-action@v2
@@ -294,7 +297,7 @@ jobs:
         id: webapp-tags
         uses: crazy-max/ghaction-docker-meta@v2
         with:
-          images: ${{ github.repository_owner }}/circ-webapp
+          images: ghcr.io/${{ github.repository_owner }}/${{ github.repository }}/circ-webapp
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
