@@ -141,7 +141,7 @@ jobs:
         id: exec-tags
         uses: crazy-max/ghaction-docker-meta@v2
         with:
-          images: ghcr.io/${{ github.repository }}/circ-exec
+          images: ghcr.io/${{ github.repository_owner }}/circ-exec
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
@@ -219,7 +219,7 @@ jobs:
         id: scripts-tags
         uses: crazy-max/ghaction-docker-meta@v2
         with:
-          images: ghcr.io/${{ github.repository }}/circ-scripts
+          images: ghcr.io/${{ github.repository_owner }}/circ-scripts
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
@@ -297,7 +297,7 @@ jobs:
         id: webapp-tags
         uses: crazy-max/ghaction-docker-meta@v2
         with:
-          images: ghcr.io/${{ github.repository }}/circ-webapp
+          images: ghcr.io/${{ github.repository_owner }}/circ-webapp
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
