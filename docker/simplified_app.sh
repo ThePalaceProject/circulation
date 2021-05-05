@@ -46,11 +46,6 @@ chown simplified:simplified circulation
 cd circulation
 git checkout $version
 
-# Use https to access submodules.
-git submodule init
-git config submodule.core.url $(git config submodule.core.url | perl -p -e 's|git@(.*?):|https://\1/|g')
-git submodule update --init --recursive
-
 # Add a .version file to the directory. This file
 # supplies an endpoint to check the app's current version.
 printf "$(git describe --tags)" > .version
