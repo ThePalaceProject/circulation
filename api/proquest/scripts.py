@@ -49,6 +49,7 @@ class ProQuestOPDS2ImportScript(OPDSImportScript):
             client_factory,
             self._db,
             collection,
+            parser=self.importer_kwargs["parser"],
             import_class=self.importer_class,
             force_reimport=force,
             process_removals=parsed.process_removals,

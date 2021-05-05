@@ -66,3 +66,7 @@ docs/**/
 docs/source/*
 !docs/source/conf.py
 !docs/source/index.rst
+
+
+# Mac OS
+.DS_Store
