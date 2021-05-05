@@ -1,4 +1,4 @@
-from ...classifier import (
+from core.classifier import (
     RBDigitalAudienceClassifier,
     RBDigitalSubjectClassifier,
     Classifier,

@@ -1,8 +1,8 @@
 # encoding: utf-8
 import pytest
 import datetime
-from ...testing import DatabaseTest
-from ...model.complaint import Complaint
+from core.testing import DatabaseTest
+from core.model.complaint import Complaint
 
 class TestComplaint(DatabaseTest):
 

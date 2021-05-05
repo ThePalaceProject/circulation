@@ -1,7 +1,7 @@
 import pytest
-from ..testing import DatabaseTest
-from ..local_analytics_provider import LocalAnalyticsProvider
-from ..model import (
+from core.testing import DatabaseTest
+from core.local_analytics_provider import LocalAnalyticsProvider
+from core.model import (
     CirculationEvent,
     ExternalIntegration,
     create,

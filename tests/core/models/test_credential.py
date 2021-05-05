@@ -2,13 +2,13 @@
 import pytest
 import datetime
 from sqlalchemy.exc import IntegrityError
-from ...testing import DatabaseTest
-from ...model.credential import (
+from core.testing import DatabaseTest
+from core.model.credential import (
     Credential,
     DelegatedPatronIdentifier,
     DRMDeviceIdentifier,
 )
-from ...model.datasource import DataSource
+from core.model.datasource import DataSource
 
 class TestCredentials(DatabaseTest):
 

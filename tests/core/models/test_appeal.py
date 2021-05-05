@@ -1,8 +1,8 @@
-from ...testing import (
+from core.testing import (
     DatabaseTest,
 )
 
-from ...model import (
+from core.model import (
     Work,
 )
 

@@ -3,14 +3,14 @@
 from collections import defaultdict
 from money import Money
 
-from ...model import (
+from core.model import (
     Identifier,
     Edition
 )
 
-from ...testing import DatabaseTest
+from core.testing import DatabaseTest
 
-from ...util import (
+from core.util import (
     Bigrams,
     english_bigrams,
     MetadataSimilarity,
@@ -19,7 +19,7 @@ from ...util import (
     fast_query_count,
     slugify
 )
-from ...util.median import median
+from core.util.median import median
 
 class DummyAuthor(object):
 

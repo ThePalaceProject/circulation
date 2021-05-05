@@ -1,8 +1,8 @@
 # encoding: utf-8
 import pytest
-from ...testing import DatabaseTest
-from ...model import create
-from ...model.admin import (
+from core.testing import DatabaseTest
+from core.model import create
+from core.model.admin import (
     Admin,
     AdminRole,
 )

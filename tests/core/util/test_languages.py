@@ -2,7 +2,7 @@
 """Test language lookup capabilities."""
 import pytest
 
-from ...util.languages import (
+from core.util.languages import (
     LanguageCodes,
     LanguageNames,
     LookupTable,

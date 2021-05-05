@@ -15,11 +15,11 @@ from mock import MagicMock
 import pytest
 from parameterized import parameterized
 
-from ..testing import (
+from core.testing import (
     DatabaseTest
 )
-from ..mirror import MirrorUploader
-from ..model import (
+from core.mirror import MirrorUploader
+from core.model import (
     Identifier,
     DataSource,
     ExternalIntegration,
@@ -27,7 +27,7 @@ from ..model import (
     Representation,
     create,
 )
-from ..s3 import (
+from core.s3 import (
     S3Uploader,
     MockS3Client,
     MultipartS3Upload,

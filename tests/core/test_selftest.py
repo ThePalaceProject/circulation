@@ -7,14 +7,14 @@ configured, not that the code is correct.
 
 import datetime
 
-from ..testing import DatabaseTest
+from core.testing import DatabaseTest
 
-from ..selftest import (
+from core.selftest import (
     SelfTestResult,
     HasSelfTests,
 )
 
-from ..util.http import IntegrationException
+from core.util.http import IntegrationException
 
 class TestSelfTestResult(DatabaseTest):
 

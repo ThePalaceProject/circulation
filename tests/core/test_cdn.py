@@ -1,9 +1,9 @@
 # encoding: utf-8
-from ..testing import DatabaseTest
+from core.testing import DatabaseTest
 
-from ..config import Configuration, temp_config
-from ..model import ExternalIntegration
-from ..cdn import cdnify
+from core.config import Configuration, temp_config
+from core.model import ExternalIntegration
+from core.cdn import cdnify
 
 
 class TestCDN(DatabaseTest):

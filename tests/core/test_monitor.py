@@ -2,10 +2,10 @@ import datetime
 
 import pytest
 
-from ..testing import DatabaseTest
-from ..config import Configuration
-from ..metadata_layer import TimestampData
-from ..model import (
+from core.testing import DatabaseTest
+from core.config import Configuration
+from core.metadata_layer import TimestampData
+from core.model import (
     CachedFeed,
     CirculationEvent,
     Collection,
@@ -27,7 +27,7 @@ from ..model import (
     get_one,
     get_one_or_create,
 )
-from ..monitor import (
+from core.monitor import (
     CachedFeedReaper,
     CirculationEventLocationScrubber,
     CollectionMonitor,
@@ -54,7 +54,7 @@ from ..monitor import (
     WorkReaper,
     WorkSweepMonitor,
 )
-from ..testing import (
+from core.testing import (
     AlwaysSuccessfulCoverageProvider,
     NeverSuccessfulCoverageProvider,
 )

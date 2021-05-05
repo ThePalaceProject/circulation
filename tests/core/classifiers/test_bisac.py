@@ -1,11 +1,11 @@
 import re
 
 import pytest
-from ...classifier import (
+from core.classifier import (
     BISACClassifier,
     Classifier,
 )
-from ...classifier.bisac import (
+from core.classifier.bisac import (
     MatchingRule,
     RE,
     anything,

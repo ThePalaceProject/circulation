@@ -1,6 +1,6 @@
 # encoding: utf-8
 
-from ...util.xmlparser import XMLParser
+from core.util.xmlparser import XMLParser
 from lxml.etree import XMLSyntaxError
 
 class MockParser(XMLParser):

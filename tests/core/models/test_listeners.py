@@ -3,11 +3,11 @@ import datetime
 import functools
 from parameterized import parameterized
 
-from ...testing import DatabaseTest
-from ... import lane
-from ... import model
-from ...config import Configuration
-from ...model import (
+from core.testing import DatabaseTest
+from core import lane
+from core import model
+from core.config import Configuration
+from core.model import (
     CachedFeed,
     ConfigurationSetting,
     create,

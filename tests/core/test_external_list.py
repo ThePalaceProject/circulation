@@ -1,18 +1,18 @@
 # encoding: utf-8
 import datetime
 
-from ..testing import (
+from core.testing import (
     DatabaseTest,
     DummyMetadataClient,
 )
 
-from ..model import (
+from core.model import (
     DataSource,
     Edition,
     Identifier,
     Subject,
 )
-from ..external_list import (
+from core.external_list import (
     CustomListFromCSV,
     MembershipManager,
     ClassificationBasedMembershipManager,

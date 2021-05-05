@@ -9,37 +9,37 @@ from flask_babel import lazy_gettext as _
 from lxml import etree
 from psycopg2.extras import NumericRange
 
-from ..testing import (
+from core.testing import (
     DatabaseTest,
 )
-from ..classifier import (
+from core.classifier import (
     Classifier,
     Contemporary_Romance,
     Epic_Fantasy,
     Fantasy,
     History,
 )
-from ..config import (
+from core.config import (
     Configuration,
     temp_config,
 )
-from ..entrypoint import (
+from core.entrypoint import (
     AudiobooksEntryPoint,
     EbooksEntryPoint,
     EntryPoint,
     EverythingEntryPoint,
 )
-from ..external_search import MockExternalSearchIndex
-from ..facets import FacetConstants
-from ..lane import (
+from core.external_search import MockExternalSearchIndex
+from core.facets import FacetConstants
+from core.lane import (
     Facets,
     FeaturedFacets,
     Pagination,
     SearchFacets,
     WorkList,
 )
-from ..lcp.credential import LCPCredentialFactory
-from ..model import (
+from core.lcp.credential import LCPCredentialFactory
+from core.model import (
     CachedFeed,
     Contributor,
     CustomList,
@@ -55,7 +55,7 @@ from ..model import (
     get_one,
     create,
 )
-from ..opds import (
+from core.opds import (
     AcquisitionFeed,
     Annotator,
     LookupAcquisitionFeed,
@@ -66,13 +66,13 @@ from ..opds import (
     TestAnnotatorWithGroup,
     TestUnfulfillableAnnotator
 )
-from ..opds_import import OPDSXMLParser
-from ..util.flask_util import (
+from core.opds_import import OPDSXMLParser
+from core.util.flask_util import (
     OPDSEntryResponse,
     OPDSFeedResponse,
     Response,
 )
-from ..util.opds_writer import (
+from core.util.opds_writer import (
     AtomFeed,
     OPDSFeed,
     OPDSMessage,

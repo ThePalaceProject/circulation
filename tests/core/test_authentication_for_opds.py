@@ -1,5 +1,5 @@
 import pytest
-from ..util.authentication_for_opds import (
+from core.util.authentication_for_opds import (
     AuthenticationForOPDSDocument as Doc,
     OPDSAuthenticationFlow as Flow,
 )

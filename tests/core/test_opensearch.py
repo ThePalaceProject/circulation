@@ -1,8 +1,8 @@
-from ..model import Genre
-from ..classifier import Classifier
-from ..opensearch import OpenSearchDocument
-from ..lane import Lane
-from ..testing import DatabaseTest
+from core.model import Genre
+from core.classifier import Classifier
+from core.opensearch import OpenSearchDocument
+from core.lane import Lane
+from core.testing import DatabaseTest
 
 class TestOpenSearchDocument(DatabaseTest):
 

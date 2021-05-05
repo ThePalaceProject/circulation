@@ -10,15 +10,15 @@ from lxml import etree
 import pkgutil
 from psycopg2.extras import NumericRange
 
-from ..testing import (
+from core.testing import (
     DatabaseTest,
 )
 
-from ..config import (
+from core.config import (
     CannotLoadConfiguration,
     IntegrationException,
 )
-from ..opds_import import (
+from core.opds_import import (
     AccessNotAuthenticated,
     MetadataWranglerOPDSLookup,
     OPDSImporter,
@@ -26,18 +26,18 @@ from ..opds_import import (
     OPDSXMLParser,
     SimplifiedOPDSLookup,
 )
-from ..util.opds_writer import (
+from core.util.opds_writer import (
     AtomFeed,
     OPDSFeed,
     OPDSMessage,
 )
-from ..metadata_layer import (
+from core.metadata_layer import (
     LinkData,
     CirculationData,
     Metadata,
     TimestampData,
 )
-from ..model import (
+from core.model import (
     Collection,
     Contributor,
     CoverageRecord,
@@ -55,20 +55,20 @@ from ..model import (
     Work,
     WorkCoverageRecord,
 )
-from ..model.configuration import ExternalIntegrationLink
-from ..coverage import CoverageFailure
+from core.model.configuration import ExternalIntegrationLink
+from core.coverage import CoverageFailure
 
-from ..s3 import (
+from core.s3 import (
     S3Uploader,
     MockS3Uploader,
     S3UploaderConfiguration)
-from ..selftest import SelfTestResult
-from ..testing import (
+from core.selftest import SelfTestResult
+from core.testing import (
     DummyHTTPClient,
     MockRequestsRequest,
     MockRequestsResponse,
 )
-from ..util.http import BadResponseException
+from core.util.http import BadResponseException
 
 
 class DoomedOPDSImporter(OPDSImporter):
@@ -1127,7 +1127,7 @@ class TestOPDSImporter(OPDSImporterTest):
         assert '7' == seven.subject.identifier
         assert 100 == seven.weight
         assert Subject.AGE_RANGE == seven.subject.type
-        from ..classifier import Classifier
+        from core.classifier import Classifier
         classifier = Classifier.classifiers.get(seven.subject.type, None)
         classifier.classify(seven.subject)
 

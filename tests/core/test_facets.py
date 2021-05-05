@@ -1,6 +1,6 @@
-from ..testing import DatabaseTest
+from core.testing import DatabaseTest
 
-from ..facets import (
+from core.facets import (
     FacetConstants as Facets,
     FacetConfig,
 )

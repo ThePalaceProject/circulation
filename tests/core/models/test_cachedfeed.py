@@ -1,19 +1,19 @@
 # encoding: utf-8
 import pytest
 import datetime
-from ...testing import DatabaseTest
-from ...classifier import Classifier
-from ...lane import (
+from core.testing import DatabaseTest
+from core.classifier import Classifier
+from core.lane import (
     Facets,
     Pagination,
     Lane,
     WorkList,
 )
-from ...model.cachedfeed import CachedFeed
-from ...model.configuration import ConfigurationSetting
-from ...opds import AcquisitionFeed
-from ...util.flask_util import OPDSFeedResponse
-from ...util.opds_writer import OPDSFeed
+from core.model.cachedfeed import CachedFeed
+from core.model.configuration import ConfigurationSetting
+from core.opds import AcquisitionFeed
+from core.util.flask_util import OPDSFeedResponse
+from core.util.opds_writer import OPDSFeed
 
 class MockFeedGenerator(object):
 

@@ -5,11 +5,11 @@ from psycopg2.extras import NumericRange
 from sqlalchemy import not_
 from sqlalchemy.orm.exc import MultipleResultsFound
 
-from ...testing import DatabaseTest
-from ... import classifier
-from ...external_search import mock_search_index
-from ...config import Configuration
-from ...model import (
+from core.testing import DatabaseTest
+from core import classifier
+from core.external_search import mock_search_index
+from core.config import Configuration
+from core.model import (
     DataSource,
     Edition,
     Genre,

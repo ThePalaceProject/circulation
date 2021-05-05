@@ -1,10 +1,10 @@
 import datetime
 
 import pytest
-from ..testing import (
+from core.testing import (
     DatabaseTest
 )
-from ..testing import (
+from core.testing import (
     AlwaysSuccessfulBibliographicCoverageProvider,
     AlwaysSuccessfulCollectionCoverageProvider,
     AlwaysSuccessfulCoverageProvider,
@@ -17,7 +17,7 @@ from ..testing import (
     TransientFailureCoverageProvider,
     TransientFailureWorkCoverageProvider,
 )
-from ..model import (
+from core.model import (
     Collection,
     CollectionMissing,
     Contributor,
@@ -36,8 +36,8 @@ from ..model import (
     Work,
     WorkCoverageRecord,
 )
-from ..model.configuration import ExternalIntegrationLink
-from ..metadata_layer import (
+from core.model.configuration import ExternalIntegrationLink
+from core.metadata_layer import (
     Metadata,
     CirculationData,
     FormatData,
@@ -47,8 +47,8 @@ from ..metadata_layer import (
     ReplacementPolicy,
     SubjectData,
 )
-from ..s3 import MockS3Uploader
-from ..coverage import (
+from core.s3 import MockS3Uploader
+from core.coverage import (
     BaseCoverageProvider,
     BibliographicCoverageProvider,
     CatalogCoverageProvider,

@@ -5,8 +5,8 @@ import sys
 
 import pytest
 
-from ..testing import DatabaseTest
-from ..log import (
+from core.testing import DatabaseTest
+from core.log import (
     StringFormatter,
     JSONFormatter,
     LogglyHandler,
@@ -18,11 +18,11 @@ from ..log import (
     Logger,
     CannotLoadConfiguration,
 )
-from ..model import (
+from core.model import (
     ExternalIntegration,
     ConfigurationSetting
 )
-from ..config import Configuration
+from core.config import Configuration
 
 class TestJSONFormatter(object):
 

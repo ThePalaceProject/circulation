@@ -8,10 +8,10 @@ from mock import MagicMock, create_autospec
 from parameterized import parameterized
 from sqlalchemy.exc import IntegrityError
 
-from ...config import CannotLoadConfiguration, Configuration
-from ...model import create, get_one
-from ...model.collection import Collection
-from ...model.configuration import (
+from core.config import CannotLoadConfiguration, Configuration
+from core.model import create, get_one
+from core.model.collection import Collection
+from core.model.configuration import (
     ConfigurationAttribute,
     ConfigurationAttributeType,
     ConfigurationGrouping,
@@ -23,8 +23,8 @@ from ...model.configuration import (
     ExternalIntegrationLink,
     HasExternalIntegration,
 )
-from ...model.datasource import DataSource
-from ...testing import DatabaseTest
+from core.model.datasource import DataSource
+from core.testing import DatabaseTest
 
 
 class TestConfigurationSetting(DatabaseTest):

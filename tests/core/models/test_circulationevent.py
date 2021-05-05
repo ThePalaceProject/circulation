@@ -2,15 +2,15 @@
 import pytest
 import datetime
 from sqlalchemy.exc import IntegrityError
-from ...testing import DatabaseTest
-from ...model import (
+from core.testing import DatabaseTest
+from core.model import (
     create,
     get_one_or_create
 )
-from ...model.circulationevent import CirculationEvent
-from ...model.datasource import DataSource
-from ...model.identifier import Identifier
-from ...model.licensing import LicensePool
+from core.model.circulationevent import CirculationEvent
+from core.model.datasource import DataSource
+from core.model.identifier import Identifier
+from core.model.licensing import LicensePool
 
 class TestCirculationEvent(DatabaseTest):
 

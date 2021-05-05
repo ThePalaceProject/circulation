@@ -9,24 +9,24 @@ from StringIO import StringIO
 import pytest
 from parameterized import parameterized
 
-from ..testing import (
+from core.testing import (
     DatabaseTest,
 )
-from ..classifier import Classifier
-from ..config import (
+from core.classifier import Classifier
+from core.config import (
     CannotLoadConfiguration,
 )
-from ..external_search import MockExternalSearchIndex
-from ..lane import (
+from core.external_search import MockExternalSearchIndex
+from core.lane import (
     Lane,
     WorkList,
 )
-from ..metadata_layer import (
+from core.metadata_layer import (
     LinkData,
     TimestampData,
 )
-from ..mirror import MirrorUploader
-from ..model import (
+from core.mirror import MirrorUploader
+from core.model import (
     create,
     dump_query,
     get_one,
@@ -46,14 +46,14 @@ from ..model import (
     Work,
     WorkCoverageRecord,
 )
-from ..model.configuration import ExternalIntegrationLink
-from ..monitor import (
+from core.model.configuration import ExternalIntegrationLink
+from core.monitor import (
     Monitor,
     CollectionMonitor,
     ReaperMonitor,
 )
-from ..s3 import S3Uploader, MinIOUploader, MinIOUploaderConfiguration
-from ..scripts import (
+from core.s3 import S3Uploader, MinIOUploader, MinIOUploaderConfiguration
+from core.scripts import (
     AddClassificationScript,
     CheckContributorNamesInDB,
     CollectionArgumentsScript,
@@ -96,11 +96,11 @@ from ..scripts import (
     WorkClassificationScript,
     WorkProcessingScript,
     CollectionType)
-from ..testing import (
+from core.testing import (
     AlwaysSuccessfulCollectionCoverageProvider,
     AlwaysSuccessfulWorkCoverageProvider,
 )
-from ..util.worker_pools import (
+from core.util.worker_pools import (
     DatabasePool,
 )
 

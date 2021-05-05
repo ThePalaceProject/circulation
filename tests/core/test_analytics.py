@@ -1,12 +1,12 @@
-from ..config import (
+from core.config import (
     Configuration,
     temp_config,
 )
-from ..analytics import Analytics
-from ..mock_analytics_provider import MockAnalyticsProvider
-from ..local_analytics_provider import LocalAnalyticsProvider
-from ..testing import DatabaseTest
-from ..model import (
+from core.analytics import Analytics
+from core.mock_analytics_provider import MockAnalyticsProvider
+from core.local_analytics_provider import LocalAnalyticsProvider
+from core.testing import DatabaseTest
+from core.model import (
     CirculationEvent,
     ExternalIntegration,
     Library,

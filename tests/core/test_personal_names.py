@@ -7,7 +7,7 @@ import site
 import re
 import tempfile
 
-from ..model import (
+from core.model import (
     Contributor,
     DataSource,
     Work,
@@ -18,15 +18,15 @@ from ..model import (
     get_one_or_create,
 )
 
-from ..testing import (
+from core.testing import (
     DatabaseTest,
     DummyHTTPClient,
 )
 
-from ..util.personal_names import (
+from core.util.personal_names import (
     display_name_to_sort_name,
 )
-from ..mock_analytics_provider import MockAnalyticsProvider
+from core.mock_analytics_provider import MockAnalyticsProvider
 
 
 

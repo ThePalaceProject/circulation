@@ -3,12 +3,12 @@ import datetime
 import pytest
 from parameterized import parameterized
 
-from ..testing import DatabaseTest
-from ..config import CannotLoadConfiguration
-from ..mirror import MirrorUploader
-from ..model import ExternalIntegration
-from ..model.configuration import ExternalIntegrationLink
-from ..s3 import S3Uploader, MinIOUploader, MinIOUploaderConfiguration, S3UploaderConfiguration
+from core.testing import DatabaseTest
+from core.config import CannotLoadConfiguration
+from core.mirror import MirrorUploader
+from core.model import ExternalIntegration
+from core.model.configuration import ExternalIntegrationLink
+from core.s3 import S3Uploader, MinIOUploader, MinIOUploaderConfiguration, S3UploaderConfiguration
 
 
 class DummySuccessUploader(MirrorUploader):

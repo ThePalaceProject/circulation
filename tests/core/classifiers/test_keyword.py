@@ -1,6 +1,6 @@
-from ... import classifier
-from ...classifier import *
-from ...classifier.keyword import (
+from core import classifier
+from core.classifier import *
+from core.classifier.keyword import (
     KeywordBasedClassifier as Keyword,
     LCSHClassifier as LCSH,
     FASTClassifier as FAST,

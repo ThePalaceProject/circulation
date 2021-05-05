@@ -3,8 +3,8 @@ import datetime
 
 import pytest
 
-from ...testing import DatabaseTest
-from ...model.integrationclient import IntegrationClient
+from core.testing import DatabaseTest
+from core.model.integrationclient import IntegrationClient
 
 class TestIntegrationClient(DatabaseTest):
 

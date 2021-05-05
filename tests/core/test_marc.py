@@ -6,9 +6,9 @@ from StringIO import StringIO
 import urllib
 from sqlalchemy.orm.session import Session
 
-from ..testing import DatabaseTest
+from core.testing import DatabaseTest
 
-from ..model import (
+from core.model import (
     CachedMARCFile,
     Contributor,
     DataSource,
@@ -23,22 +23,22 @@ from ..model import (
     Work,
     get_one,
 )
-from ..config import CannotLoadConfiguration
-from ..external_search import (
+from core.config import CannotLoadConfiguration
+from core.external_search import (
     MockExternalSearchIndex,
     Filter,
 )
-from ..marc import (
+from core.marc import (
   Annotator,
   MARCExporter,
   MARCExporterFacets,
 )
 
-from ..s3 import (
+from core.s3 import (
     MockS3Uploader,
     S3Uploader,
 )
-from ..lane import WorkList
+from core.lane import WorkList
 
 class TestAnnotator(DatabaseTest):
 

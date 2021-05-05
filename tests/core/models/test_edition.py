@@ -1,18 +1,18 @@
 # encoding: utf-8
 import datetime
-from ...testing import DatabaseTest
-from ...model import (
+from core.testing import DatabaseTest
+from core.model import (
     get_one_or_create,
     PresentationCalculationPolicy,
 )
-from ...model.constants import MediaTypes
-from ...model.coverage import CoverageRecord
-from ...model.contributor import Contributor
-from ...model.datasource import DataSource
-from ...model.edition import Edition
-from ...model.identifier import Identifier
-from ...model.licensing import DeliveryMechanism
-from ...model.resource import (
+from core.model.constants import MediaTypes
+from core.model.coverage import CoverageRecord
+from core.model.contributor import Contributor
+from core.model.datasource import DataSource
+from core.model.edition import Edition
+from core.model.identifier import Identifier
+from core.model.licensing import DeliveryMechanism
+from core.model.resource import (
     Hyperlink,
     Representation,
 )

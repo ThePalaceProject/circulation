@@ -1,5 +1,5 @@
 import json
-from ..user_profile import (
+from core.user_profile import (
     ProfileController,
     MockProfileStorage,
 )
