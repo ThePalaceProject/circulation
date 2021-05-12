@@ -15,6 +15,7 @@ import time
 import dateutil.parser
 from flask_babel import lazy_gettext as _
 from lxml import etree
+from six.moves.html_parser import HTMLParser
 from sqlalchemy import or_
 from sqlalchemy.orm.session import Session
 
@@ -645,6 +646,8 @@ class ItemListParser(XMLParser):
 
     NAMESPACES = {}
 
+    unescape_entity_references = HTMLParser().unescape
+
     def parse(self, xml):
         for i in self.process_all(xml, "//Item"):
             yield i
@@ -672,6 +675,11 @@ class ItemListParser(XMLParser):
         contributors = []
         if not string:
             return contributors
+
+        # Contributors may have two levels of entity reference escaping,
+        # one of which will have already been handled by the initial parse.
+        # We handle the potential need for a second unescaping here.
+        string = cls.unescape_entity_references(string)
 
         for sort_name in string.split(';'):
             sort_name = cls.parenthetical.sub("", sort_name.strip())
