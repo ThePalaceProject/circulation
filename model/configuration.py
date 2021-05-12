@@ -939,13 +939,13 @@ class ConfigurationAttributeType(Enum):
     MENU = 'menu'
 
     def to_control_type(self):
-        """Converts the value to a attribute type understandable by circulation-web
+        """Converts the value to a attribute type understandable by circulation-admin
 
         :return: String representation of attribute's type
         :rtype: string
         """
-        # NOTE: For some reason, circulation-web converts "text" into <text> so we have to turn it into None
-        # In this case circulation-web will use <input>
+        # NOTE: For some reason, circulation-admin converts "text" into <text> so we have to turn it into None
+        # In this case circulation-admin will use <input>
         # TODO: To be fixed in https://jira.nypl.org/browse/SIMPLY-3008
         if self.value == self.TEXT.value:
             return None
@@ -1360,9 +1360,9 @@ class ConfigurationGrouping(HasConfigurationSettings):
 
     @classmethod
     def to_settings_generator(cls):
-        """Return a generator object returning settings in a format understandable by circulation-web.
+        """Return a generator object returning settings in a format understandable by circulation-admin.
 
-        :return: list of settings in a format understandable by circulation-web.
+        :return: list of settings in a format understandable by circulation-admin.
         :rtype: List[Dict]
         """
         for name, member in ConfigurationMetadata.get_configuration_metadata(cls):
@@ -1391,9 +1391,9 @@ class ConfigurationGrouping(HasConfigurationSettings):
 
     @classmethod
     def to_settings(cls):
-        """Return a list of settings in a format understandable by circulation-web.
+        """Return a list of settings in a format understandable by circulation-admin.
 
-        :return: list of settings in a format understandable by circulation-web.
+        :return: list of settings in a format understandable by circulation-admin.
         :rtype: List[Dict]
         """
         return list(cls.to_settings_generator())
