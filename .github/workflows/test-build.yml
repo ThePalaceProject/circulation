@@ -139,14 +139,14 @@ jobs:
 
       - name: Generate tags for circ-exec image
         id: exec-tags
-        uses: crazy-max/ghaction-docker-meta@v2
+        uses: docker/metadata-action@v3
         with:
           images: ghcr.io/${{ github.repository_owner }}/circ-exec
           tags: |
-            type=sha
-            type=ref,event=branch
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}},priority=10
+            type=semver,pattern={{version}},priority=20
+            type=ref,event=branch,priority=30
+            type=sha,priority=40
 
       - name: Build & push circ-exec image
         uses: docker/build-push-action@v2
@@ -217,14 +217,14 @@ jobs:
 
       - name: Generate tags for circ-scripts image
         id: scripts-tags
-        uses: crazy-max/ghaction-docker-meta@v2
+        uses: docker/metadata-action@v3
         with:
           images: ghcr.io/${{ github.repository_owner }}/circ-scripts
           tags: |
-            type=sha
-            type=ref,event=branch
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}},priority=10
+            type=semver,pattern={{version}},priority=20
+            type=ref,event=branch,priority=30
+            type=sha,priority=40
 
       - name: Push circ-scripts image
         uses: docker/build-push-action@v2
@@ -295,14 +295,14 @@ jobs:
 
       - name: Generate tags for circ-webapp image
         id: webapp-tags
-        uses: crazy-max/ghaction-docker-meta@v2
+        uses: docker/metadata-action@v3
         with:
           images: ghcr.io/${{ github.repository_owner }}/circ-webapp
           tags: |
-            type=sha
-            type=ref,event=branch
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}},priority=10
+            type=semver,pattern={{version}},priority=20
+            type=ref,event=branch,priority=30
+            type=sha,priority=40
 
       - name: Push circ-webapp image
         uses: docker/build-push-action@v2
