@@ -1,5 +1,5 @@
-Welcome to Library Simplified Circulation Manager's documentation!
-==================================================================
+Welcome to the Palace Manager's documentation!
+==============================================
 
 .. toctree::
   :maxdepth: 2

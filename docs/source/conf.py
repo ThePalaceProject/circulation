@@ -20,9 +20,9 @@ sys.path.insert(0, os.path.abspath('../../'))
 
 # -- Project information -----------------------------------------------------
 year = datetime.datetime.now().year
-project = 'Library Simplified Circulation Manager'
-copyright = '%s, The New York Public Library, Astor, Lenox, and Tilden Foundations' % year
-author = 'Library Simplified'
+project = 'Palace Manager'
+copyright = '%s, LYRASIS' % year
+author = 'The Palace Project'
 
 # The short X.Y version
 version = ''
@@ -67,7 +67,7 @@ language = None
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = []
+exclude_patterns = ['app.py', 'api/app.py', 'tests']
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = None
@@ -89,7 +89,7 @@ html_theme = 'alabaster'
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['../build/html/_static']
+html_static_path = []
 
 # Custom sidebar templates, must be a dictionary that maps document names
 # to template names.
@@ -100,13 +100,6 @@ html_static_path = ['../build/html/_static']
 # 'searchbox.html']``.
 #
 # html_sidebars = {}
-
-
-# -- Options for HTMLHelp output ---------------------------------------------
-
-# Output file base name for HTML help builder.
-htmlhelp_basename = 'LibrarySimplifiedCirculationManagerdoc'
-
 
 # -- Options for LaTeX output ------------------------------------------------
 
@@ -132,52 +125,11 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'LibrarySimplifiedCirculationManager.tex',
-     'Library Simplified Circulation Manager Documentation',
-     'Library Simplified', 'manual'),
+    (master_doc, 'PalaceManager.tex',
+     'Palace Manager Documentation',
+     'The Palace Project', 'manual'),
 ]
-
-
-# -- Options for manual page output ------------------------------------------
-
-# One entry per manual page. List of tuples
-# (source start file, name, description, authors, manual section).
-man_pages = [
-    (master_doc, 'librarysimplifiedcirculationmanager',
-     'Library Simplified Circulation Manager Documentation',
-     [author], 1)
-]
-
-
-# -- Options for Texinfo output ----------------------------------------------
-
-# Grouping the document tree into Texinfo files. List of tuples
-# (source start file, target name, title, author,
-#  dir menu entry, description, category)
-texinfo_documents = [
-    (master_doc, 'LibrarySimplifiedCirculationManager',
-     'Library Simplified Circulation Manager Documentation',
-     author, 'LibrarySimplifiedCirculationManager', 'One line description of project.',
-     'Miscellaneous'),
-]
-
-
-# -- Options for Epub output -------------------------------------------------
-
-# Bibliographic Dublin Core info.
-epub_title = project
-
-# The unique identifier of the text. This can be a ISBN number
-# or the project homepage.
-#
-# epub_identifier = ''
-
-# A unique identification for the text.
-#
-# epub_uid = ''
-
-# A list of files that should not be packed into the epub file.
-epub_exclude_files = ['search.html']
 
 
 # -- Extension configuration -------------------------------------------------
+autodoc_mock_imports = []
