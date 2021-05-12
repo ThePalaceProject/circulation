@@ -832,7 +832,7 @@ class TestAdminStatic(AdminRouteTest):
     CONTROLLER_NAME = "static_files"
 
     def test_static_file(self):
-        url = "/admin/static/circulation-web.js"
+        url = "/admin/static/circulation-admin.js"
 
         # Go to the back to the root folder to get the right
         # path for the static files.
@@ -840,15 +840,15 @@ class TestAdminStatic(AdminRouteTest):
             os.path.join(
                 os.path.abspath(os.path.dirname(__file__)),
                 "../..",
-                "api/admin/node_modules/simplified-circulation-web/dist"
+                "api/admin/node_modules/@thepalaceproject/circulation-admin/dist"
             )
         )
 
         self.assert_request_calls(
-            url, self.controller.static_file, local_path, "circulation-web.js"
+            url, self.controller.static_file, local_path, "circulation-admin.js"
         )
 
-        url = "/admin/static/circulation-web.css"
+        url = "/admin/static/circulation-admin.css"
         self.assert_request_calls(
-            url, self.controller.static_file, local_path, "circulation-web.css"
+            url, self.controller.static_file, local_path, "circulation-admin.css"
         )

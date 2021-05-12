@@ -4,10 +4,10 @@ admin = """
 <head>
 <title>Circulation Manager</title>
 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
-<link href=\"/admin/static/circulation-web.css\" rel="stylesheet" />
+<link href=\"/admin/static/circulation-admin.css\" rel="stylesheet" />
 </head>
 <body>
-  <script src=\"/admin/static/circulation-web.js\"></script>
+  <script src=\"/admin/static/circulation-admin.js\"></script>
   <script>
     var circulationWeb = new CirculationWeb({
         csrfToken: \"{{ csrf_token }}\",

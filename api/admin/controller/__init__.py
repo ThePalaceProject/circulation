@@ -1428,7 +1428,7 @@ class SettingsController(AdminCirculationManagerController):
 
     @staticmethod
     def _get_menu_values(setting_key, form):
-        """circulation-web returns "menu" values in a different format not compatible with werkzeug.MultiDict semantics:
+        """circulation-admin returns "menu" values in a different format not compatible with werkzeug.MultiDict semantics:
             {setting_key}_{menu} = {value_in_the_dropdown_box}
             {setting_key}_{setting_value1} = {setting_label1}
             {setting_key}_{setting_value2} = {setting_label2}
@@ -1441,7 +1441,7 @@ class SettingsController(AdminCirculationManagerController):
         :type setting_key: str
 
         :param form: Multi-dictionary containing input values submitted by the user
-            and sent back to CM by circulation-web
+            and sent back to CM by circulation-admin
         :type form: werkzeug.MultiDict
 
         :return: List of "menu" values
