@@ -1,0 +1,37 @@
+name: Sync branch with NYPL
+on:
+  schedule:
+    - cron:  '0 7 * * *'
+
+  workflow_dispatch:
+
+jobs:
+  sync_with_nypl:
+    runs-on: ubuntu-latest
+
+    env:
+      REMOTE_ORG: NYPL-Simplified
+      REMOTE_REPO: circulation
+      REMOTE_BRANCH: develop
+      LOCAL_BRANCH: nypl/develop
+
+    steps:
+    - name: Checkout local branch
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ env.LOCAL_BRANCH }}
+
+    - name: Fetch remote repo
+      id: fetch
+      run: |
+        git remote add upstream https://github.com/${{ env.REMOTE_ORG }}/${{ env.REMOTE_REPO }}.git
+        git fetch upstream ${{ env.REMOTE_BRANCH }}
+        echo "::set-output name=LOCAL_COMMIT::$(git rev-parse refs/heads/${{ env.LOCAL_BRANCH }})"
+        echo "::set-output name=REMOTE_COMMIT::$(git rev-parse refs/remotes/upstream/${{ env.REMOTE_BRANCH }})"
+
+    - name: Sync
+      if: steps.fetch.outputs.LOCAL_COMMIT != steps.fetch.outputs.REMOTE_COMMIT
+      run: |
+        git pull --no-edit --ff-only upstream ${{ env.REMOTE_BRANCH }}
+        git push origin ${{ env.LOCAL_BRANCH }}
+
