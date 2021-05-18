@@ -5,6 +5,8 @@ env:
   POSTGRES_PASSWORD: test
   POSTGRES_DB: simplified_circulation_test
   SIMPLIFIED_TEST_DATABASE: postgres://simplified_test:test@localhost:5432/simplified_circulation_test
+  # Don't push the Docker image if the `NO_DOCKER_IMAGE` secret is set.
+  IMAGE_PUSH_ENABLED: ${{ secrets.NO_DOCKER_IMAGE == null }}
 
 jobs:
   test-circulation:
@@ -153,7 +155,7 @@ jobs:
         with:
           context: ./docker
           file: ./docker/Dockerfile.exec
-          push: true
+          push: ${{ env.IMAGE_PUSH_ENABLED }}
           tags: ${{ steps.exec-tags.outputs.tags }}
           build-args: |
             repo=${{ github.repository }}
@@ -231,7 +233,7 @@ jobs:
         with:
           context: ./docker
           file: ./docker/Dockerfile.scripts
-          push: true
+          push: ${{ env.IMAGE_PUSH_ENABLED }}
           tags: ${{ steps.scripts-tags.outputs.tags }}
           build-args: |
             repo=${{ github.repository }}
@@ -309,7 +311,7 @@ jobs:
         with:
           context: ./docker
           file: ./docker/Dockerfile.webapp
-          push: true
+          push: ${{ env.IMAGE_PUSH_ENABLED }}
           tags: ${{ steps.webapp-tags.outputs.tags }}
           build-args: |
             repo=${{ github.repository }}
