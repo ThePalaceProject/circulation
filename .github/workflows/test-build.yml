@@ -4,6 +4,8 @@ env:
   POSTGRES_USER: simplified_test
   POSTGRES_PASSWORD: test
   POSTGRES_DB: simplified_circulation_test
+  # Don't push the Docker image if the `NO_DOCKER_IMAGE` secret is set.
+  IMAGE_PUSH_ENABLED: ${{ secrets.NO_DOCKER_IMAGE == null }}
 
 jobs:
   test-circulation:
@@ -91,29 +93,30 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
 
-      - name: Login to DockerHub
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v1
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate tags for circ-exec image
         id: exec-tags
-        uses: crazy-max/ghaction-docker-meta@v2
+        uses: docker/metadata-action@v3
         with:
-          images: ${{ github.repository_owner }}/circ-exec
+          images: ghcr.io/${{ github.repository_owner }}/circ-exec
           tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
+            type=semver,pattern={{major}}.{{minor}},priority=10
+            type=semver,pattern={{version}},priority=20
+            type=ref,event=branch,priority=30
+            type=sha,priority=40
 
       - name: Build & push circ-exec image
         uses: docker/build-push-action@v2
         with:
           context: ./docker
           file: ./docker/Dockerfile.exec
-          push: true
+          push: ${{ env.IMAGE_PUSH_ENABLED }}
           tags: ${{ steps.exec-tags.outputs.tags }}
           build-args: |
             repo=${{ github.repository }}
@@ -143,11 +146,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
 
-      - name: Login to DockerHub
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v1
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build circ-scripts image
         uses: docker/build-push-action@v2
@@ -176,21 +180,21 @@ jobs:
 
       - name: Generate tags for circ-scripts image
         id: scripts-tags
-        uses: crazy-max/ghaction-docker-meta@v2
+        uses: docker/metadata-action@v3
         with:
-          images: ${{ github.repository_owner }}/circ-scripts
+          images: ghcr.io/${{ github.repository_owner }}/circ-scripts
           tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
+            type=semver,pattern={{major}}.{{minor}},priority=10
+            type=semver,pattern={{version}},priority=20
+            type=ref,event=branch,priority=30
+            type=sha,priority=40
 
       - name: Push circ-scripts image
         uses: docker/build-push-action@v2
         with:
           context: ./docker
           file: ./docker/Dockerfile.scripts
-          push: true
+          push: ${{ env.IMAGE_PUSH_ENABLED }}
           tags: ${{ steps.scripts-tags.outputs.tags }}
           build-args: |
             repo=${{ github.repository }}
@@ -220,11 +224,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
 
-      - name: Login to DockerHub
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v1
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build circ-webapp image
         uses: docker/build-push-action@v2
@@ -253,21 +258,21 @@ jobs:
 
       - name: Generate tags for circ-webapp image
         id: webapp-tags
-        uses: crazy-max/ghaction-docker-meta@v2
+        uses: docker/metadata-action@v3
         with:
-          images: ${{ github.repository_owner }}/circ-webapp
+          images: ghcr.io/${{ github.repository_owner }}/circ-webapp
           tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
+            type=semver,pattern={{major}}.{{minor}},priority=10
+            type=semver,pattern={{version}},priority=20
+            type=ref,event=branch,priority=30
+            type=sha,priority=40
 
       - name: Push circ-webapp image
         uses: docker/build-push-action@v2
         with:
           context: ./docker
           file: ./docker/Dockerfile.webapp
-          push: true
+          push: ${{ env.IMAGE_PUSH_ENABLED }}
           tags: ${{ steps.webapp-tags.outputs.tags }}
           build-args: |
             repo=${{ github.repository }}
