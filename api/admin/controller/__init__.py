@@ -297,6 +297,24 @@ class AdminCirculationManagerController(CirculationManagerController):
             raise AdminNotAuthorized()
 
 class ViewController(AdminController):
+    CDN_URL = "https://cdn.jsdelivr.net/npm/@thepalaceproject/circulation-admin@{}/dist/{}"
+    ADMIN_UI_VERSION = "0.0.2"
+    JS = "circulation-admin.js"
+    CSS = "circulation-admin.css"
+
+    @classmethod
+    def debug_file_path(cls):
+        path = os.path.split(os.path.abspath(os.path.dirname(__file__)))[0]
+        return os.path.join(path, "node_modules", "@thepalaceproject", "circulation-admin", "dist")
+
+    # If a local copy of the CSS and JS is available, we serve it instead of the copy
+    # from the CDN, so that it is easy to debug and test changes to the JS app
+    @classmethod
+    def use_debug_paths(cls):
+        debug_css_avail = os.path.isfile(os.path.join(cls.debug_file_path(), cls.CSS))
+        debug_js_avail = os.path.isfile(os.path.join(cls.debug_file_path(), cls.JS))
+        return debug_css_avail and debug_js_avail
+
     def __call__(self, collection, book, path=None):
         setting_up = (self.admin_auth_providers == [])
         email = None
@@ -338,6 +356,13 @@ class ViewController(AdminController):
 
         csrf_token = flask.request.cookies.get("csrf_token") or self.generate_csrf_token()
 
+        if self.use_debug_paths():
+            admin_js = "/admin/static/{}".format(self.JS)
+            admin_css = "/admin/static/{}".format(self.CSS)
+        else:
+            admin_js = self.CDN_URL.format(self.ADMIN_UI_VERSION, self.JS)
+            admin_css = self.CDN_URL.format(self.ADMIN_UI_VERSION, self.CSS)
+
         # Find the URL and text to use when rendering the Terms of
         # Service link in the footer.
         sitewide_tos_href = ConfigurationSetting.sitewide(
@@ -363,6 +388,8 @@ class ViewController(AdminController):
             setting_up=setting_up,
             email=email,
             roles=roles,
+            admin_js=admin_js,
+            admin_css=admin_css
         ))
 
         # The CSRF token is in its own cookie instead of the session cookie,

@@ -17,7 +17,9 @@ from core.model import (
     Library,
 )
 
-from .controller import setup_admin_controllers
+from .controller import (setup_admin_controllers,
+    ViewController,
+)
 from .templates import (
     admin_sign_in_again as sign_in_again_template,
 )
@@ -650,14 +652,16 @@ def admin_view(collection=None, book=None, etc=None, **kwargs):
 def admin_base(**kwargs):
     return redirect(app.manager.url_for('admin_view'))
 
+# These paths are only used in debug mode when serving the
+# admin javascript app alongside the admin api
 @app.route('/admin/static/circulation-admin.js')
 @returns_problem_detail
 def admin_js():
-    directory = os.path.join(os.path.abspath(os.path.dirname(__file__)), "node_modules", "@thepalaceproject", "circulation-admin", "dist")
-    return app.manager.static_files.static_file(directory, "circulation-admin.js")
+    directory = app.manager.admin_view_controller.debug_file_path()
+    return app.manager.static_files.static_file(directory, app.manager.admin_view_controller.JS)
 
 @app.route('/admin/static/circulation-admin.css')
 @returns_problem_detail
 def admin_css():
-    directory = os.path.join(os.path.abspath(os.path.dirname(__file__)), "node_modules", "@thepalaceproject", "circulation-admin", "dist")
-    return app.manager.static_files.static_file(directory, "circulation-admin.css")
+    directory = app.manager.admin_view_controller.debug_file_path()
+    return app.manager.static_files.static_file(directory, app.manager.admin_view_controller.CSS)
