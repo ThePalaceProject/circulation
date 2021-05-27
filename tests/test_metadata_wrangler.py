@@ -485,7 +485,6 @@ class TestBaseMetadataWranglerCoverageProvider(MetadataWranglerCoverageProviderT
                 Identifier.OVERDRIVE_ID,
                 Identifier.BIBLIOTHECA_ID,
                 Identifier.AXIS_360_ID,
-                Identifier.ONECLICK_ID,
                 Identifier.URI,
             ]) ==
             set(BaseMetadataWranglerCoverageProvider.INPUT_IDENTIFIER_TYPES))

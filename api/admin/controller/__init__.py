@@ -45,7 +45,6 @@ from api.odilo import OdiloAPI
 from api.odl import ODLAPI, SharedODLAPI
 from api.opds_for_distributors import OPDSForDistributorsAPI
 from api.overdrive import OverdriveAPI
-from api.rbdigital import RBDigitalAPI
 from core.app_server import (
     load_pagination_from_request,
 )
@@ -1304,7 +1303,6 @@ class SettingsController(AdminCirculationManagerController):
         OdiloAPI,
         BibliothecaAPI,
         Axis360API,
-        RBDigitalAPI,
         EnkiAPI,
         ODLAPI,
         SharedODLAPI,
