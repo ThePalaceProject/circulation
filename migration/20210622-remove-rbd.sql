@@ -1,5 +1,3 @@
-BEGIN;
-
 -- Remove RBD datasource and all realated content
 DELETE FROM classifications USING datasources WHERE datasources.name = 'RBdigital' AND classifications.data_source_id = datasources.id;
 DELETE FROM coveragerecords USING datasources WHERE datasources.name = 'RBdigital' AND coveragerecords.data_source_id = datasources.id;
@@ -40,5 +38,3 @@ DELETE FROM timestamps USING collections, externalintegrations WHERE timestamps.
 DELETE FROM collections_customlists USING collections, externalintegrations WHERE collections_customlists.collection_id = collections.id AND collections.external_integration_id = externalintegrations.id AND externalintegrations.protocol = 'RBdigital';
 DELETE FROM collections USING externalintegrations WHERE collections.external_integration_id = externalintegrations.id AND externalintegrations.protocol = 'RBdigital';
 DELETE FROM externalintegrations WHERE externalintegrations.protocol = 'RBdigital';
-
-COMMIT;
