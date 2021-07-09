@@ -2052,6 +2052,9 @@ class DatabaseMigrationScript(Script):
     # There are some SQL commands that can't be run inside a transaction.
     TRANSACTIONLESS_COMMANDS = ['alter type']
 
+    TRANSACTION_PER_STATEMENT = 'SIMPLYE_MIGRATION_TRANSACTION_PER_STATEMENT'
+    DO_NOT_EXECUTE = 'SIMPLYE_MIGRATION_DO_NOT_EXECUTE'
+
     class TimestampInfo(object):
         """Act like a ORM Timestamp object, but with no database connection."""
 
@@ -2461,27 +2464,65 @@ class DatabaseMigrationScript(Script):
         """Runs a single SQL or Python migration file"""
 
         migration_filename = os.path.split(migration_path)[1]
+        ok_to_execute = True
 
         if migration_path.endswith('.sql'):
             with open(migration_path) as clause:
                 sql = clause.read()
 
                 transactionless = any([c for c in self.TRANSACTIONLESS_COMMANDS if c in sql.lower()])
-                if transactionless:
-                    new_session = self._run_migration_without_transaction(sql)
-                else:
-                    # By wrapping the action in a transation, we can avoid
-                    # rolling over errors and losing data in files
-                    # with multiple interrelated SQL actions.
-                    sql = 'BEGIN;\n%s\nCOMMIT;' % sql
-                    self._db.execute(sql)
+                one_tx_per_statement = bool(self.TRANSACTION_PER_STATEMENT.lower() in sql.lower())
+                ok_to_execute = not bool(self.DO_NOT_EXECUTE.lower() in sql.lower())
+
+                if ok_to_execute:
+                    if transactionless:
+                        new_session = self._run_migration_without_transaction(sql)
+                    elif one_tx_per_statement:
+                        commands = self._extract_statements_from_sql_file(migration_path)
+                        for command in commands:
+                            self._db.execute(f"BEGIN;{command}COMMIT;")
+                    else:
+                        # By wrapping the action in a transation, we can avoid
+                        # rolling over errors and losing data in files
+                        # with multiple interrelated SQL actions.
+                        sql = 'BEGIN;\n%s\nCOMMIT;' % sql
+                        self._db.execute(sql)
 
         if migration_path.endswith('.py'):
             module_name = migration_filename[:-3]
             subprocess.call(migration_path)
 
         # Update timestamp for the migration.
-        self.update_timestamps(migration_filename)
+        if ok_to_execute:
+            self.update_timestamps(migration_filename)
+
+    def _extract_statements_from_sql_file(self, filepath):
+        """
+        From an SQL file, return a python list of the individual statements.
+
+        Removes comment lines and extraneous whitespace at the start / end of
+        statements, but that's about it. Use carefully.
+        """
+        with open(filepath) as f:
+            sql_file_lines = f.readlines()
+
+        sql_commands = []
+        current_command = ''
+
+        for line in sql_file_lines:
+            if line.strip().startswith('--'):
+                continue
+            else:
+                if current_command == '':
+                    current_command = line.strip()
+                else:
+                    current_command = current_command + ' ' + line.strip()
+
+            if current_command.endswith(';'):
+                sql_commands.append(current_command)
+                current_command = ''
+
+        return sql_commands
 
     def _run_migration_without_transaction(self, sql_statement):
         """Runs a single SQL statement outside of a transaction."""
