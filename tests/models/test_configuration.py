@@ -257,6 +257,16 @@ class TestConfigurationSetting(DatabaseTest):
         setting.value = set_to
         assert setting.value == expect
 
+    def test_stored_bytes_value(self):
+        bytes_setting = ConfigurationSetting.sitewide(self._db, "bytes_setting")
+        assert bytes_setting.value is None
+
+        bytes_setting.value = '1234 ☃'.encode('utf8')
+        assert '1234 ☃' == bytes_setting.value
+
+        with pytest.raises(UnicodeDecodeError):
+            bytes_setting.value = b'\x80'
+
     def test_int_value(self):
         number = ConfigurationSetting.sitewide(self._db, "number")
         assert None == number.int_value
