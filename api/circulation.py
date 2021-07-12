@@ -572,7 +572,10 @@ class CirculationAPI(object):
         PatronUtility.assert_borrowing_privileges(patron)
 
         now = datetime.datetime.utcnow()
-        if licensepool.open_access or licensepool.self_hosted:
+        api = self.api_for_license_pool(licensepool)
+
+        if licensepool.open_access or licensepool.self_hosted or \
+                (not api and licensepool.unlimited_access):
             # We can 'loan' open-access content ourselves just by
             # putting a row in the database.
             now = datetime.datetime.utcnow()
@@ -585,7 +588,6 @@ class CirculationAPI(object):
         # Okay, it's not an open-access book. This means we need to go
         # to an external service to get the book.
 
-        api = self.api_for_license_pool(licensepool)
         if not api:
             # If there's no API for the pool, the pool is probably associated
             # with a collection that this library doesn't have access to.
@@ -917,7 +919,10 @@ class CirculationAPI(object):
                   requested_delivery_mechanism=delivery_mechanism.delivery_mechanism.name)
             )
 
-        if licensepool.open_access or licensepool.self_hosted:
+        api = self.api_for_license_pool(licensepool)
+
+        if licensepool.open_access or licensepool.self_hosted or \
+                (not api and licensepool.unlimited_access):
             # We ignore the vendor-specific arguments when doing
             # open-access fulfillment, because we just don't support
             # partial fulfillment of open-access content.
@@ -928,7 +933,9 @@ class CirculationAPI(object):
             if licensepool.self_hosted:
                 fulfillment = self._try_to_sign_fulfillment_link(licensepool, fulfillment)
         else:
-            api = self.api_for_license_pool(licensepool)
+            if not api:
+                raise CannotFulfill()
+
             internal_format = api.internal_format(delivery_mechanism)
 
             # Here we _do_ pass in the vendor-specific arguments, but

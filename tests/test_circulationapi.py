@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import flask
 import pytest
 from flask import Flask
+from mock import MagicMock
 from parameterized import parameterized
 
 from api.authenticator import LibraryAuthenticator, PatronData
@@ -32,11 +33,12 @@ from core.model import (
     Hyperlink,
     Identifier,
     Loan,
+    MediaTypes,
     Representation,
     RightsStatus,
 )
-
 from core.testing import DatabaseTest
+
 from . import sample_data
 
 
@@ -145,6 +147,28 @@ class TestCirculationAPI(DatabaseTest):
     def test_borrowing_of_self_hosted_book_succeeds(self):
         # Arrange
         self.pool.self_hosted = True
+
+        # Act
+        loan, hold, is_new = self.borrow()
+
+        # Assert
+        assert True == is_new
+        assert self.pool == loan.license_pool
+        assert self.patron == loan.patron
+        assert hold is None
+
+    def test_borrowing_of_unlimited_access_book_succeeds(self):
+        """Ensure that unlimited access books that don't belong to collections
+            having a custom CirculationAPI implementation (e.g., OPDS 1.x, OPDS 2.x collections)
+            are checked out in the same way as OA and self-hosted books."""
+        # Arrange
+
+        # Reset the API map, this book belongs to the "basic" collection,
+        # i.e. collection without a custom CirculationAPI implementation.
+        self.circulation.api_for_license_pool = MagicMock(return_value=None)
+
+        # Mark the book as unlimited access.
+        self.pool.unlimited_access = True
 
         # Act
         loan, hold, is_new = self.borrow()
@@ -839,6 +863,58 @@ class TestCirculationAPI(DatabaseTest):
         pytest.raises(FormatNotAvailable, self.circulation.fulfill_open_access,
                       self.pool, i_want_an_epub)
 
+    def test_fulfilment_of_unlimited_access_book_succeeds(self):
+        """Ensure that unlimited access books that don't belong to collections
+            having a custom CirculationAPI implementation (e.g., OPDS 1.x, OPDS 2.x collections)
+            are fulfilled in the same way as OA and self-hosted books."""
+        # Reset the API map, this book belongs to the "basic" collection,
+        # i.e. collection without a custom CirculationAPI implementation.
+        self.circulation.api_for_license_pool = MagicMock(return_value=None)
+
+        # Mark the book as unlimited access.
+        self.pool.unlimited_access = True
+
+        media_type = MediaTypes.EPUB_MEDIA_TYPE
+
+        # Create a borrow link.
+        link, _ = self.pool.identifier.add_link(
+            Hyperlink.BORROW,
+            self._url,
+            self.pool.data_source
+        )
+
+        # Create a license pool delivery mechanism.
+        self.pool.set_delivery_mechanism(
+            media_type,
+            DeliveryMechanism.ADOBE_DRM,
+            RightsStatus.IN_COPYRIGHT,
+            link.resource,
+        )
+
+        # Create a representation.
+        representation, _ = self._representation(
+            link.resource.url,
+            media_type,
+            "Dummy content",
+            mirrored=True
+        )
+        link.resource.representation = representation
+
+        # Act
+        self.pool.loan_to(self.patron)
+
+        result = self.circulation.fulfill(
+            self.patron,
+            '1234',
+            self.pool,
+            self.pool.delivery_mechanisms[0]
+        )
+
+        # The fulfillment looks good.
+        assert isinstance(result, FulfillmentInfo)
+        assert result.content_link == link.resource.representation.public_url
+        assert result.content_type == media_type
+
     def test_fulfill(self):
         self.pool.loan_to(self.patron)
 
@@ -1331,6 +1407,7 @@ class TestCirculationAPI(DatabaseTest):
         # An open access pool can be fulfilled even without the BaseCirculationAPI.
         pool.open_access = True
         assert True == circulation.can_fulfill_without_loan(None, pool, object())
+
 
 class TestBaseCirculationAPI(DatabaseTest):
 
