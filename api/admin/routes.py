@@ -650,14 +650,14 @@ def admin_view(collection=None, book=None, etc=None, **kwargs):
 def admin_base(**kwargs):
     return redirect(app.manager.url_for('admin_view'))
 
-@app.route('/admin/static/circulation-web.js')
+@app.route('/admin/static/circulation-admin.js')
 @returns_problem_detail
 def admin_js():
-    directory = os.path.join(os.path.abspath(os.path.dirname(__file__)), "node_modules", "simplified-circulation-web", "dist")
-    return app.manager.static_files.static_file(directory, "circulation-web.js")
+    directory = os.path.join(os.path.abspath(os.path.dirname(__file__)), "node_modules", "@thepalaceproject", "circulation-admin", "dist")
+    return app.manager.static_files.static_file(directory, "circulation-admin.js")
 
-@app.route('/admin/static/circulation-web.css')
+@app.route('/admin/static/circulation-admin.css')
 @returns_problem_detail
 def admin_css():
-    directory = os.path.join(os.path.abspath(os.path.dirname(__file__)), "node_modules", "simplified-circulation-web", "dist")
-    return app.manager.static_files.static_file(directory, "circulation-web.css")
+    directory = os.path.join(os.path.abspath(os.path.dirname(__file__)), "node_modules", "@thepalaceproject", "circulation-admin", "dist")
+    return app.manager.static_files.static_file(directory, "circulation-admin.css")

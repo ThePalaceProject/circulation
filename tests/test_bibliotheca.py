@@ -1563,6 +1563,16 @@ class TestItemListParser(BibliothecaAPITest):
             "Baum, Frank L. (Frank Lyell)")
         assert "Baum, Frank L." == author.sort_name
 
+        # Contributors may have two levels of entity reference escaping,
+        # one of which will have already been handled by the initial parse.
+        # So, we'll test zero and one escapings here.
+        authors = list(ItemListParser.contributors_from_string(
+            u'Raji Codell, Esmé; Raji Codell, Esm&#233;'))
+        author_names = [a.sort_name for a in authors]
+        assert len(authors) == 2
+        assert len(set(author_names)) == 1
+        assert all(u'Raji Codell, Esmé' == name for name in author_names)
+
         # It's possible to specify some role other than AUTHOR_ROLE.
         narrators = list(
             ItemListParser.contributors_from_string(

@@ -1,19 +1,15 @@
 # Library Simplified Circulation Manager
-![Build Status](https://github.com/nypl-simplified/circulation/actions/workflows/test.yml/badge.svg?branch=develop) [![GitHub Release](https://img.shields.io/github/release/nypl-simplified/circulation.svg?style=flat)]()
+[![Test Circulation & Build Docker Images](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml/badge.svg)](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml)
 
-## Overview
+This is a [The Palace Project](https://thepalaceproject.org) maintained fork of the NYPL [Library Simplified](http://www.librarysimplified.org/) Circulation Manager.
 
-Default Branch: `develop`
-
-This is the Circulation Manager for [Library Simplified](https://www.librarysimplified.org/). The Circulation Manager is the main connection between a library's collection and Library Simplified's various client-side applications, including SimplyE. It handles user authentication, combines licensed works with open access content, pulls in updated book information from the [Metadata Wrangler](https://github.com/NYPL-Simplified/metadata_wrangler), and serves up available books in appropriately organized OPDS feeds.
-
-It depends on [Library Simplified Server Core](https://github.com/NYPL-Simplified/server_core) as a git submodule.
+It depends on [Circulation Core](https://github.com/thepalaceproject/circulation-core) as a git submodule.
 
 ## Installation
 
-* [How to install Docker images](https://github.com/NYPL-Simplified/Simplified/wiki/Deployment:-Quickstart-with-Docker)
-* [How to set up a development environment](https://github.com/NYPL-Simplified/Simplified/wiki/Deployment-Instructions)
-* Two sets of Ansible playbooks are in development: [One developed by Minitex](https://github.com/Minitex/ansible-playbook-libsimple) and [a derivative developed by Amigos Library Services](https://github.com/alsrlw/ansible-playbook-libsimple)
+Docker images created from this code are available at:
+https://github.com/ThePalaceProject/circulation/pkgs/container/circ-webapp
+https://github.com/ThePalaceProject/circulation/pkgs/container/circ-scripts
 
 ## Git Branch Workflow
 
@@ -155,11 +151,11 @@ export CPPFLAGS="-DXMLSEC_NO_XKMS=1"
 
 ## Generating Documentation
 
-Code documentation using Sphinx can be found on this repo's [Github Pages](http://nypl-simplified.github.io/circulation/index.html). It currently documents this repo's `api` directory, `scripts` file, and the `core` submodule directory. The configuration for the documentation can be found in `/docs`.
+Code documentation can be generated using Sphinx. The configuration for the documentation can be found in `/docs`.
 
 Github Actions handles generating the `.rst` source files, generating the HTML static site, and deploying the build to the `gh-pages` branch.
 
-To view the documentation _locally_, go into the `/docs` directory and run `make html`. This will generate the .rst source files and build the static site in `/docs/build/html`.
+To view the documentation _locally_, go into the `/docs` directory and run `make html`. This will generate the .rst source files and build the static site in `/docs/build/html`
 
 ## Continuous Integration
 
@@ -168,7 +164,7 @@ This project runs all the unit tests through Github Actions for new pull request
 As mentioned above, Github Actions is also used to build and deploy Sphinx documentation to Github Pages. The relevant file can be found in `.github/workflows/docks.yml`.
 
 ## Testing
-The Github Actions CI service runs the unit tests against Python 3.6, 3.7, and 3.8 automatically using [tox](https://tox.readthedocs.io/en/latest/). 
+The Github Actions CI service runs the unit tests against Python 3.6, 3.7, and 3.8 automatically using [tox](https://tox.readthedocs.io/en/latest/).
 
 To run `pytest` unit tests locally, install `tox`.
 
@@ -177,7 +173,7 @@ pip install tox
 ```
 
 Tox has an environment for each python version and an optional `-docker` factor that will automatically use docker to
-deploy service containers used for the tests. You can select the environment you would like to test with the tox `-e` 
+deploy service containers used for the tests. You can select the environment you would like to test with the tox `-e`
 flag.
 
 ### Environments
@@ -189,7 +185,7 @@ flag.
 | py38        | Python 3.8     |
 
 All of these environments are tested by default when running tox. To test one specific environment you can use the `-e`
-flag. 
+flag.
 
 Test Python 3.8
 ```
@@ -203,14 +199,14 @@ You need to have the Python versions you are testing against installed on your l
 ### Docker
 
 If you install `tox-docker` tox will take care of setting up all the service containers necessary to run the unit tests
-and pass the correct environment variables to configure the tests to use these services. Using `tox-docker` is not required, but it is the recommended way to run the tests locally, since it runs the tests in the same way they are run on the Github Actions CI server. 
+and pass the correct environment variables to configure the tests to use these services. Using `tox-docker` is not required, but it is the recommended way to run the tests locally, since it runs the tests in the same way they are run on the Github Actions CI server.
 
 ```
 pip install tox-docker
-``` 
+```
 
 The docker functionality is included in a `docker` factor that can be added to the environment. To run an environment
-with a particular factor you add it to the end of the environment. 
+with a particular factor you add it to the end of the environment.
 
 Test with Python 3.8 using docker containers for the services.
 ```
@@ -239,7 +235,7 @@ tox -e py38
 ### Override `pytest` arguments
 
 If you wish to pass additional arguments to `pytest` you can do so through `tox`. The default argument passed to `pytest`
-is `tests`, however you can override this. Every argument passed after a `--` to the `tox` command line will the passed 
+is `tests`, however you can override this. Every argument passed after a `--` to the `tox` command line will the passed
 to `pytest`, overriding the default.
 
 Only run the `test_cdn` tests with Python 3.6 using docker.
@@ -251,21 +247,3 @@ tox -e py36-docker -- tests/test_google_analytics_provider.py
 ## Usage with Docker
 
 Check out the [Docker README](/docker/README.md) in the `/docker` directory for in-depth information on optionally running and developing the Circulation Manager locally with Docker, or for deploying the Circulation Manager with Docker.
-
-## License
-
-```
-Copyright © 2015 The New York Public Library, Astor, Lenox, and Tilden Foundations
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-   http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-```
