@@ -12,6 +12,6 @@
     "npm": ">=7.0.0"
   },
   "dependencies": {
-    "@thepalaceproject/circulation-admin": "^0.0.2"
+    "@thepalaceproject/circulation-admin": "^0.0.3"
   }
 }
