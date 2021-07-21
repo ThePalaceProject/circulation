@@ -4,7 +4,7 @@
 
 FROM amd64/golang AS builder
 
-LABEL maintainer="Library Simplified <info@librarysimplified.org>"
+LABEL maintainer="The Palace Project <info@thepalaceproject.org>"
 
 RUN go get -v github.com/readium/readium-lcp-server/lcpencrypt
 
@@ -17,12 +17,12 @@ FROM phusion/baseimage:bionic-1.0.0
 COPY --from=builder /go/bin/lcpencrypt /go/bin/lcpencrypt
 
 ARG version
-ARG repo="lyrasis/circulation"
+ARG repo="thepalaceproject/circulation"
 
-ENV SIMPLIFIED_DB_TASK "auto"
+ENV SIMPLIFIED_DB_TASK "ignore"
 ENV SIMPLIFIED_SCRIPT_NAME ""
 
-# Copy over all Library Simplified build files for this image
+# Copy over all Palace build files for this image
 COPY . /ls_build
 
 RUN /bin/bash -c "/ls_build/simplified_app.sh ${repo} ${version} \
