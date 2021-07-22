@@ -210,7 +210,8 @@ class TestODL2Importer(TestOPDS2Importer):
             == moby_dick_license.checkout_url
         )
         assert "http://www.example.com/status/294024" == moby_dick_license.status_url
-        assert datetime.datetime(2016, 4, 25, 10, 25, 21) == moby_dick_license.expires
+        assert datetime.datetime(2016, 4, 25, 10, 25, 21, tzinfo=datetime.timezone.utc) \
+               == moby_dick_license.expires
         assert 10 == moby_dick_license.remaining_checkouts
         assert 10 == moby_dick_license.concurrent_checkouts
 
@@ -241,4 +242,4 @@ class TestODL2Importer(TestOPDS2Importer):
             ),
             node_property=None,
         )
-        assert huck_finn_semantic_error.message == huck_finn_failure.exception
+        assert str(huck_finn_semantic_error) == huck_finn_failure.exception

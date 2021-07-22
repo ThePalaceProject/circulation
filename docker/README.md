@@ -1,29 +1,33 @@
 ## Using This Image
 
-You will need **a PostgreSQL instance url** in the format `postgres://[username]:[password]@[host]:[port]/[database_name]`. With this URL, you can created containers for both the web application (`circ-webapp`) and for the background cron jobs that import and update books and otherwise keep the app running smoothly (`circ-scripts`). Either container can be used to initialize or migrate the database. During the first deployment against a brand new database, the first container run can use the default `SIMPLIFIED_DB_TASK='auto'` or be run manually with `SIMPLIFIED_DB_TASK='init'`. See the "Environment Variables" section below for mroe information.
+You will need **a PostgreSQL instance URL** in the format `postgres://[username]:[password]@[host]:[port]/[database_name]`. Check the `./docker-compose.yml` file for an example. With this URL, you can create containers for both the web application (`circ-webapp`) and for the background cron jobs that import and update books and otherwise keep the app running smoothly (`circ-scripts`). Either container can be used to initialize or migrate the database. During the first deployment against a brand new database, the first container run can use the default `SIMPLIFIED_DB_TASK='auto'` or be run manually with `SIMPLIFIED_DB_TASK='init'`. See the "Environment Variables" section below for more information.
 
 ### circ-webapp
 
-```
+Once the webapp Docker image is built, we can run it in a container with the following command.
+
+```sh
 # See the section "Environment Variables" below for more information
 # about the values listed here and their alternatives.
-$ docker run --name webapp \
-    -d -p 80:80 \
+$ docker run --name webapp -d \
+    --p 80:80 \
     -e SIMPLIFIED_PRODUCTION_DATABASE='postgres://[username]:[password]@[host]:[port]/[database_name]' \
-    lyrasis/circ-webapp:develop
+    ghcr.io/thepalaceproject/circ-webapp:main
 ```
 
-Navigate to `http://localhost/admin` to in your browser to input or update configuration information. If you have not yet created an admin authorization protocol before, you'll need to do that before you can set other configuration.
+Navigate to `http://localhost/admin` in your browser to visit the web admin for the Circulation Manager. In the admin, you can add or update configuration information. If you have not yet created an admin authorization protocol before, you'll need to do that before you can set other configuration.
 
 ### circ-scripts
 
-```
+Once the scripts Docker image is built, we can run it in a container with the following command.
+
+```sh
 # See the section "Environment Variables" below for more information
 # about the values listed here and their alternatives.
 $ docker run --name scripts -d \
     -e TZ='YOUR_TIMEZONE_STRING' \
     -e SIMPLIFIED_PRODUCTION_DATABASE='postgres://[username]:[password]@[host]:[port]/[database_name]' \
-    lyrasis/circ-scripts:develop
+    ghcr.io/thepalaceproject/circ-scripts:main
 ```
 
 Using `docker exec -it scripts /bin/bash` in your console, navigate to `/var/log/simplified` in the container. After 5-20 minutes, you'll begin to see log files populate that directory.
@@ -36,13 +40,13 @@ Unlike the `circ-scripts` image, which runs constantly and executes every possib
 
 Because containers based on `circ-exec` are built, run their job, and are destroyed, it's important to configure an external log aggregator.
 
-```
+```sh
 # See the section "Environment Variables" below for more information
 # about the values listed here and their alternatives.
-$ docker run --name refresh-materialized-views -it \
+$ docker run --name search_index_refresh -it \
     -e SIMPLIFIED_SCRIPT_NAME='refresh_materialized_views' \
     -e SIMPLIFIED_PRODUCTION_DATABASE='postgres://[username]:[password]@[host]:[port]/[database_name]' \
-    lyrasis/circ-exec:develop
+    ghcr.io/thepalaceproject/circ-exec:main
 ```
 
 ## Environment Variables
@@ -69,15 +73,23 @@ Environment variables can be set with the `-e VARIABLE_KEY='variable_value'` opt
 
 *Optional. Applies to `circ-scripts` only.* The time zone that cron should use to run scheduled scripts--usually the time zone of the library or libraries on the circulation manager instance. This value should be selected according to [Debian-system time zone options](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones). This value allows scripts to be run at ideal times.
 
+### `UWSGI_PROCESSES`
+
+*Optional.* The number of processes to use when running uWSGI. This value can be updated in `docker-compose.yml` or added directly in `Dockerfile.webapp`. Defaults to 6.
+
+### `UWSGI_THREADS`
+
+*Optional.* The number of threads to use when running uWSGI. This value can be updated in `docker-compose.yml` or added directly in `Dockerfile.webapp`. Defaults to 2.
+
 ## Building new images
 
-If you plan to work with stable versions of the Circulation Manager, we strongly recommend using the latest stable versions of circ-webapp and circ-scripts [published to Docker Hub](https://hub.docker.com/r/lyrasis/). However, there may come a time in development when you want to build Docker containers for a particular version of the Circulation Manager. If so, please use the instructions below.
+If you plan to work with stable versions of the Circulation Manager, we strongly recommend using the latest stable versions of circ-webapp and circ-scripts [published to the GitHub Container Registry](https://github.com/orgs/ThePalaceProject/packages?repo_name=circulation). However, there may come a time in development when you want to build Docker containers for a particular version of the Circulation Manager. If so, please use the instructions below.
 
 We recommend you install at least version 18.06 of the Docker engine and version 1.24 of Docker Compose.
 
-### > `.webapp` and `.scripts`
+### `.webapp` and `.scripts` images
 
-Determine which container you would like to build and update the tag and Dockerfile listed below accordingly.
+Determine which image you would like to build and update the tag and `Dockerfile` listed below accordingly.
 
 ```sh
 $ docker build --build-arg version=YOUR_DESIRED_BRANCH_OR_COMMIT \
