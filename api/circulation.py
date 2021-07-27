@@ -1018,7 +1018,7 @@ class CirculationAPI(object):
         )
         if loan:
             api = self.api_for_license_pool(licensepool)
-            if api is not None:
+            if not (api is None or licensepool.open_access or licensepool.self_hosted):
                 try:
                     api.checkin(patron, pin, licensepool)
                 except NotCheckedOut, e:
