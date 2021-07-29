@@ -573,7 +573,10 @@ class CirculationAPI(object):
         PatronUtility.assert_borrowing_privileges(patron)
 
         now = utc_now()
-        if licensepool.open_access or licensepool.self_hosted:
+        api = self.api_for_license_pool(licensepool)
+
+        if licensepool.open_access or licensepool.self_hosted or \
+                (not api and licensepool.unlimited_access):
             # We can 'loan' open-access content ourselves just by
             # putting a row in the database.
             __transaction = self._db.begin_nested()
@@ -585,7 +588,6 @@ class CirculationAPI(object):
         # Okay, it's not an open-access book. This means we need to go
         # to an external service to get the book.
 
-        api = self.api_for_license_pool(licensepool)
         if not api:
             # If there's no API for the pool, the pool is probably associated
             # with a collection that this library doesn't have access to.
@@ -627,15 +629,30 @@ class CirculationAPI(object):
 
         new_loan = False
 
+        # Some exceptions may be raised during the borrow process even
+        # if the book is not actually available for loan.  In those
+        # cases, we will store the exception here and try to place the
+        # book on hold. If the hold placement succeeds, there's no
+        # problem. If the hold placement fails because the book is
+        # actually available, it's better to raise this exception than
+        # one that says "you tried to place a currently available book
+        # on hold" -- that's probably not what the patron actually
+        # tried to do.
+        loan_exception = None
+
         # Enforce any library-specific limits on loans or holds.
         self.enforce_limits(patron, licensepool)
 
-        # Since that didn't raise an exception, we know that the
-        # patron is able to get a loan or a hold. There are race
-        # conditions that will allow someone to get a hold in excess
-        # of their hold limit (because we thought they were getting a
-        # loan but someone else checked out the book right before we
-        # got to it) but they're rare and not serious.
+        # Since that didn't raise an exception, we don't know of any
+        # reason why the patron shouldn't be able to get a loan or a
+        # hold. There are race conditions that will allow someone to
+        # get a hold in excess of their hold limit (because we thought
+        # they were getting a loan but someone else checked out the
+        # book right before we got to it) but they're rare and not
+        # serious. There are also vendor-side restrictions that may
+        # impose additional limits on patron activity, but that will
+        # just result in exceptions being raised later in this method
+        # rather than in enforce_limits.
 
         # We try to check out the book even if we believe it's not
         # available -- someone else may have checked it in since we
@@ -702,6 +719,14 @@ class CirculationAPI(object):
             # immediately.
             api.update_availability(licensepool)
             raise
+        except PatronLoanLimitReached as e:
+            # The server-side loan limits didn't apply to this patron,
+            # but there's a vendor-side loan limit that does. However,
+            # we don't necessarily know whether or not this book is
+            # available! We'll try putting the book on hold just in
+            # case, and raise this exception only if that doesn't
+            # work.
+            loan_exception = e
 
         if loan_info:
             # We successfuly secured a loan.  Now create it in our
@@ -748,6 +773,21 @@ class CirculationAPI(object):
                     licensepool.identifier.type, licensepool.identifier.identifier,
                     None, None, None
                 )
+            except CurrentlyAvailable:
+                if loan_exception:
+                    # We tried to take out a loan and got an
+                    # exception.  But we weren't sure whether the real
+                    # problem was the exception we got or the fact
+                    # that the book wasn't available. Then we tried to
+                    # place a hold, which didn't work because the book
+                    # is currently available. That answers the
+                    # question: we should have let the first exception
+                    # go through.  Raise it now.
+                    raise loan_exception
+
+                # This shouldn't normally happen, but if it does,
+                # treat it as any other exception.
+                raise
 
         # It's pretty rare that we'd go from having a loan for a book
         # to needing to put it on hold, but we do check for that case.
@@ -917,7 +957,10 @@ class CirculationAPI(object):
                   requested_delivery_mechanism=delivery_mechanism.delivery_mechanism.name)
             )
 
-        if licensepool.open_access or licensepool.self_hosted:
+        api = self.api_for_license_pool(licensepool)
+
+        if licensepool.open_access or licensepool.self_hosted or \
+                (not api and licensepool.unlimited_access):
             # We ignore the vendor-specific arguments when doing
             # open-access fulfillment, because we just don't support
             # partial fulfillment of open-access content.
@@ -928,7 +971,9 @@ class CirculationAPI(object):
             if licensepool.self_hosted:
                 fulfillment = self._try_to_sign_fulfillment_link(licensepool, fulfillment)
         else:
-            api = self.api_for_license_pool(licensepool)
+            if not api:
+                raise CannotFulfill()
+
             internal_format = api.internal_format(delivery_mechanism)
 
             # Here we _do_ pass in the vendor-specific arguments, but
