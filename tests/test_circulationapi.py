@@ -960,7 +960,8 @@ class TestCirculationAPI(DatabaseTest):
 
     @parameterized.expand([
         ('open_access', True, False),
-        ('self_hosted', False, True)
+        ('self_hosted', False, True),
+        ('neither', False, False),
     ])
     def test_revoke_loan(self, _, open_access=False, self_hosted=False):
         self.pool.open_access = open_access
