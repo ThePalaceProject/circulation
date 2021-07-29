@@ -28,7 +28,7 @@ from api.routes import (
     library_route,
     allows_library
 )
-
+from api.admin.config import Configuration as AdminClientConfig
 import urllib.request, urllib.parse, urllib.error
 from datetime import timedelta
 from core.local_analytics_provider import LocalAnalyticsProvider
@@ -657,11 +657,11 @@ def admin_base(**kwargs):
 @app.route('/admin/static/circulation-admin.js')
 @returns_problem_detail
 def admin_js():
-    directory = app.manager.admin_view_controller.debug_file_path()
-    return app.manager.static_files.static_file(directory, app.manager.admin_view_controller.JS)
+    directory = AdminClientConfig.static_files_directory()
+    return app.manager.static_files.static_file(directory, 'circulation-admin.js')
 
 @app.route('/admin/static/circulation-admin.css')
 @returns_problem_detail
 def admin_css():
-    directory = app.manager.admin_view_controller.debug_file_path()
-    return app.manager.static_files.static_file(directory, app.manager.admin_view_controller.CSS)
+    directory = AdminClientConfig.static_files_directory()
+    return app.manager.static_files.static_file(directory, 'circulation-admin.css')
