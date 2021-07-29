@@ -15,9 +15,8 @@ from wsgiref.handlers import format_date_time
 
 import feedparser
 import flask
-import urlparse
-
 import pytest
+import urlparse
 from flask import Response as FlaskResponse
 from flask import url_for
 from flask_sqlalchemy_session import current_session
@@ -93,7 +92,7 @@ from core.lane import (
     SearchFacets,
     WorkList,
 )
-from core.local_analytics_provider import LocalAnalyticsProvider
+from core.local_analytics_provider import LocalAnalyticsProviderConfiguration
 from core.metadata_layer import ContributorData, Metadata
 from core.model import (
     Admin,
@@ -4872,8 +4871,8 @@ class TestAnalyticsController(CirculationControllerTest):
             protocol="core.local_analytics_provider",
         )
         integration.setting(
-            LocalAnalyticsProvider.LOCATION_SOURCE
-        ).value = LocalAnalyticsProvider.LOCATION_SOURCE_NEIGHBORHOOD
+            LocalAnalyticsProviderConfiguration.LOCATION_SOURCE
+        ).value = LocalAnalyticsProviderConfiguration.LOCATION_SOURCE_NEIGHBORHOOD
         self.manager.analytics = Analytics(self._db)
 
         with self.request_context_with_library("/"):
