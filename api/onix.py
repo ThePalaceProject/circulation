@@ -222,7 +222,10 @@ class ONIXExtractor(object):
             publishing_date = parser.text_of_optional_subtag(record, 'publishingdetail/publishingdate/b306')
             issued = None
             if publishing_date:
-                issued = strptime_utc(publishing_date, "%Y%m%d")
+                try:
+                    issued = strptime_utc(publishing_date, "%Y%m%d")
+                except ValueError:
+                    issued = strptime_utc(publishing_date, "%Y")
 
             identifier_tags = parser._xpath(record, 'productidentifier')
             identifiers = []
@@ -240,13 +243,16 @@ class ONIXExtractor(object):
             for tag in subject_tags:
                 type = parser.text_of_subtag(tag, 'b067')
                 if type in cls.SUBJECT_TYPES:
-                    subjects.append(
-                        SubjectData(
-                            cls.SUBJECT_TYPES[type],
-                            parser.text_of_subtag(tag, 'b069'),
-                            weight=weight
+                    b069 = parser.text_of_optional_subtag(tag, 'b069')
+
+                    if b069:
+                        subjects.append(
+                            SubjectData(
+                                cls.SUBJECT_TYPES[type],
+                                b069,
+                                weight=weight
+                            )
                         )
-                    )
 
             audience_tags = parser._xpath(record, 'descriptivedetail/audience/b204')
             audiences = []
@@ -265,7 +271,7 @@ class ONIXExtractor(object):
             for tag in contributor_tags:
                 type = parser.text_of_subtag(tag, 'b035')
                 if type in cls.CONTRIBUTOR_TYPES:
-                    display_name = parser.text_of_subtag(tag, 'b036')
+                    display_name = parser.text_of_optional_subtag(tag, 'b036')
                     sort_name = parser.text_of_optional_subtag(tag, 'b037')
                     family_name = parser.text_of_optional_subtag(tag, 'b040')
                     bio = parser.text_of_optional_subtag(tag, 'b044')
