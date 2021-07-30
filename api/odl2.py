@@ -39,8 +39,8 @@ class ODL2API(ODLAPI):
 class ODL2Importer(OPDS2Importer, HasExternalIntegration):
     """Import information and formats from an ODL feed.
 
-    The only change from ODL2Importer is that this importer extracts
-    format information from 'odl:license' tags.
+    The only change from OPDS2Importer is that this importer extracts
+    FormatData and LicenseData from ODL 2.x's "licenses" arrays.
     """
 
     NAME = ODL2API.NAME
