@@ -751,11 +751,11 @@ class TestCollection(DatabaseTest):
             data_source_name=DataSource.OVERDRIVE, with_license_pool=True,
             title="Overdrive Ebook",
         )
-        rbdigital_audiobook = self._work(
-            data_source_name=DataSource.RB_DIGITAL, with_license_pool=True,
-            title="RBDigital Audiobook"
+        feedbooks_audiobook = self._work(
+            data_source_name=DataSource.FEEDBOOKS, with_license_pool=True,
+            title="Feedbooks Audiobook"
         )
-        rbdigital_audiobook.presentation_edition.medium = Edition.AUDIO_MEDIUM
+        feedbooks_audiobook.presentation_edition.medium = Edition.AUDIO_MEDIUM
 
         DataSource.lookup(self._db, DataSource.LCP, autocreate=True)
         self_hosted_lcp_book = self._work(
@@ -794,17 +794,17 @@ class TestCollection(DatabaseTest):
         # up.
         setting.value = json.dumps([])
         expect(
-            qu, [overdrive_ebook, overdrive_audiobook, rbdigital_audiobook, self_hosted_lcp_book, unlimited_access_book]
+            qu, [overdrive_ebook, overdrive_audiobook, feedbooks_audiobook, self_hosted_lcp_book, unlimited_access_book]
         )
         # Putting a data source in the list excludes its audiobooks, but
         # not its ebooks.
         setting.value = json.dumps([DataSource.OVERDRIVE])
         expect(
             qu,
-            [overdrive_ebook, rbdigital_audiobook, self_hosted_lcp_book, unlimited_access_book]
+            [overdrive_ebook, feedbooks_audiobook, self_hosted_lcp_book, unlimited_access_book]
         )
         setting.value = json.dumps(
-            [DataSource.OVERDRIVE, DataSource.RB_DIGITAL]
+            [DataSource.OVERDRIVE, DataSource.FEEDBOOKS]
         )
         expect(
             qu, [overdrive_ebook, self_hosted_lcp_book, unlimited_access_book]

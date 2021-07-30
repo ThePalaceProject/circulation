@@ -162,8 +162,6 @@ class ExternalIntegration(Base, HasFullTableCache):
     ODILO = DataSourceConstants.ODILO
     BIBLIOTHECA = DataSourceConstants.BIBLIOTHECA
     AXIS_360 = DataSourceConstants.AXIS_360
-    RB_DIGITAL = DataSourceConstants.RB_DIGITAL
-    ONE_CLICK = RB_DIGITAL
     OPDS_FOR_DISTRIBUTORS = 'OPDS for Distributors'
     ENKI = DataSourceConstants.ENKI
     FEEDBOOKS = DataSourceConstants.FEEDBOOKS
@@ -180,7 +178,7 @@ class ExternalIntegration(Base, HasFullTableCache):
     GUTENBERG = DataSourceConstants.GUTENBERG
 
     LICENSE_PROTOCOLS = [
-        OPDS_IMPORT, OVERDRIVE, ODILO, BIBLIOTHECA, AXIS_360, RB_DIGITAL,
+        OPDS_IMPORT, OVERDRIVE, ODILO, BIBLIOTHECA, AXIS_360,
         GUTENBERG, ENKI, MANUAL
     ]
 
@@ -191,7 +189,6 @@ class ExternalIntegration(Base, HasFullTableCache):
         ODILO : DataSourceConstants.ODILO,
         BIBLIOTHECA : DataSourceConstants.BIBLIOTHECA,
         AXIS_360 : DataSourceConstants.AXIS_360,
-        RB_DIGITAL : DataSourceConstants.RB_DIGITAL,
         ENKI : DataSourceConstants.ENKI,
         FEEDBOOKS : DataSourceConstants.FEEDBOOKS,
     }

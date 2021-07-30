@@ -192,7 +192,7 @@ class TestCredentials(DatabaseTest):
     def test_collection_token(self):
         # Make sure we can have two tokens from the same data_source with
         # different collections.
-        data_source = DataSource.lookup(self._db, DataSource.RB_DIGITAL)
+        data_source = DataSource.lookup(self._db, DataSource.FEEDBOOKS)
         collection1 = self._collection("test collection 1")
         collection2 = self._collection("test collection 2")
         patron = self._patron()

@@ -114,7 +114,6 @@ class Work(Base):
     # necessary to show up in featured feeds.
     default_quality_by_data_source = {
         DataSourceConstants.GUTENBERG: 0,
-        DataSourceConstants.RB_DIGITAL: 0.4,
         DataSourceConstants.OVERDRIVE: 0.4,
         DataSourceConstants.BIBLIOTHECA : 0.65,
         DataSourceConstants.AXIS_360: 0.65,

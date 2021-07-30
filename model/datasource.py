@@ -193,7 +193,6 @@ class DataSource(Base, HasFullTableCache, DataSourceConstants):
 
         for (name, offers_licenses, offers_metadata_lookup, primary_identifier_type, refresh_rate) in (
                 (cls.GUTENBERG, True, False, IdentifierConstants.GUTENBERG_ID, None),
-                (cls.RB_DIGITAL, True, True, IdentifierConstants.RB_DIGITAL_ID, None),
                 (cls.OVERDRIVE, True, False, IdentifierConstants.OVERDRIVE_ID, 0),
                 (cls.BIBLIOTHECA, True, False, IdentifierConstants.BIBLIOTHECA_ID, 60*60*6),
                 (cls.ODILO, True, False, IdentifierConstants.ODILO_ID, 0),

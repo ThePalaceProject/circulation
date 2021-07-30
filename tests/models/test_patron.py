@@ -400,18 +400,18 @@ class TestPatron(DatabaseTest):
         axis = DataSource.AXIS_360
         axis_identifier = patron.identifier_to_remote_service(axis)
 
-        rb_digital = DataSource.lookup(self._db, DataSource.RB_DIGITAL)
-        rb_identifier = patron.identifier_to_remote_service(rb_digital)
+        feedbooks = DataSource.lookup(self._db, DataSource.FEEDBOOKS)
+        feedbooks_identifier = patron.identifier_to_remote_service(feedbooks)
 
         # The identifiers are different.
-        assert axis_identifier != rb_identifier
+        assert axis_identifier != feedbooks_identifier
 
         # But they're both 36-character UUIDs.
         assert 36 == len(axis_identifier)
-        assert 36 == len(rb_identifier)
+        assert 36 == len(feedbooks_identifier)
 
         # They're persistent.
-        assert rb_identifier == patron.identifier_to_remote_service(rb_digital)
+        assert feedbooks_identifier == patron.identifier_to_remote_service(feedbooks)
         assert axis_identifier == patron.identifier_to_remote_service(axis)
 
         # You can customize the function used to generate the
