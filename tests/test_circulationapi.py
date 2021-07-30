@@ -4,6 +4,7 @@ from datetime import timedelta
 import flask
 import pytest
 from flask import Flask
+from mock import MagicMock
 from parameterized import parameterized
 
 from api.authenticator import LibraryAuthenticator, PatronData
@@ -32,10 +33,10 @@ from core.model import (
     Hyperlink,
     Identifier,
     Loan,
+    MediaTypes,
     Representation,
     RightsStatus,
 )
-
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
 from . import sample_data
@@ -146,6 +147,28 @@ class TestCirculationAPI(DatabaseTest):
     def test_borrowing_of_self_hosted_book_succeeds(self):
         # Arrange
         self.pool.self_hosted = True
+
+        # Act
+        loan, hold, is_new = self.borrow()
+
+        # Assert
+        assert True == is_new
+        assert self.pool == loan.license_pool
+        assert self.patron == loan.patron
+        assert hold is None
+
+    def test_borrowing_of_unlimited_access_book_succeeds(self):
+        """Ensure that unlimited access books that don't belong to collections
+            having a custom CirculationAPI implementation (e.g., OPDS 1.x, OPDS 2.x collections)
+            are checked out in the same way as OA and self-hosted books."""
+        # Arrange
+
+        # Reset the API map, this book belongs to the "basic" collection,
+        # i.e. collection without a custom CirculationAPI implementation.
+        self.circulation.api_for_license_pool = MagicMock(return_value=None)
+
+        # Mark the book as unlimited access.
+        self.pool.unlimited_access = True
 
         # Act
         loan, hold, is_new = self.borrow()
@@ -297,6 +320,52 @@ class TestCirculationAPI(DatabaseTest):
         assert True == is_new
         assert self.pool == hold.license_pool
         assert self.patron == hold.patron
+
+    def test_vendor_side_loan_limit_allows_for_hold_placement(self):
+        # Attempting to borrow a book will trigger a vendor-side loan
+        # limit.
+        self.remote.queue_checkout(PatronLoanLimitReached())
+
+        # But the point is moot because the book isn't even available.
+        # Attempting to place a hold will succeed.
+        holdinfo = HoldInfo(
+            self.pool.collection, self.pool.data_source,
+            self.identifier.type, self.identifier.identifier,
+            None, None, 10
+        )
+        self.remote.queue_hold(holdinfo)
+
+        loan, hold, is_new = self.borrow()
+
+        # No exception was raised, and the Hold looks good.
+        assert holdinfo.identifier == hold.license_pool.identifier.identifier
+        assert self.patron == hold.patron
+        assert None == loan
+        assert True == is_new
+
+    def test_loan_exception_reraised_if_hold_placement_fails(self):
+        # Attempting to borrow a book will trigger a vendor-side loan
+        # limit.
+        self.remote.queue_checkout(PatronLoanLimitReached())
+
+        # Attempting to place a hold will fail because the book is
+        # available. (As opposed to the previous test, where the book
+        # was _not_ available and hold placement succeeded.) This
+        # indicates that we should have raised PatronLoanLimitReached
+        # in the first place.
+        self.remote.queue_hold(CurrentlyAvailable())
+
+        assert len(self.remote.responses['checkout']) == 1
+        assert len(self.remote.responses['hold']) == 1
+
+        # The exception raised is PatronLoanLimitReached, the first
+        # one we encountered...
+        pytest.raises(PatronLoanLimitReached, self.borrow)
+
+        # ...but we made both requests and have no more responses
+        # queued.
+        assert not self.remote.responses['checkout']
+        assert not self.remote.responses['hold']
 
     def test_hold_sends_analytics_event(self):
         self.remote.queue_checkout(NoAvailableCopies())
@@ -840,6 +909,58 @@ class TestCirculationAPI(DatabaseTest):
         pytest.raises(FormatNotAvailable, self.circulation.fulfill_open_access,
                       self.pool, i_want_an_epub)
 
+    def test_fulfilment_of_unlimited_access_book_succeeds(self):
+        """Ensure that unlimited access books that don't belong to collections
+            having a custom CirculationAPI implementation (e.g., OPDS 1.x, OPDS 2.x collections)
+            are fulfilled in the same way as OA and self-hosted books."""
+        # Reset the API map, this book belongs to the "basic" collection,
+        # i.e. collection without a custom CirculationAPI implementation.
+        self.circulation.api_for_license_pool = MagicMock(return_value=None)
+
+        # Mark the book as unlimited access.
+        self.pool.unlimited_access = True
+
+        media_type = MediaTypes.EPUB_MEDIA_TYPE
+
+        # Create a borrow link.
+        link, _ = self.pool.identifier.add_link(
+            Hyperlink.BORROW,
+            self._url,
+            self.pool.data_source
+        )
+
+        # Create a license pool delivery mechanism.
+        self.pool.set_delivery_mechanism(
+            media_type,
+            DeliveryMechanism.ADOBE_DRM,
+            RightsStatus.IN_COPYRIGHT,
+            link.resource,
+        )
+
+        # Create a representation.
+        representation, _ = self._representation(
+            link.resource.url,
+            media_type,
+            "Dummy content",
+            mirrored=True
+        )
+        link.resource.representation = representation
+
+        # Act
+        self.pool.loan_to(self.patron)
+
+        result = self.circulation.fulfill(
+            self.patron,
+            '1234',
+            self.pool,
+            self.pool.delivery_mechanisms[0]
+        )
+
+        # The fulfillment looks good.
+        assert isinstance(result, FulfillmentInfo)
+        assert result.content_link == link.resource.representation.public_url
+        assert result.content_type == media_type
+
     def test_fulfill(self):
         self.pool.loan_to(self.patron)
 
@@ -885,7 +1006,8 @@ class TestCirculationAPI(DatabaseTest):
 
     @parameterized.expand([
         ('open_access', True, False),
-        ('self_hosted', False, True)
+        ('self_hosted', False, True),
+        ('neither', False, False),
     ])
     def test_revoke_loan(self, _, open_access=False, self_hosted=False):
         self.pool.open_access = open_access
@@ -1331,6 +1453,7 @@ class TestCirculationAPI(DatabaseTest):
         # An open access pool can be fulfilled even without the BaseCirculationAPI.
         pool.open_access = True
         assert True == circulation.can_fulfill_without_loan(None, pool, object())
+
 
 class TestBaseCirculationAPI(DatabaseTest):
 

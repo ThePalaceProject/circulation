@@ -255,6 +255,7 @@ class BibliothecaAPI(BaseCirculationAPI, HasSelfTests):
                 self._db, url, extra_request_headers=headers,
                 do_get=self._simple_http_get, max_age=max_age,
                 exception_handler=Representation.reraise_exception,
+                timeout=60
             )
             content = representation.content
             return content
@@ -1144,6 +1145,10 @@ class DateResponseParser(BibliothecaParser):
 
     def process_all(self, string):
         parser = etree.XMLParser()
+        # If the data is an HTTP response, it is a bytestring and
+        # must be converted before it is parsed.
+        if isinstance(string, bytes):
+            string = string.decode("utf-8")
         root = etree.parse(StringIO(string), parser)
         m = root.xpath("/%s/%s" % (self.RESULT_TAG_NAME, self.DATE_TAG_NAME))
         if not m:
