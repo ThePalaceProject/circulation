@@ -437,6 +437,7 @@ class CirculationAPI(object):
         from .enki import EnkiAPI
         from .opds_for_distributors import OPDSForDistributorsAPI
         from .odl import ODLAPI, SharedODLAPI
+        from .odl2 import ODL2API
         from api.lcp.collection import LCPAPI
         from api.proquest.importer import ProQuestOPDS2Importer
 
@@ -449,6 +450,7 @@ class CirculationAPI(object):
             EnkiAPI.ENKI_EXTERNAL : EnkiAPI,
             OPDSForDistributorsAPI.NAME: OPDSForDistributorsAPI,
             ODLAPI.NAME: ODLAPI,
+            ODL2API.NAME: ODL2API,
             SharedODLAPI.NAME: SharedODLAPI,
             LCPAPI.NAME: LCPAPI,
             ProQuestOPDS2Importer.NAME: ProQuestOPDS2Importer

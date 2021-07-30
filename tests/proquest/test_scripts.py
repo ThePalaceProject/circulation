@@ -2,11 +2,13 @@ import json
 import sys
 
 from mock import MagicMock, create_autospec, patch
+from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
 from api.proquest.client import ProQuestAPIClient, ProQuestAPIClientFactory
 from api.proquest.importer import ProQuestOPDS2Importer, ProQuestOPDS2ImportMonitor
 from api.proquest.scripts import ProQuestOPDS2ImportScript
 from core.model import Collection, DataSource, ExternalIntegration, Identifier
+from core.opds2_import import RWPMManifestParser
 from core.testing import DatabaseTest
 from tests.proquest import fixtures
 
@@ -87,6 +89,7 @@ class TestProQuestOPDS2ImportScript(DatabaseTest):
                 importer_class=ProQuestOPDS2Importer,
                 monitor_class=ProQuestOPDS2ImportMonitor,
                 protocol=ExternalIntegration.PROQUEST,
+                parser=RWPMManifestParser(OPDS2FeedParserFactory()),
             )
 
             import_script.run()
@@ -100,9 +103,10 @@ class TestProQuestOPDS2ImportScript(DatabaseTest):
             )
             assert Identifier.PROQUEST_ID == test_book_1_license_pool.identifier.type
             assert (
-                fixtures.PROQUEST_RAW_PUBLICATION_1_ID ==
-                test_book_1_license_pool.identifier.identifier)
-            assert True == test_book_1_license_pool.unlimited_access
+                fixtures.PROQUEST_RAW_PUBLICATION_1_ID
+                == test_book_1_license_pool.identifier.identifier
+            )
+            assert test_book_1_license_pool.unlimited_access
 
             test_book_2_license_pool = self._get_licensepool_by_identifier(
                 self._proquest_collection.licensepools,
@@ -110,9 +114,10 @@ class TestProQuestOPDS2ImportScript(DatabaseTest):
             )
             assert Identifier.PROQUEST_ID == test_book_2_license_pool.identifier.type
             assert (
-                fixtures.PROQUEST_RAW_PUBLICATION_2_ID ==
-                test_book_2_license_pool.identifier.identifier)
-            assert True == test_book_2_license_pool.unlimited_access
+                fixtures.PROQUEST_RAW_PUBLICATION_2_ID
+                == test_book_2_license_pool.identifier.identifier
+            )
+            assert test_book_2_license_pool.unlimited_access
 
         # 2. When we run the monitor for the second time it gets another feed containing:
         # - Test Book 1
@@ -136,6 +141,7 @@ class TestProQuestOPDS2ImportScript(DatabaseTest):
                 importer_class=ProQuestOPDS2Importer,
                 monitor_class=ProQuestOPDS2ImportMonitor,
                 protocol=ExternalIntegration.PROQUEST,
+                parser=RWPMManifestParser(OPDS2FeedParserFactory()),
             )
 
             import_script.run()
@@ -148,8 +154,9 @@ class TestProQuestOPDS2ImportScript(DatabaseTest):
             )
             assert Identifier.PROQUEST_ID == test_book_1_license_pool.identifier.type
             assert (
-                fixtures.PROQUEST_RAW_PUBLICATION_1_ID ==
-                test_book_1_license_pool.identifier.identifier)
+                fixtures.PROQUEST_RAW_PUBLICATION_1_ID
+                == test_book_1_license_pool.identifier.identifier
+            )
             assert True == test_book_1_license_pool.unlimited_access
 
             test_book_2_license_pool = self._get_licensepool_by_identifier(
@@ -158,8 +165,9 @@ class TestProQuestOPDS2ImportScript(DatabaseTest):
             )
             assert Identifier.PROQUEST_ID == test_book_2_license_pool.identifier.type
             assert (
-                fixtures.PROQUEST_RAW_PUBLICATION_2_ID ==
-                test_book_2_license_pool.identifier.identifier)
+                fixtures.PROQUEST_RAW_PUBLICATION_2_ID
+                == test_book_2_license_pool.identifier.identifier
+            )
             # We want to make sure that Test Book 2 is no longer visible in the CM's catalog
             # because it doesn't have any licenses.
             assert False == test_book_2_license_pool.unlimited_access
@@ -172,6 +180,7 @@ class TestProQuestOPDS2ImportScript(DatabaseTest):
             )
             assert Identifier.PROQUEST_ID == test_book_3_license_pool.identifier.type
             assert (
-                fixtures.PROQUEST_RAW_PUBLICATION_3_ID ==
-                test_book_3_license_pool.identifier.identifier)
+                fixtures.PROQUEST_RAW_PUBLICATION_3_ID
+                == test_book_3_license_pool.identifier.identifier
+            )
             assert True == test_book_3_license_pool.unlimited_access

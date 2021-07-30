@@ -41,7 +41,7 @@ from core.model.configuration import (
     ExternalIntegration,
     HasExternalIntegration,
 )
-from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, parse_feed
+from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, RWPMManifestParser
 from core.opds_import import OPDSImporter
 
 MISSING_AFFILIATION_ID = BaseError(
@@ -182,6 +182,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         self,
         db,
         collection,
+        parser,
         data_source_name=None,
         identifier_mapping=None,
         http_get=None,
@@ -199,6 +200,9 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
             LicensePools created by this OPDS2Import class will be associated with the given Collection.
             If this is None, no LicensePools will be created -- only Editions.
         :type collection: Collection
+
+        :param parser: Feed parser
+        :type parser: RWPMManifestParser
 
         :param data_source_name: Name of the source of this OPDS feed.
             All Editions created by this import will be associated with this DataSource.
@@ -226,6 +230,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         super(ProQuestOPDS2Importer, self).__init__(
             db,
             collection,
+            parser,
             data_source_name,
             identifier_mapping,
             http_get,
@@ -766,6 +771,7 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
         db,
         collection,
         import_class,
+        parser,
         force_reimport=False,
         process_removals=False,
         **import_class_kwargs
@@ -784,6 +790,9 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
         :param import_class: Class containing the import logic
         :type import_class: Type
 
+        :param parser: Feed parser
+        :type parser: RWPMManifestParser
+
         :param force_reimport: Boolean value indicating whether the import process must be started from scratch
         :type force_reimport: bool
 
@@ -792,6 +801,11 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
             that are no longer present in the ProQuest feed from the CM's catalog
         :type process_removals: bool
         """
+        if not isinstance(parser, RWPMManifestParser):
+            raise ValueError("Argument 'parser' must be an instance of {0}".format(RWPMManifestParser))
+
+        import_class_kwargs["parser"] = parser
+
         super(ProQuestOPDS2ImportMonitor, self).__init__(
             db, collection, import_class, force_reimport, **import_class_kwargs
         )
@@ -800,6 +814,7 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
         self._feeds = None
         self._client = self._client_factory.create(self)
         self._process_removals = process_removals
+        self._parser = parser
 
         self._logger = logging.getLogger(__name__)
 
@@ -901,7 +916,8 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
         ) as feed_page_file_handle:
             feed = feed_page_file_handle.read()
 
-        feed = parse_feed(feed, silent=False)
+        parser_result = self._parser.parse_manifest(feed)
+        feed = parser_result.root
 
         self._logger.info("Page # {0}. Finished parsing the feed".format(page))
 

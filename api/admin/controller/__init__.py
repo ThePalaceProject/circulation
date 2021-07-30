@@ -45,6 +45,7 @@ from api.odl import (
     ODLAPI,
     SharedODLAPI,
 )
+from api.odl2 import ODL2API
 from api.opds_for_distributors import OPDSForDistributorsAPI
 from api.overdrive import OverdriveAPI
 from api.proquest.importer import ProQuestOPDS2Importer
@@ -1317,6 +1318,7 @@ class SettingsController(AdminCirculationManagerController):
         RBDigitalAPI,
         EnkiAPI,
         ODLAPI,
+        ODL2API,
         SharedODLAPI,
         FeedbooksOPDSImporter,
         LCPAPI
