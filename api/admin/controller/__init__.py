@@ -49,7 +49,6 @@ from api.odl2 import ODL2API
 from api.opds_for_distributors import OPDSForDistributorsAPI
 from api.overdrive import OverdriveAPI
 from api.proquest.importer import ProQuestOPDS2Importer
-from api.rbdigital import RBDigitalAPI
 from core.app_server import (
     load_pagination_from_request,
 )
@@ -1315,7 +1314,6 @@ class SettingsController(AdminCirculationManagerController):
         OdiloAPI,
         BibliothecaAPI,
         Axis360API,
-        RBDigitalAPI,
         EnkiAPI,
         ODLAPI,
         ODL2API,

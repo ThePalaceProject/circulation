@@ -82,12 +82,6 @@ HOME=/var/www/circulation
 */15 * * * * root core/bin/run overdrive_reaper >> /var/log/cron.log 2>&1
 0 4 * * * root core/bin/run overdrive_format_sweep >> /var/log/cron.log 2>&1
 
-# RBdigital
-#
-0 */4 * * * root core/bin/run rbdigital_availability_monitor >> /var/log/cron.log 2>&1
-0 23 * * * root core/bin/run rbdigital_collection_delta >> /var/log/cron.log 2>&1
-0 23 * * * root core/bin/run rbdigital_initial_import >> /var/log/cron.log 2>&1
-
 # Enki
 #
 0 0 1 * * root core/bin/run enki_reaper >> /var/log/cron.log 2>&1

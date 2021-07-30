@@ -30,10 +30,6 @@ from .annotations import (
     AnnotationWriter,
     AnnotationParser,
 )
-from api.rbdigital import (
-    RBDigitalFulfillmentProxy,
-    RBDProxyException,
-)
 from api.saml.controller import SAMLController
 from .authenticator import (
     Authenticator,
@@ -430,7 +426,6 @@ class CirculationManager(object):
         self.odl_notification_controller = ODLNotificationController(self)
         self.shared_collection_controller = SharedCollectionController(self)
         self.static_files = StaticFileController(self)
-        self.rbdproxy = RBDFulfillmentProxyController(self)
 
         from api.lcp.controller import LCPController
         self.lcp_controller = LCPController(self)
@@ -2476,28 +2471,3 @@ class StaticFileController(CirculationManagerController):
     def image(self, filename):
         directory = os.path.join(os.path.abspath(os.path.dirname(__file__)), "..", "resources", "images")
         return self.static_file(directory, filename)
-
-class RBDFulfillmentProxyController(CirculationManagerController):
-
-    def __init__(self, *args, **kwargs):
-        super(RBDFulfillmentProxyController, self).__init__(*args, **kwargs)
-        self.log = logging.getLogger("RBDigital fulfillment proxy")
-
-    def proxy(self, bearer, api_class=None):
-        # This method expects a proxy URL with a "url" query parameter.
-        # It returns a Flask response.
-        fulfillment_url = flask.request.values.get('url', None)
-
-        try:
-            response = RBDigitalFulfillmentProxy.proxy(self._db, bearer, fulfillment_url,
-                                                       api_class=api_class)
-        except RBDProxyException as e:
-            status = e.args[0].get('status', 500)
-            message = e.args[0].get('message', 'unspecified error')
-            self.log.error('RBDProxyException: {} {}'.format(status, message))
-            response = Response(
-                response=json.dumps({"message": message}),
-                status=status, content_type='application/json;charset=UTF-8',
-            )
-
-        return response
