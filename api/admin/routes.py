@@ -640,16 +640,9 @@ def admin_view(collection=None, book=None, etc=None, **kwargs):
 def admin_base(**kwargs):
     return redirect(app.manager.url_for('admin_view'))
 
-# These paths are only used in debug mode when serving the
-# admin javascript app alongside the admin api
-@app.route('/admin/static/circulation-admin.js')
+# This path is used only in debug mode to serve frontend assets.
+@app.route('/admin/static/<filename>')
 @returns_problem_detail
-def admin_js():
-    directory = AdminClientConfig.static_files_directory()
-    return app.manager.static_files.static_file(directory, 'circulation-admin.js')
+def admin_static_file(filename):
+    return app.manager.static_files.static_file(AdminClientConfig.static_files_directory(), filename)
 
-@app.route('/admin/static/circulation-admin.css')
-@returns_problem_detail
-def admin_css():
-    directory = AdminClientConfig.static_files_directory()
-    return app.manager.static_files.static_file(directory, 'circulation-admin.css')
