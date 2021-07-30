@@ -3,20 +3,20 @@ admin = """
 <html>
 <head>
 <title>Circulation Manager</title>
-<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
-<link href=\"/admin/static/circulation-admin.css\" rel="stylesheet" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="{{ admin_css }}" rel="stylesheet" />
 </head>
 <body>
-  <script src=\"/admin/static/circulation-admin.js\"></script>
+  <script src="{{ admin_js }}"></script>
   <script>
     var circulationAdmin = new CirculationAdmin({
-        csrfToken: \"{{ csrf_token }}\",
-        tos_link_href: \"{{ sitewide_tos_href }}\",
-        tos_link_text: \"{{ sitewide_tos_text }}\",
+        csrfToken: "{{ csrf_token }}",
+        tos_link_href: "{{ sitewide_tos_href }}",
+        tos_link_text: "{{ sitewide_tos_text }}",
         showCircEventsDownload: {{ "true" if show_circ_events_download else "false" }},
         settingUp: {{ "true" if setting_up else "false" }},
-        email: \"{{ email }}\",
-        roles: [{% for role in roles %}{"role": \"{{role.role}}\"{% if role.library %}, "library": \"{{role.library.short_name}}\"{% endif %} },{% endfor %}]
+        email: "{{ email }}",
+        roles: [{% for role in roles %}{"role": "{{role.role}}"{% if role.library %}, "library": "{{role.library.short_name}}"{% endif %} },{% endfor %}]
     });
   </script>
 </body>

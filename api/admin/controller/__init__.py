@@ -5,36 +5,35 @@ import logging
 import os
 import sys
 import urllib.parse
-from datetime import date, datetime, timedelta
+from datetime import (
+    date,
+    datetime,
+    timedelta,
+)
 
 import flask
 import jwt
-from flask import (
-    Response,
-    redirect,
-)
+from flask import (redirect, Response)
 from flask_babel import lazy_gettext as _
 from sqlalchemy.sql import func
-from sqlalchemy.sql.expression import desc, nullslast, and_, distinct, select, join
+from sqlalchemy.sql.expression import (and_, desc, distinct, join, nullslast, select)
+
+from api.admin.config import Configuration as AdminClientConfig
 from api.admin.exceptions import *
 from api.admin.google_oauth_admin_authentication_provider import GoogleOAuthAdminAuthenticationProvider
-from api.admin.opds import AdminAnnotator, AdminFeed
+from api.admin.opds import (
+    AdminAnnotator,
+    AdminFeed,
+)
 from api.admin.password_admin_authentication_provider import PasswordAdminAuthenticationProvider
 from api.admin.template_styles import *
 from api.admin.templates import admin as admin_template
 from api.admin.validator import Validator
 from api.adobe_vendor_id import AuthdataUtility
-from api.authenticator import (
-    CannotCreateLocalPatron,
-    PatronData,
-)
-from api.authenticator import LibraryAuthenticator
+from api.authenticator import (CannotCreateLocalPatron, LibraryAuthenticator, PatronData)
 from api.axis import Axis360API
 from api.bibliotheca import BibliothecaAPI
-from api.config import (
-    Configuration,
-    CannotLoadConfiguration
-)
+from api.config import (CannotLoadConfiguration, Configuration)
 from api.controller import CirculationManagerController
 from api.enki import EnkiAPI
 from api.feedbooks import FeedbooksOPDSImporter
@@ -42,10 +41,14 @@ from api.lanes import create_default_lanes
 from api.lcp.collection import LCPAPI
 from api.local_analytics_exporter import LocalAnalyticsExporter
 from api.odilo import OdiloAPI
-from api.odl import ODLAPI, SharedODLAPI
+from api.odl import (
+    ODLAPI,
+    SharedODLAPI,
+)
 from api.odl2 import ODL2API
 from api.opds_for_distributors import OPDSForDistributorsAPI
 from api.overdrive import OverdriveAPI
+from api.proquest.importer import ProQuestOPDS2Importer
 from api.rbdigital import RBDigitalAPI
 from core.app_server import (
     load_pagination_from_request,
@@ -54,21 +57,24 @@ from core.classifier import (
     genres
 )
 from core.external_search import ExternalSearchIndex
-from core.lane import (Lane, WorkList)
+from core.lane import (
+    Lane,
+    WorkList,
+)
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.model import (
-    create,
-    get_one,
-    get_one_or_create,
     Admin,
     AdminRole,
     CirculationEvent,
     Collection,
     ConfigurationSetting,
+    create,
     CustomList,
     CustomListEntry,
     DataSource,
     ExternalIntegration,
+    get_one,
+    get_one_or_create,
     Hold,
     Identifier,
     Library,
@@ -84,11 +90,10 @@ from core.opds2_import import OPDS2Importer
 from core.opds_import import (OPDSImporter, OPDSImportMonitor)
 from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
+from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSFeedResponse
 from core.util.http import HTTP
 from core.util.problem_detail import ProblemDetail
-from api.proquest.importer import ProQuestOPDS2Importer
-from core.util.datetime_helpers import utc_now
 
 
 def setup_admin_controllers(manager):
@@ -297,6 +302,7 @@ class AdminCirculationManagerController(CirculationManagerController):
         if not admin or not admin.roles or admin.roles[0].role == "librarian":
             raise AdminNotAuthorized()
 
+
 class ViewController(AdminController):
     def __call__(self, collection, book, path=None):
         setting_up = (self.admin_auth_providers == [])
@@ -338,6 +344,8 @@ class ViewController(AdminController):
                     roles.append({ "role": role.role })
 
         csrf_token = flask.request.cookies.get("csrf_token") or self.generate_csrf_token()
+        admin_js = AdminClientConfig.lookup_asset_url(key='admin_js')
+        admin_css = AdminClientConfig.lookup_asset_url(key='admin_css')
 
         # Find the URL and text to use when rendering the Terms of
         # Service link in the footer.
@@ -364,6 +372,8 @@ class ViewController(AdminController):
             setting_up=setting_up,
             email=email,
             roles=roles,
+            admin_js=admin_js,
+            admin_css=admin_css
         ))
 
         # The CSRF token is in its own cookie instead of the session cookie,
