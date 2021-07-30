@@ -9,13 +9,6 @@ from api.admin.config import OperationalMode
 
 class TestAdminUI(object):
 
-    @staticmethod
-    def _set_env(key: str, value: Optional[str]):
-        if value:
-            os.environ[key] = value
-        elif key in os.environ:
-            del os.environ[key]
-
     @pytest.mark.parametrize(
         'package_name, package_version, mode, expected_result_startswith',
         [
@@ -29,10 +22,10 @@ class TestAdminUI(object):
             [None, '1.0.0', OperationalMode.development, '/'],
             ['some-package', '1.0.0', OperationalMode.development, '/'],
         ])
-    def test_package_url(self, package_name: Optional[str], package_version: Optional[str],
+    def test_package_url(self, monkeypatch, package_name: Optional[str], package_version: Optional[str],
                          mode: OperationalMode, expected_result_startswith: str):
-        self._set_env('TPP_CIRCULATION_ADMIN_PACKAGE_NAME', package_name)
-        self._set_env('TPP_CIRCULATION_ADMIN_PACKAGE_VERSION', package_version)
+        monkeypatch.setenv('TPP_CIRCULATION_ADMIN_PACKAGE_NAME', package_name)
+        monkeypatch.setenv('TPP_CIRCULATION_ADMIN_PACKAGE_VERSION', package_version)
         result = AdminConfig.package_url(_operational_mode=mode)
         assert result.startswith(expected_result_startswith)
 
@@ -43,10 +36,10 @@ class TestAdminUI(object):
             [None, '1.0.0', '/my-base-dir/node_modules/@thepalaceproject/circulation-admin'],
             ['some-package', '1.0.0', '/my-base-dir/node_modules/some-package'],
         ])
-    def test_package_development_directory(self, package_name: Optional[str], package_version: Optional[str],
-                                           expected_result: str):
-        self._set_env('TPP_CIRCULATION_ADMIN_PACKAGE_NAME', package_name)
-        self._set_env('TPP_CIRCULATION_ADMIN_PACKAGE_VERSION', package_version)
+    def test_package_development_directory(self, monkeypatch, package_name: Optional[str],
+                                           package_version: Optional[str], expected_result: str):
+        monkeypatch.setenv('TPP_CIRCULATION_ADMIN_PACKAGE_NAME', package_name)
+        monkeypatch.setenv('TPP_CIRCULATION_ADMIN_PACKAGE_VERSION', package_version)
         result = AdminConfig.package_development_directory(_base_dir='/my-base-dir')
         assert result == expected_result
 
@@ -64,8 +57,9 @@ class TestAdminUI(object):
              'https://cdn.jsdelivr.net/npm/known-package-name@1.0.0/dist/another-asset.jpg'],
         ]
     )
-    def test_lookup_asset_url(self, asset_key: str, operational_mode: OperationalMode, expected_result: str):
-        self._set_env('TPP_CIRCULATION_ADMIN_PACKAGE_NAME', 'known-package-name')
-        self._set_env('TPP_CIRCULATION_ADMIN_PACKAGE_VERSION', '1.0.0')
+    def test_lookup_asset_url(self, monkeypatch, asset_key: str, operational_mode: OperationalMode,
+                              expected_result: str):
+        monkeypatch.setenv('TPP_CIRCULATION_ADMIN_PACKAGE_NAME', 'known-package-name')
+        monkeypatch.setenv('TPP_CIRCULATION_ADMIN_PACKAGE_VERSION', '1.0.0')
         result = AdminConfig.lookup_asset_url(key=asset_key, _operational_mode=operational_mode)
         assert result == expected_result
