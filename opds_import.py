@@ -2084,9 +2084,16 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests):
 
         # Create CoverageRecords for the failures.
         for urn, failure in list(failures.items()):
-            failure.to_coverage_record(
-                operation=CoverageRecord.IMPORT_OPERATION
-            )
+            if isinstance(failure, list):
+                failure_items = failure
+            else:
+                failure_items = [failure]
+
+            for failure_item in failure_items:
+                failure_item.to_coverage_record(
+                    operation=CoverageRecord.IMPORT_OPERATION
+                )
+
         return imported_editions, failures
 
     def _get_feeds(self):

@@ -142,7 +142,7 @@ class Script(object):
                     continue
         raise ValueError("Could not parse time: %s" % time_string)
 
-    def __init__(self, _db=None):
+    def __init__(self, _db=None, *args, **kwargs):
         """Basic constructor.
 
         :_db: A database session to be used instead of
@@ -1855,6 +1855,7 @@ class OPDSImportScript(CollectionInputScript):
         self.importer_class = importer_class or self.IMPORTER_CLASS
         self.monitor_class = monitor_class or self.MONITOR_CLASS
         self.protocol = protocol or self.PROTOCOL
+        self.importer_kwargs = kwargs
 
     @classmethod
     def arg_parser(cls):
@@ -1875,7 +1876,7 @@ class OPDSImportScript(CollectionInputScript):
     def run_monitor(self, collection, force=None):
         monitor = self.monitor_class(
             self._db, collection, import_class=self.importer_class,
-            force_reimport=force
+            force_reimport=force, **self.importer_kwargs
         )
         monitor.run()
 
