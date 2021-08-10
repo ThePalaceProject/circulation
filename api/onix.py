@@ -1,6 +1,7 @@
 import datetime
 import logging
 
+import dateutil.parser
 from enum import Enum
 from lxml import etree
 
@@ -222,10 +223,7 @@ class ONIXExtractor(object):
             publishing_date = parser.text_of_optional_subtag(record, 'publishingdetail/publishingdate/b306')
             issued = None
             if publishing_date:
-                try:
-                    issued = datetime.datetime.strptime(publishing_date, "%Y%m%d")
-                except ValueError:
-                    issued = datetime.datetime.strptime(publishing_date, "%Y")
+                issued = dateutil.parser.isoparse(publishing_date)
 
             identifier_tags = parser._xpath(record, 'productidentifier')
             identifiers = []
@@ -266,15 +264,28 @@ class ONIXExtractor(object):
                         )
                     )
 
+            # TODO: We don't handle ONIX unnamed and alternatively named contributors.
             contributor_tags = parser._xpath(record, 'descriptivedetail/contributor')
             contributors = []
             for tag in contributor_tags:
                 type = parser.text_of_subtag(tag, 'b035')
                 if type in cls.CONTRIBUTOR_TYPES:
-                    display_name = parser.text_of_optional_subtag(tag, 'b036')
-                    sort_name = parser.text_of_optional_subtag(tag, 'b037')
-                    family_name = parser.text_of_optional_subtag(tag, 'b040')
+                    person_name_display = parser.text_of_optional_subtag(tag, 'b036')
+                    person_name_inverted = parser.text_of_optional_subtag(tag, 'b037')
+                    corp_name_display = parser.text_of_optional_subtag(tag, 'b047')
+                    corp_name_inverted = parser.text_of_optional_subtag(tag, 'x443')
                     bio = parser.text_of_optional_subtag(tag, 'b044')
+                    family_name = None
+                    if person_name_display or person_name_inverted:
+                        display_name = person_name_display
+                        sort_name = person_name_inverted
+                        family_name = parser.text_of_optional_subtag(tag, 'b040')
+                    elif corp_name_display or corp_name_inverted:
+                        display_name = corp_name_display
+                        # Sort form for corporate name might just be the display name
+                        sort_name = corp_name_inverted or corp_name_display
+                    else:
+                        sort_name = display_name = None
                     contributors.append(ContributorData(sort_name=sort_name,
                                                         display_name=display_name,
                                                         family_name=family_name,
