@@ -52,6 +52,8 @@ class TestONIXExtractor(object):
 
         record = metadata_records[1]
         assert Edition.AUDIO_MEDIUM == record.medium
+        assert "The Test Corporation" == record.contributors[0].display_name
+        assert "Test Corporation, The" == record.contributors[0].sort_name
 
     @parameterized.expand([
         (
