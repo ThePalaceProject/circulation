@@ -1365,7 +1365,7 @@ class TestDirectoryImportScript(DatabaseTest):
             return path in mock_filesystem
 
         @contextlib.contextmanager
-        def mock_open(path):
+        def mock_open(path, mode="r"):
             yield StringIO(mock_filesystem[path])
         mock_filesystem_operations = mock_exists, mock_open
 
