@@ -3,7 +3,7 @@ import json
 import os
 
 import requests_mock
-from api.odl2 import ODL2APIConfiguration, ODL2Importer
+from freezegun import freeze_time
 from webpub_manifest_parser.core.ast import PresentationMetadata
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.odl.ast import ODLPublication
@@ -11,6 +11,8 @@ from webpub_manifest_parser.odl.semantic import (
     ODL_PUBLICATION_MUST_CONTAIN_EITHER_LICENSES_OR_OA_ACQUISITION_LINK_ERROR,
 )
 
+from api.odl import ODLImporter
+from api.odl2 import ODL2API, ODL2APIConfiguration, ODL2ExpiredItemsReaper, ODL2Importer
 from core.coverage import CoverageFailure
 from core.model import (
     Contribution,
@@ -25,10 +27,11 @@ from core.model import (
 )
 from core.model.configuration import ConfigurationFactory, ConfigurationStorage
 from core.opds2_import import RWPMManifestParser
-from core.tests.test_opds2_import import TestOPDS2Importer
+from core.tests.test_opds2_import import OPDS2Test
+from tests.test_odl import TestODLExpiredItemsReaper
 
 
-class TestODL2Importer(TestOPDS2Importer):
+class TestODL2Importer(OPDS2Test):
     @staticmethod
     def _get_delivery_mechanism_by_drm_scheme_and_content_type(
         delivery_mechanisms, content_type, drm_scheme
@@ -58,12 +61,17 @@ class TestODL2Importer(TestOPDS2Importer):
 
         return None
 
-    def sample_opds(self, filename):
+    def sample_opds(self, filename, file_type="r"):
         base_path = os.path.split(__file__)[0]
         resource_path = os.path.join(base_path, "files", "odl2")
         return open(os.path.join(resource_path, filename)).read()
 
+    @freeze_time("2016-01-01T00:00:00+00:00")
     def test(self):
+        """Ensure that ODL2Importer2 correctly processes and imports the ODL feed encoded using OPDS 1.x.
+
+        NOTE: `freeze_time` decorator is required to treat the licenses in the ODL feed as non-expired.
+        """
         # Arrange
         odl_status = {"checkouts": {"left": 10, "available": 10}}
         collection = self._default_collection
@@ -243,3 +251,34 @@ class TestODL2Importer(TestOPDS2Importer):
             node_property=None,
         )
         assert str(huck_finn_semantic_error) == huck_finn_failure.exception
+
+
+class TestODL2ExpiredItemsReaper(TestODLExpiredItemsReaper):
+    __base_path = os.path.split(__file__)[0]
+    resource_path = os.path.join(__base_path, "files", "odl2")
+
+    ODL_PROTOCOL = ODL2API.NAME
+    ODL_FEED_FILENAME_WITH_SINGLE_ODL_LICENSE = "single_license.json"
+    ODL_REAPER_CLASS = ODL2ExpiredItemsReaper
+
+    def _create_importer(self, collection, http_get):
+        """Create a new ODL importer with the specified parameters.
+
+        :param collection: Collection object
+        :type collection: core.model.collection.Collection
+
+        :param http_get: Use this method to make an HTTP GET request.
+            This can be replaced with a stub method for testing purposes.
+        :type http_get: Callable
+
+        :return: ODLImporter object
+        :rtype: ODLImporter
+        """
+        importer = ODL2Importer(
+            self._db,
+            collection=collection,
+            parser=RWPMManifestParser(ODLFeedParserFactory()),
+            http_get=http_get,
+        )
+
+        return importer
