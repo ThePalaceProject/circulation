@@ -1,6 +1,7 @@
 import datetime
 import os
 
+from parameterized import parameterized
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
 from ..model import (
@@ -67,12 +68,18 @@ class TestOPDS2Importer(OPDSTest):
 
         return None
 
-    def sample_opds(self, filename):
+    def sample_opds(self, filename, file_type="r"):
         base_path = os.path.split(__file__)[0]
         resource_path = os.path.join(base_path, "files", "opds2")
         return open(os.path.join(resource_path, filename)).read()
 
-    def test(self):
+    @parameterized.expand(
+        [
+            ("manifest encoded as a string", "string"),
+            ("manifest encoded as a byte-string", "bytes"),
+        ]
+    )
+    def test(self, _, manifest_type):
         # Arrange
         collection = self._default_collection
         data_source = DataSource.lookup(
@@ -85,6 +92,9 @@ class TestOPDS2Importer(OPDSTest):
             self._db, collection, RWPMManifestParser(OPDS2FeedParserFactory())
         )
         content_server_feed = self.sample_opds("feed.json")
+
+        if manifest_type == "bytes":
+            content_server_feed = content_server_feed.encode()
 
         # Act
         imported_editions, pools, works, failures = importer.import_from_feed(

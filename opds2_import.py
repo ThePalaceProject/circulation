@@ -2,7 +2,7 @@ import logging
 
 import webpub_manifest_parser.opds2.ast as opds2_ast
 from flask_babel import lazy_gettext as _
-from io import StringIO
+from io import StringIO, BytesIO
 from urllib.parse import urljoin, urlparse
 from webpub_manifest_parser.core import ManifestParserFactory, ManifestParserResult
 from webpub_manifest_parser.core.analyzer import NodeFinder
@@ -71,31 +71,30 @@ class RWPMManifestParser(object):
         """
         result = None
 
-        if isinstance(manifest, str):
-            try:
+        try:
+            if isinstance(manifest, bytes):
+                input_stream = BytesIO(manifest)
+                parser = self._manifest_parser_factory.create()
+                result = parser.parse_stream(input_stream)
+            elif isinstance(manifest, str):
                 input_stream = StringIO(manifest)
                 parser = self._manifest_parser_factory.create()
                 result = parser.parse_stream(input_stream)
-            except BaseError:
-                logging.exception("Failed to parse the RWPM-like manifest")
-
-                raise
-        elif isinstance(manifest, dict):
-            try:
+            elif isinstance(manifest, dict):
                 parser = self._manifest_parser_factory.create()
                 result = parser.parse_json(manifest)
-            except BaseError:
-                logging.exception("Failed to parse the RWPM-like manifest")
-
-                raise
-        elif isinstance(manifest, Manifestlike):
-            result = ManifestParserResult(manifest)
-        else:
-            raise ValueError(
-                "Argument 'manifest' must be either a string, a dictionary, or an instance of {0}".format(
-                    Manifestlike
+            elif isinstance(manifest, Manifestlike):
+                result = ManifestParserResult(manifest)
+            else:
+                raise ValueError(
+                    "Argument 'manifest' must be either a string, a dictionary, or an instance of {0}".format(
+                        Manifestlike
+                    )
                 )
-            )
+        except BaseError:
+            logging.exception("Failed to parse the RWPM-like manifest")
+
+            raise
 
         return result
 
