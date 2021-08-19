@@ -244,6 +244,29 @@ class TestConfigurationSetting(DatabaseTest):
             assert (
                 cs == get_one(self._db, ConfigurationSetting, id=cs.id))
 
+    @parameterized.expand([
+        ('no value', None, None),
+        ('stringable value', 1, '1'),
+        ('string value', 'snowman', 'snowman'),
+        ('bytes value', '☃'.encode("utf8"), '☃'),
+    ])
+    def test_setter(self, _, set_to, expect):
+        # Values are converted into Unicode strings on the way in to
+        # the 'value' setter.
+        setting = ConfigurationSetting.sitewide(self._db, "setting")
+        setting.value = set_to
+        assert setting.value == expect
+
+    def test_stored_bytes_value(self):
+        bytes_setting = ConfigurationSetting.sitewide(self._db, "bytes_setting")
+        assert bytes_setting.value is None
+
+        bytes_setting.value = '1234 ☃'.encode('utf8')
+        assert '1234 ☃' == bytes_setting.value
+
+        with pytest.raises(UnicodeDecodeError):
+            bytes_setting.value = b'\x80'
+
     def test_int_value(self):
         number = ConfigurationSetting.sitewide(self._db, "number")
         assert None == number.int_value

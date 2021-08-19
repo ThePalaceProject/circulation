@@ -1,5 +1,4 @@
 import argparse
-import datetime
 import logging
 import os
 import random
@@ -9,8 +8,8 @@ import sys
 import traceback
 import unicodedata
 import uuid
+from pdb import set_trace
 from collections import defaultdict
-
 from enum import Enum
 from sqlalchemy import (
     exists,
@@ -24,26 +23,25 @@ from sqlalchemy.orm.exc import (
     MultipleResultsFound,
 )
 
-# from axis import Axis360BibliographicCoverageProvider
-from config import Configuration, CannotLoadConfiguration
-from coverage import (
+from .config import Configuration, CannotLoadConfiguration
+from .coverage import (
     CollectionCoverageProviderJob,
     CoverageProviderProgress,
 )
-from external_search import (
+from .external_search import (
     ExternalSearchIndex,
     Filter,
     SearchIndexCoverageProvider,
 )
-from lane import Lane
-from metadata_layer import (
+from .lane import Lane
+from .metadata_layer import (
     LinkData,
     ReplacementPolicy,
     MetaToModelUtility,
     TimestampData,
 )
-from mirror import MirrorUploader
-from model import (
+from .mirror import MirrorUploader
+from .model import (
     create,
     get_one,
     get_one_or_create,
@@ -73,26 +71,24 @@ from model import (
     WorkCoverageRecord,
     site_configuration_has_changed,
 )
-from model.configuration import ExternalIntegrationLink
-from monitor import (
+from .model.configuration import ExternalIntegrationLink
+from .monitor import (
     CollectionMonitor,
     ReaperMonitor,
 )
-from opds_import import (
+from .opds_import import (
     OPDSImportMonitor,
     OPDSImporter,
 )
-# from oneclick import (
-#     OneClickBibliographicCoverageProvider,
-# )
-from util import fast_query_count
-from util.personal_names import (
+from .util import fast_query_count
+from .util.personal_names import (
     contributor_name_match_ratio,
     display_name_to_sort_name
 )
-from util.worker_pools import (
+from .util.worker_pools import (
     DatabasePool,
 )
+from .util.datetime_helpers import strptime_utc, to_utc, utc_now
 
 
 class Script(object):
@@ -140,15 +136,13 @@ class Script(object):
             for hours in ('', ' %H:%M:%S'):
                 full_format = format + hours
                 try:
-                    parsed = datetime.datetime.strptime(
-                        time_string, full_format
-                    )
+                    parsed = strptime_utc(time_string, full_format)
                     return parsed
-                except ValueError, e:
+                except ValueError as e:
                     continue
         raise ValueError("Could not parse time: %s" % time_string)
 
-    def __init__(self, _db=None):
+    def __init__(self, _db=None, *args, **kwargs):
         """Basic constructor.
 
         :_db: A database session to be used instead of
@@ -160,14 +154,14 @@ class Script(object):
     def run(self):
         self.load_configuration()
         DataSource.well_known_sources(self._db)
-        start_time = datetime.datetime.utcnow()
+        start_time = utc_now()
         try:
             timestamp_data = self.do_run()
             if not isinstance(timestamp_data, TimestampData):
                 # Ignore any nonstandard return value from do_run().
                 timestamp_data = None
             self.update_timestamp(timestamp_data, start_time, None)
-        except Exception, e:
+        except Exception as e:
             logging.error(
                 "Fatal exception while running script: %s", e,
                 exc_info=e
@@ -284,7 +278,7 @@ class RunMultipleMonitorsScript(Script):
         for monitor in self.monitors(**self.kwargs):
             try:
                 monitor.run()
-            except Exception, e:
+            except Exception as e:
                 # This is bad, but not so bad that we should give up trying
                 # to run the other Monitors.
                 if monitor.collection:
@@ -409,7 +403,7 @@ class RunThreadedCollectionCoverageProviderScript(Script):
                 # jobs could share a single 'progress' object.
                 while offset < query_size:
                     progress = CoverageProviderProgress(
-                        start=datetime.datetime.utcnow()
+                        start=utc_now()
                     )
                     progress.offset = offset
                     job = CollectionCoverageProviderJob(
@@ -542,7 +536,7 @@ class IdentifierInputScript(InputScript):
             if identifier_type == cls.DATABASE_ID:
                 try:
                     arg = int(arg)
-                except ValueError, e:
+                except ValueError as e:
                     # We'll print out a warning later.
                     arg = None
                 if arg:
@@ -739,7 +733,7 @@ class LaneSweeperScript(LibraryInputScript):
     """Do something to each lane in a library."""
 
     def process_library(self, library):
-        from lane import WorkList
+        from .lane import WorkList
         top_level = WorkList.top_level_for_library(self._db, library)
         queue = [top_level]
         while queue:
@@ -1793,7 +1787,7 @@ class CollectionInputScript(Script):
         )
         parser.add_argument(
             '--collection-type',
-            help=u'Collection type. Valid values are: OPEN_ACCESS (default), PROTECTED_ACCESS.',
+            help='Collection type. Valid values are: OPEN_ACCESS (default), PROTECTED_ACCESS.',
             type=CollectionType,
             choices=list(CollectionType),
             default=CollectionType.OPEN_ACCESS
@@ -1861,6 +1855,7 @@ class OPDSImportScript(CollectionInputScript):
         self.importer_class = importer_class or self.IMPORTER_CLASS
         self.monitor_class = monitor_class or self.MONITOR_CLASS
         self.protocol = protocol or self.PROTOCOL
+        self.importer_kwargs = kwargs
 
     @classmethod
     def arg_parser(cls):
@@ -1881,7 +1876,7 @@ class OPDSImportScript(CollectionInputScript):
     def run_monitor(self, collection, force=None):
         monitor = self.monitor_class(
             self._db, collection, import_class=self.importer_class,
-            force_reimport=force
+            force_reimport=force, **self.importer_kwargs
         )
         monitor.run()
 
@@ -2058,6 +2053,9 @@ class DatabaseMigrationScript(Script):
     # There are some SQL commands that can't be run inside a transaction.
     TRANSACTIONLESS_COMMANDS = ['alter type']
 
+    TRANSACTION_PER_STATEMENT = 'SIMPLYE_MIGRATION_TRANSACTION_PER_STATEMENT'
+    DO_NOT_EXECUTE = 'SIMPLYE_MIGRATION_DO_NOT_EXECUTE'
+
     class TimestampInfo(object):
         """Act like a ORM Timestamp object, but with no database connection."""
 
@@ -2090,7 +2088,7 @@ class DatabaseMigrationScript(Script):
                     exception = None
                     _db.commit()
                     break
-                except ProgrammingError, e:
+                except ProgrammingError as e:
                     # The database connection is now tainted; we must
                     # create a new one.
                     logging.error(
@@ -2122,10 +2120,12 @@ class DatabaseMigrationScript(Script):
 
         def __init__(self, service, finish, counter=None):
             self.service = service
-            if isinstance(finish, basestring):
+            if isinstance(finish, str):
                 finish = Script.parse_time(finish)
+            else:
+                finish = to_utc(finish)
             self.finish = finish
-            if isinstance(counter, basestring):
+            if isinstance(counter, str):
                 counter = int(counter)
             self.counter = counter
 
@@ -2136,18 +2136,17 @@ class DatabaseMigrationScript(Script):
             """Saves a TimestampInfo object to the database.
             """
             # Reset values locally.
-            self.finish = finish
+            self.finish = to_utc(finish)
             self.counter = counter
 
             sql = (
-                "UPDATE timestamps SET start=:finish, finish=:finish, counter=:counter"
+                "UPDATE timestamps SET start=(:finish at time zone 'utc'), finish=(:finish at time zone 'utc'), counter=:counter"
                 " where service=:service"
             )
             values = dict(
                 finish=self.finish, counter=self.counter,
                 service=self.service,
             )
-
             _db.execute(text(sql), values)
             _db.flush()
 
@@ -2156,7 +2155,7 @@ class DatabaseMigrationScript(Script):
             )
             if migration_name:
                 message += " for %s" % migration_name
-            print message
+            print(message)
 
     @classmethod
     def arg_parser(cls):
@@ -2187,7 +2186,7 @@ class DatabaseMigrationScript(Script):
         return cls.sort_migrations(migratable)
 
     @classmethod
-    def sort_migrations(self, migrations):
+    def sort_migrations(cls, migrations):
         """All Python migrations sort after all SQL migrations, since a Python
         migration requires an up-to-date database schema.
 
@@ -2218,7 +2217,7 @@ class DatabaseMigrationScript(Script):
 
             # Both migrations have the same timestamp, so compare using
             # their counters (default to 0 if no counter is included)
-            first_count = self.MIGRATION_WITH_COUNTER.search(first)
+            first_count = cls.MIGRATION_WITH_COUNTER.search(first)
             if first_count is not None:
                 first_count = int(first_count.groups()[0])
             else:
@@ -2316,7 +2315,7 @@ class DatabaseMigrationScript(Script):
 
         if not timestamp or not self.overall_timestamp:
             # There's no timestamp in the database! Raise an error.
-            print ""
+            print("")
             print (
                 "NO TIMESTAMP FOUND. Either initialize your untouched database "
                 "with the script `core/bin/initialize_database` OR run this "
@@ -2331,15 +2330,15 @@ class DatabaseMigrationScript(Script):
         new_migrations = self.get_new_migrations(timestamp, migrations)
         if new_migrations:
             # Log the new migrations.
-            print "%d new migrations found." % len(new_migrations)
+            print("%d new migrations found." % len(new_migrations))
             for migration in new_migrations:
-                print "  - %s" % migration
+                print("  - %s" % migration)
             self.run_migrations(
                 new_migrations, migrations_by_dir, timestamp
             )
             self._db.commit()
         else:
-            print "No new migrations found. Your database is up-to-date."
+            print("No new migrations found. Your database is up-to-date.")
 
     def fetch_migration_files(self):
         """Pulls migration files from the expected locations
@@ -2428,11 +2427,11 @@ class DatabaseMigrationScript(Script):
         previous = None
 
         def raise_error(migration_path, message, code=1):
-            print
-            print "ERROR: %s" % message
-            print "%s must be migrated manually." % migration_path
-            print "=" * 50
-            print traceback.print_exc(file=sys.stdout)
+            print()
+            print("ERROR: %s" % message)
+            print("%s must be migrated manually." % migration_path)
+            print("=" * 50)
+            print(traceback.print_exc(file=sys.stdout))
             sys.exit(code)
 
         migrations = self.sort_migrations(migrations)
@@ -2460,35 +2459,71 @@ class DatabaseMigrationScript(Script):
                     except Exception:
                         raise_error(full_migration_path, "Migration has been halted.")
         else:
-            print "All new migrations have been run."
+            print("All new migrations have been run.")
 
     def _run_migration(self, migration_path, timestamp):
         """Runs a single SQL or Python migration file"""
 
         migration_filename = os.path.split(migration_path)[1]
+        ok_to_execute = True
 
         if migration_path.endswith('.sql'):
             with open(migration_path) as clause:
                 sql = clause.read()
 
-                transactionless = any(filter(
-                    lambda c: c in sql.lower(), self.TRANSACTIONLESS_COMMANDS
-                ))
-                if transactionless:
-                    new_session = self._run_migration_without_transaction(sql)
-                else:
-                    # By wrapping the action in a transation, we can avoid
-                    # rolling over errors and losing data in files
-                    # with multiple interrelated SQL actions.
-                    sql = 'BEGIN;\n%s\nCOMMIT;' % sql
-                    self._db.execute(sql)
+                transactionless = any([c for c in self.TRANSACTIONLESS_COMMANDS if c in sql.lower()])
+                one_tx_per_statement = bool(self.TRANSACTION_PER_STATEMENT.lower() in sql.lower())
+                ok_to_execute = not bool(self.DO_NOT_EXECUTE.lower() in sql.lower())
+
+                if ok_to_execute:
+                    if transactionless:
+                        new_session = self._run_migration_without_transaction(sql)
+                    elif one_tx_per_statement:
+                        commands = self._extract_statements_from_sql_file(migration_path)
+                        for command in commands:
+                            self._db.execute(f"BEGIN;{command}COMMIT;")
+                    else:
+                        # By wrapping the action in a transation, we can avoid
+                        # rolling over errors and losing data in files
+                        # with multiple interrelated SQL actions.
+                        sql = 'BEGIN;\n%s\nCOMMIT;' % sql
+                        self._db.execute(sql)
 
         if migration_path.endswith('.py'):
             module_name = migration_filename[:-3]
             subprocess.call(migration_path)
 
         # Update timestamp for the migration.
-        self.update_timestamps(migration_filename)
+        if ok_to_execute:
+            self.update_timestamps(migration_filename)
+
+    def _extract_statements_from_sql_file(self, filepath):
+        """
+        From an SQL file, return a python list of the individual statements.
+
+        Removes comment lines and extraneous whitespace at the start / end of
+        statements, but that's about it. Use carefully.
+        """
+        with open(filepath) as f:
+            sql_file_lines = f.readlines()
+
+        sql_commands = []
+        current_command = ''
+
+        for line in sql_file_lines:
+            if line.strip().startswith('--'):
+                continue
+            else:
+                if current_command == '':
+                    current_command = line.strip()
+                else:
+                    current_command = current_command + ' ' + line.strip()
+
+            if current_command.endswith(';'):
+                sql_commands.append(current_command)
+                current_command = ''
+
+        return sql_commands
 
     def _run_migration_without_transaction(self, sql_statement):
         """Runs a single SQL statement outside of a transaction."""
@@ -2543,12 +2578,14 @@ class DatabaseMigrationScript(Script):
         if self.overall_timestamp is None:
             return
 
+        if self.overall_timestamp.finish is not None:
+            finish_timestamp = self.overall_timestamp.finish
         # The last script that ran had an earlier timestamp than the current script
-        if self.overall_timestamp.finish > last_run_date:
+        if finish_timestamp > last_run_date:
             return
 
         # The dates of the scrips are the same so compare the counters
-        if self.overall_timestamp.finish==last_run_date:
+        if finish_timestamp==last_run_date:
             # The current script has no counter, so it's the same script that ran
             # or an earlier script that ran
             if counter is None:
@@ -2621,8 +2658,8 @@ class DatabaseMigrationInitializationScript(DatabaseMigrationScript):
             return
 
         migrations = self.sort_migrations(self.fetch_migration_files()[0])
-        py_migrations = filter(lambda m: m.endswith('.py'), migrations)
-        sql_migrations = filter(lambda m: m.endswith('.sql'), migrations)
+        py_migrations = [m for m in migrations if m.endswith('.py')]
+        sql_migrations = [m for m in migrations if m.endswith('.sql')]
 
         most_recent_sql_migration = sql_migrations[-1]
         most_recent_python_migration = py_migrations[-1]
@@ -2700,7 +2737,7 @@ class CheckContributorNamesInDB(IdentifierInputScript):
         editions = True
         offset = 0
         output = "ContributorID|\tSortName|\tDisplayName|\tComputedSortName|\tResolution|\tComplaintSource"
-        print output.encode("utf8")
+        print(output.encode("utf8"))
 
         while editions:
             my_query = self.query.offset(offset).limit(batch_size)
@@ -2725,7 +2762,7 @@ class CheckContributorNamesInDB(IdentifierInputScript):
         identifier = contribution.edition.primary_identifier
 
         if contributor.sort_name and contributor.display_name:
-            computed_sort_name_local_new = unicodedata.normalize("NFKD", unicode(display_name_to_sort_name(contributor.display_name)))
+            computed_sort_name_local_new = unicodedata.normalize("NFKD", str(display_name_to_sort_name(contributor.display_name)))
             # Did HumanName parser produce a differet result from the plain comma replacement?
             if (contributor.sort_name.strip().lower() != computed_sort_name_local_new.strip().lower()):
                 error_message_detail = "Contributor[id=%s].sort_name is oddly different from computed_sort_name, human intervention required." % contributor.id
@@ -2755,7 +2792,7 @@ class CheckContributorNamesInDB(IdentifierInputScript):
                 else:
                     # we can fix it!
                     output = "%s|\t%s|\t%s|\t%s|\tlocal_fix" % (contributor.id, contributor.sort_name, contributor.display_name, computed_sort_name_local_new)
-                    print output.encode("utf8")
+                    print(output.encode("utf8"))
                     self.set_contributor_sort_name(computed_sort_name_local_new, contribution)
 
 
@@ -2799,8 +2836,8 @@ class CheckContributorNamesInDB(IdentifierInputScript):
         try:
             complaint, is_new = Complaint.register(pools[0], cls.COMPLAINT_TYPE, source, error_message_detail)
             output = "%s|\t%s|\t%s|\t%s|\tcomplain|\t%s" % (contributor.id, contributor.sort_name, contributor.display_name, computed_sort_name, source)
-            print output.encode("utf8")
-        except ValueError, e:
+            print(output.encode("utf8"))
+        except ValueError as e:
             # log and move on, don't stop run
             log.error("Error registering complaint: %r", contributor, exc_info=e)
             success = False
@@ -2836,9 +2873,6 @@ class Explain(IdentifierInputScript):
 
     def write(self, s):
         """Write a string to self.stdout."""
-        # TODO PYTHON3 we write unicode to stdout, not bytes.
-        if isinstance(s, unicode):
-            s = s.encode("utf8")
         if not s.endswith('\n'):
             s += '\n'
         self.stdout.write(s)
@@ -2879,11 +2913,11 @@ class Explain(IdentifierInputScript):
 
         # Note:  Can change DB state.
         if work and presentation_calculation_policy is not None:
-             print "!!! About to calculate presentation!"
+             print("!!! About to calculate presentation!")
              work.calculate_presentation(policy=presentation_calculation_policy)
-             print "!!! All done!"
-             print
-             print "After recalculating presentation:"
+             print("!!! All done!")
+             print()
+             print("After recalculating presentation:")
              self.explain_work(work)
 
 
@@ -2913,10 +2947,10 @@ class Explain(IdentifierInputScript):
                 genre = genre.name
             else:
                 genre = "(!genre)"
-            #print "%s  %s says: %s/%s %s w=%s" % (
+            #print("%s  %s says: %s/%s %s w=%s" % (
             #    indent, classification.data_source.name,
             #    subject.identifier, subject.name, genre, classification.weight
-            #)
+            #))
         seen.add(identifier)
         for equivalency in identifier.equivalencies:
             if equivalency.id in seen:
@@ -3182,7 +3216,7 @@ class ListCollectionMetadataIdentifiersScript(CollectionInputScript):
 
             count += 1
             add_line(
-                unicode(collection.id),
+                str(collection.id),
                 collection.name,
                 collection.protocol,
                 collection.metadata_identifier,

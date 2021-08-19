@@ -3,6 +3,7 @@ import pytest
 from mock import create_autospec, MagicMock
 import datetime
 import json
+
 from ...testing import DatabaseTest
 from ...config import Configuration
 from ...model import (
@@ -33,6 +34,7 @@ from ...model.licensing import (
 )
 from ...model.work import Work
 from ...util.string_helpers import base64
+from ...util.datetime_helpers import utc_now
 
 
 class TestCollection(DatabaseTest):
@@ -607,7 +609,7 @@ class TestCollection(DatabaseTest):
         w3 = self._work(with_license_pool=True)
 
         # An empty catalog returns nothing.
-        timestamp = datetime.datetime.utcnow()
+        timestamp = utc_now()
         assert [] == m(self._db, timestamp).all()
 
         self.collection.catalog_identifier(w1.license_pools[0].identifier)
@@ -635,7 +637,7 @@ class TestCollection(DatabaseTest):
             c for c in w1.coverage_records
             if c.operation == WorkCoverageRecord.GENERATE_OPDS_OPERATION
         ]
-        w1_coverage_record.timestamp = datetime.datetime.utcnow()
+        w1_coverage_record.timestamp = utc_now()
         assert (
             [w1] == [x.work for x in m(self._db, timestamp)])
 
@@ -645,7 +647,7 @@ class TestCollection(DatabaseTest):
         i3 = self._identifier(identifier_type=Identifier.ISBN, foreign_id=self._isbn)
         i4 = self._identifier(identifier_type=Identifier.ISBN, foreign_id=self._isbn)
 
-        timestamp = datetime.datetime.utcnow()
+        timestamp = utc_now()
 
         # An empty catalog returns nothing..
         assert [] == self.collection.isbns_updated_since(self._db, None).all()
@@ -676,15 +678,15 @@ class TestCollection(DatabaseTest):
 
         # When a timestamp is passed, only works that have been updated since
         # then will be returned.
-        timestamp = datetime.datetime.utcnow()
-        i1.coverage_records[0].timestamp = datetime.datetime.utcnow()
+        timestamp = utc_now()
+        i1.coverage_records[0].timestamp = utc_now()
         updated_isbns = self.collection.isbns_updated_since(self._db, timestamp)
         assert_isbns([i1], updated_isbns)
 
         # Prepare an ISBN associated with a Work.
         work = self._work(with_license_pool=True)
         work.license_pools[0].identifier = i2
-        i2.coverage_records[0].timestamp = datetime.datetime.utcnow()
+        i2.coverage_records[0].timestamp = utc_now()
 
         # ISBNs that have a Work will be ignored.
         updated_isbns = self.collection.isbns_updated_since(self._db, timestamp)
@@ -749,11 +751,11 @@ class TestCollection(DatabaseTest):
             data_source_name=DataSource.OVERDRIVE, with_license_pool=True,
             title="Overdrive Ebook",
         )
-        rbdigital_audiobook = self._work(
-            data_source_name=DataSource.RB_DIGITAL, with_license_pool=True,
-            title="RBDigital Audiobook"
+        feedbooks_audiobook = self._work(
+            data_source_name=DataSource.FEEDBOOKS, with_license_pool=True,
+            title="Feedbooks Audiobook"
         )
-        rbdigital_audiobook.presentation_edition.medium = Edition.AUDIO_MEDIUM
+        feedbooks_audiobook.presentation_edition.medium = Edition.AUDIO_MEDIUM
 
         DataSource.lookup(self._db, DataSource.LCP, autocreate=True)
         self_hosted_lcp_book = self._work(
@@ -792,17 +794,17 @@ class TestCollection(DatabaseTest):
         # up.
         setting.value = json.dumps([])
         expect(
-            qu, [overdrive_ebook, overdrive_audiobook, rbdigital_audiobook, self_hosted_lcp_book, unlimited_access_book]
+            qu, [overdrive_ebook, overdrive_audiobook, feedbooks_audiobook, self_hosted_lcp_book, unlimited_access_book]
         )
         # Putting a data source in the list excludes its audiobooks, but
         # not its ebooks.
         setting.value = json.dumps([DataSource.OVERDRIVE])
         expect(
             qu,
-            [overdrive_ebook, rbdigital_audiobook, self_hosted_lcp_book, unlimited_access_book]
+            [overdrive_ebook, feedbooks_audiobook, self_hosted_lcp_book, unlimited_access_book]
         )
         setting.value = json.dumps(
-            [DataSource.OVERDRIVE, DataSource.RB_DIGITAL]
+            [DataSource.OVERDRIVE, DataSource.FEEDBOOKS]
         )
         expect(
             qu, [overdrive_ebook, self_hosted_lcp_book, unlimited_access_book]
