@@ -12,6 +12,8 @@ __pycache__/
 # Distribution / packaging
 .Python
 env/
+env2/
+venv/
 build/
 develop-eggs/
 dist/
@@ -25,6 +27,8 @@ var/
 .installed.cfg
 *.egg
 node_modules/
+admin/package.json
+admin/package-lock.json
 
 # Installer logs
 pip-log.txt
@@ -66,3 +70,8 @@ docs/**/
 docs/source/*
 !docs/source/conf.py
 !docs/source/index.rst
+
+
+# Mac OS
+.DS_Store
+

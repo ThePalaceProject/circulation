@@ -4,7 +4,6 @@ env:
   POSTGRES_USER: simplified_test
   POSTGRES_PASSWORD: test
   POSTGRES_DB: simplified_circulation_test
-  SIMPLIFIED_TEST_DATABASE: postgres://simplified_test:test@localhost:5432/simplified_circulation_test
   # Don't push the Docker image if the `NO_DOCKER_IMAGE` secret is set.
   IMAGE_PUSH_ENABLED: ${{ secrets.NO_DOCKER_IMAGE == null }}
 
@@ -12,22 +11,15 @@ jobs:
   test-circulation:
     name: Run Circulation Tests
     runs-on: ubuntu-latest
-
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [3.6, 3.7, 3.8]
     # We want to run on external PRs, but not on our own internal PRs as they'll be run
     # by the push to the branch. This prevents duplicated runs on internal PRs.
     # Some discussion of this here:
     # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
-
-    services:
-      postgres:
-        image: postgres:9.6
-        env:
-          POSTGRES_USER: ${{ env.POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
-          POSTGRES_DB: ${{ env.POSTGRES_DB }}
-        ports:
-          - 5432:5432
 
     steps:
       - uses: actions/checkout@v2
@@ -37,7 +29,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: 2.7
+          python-version: ${{ matrix.python-version }}
 
       - name: Install Apt Packages
         run: |
@@ -47,7 +39,7 @@ jobs:
       - name: Install Python Packages
         run: |
           pip install --upgrade pip
-          pip install tox
+          pip install tox tox-gh-actions tox-docker
 
       - name: Run Circulation Tests
         run: tox
@@ -56,61 +48,30 @@ jobs:
   test-core:
     name: Run Core Tests
     runs-on: ubuntu-latest
-
-    env:
-      SIMPLIFIED_TEST_ELASTICSEARCH: http://localhost:9200
-      SIMPLIFIED_TEST_MINIO_ENDPOINT_URL: http://localhost:9000
-      SIMPLIFIED_TEST_MINIO_USER: simplified
-      SIMPLIFIED_TEST_MINIO_PASSWORD: "12345678901234567890"
-
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [3.6, 3.7, 3.8, 3.9]
     # We want to run on external PRs, but not on our own internal PRs as they'll be run
     # by the push to the branch. This prevents duplicated runs on internal PRs.
     # Some discussion of this here:
     # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
 
-    services:
-      postgres:
-        image: postgres:9.6
-        env:
-          POSTGRES_USER: ${{ env.POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
-          POSTGRES_DB: ${{ env.POSTGRES_DB }}
-        ports:
-          - 5432:5432
-      elasticsearch:
-        image: elasticsearch:6.4.0
-        env:
-          discovery.type: single-node
-        ports:
-          - 9200:9200
-      minio:
-        image: bitnami/minio:latest
-        ports:
-          - 9000:9000
-        env:
-          MINIO_ACCESS_KEY: ${{ env.SIMPLIFIED_TEST_MINIO_USER }}
-          MINIO_SECRET_KEY: ${{ env.SIMPLIFIED_TEST_MINIO_PASSWORD }}
-
     steps:
       - uses: actions/checkout@v2
         with:
           submodules: recursive
 
-      - name: Configure Elasticsearch Container
-        run: |
-          docker exec ${{ job.services.elasticsearch.id }} elasticsearch-plugin install analysis-icu
-          docker restart ${{ job.services.elasticsearch.id }}
-
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: 2.7
+          python-version: ${{ matrix.python-version }}
 
-      - name: Install Python Packages
+      - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install tox
+          pip install tox tox-gh-actions tox-docker
 
       - name: Run Core Tests
         run: tox
@@ -173,7 +134,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:9.6
+        image: postgres:12
         env:
           POSTGRES_USER: ${{ env.POSTGRES_USER }}
           POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
@@ -251,7 +212,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:9.6
+        image: postgres:12
         env:
           POSTGRES_USER: ${{ env.POSTGRES_USER }}
           POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}

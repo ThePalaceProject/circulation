@@ -1,4 +1,3 @@
-import datetime
 import logging
 
 import dateutil.parser
@@ -21,6 +20,7 @@ from core.model import (
     Representation,
     Subject,
     LicensePool, EditionConstants)
+from core.util.datetime_helpers import strptime_utc
 from core.util.xmlparser import XMLParser
 
 

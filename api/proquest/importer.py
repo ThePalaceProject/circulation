@@ -6,7 +6,6 @@ import shutil
 import tempfile
 from contextlib import contextmanager
 
-import six
 import webpub_manifest_parser.opds2.ast as opds2_ast
 from flask_babel import lazy_gettext as _
 from requests import HTTPError
@@ -42,9 +41,8 @@ from core.model.configuration import (
     ExternalIntegration,
     HasExternalIntegration,
 )
-from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, parse_feed
+from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, RWPMManifestParser
 from core.opds_import import OPDSImporter
-from core.util.string_helpers import is_string
 
 MISSING_AFFILIATION_ID = BaseError(
     _(
@@ -76,7 +74,7 @@ class CannotCreateProQuestTokenError(BaseError):
     def __init__(self, inner_exception):
         message = "{0}: {1}".format(
             _("Can not create a ProQuest JWT bearer token"),
-            six.ensure_text(str(inner_exception)),
+            str(inner_exception),
         )
 
         super(CannotCreateProQuestTokenError, self).__init__(message, inner_exception)
@@ -171,7 +169,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
     """Allows to import ProQuest OPDS 2.0 feeds into Circulation Manager."""
 
     NAME = ExternalIntegration.PROQUEST
-    DESCRIPTION = _(u"Import books from a ProQuest OPDS 2.0 feed.")
+    DESCRIPTION = _("Import books from a ProQuest OPDS 2.0 feed.")
     SETTINGS = (
         ProQuestOPDS2ImporterConfiguration.to_settings()
         + ProQuestAPIClientConfiguration.to_settings()
@@ -184,6 +182,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         self,
         db,
         collection,
+        parser,
         data_source_name=None,
         identifier_mapping=None,
         http_get=None,
@@ -201,6 +200,9 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
             LicensePools created by this OPDS2Import class will be associated with the given Collection.
             If this is None, no LicensePools will be created -- only Editions.
         :type collection: Collection
+
+        :param parser: Feed parser
+        :type parser: RWPMManifestParser
 
         :param data_source_name: Name of the source of this OPDS feed.
             All Editions created by this import will be associated with this DataSource.
@@ -228,6 +230,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         super(ProQuestOPDS2Importer, self).__init__(
             db,
             collection,
+            parser,
             data_source_name,
             identifier_mapping,
             http_get,
@@ -278,7 +281,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         if configuration.affiliation_attributes:
             if isinstance(configuration.affiliation_attributes, list):
                 affiliation_attributes = configuration.affiliation_attributes
-            elif is_string(configuration.affiliation_attributes):
+            elif isinstance(configuration.affiliation_attributes, str):
                 affiliation_attributes = tuple(
                     map(
                         str.strip,
@@ -374,7 +377,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         except Exception as exception:
             self._logger.exception("Cannot create a ProQuest JWT bearer token")
 
-            raise CannotCreateProQuestTokenError(exception)
+            raise CannotCreateProQuestTokenError(str(exception))
 
     def _get_or_create_proquest_token(self, patron, configuration):
         """Get an existing or create a new ProQuest JWT bearer token.
@@ -445,7 +448,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         :rtype: List[LinkData]
         """
         self._logger.debug(
-            u"Started extracting image links from {0}".format(
+            "Started extracting image links from {0}".format(
                 encode(publication.images)
             )
         )
@@ -470,7 +473,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
             image_links.append(cover_link)
 
         self._logger.debug(
-            u"Finished extracting image links from {0}: {1}".format(
+            "Finished extracting image links from {0}: {1}".format(
                 encode(publication.images), encode(image_links)
             )
         )
@@ -509,7 +512,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         :rtype: List[Tuple[str, str]]
         """
         self._logger.debug(
-            u"Started extracting media types and a DRM scheme from {0}".format(
+            "Started extracting media types and a DRM scheme from {0}".format(
                 encode(link)
             )
         )
@@ -544,7 +547,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
                 )
 
         self._logger.debug(
-            u"Finished extracting media types and a DRM scheme from {0}: {1}".format(
+            "Finished extracting media types and a DRM scheme from {0}: {1}".format(
                 encode(link), encode(media_types_and_drm_scheme)
             )
         )
@@ -673,8 +676,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
                 return loan
         except BaseError as exception:
             self._logger.exception("Failed to check out {0} for patron {1}")
-
-            raise CannotLoan(six.ensure_text(str(exception)))
+            raise CannotLoan(str(exception))
 
     def fulfill(
         self,
@@ -711,7 +713,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
                         content_link=None,
                         content_type=book.content_type
                         if book.content_type
-                        else internal_format.delivery_mechanism.media_type,
+                        else internal_format.delivery_mechanism.content_type,
                         content=book.content,
                         content_expires=None,
                     )
@@ -746,7 +748,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         except BaseError as exception:
             self._logger.exception("Failed to fulfill out {0} for patron {1}")
 
-            raise CannotFulfill(six.ensure_text(str(exception)))
+            raise CannotFulfill(str(exception))
 
     def external_integration(self, db):
         """Return an external integration associated with this object.
@@ -769,6 +771,7 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
         db,
         collection,
         import_class,
+        parser,
         force_reimport=False,
         process_removals=False,
         **import_class_kwargs
@@ -787,6 +790,9 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
         :param import_class: Class containing the import logic
         :type import_class: Type
 
+        :param parser: Feed parser
+        :type parser: RWPMManifestParser
+
         :param force_reimport: Boolean value indicating whether the import process must be started from scratch
         :type force_reimport: bool
 
@@ -795,6 +801,11 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
             that are no longer present in the ProQuest feed from the CM's catalog
         :type process_removals: bool
         """
+        if not isinstance(parser, RWPMManifestParser):
+            raise ValueError("Argument 'parser' must be an instance of {0}".format(RWPMManifestParser))
+
+        import_class_kwargs["parser"] = parser
+
         super(ProQuestOPDS2ImportMonitor, self).__init__(
             db, collection, import_class, force_reimport, **import_class_kwargs
         )
@@ -803,6 +814,7 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
         self._feeds = None
         self._client = self._client_factory.create(self)
         self._process_removals = process_removals
+        self._parser = parser
 
         self._logger = logging.getLogger(__name__)
 
@@ -867,7 +879,7 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
 
             try:
                 feed_page_content = json.dumps(
-                    feed, default=str, ensure_ascii=True, encoding="utf-8"
+                    feed, default=str, ensure_ascii=True,
                 )
                 feed_page_file.write(feed_page_content)
                 feed_page_file.flush()
@@ -904,7 +916,8 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
         ) as feed_page_file_handle:
             feed = feed_page_file_handle.read()
 
-        feed = parse_feed(feed, silent=False)
+        parser_result = self._parser.parse_manifest(feed)
+        feed = parser_result.root
 
         self._logger.info("Page # {0}. Finished parsing the feed".format(page))
 

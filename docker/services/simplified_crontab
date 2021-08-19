@@ -72,6 +72,7 @@ HOME=/var/www/circulation
 # Bibliotheca
 #
 */15 * * * * root core/bin/run bibliotheca_monitor >> /var/log/cron.log 2>&1
+0 */5 * * * root core/bin/run bibliotheca_purchase_monitor >> /var/log/cron.log 2>&1
 0 5 * * * root core/bin/run bibliotheca_circulation_sweep >> /var/log/cron.log 2>&1
 
 # Overdrive
@@ -80,12 +81,6 @@ HOME=/var/www/circulation
 */15 * * * * root core/bin/run overdrive_monitor_recent >> /var/log/cron.log 2>&1
 */15 * * * * root core/bin/run overdrive_reaper >> /var/log/cron.log 2>&1
 0 4 * * * root core/bin/run overdrive_format_sweep >> /var/log/cron.log 2>&1
-
-# RBdigital
-#
-0 */4 * * * root core/bin/run rbdigital_availability_monitor >> /var/log/cron.log 2>&1
-0 23 * * * root core/bin/run rbdigital_collection_delta >> /var/log/cron.log 2>&1
-0 23 * * * root core/bin/run rbdigital_initial_import >> /var/log/cron.log 2>&1
 
 # Enki
 #

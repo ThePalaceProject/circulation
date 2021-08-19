@@ -12,13 +12,13 @@ from flask import (
 from flask_cors.core import get_cors_options, set_cors_headers
 from werkzeug.exceptions import HTTPException
 
-from app import app, babel
+from .app import app, babel
 
 # We use URIs as identifiers throughout the application, meaning that
 # we never want werkzeug's merge_slashes feature.
 app.url_map.merge_slashes = False
 
-from config import Configuration
+from .config import Configuration
 from core.app_server import (
     ErrorHandler,
     compressible,
@@ -26,8 +26,8 @@ from core.app_server import (
 )
 from core.model import ConfigurationSetting
 from core.util.problem_detail import ProblemDetail
-from controller import CirculationManager
-from problem_details import REMOTE_INTEGRATION_FAILED
+from .controller import CirculationManager
+from .problem_details import REMOTE_INTEGRATION_FAILED
 from flask_babel import lazy_gettext as _
 
 @app.before_first_request
@@ -441,11 +441,6 @@ def annotations_for_work(identifier_type, identifier):
 @returns_problem_detail
 def borrow(identifier_type, identifier, mechanism_id=None):
     return app.manager.loans.borrow(identifier_type, identifier, mechanism_id)
-
-@library_route('/works/<license_pool_id>/fulfill/<mechanism_id>/<part>/rbdproxy/<bearer>')
-@has_library
-def proxy_rbdigital_patron_requests(license_pool_id, mechanism_id, part, bearer):
-    return app.manager.rbdproxy.proxy(bearer)
 
 @library_route('/works/<license_pool_id>/fulfill')
 @library_route('/works/<license_pool_id>/fulfill/<mechanism_id>')

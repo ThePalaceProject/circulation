@@ -19,7 +19,7 @@ from core.model import (
 from core.model.configuration import ExternalIntegrationLink
 from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
-from test_controller import SettingsControllerTest
+from .test_controller import SettingsControllerTest
 
 
 class TestCollectionSettings(SettingsControllerTest):
@@ -365,16 +365,6 @@ class TestCollectionSettings(SettingsControllerTest):
             response = self.manager.admin_collection_settings_controller.process_collections()
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
-        with self.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict([
-                ("name", "collection1"),
-                ("protocol", ExternalIntegration.RB_DIGITAL),
-                ("username", "user"),
-                ("password", "password"),
-            ])
-            response = self.manager.admin_collection_settings_controller.process_collections()
-            assert response.uri == INCOMPLETE_CONFIGURATION.uri
-
     def test_collections_post_create(self):
         l1, ignore = create(
             self._db, Library, name="Library 1", short_name="L1",
@@ -555,18 +545,18 @@ class TestCollectionSettings(SettingsControllerTest):
         return [
             ("id", collection.id),
             ("name", "Collection 1"),
-            ("protocol", ExternalIntegration.RB_DIGITAL),
+            ("protocol", ExternalIntegration.AXIS_360),
             ("external_account_id", "1234"),
             ("username", "user2"),
             ("password", "password"),
-            ("url", "http://rb/"),
+            ("url", "http://axis/"),
         ]
 
     def test_collections_post_edit_mirror_integration(self):
         # The collection exists.
         collection = self._collection(
             name="Collection 1",
-            protocol=ExternalIntegration.RB_DIGITAL
+            protocol=ExternalIntegration.AXIS_360
         )
 
         # There is a storage integration not associated with the collection.
@@ -623,7 +613,7 @@ class TestCollectionSettings(SettingsControllerTest):
         # The collection exists.
         collection = self._collection(
             name="Collection 1",
-            protocol=ExternalIntegration.RB_DIGITAL
+            protocol=ExternalIntegration.AXIS_360
         )
 
         # There is a storage integration not associated with the collection,
@@ -652,7 +642,7 @@ class TestCollectionSettings(SettingsControllerTest):
         # The collection exists.
         collection = self._collection(
             name="Collection 1",
-            protocol=ExternalIntegration.RB_DIGITAL
+            protocol=ExternalIntegration.AXIS_360
         )
 
         l1, ignore = create(
@@ -663,16 +653,15 @@ class TestCollectionSettings(SettingsControllerTest):
             flask.request.form = MultiDict([
                 ("id", collection.id),
                 ("name", "Collection 1"),
-                ("protocol", ExternalIntegration.RB_DIGITAL),
+                ("protocol", ExternalIntegration.AXIS_360),
                 ("external_account_id", "1234"),
                 ("username", "user2"),
                 ("password", "password"),
-                ("url", "http://rb/"),
+                ("url", "http://axis/"),
                 ("libraries", json.dumps([
                     {
                         "short_name": "L1",
-                        "ebook_loan_duration": "14",
-                        "audio_loan_duration": "12"
+                        "ebook_loan_duration": "14"
                     }
                 ])
                 ),
@@ -683,19 +672,17 @@ class TestCollectionSettings(SettingsControllerTest):
         # Additional settings were set on the collection+library.
         assert "14" == ConfigurationSetting.for_library_and_externalintegration(
                 self._db, "ebook_loan_duration", l1, collection.external_integration).value
-        assert "12" == ConfigurationSetting.for_library_and_externalintegration(
-                self._db, "audio_loan_duration", l1, collection.external_integration).value
 
         # Remove the connection between collection and library.
         with self.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict([
                 ("id", collection.id),
                 ("name", "Collection 1"),
-                ("protocol", ExternalIntegration.RB_DIGITAL),
+                ("protocol", ExternalIntegration.AXIS_360),
                 ("external_account_id", "1234"),
                 ("username", "user2"),
                 ("password", "password"),
-                ("url", "http://rb/"),
+                ("url", "http://axis/"),
                 ("libraries", json.dumps([])),
             ])
             response = self.manager.admin_collection_settings_controller.process_collections()
@@ -707,8 +694,6 @@ class TestCollectionSettings(SettingsControllerTest):
         # when the connection between collection and library was deleted.
         assert None == ConfigurationSetting.for_library_and_externalintegration(
                 self._db, "ebook_loan_duration", l1, collection.external_integration).value
-        assert None == ConfigurationSetting.for_library_and_externalintegration(
-                self._db, "audio_loan_duration", l1, collection.external_integration).value
         assert [] == collection.libraries
 
     def test_collection_delete(self):
