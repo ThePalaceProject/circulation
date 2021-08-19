@@ -347,5 +347,13 @@
       <b233>MIT Press Title ID</b233>
       <b244>11245</b244>
     </productidentifier>
+    <descriptivedetail>
+      <contributor>
+        <b034>1</b034>
+        <b035>A01</b035>
+        <b047>The Test Corporation</b047>
+        <x443>Test Corporation, The</x443>
+      </contributor>
+    </descriptivedetail>
   </product>
 </ONIXmessage>
