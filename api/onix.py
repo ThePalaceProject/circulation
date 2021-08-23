@@ -20,7 +20,7 @@ from core.model import (
     Representation,
     Subject,
     LicensePool, EditionConstants)
-from core.util.datetime_helpers import strptime_utc
+from core.util.datetime_helpers import to_utc
 from core.util.xmlparser import XMLParser
 
 
@@ -224,6 +224,12 @@ class ONIXExtractor(object):
             issued = None
             if publishing_date:
                 issued = dateutil.parser.isoparse(publishing_date)
+                if issued.tzinfo is None:
+                    cls._logger.warning(
+                        "Publishing date {} does not contain timezone information. Assuming UTC."
+                        .format(publishing_date)
+                    )
+                issued = to_utc(issued)
 
             identifier_tags = parser._xpath(record, 'productidentifier')
             identifiers = []
