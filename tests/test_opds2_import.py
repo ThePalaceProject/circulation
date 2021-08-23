@@ -19,7 +19,7 @@ from ..opds2_import import OPDS2Importer, RWPMManifestParser
 from .test_opds_import import OPDSTest
 
 
-class TestOPDS2Importer(OPDSTest):
+class OPDS2Test(OPDSTest):
     @staticmethod
     def _get_edition_by_identifier(editions, identifier):
         """Find an edition in the list by its identifier.
@@ -68,6 +68,8 @@ class TestOPDS2Importer(OPDSTest):
 
         return None
 
+
+class TestOPDS2Importer(OPDS2Test):
     def sample_opds(self, filename, file_type="r"):
         base_path = os.path.split(__file__)[0]
         resource_path = os.path.join(base_path, "files", "opds2")
