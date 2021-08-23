@@ -1,5 +1,7 @@
 # Library Simplified Circulation Manager
 [![Test Circulation & Build Docker Images](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml/badge.svg)](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml)
+[![Deploy Documentation](https://github.com/ThePalaceProject/circulation/actions/workflows/gh-pages.yml/badge.svg)](https://github.com/ThePalaceProject/circulation/actions/workflows/gh-pages.yml)
+
 
 This is a [The Palace Project](https://thepalaceproject.org) maintained fork of the NYPL [Library Simplified](http://www.librarysimplified.org/) Circulation Manager.
 
@@ -153,7 +155,7 @@ export CPPFLAGS="-DXMLSEC_NO_XKMS=1"
 
 Code documentation can be generated using Sphinx. The configuration for the documentation can be found in `/docs`.
 
-Github Actions handles generating the `.rst` source files, generating the HTML static site, and deploying the build to the `gh-pages` branch.
+Github Actions handles generating the `.rst` source files, generating the HTML static site, and deploying the build to the `gh-pages` branch. This documentation is generated every time a new commit is pushed to the `main` branch. You can see this documentation online at https://manager.docs.palaceproject.io.
 
 To view the documentation _locally_, go into the `/docs` directory and run `make html`. This will generate the .rst source files and build the static site in `/docs/build/html`
 
