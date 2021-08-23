@@ -1747,7 +1747,7 @@ class DirectoryImportScript(TimestampScript):
                         ext.lower()
                     )
                     content = None
-                    with open_f(path) as fh:
+                    with open_f(path, "rb") as fh:
                         content = fh.read()
                     return filename, media_type, content
 
