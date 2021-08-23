@@ -1,4 +1,5 @@
 import logging
+import pytz
 
 import dateutil.parser
 from enum import Enum
@@ -224,6 +225,12 @@ class ONIXExtractor(object):
             issued = None
             if publishing_date:
                 issued = dateutil.parser.isoparse(publishing_date)
+                if issued.tzinfo is None:
+                    cls._logger.warning(
+                        "Publishing date {} does not contain timezone information. Assuming UTC."
+                        .format(publishing_date)
+                    )
+                    issued = issued.replace(tzinfo=pytz.UTC)
 
             identifier_tags = parser._xpath(record, 'productidentifier')
             identifiers = []
