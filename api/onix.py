@@ -1,5 +1,4 @@
 import logging
-import pytz
 
 import dateutil.parser
 from enum import Enum
