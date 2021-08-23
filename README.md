@@ -15,24 +15,12 @@ https://github.com/ThePalaceProject/circulation/pkgs/container/circ-scripts
 
 | Branch   | Python Version |
 | -------- | -------------- |
-| develop  | Python 3       |
 | main     | Python 3       |
 | python2  | Python 2       |
 
-The default branch is `develop` and that's the working branch that should be used when branching off for bug fixes or new features. Once a feature branch pull request is merged into `develop`, the changes can be merged to `main` to create releases.
+The default branch is `main` and that's the working branch that should be used when branching off for bug fixes or new features.
 
-Python 2 stopped being supported after January 1st, 2020 but there is still a `python2` branch which can be used. As of May 2021, development will be done in the `develop` and `main` branches.
-
-There are additional protected branches that are used for *NYPL-specific* deployments to keep in mind.
-
-| Branch          |
-| --------------- |
-| nypl-deploy-qa  |
-| nypl-deploy-production  |
-| openebooks-deploy-qa  |
-| openebooks-deploy-qa  |
-| bpl-deploy-qa  |
-| bpl-deploy-production  |
+Python 2 stopped being supported after January 1st, 2020 but there is still a `python2` branch which can be used. As of August 2021, development will be done in the `main` branch and the `python2` branch will not be updated unless absolutely necessary.
 
 ## Set Up
 
@@ -61,7 +49,7 @@ You will need to set up a local virtual environment to install packages and run 
 $ python -m venv env
 ```
 
-As mentioned above, this application depends on [Library Simplified Server Core](https://github.com/NYPL-Simplified/server_core) as a git submodule. To set that up, in the repository, run:
+As mentioned above, this application depends on [LCirculation Core](https://github.com/thepalaceproject/circulation-core) as a git submodule. To set that up, in the repository, run:
 
 * `$ git submodule init`
 * `$ git submodule update`
