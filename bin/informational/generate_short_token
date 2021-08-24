@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Find information about a particular patron based on barcode and pin."""
+
+"""
+Generate long lived client short tokens that can be used for testing the service. This
+is useful if for example you need to give Adobe a token for testing and you need it to
+not expire before they have a chance to test.
+"""
 import datetime
 import os
 import sys
