@@ -84,13 +84,15 @@ from core.model import (
     Identifier,
     LicensePool,
     Loan,
+    Patron,
     Representation,
     RightsStatus,
     SessionManager,
     Subject,
     Timestamp,
     Work,
-    EditionConstants)
+    EditionConstants,
+)
 from core.model.configuration import ExternalIntegrationLink
 from core.opds import (
     AcquisitionFeed,
@@ -1880,3 +1882,56 @@ class LocalAnalyticsExportScript(Script):
 
         exporter = exporter or LocalAnalyticsExporter()
         output.write(exporter.export(self._db, start, end))
+
+class GenerateShortTokenScript(LibraryInputScript):
+    """
+    Generate long lived client short tokens that can be used for testing the service. This
+    is useful if for example you need to give Adobe a token for testing and you need it to
+    not expire before they have a chance to test.
+    """
+
+    @classmethod
+    def arg_parser(cls, _db):
+        parser = super(GenerateShortTokenScript, cls).arg_parser(_db, multiple_libraries=False)
+        parser.add_argument(
+            '--id',
+            help="The patron authorization identifier.",
+            required=True,
+        )
+        group = parser.add_mutually_exclusive_group(required=True)
+        group.add_argument(
+            '--days',
+            help="Token expiry in days.",
+            type=int,
+        )
+        group.add_argument(
+            '--hours',
+            help="Token expiry in hours.",
+            type=int,
+        )
+        group.add_argument(
+            '--minutes',
+            help="Token expiry in minutes.",
+            type=int,
+        )
+        return parser
+
+    def do_run(self, _db=None, cmd_args=None, output=sys.stdout, authdata=None):
+        _db = _db or self._db
+        args = self.parse_command_line(_db, cmd_args=cmd_args)
+
+        patron = get_one(_db, Patron, authorization_identifier=args.id)
+        if patron is None:
+            print("Authorization identifier {} not found!".format(args.id))
+            sys.exit(-1)
+
+        authdata = authdata or AuthdataUtility.from_config(args.libraries[0], _db)
+        patron_identifier = authdata._adobe_patron_identifier(patron)
+        expires = {k: v for (k, v) in vars(args).items() if k in ['days', 'hours', 'minutes'] and v is not None}
+        vendor_id, token = authdata.encode_short_client_token(patron_identifier, expires=expires)
+        username, password = token.rsplit('|', 1)
+
+        output.write("Vendor ID: {}\n".format(vendor_id))
+        output.write("Token: {}\n".format(token))
+        output.write("Username: {}\n".format(username))
+        output.write("Password: {}\n".format(password))

@@ -93,12 +93,13 @@ from scripts import (
     CacheOPDSGroupFeedPerLane,
     CacheMARCFiles,
     DirectoryImportScript,
+    GenerateShortTokenScript,
     InstanceInitializationScript,
     LanguageListScript,
     NovelistSnapshotScript,
     LocalAnalyticsExportScript,
 )
-from core.util.datetime_helpers import utc_now
+from core.util.datetime_helpers import datetime_utc, utc_now
 
 class TestAdobeAccountIDResetScript(DatabaseTest):
 
@@ -1450,3 +1451,61 @@ class TestLocalAnalyticsExportScript(DatabaseTest):
             exporter=exporter)
         assert "test" == output.getvalue()
         assert ['20190820', '20190827'] == exporter.called_with
+
+class TestGenerateShortTokenScript(DatabaseTest):
+
+    def test_do_run(self, monkeypatch):
+
+        authdata = AuthdataUtility(
+            vendor_id = "The Vendor ID",
+            library_uri = "http://your-library.org/",
+            library_short_name = "you",
+            secret = "Your library secret",
+        )
+        test_date = datetime_utc(2021, 5, 5)
+        monkeypatch.setattr(authdata, "_now", lambda: test_date)
+
+        patron = self._patron(external_identifier='test')
+        patron.authorization_identifier = 'test'
+        adobe_credential = self._credential(
+            data_source_name=DataSource.INTERNAL_PROCESSING,
+            patron=patron,
+            type=authdata.ADOBE_ACCOUNT_ID_PATRON_IDENTIFIER)
+        adobe_credential.credential = '1234567'
+
+        self._delegated_patron_identifier()
+
+        script = GenerateShortTokenScript()
+
+        # Test with --days
+        cmd_args = ['--id={}'.format(patron.authorization_identifier), '--days=2', self._default_library.short_name]
+        output = StringIO()
+        script.do_run(
+            _db=self._db,
+            output=output, cmd_args=cmd_args,
+            authdata=authdata)
+        assert output.getvalue().split('\n') == [
+            'Vendor ID: The Vendor ID',
+            'Token: YOU|1620345600|1234567|ZP45vhpfs3fHREvFkDDVgDAmhoD699elFD3PGaZu7yo@',
+            'Username: YOU|1620345600|1234567',
+            'Password: ZP45vhpfs3fHREvFkDDVgDAmhoD699elFD3PGaZu7yo@',
+            ''
+        ]
+
+        # Test with --minutes
+        cmd_args = ['--id={}'.format(patron.authorization_identifier), '--minutes=20', self._default_library.short_name]
+        output = StringIO()
+        script.do_run(
+            _db=self._db,
+            output=output, cmd_args=cmd_args,
+            authdata=authdata)
+        assert output.getvalue().split('\n')[2] == 'Username: YOU|1620174000|1234567'
+
+        # Test with --hours
+        cmd_args = ['--id={}'.format(patron.authorization_identifier), '--hours=4', self._default_library.short_name]
+        output = StringIO()
+        script.do_run(
+            _db=self._db,
+            output=output, cmd_args=cmd_args,
+            authdata=authdata)
+        assert output.getvalue().split('\n')[2] == 'Username: YOU|1620187200|1234567'
