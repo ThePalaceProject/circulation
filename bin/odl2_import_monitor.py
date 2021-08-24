@@ -11,6 +11,9 @@ sys.path.append(os.path.abspath(package_dir))
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 
 from api.odl2 import ODL2API, ODL2Importer, ODL2ImportMonitor
+
+# NOTE: We need to import it explicitly to initialize MirrorUploader.IMPLEMENTATION_REGISTRY
+from core import s3
 from core.opds2_import import RWPMManifestParser
 from core.scripts import OPDSImportScript
 
