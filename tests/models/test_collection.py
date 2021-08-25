@@ -20,7 +20,7 @@ from ...model.complaint import Complaint
 from ...model.configuration import (
     ConfigurationSetting,
     ExternalIntegration,
-)
+    ExternalIntegrationLink)
 from ...model.customlist import CustomList
 from ...model.datasource import DataSource
 from ...model.edition import Edition
@@ -831,6 +831,20 @@ class TestCollection(DatabaseTest):
         )
         setting2.value = "value2"
 
+        # Also it has links to another independent ExternalIntegration (S3 storage in this case).
+        s3_storage = self._external_integration(
+            ExternalIntegration.S3, ExternalIntegration.STORAGE_GOAL, libraries=[self._default_library]
+        )
+        link1 = self._external_integration_link(
+            integration, self._default_library, s3_storage, ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS
+        )
+        link2 = self._external_integration_link(
+            integration, self._default_library, s3_storage, ExternalIntegrationLink.COVERS
+        )
+
+        integration.links.append(link1)
+        integration.links.append(link2)
+
         # It's got a Work that has a LicensePool, which has a License,
         # which has a loan.
         work = self._work(with_license_pool=True)
@@ -910,11 +924,19 @@ class TestCollection(DatabaseTest):
         # has any LicensePools), but not the second.
         assert [work] == index.removed
 
-        # The ExternalIntegration and its settings have been deleted.
-        assert integration not in self._db.query(ExternalIntegration).all()
+        # The collection ExternalIntegration, its settings, and links to other integrations have been deleted.
+        # The storage ExternalIntegration remains.
+        external_integrations = self._db.query(ExternalIntegration).all()
+        assert integration not in external_integrations
+        assert s3_storage in external_integrations
+
         settings = self._db.query(ConfigurationSetting).all()
-        for s in (setting1, setting2):
-            assert s not in settings
+        for setting in (setting1, setting2):
+            assert setting not in settings
+
+        links = self._db.query(ExternalIntegrationLink).all()
+        for link in (link1, link2):
+            assert link not in links
 
         # If no search_index is passed into delete() (the default behavior),
         # we try to instantiate the normal ExternalSearchIndex object. Since

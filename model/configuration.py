@@ -290,6 +290,13 @@ class ExternalIntegration(Base, HasFullTableCache):
 
     links = relationship(
         "ExternalIntegrationLink",
+        backref="integration",
+        foreign_keys="ExternalIntegrationLink.external_integration_id",
+        cascade="all, delete-orphan"
+    )
+
+    other_links = relationship(
+        "ExternalIntegrationLink",
         backref="other_integration",
         foreign_keys="ExternalIntegrationLink.other_integration_id",
         cascade="all, delete-orphan"
