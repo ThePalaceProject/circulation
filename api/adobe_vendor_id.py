@@ -897,7 +897,6 @@ class AuthdataUtility(object):
         )
         return patron_identifier.credential
 
-
     def short_client_token_for_patron(self, patron_information):
         """Generate short client token for patron, or for a patron's identifier
          for Adobe ID purposes"""
@@ -913,17 +912,22 @@ class AuthdataUtility(object):
         vendor_id, token = self.encode_short_client_token(patron_identifier)
         return vendor_id, token
 
-    def encode_short_client_token(self, patron_identifier):
+    def _now(self):
+        """Function to return current time. Used to override in testing."""
+        return utc_now()
+
+    def encode_short_client_token(self, patron_identifier, expires=None):
         """Generate a short client token suitable for putting in an OPDS feed,
         where it can be picked up by a client and sent to the
         delegation authority to look up an Adobe ID.
 
         :return: A 2-tuple (vendor ID, token)
         """
+        if expires is None:
+            expires = {'minutes': 60}
         if not patron_identifier:
             raise ValueError("No patron identifier specified")
-        now = utc_now()
-        expires = int(self.numericdate(now + datetime.timedelta(minutes=60)))
+        expires = int(self.numericdate(self._now() + datetime.timedelta(**expires)))
         authdata = self._encode_short_client_token(
             self.short_name, patron_identifier, expires
         )

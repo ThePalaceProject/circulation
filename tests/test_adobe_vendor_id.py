@@ -868,6 +868,35 @@ class TestAuthdataUtility(VendorIDTest):
         )
         assert expect_signature == signature
 
+    def test_encode_short_client_token_expiry(self, monkeypatch):
+        authdata = AuthdataUtility(
+            vendor_id = "The Vendor ID",
+            library_uri = "http://your-library.org/",
+            library_short_name = "you",
+            secret = "Your library secret",
+        )
+        test_date = datetime_utc(2021, 5, 5)
+        monkeypatch.setattr(authdata, "_now", lambda: test_date)
+        assert authdata._now() == test_date
+
+        patron_identifier = "Patron identifier"
+
+        # Test with no expiry set
+        vendor_id, token = authdata.encode_short_client_token(patron_identifier)
+        assert token.split('|')[0:-1] == ['YOU', '1620176400', 'Patron identifier']
+
+        # Test with expiry set to 20 min
+        vendor_id, token = authdata.encode_short_client_token(patron_identifier, {'minutes': 20})
+        assert token.split('|')[0:-1] == ['YOU', '1620174000', 'Patron identifier']
+
+        # Test with expiry set to 2 days
+        vendor_id, token = authdata.encode_short_client_token(patron_identifier, {'days': 2})
+        assert token.split('|')[0:-1] == ['YOU', '1620345600', 'Patron identifier']
+
+        # Test with expiry set to 4 hours
+        vendor_id, token = authdata.encode_short_client_token(patron_identifier, {'hours': 4})
+        assert token.split('|')[0:-1] == ['YOU', '1620187200', 'Patron identifier']
+
     def test_decode_short_client_token_from_another_library(self):
         # Here's the AuthdataUtility used by another library.
         foreign_authdata = AuthdataUtility(
