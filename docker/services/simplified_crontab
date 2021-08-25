@@ -26,11 +26,11 @@ HOME=/var/www/circulation
 */10 * * * * root core/bin/run -d 9 metadata_wrangler_collection_registrar >> /var/log/cron.log 2>&1
 
 # Remove newly removed identifiers from our Metadata Wrangler collection
-0 */22 * * * root core/bin/run -d 50 metadata_wrangler_collection_reaper >> /var/log/cron.log 2>&1
+22 * * * * root core/bin/run -d 50 metadata_wrangler_collection_reaper >> /var/log/cron.log 2>&1
 
 # Check whether the Metadata Wrangler has ascertained any new
 # information about books in our collection.
-*/59 * * * * root core/bin/run -d 50 metadata_wrangler_collection_updates >> /var/log/cron.log 2>&1
+59 * * * * root core/bin/run -d 50 metadata_wrangler_collection_updates >> /var/log/cron.log 2>&1
 
 # If the Metadata Wrangler needs content such as book covers or distributor
 # information that only we can provide, send it over.
@@ -101,7 +101,7 @@ HOME=/var/www/circulation
 30 5 * * * root core/bin/run opds2_import_monitor >> /var/log/cron.log 2>&1
 
 # OPDS import from Feedbooks
-* * */7 * * root core/bin/run feedbooks_import_monitor >> /var/log/cron.log 2>&1
+1 2 * * 0 root core/bin/run feedbooks_import_monitor >> /var/log/cron.log 2>&1
 
 # ODL import
 #
