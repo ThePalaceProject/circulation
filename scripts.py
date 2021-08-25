@@ -1886,9 +1886,8 @@ class LocalAnalyticsExportScript(Script):
 
 class GenerateShortTokenScript(LibraryInputScript):
     """
-    Generate long lived client short tokens that can be used for testing the service. This
-    is useful if for example you need to give Adobe a token for testing and you need it to
-    not expire before they have a chance to test.
+    Generate a short client token of the specified duration that can be used for testing that
+    involves the Adobe Vendor ID API implementation.
     """
 
     @classmethod
