@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Generate long lived client short tokens.
+Generate client short tokens from cli.
 """
 import os
 import sys
