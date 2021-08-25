@@ -1454,17 +1454,28 @@ class TestLocalAnalyticsExportScript(DatabaseTest):
 
 class TestGenerateShortTokenScript(DatabaseTest):
 
-    def test_do_run(self, monkeypatch):
+    @pytest.fixture
+    def script(self):
+        return GenerateShortTokenScript()
 
+    @pytest.fixture
+    def output(self):
+        return StringIO()
+
+    @pytest.fixture
+    def authdata(self, monkeypatch):
         authdata = AuthdataUtility(
-            vendor_id = "The Vendor ID",
-            library_uri = "http://your-library.org/",
-            library_short_name = "you",
-            secret = "Your library secret",
+            vendor_id="The Vendor ID",
+            library_uri="http://your-library.org/",
+            library_short_name="you",
+            secret="Your library secret",
         )
         test_date = datetime_utc(2021, 5, 5)
         monkeypatch.setattr(authdata, "_now", lambda: test_date)
+        return authdata
 
+    @pytest.fixture
+    def patron(self, authdata):
         patron = self._patron(external_identifier='test')
         patron.authorization_identifier = 'test'
         adobe_credential = self._credential(
@@ -1472,14 +1483,11 @@ class TestGenerateShortTokenScript(DatabaseTest):
             patron=patron,
             type=authdata.ADOBE_ACCOUNT_ID_PATRON_IDENTIFIER)
         adobe_credential.credential = '1234567'
+        return patron
 
-        self._delegated_patron_identifier()
-
-        script = GenerateShortTokenScript()
-
+    def test_run_days(self, script, output, authdata, patron):
         # Test with --days
         cmd_args = ['--id={}'.format(patron.authorization_identifier), '--days=2', self._default_library.short_name]
-        output = StringIO()
         script.do_run(
             _db=self._db,
             output=output, cmd_args=cmd_args,
@@ -1492,20 +1500,31 @@ class TestGenerateShortTokenScript(DatabaseTest):
             ''
         ]
 
+    def test_run_minutes(self, script, output, authdata, patron):
         # Test with --minutes
         cmd_args = ['--id={}'.format(patron.authorization_identifier), '--minutes=20', self._default_library.short_name]
-        output = StringIO()
         script.do_run(
             _db=self._db,
             output=output, cmd_args=cmd_args,
             authdata=authdata)
         assert output.getvalue().split('\n')[2] == 'Username: YOU|1620174000|1234567'
 
+    def test_run_hours(self, script, output, authdata, patron):
         # Test with --hours
         cmd_args = ['--id={}'.format(patron.authorization_identifier), '--hours=4', self._default_library.short_name]
-        output = StringIO()
         script.do_run(
             _db=self._db,
             output=output, cmd_args=cmd_args,
             authdata=authdata)
         assert output.getvalue().split('\n')[2] == 'Username: YOU|1620187200|1234567'
+
+    def test_no_patron(self, script, output):
+        # Test running when the patron does not exist
+        cmd_args = ['--id={}'.format('1234567'), '--hours=4', self._default_library.short_name]
+        with pytest.raises(SystemExit) as pytest_exit:
+            script.do_run(
+                _db=self._db,
+                output=output, cmd_args=cmd_args,
+                authdata=None)
+        assert pytest_exit.value.code == -1
+        assert "Authorization identifier 123456 not found!" in output.getvalue()
