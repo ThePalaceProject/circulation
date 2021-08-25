@@ -5,7 +5,8 @@ from contextlib2 import contextmanager
 from flask_babel import lazy_gettext as _
 from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
-from api.odl import ODLAPI
+from api.odl import ODLAPI, ODLExpiredItemsReaper
+from core import util
 from core.metadata_layer import FormatData, LicenseData
 from core.model import DeliveryMechanism, Edition, MediaTypes, RightsStatus
 from core.model.configuration import (
@@ -239,6 +240,13 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
                     expires = license.metadata.terms.expires
                     concurrent_checkouts = license.metadata.terms.concurrency
 
+                    if expires:
+                        expires = util.datetime_helpers.to_utc(expires)
+                        now = util.datetime_helpers.utc_now()
+
+                        if expires <= now:
+                            continue
+
                 licenses_owned += int(concurrent_checkouts or 0)
                 licenses_available += int(available_checkouts or 0)
 
@@ -270,3 +278,9 @@ class ODL2ImportMonitor(OPDS2ImportMonitor):
 
     PROTOCOL = ODL2Importer.NAME
     SERVICE_NAME = "ODL 2.x Import Monitor"
+
+
+class ODL2ExpiredItemsReaper(ODLExpiredItemsReaper):
+    """Responsible for removing expired ODL licenses."""
+    SERVICE_NAME = "ODL 2 Expired Items Reaper"
+    PROTOCOL = ODL2Importer.NAME
