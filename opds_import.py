@@ -49,7 +49,7 @@ from .util.http import HTTP, BadResponseException
 from .util.opds_writer import OPDSFeed, OPDSMessage
 from .util.string_helpers import base64
 from .util.xmlparser import XMLParser
-from .util.datetime_helpers import datetime_utc, utc_now
+from .util.datetime_helpers import datetime_utc, utc_now, to_utc
 
 
 def parse_identifier(db, identifier):
@@ -2016,7 +2016,7 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests):
                 )
                 return True
 
-            if last_updated_remote >= record.timestamp:
+            if to_utc(last_updated_remote) >= to_utc(record.timestamp):
                 # This book has been updated.
                 self.log.info(
                     "Counting %s as new because its coverage date is %s and remote has %s.",
