@@ -10,6 +10,7 @@ import webpub_manifest_parser.opds2.ast as opds2_ast
 from flask_babel import lazy_gettext as _
 from requests import HTTPError
 from sqlalchemy import or_
+from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 from webpub_manifest_parser.utils import encode
 
 from api.circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
@@ -182,7 +183,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         self,
         db,
         collection,
-        parser,
+        parser=None,
         data_source_name=None,
         identifier_mapping=None,
         http_get=None,
@@ -230,7 +231,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         super(ProQuestOPDS2Importer, self).__init__(
             db,
             collection,
-            parser,
+            parser if parser else RWPMManifestParser(OPDS2FeedParserFactory()),
             data_source_name,
             identifier_mapping,
             http_get,

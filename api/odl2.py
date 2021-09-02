@@ -3,6 +3,7 @@ import logging
 
 from contextlib2 import contextmanager
 from flask_babel import lazy_gettext as _
+from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
 from api.odl import ODLAPI, ODLExpiredItemsReaper
@@ -17,7 +18,7 @@ from core.model.configuration import (
     ConfigurationStorage,
     HasExternalIntegration,
 )
-from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor
+from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, RWPMManifestParser
 from core.util import first_or_default
 
 
@@ -65,7 +66,7 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
         self,
         db,
         collection,
-        parser,
+        parser=None,
         data_source_name=None,
         identifier_mapping=None,
         http_get=None,
@@ -113,7 +114,7 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
         super(ODL2Importer, self).__init__(
             db,
             collection,
-            parser,
+            parser if parser else RWPMManifestParser(ODLFeedParserFactory()),
             data_source_name,
             identifier_mapping,
             http_get,
