@@ -62,11 +62,15 @@ def parse_identifier(db, identifier):
     :type identifier: str
 
     :return: Identifier object
-    :rtype: core.model.identifier.Identifier
+    :rtype: Optional[core.model.identifier.Identifier]
     """
-    identifier, _ = Identifier.parse_urn(db, identifier)
+    parsed_identifier = None
+    result = Identifier.parse_urn(db, identifier)
 
-    return identifier
+    if result is not None:
+        parsed_identifier, _ = result
+
+    return parsed_identifier
 
 
 class AccessNotAuthenticated(Exception):

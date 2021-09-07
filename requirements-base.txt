@@ -45,8 +45,8 @@ py-bcrypt==0.4
 pymarc==4.0.0
 pyparsing==2.4.7
 pyspellchecker==0.5.5
-python-dateutil==2.8.1
-pytz==2020.1
+python-dateutil==2.8.2
+pytz==2021.1
 rdflib==5.0.0
 requests==2.24.0
 requests-futures==1.0.0
@@ -62,7 +62,7 @@ watchtower==0.8.0
 Werkzeug==1.0.1
 
 multipledispatch==0.6.0
-palace-webpub-manifest-parser==2.0.1
+palace-webpub-manifest-parser==2.0.3
 
 # Theses dependencies are only used in our tests. Ideally they would get moved out to
 # the dev requirements file, but the mock classes for our tests are included alongside
