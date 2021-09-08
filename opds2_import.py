@@ -1,11 +1,10 @@
 import logging
+from io import BytesIO, StringIO
+from typing import Dict, List
+from urllib.parse import urljoin, urlparse
 
 import webpub_manifest_parser.opds2.ast as opds2_ast
 from flask_babel import lazy_gettext as _
-from io import StringIO, BytesIO
-from urllib.parse import urljoin, urlparse
-
-from typing import Dict, List
 from webpub_manifest_parser.core import ManifestParserFactory, ManifestParserResult
 from webpub_manifest_parser.core.analyzer import NodeFinder
 from webpub_manifest_parser.core.ast import Manifestlike
@@ -178,6 +177,21 @@ class OPDS2Importer(OPDSImporter):
 
         self._parser = parser
         self._logger = logging.getLogger(__name__)
+
+    def _is_identifier_allowed(self, identifier: Identifier) -> bool:
+        """Check the identifier and return a boolean value indicating whether CM can import it.
+
+        NOTE: Currently, this method hard codes allowed identifier types.
+        The next PR will add an additional configuration setting allowing to override this behaviour
+        and configure allowed identifier types in the CM Admin UI.
+
+        :param identifier: Identifier object
+        :type identifier: Identifier
+
+        :return: Boolean value indicating whether CM can import the identifier
+        :rtype: bool
+        """
+        return identifier.type == Identifier.ISBN
 
     def _extract_subjects(self, subjects):
         """Extract a list of SubjectData objects from the webpub-manifest-parser's subject.
@@ -923,8 +937,7 @@ class OPDS2Importer(OPDSImporter):
         for publication in self._get_publications(feed):
             recognized_identifier = self._extract_identifier(publication)
 
-            # TODO: Identifier type based filtration will be implemented in the next PR.
-            if not recognized_identifier or recognized_identifier.type != Identifier.ISBN:
+            if not recognized_identifier or not self._is_identifier_allowed(recognized_identifier):
                 self._record_publication_unrecognizable_identifier(publication)
                 continue
 
@@ -946,8 +959,7 @@ class OPDS2Importer(OPDSImporter):
             if publication:
                 recognized_identifier = self._extract_identifier(publication)
 
-                # TODO: Identifier type based filtration will be implemented in the next PR.
-                if not recognized_identifier or recognized_identifier.type != Identifier.ISBN:
+                if not recognized_identifier or not self._is_identifier_allowed(recognized_identifier):
                     self._record_publication_unrecognizable_identifier(publication)
                 else:
                     self._record_coverage_failure(
