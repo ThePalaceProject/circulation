@@ -3,8 +3,6 @@
 
 This is a [The Palace Project](https://thepalaceproject.org) maintained fork of the NYPL [Library Simplified](http://www.librarysimplified.org/) Circulation Manager.
 
-It depends on [Circulation Core](https://github.com/thepalaceproject/circulation-core) as a git submodule.
-
 ## Installation
 
 Docker images created from this code are available at:
@@ -49,14 +47,9 @@ You will need to set up a local virtual environment to install packages and run 
 $ python -m venv env
 ```
 
-As mentioned above, this application depends on [LCirculation Core](https://github.com/thepalaceproject/circulation-core) as a git submodule. To set that up, in the repository, run:
-
-* `$ git submodule init`
-* `$ git submodule update`
-
 ### Elasticsearch Set Up
 
-The circulation manager requires Elasticsearch. If you don't have Elasticsearch, check out instructions in the [Library Simplified wiki](https://github.com/NYPL-Simplified/Simplified/wiki/Deployment-Instructions), or simply read on.
+The circulation manager requires Elasticsearch.
 
 1. Download it [here](https://www.elastic.co/downloads/past-releases/elasticsearch-6-8-6).
 2. `cd` into the `elasticsearch-[version number]` directory.
@@ -66,8 +59,6 @@ The circulation manager requires Elasticsearch. If you don't have Elasticsearch,
 6. Check `http://localhost:9200` to make sure the Elasticsearch server is running.
 
 ### Database Set Up
-
-The databases should be created next. To find instructions for how to do so, check out the [Library Simplified wiki](https://github.com/NYPL-Simplified/Simplified/wiki/Deployment-Instructions), or simply read on.
 
 1. Download and install [Postgres](https://www.postgresql.org/download/) if you don't have it already.
 2. Use the command `$ psql` to access the Postgresql client.
@@ -147,9 +138,9 @@ To view the documentation _locally_, go into the `/docs` directory and run `make
 
 ## Continuous Integration
 
-This project runs all the unit tests through Github Actions for new pull requests and when merging into the default `develop` branch. The relevant file can be found in `.github/workflows/test.yml`. When contributing updates or fixes, it's required for the test Github Action to pass for all python 3 environments. Run the `tox` command locally before pushing changes to make sure you find any failing tests before committing them.
+This project runs all the unit tests through Github Actions for new pull requests and when merging into the default `main` branch. The relevant file can be found in `.github/workflows/test-build.yml`. When contributing updates or fixes, it's required for the test Github Action to pass for all Python 3 environments. Run the `tox` command locally before pushing changes to make sure you find any failing tests before committing them.
 
-As mentioned above, Github Actions is also used to build and deploy Sphinx documentation to Github Pages. The relevant file can be found in `.github/workflows/docks.yml`.
+For each push to a branch, CI also creates a docker image for the code in the branch, that can be used for testing the branch, or deploying hotfixes.
 
 ## Testing
 The Github Actions CI service runs the unit tests against Python 3.6, 3.7, and 3.8 automatically using [tox](https://tox.readthedocs.io/en/latest/).
@@ -160,31 +151,33 @@ To run `pytest` unit tests locally, install `tox`.
 pip install tox
 ```
 
-Tox has an environment for each python version and an optional `-docker` factor that will automatically use docker to
-deploy service containers used for the tests. You can select the environment you would like to test with the tox `-e`
-flag.
+Tox has an environments for each python version, the module being tested, and an optional `-docker` factor that will automatically use docker to
+deploy service containers used for the tests. You can select the environment you would like to test with the tox `-e` flag.
 
-### Environments
+### Factors
 
-| Environment | Python Version |
+When running tox without an environment specified, it tests `circulation` and `core` using Python 3.6 - 3.8 and uses docker for the service containers. 
+
+#### Python version
+
+| Factor      | Python Version |
 | ----------- | -------------- |
 | py36        | Python 3.6     |
 | py37        | Python 3.7     |
 | py38        | Python 3.8     |
 
-All of these environments are tested by default when running tox. To test one specific environment you can use the `-e`
-flag.
-
-Test Python 3.8
-```
-tox -e py38
-```
-
 You need to have the Python versions you are testing against installed on your local system. `tox` searches the system for installed Python versions, but does not install new Python versions. If `tox` doesn't find the Python version its looking for it will give an `InterpreterNotFound` errror.
 
 [Pyenv](https://github.com/pyenv/pyenv) is a useful tool to install multiple Python versions, if you need to install missing Python versions in your system for local testing.
 
-### Docker
+#### Module 
+
+| Factor      | Module            |
+| ----------- | ----------------- |
+| core        | core tests        |
+| circulation | circulation tests |
+
+#### Docker
 
 If you install `tox-docker` tox will take care of setting up all the service containers necessary to run the unit tests
 and pass the correct environment variables to configure the tests to use these services. Using `tox-docker` is not required, but it is the recommended way to run the tests locally, since it runs the tests in the same way they are run on the Github Actions CI server.
@@ -196,9 +189,9 @@ pip install tox-docker
 The docker functionality is included in a `docker` factor that can be added to the environment. To run an environment
 with a particular factor you add it to the end of the environment.
 
-Test with Python 3.8 using docker containers for the services.
+Test circulation with Python 3.8 using docker containers for the services.
 ```
-tox -e py38-docker
+tox -e py38-circulation-docker
 ```
 
 ### Local services
@@ -217,7 +210,7 @@ export SIMPLIFIED_TEST_DATABASE="postgres://simplified_test:test@localhost:9005/
 export SIMPLIFIED_TEST_ELASTICSEARCH="http://localhost:9006"
 
 # Run tox
-tox -e py38
+tox -e py38-circulation
 ```
 
 ### Override `pytest` arguments
@@ -229,7 +222,7 @@ to `pytest`, overriding the default.
 Only run the `test_cdn` tests with Python 3.6 using docker.
 
 ```sh
-tox -e py36-docker -- tests/test_google_analytics_provider.py
+tox -e py36-circulation-docker -- tests/test_google_analytics_provider.py
 ```
 
 ## Usage with Docker
