@@ -22,6 +22,8 @@ from webpub_manifest_parser.opds2.ast import (
 from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 from webpub_manifest_parser.rwpm.registry import RWPMLinkRelationsRegistry
 
+from core.util.datetime_helpers import datetime_utc
+
 
 def serialize(rwpm_item):
     """Serialize RWPM AST node into a Python dictionary.
@@ -80,7 +82,7 @@ PROQUEST_PUBLICATION_1 = OPDS2Publication(
     metadata=PresentationMetadata(
         identifier="urn:proquest.com/document-id/1",
         title="Publićation # 1",
-        modified=datetime.datetime(2020, 1, 31, 0, 0, 0),
+        modified=datetime_utc(2020, 1, 31, 0, 0, 0),
     ),
     links=LinkList(
         [
@@ -96,7 +98,7 @@ PROQUEST_PUBLICATION_2 = OPDS2Publication(
     metadata=PresentationMetadata(
         identifier="urn:proquest.com/document-id/2",
         title="Publication # 2",
-        modified=datetime.datetime(2020, 1, 30, 0, 0, 0),
+        modified=datetime_utc(2020, 1, 30, 0, 0, 0),
     ),
     links=LinkList(
         [
@@ -112,7 +114,7 @@ PROQUEST_PUBLICATION_3 = OPDS2Publication(
     metadata=PresentationMetadata(
         identifier="urn:proquest.com/document-id/3",
         title="Publication # 3",
-        modified=datetime.datetime(2020, 1, 29, 0, 0, 0),
+        modified=datetime_utc(2020, 1, 29, 0, 0, 0),
     ),
     links=LinkList(
         [
@@ -128,7 +130,7 @@ PROQUEST_PUBLICATION_4 = OPDS2Publication(
     metadata=PresentationMetadata(
         identifier="urn:proquest.com/document-id/4",
         title="Publication # 4",
-        modified=datetime.datetime(2020, 1, 28, 0, 0, 0),
+        modified=datetime_utc(2020, 1, 28, 0, 0, 0),
     ),
     links=LinkList(
         [

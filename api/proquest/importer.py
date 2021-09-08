@@ -44,6 +44,7 @@ from core.model.configuration import (
 )
 from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, RWPMManifestParser
 from core.opds_import import OPDSImporter
+from core.util.datetime_helpers import utc_now
 
 MISSING_AFFILIATION_ID = BaseError(
     _(
@@ -555,6 +556,21 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
 
         return media_types_and_drm_scheme
 
+    def _is_identifier_allowed(self, identifier: Identifier) -> bool:
+        """Check the identifier and return a boolean value indicating whether CM can import it.
+
+        NOTE: Currently, this method hard codes allowed identifier types.
+        The next PR will add an additional configuration setting allowing to override this behaviour
+        and configure allowed identifier types in the CM Admin UI.
+
+        :param identifier: Identifier object
+        :type identifier: Identifier
+
+        :return: Boolean value indicating whether CM can import the identifier
+        :rtype: bool
+        """
+        return identifier.type == Identifier.PROQUEST_ID
+
     def _parse_identifier(self, identifier):
         """Parse the identifier and return an Identifier object representing it.
 
@@ -592,7 +608,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         :return: List of patron's loans
         :rtype: List[LoanInfo]
         """
-        now = datetime.datetime.utcnow()
+        now = utc_now()
         loans = (
             self._db.query(Loan)
             .join(LicensePool)
@@ -655,7 +671,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
                 self._get_or_create_proquest_token(patron, configuration)
 
                 loan_period = self.collection.default_loan_period(patron.library)
-                start_time = datetime.datetime.utcnow()
+                start_time = utc_now()
                 end_time = start_time + datetime.timedelta(days=loan_period)
                 loan = LoanInfo(
                     licensepool.collection,
@@ -719,7 +735,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
                         content_expires=None,
                     )
                 else:
-                    now = datetime.datetime.utcnow()
+                    now = utc_now()
                     expires_in = (token.expires - now).total_seconds()
                     token_document = dict(
                         token_type="Bearer",

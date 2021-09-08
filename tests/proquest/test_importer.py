@@ -53,6 +53,7 @@ from core.model.configuration import (
 )
 from core.opds2_import import RWPMManifestParser
 from core.testing import DatabaseTest
+from core.util.datetime_helpers import utc_now, datetime_utc
 from tests.proquest import fixtures
 
 
@@ -71,7 +72,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
         )
 
         self._proquest_patron = self._patron()
-        self._loan_start_date = datetime.datetime(2020, 1, 1)
+        self._loan_start_date = datetime_utc(2020, 1, 1)
         self._loan_end_date = self._loan_start_date + datetime.timedelta(
             days=Collection.STANDARD_DEFAULT_LOAN_PERIOD
         )
@@ -98,7 +99,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
         self._configuration_storage = ConfigurationStorage(integration_owner)
         self._configuration_factory = ConfigurationFactory()
 
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_patron_activity(self):
         # We want to test that ProQuestOPDS2Importer.patron_activity returns actual loans made by patrons.
 
@@ -128,7 +129,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
         assert None == remote_loan_info.fulfillment_info
         assert None == remote_loan_info.external_identifier
 
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_checkout_lookups_for_existing_token(self):
         # We want to test that checkout operation always is always preceded by
         # checking for a ProQuest JWT bearer token.
@@ -175,7 +176,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
                 self._db, self._proquest_patron
             )
 
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_checkout_creates_new_token_if_there_is_none(self):
         # We want to test that checkout operation without an existing ProQuest JWT bearer token leads to the following:
         # 1. Circulation Manager (CM) lookups for an existing token and doesn't find any.
@@ -295,7 +296,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
             ),
         ]
     )
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_checkout_creates_new_token_using_affiliation_id_from_custom_saml_attribute(
         self, _, custom_affiliation_attributes
     ):
@@ -420,7 +421,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
                     proquest_token,
                 )
 
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_checkout_raises_cannot_loan_error_if_it_cannot_get_affiliation_id(self):
         # We want to test that checkout operation returns api.proquest.importer.MISSING_AFFILIATION_ID
         # when it cannot get the patron's affiliation ID.
@@ -465,7 +466,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
                 self._db, self._proquest_patron
             )
 
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_checkout_raises_cannot_loan_error_if_it_cannot_create_proquest_token(self):
         # We want to test that checkout operation returns api.proquest.importer.CANNOT_CREATE_PROQUEST_TOKEN
         # when it cannot create a ProQuest JWT bearer token using ProQuest API.
@@ -532,7 +533,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
             )
 
     @parameterized.expand([("default_value", None), ("custom_value_set_by_admin", 10)])
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_checkout_uses_loan_length_configuration_setting(self, _, loan_length=None):
         # We want to test that checkout operation always uses
         # loan length configuration setting BaseCirculationAPI.DEFAULT_LOAN_DURATION_SETTING.
@@ -631,7 +632,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
                 proquest_token,
             )
 
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_fulfil_lookups_for_existing_token(self):
         # We want to test that fulfil operation always is always preceded by
         # checking for a ProQuest JWT bearer token.
@@ -640,7 +641,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
 
         # Arrange
         proquest_token = "1234567890"
-        proquest_token_expires_in = datetime.datetime.utcnow() + datetime.timedelta(
+        proquest_token_expires_in = utc_now() + datetime.timedelta(
             hours=1
         )
         proquest_credential = Credential(
@@ -700,7 +701,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
             assert "Bearer" == token_document["token_type"]
             assert proquest_token == token_document["access_token"]
             assert (
-                proquest_token_expires_in - datetime.datetime.utcnow()
+                proquest_token_expires_in - utc_now()
             ).total_seconds() == token_document["expires_in"]
             assert drm_free_book.link == token_document["location"]
             assert DeliveryMechanism.BEARER_TOKEN == fulfilment_info.content_type
@@ -723,7 +724,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
                 self._proquest_license_pool.identifier.identifier,
             )
 
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_fulfil_creates_new_token_if_there_is_none(self):
         # We want to test that fulfil operation without an existing ProQuest JWT bearer token leads to the following:
         # 1. Circulation Manager (CM) lookups for an existing token and doesn't find any.
@@ -830,7 +831,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
                 self._proquest_license_pool.identifier.identifier,
             )
 
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_fulfil_raises_cannot_fulfil_error_if_it_cannot_get_affiliation_id(self):
         # We want to test that fulfil operation returns api.proquest.importer.MISSING_AFFILIATION_ID
         # when it cannot get the patron's affiliation ID.
@@ -877,7 +878,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
                 ProQuestOPDS2ImporterConfiguration.DEFAULT_AFFILIATION_ATTRIBUTES,
             )
 
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_fulfil_raises_cannot_fulfil_error_if_it_cannot_create_proquest_token(self):
         # We want to test that fulfil operation returns api.proquest.importer.CANNOT_CREATE_PROQUEST_TOKEN
         # when it cannot create a ProQuest JWT bearer token using ProQuest API.
@@ -941,7 +942,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
                 self._db, affiliation_id
             )
 
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_fulfil_refreshes_expired_token(self):
         # By default ProQuest JWT bearer tokens should be valid for 1 hour but
         # since they are controlled by ProQuest we cannot be sure that they will not change this setting.
@@ -956,13 +957,13 @@ class TestProQuestOPDS2Importer(DatabaseTest):
         affiliation_id = "12345"
         expired_proquest_token = "1234567890"
         expired_proquest_token_expired_in = (
-            datetime.datetime.utcnow() - datetime.timedelta(minutes=1)
+            utc_now() - datetime.timedelta(minutes=1)
         )
         expired_proquest_token_credential = Credential(
             credential=expired_proquest_token, expires=expired_proquest_token_expired_in
         )
         new_proquest_token = "1234567890_"
-        new_proquest_token_expires_in = datetime.datetime.utcnow() + datetime.timedelta(
+        new_proquest_token_expires_in = utc_now() + datetime.timedelta(
             hours=1
         )
         new_proquest_token_credential = Credential(
