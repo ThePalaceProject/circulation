@@ -3,6 +3,8 @@ import json
 import os
 
 import requests_mock
+from api.odl import ODLImporter
+from api.odl2 import ODL2API, ODL2APIConfiguration, ODL2ExpiredItemsReaper, ODL2Importer
 from freezegun import freeze_time
 from webpub_manifest_parser.core.ast import PresentationMetadata
 from webpub_manifest_parser.odl import ODLFeedParserFactory
@@ -11,8 +13,6 @@ from webpub_manifest_parser.odl.semantic import (
     ODL_PUBLICATION_MUST_CONTAIN_EITHER_LICENSES_OR_OA_ACQUISITION_LINK_ERROR,
 )
 
-from api.odl import ODLImporter
-from api.odl2 import ODL2API, ODL2APIConfiguration, ODL2ExpiredItemsReaper, ODL2Importer
 from core.coverage import CoverageFailure
 from core.model import (
     Contribution,
@@ -26,6 +26,7 @@ from core.model import (
     Work,
 )
 from core.model.configuration import ConfigurationFactory, ConfigurationStorage
+from core.model.constants import IdentifierType
 from core.opds2_import import RWPMManifestParser
 from core.tests.test_opds2_import import OPDS2Test
 from tests.test_odl import TestODLExpiredItemsReaper
@@ -67,8 +68,17 @@ class TestODL2Importer(OPDS2Test):
         return open(os.path.join(resource_path, filename)).read()
 
     @freeze_time("2016-01-01T00:00:00+00:00")
-    def test(self):
-        """Ensure that ODL2Importer2 correctly processes and imports the ODL feed encoded using OPDS 1.x.
+    def test_odl2_importer_correctly_imports_valid_odl2_feed(self):
+        """Ensure that ODL2Importer correctly processes and imports the ODL feed encoded using OPDS 2.x.
+
+        Additionally, this test ensures that ODL2Importer imports only publications with supported identifier types.
+        The test feed contains three publications:
+          - valid publication with an ISBN identifier,
+          - invalid publication,
+          - and valid publication with an URI identifier.
+
+        The test ensures that only the first gets imported and
+        there is a coverage failures gets registered for the second one.
 
         NOTE: `freeze_time` decorator is required to treat the licenses in the ODL feed as non-expired.
         """
@@ -92,6 +102,7 @@ class TestODL2Importer(OPDS2Test):
         with configuration_factory.create(
             configuration_storage, self._db, ODL2APIConfiguration
         ) as configuration:
+            configuration.set_supported_identifier_types([IdentifierType.ISBN])
             configuration.skipped_license_formats = json.dumps(["text/html"])
 
         # Act
@@ -218,8 +229,10 @@ class TestODL2Importer(OPDS2Test):
             == moby_dick_license.checkout_url
         )
         assert "http://www.example.com/status/294024" == moby_dick_license.status_url
-        assert datetime.datetime(2016, 4, 25, 10, 25, 21, tzinfo=datetime.timezone.utc) \
-               == moby_dick_license.expires
+        assert (
+            datetime.datetime(2016, 4, 25, 10, 25, 21, tzinfo=datetime.timezone.utc)
+            == moby_dick_license.expires
+        )
         assert 10 == moby_dick_license.remaining_checkouts
         assert 10 == moby_dick_license.concurrent_checkouts
 
@@ -244,11 +257,13 @@ class TestODL2Importer(OPDS2Test):
         assert isinstance(huck_finn_failure, CoverageFailure)
         assert "9781234567897" == huck_finn_failure.obj.identifier
 
-        huck_finn_semantic_error = ODL_PUBLICATION_MUST_CONTAIN_EITHER_LICENSES_OR_OA_ACQUISITION_LINK_ERROR(
-            node=ODLPublication(
-                metadata=PresentationMetadata(identifier="urn:isbn:9781234567897")
-            ),
-            node_property=None,
+        huck_finn_semantic_error = (
+            ODL_PUBLICATION_MUST_CONTAIN_EITHER_LICENSES_OR_OA_ACQUISITION_LINK_ERROR(
+                node=ODLPublication(
+                    metadata=PresentationMetadata(identifier="urn:isbn:9781234567897")
+                ),
+                node_property=None,
+            )
         )
         assert str(huck_finn_semantic_error) == huck_finn_failure.exception
 
