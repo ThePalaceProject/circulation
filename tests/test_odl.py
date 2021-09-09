@@ -2167,7 +2167,7 @@ class TestODLExpiredItemsReaperMultipleLicense(TestODLExpiredItemsReaper):
     @freeze_time("2021-01-01T00:00:00+00:00")
     def test_odl_reaper_removes_expired_licenses(self):
         """Ensure ODLExpiredItemsReaper removes expired licenses."""
-        # 1.1. Import the test feed with an ODL licenses that are still valid.
+        # 1.1. Import the test feed with ODL licenses that are not expired.
         license_expiration_dates = [
             datetime_helpers.utc_now() + datetime.timedelta(days=1),
             datetime_helpers.utc_now() + datetime.timedelta(days=60),
@@ -2216,12 +2216,12 @@ class TestODLExpiredItemsReaperMultipleLicense(TestODLExpiredItemsReaper):
         assert imported_pool.licenses_owned == 2 * self.LICENSES_OWNED
         assert imported_pool.licenses_available == 2 * self.LICENSES_AVAILABLE
 
-        # 4.1. Run ODLExpiredItemsReaper again to ensure that number of licenses won't become negative.
+        # 4.1. Run ODLExpiredItemsReaper again to make sure that licenses are not expired twice.
         script.run()
 
         # Commit to expire the SQLAlchemy cache.
         self._db.commit()
 
-        # 4.2. Ensure that number of licenses is still 0.
+        # 4.2. Ensure that number of licenses remains the same as in step 3.2.
         assert imported_pool.licenses_owned == 2 * self.LICENSES_OWNED
         assert imported_pool.licenses_available == 2 * self.LICENSES_AVAILABLE
