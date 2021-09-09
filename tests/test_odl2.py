@@ -28,7 +28,10 @@ from core.model import (
 from core.model.configuration import ConfigurationFactory, ConfigurationStorage
 from core.opds2_import import RWPMManifestParser
 from core.tests.test_opds2_import import OPDS2Test
-from tests.test_odl import TestODLExpiredItemsReaper
+from tests.test_odl import (
+    TestODLExpiredItemsReaperMultipleLicense,
+    TestODLExpiredItemsReaperSingleLicense,
+)
 
 
 class TestODL2Importer(OPDS2Test):
@@ -253,13 +256,12 @@ class TestODL2Importer(OPDS2Test):
         assert str(huck_finn_semantic_error) == huck_finn_failure.exception
 
 
-class TestODL2ExpiredItemsReaper(TestODLExpiredItemsReaper):
+class TestODL2ExpiredItemsReaper:
     __base_path = os.path.split(__file__)[0]
     resource_path = os.path.join(__base_path, "files", "odl2")
 
-    ODL_PROTOCOL = ODL2API.NAME
-    ODL_FEED_FILENAME_WITH_SINGLE_ODL_LICENSE = "single_license.json"
     ODL_REAPER_CLASS = ODL2ExpiredItemsReaper
+    ODL_PROTOCOL = ODL2API.NAME
 
     def _create_importer(self, collection, http_get):
         """Create a new ODL importer with the specified parameters.
@@ -282,3 +284,11 @@ class TestODL2ExpiredItemsReaper(TestODLExpiredItemsReaper):
         )
 
         return importer
+
+
+class TestODL2ExpiredItemsReaperSingleLicensee(TestODL2ExpiredItemsReaper, TestODLExpiredItemsReaperSingleLicense):
+    ODL_FEED_FILENAME = "single_license.json"
+
+
+class TestODL2ExpiredItemsReaperMultipleLicense(TestODL2ExpiredItemsReaper, TestODLExpiredItemsReaperMultipleLicense):
+    ODL_FEED_FILENAME = "multiple_license.json"

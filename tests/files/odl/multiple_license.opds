@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:dcterms="http://purl.org/dc/terms/" xmlns:thr="http://purl.org/syndication/thread/1.0" xmlns:app="http://www.w3.org/2007/app" xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns="http://www.w3.org/2005/Atom" xmlns:opds="http://opds-spec.org/2010/catalog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xml:lang="en" xmlns:odl="http://opds-spec.org/odl" xmlns:schema="http://schema.org/" xmlns:opf="http://www.idpf.org/2007/opf">
+  <id>https://market.example.com/api/libraries/harvest.atom</id>
+  <title>Example</title>
+  <updated>2021-09-09T14:19:33Z</updated>
+  <icon>/favicon.ico</icon>
+  <author>
+    <name>Example</name>
+    <uri>https://market.example.com</uri>
+    <email>support@example.zendesk.com</email>
+  </author>
+  <link rel="self" type="application/atom+xml;profile=odl; charset=utf-8" href="https://market.example.com/api/libraries/harvest.atom"/>
+<opensearch:totalResults>481</opensearch:totalResults>
+<opensearch:itemsPerPage>100</opensearch:itemsPerPage>
+<link rel="next" title="Next" type="application/atom+xml;profile=odl" href="https://market.example.com/api/libraries/harvest?page=2&amp;token=zranj2ru0etaxjtmi4wd"/>
+<entry schema:additionalType="http://schema.org/Ebook">
+<title>The Murmur of Bees</title>
+<id>https://www.example.com/item/4154969</id>
+<dcterms:identifier xsi:type="dcterms:URI">urn:ISBN:9781542090490</dcterms:identifier>
+<dcterms:source xsi:type="dcterms:URI">urn:ISBN:9781542040501</dcterms:source>
+<schema:numberOfPages>476</schema:numberOfPages>
+<author>
+  <name>Sofía Segovia</name>
+  <uri>https://example.com/store/browse/recent.atom?author_id=519449&amp;lang=en</uri>
+</author>
+<contributor opf:role="trl">
+  <name>Simon Bruni</name>
+  <uri>https://example.com/store/browse/recent.atom?contributor_id=1447607&amp;lang=en</uri>
+</contributor>
+<published>2021-06-14T17:38:53Z</published>
+<updated>2021-07-09T13:10:07Z</updated>
+<dcterms:language>en</dcterms:language>
+<dcterms:publisher>Amazon Publishing</dcterms:publisher>
+<dcterms:issued>2019-04-16</dcterms:issued>
+<summary>
+From a beguiling voice in Mexican fiction comes an astonishing novel—her first to be translated into English—about a mysterious child with the power to change a family’s history in a country on the verge of revolution.
+
+From the day that old Nana Reja found a baby abandoned under a bridge, the life of a small Mexican town forever changed. Disfigured and covered in a blanket of bees, little Simonopio is for some locals the stuff of superstition, a child kissed by the devil. But he is welcomed by landowners Francisco and Beatriz Morales, who adopt him and care for him as if he were their own. As he grows up, Simonopio becomes a cause for wonder to the Morales family, because when the uncannily gifted child closes his eyes, he can see what no one else can—visions of all that’s yet to come, both beautiful and dangerous. Followed by his protective swarm of bees and living to deliver his adoptive family from threats—both human and those of nature—Simonopio’s purpose in Linares will, in time, be divined.
+
+Set against the backdrop of the Mexican Revolution and the devastating influenza of 1918,
+The Murmur of Bees
+captures both the fate of a country in flux and the destiny of one family that has put their love, faith, and future in the unbelievable.
+</summary>
+<dcterms:extent>476 pages</dcterms:extent>
+<dcterms:extent>5 MB</dcterms:extent>
+<category label="Fiction" term="FBFIC000000" scheme="http://www.feedbooks.com/categories"/>
+<category label="Historical" term="FBFIC014000" scheme="http://www.feedbooks.com/categories"/>
+<category label="Literary" term="FBFIC019000" scheme="http://www.feedbooks.com/categories"/>
+<link type="text/html" rel="alternate" title="View on Example" href="http://www.example.com/item/4154969"/>
+<link type="image/jpeg" rel="http://opds-spec.org/image" href="https://covers.example.net/item/4154969.jpg?size=large"/>
+<link type="image/jpeg" rel="http://opds-spec.org/image/thumbnail" href="https://covers.example.net/item/4154969.jpg"/>
+<link type="text/html" rel="http://opds-spec.org/acquisition/buy" href="https://market.example.com/item/4154969/buy">
+  <opds:indirectAcquisition type="application/epub+zip"/>
+</link>
+<link type="application/epub+zip" rel="http://opds-spec.org/acquisition/sample" href="https://market.example.com/item/4154969/preview"/>
+<odl:license>
+  <dcterms:identifier xsi:type="dcterms:URI">urn:uuid:ed3c2fe4-d44d-427e-afde-cf246d21ecd9</dcterms:identifier>
+  <dcterms:format>application/epub+zip</dcterms:format>
+  <dcterms:format>text/html</dcterms:format>
+  <created>2021-06-14T19:46:17+02:00</created>
+  <odl:terms>
+    <odl:expires>{{expires_1}}</odl:expires>
+    <odl:total_checkouts>40</odl:total_checkouts>
+    <odl:concurrent_checkouts>10</odl:concurrent_checkouts>
+    <odl:maximum_checkout_length>5097600</odl:maximum_checkout_length>
+  </odl:terms>
+  <odl:protection>
+    <dcterms:format>application/vnd.adobe.adept+xml</dcterms:format>
+    <odl:max_devices>6</odl:max_devices>
+    <odl:copy>true</odl:copy>
+    <odl:print>false</odl:print>
+    <odl:tts>false</odl:tts>
+  </odl:protection>
+  <odl:protection>
+    <dcterms:format>application/vnd.readium.lcp.license.v1.0+json</dcterms:format>
+    <odl:max_devices>6</odl:max_devices>
+    <odl:copy>true</odl:copy>
+    <odl:print>false</odl:print>
+    <odl:tts>false</odl:tts>
+  </odl:protection>
+  <odl:tlink href="https://license.example.net/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}" rel="http://opds-spec.org/acquisition/borrow" type="application/vnd.readium.license.status.v1.0+json"/>
+  <link href="https://license.example.net/copy/status/?uuid=ed3c2fe4-d44d-427e-afde-cf246d21ecd9" rel="self" type="application/vnd.odl.info+json"/>
+</odl:license>
+<odl:license>
+  <dcterms:identifier xsi:type="dcterms:URI">urn:uuid:c9079f86-3cdb-4144-b106-04bd70973586</dcterms:identifier>
+  <dcterms:format>application/epub+zip</dcterms:format>
+  <dcterms:format>text/html</dcterms:format>
+  <created>2021-07-09T15:08:55+02:00</created>
+  <odl:terms>
+    <odl:expires>{{expires_2}}</odl:expires>
+    <odl:total_checkouts>40</odl:total_checkouts>
+    <odl:concurrent_checkouts>10</odl:concurrent_checkouts>
+    <odl:maximum_checkout_length>5097600</odl:maximum_checkout_length>
+  </odl:terms>
+  <odl:protection>
+    <dcterms:format>application/vnd.adobe.adept+xml</dcterms:format>
+    <odl:max_devices>6</odl:max_devices>
+    <odl:copy>true</odl:copy>
+    <odl:print>false</odl:print>
+    <odl:tts>false</odl:tts>
+  </odl:protection>
+  <odl:protection>
+    <dcterms:format>application/vnd.readium.lcp.license.v1.0+json</dcterms:format>
+    <odl:max_devices>6</odl:max_devices>
+    <odl:copy>true</odl:copy>
+    <odl:print>false</odl:print>
+    <odl:tts>false</odl:tts>
+  </odl:protection>
+  <odl:tlink href="https://license.example.net/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}" rel="http://opds-spec.org/acquisition/borrow" type="application/vnd.readium.license.status.v1.0+json"/>
+  <link href="https://license.example.net/copy/status/?uuid=c9079f86-3cdb-4144-b106-04bd70973586" rel="self" type="application/vnd.odl.info+json"/>
+</odl:license>
+<odl:license>
+  <dcterms:identifier xsi:type="dcterms:URI">urn:uuid:49f6bb8d-1912-4b95-8e62-a65d7c8c02fd</dcterms:identifier>
+  <dcterms:format>application/epub+zip</dcterms:format>
+  <dcterms:format>text/html</dcterms:format>
+  <created>2021-07-09T15:08:55+02:00</created>
+  <odl:terms>
+    <odl:expires>{{expires_3}}</odl:expires>
+    <odl:total_checkouts>40</odl:total_checkouts>
+    <odl:concurrent_checkouts>10</odl:concurrent_checkouts>
+    <odl:maximum_checkout_length>5097600</odl:maximum_checkout_length>
+  </odl:terms>
+  <odl:protection>
+    <dcterms:format>application/vnd.adobe.adept+xml</dcterms:format>
+    <odl:max_devices>6</odl:max_devices>
+    <odl:copy>true</odl:copy>
+    <odl:print>false</odl:print>
+    <odl:tts>false</odl:tts>
+  </odl:protection>
+  <odl:protection>
+    <dcterms:format>application/vnd.readium.lcp.license.v1.0+json</dcterms:format>
+    <odl:max_devices>6</odl:max_devices>
+    <odl:copy>true</odl:copy>
+    <odl:print>false</odl:print>
+    <odl:tts>false</odl:tts>
+  </odl:protection>
+  <odl:tlink href="https://license.example.net/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}" rel="http://opds-spec.org/acquisition/borrow" type="application/vnd.readium.license.status.v1.0+json"/>
+  <link href="https://license.example.net/copy/status/?uuid=49f6bb8d-1912-4b95-8e62-a65d7c8c02fd" rel="self" type="application/vnd.odl.info+json"/>
+</odl:license>
+</entry>
+</feed>
