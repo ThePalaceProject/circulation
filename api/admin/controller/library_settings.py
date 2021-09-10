@@ -1,6 +1,7 @@
 import base64
 from io import BytesIO
 import json
+from typing import Any, Dict, Optional
 import uuid
 
 import flask
@@ -330,18 +331,33 @@ class LibrarySettingsController(SettingsController):
 
         return json.dumps([_f for _f in value if _f])
 
-    def image_setting(self, setting):
-        """Retrieve an uploaded image for the given setting from the current HTTP request."""
+    @staticmethod
+    def _data_url_for_image(image: Image) -> Optional[str]:
+        """Produce the `data` URL for the setting's uploaded image file.
+
+        :param setting: A setting object.
+        :return: The `data` URL if an image file was uploaded, else None.
+        """
+        buffer = BytesIO()
+        image.save(buffer, format="PNG")
+        b64 = base64.b64encode(buffer.getvalue())
+        return "data:image/png;base64,%s" % b64.decode('utf-8')
+
+    def image_setting(self, setting: Dict[str, Any], max_dimension=135) -> str:
+        """Retrieve an uploaded image file for the setting and return its data URL.
+
+        :param image: A Python Image Library image object.
+        :return: The `data` URL if an image file was uploaded, else None.
+        """
         image_file = flask.request.files.get(setting.get("key"))
-        if image_file:
-            image = Image.open(image_file)
-            width, height = image.size
-            if width > 135 or height > 135:
-                image.thumbnail((135, 135), Image.ANTIALIAS)
-            buffer = BytesIO()
-            image.save(buffer, format="PNG")
-            b64 = base64.b64encode(buffer.getvalue())
-            return "data:image/png;base64,%s" % b64
+        if not image_file:
+            return None
+
+        image = Image.open(image_file)
+        width, height = image.size
+        if width > max_dimension or height > max_dimension:
+            image.thumbnail((max_dimension, max_dimension), Image.ANTIALIAS)
+        return self._data_url_for_image(image)
 
     def current_value(self, setting, library):
         """Retrieve the current value of the given setting from the database."""
