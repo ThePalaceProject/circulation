@@ -1,36 +1,29 @@
 import base64
+from io import BytesIO
+import json
+import uuid
+
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
-import json
-from pypostalcode import PostalCodeDatabase
-import re
-from io import BytesIO
-import urllib.request, urllib.parse, urllib.error
-import uszipcode
-import uuid
+from PIL import Image
 import wcag_contrast_ratio
 
 from . import SettingsController
+from api.admin.announcement_list_validator import AnnouncementListValidator
 from api.config import Configuration
 from api.lanes import create_default_lanes
+from api.admin.geographic_validator import GeographicValidator
+from api.admin.problem_details import *
 from core.model import (
     ConfigurationSetting,
     create,
-    ExternalIntegration,
     get_one,
     Library,
-    Representation,
 )
-from core.util.http import HTTP
-from PIL import Image
-from api.admin.exceptions import *
-from api.admin.problem_details import *
-from api.admin.geographic_validator import GeographicValidator
-from api.admin.announcement_list_validator import AnnouncementListValidator
 from core.util.problem_detail import ProblemDetail
 from core.util import LanguageCodes
-from api.registry import RemoteRegistry
+
 
 class LibrarySettingsController(SettingsController):
 

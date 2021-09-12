@@ -1,39 +1,33 @@
-import pytest
-
 import base64
 import datetime
-import flask
-import json
-import urllib.request, urllib.parse, urllib.error
 from io import BytesIO
-from werkzeug.datastructures import ImmutableMultiDict, MultiDict
+import json
+
+import flask
+import pytest
+from werkzeug.datastructures import MultiDict
+
+from .test_controller import SettingsControllerTest
+from api.admin.announcement_list_validator import AnnouncementListValidator
+from api.admin.controller.library_settings import LibrarySettingsController
 from api.admin.exceptions import *
-from api.config import Configuration
-from api.registry import (
-    Registration,
-    RemoteRegistry,
-)
-from core.facets import FacetConstants
-from core.model import (
-    AdminRole,
-    ConfigurationSetting,
-    create,
-    ExternalIntegration,
-    get_one,
-    get_one_or_create,
-    Library,
-)
-from core.testing import MockRequestsResponse
-from core.util.problem_detail import ProblemDetail
+from api.admin.geographic_validator import GeographicValidator
 from api.announcements import (
     Announcements,
     Announcement,
 )
-from api.admin.controller.library_settings import LibrarySettingsController
-from api.admin.announcement_list_validator import AnnouncementListValidator
-from api.admin.geographic_validator import GeographicValidator
+from api.config import Configuration
 from api.testing import AnnouncementTest
-from .test_controller import SettingsControllerTest
+from core.facets import FacetConstants
+from core.model import (
+    AdminRole,
+    ConfigurationSetting,
+    get_one,
+    get_one_or_create,
+    Library,
+)
+from core.util.problem_detail import ProblemDetail
+
 
 class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
 
