@@ -45,35 +45,48 @@
         </link>
         <link type="application/epub+zip" rel="http://opds-spec.org/acquisition/sample" href="https://market.feedbooks.com/item/2895246/preview"/>
         <link type="text/html" rel="http://opds-spec.org/acquisition/sample" href="https://www.cantook.net/p/9780374718060"/>
-        <odl:license>
-            <dcterms:identifier xsi:type="dcterms:URI">urn:uuid:c981d61e-26f4-4070-aaa8-83df952cf61b</dcterms:identifier>
-            <dcterms:format>application/epub+zip</dcterms:format>
-            <dcterms:format>text/html</dcterms:format>
-            <dcterms:source>http://www.cantook.net/</dcterms:source>
-            <opds:price currencycode="USD">40.00</opds:price>
-            <dcterms:source>cant-2461538-24501117858552614-libraries</dcterms:source>
-            <created>2020-03-02T20:20:17+01:00</created>
-            <odl:terms>
-                <odl:expires>{{expires}}</odl:expires>
-                <odl:concurrent_checkouts>1</odl:concurrent_checkouts>
-                <odl:maximum_checkout_length>5097600</odl:maximum_checkout_length>
-            </odl:terms>
-            <odl:protection>
-                <dcterms:format>application/vnd.adobe.adept+xml</dcterms:format>
-                <odl:max_devices>6</odl:max_devices>
-                <odl:copy>true</odl:copy>
-                <odl:print>false</odl:print>
-                <odl:tts>false</odl:tts>
-            </odl:protection>
-            <odl:protection>
-                <dcterms:format>application/vnd.readium.lcp.license.v1.0+json</dcterms:format>
-                <odl:max_devices>6</odl:max_devices>
-                <odl:copy>true</odl:copy>
-                <odl:print>false</odl:print>
-                <odl:tts>false</odl:tts>
-            </odl:protection>
-            <odl:tlink href="https://license.feedbooks.net/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}" rel="http://opds-spec.org/acquisition/borrow" type="application/vnd.readium.license.status.v1.0+json"/>
-            <link href="https://license.feedbooks.net/copy/status/?uuid=c981d61e-26f4-4070-aaa8-83df952cf61b" rel="self" type="application/vnd.odl.info+json"/>
-        </odl:license>
+
+        {% for license in licenses %}
+            <odl:license>
+                <dcterms:identifier xsi:type="dcterms:URI">urn:uuid:{{ license.identifier }}</dcterms:identifier>
+                <dcterms:format>application/epub+zip</dcterms:format>
+                <dcterms:format>text/html</dcterms:format>
+                <dcterms:source>http://www.cantook.net/</dcterms:source>
+                <opds:price currencycode="USD">40.00</opds:price>
+                <dcterms:source>cant-2461538-24501117858552614-libraries</dcterms:source>
+                <created>2020-03-02T20:20:17+01:00</created>
+                <odl:terms>
+                    {% if license.total_checkouts is not none %}
+                        <odl:total_checkouts>{{ license.total_checkouts }}</odl:total_checkouts>
+                    {% endif %}
+
+                    {% if license.concurrent_checkouts is not none %}
+                        <odl:concurrent_checkouts>{{ license.concurrent_checkouts }}</odl:concurrent_checkouts>
+                    {% endif %}
+
+                    {% if license.expires is not none %}
+                        <odl:expires>{{ license.expires.isoformat() }}</odl:expires>
+                    {% endif %}
+
+                    <odl:maximum_checkout_length>5097600</odl:maximum_checkout_length>
+                </odl:terms>
+                <odl:protection>
+                    <dcterms:format>application/vnd.adobe.adept+xml</dcterms:format>
+                    <odl:max_devices>6</odl:max_devices>
+                    <odl:copy>true</odl:copy>
+                    <odl:print>false</odl:print>
+                    <odl:tts>false</odl:tts>
+                </odl:protection>
+                <odl:protection>
+                    <dcterms:format>application/vnd.readium.lcp.license.v1.0+json</dcterms:format>
+                    <odl:max_devices>6</odl:max_devices>
+                    <odl:copy>true</odl:copy>
+                    <odl:print>false</odl:print>
+                    <odl:tts>false</odl:tts>
+                </odl:protection>
+                <odl:tlink href="https://license.feedbooks.net/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}" rel="http://opds-spec.org/acquisition/borrow" type="application/vnd.readium.license.status.v1.0+json"/>
+                <link href="https://license.feedbooks.net/copy/status/?uuid=c981d61e-26f4-4070-aaa8-83df952cf61b" rel="self" type="application/vnd.odl.info+json"/>
+            </odl:license>
+        {% endfor %}
     </entry>
 </feed>

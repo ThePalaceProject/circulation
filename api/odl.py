@@ -1,5 +1,6 @@
 import datetime
 import json
+import logging
 import uuid
 from io import StringIO
 
@@ -844,9 +845,10 @@ class ODLImporter(OPDSImporter):
             data['medium'] = medium
 
             expires = None
+            total_checkouts = None
             remaining_checkouts = None
-            available_checkouts = None
             concurrent_checkouts = None
+            available_concurrent_checkouts = None
 
             checkout_link = None
             for link_tag in parser._xpath(odl_license_tag, 'odl:tlink') or []:
@@ -866,17 +868,21 @@ class ODLImporter(OPDSImporter):
                     odl_status_link = attrib.get("href")
                     break
 
-            # If we found one, retrieve it and get licensing information about this book.
-            if odl_status_link:
-                ignore, ignore, response = do_get(odl_status_link, headers={})
-                status = json.loads(response)
-                checkouts = status.get("checkouts", {})
-                remaining_checkouts = checkouts.get("left")
-                available_checkouts = checkouts.get("available")
-
             terms = parser._xpath(odl_license_tag, "odl:terms")
             if terms:
+                total_checkouts = subtag(terms[0], "odl:total_checkouts")
                 concurrent_checkouts = subtag(terms[0], "odl:concurrent_checkouts")
+
+                if total_checkouts is not None:
+                    total_checkouts = int(total_checkouts)
+
+                    if total_checkouts <= 0:
+                        logging.info(
+                            f"License # {identifier} expired since "
+                            f"the total number of checkouts is {total_checkouts}"
+                        )
+                        continue
+
                 expires = subtag(terms[0], "odl:expires")
 
                 if expires:
@@ -884,10 +890,37 @@ class ODLImporter(OPDSImporter):
                     now = util.datetime_helpers.utc_now()
 
                     if expires <= now:
-                            continue
+                        logging.info(
+                            f"License # {identifier} expired at {expires} (now is {now})"
+                        )
+                        continue
 
-            licenses_owned += int(concurrent_checkouts or 0)
-            licenses_available += int(available_checkouts or 0)
+            # If we found one, retrieve it and get licensing information about this book.
+            if odl_status_link:
+                ignore, ignore, response = do_get(odl_status_link, headers={})
+                status = json.loads(response)
+                checkouts = status.get("checkouts", {})
+                remaining_checkouts = checkouts.get("left")
+                available_concurrent_checkouts = checkouts.get("available")
+
+            if remaining_checkouts is None:
+                remaining_checkouts = total_checkouts
+
+            if remaining_checkouts is not None:
+                remaining_checkouts = int(remaining_checkouts)
+
+                if remaining_checkouts <= 0:
+                    logging.info(
+                        f"License # {identifier} expired since "
+                        f"the remaining number of checkouts is {remaining_checkouts}"
+                    )
+                    continue
+
+            if available_concurrent_checkouts is None:
+                available_concurrent_checkouts = concurrent_checkouts
+
+            licenses_owned += int(remaining_checkouts or 0)
+            licenses_available += int(available_concurrent_checkouts or 0)
 
             licenses.append(LicenseData(
                 identifier=identifier,
@@ -895,7 +928,7 @@ class ODLImporter(OPDSImporter):
                 status_url=odl_status_link,
                 expires=expires,
                 remaining_checkouts=remaining_checkouts,
-                concurrent_checkouts=concurrent_checkouts,
+                concurrent_checkouts=available_concurrent_checkouts,
             ))
 
         if not data.get('circulation'):
@@ -1552,17 +1585,18 @@ class ODLExpiredItemsReaper(IdentifierSweepMonitor):
 
     def process_item(self, identifier):
         for licensepool in identifier.licensed_through:
-            licenses_owned = licensepool.licenses_owned
-            licenses_available = licensepool.licenses_available
+            remaining_checkouts = 0   # total number of checkouts across all the licenses in the pool
+            concurrent_checkouts = 0  # number of concurrent checkouts allowed across all the licenses in the pool
 
             for license in licensepool.licenses:
-                if license.is_expired:
-                    licenses_owned -= 1
-                    licenses_available -= 1
+                if not license.is_expired:
+                    remaining_checkouts += license.remaining_checkouts
+                    concurrent_checkouts += license.concurrent_checkouts
 
-            if licenses_owned != licensepool.licenses_owned or licenses_available != licensepool.licenses_available:
-                licenses_owned = max(licenses_owned, 0)
-                licenses_available = max(licenses_available, 0)
+            if remaining_checkouts != licensepool.licenses_owned or \
+                    concurrent_checkouts != licensepool.licenses_available:
+                licenses_owned = max(remaining_checkouts, 0)
+                licenses_available = max(concurrent_checkouts, 0)
 
                 circulation_data = CirculationData(
                     data_source=licensepool.data_source,
