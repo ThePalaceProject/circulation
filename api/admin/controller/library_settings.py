@@ -332,19 +332,23 @@ class LibrarySettingsController(SettingsController):
         return json.dumps([_f for _f in value if _f])
 
     @staticmethod
-    def _data_url_for_image(image: Image) -> Optional[str]:
+    def _data_url_for_image(image: Image, _format="PNG") -> Optional[str]:
         """Produce the `data` URL for the setting's uploaded image file.
 
-        :param setting: A setting object.
+        :param image: A Pillow Image object.
+        :param _format: A valid Pillow image format.
         :return: The `data` URL if an image file was uploaded, else None.
         """
         buffer = BytesIO()
-        image.save(buffer, format="PNG")
+        image.save(buffer, format=_format)
         b64 = base64.b64encode(buffer.getvalue())
         return "data:image/png;base64,%s" % b64.decode('utf-8')
 
-    def image_setting(self, setting: Dict[str, Any], max_dimension=135) -> str:
+    def image_setting(self, setting: Dict[str, Any], max_dimension=Configuration.LOGO_MAX_DIMENSION) -> str:
         """Retrieve an uploaded image file for the setting and return its data URL.
+
+        If the image is too large, scale it down to the `max_dimension`
+        while retaining its aspect ratio.
 
         :param image: A Python Image Library image object.
         :return: The `data` URL if an image file was uploaded, else None.
