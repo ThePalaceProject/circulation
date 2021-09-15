@@ -110,7 +110,7 @@
                   "type": "application/vnd.odl.info+json"
                 }
               ]
-            }
+            }{{ ", " if not loop.last else "" }}
         {% endfor %}
       ]
     }

@@ -3,7 +3,10 @@ import json
 import os
 
 import requests_mock
+from api.odl import ODLImporter
+from api.odl2 import ODL2API, ODL2APIConfiguration, ODL2ExpiredItemsReaper, ODL2Importer
 from freezegun import freeze_time
+from mock import MagicMock
 from webpub_manifest_parser.core.ast import PresentationMetadata
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.odl.ast import ODLPublication
@@ -11,8 +14,6 @@ from webpub_manifest_parser.odl.semantic import (
     ODL_PUBLICATION_MUST_CONTAIN_EITHER_LICENSES_OR_OA_ACQUISITION_LINK_ERROR,
 )
 
-from api.odl import ODLImporter
-from api.odl2 import ODL2API, ODL2APIConfiguration, ODL2ExpiredItemsReaper, ODL2Importer
 from core.coverage import CoverageFailure
 from core.model import (
     Contribution,
@@ -29,6 +30,7 @@ from core.model.configuration import ConfigurationFactory, ConfigurationStorage
 from core.opds2_import import RWPMManifestParser
 from core.tests.test_opds2_import import OPDS2Test
 from tests.test_odl import (
+    TestODLExpiredItemsReaper,
     TestODLExpiredItemsReaperMultipleLicense,
     TestODLExpiredItemsReaperSingleLicense,
 )
@@ -256,12 +258,11 @@ class TestODL2Importer(OPDS2Test):
         assert str(huck_finn_semantic_error) == huck_finn_failure.exception
 
 
-class TestODL2ExpiredItemsReaper:
-    __base_path = os.path.split(__file__)[0]
-    resource_path = os.path.join(__base_path, "files", "odl2")
-
-    ODL_REAPER_CLASS = ODL2ExpiredItemsReaper
+class TestODL2ExpiredItemsReaper(TestODLExpiredItemsReaper):
     ODL_PROTOCOL = ODL2API.NAME
+    ODL_TEMPLATE_DIR = "files/odl2"
+    ODL_TEMPLATE_FILENAME = "feed_template.json.jinja2"
+    ODL_REAPER_CLASS = ODL2ExpiredItemsReaper
 
     def _create_importer(self, collection, http_get):
         """Create a new ODL importer with the specified parameters.
@@ -282,13 +283,14 @@ class TestODL2ExpiredItemsReaper:
             parser=RWPMManifestParser(ODLFeedParserFactory()),
             http_get=http_get,
         )
+        importer._is_identifier_allowed = MagicMock(return_value=True)
 
         return importer
 
 
 class TestODL2ExpiredItemsReaperSingleLicensee(TestODL2ExpiredItemsReaper, TestODLExpiredItemsReaperSingleLicense):
-    ODL_FEED_FILENAME = "single_license.json"
+    pass
 
 
 class TestODL2ExpiredItemsReaperMultipleLicense(TestODL2ExpiredItemsReaper, TestODLExpiredItemsReaperMultipleLicense):
-    ODL_FEED_FILENAME = "multiple_license.json"
+    pass

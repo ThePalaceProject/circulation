@@ -1,14 +1,13 @@
 import json
 import logging
 
+from api.odl import ODLAPI, ODLExpiredItemsReaper, ODLImporter
 from contextlib2 import contextmanager
 from flask_babel import lazy_gettext as _
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
-from api.odl import ODLAPI, ODLExpiredItemsReaper
-from core import util
-from core.metadata_layer import FormatData, LicenseData
+from core.metadata_layer import FormatData
 from core.model import DeliveryMechanism, Edition, MediaTypes, RightsStatus
 from core.model.configuration import (
     ConfigurationAttributeType,
@@ -209,11 +208,6 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
                             )
                         )
 
-                expires = None
-                remaining_checkouts = None
-                available_checkouts = None
-                concurrent_checkouts = None
-
                 checkout_link = first_or_default(
                     license.links.get_by_rel(OPDS2LinkRelationsRegistry.BORROW.key)
                 )
@@ -226,41 +220,32 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
                 if odl_status_link:
                     odl_status_link = odl_status_link.href
 
-                if odl_status_link:
-                    status_code, _, response = self.http_get(
-                        odl_status_link, headers={}
-                    )
-
-                    if status_code < 400:
-                        status = json.loads(response)
-                        checkouts = status.get("checkouts", {})
-                        remaining_checkouts = checkouts.get("left")
-                        available_checkouts = checkouts.get("available")
+                expires = None
+                total_checkouts = None
+                concurrent_checkouts = None
 
                 if license.metadata.terms:
-                    expires = license.metadata.terms.expires
+                    total_checkouts = license.metadata.terms.checkouts
                     concurrent_checkouts = license.metadata.terms.concurrency
+                    expires = license.metadata.terms.expires
 
-                    if expires:
-                        expires = util.datetime_helpers.to_utc(expires)
-                        now = util.datetime_helpers.utc_now()
-
-                        if expires <= now:
-                            continue
-
-                licenses_owned += int(concurrent_checkouts or 0)
-                licenses_available += int(available_checkouts or 0)
-
-                licenses.append(
-                    LicenseData(
-                        identifier=identifier,
-                        checkout_url=checkout_link,
-                        status_url=odl_status_link,
-                        expires=expires,
-                        remaining_checkouts=remaining_checkouts,
-                        concurrent_checkouts=concurrent_checkouts,
-                    )
+                license = ODLImporter.parse_license(
+                    identifier,
+                    total_checkouts,
+                    concurrent_checkouts,
+                    expires,
+                    checkout_link,
+                    odl_status_link,
+                    self.http_get
                 )
+
+                if not license:
+                    continue
+
+                licenses_owned += int(license.remaining_checkouts or 0)
+                licenses_available += int(license.concurrent_checkouts or 0)
+
+                licenses.append(license)
 
         metadata.circulation.licenses_owned = licenses_owned
         metadata.circulation.licenses_available = licenses_available
