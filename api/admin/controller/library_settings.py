@@ -335,9 +335,9 @@ class LibrarySettingsController(SettingsController):
     def _data_url_for_image(image: Image, _format="PNG") -> Optional[str]:
         """Produce the `data` URL for the setting's uploaded image file.
 
-        :param image: A Pillow Image object.
+        :param image: A Pillow Image.
         :param _format: A valid Pillow image format.
-        :return: The `data` URL if an image file was uploaded, else None.
+        :return: The `data` URL for the image.
         """
         buffer = BytesIO()
         image.save(buffer, format=_format)
@@ -351,7 +351,7 @@ class LibrarySettingsController(SettingsController):
         while retaining its aspect ratio.
 
         :param image: A Python Image Library image object.
-        :return: The `data` URL if an image file was uploaded, else None.
+        :return: The `data` URL for the image file, if it was uploaded, else None.
         """
         image_file = flask.request.files.get(setting.get("key"))
         if not image_file:
