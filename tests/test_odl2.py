@@ -260,7 +260,7 @@ class TestODL2Importer(OPDS2Test):
 
 class TestODL2ExpiredItemsReaper(TestODLExpiredItemsReaper):
     ODL_PROTOCOL = ODL2API.NAME
-    ODL_TEMPLATE_DIR = "files/odl2"
+    ODL_TEMPLATE_DIR = os.path.join(TestODLExpiredItemsReaper.base_path, "files", "odl2")
     ODL_TEMPLATE_FILENAME = "feed_template.json.jinja2"
     ODL_REAPER_CLASS = ODL2ExpiredItemsReaper
 

@@ -2040,7 +2040,7 @@ class TestLicenseInfo:
 
 class TestODLExpiredItemsReaper(DatabaseTest, BaseODLTest):
     ODL_PROTOCOL = ODLAPI.NAME
-    ODL_TEMPLATE_DIR = "files/odl"
+    ODL_TEMPLATE_DIR = os.path.join(BaseODLTest.base_path, "files", "odl")
     ODL_TEMPLATE_FILENAME = "feed_template.opds.jinja2"
     ODL_REAPER_CLASS = ODLExpiredItemsReaper
 
