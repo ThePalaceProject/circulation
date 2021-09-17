@@ -126,6 +126,8 @@ class Configuration(CoreConfiguration):
 
     # The library-wide logo setting.
     LOGO = "logo"
+    # Maximum height and width for the saved logo image
+    LOGO_MAX_DIMENSION = 135
 
     # Settings for geographic areas associated with the library.
     LIBRARY_FOCUS_AREA = "focus_area"
@@ -367,7 +369,13 @@ class Configuration(CoreConfiguration):
             "key": LOGO,
             "label": _("Logo image"),
             "type": "image",
-            "description": _("The image must be in GIF, PNG, or JPG format, approximately square, no larger than 135x135 pixels, and look good on a white background."),
+            "description": _(
+                "The image should be in GIF, PNG, or JPG format, approximately square, no larger than "
+                f"{LOGO_MAX_DIMENSION}x{LOGO_MAX_DIMENSION} pixels, "
+                "and look good on a light or dark mode background. "
+                "Larger images will be accepted, but scaled down (maintaining aspect ratio) such that "
+                f"the longest dimension does not excede {LOGO_MAX_DIMENSION} pixels."
+            ),
             "category": "Client Interface Customization",
             "level": CoreConfiguration.ALL_ACCESS
         },
