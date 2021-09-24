@@ -26,7 +26,7 @@ class Configuration:
             'asset_rel_url': 'dist/{filename}'
         },
         OperationalMode.development: {
-            'package_url': '/',
+            'package_url': '/admin/',
             'asset_rel_url': 'static/{filename}',
         },
     }
