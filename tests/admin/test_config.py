@@ -53,13 +53,13 @@ class TestAdminUI(object):
     @pytest.mark.parametrize(
         'asset_key, operational_mode, expected_result',
         [
-            ['admin_css', OperationalMode.development, '/static/circulation-admin.css'],
+            ['admin_css', OperationalMode.development, '/admin/static/circulation-admin.css'],
             ['admin_css', OperationalMode.production,
              'https://cdn.jsdelivr.net/npm/known-package-name@1.0.0/dist/circulation-admin.css'],
-            ['admin_js', OperationalMode.development, '/static/circulation-admin.js'],
+            ['admin_js', OperationalMode.development, '/admin/static/circulation-admin.js'],
             ['admin_js', OperationalMode.production,
              'https://cdn.jsdelivr.net/npm/known-package-name@1.0.0/dist/circulation-admin.js'],
-            ['another-asset.jpg', OperationalMode.development, '/static/another-asset.jpg'],
+            ['another-asset.jpg', OperationalMode.development, '/admin/static/another-asset.jpg'],
             ['another-asset.jpg', OperationalMode.production,
              'https://cdn.jsdelivr.net/npm/known-package-name@1.0.0/dist/another-asset.jpg'],
         ]
