@@ -52,11 +52,11 @@ class Configuration(CoreConfiguration):
     # service for a library's inclusion in the SimplyE library
     # registry.
     CUSTOM_TOS_HREF = "tos_href"
-    DEFAULT_TOS_HREF = "https://librarysimplified.org/simplyetermsofservice2/"
+    DEFAULT_TOS_HREF = "https://thepalaceproject.org/terms-of-service/"
 
     # Custom text for the link defined in CUSTOM_TOS_LINK.
     CUSTOM_TOS_TEXT = "tos_text"
-    DEFAULT_TOS_TEXT = "Terms of Service for presenting e-reading materials through NYPL's SimplyE mobile app"
+    DEFAULT_TOS_TEXT = "Terms of Service for presenting content through the Palace client applications"
 
     # A short description of the library, used in its Authentication
     # for OPDS document.
