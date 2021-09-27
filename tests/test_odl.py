@@ -1960,7 +1960,7 @@ class TestLicense:
         """
         self._identifier: str = identifier if identifier else str(uuid.uuid1())
         self._total_checkouts: Optional[int] = total_checkouts
-        self._concurrent_checkouts: int = concurrent_checkouts
+        self._concurrent_checkouts: Optional[int] = concurrent_checkouts
         self._expires: Optional[datetime.datetime] = expires
 
     @property
@@ -2039,9 +2039,11 @@ class TestLicenseInfo:
 
 
 class TestODLExpiredItemsReaper(DatabaseTest, BaseODLTest):
+    """Base class for all ODL reaper tests."""
+
     ODL_PROTOCOL = ODLAPI.NAME
     ODL_TEMPLATE_DIR = os.path.join(BaseODLTest.base_path, "files", "odl")
-    ODL_TEMPLATE_FILENAME = "feed_template.opds.jinja2"
+    ODL_TEMPLATE_FILENAME = "feed_template.xml.jinja"
     ODL_REAPER_CLASS = ODLExpiredItemsReaper
 
     def _create_importer(self, collection, http_get):
@@ -2114,6 +2116,8 @@ class TestODLExpiredItemsReaper(DatabaseTest, BaseODLTest):
 
 
 class TestODLExpiredItemsReaperSingleLicense(TestODLExpiredItemsReaper):
+    """Class testing that the ODL 1.x reaper correctly processes publications with a single license."""
+
     @parameterized.expand([
         (
             "expiration_date_in_the_past",
@@ -2139,10 +2143,13 @@ class TestODLExpiredItemsReaperSingleLicense(TestODLExpiredItemsReaper):
         test_license_info: Optional[TestLicenseInfo] = None
     ) -> None:
         """Ensure ODLImporter skips expired licenses
-        and does not count them in the total number of available licenses."""
+        and does not count them in the total number of available licenses.
+
+        :param test_license: An example of an expired ODL license
+        :param test_license_info: An example of an ODL License Info Document belonging to an expired ODL license
+            (if required)
+        """
         # 1.1. Import the test feed with an expired ODL license.
-        # The license expires 2021-01-01T00:01:00+01:00 that equals to 2010-01-01T00:00:00+00:00, the current time.
-        # It means the license had already expired at the time of the import.
         imported_editions, imported_pools, imported_works = self._import_test_feed(
             [test_license],
             [test_license_info]
@@ -2247,11 +2254,13 @@ class TestODLExpiredItemsReaperSingleLicense(TestODLExpiredItemsReaper):
 
 
 class TestODLExpiredItemsReaperMultipleLicense(TestODLExpiredItemsReaper):
+    """Class testing that the ODL 1.x reaper correctly processes publications with multiple licenses."""
+
     @freeze_time("2021-01-01T00:00:00+00:00")
     def test_odl_importer_skips_expired_licenses(self):
         """Ensure ODLImporter skips expired licenses
         and does not count them in the total number of available licenses."""
-        # 1.1. Import the test feed with one expired ODL license and two valid licenses.
+        # 1.1. Import the test feed with three expired ODL licenses and two valid licenses.
         remaining_checkouts = 9
         available_concurrent_checkouts = 5
         imported_editions, imported_pools, imported_works = self._import_test_feed(
@@ -2305,10 +2314,10 @@ class TestODLExpiredItemsReaperMultipleLicense(TestODLExpiredItemsReaper):
         assert len(imported_pools) == 1
         [imported_pool] = imported_pools
 
-        # 1.3. Ensure that the two valid licenses were imported
+        # 1.3. Ensure that the two valid licenses were imported.
         assert len(imported_pool.licenses) == 2
 
-        # 1.4 Make sure that 20 licenses are marked as owned (10 from each valid license)
+        # 1.4 Make sure that the license statistics is correct and include only checkouts owned by two valid licenses.
         assert imported_pool.licenses_owned == remaining_checkouts * 2
         assert imported_pool.licenses_available == available_concurrent_checkouts * 2
 
@@ -2398,7 +2407,7 @@ class TestODLExpiredItemsReaperMultipleLicense(TestODLExpiredItemsReaper):
         # Commit to expire the SQLAlchemy cache.
         self._db.commit()
 
-        # 3.2. Ensure that availability of the license pool was updated
+        # 3.2. Ensure that availability of the license pool was updated.
         assert len(imported_pool.licenses) == 3
         assert imported_pool.licenses_owned == 2 * remaining_checkouts
         assert imported_pool.licenses_available == 2 * available_concurrent_checkouts

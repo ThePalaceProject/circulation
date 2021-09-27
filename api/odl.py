@@ -776,9 +776,26 @@ class ODLImporter(OPDSImporter):
             odl_status_link: Optional[str],
             do_get: Callable
     ) -> Optional[LicenseData]:
+        """Check the license's attributes passed as parameters:
+        - if they're correct, turn them into a LicenseData object
+        - otherwise, return a None
+
+        :param identifier: License's identifier
+        :param total_checkouts: Total number of checkouts before the license expires
+        :param concurrent_checkouts: Number of concurrent checkouts allowed for this license
+        :param expires: Date & time until the license is valid
+        :param checkout_link: License's checkout link
+        :param odl_status_link: License Info Document's link
+        :param do_get: Callback performing HTTP GET method
+
+        :return: LicenseData if all the license's attributes are correct, None, otherwise
+        """
         remaining_checkouts = None
         available_concurrent_checkouts = None
 
+        # This cycle ends in two different cases:
+        # - when at least one of the parameters is invalid; in this case, the method returns None.
+        # - when all the parameters are valid; in this case, the method returns a LicenseData object.
         while True:
             if total_checkouts is not None:
                 total_checkouts = int(total_checkouts)
@@ -813,6 +830,12 @@ class ODLImporter(OPDSImporter):
                     checkouts = status.get("checkouts", {})
                     remaining_checkouts = checkouts.get("left")
                     available_concurrent_checkouts = checkouts.get("available")
+                else:
+                    logging.warning(
+                        f"License # {identifier}'s Info Document is not available. "
+                        f"Status link failed with {status_code} code"
+                    )
+                    break
 
             if remaining_checkouts is None:
                 remaining_checkouts = total_checkouts
@@ -1601,10 +1624,12 @@ class ODLExpiredItemsReaper(IdentifierSweepMonitor):
             remaining_checkouts = 0   # total number of checkouts across all the licenses in the pool
             concurrent_checkouts = 0  # number of concurrent checkouts allowed across all the licenses in the pool
 
-            for license in licensepool.licenses:
-                if not license.is_expired:
-                    remaining_checkouts += license.remaining_checkouts
-                    concurrent_checkouts += license.concurrent_checkouts
+            # 0 is a starting point,
+            # we're going through all the valid licenses in the pool and count up available checkouts.
+            for license_pool_license in licensepool.licenses:
+                if not license_pool_license.is_expired:
+                    remaining_checkouts += license_pool_license.remaining_checkouts
+                    concurrent_checkouts += license_pool_license.concurrent_checkouts
 
             if remaining_checkouts != licensepool.licenses_owned or \
                     concurrent_checkouts != licensepool.licenses_available:

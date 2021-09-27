@@ -259,9 +259,11 @@ class TestODL2Importer(OPDS2Test):
 
 
 class TestODL2ExpiredItemsReaper(TestODLExpiredItemsReaper):
+    """Base class for all ODL 2.x reaper tests."""
+
     ODL_PROTOCOL = ODL2API.NAME
     ODL_TEMPLATE_DIR = os.path.join(TestODLExpiredItemsReaper.base_path, "files", "odl2")
-    ODL_TEMPLATE_FILENAME = "feed_template.json.jinja2"
+    ODL_TEMPLATE_FILENAME = "feed_template.json.jinja"
     ODL_REAPER_CLASS = ODL2ExpiredItemsReaper
 
     def _create_importer(self, collection, http_get):
@@ -288,9 +290,9 @@ class TestODL2ExpiredItemsReaper(TestODLExpiredItemsReaper):
         return importer
 
 
-class TestODL2ExpiredItemsReaperSingleLicensee(TestODL2ExpiredItemsReaper, TestODLExpiredItemsReaperSingleLicense):
-    pass
+class TestODL2ExpiredItemsReaperSingleLicense(TestODL2ExpiredItemsReaper, TestODLExpiredItemsReaperSingleLicense):
+    """Class testing that the ODL 2.x reaper correctly processes publications with a single license."""
 
 
 class TestODL2ExpiredItemsReaperMultipleLicense(TestODL2ExpiredItemsReaper, TestODLExpiredItemsReaperMultipleLicense):
-    pass
+    """Class testing that the ODL 2.x reaper correctly processes publications with multiple licenses."""
