@@ -11,7 +11,7 @@ class OperationalMode(str, Enum):
 class Configuration:
 
     PACKAGE_NAME = '@thepalaceproject/circulation-admin'
-    PACKAGE_VERSION = '0.0.4'
+    PACKAGE_VERSION = '0.0.5'
 
     STATIC_ASSETS = {
         'admin_js': 'circulation-admin.js',
