@@ -825,7 +825,7 @@ class ODLImporter(OPDSImporter):
                     odl_status_link, headers={}
                 )
 
-                if status_code < 400:
+                if status_code in (200, 201):
                     status = json.loads(response)
                     checkouts = status.get("checkouts", {})
                     remaining_checkouts = checkouts.get("left")
