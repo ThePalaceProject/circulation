@@ -615,6 +615,7 @@ def saml_callback():
 
 
 @app.route('/<collection_name>/lcp/licenses/<license_id>/hint')
+@app.route('/<collection_name>/lcp/licenses/<path:license_id>/hint')
 @has_library_through_external_loan_identifier(parameter_name='license_id')
 @requires_auth
 @returns_problem_detail

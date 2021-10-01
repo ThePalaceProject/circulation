@@ -1,12 +1,12 @@
 import json
 import logging
 
-from api.odl import ODLAPI, ODLExpiredItemsReaper, ODLImporter
 from contextlib2 import contextmanager
 from flask_babel import lazy_gettext as _
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
+from api.odl import ODLAPI, ODLExpiredItemsReaper, ODLImporter
 from core.metadata_layer import FormatData
 from core.model import DeliveryMechanism, Edition, MediaTypes, RightsStatus
 from core.model.configuration import (
@@ -15,6 +15,7 @@ from core.model.configuration import (
     ConfigurationGrouping,
     ConfigurationMetadata,
     ConfigurationStorage,
+    ExternalIntegration,
     HasExternalIntegration,
 )
 from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, RWPMManifestParser
@@ -24,8 +25,10 @@ from core.util import first_or_default
 class ODL2APIConfiguration(ConfigurationGrouping):
     skipped_license_formats = ConfigurationMetadata(
         key="odl2_skipped_license_formats",
-        label=_("License formats"),
-        description=_("Name of the data source associated with this collection."),
+        label=_("Skipped license formats"),
+        description=_(
+            "List of license formats that will NOT be imported into Circulation Manager."
+        ),
         type=ConfigurationAttributeType.LIST,
         required=False,
         default=["text/html"],
@@ -33,7 +36,7 @@ class ODL2APIConfiguration(ConfigurationGrouping):
 
 
 class ODL2API(ODLAPI):
-    NAME = "ODL 2.0"
+    NAME = ExternalIntegration.ODL2
     SETTINGS = ODLAPI.SETTINGS + ODL2APIConfiguration.to_settings()
 
 
@@ -57,7 +60,7 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
     LICENSE_FORMATS = {
         FEEDBOOKS_AUDIO: {
             CONTENT_TYPE: MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-            DRM_SCHEME: DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM
+            DRM_SCHEME: DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
         }
     }
 
@@ -194,8 +197,12 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
                     )
 
                     if license_format in self.LICENSE_FORMATS:
-                        drm_scheme = self.LICENSE_FORMATS[license_format][self.DRM_SCHEME]
-                        license_format = self.LICENSE_FORMATS[license_format][self.CONTENT_TYPE]
+                        drm_scheme = self.LICENSE_FORMATS[license_format][
+                            self.DRM_SCHEME
+                        ]
+                        license_format = self.LICENSE_FORMATS[license_format][
+                            self.CONTENT_TYPE
+                        ]
 
                         drm_schemes.append(drm_scheme)
 
@@ -236,7 +243,7 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
                     expires,
                     checkout_link,
                     odl_status_link,
-                    self.http_get
+                    self.http_get,
                 )
 
                 if not license:
@@ -268,5 +275,6 @@ class ODL2ImportMonitor(OPDS2ImportMonitor):
 
 class ODL2ExpiredItemsReaper(ODLExpiredItemsReaper):
     """Responsible for removing expired ODL licenses."""
+
     SERVICE_NAME = "ODL 2 Expired Items Reaper"
     PROTOCOL = ODL2Importer.NAME
