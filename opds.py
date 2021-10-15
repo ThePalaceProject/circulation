@@ -1,11 +1,9 @@
 import datetime
 import logging
+from collections import defaultdict
 from urllib.parse import quote
-from collections import (
-    defaultdict,
-)
-from lxml import etree
 
+from lxml import etree
 from sqlalchemy.orm.session import Session
 
 from .cdn import cdnify
@@ -21,29 +19,23 @@ from .lane import (
     SearchFacets,
 )
 from .lcp.credential import LCPCredentialFactory
+from .lcp.exceptions import LCPError
 from .model import (
     CachedFeed,
     Contributor,
     DataSource,
-    Hyperlink,
-    PresentationCalculationPolicy,
-    Identifier,
     Edition,
+    ExternalIntegration,
+    Hyperlink,
+    Identifier,
     Measurement,
+    PresentationCalculationPolicy,
     Subject,
     Work,
-    ExternalIntegration
-)
-from .util.flask_util import (
-    OPDSEntryResponse,
-    OPDSFeedResponse,
-)
-from .util.opds_writer import (
-    AtomFeed,
-    OPDSFeed,
-    OPDSMessage,
 )
 from .util.datetime_helpers import utc_now
+from .util.flask_util import OPDSEntryResponse, OPDSFeedResponse
+from .util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
 
 
 class UnfulfillableWork(Exception):
@@ -1598,16 +1590,27 @@ class AcquisitionFeed(OPDSFeed):
         # and will not ask patrons to enter their passphrases
         # For more information please look here:
         # https://readium.org/lcp-specs/notes/lcp-key-retrieval.html#including-a-hashed-passphrase-in-an-opds-1-catalog
-        if active_loan and active_loan.license_pool.collection.protocol == ExternalIntegration.LCP:
+        if active_loan and active_loan.license_pool.collection.protocol in [
+            ExternalIntegration.LCP,
+            ExternalIntegration.ODL,
+            ExternalIntegration.ODL2,
+        ]:
             db = Session.object_session(active_loan)
             lcp_credential_factory = LCPCredentialFactory()
-            hashed_passphrase = lcp_credential_factory.get_hashed_passphrase(db, active_loan.patron)
 
-            hashed_passphrase_element = AtomFeed.makeelement(
-                "{%s}hashed_passphrase" % AtomFeed.LCP_NS)
-            hashed_passphrase_element.text = hashed_passphrase
+            try:
+                hashed_passphrase = lcp_credential_factory.get_hashed_passphrase(
+                    db, active_loan.patron
+                )
+                hashed_passphrase_element = AtomFeed.makeelement(
+                    "{%s}hashed_passphrase" % AtomFeed.LCP_NS
+                )
+                hashed_passphrase_element.text = hashed_passphrase
 
-            link.append(hashed_passphrase_element)
+                link.append(hashed_passphrase_element)
+            except LCPError:
+                # The patron's passphrase wasn't generated yet and not present in the database.
+                pass
 
         if indirect is not None:
             link.append(indirect)

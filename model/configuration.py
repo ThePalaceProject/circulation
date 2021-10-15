@@ -165,6 +165,8 @@ class ExternalIntegration(Base, HasFullTableCache):
     OPDS_FOR_DISTRIBUTORS = 'OPDS for Distributors'
     ENKI = DataSourceConstants.ENKI
     FEEDBOOKS = DataSourceConstants.FEEDBOOKS
+    ODL = "ODL"
+    ODL2 = "ODL 2.0"
     LCP = DataSourceConstants.LCP
     MANUAL = DataSourceConstants.MANUAL
     PROQUEST = DataSourceConstants.PROQUEST
