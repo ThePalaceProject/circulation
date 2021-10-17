@@ -1,4 +1,6 @@
+import html
 import json
+import sys
 from io import (
     BytesIO,
     StringIO,
@@ -694,7 +696,10 @@ class ItemListParser(XMLParser):
 
     NAMESPACES = {}
 
-    unescape_entity_references = HTMLParser().unescape
+    if sys.version_info[1] < 9:
+        unescape_entity_references = HTMLParser().unescape
+    else:
+        unescape_entity_references = html.unescape
 
     def parse(self, xml):
         for i in self.process_all(xml, "//Item"):
