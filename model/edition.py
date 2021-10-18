@@ -2,51 +2,25 @@
 # Edition
 
 
-from . import (
-    Base,
-    get_one,
-    get_one_or_create,
-    PresentationCalculationPolicy,
-)
-from .coverage import CoverageRecord
-from .constants import (
-    DataSourceConstants,
-    EditionConstants,
-    LinkRelations,
-    MediaTypes,
-)
-from .contributor import (
-    Contributor,
-    Contribution,
-)
-from .datasource import DataSource
-from .identifier import Identifier
-from .licensing import (
-    DeliveryMechanism,
-    LicensePool,
-)
-
-from collections import defaultdict
 import logging
-from sqlalchemy import (
-    Column,
-    Date,
-    Enum,
-    ForeignKey,
-    Index,
-    Integer,
-    String,
-    Unicode,
-)
+from collections import defaultdict
+
+from sqlalchemy import Column, Date, Enum, ForeignKey, Index, Integer, String, Unicode
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
-from ..util import (
-    LanguageCodes,
-    TitleProcessor
-)
+
+from ..util import LanguageCodes, TitleProcessor
 from ..util.permanent_work_id import WorkIDCalculator
+from . import Base, PresentationCalculationPolicy, get_one, get_one_or_create
+from .constants import DataSourceConstants, EditionConstants, LinkRelations, MediaTypes
+from .contributor import Contribution, Contributor
+from .coverage import CoverageRecord
+from .datasource import DataSource
+from .identifier import Identifier
+from .licensing import DeliveryMechanism, LicensePool
+
 
 class Edition(Base, EditionConstants):
 
@@ -55,10 +29,10 @@ class Edition(Base, EditionConstants):
     as a "book" with a "title" it can go in here.
     """
 
-    __tablename__ = 'editions'
+    __tablename__ = "editions"
     id = Column(Integer, primary_key=True)
 
-    data_source_id = Column(Integer, ForeignKey('datasources.id'), index=True)
+    data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
 
     MAX_THUMBNAIL_HEIGHT = 300
     MAX_THUMBNAIL_WIDTH = 200
@@ -71,8 +45,7 @@ class Edition(Base, EditionConstants):
     # identifier--the one used by its data source to identify
     # it. Through the Equivalency class, it is associated with a
     # (probably huge) number of other identifiers.
-    primary_identifier_id = Column(
-        Integer, ForeignKey('identifiers.id'), index=True)
+    primary_identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
 
     # An Edition may be the presentation edition for a single Work. If it's not
     # a presentation edition for a work, work will be None.
@@ -82,9 +55,7 @@ class Edition(Base, EditionConstants):
     custom_list_entries = relationship("CustomListEntry", backref="edition")
 
     # An Edition may be the presentation edition for many LicensePools.
-    is_presentation_for = relationship(
-        "LicensePool", backref="presentation_edition"
-    )
+    is_presentation_for = relationship("LicensePool", backref="presentation_edition")
 
     title = Column(Unicode, index=True)
     sort_title = Column(Unicode, index=True)
@@ -119,9 +90,10 @@ class Edition(Base, EditionConstants):
     medium = Column(MEDIUM_ENUM, index=True)
 
     cover_id = Column(
-        Integer, ForeignKey(
-            'resources.id', use_alter=True, name='fk_editions_summary_id'),
-        index=True)
+        Integer,
+        ForeignKey("resources.id", use_alter=True, name="fk_editions_summary_id"),
+        index=True,
+    )
     # These two let us avoid actually loading up the cover Resource
     # every time.
     cover_full_url = Column(Unicode)
@@ -137,9 +109,11 @@ class Edition(Base, EditionConstants):
     def __repr__(self):
         id_repr = repr(self.primary_identifier)
         return "Edition %s [%r] (%s/%s/%s)" % (
-            self.id, id_repr, self.title,
+            self.id,
+            id_repr,
+            self.title,
             ", ".join([x.sort_name for x in self.contributors]),
-            self.language
+            self.language,
         )
 
     @property
@@ -185,10 +159,12 @@ class Edition(Base, EditionConstants):
                 primary_author = x.contributor
             elif x.role in Contributor.AUTHOR_ROLES:
                 other_authors.append(x.contributor)
-            elif x.role.lower().startswith('author and'):
+            elif x.role.lower().startswith("author and"):
                 other_authors.append(x.contributor)
-            elif (x.role in Contributor.AUTHOR_SUBSTITUTE_ROLES
-                  or x.role in Contributor.PERFORMER_ROLES):
+            elif (
+                x.role in Contributor.AUTHOR_SUBSTITUTE_ROLES
+                or x.role in Contributor.PERFORMER_ROLES
+            ):
                 l = acceptable_substitutes[x.role]
                 if x.contributor not in l:
                     l.append(x.contributor)
@@ -207,15 +183,14 @@ class Edition(Base, EditionConstants):
             return deduped
 
         if primary_author:
-            return dedupe([primary_author] + sorted(other_authors, key=lambda x: x.sort_name))
+            return dedupe(
+                [primary_author] + sorted(other_authors, key=lambda x: x.sort_name)
+            )
 
         if other_authors:
             return dedupe(other_authors)
 
-        for role in (
-                Contributor.AUTHOR_SUBSTITUTE_ROLES
-                + Contributor.PERFORMER_ROLES
-        ):
+        for role in Contributor.AUTHOR_SUBSTITUTE_ROLES + Contributor.PERFORMER_ROLES:
             if role in acceptable_substitutes:
                 contributors = acceptable_substitutes[role]
                 return dedupe(sorted(contributors, key=lambda x: x.sort_name))
@@ -225,7 +200,6 @@ class Edition(Base, EditionConstants):
             # scale (like 'Executive producer') that we just don't
             # want to put them down as 'author'.
             return []
-
 
     @classmethod
     def medium_from_media_type(cls, media_type):
@@ -254,9 +228,9 @@ class Edition(Base, EditionConstants):
         return None
 
     @classmethod
-    def for_foreign_id(cls, _db, data_source,
-                       foreign_id_type, foreign_id,
-                       create_if_not_exists=True):
+    def for_foreign_id(
+        cls, _db, data_source, foreign_id_type, foreign_id, create_if_not_exists=True
+    ):
         """Find the Edition representing the given data source's view of
         the work that it primarily identifies by foreign ID.
         e.g. for_foreign_id(_db, DataSource.OVERDRIVE, Identifier.OVERDRIVE_ID, uuid)
@@ -273,8 +247,7 @@ class Edition(Base, EditionConstants):
         if isinstance(data_source, (bytes, str)):
             data_source = DataSource.lookup(_db, data_source)
 
-        identifier, ignore = Identifier.for_foreign_id(
-            _db, foreign_id_type, foreign_id)
+        identifier, ignore = Identifier.for_foreign_id(_db, foreign_id_type, foreign_id)
 
         # Combine the two to get/create a Edition.
         if create_if_not_exists:
@@ -283,9 +256,13 @@ class Edition(Base, EditionConstants):
         else:
             f = get_one
             kwargs = dict()
-        r = f(_db, Edition, data_source=data_source,
-                 primary_identifier=identifier,
-                 **kwargs)
+        r = f(
+            _db,
+            Edition,
+            data_source=data_source,
+            primary_identifier=identifier,
+            **kwargs
+        )
         return r
 
     @property
@@ -294,9 +271,14 @@ class Edition(Base, EditionConstants):
         by this Edition.
         """
         _db = Session.object_session(self)
-        return _db.query(LicensePool).filter(
-            LicensePool.data_source==self.data_source,
-            LicensePool.identifier==self.primary_identifier).all()
+        return (
+            _db.query(LicensePool)
+            .filter(
+                LicensePool.data_source == self.data_source,
+                LicensePool.identifier == self.primary_identifier,
+            )
+            .all()
+        )
 
     def equivalent_identifiers(self, type=None, policy=None):
         """All Identifiers equivalent to this
@@ -307,13 +289,12 @@ class Edition(Base, EditionConstants):
         identifier_id_subquery = Identifier.recursively_equivalent_identifier_ids_query(
             self.primary_identifier.id, policy=policy
         )
-        q = _db.query(Identifier).filter(
-            Identifier.id.in_(identifier_id_subquery))
+        q = _db.query(Identifier).filter(Identifier.id.in_(identifier_id_subquery))
         if type:
             if isinstance(type, list):
                 q = q.filter(Identifier.type.in_(type))
             else:
-                q = q.filter(Identifier.type==type)
+                q = q.filter(Identifier.type == type)
         return q.all()
 
     def equivalent_editions(self, policy=None):
@@ -325,12 +306,12 @@ class Edition(Base, EditionConstants):
             self.primary_identifier.id, policy=policy
         )
         return _db.query(Edition).filter(
-            Edition.primary_identifier_id.in_(identifier_id_subquery))
+            Edition.primary_identifier_id.in_(identifier_id_subquery)
+        )
 
     @classmethod
     def missing_coverage_from(
-            cls, _db, edition_data_sources, coverage_data_source,
-            operation=None
+        cls, _db, edition_data_sources, coverage_data_source, operation=None
     ):
         """Find Editions from `edition_data_source` whose primary
         identifiers have no CoverageRecord from
@@ -339,7 +320,7 @@ class Edition(Base, EditionConstants):
         gutenberg = DataSource.lookup(_db, DataSource.GUTENBERG)
         oclc_classify = DataSource.lookup(_db, DataSource.OCLC)
         missing_coverage_from(_db, gutenberg, oclc_classify)
-        
+
         will find Editions that came from Project Gutenberg and
         have never been used as input to the OCLC Classify web
         service.
@@ -348,16 +329,15 @@ class Edition(Base, EditionConstants):
             edition_data_sources = [edition_data_sources]
         edition_data_source_ids = [x.id for x in edition_data_sources]
         join_clause = (
-            (Edition.primary_identifier_id==CoverageRecord.identifier_id) &
-            (CoverageRecord.data_source_id==coverage_data_source.id) &
-            (CoverageRecord.operation==operation)
+            (Edition.primary_identifier_id == CoverageRecord.identifier_id)
+            & (CoverageRecord.data_source_id == coverage_data_source.id)
+            & (CoverageRecord.operation == operation)
         )
 
-        q = _db.query(Edition).outerjoin(
-            CoverageRecord, join_clause)
+        q = _db.query(Edition).outerjoin(CoverageRecord, join_clause)
         if edition_data_source_ids:
             q = q.filter(Edition.data_source_id.in_(edition_data_source_ids))
-        q2 = q.filter(CoverageRecord.id==None)
+        q2 = q.filter(CoverageRecord.id == None)
         return q2
 
     @classmethod
@@ -366,6 +346,7 @@ class Edition(Base, EditionConstants):
         this LicensePool, in the order they should be used to create a
         presentation Edition for the LicensePool.
         """
+
         def sort_key(edition):
             """Return a numeric ordering of this edition."""
             source = edition.data_source
@@ -390,9 +371,12 @@ class Edition(Base, EditionConstants):
                 return -1.5
 
             if source.name in DataSourceConstants.PRESENTATION_EDITION_PRIORITY:
-                return DataSourceConstants.PRESENTATION_EDITION_PRIORITY.index(source.name)
+                return DataSourceConstants.PRESENTATION_EDITION_PRIORITY.index(
+                    source.name
+                )
             else:
                 return -2
+
         return sorted(editions, key=sort_key)
 
     @classmethod
@@ -418,8 +402,10 @@ class Edition(Base, EditionConstants):
         # versions of this representation and we need some way of
         # choosing between them. Right now we just pick the first one
         # that works.
-        if (resource.representation.image_height
-            and resource.representation.image_height <= self.MAX_THUMBNAIL_HEIGHT):
+        if (
+            resource.representation.image_height
+            and resource.representation.image_height <= self.MAX_THUMBNAIL_HEIGHT
+        ):
             # This image doesn't need a thumbnail.
             self.cover_thumbnail_url = resource.representation.public_url
         else:
@@ -427,21 +413,25 @@ class Edition(Base, EditionConstants):
             best_thumbnail = resource.representation.best_thumbnail
             if best_thumbnail:
                 self.cover_thumbnail_url = best_thumbnail.public_url
-        if (not self.cover_thumbnail_url and
-            resource.representation.image_height
-            and resource.representation.image_height <= self.MAX_FALLBACK_THUMBNAIL_HEIGHT):
+        if (
+            not self.cover_thumbnail_url
+            and resource.representation.image_height
+            and resource.representation.image_height
+            <= self.MAX_FALLBACK_THUMBNAIL_HEIGHT
+        ):
             # The full-sized image is too large to be a thumbnail, but it's
             # not huge, and there is no other thumbnail, so use it.
             self.cover_thumbnail_url = resource.representation.public_url
         if old_cover != self.cover or old_cover_full_url != self.cover_full_url:
             logging.debug(
                 "Setting cover for %s/%s: full=%s thumb=%s",
-                self.primary_identifier.type, self.primary_identifier.identifier,
-                self.cover_full_url, self.cover_thumbnail_url
+                self.primary_identifier.type,
+                self.primary_identifier.identifier,
+                self.cover_full_url,
+                self.cover_thumbnail_url,
             )
 
-    def add_contributor(self, name, roles, aliases=None, lc=None, viaf=None,
-                        **kwargs):
+    def add_contributor(self, name, roles, aliases=None, lc=None, viaf=None, **kwargs):
         """Assign a contributor to this Edition."""
         _db = Session.object_session(self)
         if isinstance(roles, (bytes, str)):
@@ -451,8 +441,7 @@ class Edition(Base, EditionConstants):
         if isinstance(name, Contributor):
             contributor = name
         else:
-            contributor, was_new = Contributor.lookup(
-                _db, name, lc, viaf, aliases)
+            contributor, was_new = Contributor.lookup(_db, name, lc, viaf, aliases)
             if isinstance(contributor, list):
                 # Contributor was looked up/created by name,
                 # which returns a list.
@@ -461,8 +450,8 @@ class Edition(Base, EditionConstants):
         # Then add their Contributions.
         for role in roles:
             contribution, was_new = get_one_or_create(
-                _db, Contribution, edition=self, contributor=contributor,
-                role=role)
+                _db, Contribution, edition=self, contributor=contributor, role=role
+            )
         return contributor
 
     def similarity_to(self, other_record):
@@ -506,16 +495,18 @@ class Edition(Base, EditionConstants):
                 # English, the penalty will be less if one of the
                 # languages is English. It's more likely that an unlabeled
                 # record is in English than that it's in some other language.
-                if self.language == 'eng' or other_record.language == 'eng':
+                if self.language == "eng" or other_record.language == "eng":
                     language_factor = 0.80
                 else:
                     language_factor = 0.50
 
         title_quotient = MetadataSimilarity.title_similarity(
-            self.title, other_record.title)
+            self.title, other_record.title
+        )
 
         author_quotient = MetadataSimilarity.author_similarity(
-            self.author_contributors, other_record.author_contributors)
+            self.author_contributors, other_record.author_contributors
+        )
         if author_quotient == 0:
             # The two works have no authors in common. Immediate
             # disqualification.
@@ -524,8 +515,7 @@ class Edition(Base, EditionConstants):
         # We weight title more heavily because it's much more likely
         # that one author wrote two different books than that two
         # books with the same title have different authors.
-        return language_factor * (
-            (title_quotient * 0.80) + (author_quotient * 0.20))
+        return language_factor * ((title_quotient * 0.80) + (author_quotient * 0.20))
 
     def apply_similarity_threshold(self, candidates, threshold=0.5):
         """Yield the Editions from the given list that are similar
@@ -542,7 +532,7 @@ class Edition(Base, EditionConstants):
     def best_cover_within_distance(self, distance, rel=None, policy=None):
         _db = Session.object_session(self)
         identifier_ids = [self.primary_identifier.id]
-        
+
         if distance > 0:
             if policy is None:
                 new_policy = PresentationCalculationPolicy()
@@ -564,7 +554,7 @@ class Edition(Base, EditionConstants):
     def title_for_permanent_work_id(self):
         title = self.title
         if self.subtitle:
-            title += (": " + self.subtitle)
+            title += ": " + self.subtitle
         return title
 
     @property
@@ -596,11 +586,18 @@ class Edition(Base, EditionConstants):
 
         old_id = self.permanent_work_id
         self.permanent_work_id = self.calculate_permanent_work_id_for_title_and_author(
-            title, author, medium)
+            title, author, medium
+        )
         args = (
             "Permanent work ID for %d: %s/%s -> %s/%s/%s -> %s (was %s)",
-            self.id, title, author, norm_title, norm_author, medium,
-                self.permanent_work_id, old_id
+            self.id,
+            title,
+            author,
+            norm_title,
+            norm_author,
+            medium,
+            self.permanent_work_id,
+            old_id,
         )
         if debug:
             logging.debug(*args)
@@ -608,18 +605,14 @@ class Edition(Base, EditionConstants):
             logging.info(*args)
 
     @classmethod
-    def calculate_permanent_work_id_for_title_and_author(
-            cls, title, author, medium):
+    def calculate_permanent_work_id_for_title_and_author(cls, title, author, medium):
         w = WorkIDCalculator
         norm_title = w.normalize_title(title)
         norm_author = w.normalize_author(author)
 
-        return WorkIDCalculator.permanent_id(
-            norm_title, norm_author, medium)
+        return WorkIDCalculator.permanent_id(norm_title, norm_author, medium)
 
     UNKNOWN_AUTHOR = "[Unknown]"
-
-
 
     def calculate_presentation(self, policy=None):
         """Make sure the presentation of this Edition is up-to-date."""
@@ -643,14 +636,16 @@ class Edition(Base, EditionConstants):
             self.sort_title = TitleProcessor.sort_title_for(self.title)
             self.calculate_permanent_work_id()
             CoverageRecord.add_for(
-                self, data_source=self.data_source,
-                operation=CoverageRecord.SET_EDITION_METADATA_OPERATION
+                self,
+                data_source=self.data_source,
+                operation=CoverageRecord.SET_EDITION_METADATA_OPERATION,
             )
 
         if policy.choose_cover:
             self.choose_cover(policy=policy)
 
-        if (self.author != old_author
+        if (
+            self.author != old_author
             or self.sort_author != old_sort_author
             or self.sort_title != old_sort_title
             or self.permanent_work_id != old_work_id
@@ -670,9 +665,15 @@ class Edition(Base, EditionConstants):
                 level = logging.debug
 
             msg = "Presentation %s for Edition %s (by %s, pub=%s, ident=%s/%s, pwid=%s, language=%s, cover=%r)"
-            args = [changed_status, self.title, self.author, self.publisher,
-                    self.primary_identifier.type, self.primary_identifier.identifier,
-                    self.permanent_work_id, self.language
+            args = [
+                changed_status,
+                self.title,
+                self.author,
+                self.publisher,
+                self.primary_identifier.type,
+                self.primary_identifier.identifier,
+                self.permanent_work_id,
+                self.language,
             ]
             if self.cover and self.cover.representation:
                 args.append(self.cover.representation.public_url)
@@ -729,7 +730,7 @@ class Edition(Base, EditionConstants):
                         logging.warn(
                             "Best cover for %r (%s) was never thumbnailed!",
                             self.primary_identifier,
-                            rep.public_url
+                            rep.public_url,
                         )
                 self.set_cover(best_cover)
                 break
@@ -753,7 +754,8 @@ class Edition(Base, EditionConstants):
             # look for a cover.
             for distance in (0, 5):
                 best_thumbnail, thumbnails = self.best_cover_within_distance(
-                    distance=distance, policy=policy,
+                    distance=distance,
+                    policy=policy,
                     rel=LinkRelations.THUMBNAIL_IMAGE,
                 )
                 if best_thumbnail:
@@ -776,8 +778,15 @@ class Edition(Base, EditionConstants):
         # Whether or not we succeeded in setting the cover,
         # record the fact that we tried.
         CoverageRecord.add_for(
-            self, data_source=self.data_source,
-            operation=CoverageRecord.CHOOSE_COVER_OPERATION
+            self,
+            data_source=self.data_source,
+            operation=CoverageRecord.CHOOSE_COVER_OPERATION,
         )
 
-Index("ix_editions_data_source_id_identifier_id", Edition.data_source_id, Edition.primary_identifier_id, unique=True)
+
+Index(
+    "ix_editions_data_source_id_identifier_id",
+    Edition.data_source_id,
+    Edition.primary_identifier_id,
+    unique=True,
+)

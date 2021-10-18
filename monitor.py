@@ -1,13 +1,11 @@
 import datetime
 import logging
 import traceback
-from sqlalchemy.orm import defer
-from sqlalchemy.sql.expression import (
-    and_,
-    or_,
-)
 
-from . import log # This sets the appropriate log format and level.
+from sqlalchemy.orm import defer
+from sqlalchemy.sql.expression import and_, or_
+
+from . import log  # This sets the appropriate log format and level.
 from .config import Configuration
 from .metadata_layer import TimestampData
 from .model import (
@@ -40,12 +38,12 @@ class CollectionMonitorLogger(logging.LoggerAdapter):
     def __init__(self, logger, extra):
         self.logger = logger
         self.extra = extra
-        collection = self.extra.get('collection', None)
-        self.log_prefix = '[{}] '.format(collection.name) if collection else ''
+        collection = self.extra.get("collection", None)
+        self.log_prefix = "[{}] ".format(collection.name) if collection else ""
         self.warn = self.warning
 
     def process(self, msg, kwargs):
-        return '{}{}'.format(self.log_prefix, msg), kwargs
+        return "{}{}".format(self.log_prefix, msg), kwargs
 
 
 class Monitor(object):
@@ -68,6 +66,7 @@ class Monitor(object):
     that needs to be run on every Collection of a certain type.
 
     """
+
     # In your subclass, set this to the name of the service,
     # e.g. "Overdrive Circulation Monitor". All instances of your
     # subclass will give this as their service name and track their
@@ -76,7 +75,7 @@ class Monitor(object):
 
     # Some useful relative constants for DEFAULT_START_TIME (below).
     ONE_MINUTE_AGO = datetime.timedelta(seconds=60)
-    ONE_YEAR_AGO = datetime.timedelta(seconds=60*60*24*365)
+    ONE_YEAR_AGO = datetime.timedelta(seconds=60 * 60 * 24 * 365)
     NEVER = object()
 
     # If there is no Timestamp for this Monitor, this time will be
@@ -97,9 +96,7 @@ class Monitor(object):
         self.service_name = self.SERVICE_NAME
         default_start_time = cls.DEFAULT_START_TIME
         if isinstance(default_start_time, datetime.timedelta):
-            default_start_time = (
-                utc_now() - default_start_time
-            )
+            default_start_time = utc_now() - default_start_time
         self.default_start_time = default_start_time
         self.default_counter = cls.DEFAULT_COUNTER
 
@@ -112,10 +109,10 @@ class Monitor(object):
 
     @property
     def log(self):
-        if not hasattr(self, '_log'):
+        if not hasattr(self, "_log"):
             self._log = CollectionMonitorLogger(
                 logging.getLogger(self.service_name),
-                {'collection': self.collection},
+                {"collection": self.collection},
             )
         return self._log
 
@@ -150,7 +147,8 @@ class Monitor(object):
         """
         initial_timestamp = self.initial_start_time
         timestamp, new = get_one_or_create(
-            self._db, Timestamp,
+            self._db,
+            Timestamp,
             service=self.service_name,
             service_type=Timestamp.MONITOR_TYPE,
             collection=self.collection,
@@ -158,7 +156,7 @@ class Monitor(object):
                 start=initial_timestamp,
                 finish=None,
                 counter=self.default_counter,
-            )
+            ),
         )
         return timestamp
 
@@ -197,7 +195,7 @@ class Monitor(object):
                     collection=self.collection,
                     start=this_run_start,
                     finish=this_run_finish,
-                    exception=None
+                    exception=None,
                 )
                 new_timestamp.apply(self._db)
             else:
@@ -208,7 +206,7 @@ class Monitor(object):
             this_run_finish = utc_now()
             self.log.exception(
                 "Error running %s monitor. Timestamp will not be updated.",
-                self.service_name
+                self.service_name,
             )
             exception = traceback.format_exc()
         if exception is not None:
@@ -222,7 +220,8 @@ class Monitor(object):
 
         duration = this_run_finish - this_run_start
         self.log.info(
-            "Ran %s monitor in %.2f sec.", self.service_name,
+            "Ran %s monitor in %.2f sec.",
+            self.service_name,
             duration.total_seconds(),
         )
 
@@ -257,6 +256,7 @@ class TimelineMonitor(Monitor):
     the span of time covered in the most recent run, not the time it
     actually took to run.
     """
+
     OVERLAP = datetime.timedelta(minutes=5)
 
     def run_once(self, progress):
@@ -352,9 +352,8 @@ class CollectionMonitor(Monitor):
         protocol = protocol or cls.PROTOCOL
         if protocol and collection.protocol != protocol:
             raise ValueError(
-                "Collection protocol (%s) does not match Monitor protocol (%s)" % (
-                    collection.protocol, protocol
-                )
+                "Collection protocol (%s) does not match Monitor protocol (%s)"
+                % (collection.protocol, protocol)
             )
 
     @classmethod
@@ -379,14 +378,15 @@ class CollectionMonitor(Monitor):
             into the CollectionMonitor constructor.
 
         """
-        service_match = or_(Timestamp.service==cls.SERVICE_NAME,
-                            Timestamp.service==None)
+        service_match = or_(
+            Timestamp.service == cls.SERVICE_NAME, Timestamp.service == None
+        )
         collections_for_protocol = Collection.by_protocol(_db, cls.PROTOCOL).outerjoin(
             Timestamp,
             and_(
-                Timestamp.collection_id==Collection.id,
+                Timestamp.collection_id == Collection.id,
                 service_match,
-            )
+            ),
         )
 
         if collections:
@@ -395,11 +395,13 @@ class CollectionMonitor(Monitor):
                 try:
                     cls._validate_collection(coll, cls.PROTOCOL)
                 except ValueError as e:
-                    additional_info = 'Only the following collections are available: {!r}'.format(
-                        [c.name for c in collections_for_protocol]
+                    additional_info = (
+                        "Only the following collections are available: {!r}".format(
+                            [c.name for c in collections_for_protocol]
+                        )
                     )
                     e.args += (additional_info,)
-                    raise ValueError(str(e) + '\n' + additional_info)
+                    raise ValueError(str(e) + "\n" + additional_info)
         else:
             collections = collections_for_protocol.order_by(
                 Timestamp.start.asc().nullsfirst()
@@ -466,8 +468,10 @@ class SweepMonitor(CollectionMonitor):
 
             self.log.debug(
                 "%s monitor went from offset %s to %s in %.2f sec",
-                self.service_name, offset, new_offset,
-                (batch_ended_at-batch_started_at).total_seconds()
+                self.service_name,
+                offset,
+                new_offset,
+                (batch_ended_at - batch_started_at).total_seconds(),
             )
             achievements = "Records processed: %d." % total_processed
 
@@ -479,8 +483,7 @@ class SweepMonitor(CollectionMonitor):
             # We need to do another batch. If it should raise an exception,
             # we don't want to lose the progress we've already made.
             timestamp.update(
-                counter=new_offset, finish=batch_ended_at,
-                achievements=achievements
+                counter=new_offset, finish=batch_ended_at, achievements=achievements
             )
             self._db.commit()
 
@@ -510,8 +513,12 @@ class SweepMonitor(CollectionMonitor):
 
     def fetch_batch(self, offset):
         """Retrieve one batch of work from the database."""
-        q = self.item_query().filter(self.model_class.id > offset).order_by(
-            self.model_class.id).limit(self.batch_size)
+        q = (
+            self.item_query()
+            .filter(self.model_class.id > offset)
+            .order_by(self.model_class.id)
+            .limit(self.batch_size)
+        )
         return q
 
     def item_query(self):
@@ -544,17 +551,19 @@ class SweepMonitor(CollectionMonitor):
 
 class IdentifierSweepMonitor(SweepMonitor):
     """A Monitor that does some work for every Identifier."""
+
     MODEL_CLASS = Identifier
 
     def scope_to_collection(self, qu, collection):
         """Only find Identifiers licensed through the given Collection."""
         return qu.join(Identifier.licensed_through).filter(
-            LicensePool.collection==collection
+            LicensePool.collection == collection
         )
 
 
 class SubjectSweepMonitor(SweepMonitor):
     """A Monitor that does some work for every Subject."""
+
     MODEL_CLASS = Subject
 
     # It's usually easy to process a Subject, so make the batch size
@@ -575,12 +584,12 @@ class SubjectSweepMonitor(SweepMonitor):
         """Find only Subjects that match the given filters."""
         qu = self._db.query(Subject)
         if self.subject_type:
-            qu = qu.filter(Subject.type==self.subject_type)
+            qu = qu.filter(Subject.type == self.subject_type)
         if self.filter_string:
-            filter_string = '%' + self.filter_string + '%'
+            filter_string = "%" + self.filter_string + "%"
             or_clause = or_(
                 Subject.identifier.ilike(filter_string),
-                Subject.name.ilike(filter_string)
+                Subject.name.ilike(filter_string),
             )
             qu = qu.filter(or_clause)
         return qu
@@ -592,52 +601,58 @@ class SubjectSweepMonitor(SweepMonitor):
 
 class CustomListEntrySweepMonitor(SweepMonitor):
     """A Monitor that does something to every CustomListEntry."""
+
     MODEL_CLASS = CustomListEntry
 
     def scope_to_collection(self, qu, collection):
         """Restrict the query to only find CustomListEntries whose
         Work is in the given Collection.
         """
-        return qu.join(CustomListEntry.work).join(Work.license_pools).filter(
-            LicensePool.collection==collection
+        return (
+            qu.join(CustomListEntry.work)
+            .join(Work.license_pools)
+            .filter(LicensePool.collection == collection)
         )
 
 
 class EditionSweepMonitor(SweepMonitor):
     """A Monitor that does something to every Edition."""
+
     MODEL_CLASS = Edition
 
     def scope_to_collection(self, qu, collection):
         """Restrict the query to only find Editions whose
         primary Identifier is licensed to the given Collection.
         """
-        return qu.join(Edition.primary_identifier).join(
-            Identifier.licensed_through).filter(
-                LicensePool.collection==collection
-            )
+        return (
+            qu.join(Edition.primary_identifier)
+            .join(Identifier.licensed_through)
+            .filter(LicensePool.collection == collection)
+        )
 
 
 class WorkSweepMonitor(SweepMonitor):
     """A Monitor that does something to every Work."""
+
     MODEL_CLASS = Work
 
     def scope_to_collection(self, qu, collection):
         """Restrict the query to only find Works found in the given
         Collection.
         """
-        return qu.join(Work.license_pools).filter(
-            LicensePool.collection==collection
-        )
+        return qu.join(Work.license_pools).filter(LicensePool.collection == collection)
 
 
 class PresentationReadyWorkSweepMonitor(WorkSweepMonitor):
     """A Monitor that does something to every presentation-ready Work."""
 
     def item_query(self):
-        return super(
-            PresentationReadyWorkSweepMonitor, self).item_query().filter(
-                Work.presentation_ready==True
-            )
+        return (
+            super(PresentationReadyWorkSweepMonitor, self)
+            .item_query()
+            .filter(Work.presentation_ready == True)
+        )
+
 
 class NotPresentationReadyWorkSweepMonitor(WorkSweepMonitor):
     """A Monitor that does something to every Work that is not
@@ -646,16 +661,17 @@ class NotPresentationReadyWorkSweepMonitor(WorkSweepMonitor):
 
     def item_query(self):
         not_presentation_ready = or_(
-            Work.presentation_ready==False,
-            Work.presentation_ready==None
+            Work.presentation_ready == False, Work.presentation_ready == None
         )
-        return super(
-            NotPresentationReadyWorkSweepMonitor, self).item_query().filter(
-                not_presentation_ready
-            )
+        return (
+            super(NotPresentationReadyWorkSweepMonitor, self)
+            .item_query()
+            .filter(not_presentation_ready)
+        )
 
 
 # SweepMonitors that do something specific.
+
 
 class OPDSEntryCacheMonitor(PresentationReadyWorkSweepMonitor):
     """A Monitor that recalculates the OPDS entries for every
@@ -665,15 +681,18 @@ class OPDSEntryCacheMonitor(PresentationReadyWorkSweepMonitor):
     which only processes works that are missing a WorkCoverageRecord
     with the 'generate-opds' operation.
     """
+
     SERVICE_NAME = "ODPS Entry Cache Monitor"
 
     def process_item(self, work):
         work.calculate_opds_entries()
 
+
 class PermanentWorkIDRefreshMonitor(EditionSweepMonitor):
     """A monitor that calculates or recalculates the permanent work ID for
     every edition.
     """
+
     SERVICE_NAME = "Permanent work ID refresh"
 
     def process_item(self, edition):
@@ -688,14 +707,13 @@ class MakePresentationReadyMonitor(NotPresentationReadyWorkSweepMonitor):
     the ensure_coverage() calls succeed, presentation of the work is
     calculated and the work is marked presentation ready.
     """
+
     SERVICE_NAME = "Make Works Presentation Ready"
 
     def __init__(self, _db, coverage_providers, collection=None):
         super(MakePresentationReadyMonitor, self).__init__(_db, collection)
         self.coverage_providers = coverage_providers
-        self.policy = PresentationCalculationPolicy(
-            choose_edition=False
-        )
+        self.policy = PresentationCalculationPolicy(choose_edition=False)
 
     def run(self):
         """Before doing anything, consolidate works."""
@@ -713,9 +731,7 @@ class MakePresentationReadyMonitor(NotPresentationReadyWorkSweepMonitor):
         except CoverageProvidersFailed as e:
             exception = "Provider(s) failed: %s" % e
         except Exception as e:
-            self.log.error(
-                "Exception processing work %r", work, exc_info=e
-            )
+            self.log.error("Exception processing work %r", work, exc_info=e)
             exception = str(e)
 
         if exception:
@@ -745,9 +761,11 @@ class MakePresentationReadyMonitor(NotPresentationReadyWorkSweepMonitor):
             covered_types = provider.input_identifier_types
             if covered_types and identifier.type in covered_types:
                 coverage_record = provider.ensure_coverage(identifier)
-                if (not isinstance(coverage_record, CoverageRecord)
+                if (
+                    not isinstance(coverage_record, CoverageRecord)
                     or coverage_record.status != CoverageRecord.SUCCESS
-                    or coverage_record.exception is not None):
+                    or coverage_record.exception is not None
+                ):
                     # This provider has failed.
                     failures.append(provider)
         if failures:
@@ -759,6 +777,7 @@ class CoverageProvidersFailed(Exception):
     """We tried to run CoverageProviders on a Work's identifier,
     but some of the providers failed.
     """
+
     def __init__(self, failed_providers):
         self.failed_providers = failed_providers
         super(CoverageProvidersFailed, self).__init__(
@@ -769,6 +788,7 @@ class CoverageProvidersFailed(Exception):
 class CustomListEntryWorkUpdateMonitor(CustomListEntrySweepMonitor):
 
     """Set or reset the Work associated with each custom list entry."""
+
     SERVICE_NAME = "Update Works for custom list entries"
     DEFAULT_BATCH_SIZE = 100
 
@@ -799,6 +819,7 @@ class ReaperMonitor(Monitor):
     into a list called LARGE_FIELDS and the Reaper will avoid fetching
     that information, improving performance.
     """
+
     MODEL_CLASS = None
     TIMESTAMP_FIELD = None
     MAX_AGE = None
@@ -815,8 +836,7 @@ class ReaperMonitor(Monitor):
 
     @property
     def cutoff(self):
-        """Items with a timestamp earlier than this time will be reaped.
-        """
+        """Items with a timestamp earlier than this time will be reaped."""
         if isinstance(self.MAX_AGE, datetime.timedelta):
             max_age = self.MAX_AGE
         else:
@@ -829,14 +849,13 @@ class ReaperMonitor(Monitor):
 
     @property
     def where_clause(self):
-        """A SQLAlchemy clause that identifies the database rows to be reaped.
-        """
+        """A SQLAlchemy clause that identifies the database rows to be reaped."""
         return self.timestamp_field < self.cutoff
 
     def run_once(self, *args, **kwargs):
         rows_deleted = 0
         qu = self.query()
-        to_defer = getattr(self.MODEL_CLASS, 'LARGE_FIELDS', [])
+        to_defer = getattr(self.MODEL_CLASS, "LARGE_FIELDS", [])
         for x in to_defer:
             qu = qu.options(defer(x))
         count = qu.count()
@@ -862,28 +881,40 @@ class ReaperMonitor(Monitor):
     def query(self):
         return self._db.query(self.MODEL_CLASS).filter(self.where_clause)
 
+
 # ReaperMonitors that do something specific.
+
 
 class CachedFeedReaper(ReaperMonitor):
     """Removed cached feeds older than thirty days."""
+
     MODEL_CLASS = CachedFeed
-    TIMESTAMP_FIELD = 'timestamp'
+    TIMESTAMP_FIELD = "timestamp"
     MAX_AGE = 30
+
+
 ReaperMonitor.REGISTRY.append(CachedFeedReaper)
 
 
 class CredentialReaper(ReaperMonitor):
     """Remove Credentials that expired more than a day ago."""
+
     MODEL_CLASS = Credential
-    TIMESTAMP_FIELD = 'expires'
+    TIMESTAMP_FIELD = "expires"
     MAX_AGE = 1
+
+
 ReaperMonitor.REGISTRY.append(CredentialReaper)
+
 
 class PatronRecordReaper(ReaperMonitor):
     """Remove patron records that expired more than 60 days ago"""
+
     MODEL_CLASS = Patron
-    TIMESTAMP_FIELD = 'authorization_expires'
+    TIMESTAMP_FIELD = "authorization_expires"
     MAX_AGE = 60
+
+
 ReaperMonitor.REGISTRY.append(PatronRecordReaper)
 
 
@@ -893,36 +924,39 @@ class WorkReaper(ReaperMonitor):
     Unlike other reapers, no timestamp is relevant. As soon as a Work
     loses its last LicensePool it can be removed.
     """
+
     MODEL_CLASS = Work
 
     def __init__(self, *args, **kwargs):
         from .external_search import ExternalSearchIndex
-        search_index_client = kwargs.pop('search_index_client', None)
+
+        search_index_client = kwargs.pop("search_index_client", None)
         super(WorkReaper, self).__init__(*args, **kwargs)
-        self.search_index_client = (
-            search_index_client or ExternalSearchIndex(self._db)
-        )
+        self.search_index_client = search_index_client or ExternalSearchIndex(self._db)
 
     def query(self):
-        return self._db.query(Work).outerjoin(Work.license_pools).filter(
-            LicensePool.id==None
+        return (
+            self._db.query(Work)
+            .outerjoin(Work.license_pools)
+            .filter(LicensePool.id == None)
         )
 
     def delete(self, work):
         """Delete work from elasticsearch and database."""
         work.delete(self.search_index_client)
 
+
 ReaperMonitor.REGISTRY.append(WorkReaper)
 
 
 class CollectionReaper(ReaperMonitor):
     """Remove collections that have been marked for deletion."""
+
     MODEL_CLASS = Collection
 
     @property
     def where_clause(self):
-        """A SQLAlchemy clause that identifies the database rows to be reaped.
-        """
+        """A SQLAlchemy clause that identifies the database rows to be reaped."""
         return Collection.marked_for_deletion == True
 
     def delete(self, collection):
@@ -934,17 +968,26 @@ class CollectionReaper(ReaperMonitor):
         failure.
         """
         collection.delete()
+
+
 ReaperMonitor.REGISTRY.append(CollectionReaper)
 
 
 class MeasurementReaper(ReaperMonitor):
     """Remove measurements that are not the most recent"""
+
     MODEL_CLASS = Measurement
 
     def run(self):
-        enabled = ConfigurationSetting.sitewide(self._db, Configuration.MEASUREMENT_REAPER).bool_value
+        enabled = ConfigurationSetting.sitewide(
+            self._db, Configuration.MEASUREMENT_REAPER
+        ).bool_value
         if enabled is not None and not enabled:
-            self.log.info("{} skipped because it is disabled in configuration.".format(self.service_name))
+            self.log.info(
+                "{} skipped because it is disabled in configuration.".format(
+                    self.service_name
+                )
+            )
             return
         return super(ReaperMonitor, self).run()
 
@@ -956,6 +999,7 @@ class MeasurementReaper(ReaperMonitor):
         rows_deleted = self.query().delete()
         self._db.commit()
         return TimestampData(achievements="Items deleted: %d" % rows_deleted)
+
 
 ReaperMonitor.REGISTRY.append(MeasurementReaper)
 
@@ -973,6 +1017,7 @@ class ScrubberMonitor(ReaperMonitor):
     * SCRUB_FIELD - The field whose value will be set to None when a row
       is scrubbed.
     """
+
     def __init__(self, *args, **kwargs):
         """Set the name of the Monitor based on which field is being
         scrubbed.
@@ -980,18 +1025,19 @@ class ScrubberMonitor(ReaperMonitor):
         super(ScrubberMonitor, self).__init__(*args, **kwargs)
         self.SERVICE_NAME = "Scrubber for %s.%s" % (
             self.MODEL_CLASS.__name__,
-            self.SCRUB_FIELD
+            self.SCRUB_FIELD,
         )
 
     def run_once(self, *args, **kwargs):
         """Find all rows that need to be scrubbed, and scrub them."""
         rows_scrubbed = 0
         cls = self.MODEL_CLASS
-        update = cls.__table__.update().where(
-            self.where_clause
-        ).values(
-            {self.SCRUB_FIELD : None}
-        ).returning(cls.id)
+        update = (
+            cls.__table__.update()
+            .where(self.where_clause)
+            .values({self.SCRUB_FIELD: None})
+            .returning(cls.id)
+        )
         scrubbed = self._db.execute(update).fetchall()
         self._db.commit()
         return TimestampData(achievements="Items scrubbed: %d" % len(scrubbed))
@@ -1002,10 +1048,7 @@ class ScrubberMonitor(ReaperMonitor):
         SCRUB_FIELD. If the field is already null, there's no need to
         scrub it.
         """
-        return and_(
-            super(ScrubberMonitor, self).where_clause,
-            self.scrub_field != None
-        )
+        return and_(super(ScrubberMonitor, self).where_clause, self.scrub_field != None)
 
     @property
     def scrub_field(self):
@@ -1017,10 +1060,13 @@ class ScrubberMonitor(ReaperMonitor):
 
 class CirculationEventLocationScrubber(ScrubberMonitor):
     """Scrub location information from old CirculationEvents."""
+
     MODEL_CLASS = CirculationEvent
-    TIMESTAMP_FIELD = 'start'
+    TIMESTAMP_FIELD = "start"
     MAX_AGE = 365
-    SCRUB_FIELD = 'location'
+    SCRUB_FIELD = "location"
+
+
 ReaperMonitor.REGISTRY.append(CirculationEventLocationScrubber)
 
 
@@ -1028,8 +1074,11 @@ class PatronNeighborhoodScrubber(ScrubberMonitor):
     """Scrub cached neighborhood information from patrons who haven't been
     seen in a while.
     """
+
     MODEL_CLASS = Patron
-    TIMESTAMP_FIELD = 'last_external_sync'
+    TIMESTAMP_FIELD = "last_external_sync"
     MAX_AGE = Patron.MAX_SYNC_TIME
-    SCRUB_FIELD = 'cached_neighborhood'
+    SCRUB_FIELD = "cached_neighborhood"
+
+
 ReaperMonitor.REGISTRY.append(PatronNeighborhoodScrubber)

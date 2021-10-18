@@ -2,15 +2,19 @@
 # Resource, ResourceTransformation, Hyperlink, Representation
 
 
-from io import BytesIO
 import datetime
 import json
 import logging
-from hashlib import md5
 import os
-from PIL import Image
 import re
+import time
+import traceback
+from hashlib import md5
+from io import BytesIO
+from urllib.parse import quote, urlparse, urlsplit
+
 import requests
+from PIL import Image
 from sqlalchemy import (
     Binary,
     Column,
@@ -23,22 +27,14 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.mutable import MutableDict
-from sqlalchemy.orm import (
-    backref,
-    relationship,
-)
+from sqlalchemy.orm import backref, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import or_
-import time
-import traceback
-from urllib.parse import urlparse, urlsplit, quote
 
-from . import (
-    Base,
-    get_one,
-    get_one_or_create,
-)
 from ..config import Configuration
+from ..util.datetime_helpers import utc_now
+from ..util.http import HTTP
+from . import Base, get_one, get_one_or_create
 from .constants import (
     DataSourceConstants,
     IdentifierConstants,
@@ -46,19 +42,15 @@ from .constants import (
     MediaTypes,
 )
 from .edition import Edition
-from .licensing import (
-    LicensePool,
-    LicensePoolDeliveryMechanism,
-)
-from ..util.http import HTTP
-from ..util.datetime_helpers import utc_now
+from .licensing import LicensePool, LicensePoolDeliveryMechanism
+
 
 class Resource(Base):
     """An external resource that may be mirrored locally.
     E.g: a cover image, an epub, a description.
     """
 
-    __tablename__ = 'resources'
+    __tablename__ = "resources"
 
     # How many votes is the initial quality estimate worth?
     ESTIMATED_QUALITY_WEIGHT = 5
@@ -76,51 +68,56 @@ class Resource(Base):
 
     # Many Editions may choose this resource (as opposed to other
     # resources linked to them with rel="image") as their cover image.
-    cover_editions = relationship("Edition", backref="cover", foreign_keys=[Edition.cover_id])
+    cover_editions = relationship(
+        "Edition", backref="cover", foreign_keys=[Edition.cover_id]
+    )
 
     # Many Works may use this resource (as opposed to other resources
     # linked to them with rel="description") as their summary.
     from .work import Work
-    summary_works = relationship("Work", backref="summary", foreign_keys=[Work.summary_id])
+
+    summary_works = relationship(
+        "Work", backref="summary", foreign_keys=[Work.summary_id]
+    )
 
     # Many LicensePools (but probably one at most) may use this
     # resource in a delivery mechanism.
     licensepooldeliverymechanisms = relationship(
-        "LicensePoolDeliveryMechanism", backref="resource",
-        foreign_keys=[LicensePoolDeliveryMechanism.resource_id]
+        "LicensePoolDeliveryMechanism",
+        backref="resource",
+        foreign_keys=[LicensePoolDeliveryMechanism.resource_id],
     )
 
     links = relationship("Hyperlink", backref="resource")
 
     # The DataSource that is the controlling authority for this Resource.
-    data_source_id = Column(Integer, ForeignKey('datasources.id'), index=True)
+    data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
 
     # An archived Representation of this Resource.
-    representation_id = Column(
-        Integer, ForeignKey('representations.id'), index=True)
+    representation_id = Column(Integer, ForeignKey("representations.id"), index=True)
 
     # The rights status of this Resource.
-    rights_status_id = Column(Integer, ForeignKey('rightsstatus.id'))
+    rights_status_id = Column(Integer, ForeignKey("rightsstatus.id"))
 
     # An optional explanation of the rights status.
     rights_explanation = Column(Unicode)
 
     # A Resource may be transformed into many derivatives.
     transformations = relationship(
-        'ResourceTransformation',
+        "ResourceTransformation",
         primaryjoin="ResourceTransformation.original_id==Resource.id",
         foreign_keys=id,
         lazy="joined",
-        backref=backref('original', uselist=False),
+        backref=backref("original", uselist=False),
         uselist=True,
     )
 
     # A derivative resource may have one original.
     derived_through = relationship(
-        'ResourceTransformation',
+        "ResourceTransformation",
         primaryjoin="ResourceTransformation.derivative_id==Resource.id",
         foreign_keys=id,
-        backref=backref('derivative', uselist=False),
+        backref=backref("derivative", uselist=False),
         lazy="joined",
         uselist=False,
     )
@@ -143,9 +140,7 @@ class Resource(Base):
     quality = Column(Float, index=True)
 
     # URL must be unique.
-    __table_args__ = (
-        UniqueConstraint('url'),
-    )
+    __table_args__ = (UniqueConstraint("url"),)
 
     @property
     def final_url(self):
@@ -177,13 +172,12 @@ class Resource(Base):
         _db = Session.object_session(self)
 
         if not (content or content_path):
-            raise ValueError(
-                "One of content and content_path must be specified.")
+            raise ValueError("One of content and content_path must be specified.")
         if content and content_path:
-            raise ValueError(
-                "Only one of content and content_path may be specified.")
+            raise ValueError("Only one of content and content_path may be specified.")
         representation, is_new = get_one_or_create(
-            _db, Representation, url=self.url, media_type=media_type)
+            _db, Representation, url=self.url, media_type=media_type
+        )
         self.representation = representation
         representation.set_fetched_content(content, content_path)
 
@@ -198,7 +192,7 @@ class Resource(Base):
         self.votes_for_quality = self.votes_for_quality or 0
 
         total_quality = self.voted_quality * self.votes_for_quality
-        total_quality += (quality * weight)
+        total_quality += quality * weight
         self.votes_for_quality += weight
         self.voted_quality = total_quality / float(self.votes_for_quality)
         self.update_quality()
@@ -260,8 +254,9 @@ class Resource(Base):
         total_weight = estimated_weight + votes_for_quality
 
         voted_quality = (self.voted_quality or 0) * votes_for_quality
-        total_quality = (((self.estimated_quality or 0) * self.ESTIMATED_QUALITY_WEIGHT) +
-                         voted_quality)
+        total_quality = (
+            (self.estimated_quality or 0) * self.ESTIMATED_QUALITY_WEIGHT
+        ) + voted_quality
 
         if voted_quality < 0 and total_quality > 0:
             # If `voted_quality` is negative, the Resource has been
@@ -297,7 +292,7 @@ class Resource(Base):
                 continue
             media_priority = cls.image_type_priority(rep.media_type)
             if media_priority is None:
-                media_priority = float('inf')
+                media_priority = float("inf")
 
             # This method will set the quality if it hasn't been set before.
             r.quality_as_thumbnail_image
@@ -328,8 +323,7 @@ class Resource(Base):
 
     @property
     def quality_as_thumbnail_image(self):
-        """Determine this image's suitability for use as a thumbnail image.
-        """
+        """Determine this image's suitability for use as a thumbnail image."""
         rep = self.representation
         if not rep:
             return 0
@@ -341,11 +335,11 @@ class Resource(Base):
 
         # Scale the estimated quality by the source of the image.
         source_name = self.data_source.name
-        if source_name==DataSourceConstants.GUTENBERG_COVER_GENERATOR:
+        if source_name == DataSourceConstants.GUTENBERG_COVER_GENERATOR:
             quality = quality * 0.60
-        elif source_name==DataSourceConstants.GUTENBERG:
+        elif source_name == DataSourceConstants.GUTENBERG:
             quality = quality * 0.50
-        elif source_name==DataSourceConstants.OPEN_LIBRARY:
+        elif source_name == DataSourceConstants.OPEN_LIBRARY:
             quality = quality * 0.25
         elif source_name in DataSourceConstants.COVER_IMAGE_PRIORITY:
             # Covers from the data sources listed in
@@ -354,7 +348,7 @@ class Resource(Base):
             # over all others, relative to their position in
             # COVER_IMAGE_PRIORITY.
             i = DataSourceConstants.COVER_IMAGE_PRIORITY.index(source_name)
-            quality = quality * (i+2)
+            quality = quality * (i + 2)
         self.set_estimated_quality(quality)
         return quality
 
@@ -362,50 +356,56 @@ class Resource(Base):
         _db = Session.object_session(self)
 
         transformation, ignore = get_one_or_create(
-            _db, ResourceTransformation, derivative_id=derivative_resource.id)
+            _db, ResourceTransformation, derivative_id=derivative_resource.id
+        )
         transformation.original_id = self.id
         transformation.settings = settings or {}
         return transformation
+
 
 class ResourceTransformation(Base):
     """A record that a resource is a derivative of another resource,
     and the settings that were used to transform the original into it.
     """
 
-    __tablename__ = 'resourcetransformations'
+    __tablename__ = "resourcetransformations"
 
     # The derivative resource. A resource can only be derived from one other resource.
     derivative_id = Column(
-        Integer, ForeignKey('resources.id'), index=True, primary_key=True)
+        Integer, ForeignKey("resources.id"), index=True, primary_key=True
+    )
 
     # The original resource that was transformed into the derivative.
-    original_id = Column(
-        Integer, ForeignKey('resources.id'), index=True)
+    original_id = Column(Integer, ForeignKey("resources.id"), index=True)
 
     # The settings used for the transformation.
     settings = Column(MutableDict.as_mutable(JSON), default={})
 
+
 class Hyperlink(Base, LinkRelations):
     """A link between an Identifier and a Resource."""
 
-    __tablename__ = 'hyperlinks'
+    __tablename__ = "hyperlinks"
 
     id = Column(Integer, primary_key=True)
 
     # A Hyperlink is always associated with some Identifier.
     identifier_id = Column(
-        Integer, ForeignKey('identifiers.id'), index=True, nullable=False)
+        Integer, ForeignKey("identifiers.id"), index=True, nullable=False
+    )
 
     # The DataSource through which this link was discovered.
     data_source_id = Column(
-        Integer, ForeignKey('datasources.id'), index=True, nullable=False)
+        Integer, ForeignKey("datasources.id"), index=True, nullable=False
+    )
 
     # The link relation between the Identifier and the Resource.
     rel = Column(Unicode, index=True, nullable=False)
 
     # The Resource on the other end of the link.
     resource_id = Column(
-        Integer, ForeignKey('resources.id'), index=True, nullable=False)
+        Integer, ForeignKey("resources.id"), index=True, nullable=False
+    )
 
     @classmethod
     def unmirrored(cls, collection):
@@ -416,29 +416,30 @@ class Hyperlink(Base, LinkRelations):
         was created but not mirrored.)
         """
         from .identifier import Identifier
+
         _db = Session.object_session(collection)
-        qu = _db.query(Hyperlink).join(
-            Hyperlink.identifier
-        ).join(
-            Identifier.licensed_through
-        ).outerjoin(
-            Hyperlink.resource
-        ).outerjoin(
-            Resource.representation
+        qu = (
+            _db.query(Hyperlink)
+            .join(Hyperlink.identifier)
+            .join(Identifier.licensed_through)
+            .outerjoin(Hyperlink.resource)
+            .outerjoin(Resource.representation)
         )
-        qu = qu.filter(LicensePool.collection_id==collection.id)
+        qu = qu.filter(LicensePool.collection_id == collection.id)
         qu = qu.filter(Hyperlink.rel.in_(Hyperlink.MIRRORED))
-        qu = qu.filter(Hyperlink.data_source==collection.data_source)
+        qu = qu.filter(Hyperlink.data_source == collection.data_source)
         qu = qu.filter(
             or_(
-                Representation.id==None,
-                Representation.mirror_url==None,
+                Representation.id == None,
+                Representation.mirror_url == None,
             )
         )
         # Without this ordering, the query does a table scan looking for
         # items that match. With the ordering, they're all at the front.
-        qu = qu.order_by(Representation.mirror_url.asc().nullsfirst(),
-                         Representation.id.asc().nullsfirst())
+        qu = qu.order_by(
+            Representation.mirror_url.asc().nullsfirst(),
+            Representation.id.asc().nullsfirst(),
+        )
         return qu
 
     @classmethod
@@ -465,11 +466,11 @@ class Hyperlink(Base, LinkRelations):
     @classmethod
     def _default_filename(self, rel):
         if rel == self.OPEN_ACCESS_DOWNLOAD:
-            return 'content'
+            return "content"
         elif rel == self.IMAGE:
-            return 'cover'
+            return "cover"
         elif rel == self.THUMBNAIL_IMAGE:
-            return 'cover-thumbnail'
+            return "cover-thumbnail"
 
     @property
     def default_filename(self):
@@ -487,7 +488,7 @@ class Representation(Base, MediaTypes):
     of.
     """
 
-    __tablename__ = 'representations'
+    __tablename__ = "representations"
     id = Column(Integer, primary_key=True)
 
     # URL from which the representation was fetched.
@@ -531,13 +532,14 @@ class Representation(Base, MediaTypes):
 
     # An image Representation may be a thumbnail version of another
     # Representation.
-    thumbnail_of_id = Column(
-        Integer, ForeignKey('representations.id'), index=True)
+    thumbnail_of_id = Column(Integer, ForeignKey("representations.id"), index=True)
 
     thumbnails = relationship(
         "Representation",
-        backref=backref("thumbnail_of", remote_side = [id]),
-        lazy="joined", post_update=True)
+        backref=backref("thumbnail_of", remote_side=[id]),
+        lazy="joined",
+        post_update=True,
+    )
 
     # The HTTP status code from the last fetch.
     status_code = Column(Integer)
@@ -574,19 +576,20 @@ class Representation(Base, MediaTypes):
 
     # A Representation may be a CachedMARCFile.
     marc_file = relationship(
-        "CachedMARCFile", backref="representation",
+        "CachedMARCFile",
+        backref="representation",
         cascade="all, delete-orphan",
     )
 
     # At any given time, we will have a single representation for a
     # given URL and media type.
-    __table_args__ = (
-        UniqueConstraint('url', 'media_type'),
-    )
+    __table_args__ = (UniqueConstraint("url", "media_type"),)
 
     # A User-Agent to use when acting like a web browser.
     # BROWSER_USER_AGENT = "Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/37.0.2049.0 Safari/537.36 (Simplified)"
-    BROWSER_USER_AGENT = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:37.0) Gecko/20100101 Firefox/37.0"
+    BROWSER_USER_AGENT = (
+        "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:37.0) Gecko/20100101 Firefox/37.0"
+    )
 
     @property
     def age(self):
@@ -598,7 +601,11 @@ class Representation(Base, MediaTypes):
     def has_content(self):
         if self.content and self.status_code == 200 and self.fetch_exception is None:
             return True
-        if self.local_content_path and os.path.exists(self.local_content_path) and self.fetch_exception is None:
+        if (
+            self.local_content_path
+            and os.path.exists(self.local_content_path)
+            and self.fetch_exception is None
+        ):
             return True
         return False
 
@@ -624,7 +631,9 @@ class Representation(Base, MediaTypes):
         a status code that's not in the 5xx series.
         """
         if not self.fetch_exception and (
-            self.content or self.local_path or self.status_code
+            self.content
+            or self.local_path
+            or self.status_code
             and self.status_code // 100 != 5
         ):
             return True
@@ -636,17 +645,20 @@ class Representation(Base, MediaTypes):
         if not s:
             return False
         s = s.lower()
-        return any(s.startswith(x) for x in [
-                   'application/',
-                   'audio/',
-                   'example/',
-                   'image/',
-                   'message/',
-                   'model/',
-                   'multipart/',
-                   'text/',
-                   'video/'
-        ])
+        return any(
+            s.startswith(x)
+            for x in [
+                "application/",
+                "audio/",
+                "example/",
+                "image/",
+                "message/",
+                "model/",
+                "multipart/",
+                "text/",
+                "video/",
+            ]
+        )
 
     @classmethod
     def guess_url_media_type_from_path(cls, url):
@@ -674,13 +686,25 @@ class Representation(Base, MediaTypes):
 
         if not self.is_usable:
             return False
-        return (max_age is None or max_age > self.age)
+        return max_age is None or max_age > self.age
 
     @classmethod
-    def get(cls, _db, url, do_get=None, extra_request_headers=None,
-            accept=None, max_age=None, pause_before=0, allow_redirects=True,
-            presumed_media_type=None, debug=True, response_reviewer=None,
-            exception_handler=None, url_normalizer=None):
+    def get(
+        cls,
+        _db,
+        url,
+        do_get=None,
+        extra_request_headers=None,
+        accept=None,
+        max_age=None,
+        pause_before=0,
+        allow_redirects=True,
+        presumed_media_type=None,
+        debug=True,
+        response_reviewer=None,
+        exception_handler=None,
+        url_normalizer=None,
+    ):
         """Retrieve a representation from the cache if possible.
         If not possible, retrieve it from the web and store it in the
         cache.
@@ -754,8 +778,8 @@ class Representation(Base, MediaTypes):
 
         a = dict(url=normalized_url)
         if accept:
-            a['media_type'] = accept
-        representation = get_one(_db, Representation, 'interchangeable', **a)
+            a["media_type"] = accept
+        representation = get_one(_db, Representation, "interchangeable", **a)
 
         usable_representation = fresh_representation = False
         if representation:
@@ -785,16 +809,16 @@ class Representation(Base, MediaTypes):
         if extra_request_headers:
             headers.update(extra_request_headers)
         if accept:
-            headers['Accept'] = accept
+            headers["Accept"] = accept
 
         if usable_representation:
             # We have a representation but it's not fresh. We will
             # be making a conditional HTTP request to see if there's
             # a new version.
             if representation.last_modified:
-                headers['If-Modified-Since'] = representation.last_modified
+                headers["If-Modified-Since"] = representation.last_modified
             if representation.etag:
-                headers['If-None-Match'] = representation.etag
+                headers["If-None-Match"] = representation.etag
 
         fetched_at = utc_now()
         if pause_before:
@@ -817,7 +841,9 @@ class Representation(Base, MediaTypes):
             # request, not that the HTTP request returned an error
             # condition.
             fetch_exception = e
-            logging.error("Error making HTTP request to %s", url, exc_info=fetch_exception)
+            logging.error(
+                "Error making HTTP request to %s", url, exc_info=fetch_exception
+            )
             exception_traceback = traceback.format_exc()
 
             status_code = None
@@ -829,18 +855,17 @@ class Representation(Base, MediaTypes):
         # we don't have one already, or if the URL or media type we
         # actually got from the server differs from what we thought
         # we had.
-        if (not usable_representation
+        if (
+            not usable_representation
             or media_type != representation.media_type
-            or normalized_url != representation.url):
+            or normalized_url != representation.url
+        ):
             representation, is_new = get_one_or_create(
-                _db, Representation, url=normalized_url,
-                media_type=str(media_type)
+                _db, Representation, url=normalized_url, media_type=str(media_type)
             )
 
         if fetch_exception:
-            exception_handler(
-                representation, fetch_exception, exception_traceback
-            )
+            exception_handler(representation, fetch_exception, exception_traceback)
         representation.fetched_at = fetched_at
 
         if status_code == 304:
@@ -856,7 +881,7 @@ class Representation(Base, MediaTypes):
         else:
             status_code_series = None
 
-        if status_code_series in (2,3) or status_code in (404, 410):
+        if status_code_series in (2, 3) or status_code in (404, 410):
             # We have a new, good representation. Update the
             # Representation object and return it as fresh.
             representation.status_code = status_code
@@ -864,9 +889,10 @@ class Representation(Base, MediaTypes):
             representation.media_type = media_type
 
             for header, field in (
-                    ('etag', 'etag'),
-                    ('last-modified', 'last_modified'),
-                    ('location', 'location')):
+                ("etag", "etag"),
+                ("last-modified", "last_modified"),
+                ("location", "location"),
+            ):
                 if header in headers:
                     value = headers[header]
                 else:
@@ -880,8 +906,9 @@ class Representation(Base, MediaTypes):
         # Okay, things didn't go so well.
         date_string = fetched_at.strftime("%Y-%m-%d %H:%M:%S")
         representation.fetch_exception = representation.fetch_exception or (
-            "Most recent fetch attempt (at %s) got status code %s" % (
-                date_string, status_code))
+            "Most recent fetch attempt (at %s) got status code %s"
+            % (date_string, status_code)
+        )
         if usable_representation:
             # If we have a usable (but stale) representation, we'd
             # rather return the cached data than destroy the information.
@@ -905,9 +932,9 @@ class Representation(Base, MediaTypes):
         derive one from the URL extension.
         """
         default = default or cls.guess_url_media_type_from_path(url)
-        if not headers or not 'content-type' in headers:
+        if not headers or not "content-type" in headers:
             return default
-        headers_type = headers['content-type'].lower()
+        headers_type = headers["content-type"].lower()
         clean = cls._clean_media_type(headers_type)
         if clean in Representation.GENERIC_MEDIA_TYPES and default:
             return default
@@ -926,19 +953,22 @@ class Representation(Base, MediaTypes):
         representation.fetch_exception = traceback
 
     @classmethod
-    def post(cls, _db, url, data, max_age=None, response_reviewer=None,
-             **kwargs):
+    def post(cls, _db, url, data, max_age=None, response_reviewer=None, **kwargs):
         """Finds or creates POST request as a Representation"""
 
-        original_do_get = kwargs.pop('do_get', cls.simple_http_post)
+        original_do_get = kwargs.pop("do_get", cls.simple_http_post)
 
         def do_post(url, headers, **kwargs):
-            kwargs.update({'data' : data})
+            kwargs.update({"data": data})
             return original_do_get(url, headers, **kwargs)
 
         return cls.get(
-            _db, url, do_get=do_post, max_age=max_age,
-            response_reviewer=response_reviewer, **kwargs
+            _db,
+            url,
+            do_get=do_post,
+            max_age=max_age,
+            response_reviewer=response_reviewer,
+            **kwargs
         )
 
     @property
@@ -948,9 +978,8 @@ class Representation(Base, MediaTypes):
         Basically, images and books.
         """
         return any(
-            self.media_type in x for x in
-            (Representation.BOOK_MEDIA_TYPES,
-             Representation.IMAGE_MEDIA_TYPES)
+            self.media_type in x
+            for x in (Representation.BOOK_MEDIA_TYPES, Representation.IMAGE_MEDIA_TYPES)
         )
 
     def update_image_size(self):
@@ -958,7 +987,7 @@ class Representation(Base, MediaTypes):
         Clears .image_height and .image_width if the representation
         is not an image.
         """
-        if self.media_type and self.media_type.startswith('image/'):
+        if self.media_type and self.media_type.startswith("image/"):
             image = self.as_image()
             if image:
                 self.image_width, self.image_height = image.size
@@ -971,8 +1000,8 @@ class Representation(Base, MediaTypes):
             return None
         base = base or Configuration.data_directory()
         if content_path.startswith(base):
-            content_path = content_path[len(base):]
-            if content_path.startswith('/'):
+            content_path = content_path[len(base) :]
+            if content_path.startswith("/"):
                 content_path = content_path[1:]
         return content_path
 
@@ -982,7 +1011,7 @@ class Representation(Base, MediaTypes):
         If all attempts fail, we will return None rather than raise an exception.
         """
         content = None
-        for encoding in ('utf-8', 'windows-1252'):
+        for encoding in ("utf-8", "windows-1252"):
             try:
                 content = self.content.decode(encoding)
                 break
@@ -1024,17 +1053,17 @@ class Representation(Base, MediaTypes):
     @classmethod
     def simple_http_get(cls, url, headers, **kwargs):
         """The most simple HTTP-based GET."""
-        if not 'allow_redirects' in kwargs:
-            kwargs['allow_redirects'] = True
+        if not "allow_redirects" in kwargs:
+            kwargs["allow_redirects"] = True
         response = HTTP.get_with_timeout(url, headers=headers, **kwargs)
         return response.status_code, response.headers, response.content
 
     @classmethod
     def simple_http_post(cls, url, headers, **kwargs):
         """The most simple HTTP-based POST."""
-        data = kwargs.get('data')
-        if 'data' in kwargs:
-            del kwargs['data']
+        data = kwargs.get("data")
+        if "data" in kwargs:
+            del kwargs["data"]
         response = HTTP.post_with_timeout(url, data, headers=headers, **kwargs)
         return response.status_code, response.headers, response.content
 
@@ -1049,10 +1078,9 @@ class Representation(Base, MediaTypes):
 
     @classmethod
     def browser_http_get(cls, url, headers, **kwargs):
-        """GET the representation that would be displayed to a web browser.
-        """
+        """GET the representation that would be displayed to a web browser."""
         headers = dict(headers)
-        headers['User-Agent'] = cls.BROWSER_USER_AGENT
+        headers["User-Agent"] = cls.BROWSER_USER_AGENT
         return cls.simple_http_get(url, headers, **kwargs)
 
     @classmethod
@@ -1066,25 +1094,20 @@ class Representation(Base, MediaTypes):
         gutenberg.org quickly result in IP bans. So we don't make those
         requests.
         """
-        do_not_access = kwargs.pop(
-            'do_not_access', cls.AVOID_WHEN_CAUTIOUS_DOMAINS
-        )
+        do_not_access = kwargs.pop("do_not_access", cls.AVOID_WHEN_CAUTIOUS_DOMAINS)
         check_for_redirect = kwargs.pop(
-            'check_for_redirect', cls.EXERCISE_CAUTION_DOMAINS
+            "check_for_redirect", cls.EXERCISE_CAUTION_DOMAINS
         )
-        do_get = kwargs.pop('do_get', cls.simple_http_get)
-        head_client = kwargs.pop('cautious_head_client', requests.head)
+        do_get = kwargs.pop("do_get", cls.simple_http_get)
+        head_client = kwargs.pop("cautious_head_client", requests.head)
 
         if cls.get_would_be_useful(
-                url, headers, do_not_access, check_for_redirect,
-                head_client
+            url, headers, do_not_access, check_for_redirect, head_client
         ):
             # Go ahead and make the GET request.
             return do_get(url, headers, **kwargs)
         else:
-            logging.info(
-                "Declining to make non-useful HTTP request to %s", url
-            )
+            logging.info("Declining to make non-useful HTTP request to %s", url)
             # 417 Expectation Failed - "... if the server is a proxy,
             # the server has unambiguous evidence that the request
             # could not be met by the next-hop server."
@@ -1094,23 +1117,23 @@ class Representation(Base, MediaTypes):
             # request".
             return (
                 417,
-                {"content-type" :
-                 "application/vnd.librarysimplified-did-not-make-request"},
-                "Cautiously decided not to make a GET request to %s" % url
+                {
+                    "content-type": "application/vnd.librarysimplified-did-not-make-request"
+                },
+                "Cautiously decided not to make a GET request to %s" % url,
             )
 
     # Sites known to host both free books and redirects to a domain in
     # AVOID_WHEN_CAUTIOUS_DOMAINS.
-    EXERCISE_CAUTION_DOMAINS = ['unglue.it']
+    EXERCISE_CAUTION_DOMAINS = ["unglue.it"]
 
     # Sites that cause problems for us if we make automated
     # HTTP requests to them while trying to find free books.
-    AVOID_WHEN_CAUTIOUS_DOMAINS = ['gutenberg.org', 'books.google.com']
+    AVOID_WHEN_CAUTIOUS_DOMAINS = ["gutenberg.org", "books.google.com"]
 
     @classmethod
     def get_would_be_useful(
-            cls, url, headers, do_not_access=None, check_for_redirect=None,
-            head_client=None
+        cls, url, headers, do_not_access=None, check_for_redirect=None, head_client=None
     ):
         """Determine whether making a GET request to a given URL is likely to
         have a useful result.
@@ -1131,8 +1154,7 @@ class Representation(Base, MediaTypes):
             """Is the given `domain` in `check_against`,
             or maybe a subdomain of one of the domains in `check_against`?
             """
-            return any(domain == x or domain.endswith('.' + x)
-                       for x in check_against)
+            return any(domain == x or domain.endswith("." + x) for x in check_against)
 
         netloc = urlparse(url).netloc
         if has_domain(netloc, do_not_access):
@@ -1155,7 +1177,7 @@ class Representation(Base, MediaTypes):
 
         # Yes, it's a redirect. Does it redirect to a
         # domain we don't want to access?
-        location = head_response.headers.get('location', '')
+        location = head_response.headers.get("location", "")
         netloc = urlparse(location).netloc
         return not has_domain(netloc, do_not_access)
 
@@ -1168,8 +1190,7 @@ class Representation(Base, MediaTypes):
         """Return the full local path to the representation on disk."""
         if not self.local_content_path:
             return None
-        return os.path.join(Configuration.data_directory(),
-                            self.local_content_path)
+        return os.path.join(Configuration.data_directory(), self.local_content_path)
 
     @property
     def clean_media_type(self):
@@ -1233,16 +1254,16 @@ class Representation(Base, MediaTypes):
     def _clean_media_type(cls, media_type):
         if not media_type:
             return media_type
-        if ';' in media_type:
-            media_type = media_type[:media_type.index(';')].strip()
+        if ";" in media_type:
+            media_type = media_type[: media_type.index(";")].strip()
         return media_type
 
     @classmethod
     def _extension(cls, media_type):
-        value = cls.FILE_EXTENSIONS.get(media_type, '')
+        value = cls.FILE_EXTENSIONS.get(media_type, "")
         if not value:
             return value
-        return '.' + value
+        return "." + value
 
     def default_filename(self, link=None, destination_type=None):
         """Try to come up with a good filename for this representation."""
@@ -1259,12 +1280,16 @@ class Representation(Base, MediaTypes):
             # This is the absolute last-ditch filename solution, and
             # it's basically only used when we try to mirror the root
             # URL of a domain.
-            filename = 'resource'
+            filename = "resource"
 
         default_extension = self.extension()
         extension = self.extension(destination_type)
-        if default_extension and default_extension != extension and filename.endswith(default_extension):
-            filename = filename[:-len(default_extension)] + extension
+        if (
+            default_extension
+            and default_extension != extension
+            and filename.endswith(default_extension)
+        ):
+            filename = filename[: -len(default_extension)] + extension
         elif extension and not filename.endswith(extension):
             filename += extension
         return filename
@@ -1292,7 +1317,7 @@ class Representation(Base, MediaTypes):
         elif self.local_path:
             if not os.path.exists(self.local_path):
                 raise ValueError("%s does not exist." % self.local_path)
-            return open(self.local_path, 'rb')
+            return open(self.local_path, "rb")
         return None
 
     def as_image(self):
@@ -1300,7 +1325,8 @@ class Representation(Base, MediaTypes):
         if not self.is_image:
             raise ValueError(
                 "Cannot load non-image representation as image: type %s."
-                % self.media_type)
+                % self.media_type
+            )
         if not self.content and not self.local_path:
             raise ValueError("Image representation has no content.")
 
@@ -1315,8 +1341,14 @@ class Representation(Base, MediaTypes):
         "image/jpeg": "jpeg",
     }
 
-    def scale(self, max_height, max_width,
-              destination_url, destination_media_type, force=False):
+    def scale(
+        self,
+        max_height,
+        max_width,
+        destination_url,
+        destination_media_type,
+        force=False,
+    ):
         """Return a Representation that's a scaled-down version of this
         Representation, creating it if necessary.
         :param destination_url: The URL the scaled-down resource will
@@ -1326,7 +1358,9 @@ class Representation(Base, MediaTypes):
         _db = Session.object_session(self)
 
         if not destination_media_type in self.pil_format_for_media_type:
-            raise ValueError("Unsupported destination media type: %s" % destination_media_type)
+            raise ValueError(
+                "Unsupported destination media type: %s" % destination_media_type
+            )
 
         pil_format = self.pil_format_for_media_type[destination_media_type]
 
@@ -1340,7 +1374,8 @@ class Representation(Base, MediaTypes):
             # This most likely indicates an error during the fetch
             # phrase.
             self.fetch_exception = "Error found while scaling: %s" % (
-                self.scale_exception)
+                self.scale_exception
+            )
             logging.error("Error found while scaling %r", self, exc_info=e)
 
         if not image:
@@ -1351,16 +1386,17 @@ class Representation(Base, MediaTypes):
         self.image_width, self.image_height = image.size
 
         # If the image is already a thumbnail-size bitmap, don't bother.
-        if (self.clean_media_type != Representation.SVG_MEDIA_TYPE
+        if (
+            self.clean_media_type != Representation.SVG_MEDIA_TYPE
             and self.image_height <= max_height
-            and self.image_width <= max_width):
+            and self.image_width <= max_width
+        ):
             self.thumbnails = []
             return self, False
 
         # Do we already have a representation for the given URL?
         thumbnail, is_new = get_one_or_create(
-            _db, Representation, url=destination_url,
-            media_type=destination_media_type
+            _db, Representation, url=destination_url, media_type=destination_media_type
         )
         if thumbnail not in self.thumbnails:
             thumbnail.thumbnail_of = self
@@ -1399,8 +1435,8 @@ class Representation(Base, MediaTypes):
         # Save the thumbnail image to the database under
         # thumbnail.content.
         output = BytesIO()
-        if image.mode != 'RGB':
-            image = image.convert('RGB')
+        if image.mode != "RGB":
+            image = image.convert("RGB")
         try:
             image.save(output, pil_format)
         except Exception as e:
@@ -1408,7 +1444,9 @@ class Representation(Base, MediaTypes):
             self.scaled_at = None
             # This most likely indicates a problem during the fetch phase,
             # Set fetch_exception so we'll retry the fetch.
-            self.fetch_exception = "Error found while scaling: %s" % (self.scale_exception)
+            self.fetch_exception = "Error found while scaling: %s" % (
+                self.scale_exception
+            )
             return self, False
         thumbnail.content = output.getvalue()
         thumbnail.image_width, thumbnail.image_height = image.size
@@ -1419,9 +1457,7 @@ class Representation(Base, MediaTypes):
 
     @property
     def thumbnail_size_quality_penalty(self):
-        return self._thumbnail_size_quality_penalty(
-            self.image_width, self.image_height
-        )
+        return self._thumbnail_size_quality_penalty(self.image_width, self.image_height)
 
     @classmethod
     def _thumbnail_size_quality_penalty(cls, width, height):
@@ -1462,21 +1498,25 @@ class Representation(Base, MediaTypes):
         if aspect_ratio > ideal:
             deviation = ideal / aspect_ratio
         else:
-            deviation = aspect_ratio/ideal
+            deviation = aspect_ratio / ideal
         if deviation != 1:
             quotient *= deviation
 
         # Penalize an image for not being wide enough.
         width_shortfall = (
-            float(width - IdentifierConstants.IDEAL_IMAGE_WIDTH) / IdentifierConstants.IDEAL_IMAGE_WIDTH)
+            float(width - IdentifierConstants.IDEAL_IMAGE_WIDTH)
+            / IdentifierConstants.IDEAL_IMAGE_WIDTH
+        )
         if width_shortfall < 0:
-            quotient *= (1+width_shortfall)
+            quotient *= 1 + width_shortfall
 
         # Penalize an image for not being tall enough.
         height_shortfall = (
-            float(height - IdentifierConstants.IDEAL_IMAGE_HEIGHT) / IdentifierConstants.IDEAL_IMAGE_HEIGHT)
+            float(height - IdentifierConstants.IDEAL_IMAGE_HEIGHT)
+            / IdentifierConstants.IDEAL_IMAGE_HEIGHT
+        )
         if height_shortfall < 0:
-            quotient *= (1+height_shortfall)
+            quotient *= 1 + height_shortfall
         return quotient
 
     @property

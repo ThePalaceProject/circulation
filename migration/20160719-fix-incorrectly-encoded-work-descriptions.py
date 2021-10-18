@@ -2,10 +2,11 @@
 """Fix work descriptions that were originally UTF-8 but were incorrectly
 encoded as Windows-1252.
 """
+import logging
 import os
 import sys
-import logging
 from pdb import set_trace
+
 bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..", "..")
 sys.path.append(os.path.abspath(package_dir))
@@ -13,10 +14,7 @@ sys.path.append(os.path.abspath(package_dir))
 import time
 
 from core.external_search import ExternalSearchIndex
-from core.model import (
-    production_session,
-    Work,
-)
+from core.model import Work, production_session
 
 _db = production_session()
 client = ExternalSearchIndex()

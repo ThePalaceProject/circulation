@@ -1,15 +1,16 @@
-from abc import abstractmethod, ABCMeta
+from abc import ABCMeta, abstractmethod
 from urllib.parse import urlsplit
 
 from .config import CannotLoadConfiguration
 from .util.datetime_helpers import utc_now
+
 
 class MirrorUploader(metaclass=ABCMeta):
     """Handles the job of uploading a representation's content to
     a mirror that we control.
     """
 
-    STORAGE_GOAL = 'storage'
+    STORAGE_GOAL = "storage"
 
     # Depending on the .protocol of an ExternalIntegration with
     # .goal=STORAGE, a different subclass might be initialized by
@@ -38,9 +39,10 @@ class MirrorUploader(metaclass=ABCMeta):
     def integration_by_name(cls, _db, storage_name=None):
         """Find the ExternalIntegration for the mirror by storage name."""
         from .model import ExternalIntegration
+
         qu = _db.query(ExternalIntegration).filter(
-            ExternalIntegration.goal==cls.STORAGE_GOAL,
-            ExternalIntegration.name==storage_name
+            ExternalIntegration.goal == cls.STORAGE_GOAL,
+            ExternalIntegration.name == storage_name,
         )
         integrations = qu.all()
         if not integrations:
@@ -62,10 +64,14 @@ class MirrorUploader(metaclass=ABCMeta):
             mirror integration.
         """
         from .model import ExternalIntegration
+
         try:
             from .model import Session
+
             _db = Session.object_session(collection)
-            integration = ExternalIntegration.for_collection_and_purpose(_db, collection, purpose)
+            integration = ExternalIntegration.for_collection_and_purpose(
+                _db, collection, purpose
+            )
         except CannotLoadConfiguration as e:
             return None
         return cls.implementation(integration)
@@ -96,8 +102,8 @@ class MirrorUploader(metaclass=ABCMeta):
             # This collection's 'mirror integration' isn't intended to
             # be used to mirror anything.
             raise CannotLoadConfiguration(
-                "Cannot create an MirrorUploader from an integration with goal=%s" %
-                integration.goal
+                "Cannot create an MirrorUploader from an integration with goal=%s"
+                % integration.goal
             )
 
         self._host = host
@@ -132,10 +138,16 @@ class MirrorUploader(metaclass=ABCMeta):
         """Mirror a batch of Representations at once."""
 
         for representation in representations:
-            self.mirror_one(representation, '')
+            self.mirror_one(representation, "")
 
-    def book_url(self, identifier, extension='.epub', open_access=True,
-                 data_source=None, title=None):
+    def book_url(
+        self,
+        identifier,
+        extension=".epub",
+        open_access=True,
+        data_source=None,
+        title=None,
+    ):
         """The URL of the hosted EPUB file for the given identifier.
 
         This does not upload anything to the URL, but it is expected
@@ -144,8 +156,7 @@ class MirrorUploader(metaclass=ABCMeta):
         """
         raise NotImplementedError()
 
-    def cover_image_url(self, data_source, identifier, filename=None,
-                        scaled_size=None):
+    def cover_image_url(self, data_source, identifier, filename=None, scaled_size=None):
         """The URL of the hosted cover image for the given identifier.
 
         This does not upload anything to the URL, but it is expected

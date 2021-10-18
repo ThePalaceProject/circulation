@@ -1,8 +1,9 @@
 import datetime
+from pdb import set_trace
+
 import pytest
 import pytz
 from parameterized import parameterized
-from pdb import set_trace
 
 from ...util.datetime_helpers import (
     datetime_utc,
@@ -12,13 +13,20 @@ from ...util.datetime_helpers import (
     utc_now,
 )
 
+
 class TestDatetimeUTC(object):
-    @parameterized.expand([
-        ([2021, 1, 1], "2021-01-01T00:00:00", "2021-01-01T00:00:00+00:00"),
-        ([1955, 11, 5, 12], "1955-11-05T12:00:00", "1955-11-05T12:00:00+00:00"),
-        ([2015, 10, 21, 4, 29], "2015-10-21T04:29:00", "2015-10-21T04:29:00+00:00"),
-        ([2015, 5, 9, 9, 30, 15], "2015-05-09T09:30:15", "2015-05-09T09:30:15+00:00"),
-    ])
+    @parameterized.expand(
+        [
+            ([2021, 1, 1], "2021-01-01T00:00:00", "2021-01-01T00:00:00+00:00"),
+            ([1955, 11, 5, 12], "1955-11-05T12:00:00", "1955-11-05T12:00:00+00:00"),
+            ([2015, 10, 21, 4, 29], "2015-10-21T04:29:00", "2015-10-21T04:29:00+00:00"),
+            (
+                [2015, 5, 9, 9, 30, 15],
+                "2015-05-09T09:30:15",
+                "2015-05-09T09:30:15+00:00",
+            ),
+        ]
+    )
     def test_datetime_utc(self, time, formatted, isoformat):
         """`datetime_utc` is a wrapper around `datetime.datetime` but it also
         includes UTC information when it is created.
@@ -38,6 +46,7 @@ class TestDatetimeUTC(object):
         assert util_dt.month == time[1]
         assert util_dt.day == time[2]
 
+
 class TestFromTimestamp(object):
     def test_from_timestamp(self):
         """`from_timestamp` is a wrapper around `datetime.fromtimestamp`
@@ -56,6 +65,7 @@ class TestFromTimestamp(object):
         assert util_from_ts.tzinfo is not None
         assert util_from_ts.tzinfo == pytz.UTC
 
+
 class TestUTCNow(object):
     def test_utc_now(self):
         """`utc_now` is a wrapper around `datetime.now` but it also includes
@@ -63,23 +73,24 @@ class TestUTCNow(object):
         """
         datetime_now = datetime.datetime.now(tz=pytz.UTC)
         util_now = utc_now()
-        
+
         # Same time but it's going to be off by a few milliseconds.
         assert (datetime_now - util_now).total_seconds() < 2
-        
+
         # The UTC information for this datetime object is the pytz UTC value.
         assert util_now.tzinfo == pytz.UTC
-        
+
+
 class TestToUTC(object):
     def test_to_utc(self):
         # `utc` marks a naive datetime object as being UTC, or
         # converts a timezone-aware datetime object to UTC.
         d1 = datetime.datetime(2021, 1, 1)
         d2 = datetime.datetime.strptime("2020", "%Y")
-        
+
         assert d1.tzinfo is None
         assert d2.tzinfo is None
-        
+
         d1_utc = to_utc(d1)
         d2_utc = to_utc(d2)
 
@@ -90,7 +101,7 @@ class TestToUTC(object):
         # The timezone information is from pytz UTC.
         assert d1_utc.tzinfo == pytz.UTC
         assert d2_utc.tzinfo == pytz.UTC
-        
+
         # Passing in None gets you None.
         assert to_utc(None) == None
 
@@ -103,10 +114,12 @@ class TestToUTC(object):
         d1_eastern = d1_utc.astimezone(pytz.timezone("US/Eastern"))
         assert d1_utc == to_utc(d1_eastern)
 
-    @parameterized.expand([
-        ([2021, 1, 1], "2021-01-01", "%Y-%m-%d"),
-        ([1955, 11, 5, 12], "1955-11-05T12:00:00", "%Y-%m-%dT%H:%M:%S")
-    ])
+    @parameterized.expand(
+        [
+            ([2021, 1, 1], "2021-01-01", "%Y-%m-%d"),
+            ([1955, 11, 5, 12], "1955-11-05T12:00:00", "%Y-%m-%dT%H:%M:%S"),
+        ]
+    )
     def test_strptime_utc(self, expect, date_string, format):
         assert strptime_utc(date_string, format) == datetime_utc(*expect)
 
@@ -115,5 +128,7 @@ class TestToUTC(object):
         # mention a timezone.
         with pytest.raises(ValueError) as excinfo:
             strptime_utc("2020-01-01T12:00:00+0300", "%Y-%m-%dT%H:%M:%S%z")
-        assert ("Cannot use strptime_utc with timezone-aware format %Y-%m-%dT%H:%M:%S%z"
-                in str(excinfo.value))
+        assert (
+            "Cannot use strptime_utc with timezone-aware format %Y-%m-%dT%H:%M:%S%z"
+            in str(excinfo.value)
+        )

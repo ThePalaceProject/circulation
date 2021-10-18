@@ -3,36 +3,46 @@ import csv
 import os
 import re
 import string
+
 from . import *
 from .keyword import KeywordBasedClassifier
 
+
 class CustomMatchToken(object):
     """A custom token used in matching rules."""
+
     def matches(self, subject_token):
         """Does the given token match this one?"""
         raise NotImplementedError()
 
+
 class Something(CustomMatchToken):
     """A CustomMatchToken that will match any single token."""
+
     def matches(self, subject_token):
         return True
 
+
 class RE(CustomMatchToken):
     """A CustomMatchToken that performs a regular expression search."""
+
     def __init__(self, pattern):
         self.re = re.compile(pattern, re.I)
 
     def matches(self, subject_token):
         return self.re.search(subject_token)
 
+
 class Interchangeable(CustomMatchToken):
     """A token that matches a list of strings."""
+
     def __init__(self, *choices):
         """All of these strings are interchangeable for matching purposes."""
         self.choices = set([Lowercased(x) for x in choices])
 
-    def matches(self,subject_token):
+    def matches(self, subject_token):
         return Lowercased(subject_token) in self.choices
+
 
 # Special tokens for use in matching rules.
 something = Something()
@@ -60,10 +70,13 @@ literary_criticism = Interchangeable(
 
 # If these variables are used in a rule, they must be the first token in
 # that rule.
-special_variables = { nonfiction : "nonfiction",
-                      fiction : "fiction",
-                      juvenile : "juvenile",
-                      ya : "ya",}
+special_variables = {
+    nonfiction: "nonfiction",
+    fiction: "fiction",
+    juvenile: "juvenile",
+    ya: "ya",
+}
+
 
 class MatchingRule(object):
     """A rule that takes a list of subject parts and returns
@@ -170,9 +183,7 @@ class MatchingRule(object):
             # rule token.
             while subject:
                 subject_token = subject.pop(0)
-                submatch, ignore1, ignore2 = self._consume(
-                    [next_rule], [subject_token]
-                )
+                submatch, ignore1, ignore2 = self._consume([next_rule], [subject_token])
                 if submatch:
                     # We had to remove some number of subject tokens,
                     # but we found one that matches the next rule.
@@ -193,10 +204,13 @@ class MatchingRule(object):
             # This is too complex to be a CustomMatchToken because
             # we may be modifying the subject token list.
             match = subject_token not in (
-                'juvenile fiction', 'young adult fiction', 'fiction'
+                "juvenile fiction",
+                "young adult fiction",
+                "fiction",
             )
             if match and subject_token not in (
-                    'juvenile nonfiction', 'young adult nonfiction'
+                "juvenile nonfiction",
+                "young adult nonfiction",
             ):
                 # The implicit top-level lane is 'nonfiction',
                 # which means we popped a token like 'History' that
@@ -272,269 +286,275 @@ class BISACClassifier(Classifier):
     ]
 
     TARGET_AGE = [
-        m((0,4), juvenile, anything, "Readers", "Beginner") ,
-        m((5,7), juvenile, anything, "Readers", "Intermediate"),
-        m((5,7), juvenile, anything, "Early Readers"),
-        m((8,13), juvenile, anything, "Chapter Books")
+        m((0, 4), juvenile, anything, "Readers", "Beginner"),
+        m((5, 7), juvenile, anything, "Readers", "Intermediate"),
+        m((5, 7), juvenile, anything, "Early Readers"),
+        m((8, 13), juvenile, anything, "Chapter Books"),
     ]
 
     GENRE = [
-
         # Put all erotica in Erotica, to keep the other lanes at
         # "Adult" level or lower.
-        m(Erotica, anything, 'Erotica'),
-
+        m(Erotica, anything, "Erotica"),
         # Put all non-erotica comics into the same bucket, regardless
         # of their content.
-        m(Comics_Graphic_Novels, 'Comics & Graphic Novels'),
-        m(Comics_Graphic_Novels, nonfiction, 'Comics & Graphic Novels'),
-        m(Comics_Graphic_Novels, fiction, 'Comics & Graphic Novels'),
-
+        m(Comics_Graphic_Novels, "Comics & Graphic Novels"),
+        m(Comics_Graphic_Novels, nonfiction, "Comics & Graphic Novels"),
+        m(Comics_Graphic_Novels, fiction, "Comics & Graphic Novels"),
         # "Literary Criticism / Foo" implies Literary Criticism, not Foo.
-	m(Literary_Criticism, anything, literary_criticism),
-
+        m(Literary_Criticism, anything, literary_criticism),
         # "Fiction / Christian / Foo" implies Religious Fiction
         # more strongly than it implies Foo.
-        m(Religious_Fiction, fiction, anything, 'Christian'),
-
+        m(Religious_Fiction, fiction, anything, "Christian"),
         # "Fiction / Foo / Short Stories" implies Short Stories more
         # strongly than it implies Foo. This assumes that a short
         # story collection within a genre will also be classified
         # separately under that genre. This could definitely be
         # improved but would require a Subject to map to multiple
         # Genres.
-        m(Short_Stories, fiction, anything, RE('^Anthologies')),
-        m(Short_Stories, fiction, anything, RE('^Short Stories')),
-        m(Short_Stories, 'Literary Collections'),
-        m(Short_Stories, fiction, anything, 'Collections & Anthologies'),
-
+        m(Short_Stories, fiction, anything, RE("^Anthologies")),
+        m(Short_Stories, fiction, anything, RE("^Short Stories")),
+        m(Short_Stories, "Literary Collections"),
+        m(Short_Stories, fiction, anything, "Collections & Anthologies"),
         # Classify top-level fiction categories into fiction genres.
         #
         # First, handle large overarching genres that have subgenres
         # and adjacent genres.
         #
-
         # Fantasy
-        m(Epic_Fantasy, fiction, 'Fantasy', 'Epic'),
-        m(Historical_Fantasy, fiction, 'Fantasy', 'Historical'),
-        m(Urban_Fantasy, fiction, 'Fantasy', 'Urban'),
-        m(Fantasy, fiction, 'Fantasy'),
-        m(Fantasy, fiction, 'Romance', 'Fantasy'),
-        m(Fantasy, fiction, 'Sagas'),
-
+        m(Epic_Fantasy, fiction, "Fantasy", "Epic"),
+        m(Historical_Fantasy, fiction, "Fantasy", "Historical"),
+        m(Urban_Fantasy, fiction, "Fantasy", "Urban"),
+        m(Fantasy, fiction, "Fantasy"),
+        m(Fantasy, fiction, "Romance", "Fantasy"),
+        m(Fantasy, fiction, "Sagas"),
         # Mystery
         # n.b. no BISAC for Paranormal_Mystery
-        m(Crime_Detective_Stories, fiction, 'Mystery & Detective', 'Private Investigators'),
-        m(Crime_Detective_Stories, fiction, 'Crime'),
-        m(Crime_Detective_Stories, fiction, 'Thrillers', 'Crime'),
-        m(Hard_Boiled_Mystery, fiction, 'Mystery & Detective', 'Hard-Boiled'),
-        m(Police_Procedural, fiction, 'Mystery & Detective', 'Police Procedural'),
-        m(Cozy_Mystery, fiction, 'Mystery & Detective', 'Cozy'),
-        m(Historical_Mystery, fiction, 'Mystery & Detective', 'Historical'),
-        m(Women_Detectives, fiction, 'Mystery & Detective', 'Women Sleuths'),
-        m(Mystery, fiction, anything, 'Mystery & Detective'),
-
+        m(
+            Crime_Detective_Stories,
+            fiction,
+            "Mystery & Detective",
+            "Private Investigators",
+        ),
+        m(Crime_Detective_Stories, fiction, "Crime"),
+        m(Crime_Detective_Stories, fiction, "Thrillers", "Crime"),
+        m(Hard_Boiled_Mystery, fiction, "Mystery & Detective", "Hard-Boiled"),
+        m(Police_Procedural, fiction, "Mystery & Detective", "Police Procedural"),
+        m(Cozy_Mystery, fiction, "Mystery & Detective", "Cozy"),
+        m(Historical_Mystery, fiction, "Mystery & Detective", "Historical"),
+        m(Women_Detectives, fiction, "Mystery & Detective", "Women Sleuths"),
+        m(Mystery, fiction, anything, "Mystery & Detective"),
         # Horror
-        m(Ghost_Stories, fiction, 'Ghost'),
-        m(Occult_Horror, fiction, 'Occult & Supernatural'),
-        m(Gothic_Horror, fiction, 'Gothic'),
-        m(Horror, fiction, 'Horror'),
-
+        m(Ghost_Stories, fiction, "Ghost"),
+        m(Occult_Horror, fiction, "Occult & Supernatural"),
+        m(Gothic_Horror, fiction, "Gothic"),
+        m(Horror, fiction, "Horror"),
         # Romance
         # n.b. no BISAC for Gothic Romance
-        m(Contemporary_Romance, fiction, 'Romance', 'Contemporary'),
-        m(Historical_Romance, fiction, 'Romance', 'Historical'),
-        m(Paranormal_Romance, fiction, 'Romance', 'Paranormal'),
-        m(Western_Romance, fiction, 'Romance', 'Western'),
-        m(Romantic_Suspense, fiction, 'Romance', 'Suspense'),
-        m(Romantic_SF, fiction, 'Romance', 'Time Travel'),
-        m(Romantic_SF, fiction, 'Romance', 'Science Fiction'),
-        m(Romance, fiction, 'Romance'),
-
+        m(Contemporary_Romance, fiction, "Romance", "Contemporary"),
+        m(Historical_Romance, fiction, "Romance", "Historical"),
+        m(Paranormal_Romance, fiction, "Romance", "Paranormal"),
+        m(Western_Romance, fiction, "Romance", "Western"),
+        m(Romantic_Suspense, fiction, "Romance", "Suspense"),
+        m(Romantic_SF, fiction, "Romance", "Time Travel"),
+        m(Romantic_SF, fiction, "Romance", "Science Fiction"),
+        m(Romance, fiction, "Romance"),
         # Science fiction
         # n.b. no BISAC for Cyberpunk
-        m(Dystopian_SF, fiction, 'Dystopian'),
-        m(Space_Opera, fiction, 'Science Fiction', 'Space Opera'),
-        m(Military_SF, fiction, 'Science Fiction', 'Military'),
-        m(Alternative_History, fiction, 'Alternative History'),
+        m(Dystopian_SF, fiction, "Dystopian"),
+        m(Space_Opera, fiction, "Science Fiction", "Space Opera"),
+        m(Military_SF, fiction, "Science Fiction", "Military"),
+        m(Alternative_History, fiction, "Alternative History"),
         # Juvenile steampunk is classified directly beneath 'fiction'.
-        m(Steampunk, fiction, anything, 'Steampunk'),
-        m(Science_Fiction, fiction, 'Science Fiction'),
-
+        m(Steampunk, fiction, anything, "Steampunk"),
+        m(Science_Fiction, fiction, "Science Fiction"),
         # Thrillers
         # n.b. no BISAC for Supernatural_Thriller
-        m(Historical_Thriller, fiction, 'Thrillers', 'Historical'),
-        m(Espionage, fiction, 'Thrillers', 'Espionage'),
-        m(Medical_Thriller, fiction, 'Thrillers', 'Medical'),
-        m(Political_Thriller, fiction, 'Thrillers', 'Political'),
-        m(Legal_Thriller, fiction, 'Thrillers', 'Legal'),
-        m(Technothriller, fiction, 'Thrillers', 'Technological'),
-        m(Military_Thriller, fiction, 'Thrillers', 'Military'),
-        m(Suspense_Thriller, fiction, 'Thrillers'),
-
+        m(Historical_Thriller, fiction, "Thrillers", "Historical"),
+        m(Espionage, fiction, "Thrillers", "Espionage"),
+        m(Medical_Thriller, fiction, "Thrillers", "Medical"),
+        m(Political_Thriller, fiction, "Thrillers", "Political"),
+        m(Legal_Thriller, fiction, "Thrillers", "Legal"),
+        m(Technothriller, fiction, "Thrillers", "Technological"),
+        m(Military_Thriller, fiction, "Thrillers", "Military"),
+        m(Suspense_Thriller, fiction, "Thrillers"),
         # Then handle the less complicated genres of fiction.
-        m(Adventure, fiction, 'Action & Adventure'),
-        m(Adventure, fiction, 'Sea Stories'),
-        m(Adventure, fiction, 'War & Military'),
-        m(Classics, fiction, 'Classics'),
-        m(Folklore, fiction, 'Fairy Tales, Folk Tales, Legends & Mythology'),
-        m(Historical_Fiction, anything, 'Historical'),
-        m(Humorous_Fiction, fiction, 'Humorous'),
-        m(Humorous_Fiction, fiction, 'Satire'),
-        m(Literary_Fiction, fiction, 'Literary'),
-        m(LGBTQ_Fiction, fiction, 'Gay'),
-        m(LGBTQ_Fiction, fiction, 'Lesbian'),
-        m(LGBTQ_Fiction, fiction, 'Gay & Lesbian'),
-        m(Religious_Fiction, fiction, 'Religious'),
-        m(Religious_Fiction, fiction, 'Jewish'),
-        m(Religious_Fiction, fiction, 'Visionary & Metaphysical'),
-        m(Womens_Fiction, fiction, anything, 'Contemporary Women'),
-        m(Westerns, fiction, 'Westerns'),
-
+        m(Adventure, fiction, "Action & Adventure"),
+        m(Adventure, fiction, "Sea Stories"),
+        m(Adventure, fiction, "War & Military"),
+        m(Classics, fiction, "Classics"),
+        m(Folklore, fiction, "Fairy Tales, Folk Tales, Legends & Mythology"),
+        m(Historical_Fiction, anything, "Historical"),
+        m(Humorous_Fiction, fiction, "Humorous"),
+        m(Humorous_Fiction, fiction, "Satire"),
+        m(Literary_Fiction, fiction, "Literary"),
+        m(LGBTQ_Fiction, fiction, "Gay"),
+        m(LGBTQ_Fiction, fiction, "Lesbian"),
+        m(LGBTQ_Fiction, fiction, "Gay & Lesbian"),
+        m(Religious_Fiction, fiction, "Religious"),
+        m(Religious_Fiction, fiction, "Jewish"),
+        m(Religious_Fiction, fiction, "Visionary & Metaphysical"),
+        m(Womens_Fiction, fiction, anything, "Contemporary Women"),
+        m(Westerns, fiction, "Westerns"),
         # n.b. BISAC "Fiction / Urban" is distinct from "Fiction /
         # African-American / Urban", and does not map to any of our
         # genres.
-        m(Urban_Fiction, fiction, 'African American', 'Urban'),
-
+        m(Urban_Fiction, fiction, "African American", "Urban"),
         # BISAC classifies these genres at the top level, which we
         # treat as 'nonfiction', but we classify them as fiction. It
         # doesn't matter because they're neither, really.
-        m(Drama, nonfiction, 'Drama'),
-	m(Poetry, nonfiction, 'Poetry'),
-
+        m(Drama, nonfiction, "Drama"),
+        m(Poetry, nonfiction, "Poetry"),
         # Now on to nonfiction.
-
         # Classify top-level nonfiction categories into fiction genres.
         #
         # First, handle large overarching genres that have subgenres
         # and adjacent genres.
         #
-
         # Art & Design
-        m(Architecture, nonfiction, 'Architecture'),
-        m(Art_Criticism_Theory, nonfiction, 'Art', 'Criticism & Theory'),
-        m(Art_History, nonfiction, 'Art', 'History'),
-        m(Fashion, nonfiction, 'Design', 'Fashion'),
-        m(Design, nonfiction, 'Design'),
-        m(Art_Design, nonfiction, 'Art'),
-        m(Photography, nonfiction, 'Photography'),
-
+        m(Architecture, nonfiction, "Architecture"),
+        m(Art_Criticism_Theory, nonfiction, "Art", "Criticism & Theory"),
+        m(Art_History, nonfiction, "Art", "History"),
+        m(Fashion, nonfiction, "Design", "Fashion"),
+        m(Design, nonfiction, "Design"),
+        m(Art_Design, nonfiction, "Art"),
+        m(Photography, nonfiction, "Photography"),
         # Personal Finance & Business
-        m(Business, nonfiction, 'Business & Economics', RE('^Business.*')),
-        m(Business, nonfiction, 'Business & Economics', 'Accounting'),
-        m(Economics, nonfiction, 'Business & Economics', 'Economics'),
-
-        m(Economics, nonfiction, 'Business & Economics', 'Environmental Economics'),
-        m(Economics, nonfiction, 'Business & Economics', RE('^Econo.*')),
-        m(Management_Leadership, nonfiction, 'Business & Economics', 'Management'),
-        m(Management_Leadership, nonfiction, 'Business & Economics', 'Management Science'),
-        m(Management_Leadership, nonfiction, 'Business & Economics', 'Leadership'),
-        m(Personal_Finance_Investing, nonfiction, 'Business & Economics', 'Personal Finance'),
-        m(Personal_Finance_Investing, nonfiction, 'Business & Economics', 'Personal Success'),
-        m(Personal_Finance_Investing, nonfiction, 'Business & Economics', 'Investments & Securities'),
-        m(Real_Estate, nonfiction, 'Business & Economics', 'Real Estate'),
-        m(Personal_Finance_Business, nonfiction, 'Business & Economics'),
-
+        m(Business, nonfiction, "Business & Economics", RE("^Business.*")),
+        m(Business, nonfiction, "Business & Economics", "Accounting"),
+        m(Economics, nonfiction, "Business & Economics", "Economics"),
+        m(Economics, nonfiction, "Business & Economics", "Environmental Economics"),
+        m(Economics, nonfiction, "Business & Economics", RE("^Econo.*")),
+        m(Management_Leadership, nonfiction, "Business & Economics", "Management"),
+        m(
+            Management_Leadership,
+            nonfiction,
+            "Business & Economics",
+            "Management Science",
+        ),
+        m(Management_Leadership, nonfiction, "Business & Economics", "Leadership"),
+        m(
+            Personal_Finance_Investing,
+            nonfiction,
+            "Business & Economics",
+            "Personal Finance",
+        ),
+        m(
+            Personal_Finance_Investing,
+            nonfiction,
+            "Business & Economics",
+            "Personal Success",
+        ),
+        m(
+            Personal_Finance_Investing,
+            nonfiction,
+            "Business & Economics",
+            "Investments & Securities",
+        ),
+        m(Real_Estate, nonfiction, "Business & Economics", "Real Estate"),
+        m(Personal_Finance_Business, nonfiction, "Business & Economics"),
         # Parenting & Family
-        m(Parenting, nonfiction, 'Family & Relationships', 'Parenting'),
-        m(Family_Relationships, nonfiction, 'Family & Relationships'),
-
+        m(Parenting, nonfiction, "Family & Relationships", "Parenting"),
+        m(Family_Relationships, nonfiction, "Family & Relationships"),
         # Food & Health
-        m(Bartending_Cocktails, nonfiction, 'Cooking', 'Beverages'),
-        m(Health_Diet, nonfiction, 'Cooking', 'Health & Healing'),
-        m(Health_Diet, nonfiction, 'Health & Fitness'),
-        m(Vegetarian_Vegan, nonfiction, 'Cooking', 'Vegetarian & Vegan'),
-        m(Cooking, nonfiction, 'Cooking'),
-
+        m(Bartending_Cocktails, nonfiction, "Cooking", "Beverages"),
+        m(Health_Diet, nonfiction, "Cooking", "Health & Healing"),
+        m(Health_Diet, nonfiction, "Health & Fitness"),
+        m(Vegetarian_Vegan, nonfiction, "Cooking", "Vegetarian & Vegan"),
+        m(Cooking, nonfiction, "Cooking"),
         # History
-        m(African_History, nonfiction, 'History', 'Africa'),
-        m(Ancient_History, nonfiction, 'History', 'Ancient'),
-        m(Asian_History, nonfiction, 'History', 'Asia'),
-        m(Civil_War_History, nonfiction, 'History', 'United States', RE('^Civil War')),
-        m(European_History, nonfiction, 'History', 'Europe'),
-        m(Latin_American_History, nonfiction, 'History', 'Latin America'),
-        m(Medieval_History, nonfiction, 'History', 'Medieval'),
-        m(Military_History, nonfiction, 'History', 'Military'),
-        m(Renaissance_Early_Modern_History, nonfiction, 'History', 'Renaissance'),
-        m(Renaissance_Early_Modern_History, nonfiction, 'History', 'Modern', RE('^1[678]th Century')),
-        m(Modern_History, nonfiction, 'History', 'Modern'),
-        m(United_States_History, nonfiction, 'History', 'Native American'),
-        m(United_States_History, nonfiction, 'History', 'United States'),
-        m(World_History, nonfiction, 'History', 'World'),
-        m(World_History, nonfiction, 'History', 'Civilization'),
-        m(History, nonfiction, 'History'),
-
+        m(African_History, nonfiction, "History", "Africa"),
+        m(Ancient_History, nonfiction, "History", "Ancient"),
+        m(Asian_History, nonfiction, "History", "Asia"),
+        m(Civil_War_History, nonfiction, "History", "United States", RE("^Civil War")),
+        m(European_History, nonfiction, "History", "Europe"),
+        m(Latin_American_History, nonfiction, "History", "Latin America"),
+        m(Medieval_History, nonfiction, "History", "Medieval"),
+        m(Military_History, nonfiction, "History", "Military"),
+        m(Renaissance_Early_Modern_History, nonfiction, "History", "Renaissance"),
+        m(
+            Renaissance_Early_Modern_History,
+            nonfiction,
+            "History",
+            "Modern",
+            RE("^1[678]th Century"),
+        ),
+        m(Modern_History, nonfiction, "History", "Modern"),
+        m(United_States_History, nonfiction, "History", "Native American"),
+        m(United_States_History, nonfiction, "History", "United States"),
+        m(World_History, nonfiction, "History", "World"),
+        m(World_History, nonfiction, "History", "Civilization"),
+        m(History, nonfiction, "History"),
         # Hobbies & Home
-        m(Antiques_Collectibles, nonfiction, 'Antiques & Collectibles'),
-        m(Crafts_Hobbies, nonfiction, 'Crafts & Hobbies'),
-        m(Gardening, nonfiction, 'Gardening'),
-        m(Games, nonfiction, 'Games'),
-        m(House_Home, nonfiction, 'House & Home'),
-        m(Pets, nonfiction, 'Pets'),
-
+        m(Antiques_Collectibles, nonfiction, "Antiques & Collectibles"),
+        m(Crafts_Hobbies, nonfiction, "Crafts & Hobbies"),
+        m(Gardening, nonfiction, "Gardening"),
+        m(Games, nonfiction, "Games"),
+        m(House_Home, nonfiction, "House & Home"),
+        m(Pets, nonfiction, "Pets"),
         # Entertainment
-        m(Film_TV, nonfiction, 'Performing Arts', 'Film & Video'),
-        m(Film_TV, nonfiction, 'Performing Arts', 'Television'),
-        m(Music, nonfiction, 'Music'),
-        m(Performing_Arts, nonfiction, 'Performing Arts'),
-
+        m(Film_TV, nonfiction, "Performing Arts", "Film & Video"),
+        m(Film_TV, nonfiction, "Performing Arts", "Television"),
+        m(Music, nonfiction, "Music"),
+        m(Performing_Arts, nonfiction, "Performing Arts"),
         # Reference & Study Aids
-        m(Dictionaries, nonfiction, 'Reference', 'Dictionaries'),
-        m(Foreign_Language_Study, nonfiction, 'Foreign Language Study'),
-        m(Law, nonfiction, 'Law'),
-        m(Study_Aids, nonfiction, 'Study Aids'),
-        m(Reference_Study_Aids, nonfiction, 'Reference'),
-        m(Reference_Study_Aids, nonfiction, 'Language Arts & Disciplines'),
-
+        m(Dictionaries, nonfiction, "Reference", "Dictionaries"),
+        m(Foreign_Language_Study, nonfiction, "Foreign Language Study"),
+        m(Law, nonfiction, "Law"),
+        m(Study_Aids, nonfiction, "Study Aids"),
+        m(Reference_Study_Aids, nonfiction, "Reference"),
+        m(Reference_Study_Aids, nonfiction, "Language Arts & Disciplines"),
         # Religion & Spirituality
         m(Body_Mind_Spirit, nonfiction, body_mind_spirit),
-        m(Buddhism, nonfiction, 'Religion', 'Buddhism'),
-        m(Christianity, nonfiction, 'Religion', RE('^Biblical')),
-        m(Christianity, nonfiction, 'Religion', RE('^Christian')),
-        m(Christianity, nonfiction, 'Bibles'),
-        m(Hinduism, nonfiction, 'Religion', 'Hinduism'),
-        m(Islam, nonfiction, 'Religion', 'Islam'),
-        m(Judaism, nonfiction, 'Religion', 'Judaism'),
-        m(Religion_Spirituality, nonfiction, 'Religion'),
-
+        m(Buddhism, nonfiction, "Religion", "Buddhism"),
+        m(Christianity, nonfiction, "Religion", RE("^Biblical")),
+        m(Christianity, nonfiction, "Religion", RE("^Christian")),
+        m(Christianity, nonfiction, "Bibles"),
+        m(Hinduism, nonfiction, "Religion", "Hinduism"),
+        m(Islam, nonfiction, "Religion", "Islam"),
+        m(Judaism, nonfiction, "Religion", "Judaism"),
+        m(Religion_Spirituality, nonfiction, "Religion"),
         # Science & Technology
-        m(Computers, nonfiction, 'Computers'),
-        m(Mathematics, nonfiction, 'Mathematics'),
-        m(Medical, nonfiction, 'Medical'),
-        m(Nature, nonfiction, 'Nature'),
+        m(Computers, nonfiction, "Computers"),
+        m(Mathematics, nonfiction, "Mathematics"),
+        m(Medical, nonfiction, "Medical"),
+        m(Nature, nonfiction, "Nature"),
         m(Psychology, nonfiction, psychology),
-	m(Political_Science, nonfiction, 'Social Science', 'Politics & Government'),
-        m(Social_Sciences, nonfiction, 'Social Science'),
+        m(Political_Science, nonfiction, "Social Science", "Politics & Government"),
+        m(Social_Sciences, nonfiction, "Social Science"),
         m(Technology, nonfiction, technology),
-        m(Technology, nonfiction, 'Transportation'),
-        m(Science, nonfiction, 'Science'),
-
+        m(Technology, nonfiction, "Transportation"),
+        m(Science, nonfiction, "Science"),
         # Then handle the less complicated genres of nonfiction.
         # n.b. no BISAC for Periodicals.
         # n.b. no BISAC for Humorous Nonfiction per se.
-        m(Music, nonfiction, 'Biography & Autobiography', 'Composers & Musicians'),
-        m(Entertainment, nonfiction, 'Biography & Autobiography', 'Entertainment & Performing Arts'),
-	m(Biography_Memoir, nonfiction, 'Biography & Autobiography'),
+        m(Music, nonfiction, "Biography & Autobiography", "Composers & Musicians"),
+        m(
+            Entertainment,
+            nonfiction,
+            "Biography & Autobiography",
+            "Entertainment & Performing Arts",
+        ),
+        m(Biography_Memoir, nonfiction, "Biography & Autobiography"),
         m(Education, nonfiction, "Education"),
-	m(Philosophy, nonfiction, 'Philosophy'),
-	m(Political_Science, nonfiction, 'Political Science'),
-	m(Self_Help, nonfiction, 'Self-Help'),
-	m(Sports, nonfiction, 'Sports & Recreation'),
-	m(Travel, nonfiction, 'Travel'),
-	m(True_Crime, nonfiction, 'True Crime'),
-
+        m(Philosophy, nonfiction, "Philosophy"),
+        m(Political_Science, nonfiction, "Political Science"),
+        m(Self_Help, nonfiction, "Self-Help"),
+        m(Sports, nonfiction, "Sports & Recreation"),
+        m(Travel, nonfiction, "Travel"),
+        m(True_Crime, nonfiction, "True Crime"),
         # Handle cases where Juvenile/YA uses different terms than
         # would be used for the same books for adults.
-        m(Business, nonfiction, 'Careers'),
+        m(Business, nonfiction, "Careers"),
         m(Christianity, nonfiction, "Religious", "Christian"),
         m(Cooking, nonfiction, "Cooking & Food"),
         m(Education, nonfiction, "School & Education"),
         m(Family_Relationships, nonfiction, "Family"),
         m(Fantasy, fiction, "Fantasy & Magic"),
-        m(Ghost_Stories, fiction, 'Ghost Stories'),
-        m(Fantasy, fiction, 'Magical Realism'),
-        m(Fantasy, fiction, 'Mermaids'),
-        m(Fashion, nonfiction, 'Fashion'),
+        m(Ghost_Stories, fiction, "Ghost Stories"),
+        m(Fantasy, fiction, "Magical Realism"),
+        m(Fantasy, fiction, "Mermaids"),
+        m(Fashion, nonfiction, "Fashion"),
         m(Folklore, fiction, "Fairy Tales & Folklore"),
         m(Folklore, fiction, "Legends, Myths, Fables"),
         m(Games, nonfiction, "Games & Activities"),
@@ -542,41 +562,38 @@ class BISACClassifier(Classifier):
         m(Horror, fiction, "Horror & Ghost Stories"),
         m(Horror, fiction, "Monsters"),
         m(Horror, fiction, "Paranormal"),
-        m(Horror, fiction, 'Paranormal, Occult & Supernatural'),
-        m(Horror, fiction, 'Vampires'),
-        m(Horror, fiction, 'Werewolves & Shifters'),
-        m(Horror, fiction, 'Zombies'),
+        m(Horror, fiction, "Paranormal, Occult & Supernatural"),
+        m(Horror, fiction, "Vampires"),
+        m(Horror, fiction, "Werewolves & Shifters"),
+        m(Horror, fiction, "Zombies"),
         m(Humorous_Fiction, fiction, "Humorous Stories"),
         m(Humorous_Nonfiction, "Young Adult Nonfiction", "Humor"),
-        m(LGBTQ_Fiction, fiction, 'LGBT'),
+        m(LGBTQ_Fiction, fiction, "LGBT"),
         m(Law, nonfiction, "Law & Crime"),
         m(Mystery, fiction, "Mysteries & Detective Stories"),
         m(Nature, nonfiction, "Animals"),
-        m(Personal_Finance_Investing, nonfiction, 'Personal Finance'),
+        m(Personal_Finance_Investing, nonfiction, "Personal Finance"),
         m(Poetry, fiction, "Nursery Rhymes"),
         m(Poetry, fiction, "Stories in Verse"),
-        m(Poetry, fiction, 'Novels in Verse'),
-        m(Poetry, fiction, 'Poetry'),
+        m(Poetry, fiction, "Novels in Verse"),
+        m(Poetry, fiction, "Poetry"),
         m(Reference_Study_Aids, nonfiction, "Language Arts"),
         m(Romance, fiction, "Love & Romance"),
         m(Science_Fiction, fiction, "Robots"),
         m(Science_Fiction, fiction, "Time Travel"),
         m(Social_Sciences, nonfiction, "Media Studies"),
-        m(Suspense_Thriller, fiction, 'Superheroes'),
-        m(Suspense_Thriller, fiction, 'Thrillers & Suspense'),
-
+        m(Suspense_Thriller, fiction, "Superheroes"),
+        m(Suspense_Thriller, fiction, "Thrillers & Suspense"),
         # Most of the subcategories of 'Science & Nature' go into Nature,
         # but these go into Science.
-        m(Science, nonfiction, 'Science & Nature', 'Discoveries'),
-        m(Science, nonfiction, 'Science & Nature', 'Experiments & Projects'),
-        m(Science, nonfiction, 'Science & Nature', 'History of Science'),
-        m(Science, nonfiction, 'Science & Nature', 'Physics'),
-        m(Science, nonfiction, 'Science & Nature', 'Weights & Measures'),
-        m(Science, nonfiction, 'Science & Nature', 'General'),
-
+        m(Science, nonfiction, "Science & Nature", "Discoveries"),
+        m(Science, nonfiction, "Science & Nature", "Experiments & Projects"),
+        m(Science, nonfiction, "Science & Nature", "History of Science"),
+        m(Science, nonfiction, "Science & Nature", "Physics"),
+        m(Science, nonfiction, "Science & Nature", "Weights & Measures"),
+        m(Science, nonfiction, "Science & Nature", "General"),
         # Any other subcategory of 'Science & Nature' goes under Nature
-        m(Nature, nonfiction, 'Science & Nature', something),
-
+        m(Nature, nonfiction, "Science & Nature", something),
         # Life Strategies is juvenile/YA-specific, and contains both
         # fiction and nonfiction. It's called "Social Issues" for
         # juvenile fiction/nonfiction, and "Social Topics" for YA
@@ -633,19 +650,17 @@ class BISACClassifier(Classifier):
 
         # If all else fails, try a keyword-based classifier.
         keyword = "/".join(name)
-        return KeywordBasedClassifier.genre(
-            identifier, keyword, fiction, audience
-        )
+        return KeywordBasedClassifier.genre(identifier, keyword, fiction, audience)
 
     # A BISAC name copied from the BISAC website may end with this
     # human-readable note, which is not part of the official name.
-    see_also = re.compile('\(see also .*')
+    see_also = re.compile("\(see also .*")
 
     @classmethod
     def scrub_identifier(cls, identifier):
         if not identifier:
             return identifier
-        if identifier.startswith('FB'):
+        if identifier.startswith("FB"):
             identifier = identifier[2:]
         if identifier in cls.NAMES:
             # We know the canonical name for this BISAC identifier,
@@ -670,7 +685,7 @@ class BISACClassifier(Classifier):
         name = name.replace("  ", ", ")
 
         # The name may be enclosed in an extra set of quotes.
-        for quote in ("'\""):
+        for quote in "'\"":
             if name.startswith(quote):
                 name = name[1:]
             if name.endswith(quote):
@@ -678,23 +693,23 @@ class BISACClassifier(Classifier):
 
         # The name may end with an extraneous marker character or
         # (if it was copied from the BISAC website) an asterisk.
-        for separator in '|/*':
+        for separator in "|/*":
             if name.endswith(separator):
                 name = name[:-1]
 
         # A name copied from the BISAC website may end with a
         # human-readable cross-reference.
-        name = cls.see_also.sub('', name)
+        name = cls.see_also.sub("", name)
 
         # The canonical separator character is a slash, but a pipe
         # has also been used.
-        for separator in '|/':
+        for separator in "|/":
             if separator in name:
-                parts = [name.strip() for name in name.split(separator)
-                         if name.strip()]
+                parts = [name.strip() for name in name.split(separator) if name.strip()]
                 break
         else:
             parts = [name]
         return parts
+
 
 Classifier.classifiers[Classifier.BISAC] = BISACClassifier

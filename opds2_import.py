@@ -376,9 +376,7 @@ class OPDS2Importer(OPDSImporter):
         :rtype: List[LinkData]
         """
         self._logger.debug(
-            "Started extracting image links from {0}".format(
-                encode(publication.images)
-            )
+            "Started extracting image links from {0}".format(encode(publication.images))
         )
 
         if not publication.images:
@@ -397,7 +395,8 @@ class OPDS2Importer(OPDSImporter):
         sorted_raw_image_links = list(
             reversed(
                 sorted(
-                    publication.images.links, key=lambda link: (link.width or 0, link.height or 0)
+                    publication.images.links,
+                    key=lambda link: (link.width or 0, link.height or 0),
                 )
             )
         )
@@ -862,7 +861,9 @@ class OPDS2Importer(OPDSImporter):
 
         return failure
 
-    def _record_publication_unrecognizable_identifier(self, publication: opds2_ast.OPDS2Publication) -> None:
+    def _record_publication_unrecognizable_identifier(
+        self, publication: opds2_ast.OPDS2Publication
+    ) -> None:
         """Record a publication's unrecognizable identifier, i.e. identifier that has an unknown format
             and could not be parsed by CM.
 
@@ -875,7 +876,9 @@ class OPDS2Importer(OPDSImporter):
         if original_identifier is None:
             self._logger.warning(f"Publication '{title}' does not have an identifier.")
         else:
-            self._logger.warning(f"Publication # {original_identifier} ('{title}') has an unrecognizable identifier.")
+            self._logger.warning(
+                f"Publication # {original_identifier} ('{title}') has an unrecognizable identifier."
+            )
 
     def extract_next_links(self, feed):
         """Extracts "next" links from the feed.
@@ -937,7 +940,9 @@ class OPDS2Importer(OPDSImporter):
         for publication in self._get_publications(feed):
             recognized_identifier = self._extract_identifier(publication)
 
-            if not recognized_identifier or not self._is_identifier_allowed(recognized_identifier):
+            if not recognized_identifier or not self._is_identifier_allowed(
+                recognized_identifier
+            ):
                 self._record_publication_unrecognizable_identifier(publication)
                 continue
 
@@ -959,7 +964,9 @@ class OPDS2Importer(OPDSImporter):
             if publication:
                 recognized_identifier = self._extract_identifier(publication)
 
-                if not recognized_identifier or not self._is_identifier_allowed(recognized_identifier):
+                if not recognized_identifier or not self._is_identifier_allowed(
+                    recognized_identifier
+                ):
                     self._record_publication_unrecognizable_identifier(publication)
                 else:
                     self._record_coverage_failure(

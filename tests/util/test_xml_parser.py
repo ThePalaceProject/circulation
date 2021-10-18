@@ -1,7 +1,9 @@
 # encoding: utf-8
 
-from ...util.xmlparser import XMLParser
 from lxml.etree import XMLSyntaxError
+
+from ...util.xmlparser import XMLParser
+
 
 class MockParser(XMLParser):
     """A mock XMLParser that just returns every tag it hears about."""
@@ -9,12 +11,12 @@ class MockParser(XMLParser):
     def process_one(self, tag, namespaces):
         return tag
 
-class TestXMLParser(object):
 
+class TestXMLParser(object):
     def test_process_all(self):
         # Verify that process_all can handle either XML markup
         # or an already-parsed tag object.
-        data = '<atag>This is a tag.</atag>'
+        data = "<atag>This is a tag.</atag>"
 
         # Try it with markup.
         parser = MockParser()
@@ -29,7 +31,7 @@ class TestXMLParser(object):
     def test_process_all_with_xpath(self):
         # Verify that process_all processes only tags that
         # match the given XPath expression.
-        data = '<parent><a>First</a><b>Second</b><a>Third</a></parent><a>Fourth</a>'
+        data = "<parent><a>First</a><b>Second</b><a>Third</a></parent><a>Fourth</a>"
 
         parser = MockParser()
 
@@ -42,10 +44,13 @@ class TestXMLParser(object):
         data = b'<?xml version="1.0" encoding="utf-8"><tag>I enjoy invalid characters, such as \x00\x01 and \x1F. But I also like \xe2\x80\x9csmart quotes\xe2\x80\x9d.</tag>'
         parser = MockParser()
         [tag] = parser.process_all(data, "/tag")
-        assert 'I enjoy invalid characters, such as  and . But I also like “smart quotes”.' == tag.text
+        assert (
+            "I enjoy invalid characters, such as  and . But I also like “smart quotes”."
+            == tag.text
+        )
 
     def test_invalid_entities_are_stripped(self):
         data = '<?xml version="1.0" encoding="utf-8"><tag>I enjoy invalid entities, such as &#x00;&#x01; and &#x1F;</tag>'
         parser = MockParser()
         [tag] = parser.process_all(data, "/tag")
-        assert 'I enjoy invalid entities, such as  and ' == tag.text
+        assert "I enjoy invalid entities, such as  and " == tag.text

@@ -1,23 +1,20 @@
+import json
+
 import pytest
 
-from ..testing import DatabaseTest
-import json
-from ..model import (
-    Edition,
-    Work,
-)
 from ..entrypoint import (
-    EntryPoint,
-    EbooksEntryPoint,
-    EverythingEntryPoint,
     AudiobooksEntryPoint,
+    EbooksEntryPoint,
+    EntryPoint,
+    EverythingEntryPoint,
     MediumEntryPoint,
 )
 from ..external_search import Filter
+from ..model import Edition, Work
+from ..testing import DatabaseTest
 
 
 class TestEntryPoint(DatabaseTest):
-
     def test_defaults(self):
         everything, ebooks, audiobooks = EntryPoint.ENTRY_POINTS
         assert EverythingEntryPoint == everything
@@ -45,7 +42,6 @@ class TestEntryPoint(DatabaseTest):
         assert filter == EverythingEntryPoint.modify_search_filter(filter)
 
     def test_register(self):
-
         class Mock(object):
             pass
 
@@ -87,7 +83,6 @@ class TestEntryPoint(DatabaseTest):
 
 
 class TestEverythingEntryPoint(DatabaseTest):
-
     def test_no_changes(self):
         # EverythingEntryPoint doesn't modify queries or searches
         # beyond the default behavior for any entry point.
@@ -102,7 +97,6 @@ class TestEverythingEntryPoint(DatabaseTest):
 
 
 class TestMediumEntryPoint(DatabaseTest):
-
     def test_modify_database_query(self):
         # Create a video, and a entry point that contains videos.
         work = self._work(with_license_pool=True)
@@ -122,9 +116,7 @@ class TestMediumEntryPoint(DatabaseTest):
         videos = Videos.modify_database_query(self._db, qu)
         assert [work.id] == [x.id for x in videos]
 
-
     def test_modify_search_filter(self):
-
         class Mock(MediumEntryPoint):
             INTERNAL_NAME = object()
 

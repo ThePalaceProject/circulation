@@ -12,16 +12,13 @@
 # SQL to find commonly used classifications not assigned to a genre
 # select count(identifiers.id) as c, subjects.type, substr(subjects.identifier, 0, 20) as i, substr(subjects.name, 0, 20) as n from workidentifiers join classifications on workidentifiers.id=classifications.work_identifier_id join subjects on classifications.subject_id=subjects.id where subjects.genre_id is null and subjects.fiction is null group by subjects.type, i, n order by c desc;
 
-import logging
 import json
+import logging
 import os
 import pkgutil
 import re
+from collections import Counter, defaultdict
 from urllib.parse import urlparse
-from collections import (
-    Counter,
-    defaultdict,
-)
 
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_
@@ -32,6 +29,7 @@ resource_dir = os.path.join(base_dir, "..", "resources")
 NO_VALUE = "NONE"
 NO_NUMBER = -1
 
+
 class ClassifierConstants(object):
     DDC = "DDC"
     LCC = "LCC"
@@ -40,13 +38,13 @@ class ClassifierConstants(object):
     OVERDRIVE = "Overdrive"
     BISAC = "BISAC"
     BIC = "BIC"
-    TAG = "tag"   # Folksonomic tags.
+    TAG = "tag"  # Folksonomic tags.
 
     # Appeal controlled vocabulary developed by NYPL
     NYPL_APPEAL = "NYPL Appeal"
 
-    GRADE_LEVEL = "Grade level" # "1-2", "Grade 4", "Kindergarten", etc.
-    AGE_RANGE = "schema:typicalAgeRange" # "0-2", etc.
+    GRADE_LEVEL = "Grade level"  # "1-2", "Grade 4", "Kindergarten", etc.
+    AGE_RANGE = "schema:typicalAgeRange"  # "0-2", etc.
     AXIS_360_AUDIENCE = "Axis 360 Audience"
 
     # We know this says something about the audience but we're not sure what.
@@ -82,11 +80,20 @@ class ClassifierConstants(object):
     AUDIENCES_YOUNG_CHILDREN = [AUDIENCE_CHILDREN, AUDIENCE_ALL_AGES]
     AUDIENCES_JUVENILE = AUDIENCES_YOUNG_CHILDREN + [AUDIENCE_YOUNG_ADULT]
     AUDIENCES_ADULT = [AUDIENCE_ADULT, AUDIENCE_ADULTS_ONLY, AUDIENCE_ALL_AGES]
-    AUDIENCES = set([AUDIENCE_ADULT, AUDIENCE_ADULTS_ONLY, AUDIENCE_YOUNG_ADULT,
-                     AUDIENCE_CHILDREN, AUDIENCE_ALL_AGES, AUDIENCE_RESEARCH])
+    AUDIENCES = set(
+        [
+            AUDIENCE_ADULT,
+            AUDIENCE_ADULTS_ONLY,
+            AUDIENCE_YOUNG_ADULT,
+            AUDIENCE_CHILDREN,
+            AUDIENCE_ALL_AGES,
+            AUDIENCE_RESEARCH,
+        ]
+    )
 
     SIMPLIFIED_GENRE = "http://librarysimplified.org/terms/genres/Simplified/"
     SIMPLIFIED_FICTION_STATUS = "http://librarysimplified.org/terms/fiction/"
+
 
 class Classifier(ClassifierConstants):
     """Turn an external classification into an internal genre, an
@@ -94,7 +101,9 @@ class Classifier(ClassifierConstants):
     """
 
     AUDIENCES_NO_RESEARCH = [
-        x for x in ClassifierConstants.AUDIENCES if x != ClassifierConstants.AUDIENCE_RESEARCH
+        x
+        for x in ClassifierConstants.AUDIENCES
+        if x != ClassifierConstants.AUDIENCE_RESEARCH
     ]
 
     classifiers = dict()
@@ -136,11 +145,12 @@ class Classifier(ClassifierConstants):
         if target_age == cls.range_tuple(None, None):
             target_age = cls.default_target_age_for_audience(audience)
 
-        return (cls.genre(identifier, name, fiction, audience),
-                audience,
-                target_age,
-                fiction,
-                )
+        return (
+            cls.genre(identifier, name, fiction, audience),
+            audience,
+            target_age,
+            fiction,
+        )
 
     @classmethod
     def scrub_identifier_and_name(cls, identifier, name):
@@ -174,7 +184,6 @@ class Classifier(ClassifierConstants):
             return None
         return Lowercased(name)
 
-
     @classmethod
     def genre(cls, identifier, name, fiction=None, audience=None):
         """Is this identifier associated with a particular Genre?"""
@@ -202,9 +211,9 @@ class Classifier(ClassifierConstants):
         """What does this identifier+name say about the audience for
         this book?
         """
-        if 'juvenile' in name:
+        if "juvenile" in name:
             return cls.AUDIENCE_CHILDREN
-        elif 'young adult' in name or "YA" in name.original:
+        elif "young adult" in name or "YA" in name.original:
             return cls.AUDIENCE_YOUNG_ADULT
         return None
 
@@ -232,9 +241,7 @@ class Classifier(ClassifierConstants):
         """
         if audience == Classifier.AUDIENCE_YOUNG_ADULT:
             return cls.range_tuple(14, 17)
-        elif audience in (
-                Classifier.AUDIENCE_ADULT, Classifier.AUDIENCE_ADULTS_ONLY
-        ):
+        elif audience in (Classifier.AUDIENCE_ADULT, Classifier.AUDIENCE_ADULTS_ONLY):
             return cls.range_tuple(18, None)
         return cls.range_tuple(None, None)
 
@@ -294,11 +301,7 @@ class Classifier(ClassifierConstants):
         """
         if young is None:
             return None
-        if not any(
-                [keyword.endswith(x) for x in
-                 ("and up", "and up.", "+", "+.")
-             ]
-        ):
+        if not any([keyword.endswith(x) for x in ("and up", "and up.", "+", "+.")]):
             return None
 
         if young >= 18:
@@ -317,47 +320,46 @@ class Classifier(ClassifierConstants):
             old = young + 2
         return old
 
+
 class GradeLevelClassifier(Classifier):
     # How old a kid is when they start grade N in the US.
     american_grade_to_age = {
         # Preschool: 3-4 years
-        'preschool' : 3,
-        'pre-school' : 3,
-        'p' : 3,
-        'pk' : 4,
-
+        "preschool": 3,
+        "pre-school": 3,
+        "p": 3,
+        "pk": 4,
         # Easy readers
-        'kindergarten' : 5,
-        'k' : 5,
-        '0' : 5,
-        'first' : 6,
-        '1' : 6,
-        'second' : 7,
-        '2' : 7,
-
+        "kindergarten": 5,
+        "k": 5,
+        "0": 5,
+        "first": 6,
+        "1": 6,
+        "second": 7,
+        "2": 7,
         # Chapter Books
-        'third' : 8,
-        '3' : 8,
-        'fourth' : 9,
-        '4' : 9,
-        'fifth' : 10,
-        '5' : 10,
-        'sixth' : 11,
-        '6' : 11,
-        '7' : 12,
-        '8' : 13,
-
+        "third": 8,
+        "3": 8,
+        "fourth": 9,
+        "4": 9,
+        "fifth": 10,
+        "5": 10,
+        "sixth": 11,
+        "6": 11,
+        "7": 12,
+        "8": 13,
         # YA
-        '9' : 14,
-        '10' : 15,
-        '11' : 16,
-        '12': 17,
+        "9": 14,
+        "10": 15,
+        "11": 16,
+        "12": 17,
     }
 
     # Regular expressions that match common ways of expressing grade
     # levels.
     grade_res = [
-        re.compile(x, re.I) for x in [
+        re.compile(x, re.I)
+        for x in [
             "grades? ([kp0-9]+) to ([kp0-9]+)?",
             "grades? ([kp0-9]+) ?-? ?([kp0-9]+)?",
             "gr\.? ([kp0-9]+) ?-? ?([kp0-9]+)?",
@@ -366,7 +368,7 @@ class GradeLevelClassifier(Classifier):
             "gr\.? ([kp0-9]+)",
             "([0-9]+)[tnsr][hdt] grade",
             "([a-z]+) grade",
-            r'\b(kindergarten|preschool)\b',
+            r"\b(kindergarten|preschool)\b",
         ]
     ]
 
@@ -382,15 +384,14 @@ class GradeLevelClassifier(Classifier):
         target_age = cls.target_age(identifier, name, require_explicit_age_marker)
         return cls.default_audience_for_target_age(target_age)
 
-
     @classmethod
     def target_age(cls, identifier, name, require_explicit_grade_marker=False):
 
-        if (identifier and "education" in identifier) or (name and 'education' in name):
+        if (identifier and "education" in identifier) or (name and "education" in name):
             # This is a book about teaching, e.g. fifth grade.
             return cls.range_tuple(None, None)
 
-        if (identifier and 'grader' in identifier) or (name and 'grader' in name):
+        if (identifier and "grader" in identifier) or (name and "grader" in name):
             # This is a book about, e.g. fifth graders.
             return cls.range_tuple(None, None)
 
@@ -413,9 +414,9 @@ class GradeLevelClassifier(Classifier):
                         young, old = gr
 
                     # Strip leading zeros
-                    if young and young.lstrip('0'):
+                    if young and young.lstrip("0"):
                         young = young.lstrip("0")
-                    if old and old.lstrip('0'):
+                    if old and old.lstrip("0"):
                         old = old.lstrip("0")
 
                     young = cls.american_grade_to_age.get(young)
@@ -434,7 +435,7 @@ class GradeLevelClassifier(Classifier):
                         old = young
                     if young is None and old is not None:
                         young = old
-                    if old and young and  old < young:
+                    if old and young and old < young:
                         young, old = old, young
                     return cls.range_tuple(young, old)
         return cls.range_tuple(None, None)
@@ -452,32 +453,33 @@ class GradeLevelClassifier(Classifier):
                     break
         return (target_age, grade_words)
 
-class InterestLevelClassifier(Classifier):
 
+class InterestLevelClassifier(Classifier):
     @classmethod
     def audience(cls, identifier, name):
-        if identifier in ('lg', 'mg+', 'mg'):
+        if identifier in ("lg", "mg+", "mg"):
             return cls.AUDIENCE_CHILDREN
-        elif identifier == 'ug':
+        elif identifier == "ug":
             return cls.AUDIENCE_YOUNG_ADULT
         else:
             return None
 
     @classmethod
     def target_age(cls, identifier, name):
-        if identifier == 'lg':
-            return cls.range_tuple(5,8)
-        if identifier in ('mg+', 'mg'):
-            return cls.range_tuple(9,13)
-        if identifier == 'ug':
-            return cls.range_tuple(14,17)
+        if identifier == "lg":
+            return cls.range_tuple(5, 8)
+        if identifier in ("mg+", "mg"):
+            return cls.range_tuple(9, 13)
+        if identifier == "ug":
+            return cls.range_tuple(14, 17)
         return None
 
 
 class AgeClassifier(Classifier):
     # Regular expressions that match common ways of expressing ages.
     age_res = [
-        re.compile(x, re.I) for x in [
+        re.compile(x, re.I)
+        for x in [
             "age ([0-9]+) ?-? ?([0-9]+)?",
             "age: ([0-9]+) ?-? ?([0-9]+)?",
             "age: ([0-9]+) to ([0-9]+)",
@@ -577,54 +579,70 @@ fiction_genres = [
     COMICS_AND_GRAPHIC_NOVELS,
     "Drama",
     dict(name="Erotica", audiences=Classifier.AUDIENCE_ADULTS_ONLY),
-    dict(name="Fantasy", subgenres=[
-        "Epic Fantasy",
-        "Historical Fantasy",
-        "Urban Fantasy",
-    ]),
+    dict(
+        name="Fantasy",
+        subgenres=[
+            "Epic Fantasy",
+            "Historical Fantasy",
+            "Urban Fantasy",
+        ],
+    ),
     "Folklore",
     "Historical Fiction",
-    dict(name="Horror", subgenres=[
-        "Gothic Horror",
-        "Ghost Stories",
-        "Vampires",
-        "Werewolves",
-        "Occult Horror",
-    ]),
+    dict(
+        name="Horror",
+        subgenres=[
+            "Gothic Horror",
+            "Ghost Stories",
+            "Vampires",
+            "Werewolves",
+            "Occult Horror",
+        ],
+    ),
     "Humorous Fiction",
     "Literary Fiction",
     "LGBTQ Fiction",
-    dict(name="Mystery", subgenres=[
-        "Crime & Detective Stories",
-        "Hard-Boiled Mystery",
-        "Police Procedural",
-        "Cozy Mystery",
-        "Historical Mystery",
-        "Paranormal Mystery",
-        "Women Detectives",
-    ]),
+    dict(
+        name="Mystery",
+        subgenres=[
+            "Crime & Detective Stories",
+            "Hard-Boiled Mystery",
+            "Police Procedural",
+            "Cozy Mystery",
+            "Historical Mystery",
+            "Paranormal Mystery",
+            "Women Detectives",
+        ],
+    ),
     "Poetry",
     "Religious Fiction",
-    dict(name="Romance", subgenres=[
-        "Contemporary Romance",
-        "Gothic Romance",
-        "Historical Romance",
-        "Paranormal Romance",
-        "Western Romance",
-        "Romantic Suspense",
-    ]),
-    dict(name="Science Fiction", subgenres=[
-        "Dystopian SF",
-        "Space Opera",
-        "Cyberpunk",
-        "Military SF",
-        "Alternative History",
-        "Steampunk",
-        "Romantic SF",
-        "Media Tie-in SF",
-    ]),
+    dict(
+        name="Romance",
+        subgenres=[
+            "Contemporary Romance",
+            "Gothic Romance",
+            "Historical Romance",
+            "Paranormal Romance",
+            "Western Romance",
+            "Romantic Suspense",
+        ],
+    ),
+    dict(
+        name="Science Fiction",
+        subgenres=[
+            "Dystopian SF",
+            "Space Opera",
+            "Cyberpunk",
+            "Military SF",
+            "Alternative History",
+            "Steampunk",
+            "Romantic SF",
+            "Media Tie-in SF",
+        ],
+    ),
     "Short Stories",
-    dict(name="Suspense/Thriller",
+    dict(
+        name="Suspense/Thriller",
         subgenres=[
             "Historical Thriller",
             "Espionage",
@@ -643,92 +661,122 @@ fiction_genres = [
 ]
 
 nonfiction_genres = [
-    dict(name="Art & Design", subgenres=[
-        "Architecture",
-        "Art",
-        "Art Criticism & Theory",
-        "Art History",
-        "Design",
-        "Fashion",
-        "Photography",
-    ]),
+    dict(
+        name="Art & Design",
+        subgenres=[
+            "Architecture",
+            "Art",
+            "Art Criticism & Theory",
+            "Art History",
+            "Design",
+            "Fashion",
+            "Photography",
+        ],
+    ),
     "Biography & Memoir",
     "Education",
-    dict(name="Personal Finance & Business", subgenres=[
-        "Business",
-        "Economics",
-        "Management & Leadership",
-        "Personal Finance & Investing",
-        "Real Estate",
-    ]),
-    dict(name="Parenting & Family", subgenres=[
-        "Family & Relationships",
-        "Parenting",
-    ]),
-    dict(name="Food & Health", subgenres=[
-        "Bartending & Cocktails",
-        "Cooking",
-        "Health & Diet",
-        "Vegetarian & Vegan",
-    ]),
-    dict(name="History", subgenres=[
-        "African History",
-        "Ancient History",
-        "Asian History",
-        "Civil War History",
-        "European History",
-        "Latin American History",
-        "Medieval History",
-        "Middle East History",
-        "Military History",
-        "Modern History",
-        "Renaissance & Early Modern History",
-        "United States History",
-        "World History",
-    ]),
-    dict(name="Hobbies & Home", subgenres=[
-        "Antiques & Collectibles",
-        "Crafts & Hobbies",
-        "Gardening",
-        "Games",
-        "House & Home",
-        "Pets",
-    ]),
+    dict(
+        name="Personal Finance & Business",
+        subgenres=[
+            "Business",
+            "Economics",
+            "Management & Leadership",
+            "Personal Finance & Investing",
+            "Real Estate",
+        ],
+    ),
+    dict(
+        name="Parenting & Family",
+        subgenres=[
+            "Family & Relationships",
+            "Parenting",
+        ],
+    ),
+    dict(
+        name="Food & Health",
+        subgenres=[
+            "Bartending & Cocktails",
+            "Cooking",
+            "Health & Diet",
+            "Vegetarian & Vegan",
+        ],
+    ),
+    dict(
+        name="History",
+        subgenres=[
+            "African History",
+            "Ancient History",
+            "Asian History",
+            "Civil War History",
+            "European History",
+            "Latin American History",
+            "Medieval History",
+            "Middle East History",
+            "Military History",
+            "Modern History",
+            "Renaissance & Early Modern History",
+            "United States History",
+            "World History",
+        ],
+    ),
+    dict(
+        name="Hobbies & Home",
+        subgenres=[
+            "Antiques & Collectibles",
+            "Crafts & Hobbies",
+            "Gardening",
+            "Games",
+            "House & Home",
+            "Pets",
+        ],
+    ),
     "Humorous Nonfiction",
-    dict(name="Entertainment", subgenres=[
-        "Film & TV",
-        "Music",
-        "Performing Arts",
-    ]),
+    dict(
+        name="Entertainment",
+        subgenres=[
+            "Film & TV",
+            "Music",
+            "Performing Arts",
+        ],
+    ),
     "Life Strategies",
     "Literary Criticism",
     "Periodicals",
     "Philosophy",
     "Political Science",
-    dict(name="Reference & Study Aids", subgenres=[
-        "Dictionaries",
-        "Foreign Language Study",
-        "Law",
-        "Study Aids",
-    ]),
-    dict(name="Religion & Spirituality", subgenres=[
-        "Body, Mind & Spirit",
-        "Buddhism",
-        "Christianity",
-        "Hinduism",
-        "Islam",
-        "Judaism",
-    ]),
-    dict(name="Science & Technology", subgenres=[
-        "Computers",
-        "Mathematics",
-        "Medical",
-        "Nature",
-        "Psychology",
-        "Science",
-        "Social Sciences",
-        "Technology",
-    ]),
+    dict(
+        name="Reference & Study Aids",
+        subgenres=[
+            "Dictionaries",
+            "Foreign Language Study",
+            "Law",
+            "Study Aids",
+        ],
+    ),
+    dict(
+        name="Religion & Spirituality",
+        subgenres=[
+            "Body, Mind & Spirit",
+            "Buddhism",
+            "Christianity",
+            "Hinduism",
+            "Islam",
+            "Judaism",
+        ],
+    ),
+    dict(
+        name="Science & Technology",
+        subgenres=[
+            "Computers",
+            "Mathematics",
+            "Medical",
+            "Nature",
+            "Psychology",
+            "Science",
+            "Social Sciences",
+            "Technology",
+        ],
+    ),
     "Self-Help",
     "Sports",
     "Travel",
@@ -778,7 +826,15 @@ class GenreData(object):
 
     @property
     def variable_name(self):
-        return self.name.replace("-", "_").replace(", & ", "_").replace(", ", "_").replace(" & ", "_").replace(" ", "_").replace("/", "_").replace("'", "")
+        return (
+            self.name.replace("-", "_")
+            .replace(", & ", "_")
+            .replace(", ", "_")
+            .replace(" & ", "_")
+            .replace(" ", "_")
+            .replace("/", "_")
+            .replace("'", "")
+        )
 
     @classmethod
     def populate(cls, namespace, genres, fiction_source, nonfiction_source):
@@ -786,28 +842,35 @@ class GenreData(object):
         list of fiction and nonfiction genres.
         """
         for source, default_fiction in (
-                (fiction_source, True),
-                (nonfiction_source, False)):
+            (fiction_source, True),
+            (nonfiction_source, False),
+        ):
             for item in source:
                 subgenres = []
                 audience_restriction = None
                 name = item
                 fiction = default_fiction
                 if isinstance(item, dict):
-                    name = item['name']
-                    subgenres = item.get('subgenres', [])
-                    audience_restriction = item.get('audience_restriction')
-                    fiction = item.get('fiction', default_fiction)
+                    name = item["name"]
+                    subgenres = item.get("subgenres", [])
+                    audience_restriction = item.get("audience_restriction")
+                    fiction = item.get("fiction", default_fiction)
 
                 cls.add_genre(
-                    namespace, genres, name, subgenres, fiction,
-                    None, audience_restriction)
+                    namespace,
+                    genres,
+                    name,
+                    subgenres,
+                    fiction,
+                    None,
+                    audience_restriction,
+                )
 
     @classmethod
-    def add_genre(cls, namespace, genres, name, subgenres, fiction,
-                  parent, audience_restriction):
-        """Create a GenreData object. Add it to a dictionary and a namespace.
-        """
+    def add_genre(
+        cls, namespace, genres, name, subgenres, fiction, parent, audience_restriction
+    ):
+        """Create a GenreData object. Add it to a dictionary and a namespace."""
         if isinstance(name, tuple):
             name, default_fiction = name
         default_fiction = None
@@ -817,10 +880,10 @@ class GenreData(object):
             default_audience = parent.audience_restriction
         if isinstance(name, dict):
             data = name
-            subgenres = data.get('subgenres', [])
-            name = data['name']
-            fiction = data.get('fiction', default_fiction)
-            audience_restriction = data.get('audience', default_audience)
+            subgenres = data.get("subgenres", [])
+            name = data["name"]
+            fiction = data.get("fiction", default_fiction)
+            audience_restriction = data.get("audience", default_audience)
         if name in genres:
             raise ValueError("Duplicate genre name! %s" % name)
 
@@ -838,14 +901,18 @@ class GenreData(object):
 
         # Do the same for subgenres.
         for sub in subgenres:
-            cls.add_genre(namespace, genres, sub, [], fiction,
-                          genre_data, audience_restriction)
+            cls.add_genre(
+                namespace, genres, sub, [], fiction, genre_data, audience_restriction
+            )
+
 
 genres = dict()
 GenreData.populate(globals(), genres, fiction_genres, nonfiction_genres)
 
+
 class Lowercased(str):
     """A lowercased string that remembers its original value."""
+
     def __new__(cls, value):
         if isinstance(value, Lowercased):
             # Nothing to do.
@@ -853,7 +920,7 @@ class Lowercased(str):
         if not isinstance(value, str):
             value = str(value)
         new_value = value.lower()
-        if new_value.endswith('.'):
+        if new_value.endswith("."):
             new_value = new_value[:-1]
         o = super(Lowercased, cls).__new__(cls, new_value)
         o.original = value
@@ -864,8 +931,8 @@ class Lowercased(str):
         if not identifier:
             return identifier
 
-class AgeOrGradeClassifier(Classifier):
 
+class AgeOrGradeClassifier(Classifier):
     @classmethod
     def audience(cls, identifier, name):
         audience = AgeClassifier.audience(identifier, name)
@@ -886,6 +953,7 @@ class AgeOrGradeClassifier(Classifier):
             age = GradeLevelClassifier.target_age(identifier, name, True)
         return age
 
+
 class FreeformAudienceClassifier(AgeOrGradeClassifier):
     # NOTE: In practice, subjects like "books for all ages" tend to be
     # more like advertising slogans than reliable indicators of an
@@ -895,33 +963,36 @@ class FreeformAudienceClassifier(AgeOrGradeClassifier):
 
     @classmethod
     def audience(cls, identifier, name):
-        if identifier in ('children', 'pre-adolescent', 'beginning reader'):
+        if identifier in ("children", "pre-adolescent", "beginning reader"):
             return cls.AUDIENCE_CHILDREN
-        elif identifier in ('young adult', 'ya', 'teenagers', 'adolescent',
-                            'early adolescents'):
+        elif identifier in (
+            "young adult",
+            "ya",
+            "teenagers",
+            "adolescent",
+            "early adolescents",
+        ):
             return cls.AUDIENCE_YOUNG_ADULT
-        elif identifier == 'adult':
+        elif identifier == "adult":
             return cls.AUDIENCE_ADULT
-        elif identifier == 'adults only':
+        elif identifier == "adults only":
             return cls.AUDIENCE_ADULTS_ONLY
-        elif identifier == 'all ages':
+        elif identifier == "all ages":
             return cls.AUDIENCE_ALL_AGES
-        elif identifier == 'research':
+        elif identifier == "research":
             return cls.AUDIENCE_RESEARCH
         return AgeOrGradeClassifier.audience(identifier, name)
 
     @classmethod
     def target_age(cls, identifier, name):
-        if identifier == 'beginning reader':
-            return cls.range_tuple(5,8)
-        if identifier == 'pre-adolescent':
+        if identifier == "beginning reader":
+            return cls.range_tuple(5, 8)
+        if identifier == "pre-adolescent":
             return cls.range_tuple(9, 12)
-        if identifier == 'early adolescents':
+        if identifier == "early adolescents":
             return cls.range_tuple(13, 15)
-        if identifier == 'all ages':
-            return cls.range_tuple(
-                cls.ALL_AGES_AGE_CUTOFF, None
-            )
+        if identifier == "all ages":
+            return cls.range_tuple(cls.ALL_AGES_AGE_CUTOFF, None)
         strict_age = AgeClassifier.target_age(identifier, name, True)
         if strict_age[0] or strict_age[1]:
             return strict_age
@@ -939,52 +1010,56 @@ class WorkClassifier(object):
 
     # TODO: This needs a lot of additions.
     genre_publishers = {
-        "Harlequin" : Romance,
-        "Pocket Books/Star Trek" : Media_Tie_in_SF,
-        "Kensington" : Urban_Fiction,
-        "Fodor's Travel Publications" : Travel,
-        "Marvel Entertainment, LLC" : Comics_Graphic_Novels,
+        "Harlequin": Romance,
+        "Pocket Books/Star Trek": Media_Tie_in_SF,
+        "Kensington": Urban_Fiction,
+        "Fodor's Travel Publications": Travel,
+        "Marvel Entertainment, LLC": Comics_Graphic_Novels,
     }
 
     genre_imprints = {
-        "Harlequin Intrigue" : Romantic_Suspense,
-        "Love Inspired Suspense" : Romantic_Suspense,
-        "Harlequin Historical" : Historical_Romance,
-        "Harlequin Historical Undone" : Historical_Romance,
-        "Frommers" : Travel,
+        "Harlequin Intrigue": Romantic_Suspense,
+        "Love Inspired Suspense": Romantic_Suspense,
+        "Harlequin Historical": Historical_Romance,
+        "Harlequin Historical Undone": Historical_Romance,
+        "Frommers": Travel,
         "LucasBooks": Media_Tie_in_SF,
     }
 
     audience_imprints = {
-        "Harlequin Teen" : Classifier.AUDIENCE_YOUNG_ADULT,
-        "HarperTeen" : Classifier.AUDIENCE_YOUNG_ADULT,
-        "Open Road Media Teen & Tween" : Classifier.AUDIENCE_YOUNG_ADULT,
-        "Rosen Young Adult" : Classifier.AUDIENCE_YOUNG_ADULT,
+        "Harlequin Teen": Classifier.AUDIENCE_YOUNG_ADULT,
+        "HarperTeen": Classifier.AUDIENCE_YOUNG_ADULT,
+        "Open Road Media Teen & Tween": Classifier.AUDIENCE_YOUNG_ADULT,
+        "Rosen Young Adult": Classifier.AUDIENCE_YOUNG_ADULT,
     }
 
-    not_adult_publishers = set([
-        "Scholastic Inc.",
-        "Random House Children's Books",
-        "Little, Brown Books for Young Readers",
-        "Penguin Young Readers Group",
-        "Hachette Children's Books",
-        "Nickelodeon Publishing",
-    ])
+    not_adult_publishers = set(
+        [
+            "Scholastic Inc.",
+            "Random House Children's Books",
+            "Little, Brown Books for Young Readers",
+            "Penguin Young Readers Group",
+            "Hachette Children's Books",
+            "Nickelodeon Publishing",
+        ]
+    )
 
-    not_adult_imprints = set([
-        "Scholastic",
-        "Scholastic Paperbacks",
-        "Random House Books for Young Readers",
-        "HMH Books for Young Readers",
-        "Knopf Books for Young Readers",
-        "Delacorte Books for Young Readers",
-        "Open Road Media Young Readers",
-        "Macmillan Young Listeners",
-        "Bloomsbury Childrens",
-        "NYR Children's Collection",
-        "Bloomsbury USA Childrens",
-        "National Geographic Children's Books",
-    ])
+    not_adult_imprints = set(
+        [
+            "Scholastic",
+            "Scholastic Paperbacks",
+            "Random House Books for Young Readers",
+            "HMH Books for Young Readers",
+            "Knopf Books for Young Readers",
+            "Delacorte Books for Young Readers",
+            "Open Road Media Young Readers",
+            "Macmillan Young Listeners",
+            "Bloomsbury Childrens",
+            "NYR Children's Collection",
+            "Bloomsbury USA Childrens",
+            "National Geographic Children's Books",
+        ]
+    )
 
     fiction_imprints = set(["Del Rey"])
     nonfiction_imprints = set(["Harlequin Nonfiction"])
@@ -1036,7 +1111,7 @@ class WorkClassifier(object):
             self.classifications.append(classification)
 
         # Make sure the Subject is ready to be used in calculations.
-        if not classification.subject.checked: # or self.debug
+        if not classification.subject.checked:  # or self.debug
             classification.subject.assign_to_genre()
 
         if classification.comes_from_license_source:
@@ -1061,7 +1136,11 @@ class WorkClassifier(object):
 
         # if classification is genre or NONE from staff, ignore all non-staff genres
         is_genre = subject.genre != None
-        is_none = (from_staff and subject.type == Subject.SIMPLIFIED_GENRE and subject.identifier == SimplifiedGenreClassifier.NONE)
+        is_none = (
+            from_staff
+            and subject.type == Subject.SIMPLIFIED_GENRE
+            and subject.identifier == SimplifiedGenreClassifier.NONE
+        )
         if is_genre or is_none:
             if not from_staff and self.using_staff_genres:
                 return
@@ -1100,8 +1179,10 @@ class WorkClassifier(object):
                     # weight this way, we're also going to treat this
                     # classification as evidence _against_ an 'adult'
                     # classification.
-                    self.audience_weights[Classifier.AUDIENCE_YOUNG_ADULT] += (weight * 0.6)
-                    self.audience_weights[Classifier.AUDIENCE_CHILDREN] += (weight * 0.4)
+                    self.audience_weights[Classifier.AUDIENCE_YOUNG_ADULT] += (
+                        weight * 0.6
+                    )
+                    self.audience_weights[Classifier.AUDIENCE_CHILDREN] += weight * 0.4
                     for audience in Classifier.AUDIENCES_ADULT:
                         if audience != Classifier.AUDIENCE_ALL_AGES:
                             # 'All Ages' is considered an adult audience,
@@ -1132,9 +1213,12 @@ class WorkClassifier(object):
                     self.target_age_upper_weights[target_max] += scaled_weight
 
         if not self.using_staff_audience and not self.using_staff_target_age:
-            if subject.type=='Overdrive' and subject.audience==Classifier.AUDIENCE_CHILDREN:
+            if (
+                subject.type == "Overdrive"
+                and subject.audience == Classifier.AUDIENCE_CHILDREN
+            ):
                 if subject.target_age and (
-                        subject.target_age.lower or subject.target_age.upper
+                    subject.target_age.lower or subject.target_age.upper
                 ):
                     # This is a juvenile classification like "Picture
                     # Books" which implies a target age.
@@ -1152,20 +1236,21 @@ class WorkClassifier(object):
         This is basic stuff, like: Harlequin tends to publish
         romances.
         """
-        if self.work.title and ('Star Trek:' in self.work.title
-            or 'Star Wars:' in self.work.title
-            or ('Jedi' in self.work.title
-                and self.work.imprint=='Del Rey')
+        if self.work.title and (
+            "Star Trek:" in self.work.title
+            or "Star Wars:" in self.work.title
+            or ("Jedi" in self.work.title and self.work.imprint == "Del Rey")
         ):
             self.weigh_genre(Media_Tie_in_SF, 100)
 
         publisher = self.work.publisher
         imprint = self.work.imprint
-        if (imprint in self.nonfiction_imprints
-            or publisher in self.nonfiction_publishers):
+        if (
+            imprint in self.nonfiction_imprints
+            or publisher in self.nonfiction_publishers
+        ):
             self.fiction_weights[False] = 100
-        elif (imprint in self.fiction_imprints
-              or publisher in self.fiction_publishers):
+        elif imprint in self.fiction_imprints or publisher in self.fiction_publishers:
             self.fiction_weights[True] = 100
 
         if imprint in self.genre_imprints:
@@ -1175,10 +1260,13 @@ class WorkClassifier(object):
 
         if imprint in self.audience_imprints:
             self.audience_weights[self.audience_imprints[imprint]] += 100
-        elif (publisher in self.not_adult_publishers
-              or imprint in self.not_adult_imprints):
-            for audience in [Classifier.AUDIENCE_ADULT,
-                             Classifier.AUDIENCE_ADULTS_ONLY]:
+        elif (
+            publisher in self.not_adult_publishers or imprint in self.not_adult_imprints
+        ):
+            for audience in [
+                Classifier.AUDIENCE_ADULT,
+                Classifier.AUDIENCE_ADULTS_ONLY,
+            ]:
                 self.audience_weights[audience] -= 100
 
     def prepare_to_classify(self):
@@ -1190,17 +1278,22 @@ class WorkClassifier(object):
         explicitly_indicated_audiences = (
             Classifier.AUDIENCE_CHILDREN,
             Classifier.AUDIENCE_YOUNG_ADULT,
-            Classifier.AUDIENCE_ADULTS_ONLY)
-        audiences_from_license_source = set(
-            [classification.subject.audience
-             for classification in self.direct_from_license_source]
+            Classifier.AUDIENCE_ADULTS_ONLY,
         )
-        if (self.direct_from_license_source
+        audiences_from_license_source = set(
+            [
+                classification.subject.audience
+                for classification in self.direct_from_license_source
+            ]
+        )
+        if (
+            self.direct_from_license_source
             and not self.using_staff_audience
             and not any(
                 audience in explicitly_indicated_audiences
                 for audience in audiences_from_license_source
-        )):
+            )
+        ):
             # If this was erotica, or a book for children or young
             # adults, the distributor would have given some indication
             # of that fact. In the absense of any such indication, we
@@ -1213,8 +1306,10 @@ class WorkClassifier(object):
             # classifications.
             self.audience_weights[Classifier.AUDIENCE_ADULT] += 500
 
-        if (self.overdrive_juvenile_generic
-            and not self.overdrive_juvenile_with_target_age):
+        if (
+            self.overdrive_juvenile_generic
+            and not self.overdrive_juvenile_with_target_age
+        ):
             # This book is classified under 'Juvenile Fiction' but not
             # under 'Picture Books' or 'Beginning Readers'. The
             # implicit target age here is 9-12 (the portion of
@@ -1313,12 +1408,16 @@ class WorkClassifier(object):
         # If the 'children' weight passes the threshold on its own
         # we go with 'children'.
         total_juvenile_weight = children_weight + ya_weight
-        if (research_weight > (total_adult_weight + all_ages_weight) and
-            research_weight > (total_juvenile_weight + all_ages_weight) and
-            research_weight > threshold):
+        if (
+            research_weight > (total_adult_weight + all_ages_weight)
+            and research_weight > (total_juvenile_weight + all_ages_weight)
+            and research_weight > threshold
+        ):
             audience = Classifier.AUDIENCE_RESEARCH
-        elif (all_ages_weight > total_adult_weight and
-            all_ages_weight > total_juvenile_weight):
+        elif (
+            all_ages_weight > total_adult_weight
+            and all_ages_weight > total_juvenile_weight
+        ):
             audience = Classifier.AUDIENCE_ALL_AGES
         elif children_weight > threshold and children_weight > ya_weight:
             audience = Classifier.AUDIENCE_CHILDREN
@@ -1336,8 +1435,10 @@ class WorkClassifier(object):
         # weight, classify as 'adults only' to be safe.
         #
         # TODO: This has not been calibrated.
-        if (audience==Classifier.AUDIENCE_ADULT
-            and adults_only_weight > total_adult_weight/4):
+        if (
+            audience == Classifier.AUDIENCE_ADULT
+            and adults_only_weight > total_adult_weight / 4
+        ):
             audience = Classifier.AUDIENCE_ADULTS_ONLY
 
         return audience
@@ -1363,7 +1464,8 @@ class WorkClassifier(object):
     def target_age(self, audience):
         """Derive a target age from the gathered data."""
         if audience not in (
-                Classifier.AUDIENCE_CHILDREN, Classifier.AUDIENCE_YOUNG_ADULT
+            Classifier.AUDIENCE_CHILDREN,
+            Classifier.AUDIENCE_YOUNG_ADULT,
         ):
             # This is not a children's or YA book. Assertions about
             # target age are irrelevant and the default value rules.
@@ -1458,16 +1560,14 @@ class WorkClassifier(object):
         self.genre_weights[genre] += weight
 
     @classmethod
-    def consolidate_genre_weights(
-            cls, weights, subgenre_swallows_parent_at=0.03
-    ):
+    def consolidate_genre_weights(cls, weights, subgenre_swallows_parent_at=0.03):
         """If a genre and its subgenres both show up, examine the subgenre
         with the highest weight. If its weight exceeds a certain
         proportion of the weight of the parent genre, assign the
         parent's weight to the subgenre and remove the parent.
         """
-        #print("Before consolidation:")
-        #for genre, weight in weights.items():
+        # print("Before consolidation:")
+        # for genre, weight in weights.items():
         #    print("", genre, weight)
 
         # Convert Genre objects to GenreData.
@@ -1481,11 +1581,12 @@ class WorkClassifier(object):
         for genre, weight in list(consolidated.items()):
             for parent in genre.parents:
                 if parent in consolidated:
-                    if ((not parent in heaviest_child)
-                        or weight > heaviest_child[parent][1]):
+                    if (not parent in heaviest_child) or weight > heaviest_child[
+                        parent
+                    ][1]:
                         heaviest_child[parent] = (genre, weight)
-        #print("Heaviest child:")
-        #for parent, (genre, weight) in heaviest_child.items():
+        # print("Heaviest child:")
+        # for parent, (genre, weight) in heaviest_child.items():
         #    print("", parent, genre, weight)
         made_it = False
         while not made_it:
@@ -1505,13 +1606,14 @@ class WorkClassifier(object):
                         break
             # We made it all the way through the dict without changing it.
             made_it = True
-        #print("Final heaviest child:")
-        #for parent, (genre, weight) in heaviest_child.items():
+        # print("Final heaviest child:")
+        # for parent, (genre, weight) in heaviest_child.items():
         #    print("", parent, genre, weight)
-        #print("After consolidation:")
-        #for genre, weight in consolidated.items():
+        # print("After consolidation:")
+        # for genre, weight in consolidated.items():
         #    print("", genre, weight)
         return consolidated
+
 
 # Make a dictionary of classification schemes to classifiers.
 
@@ -1519,25 +1621,18 @@ Classifier.classifiers[Classifier.FREEFORM_AUDIENCE] = FreeformAudienceClassifie
 Classifier.classifiers[Classifier.AXIS_360_AUDIENCE] = AgeOrGradeClassifier
 
 # Finally, import classifiers described in submodules.
-from .age import (
-    GradeLevelClassifier,
-    InterestLevelClassifier,
-    AgeClassifier,
-)
+from .age import AgeClassifier, GradeLevelClassifier, InterestLevelClassifier
+from .bic import BICClassifier
 from .bisac import BISACClassifier
 from .ddc import DeweyDecimalClassifier
-from .lcc import LCCClassifier
 from .gutenberg import GutenbergBookshelfClassifier
-from .bic import BICClassifier
-from .simplified import (
-    SimplifiedFictionClassifier,
-    SimplifiedGenreClassifier,
-)
-from .overdrive import OverdriveClassifier
 from .keyword import (
+    Eg,
+    FASTClassifier,
     KeywordBasedClassifier,
     LCSHClassifier,
-    FASTClassifier,
     TAGClassifier,
-    Eg,
 )
+from .lcc import LCCClassifier
+from .overdrive import OverdriveClassifier
+from .simplified import SimplifiedFictionClassifier, SimplifiedGenreClassifier

@@ -1,57 +1,49 @@
 # encoding: utf-8
 # Complaint
 
-from sqlalchemy import (
-    Column,
-    DateTime,
-    ForeignKey,
-    Integer,
-    String,
-)
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm.session import Session
 
-from . import (
-    Base,
-    create,
-    get_one_or_create,
-)
 from ..util.datetime_helpers import utc_now
+from . import Base, create, get_one_or_create
+
 
 class Complaint(Base):
     """A complaint about a LicensePool (or, potentially, something else)."""
 
-    __tablename__ = 'complaints'
+    __tablename__ = "complaints"
 
-    VALID_TYPES = set([
-        "http://librarysimplified.org/terms/problem/" + x
-        for x in [
-                'wrong-genre',
-                'wrong-audience',
-                'wrong-age-range',
-                'wrong-title',
-                'wrong-medium',
-                'wrong-author',
-                'bad-cover-image',
-                'bad-description',
-                'cannot-fulfill-loan',
-                'cannot-issue-loan',
-                'cannot-render',
-                'cannot-return',
-              ]
-    ])
+    VALID_TYPES = set(
+        [
+            "http://librarysimplified.org/terms/problem/" + x
+            for x in [
+                "wrong-genre",
+                "wrong-audience",
+                "wrong-age-range",
+                "wrong-title",
+                "wrong-medium",
+                "wrong-author",
+                "bad-cover-image",
+                "bad-description",
+                "cannot-fulfill-loan",
+                "cannot-issue-loan",
+                "cannot-render",
+                "cannot-return",
+            ]
+        ]
+    )
 
     LICENSE_POOL_TYPES = [
-        'cannot-fulfill-loan',
-        'cannot-issue-loan',
-        'cannot-render',
-        'cannot-return',
+        "cannot-fulfill-loan",
+        "cannot-issue-loan",
+        "cannot-render",
+        "cannot-return",
     ]
 
     id = Column(Integer, primary_key=True)
 
     # One LicensePool can have many complaints lodged against it.
-    license_pool_id = Column(
-        Integer, ForeignKey('licensepools.id'), index=True)
+    license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
 
     # The type of complaint.
     type = Column(String, nullable=False, index=True)
@@ -80,14 +72,16 @@ class Complaint(Base):
         now = utc_now()
         if source:
             complaint, is_new = get_one_or_create(
-                _db, Complaint,
+                _db,
+                Complaint,
                 license_pool=license_pool,
-                source=source, type=type,
+                source=source,
+                type=type,
                 resolved=resolved,
-                on_multiple='interchangeable',
-                create_method_kwargs = dict(
+                on_multiple="interchangeable",
+                create_method_kwargs=dict(
                     timestamp=now,
-                )
+                ),
             )
             complaint.timestamp = now
             complaint.detail = detail
@@ -100,7 +94,7 @@ class Complaint(Base):
                 type=type,
                 timestamp=now,
                 detail=detail,
-                resolved=resolved
+                resolved=resolved,
             )
         return complaint, is_new
 

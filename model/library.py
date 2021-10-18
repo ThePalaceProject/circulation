@@ -1,44 +1,42 @@
 # encoding: utf-8
 # Library
-from expiringdict import ExpiringDict
-
-
-from . import (
-    Base,
-    get_one,
-)
-from ..config import Configuration
-from .circulationevent import CirculationEvent
-from .edition import Edition
-from ..entrypoint import EntryPoint
-from ..facets import FacetConstants
-from .hasfulltablecache import HasFullTableCache
-from .licensing import LicensePool
-from .work import Work
-
-from collections import Counter
 import logging
+from collections import Counter
+
+from expiringdict import ExpiringDict
 from sqlalchemy import (
     Boolean,
     Column,
     ForeignKey,
-    func,
     Integer,
     Table,
     Unicode,
     UniqueConstraint,
+    func,
 )
-from sqlalchemy.orm import relationship
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.sql.functions import func
+from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
+from sqlalchemy.sql.functions import func
+
+from ..config import Configuration
+from ..entrypoint import EntryPoint
+from ..facets import FacetConstants
+from . import Base, get_one
+from .circulationevent import CirculationEvent
+from .edition import Edition
+from .hasfulltablecache import HasFullTableCache
+from .licensing import LicensePool
+from .work import Work
+
 
 class Library(Base, HasFullTableCache):
     """A library that uses this circulation manager to authenticate
     its patrons and manage access to its content.
     A circulation manager may serve many libraries.
     """
-    __tablename__ = 'libraries'
+
+    __tablename__ = "libraries"
 
     id = Column(Integer, primary_key=True)
 
@@ -58,13 +56,13 @@ class Library(Base, HasFullTableCache):
     # One, and only one, library may be the default. The default
     # library is the one chosen when an incoming request does not
     # designate a library.
-    _is_default = Column(Boolean, index=True, default=False, name='is_default')
+    _is_default = Column(Boolean, index=True, default=False, name="is_default")
 
     # The name of this library to use when signing short client tokens
     # for consumption by the library registry. e.g. "NYNYPL" for NYPL.
     # This name must be unique across the library registry.
     _library_registry_short_name = Column(
-        Unicode, unique=True, name='library_registry_short_name'
+        Unicode, unique=True, name="library_registry_short_name"
     )
 
     # The shared secret to use when signing short client tokens for
@@ -72,47 +70,53 @@ class Library(Base, HasFullTableCache):
     library_registry_shared_secret = Column(Unicode, unique=True)
 
     # A library may have many Patrons.
-    patrons = relationship(
-        'Patron', backref='library', cascade="all, delete-orphan"
-    )
+    patrons = relationship("Patron", backref="library", cascade="all, delete-orphan")
 
     # An Library may have many admin roles.
-    adminroles = relationship("AdminRole", backref="library", cascade="all, delete-orphan")
+    adminroles = relationship(
+        "AdminRole", backref="library", cascade="all, delete-orphan"
+    )
 
     # A Library may have many CachedFeeds.
     cachedfeeds = relationship(
-        "CachedFeed", backref="library",
+        "CachedFeed",
+        backref="library",
         cascade="all, delete-orphan",
     )
 
     # A Library may have many CachedMARCFiles.
     cachedmarcfiles = relationship(
-        "CachedMARCFile", backref="library",
+        "CachedMARCFile",
+        backref="library",
         cascade="all, delete-orphan",
     )
 
     # A Library may have many CustomLists.
     custom_lists = relationship(
-        "CustomList", backref="library", lazy='joined',
+        "CustomList",
+        backref="library",
+        lazy="joined",
     )
 
     # A Library may have many ExternalIntegrations.
     integrations = relationship(
-        "ExternalIntegration", secondary=lambda: externalintegrations_libraries,
-        backref="libraries"
+        "ExternalIntegration",
+        secondary=lambda: externalintegrations_libraries,
+        backref="libraries",
     )
 
     # Any additional configuration information is stored as
     # ConfigurationSettings.
     settings = relationship(
-        "ConfigurationSetting", backref="library",
-        lazy="joined", cascade="all, delete",
+        "ConfigurationSetting",
+        backref="library",
+        lazy="joined",
+        cascade="all, delete",
     )
 
     # A Library may have many CirculationEvents
     circulation_events = relationship(
-        "CirculationEvent", backref="library",
-        cascade='all, delete-orphan'
+        "CirculationEvent", backref="library", cascade="all, delete-orphan"
     )
 
     _cache = HasFullTableCache.RESET
@@ -124,8 +128,9 @@ class Library(Base, HasFullTableCache):
     _has_root_lane_cache = ExpiringDict(max_len=1000, max_age_seconds=3600)
 
     def __repr__(self):
-        return '<Library: name="%s", short name="%s", uuid="%s", library registry short name="%s">' % (
-            self.name, self.short_name, self.uuid, self.library_registry_short_name
+        return (
+            '<Library: name="%s", short name="%s", uuid="%s", library registry short name="%s">'
+            % (self.name, self.short_name, self.uuid, self.library_registry_short_name)
         )
 
     def cache_key(self):
@@ -134,9 +139,11 @@ class Library(Base, HasFullTableCache):
     @classmethod
     def lookup(cls, _db, short_name):
         """Look up a library by short name."""
+
         def _lookup():
             library = get_one(_db, Library, short_name=short_name)
             return library, False
+
         library, is_new = cls.by_cache_key(_db, short_name, _lookup)
         return library
 
@@ -147,8 +154,12 @@ class Library(Base, HasFullTableCache):
         # the database, they're not actually interchangeable, but
         # raising an error here might make it impossible to fix the
         # problem.
-        defaults = _db.query(Library).filter(
-            Library._is_default==True).order_by(Library.id.asc()).all()
+        defaults = (
+            _db.query(Library)
+            .filter(Library._is_default == True)
+            .order_by(Library.id.asc())
+            .all()
+        )
         if len(defaults) == 1:
             # This is the normal case.
             return defaults[0]
@@ -163,9 +174,8 @@ class Library(Base, HasFullTableCache):
                 return None
             [default_library] = libraries
             logging.warn(
-                "No default library, setting %s as default." % (
-                    default_library.short_name
-                )
+                "No default library, setting %s as default."
+                % (default_library.short_name)
             )
         else:
             # There is more than one default, probably caused by a
@@ -173,9 +183,8 @@ class Library(Base, HasFullTableCache):
             # of the libraries as the default.
             default_library = defaults[0]
             logging.warn(
-                "Multiple default libraries, setting %s as default." % (
-                    default_library.short_name
-                )
+                "Multiple default libraries, setting %s as default."
+                % (default_library.short_name)
             )
         default_library.is_default = True
         return default_library
@@ -190,7 +199,7 @@ class Library(Base, HasFullTableCache):
         """Uppercase the library registry short name on the way in."""
         if value:
             value = value.upper()
-            if '|' in value:
+            if "|" in value:
                 raise ValueError(
                     "Library registry short name cannot contain the pipe character."
                 )
@@ -203,9 +212,8 @@ class Library(Base, HasFullTableCache):
         :return: A ConfigurationSetting
         """
         from .configuration import ConfigurationSetting
-        return ConfigurationSetting.for_library(
-            key, self
-        )
+
+        return ConfigurationSetting.for_library(key, self)
 
     @property
     def all_collections(self):
@@ -218,7 +226,7 @@ class Library(Base, HasFullTableCache):
 
     # The name of the per-library regular expression used to derive a patron's
     # external_type from their authorization_identifier.
-    EXTERNAL_TYPE_REGULAR_EXPRESSION = 'external_type_regular_expression'
+    EXTERNAL_TYPE_REGULAR_EXPRESSION = "external_type_regular_expression"
 
     # The name of the per-library configuration policy that controls whether
     # books may be put on hold.
@@ -286,12 +294,11 @@ class Library(Base, HasFullTableCache):
         try:
             value = setting.json_value
         except ValueError as e:
-            logging.error("Invalid list of enabled facets for %s: %s",
-                          group_name, setting.value)
-        if value is None:
-            value = list(
-                FacetConstants.DEFAULT_ENABLED_FACETS.get(group_name, [])
+            logging.error(
+                "Invalid list of enabled facets for %s: %s", group_name, setting.value
             )
+        if value is None:
+            value = list(FacetConstants.DEFAULT_ENABLED_FACETS.get(group_name, []))
         return value
 
     def enabled_facets_setting(self, group_name):
@@ -318,18 +325,22 @@ class Library(Base, HasFullTableCache):
         value = Library._has_root_lane_cache.get(self.id, None)
         if value is None:
             from ..lane import Lane
+
             _db = Session.object_session(self)
-            root_lanes = _db.query(Lane).filter(
-                Lane.library==self
-            ).filter(
-                Lane.root_for_patron_type!=None
+            root_lanes = (
+                _db.query(Lane)
+                .filter(Lane.library == self)
+                .filter(Lane.root_for_patron_type != None)
             )
-            value = (root_lanes.count() > 0)
+            value = root_lanes.count() > 0
             Library._has_root_lane_cache[self.id] = value
         return value
 
     def restrict_to_ready_deliverable_works(
-        self, query, collection_ids=None, show_suppressed=False,
+        self,
+        query,
+        collection_ids=None,
+        show_suppressed=False,
     ):
         """Restrict a query to show only presentation-ready works present in
         an appropriate collection which the default client can
@@ -343,10 +354,13 @@ class Library(Base, HasFullTableCache):
         suppressed LicensePools.
         """
         from .collection import Collection
+
         collection_ids = collection_ids or [x.id for x in self.all_collections]
         return Collection.restrict_to_ready_deliverable_works(
-            query, collection_ids=collection_ids,
-            show_suppressed=show_suppressed, allow_holds=self.allow_holds
+            query,
+            collection_ids=collection_ids,
+            show_suppressed=show_suppressed,
+            allow_holds=self.allow_holds,
         )
 
     def estimated_holdings_by_language(self, include_open_access=True):
@@ -357,14 +371,17 @@ class Library(Base, HasFullTableCache):
         of titles in that language.
         """
         _db = Session.object_session(self)
-        qu = _db.query(
-            Edition.language, func.count(Work.id).label("work_count")
-        ).select_from(Work).join(Work.license_pools).join(
-            Work.presentation_edition
-        ).filter(Edition.language != None).group_by(Edition.language)
+        qu = (
+            _db.query(Edition.language, func.count(Work.id).label("work_count"))
+            .select_from(Work)
+            .join(Work.license_pools)
+            .join(Work.presentation_edition)
+            .filter(Edition.language != None)
+            .group_by(Edition.language)
+        )
         qu = self.restrict_to_ready_deliverable_works(qu)
         if not include_open_access:
-            qu = qu.filter(LicensePool.open_access==False)
+            qu = qu.filter(LicensePool.open_access == False)
         counter = Counter()
         for language, count in qu:
             counter[language] = count
@@ -399,13 +416,13 @@ class Library(Base, HasFullTableCache):
 
         if self.library_registry_short_name:
             lines.append(
-                'Short name (for library registry): "%s"' %
-                self.library_registry_short_name
+                'Short name (for library registry): "%s"'
+                % self.library_registry_short_name
             )
-        if (self.library_registry_shared_secret and include_secrets):
+        if self.library_registry_shared_secret and include_secrets:
             lines.append(
-                'Shared secret (for library registry): "%s"' %
-                self.library_registry_shared_secret
+                'Shared secret (for library registry): "%s"'
+                % self.library_registry_shared_secret
             )
 
         # Find all ConfigurationSettings that are set on the library
@@ -425,9 +442,7 @@ class Library(Base, HasFullTableCache):
             lines.append("External integrations:")
             lines.append("----------------------")
         for integration in integrations:
-            lines.extend(
-                integration.explain(self, include_secrets=include_secrets)
-            )
+            lines.extend(integration.explain(self, include_secrets=include_secrets))
             lines.append("")
         return lines
 
@@ -450,15 +465,19 @@ class Library(Base, HasFullTableCache):
             else:
                 library._is_default = False
 
+
 externalintegrations_libraries = Table(
-    'externalintegrations_libraries', Base.metadata,
-     Column(
-         'externalintegration_id', Integer, ForeignKey('externalintegrations.id'),
-         index=True, nullable=False
-     ),
-     Column(
-         'library_id', Integer, ForeignKey('libraries.id'),
-         index=True, nullable=False
-     ),
-     UniqueConstraint('externalintegration_id', 'library_id'),
- )
+    "externalintegrations_libraries",
+    Base.metadata,
+    Column(
+        "externalintegration_id",
+        Integer,
+        ForeignKey("externalintegrations.id"),
+        index=True,
+        nullable=False,
+    ),
+    Column(
+        "library_id", Integer, ForeignKey("libraries.id"), index=True, nullable=False
+    ),
+    UniqueConstraint("externalintegration_id", "library_id"),
+)

@@ -2,13 +2,15 @@
 """Data and functions for dealing with language names and codes."""
 
 
-from collections import defaultdict
 import re
+from collections import defaultdict
+
 
 class LookupTable(dict):
     """Return None on x[key] when 'key' isn't in the dictionary,
     rather than raising a ValueError.
     """
+
     def __getitem__(self, k):
         if k in self:
             return super(LookupTable, self).__getitem__(k)
@@ -516,24 +518,29 @@ zun|||Zuni|zuni
 zxx|||No linguistic content; Not applicable|pas de contenu linguistique; non applicable
 zza|||Zaza; Dimili; Dimli; Kirdki; Kirmanjki; Zazaki|zaza; dimili; dimli; kirdki; kirmanjki; zazaki"""
 
-    NATIVE_NAMES_RAW_DATA =  [
-        {"code":"en","name":"English","nativeName":"English"},
-        {"code":"fr","name":"French","nativeName":"français"},
-        {"code":"de","name":"German","nativeName":"Deutsch"},
-        {"code":"el","name":"Greek, Modern","nativeName":"Ελληνικά"},
-        {"code":"hu","name":"Hungarian","nativeName":"Magyar"},
-        {"code":"it","name":"Italian","nativeName":"Italiano"},
-        {"code":"no","name":"Norwegian","nativeName":"Norsk"},
-        {"code":"pl","name":"Polish","nativeName":"polski"},
-        {"code":"pt","name":"Portuguese","nativeName":"Português"},
-        {"code":"ru","name":"Russian","nativeName":"русский"},
-        {"code":"es","name":"Spanish, Castilian","nativeName":"español, castellano"},
-        {"code":"sv","name":"Swedish","nativeName":"svenska"},
+    NATIVE_NAMES_RAW_DATA = [
+        {"code": "en", "name": "English", "nativeName": "English"},
+        {"code": "fr", "name": "French", "nativeName": "français"},
+        {"code": "de", "name": "German", "nativeName": "Deutsch"},
+        {"code": "el", "name": "Greek, Modern", "nativeName": "Ελληνικά"},
+        {"code": "hu", "name": "Hungarian", "nativeName": "Magyar"},
+        {"code": "it", "name": "Italian", "nativeName": "Italiano"},
+        {"code": "no", "name": "Norwegian", "nativeName": "Norsk"},
+        {"code": "pl", "name": "Polish", "nativeName": "polski"},
+        {"code": "pt", "name": "Portuguese", "nativeName": "Português"},
+        {"code": "ru", "name": "Russian", "nativeName": "русский"},
+        {
+            "code": "es",
+            "name": "Spanish, Castilian",
+            "nativeName": "español, castellano",
+        },
+        {"code": "sv", "name": "Swedish", "nativeName": "svenska"},
     ]
 
     for i in RAW_DATA.split("\n"):
-        (alpha_3, terminologic_code, alpha_2, names,
-         french_names) = i.strip().split("|")
+        (alpha_3, terminologic_code, alpha_2, names, french_names) = i.strip().split(
+            "|"
+        )
         names = [x.strip() for x in names.split(";")]
         if alpha_2:
             three_to_two[alpha_3] = alpha_2
@@ -544,9 +551,9 @@ zza|||Zaza; Dimili; Dimli; Kirdki; Kirmanjki; Zazaki|zaza; dimili; dimli; kirdki
         english_names[alpha_3] = names
 
     for i in NATIVE_NAMES_RAW_DATA:
-        alpha_2 = i['code']
+        alpha_2 = i["code"]
         alpha_3 = two_to_three[alpha_2]
-        names = i['nativeName']
+        names = i["nativeName"]
         names = [x.strip() for x in names.split(",")]
         native_names[alpha_2] = names
         native_names[alpha_3] = names
@@ -554,8 +561,8 @@ zza|||Zaza; Dimili; Dimli; Kirdki; Kirmanjki; Zazaki|zaza; dimili; dimli; kirdki
     @classmethod
     def iso_639_2_for_locale(cls, locale):
         """Turn a locale code into an ISO-639-2 alpha-3 language code."""
-        if '-' in locale:
-            language, place = locale.lower().split("-",1)
+        if "-" in locale:
+            language, place = locale.lower().split("-", 1)
         else:
             language = locale
         if cls.two_to_three[language]:
@@ -622,7 +629,7 @@ class LanguageNames(object):
 
     irrelevant_suffixes = [" languages"]
 
-    ignore = set(['No linguistic content', 'Not applicable', 'Uncoded'])
+    ignore = set(["No linguistic content", "Not applicable", "Uncoded"])
 
     number = re.compile("[0-9]")
     parentheses = re.compile("\([^)]+\)")
@@ -651,7 +658,7 @@ class LanguageNames(object):
             # For instance, "Himachali languages" is best handled
             # as "Himachali".
             if human_readable_name.endswith(suffix):
-                human_readable_name = human_readable_name[:-len(suffix)]
+                human_readable_name = human_readable_name[: -len(suffix)]
         return human_readable_name.strip().lower(), alpha
 
     @classmethod
@@ -672,23 +679,20 @@ class LanguageNames(object):
 
         # Add a couple of languages that were incorrectly excluded by the
         # "no dates" rule.
-        for name, alpha in (
-            ('greek', 'el'),
-            ('occitan', 'oc')
-        ):
+        for name, alpha in (("greek", "el"), ("occitan", "oc")):
             add(name, alpha)
 
         # Process the native-language names found in NATIVE_NAMES_RAW_DATA.
         for item in LanguageCodes.NATIVE_NAMES_RAW_DATA:
-            add(item['nativeName'], item['code'])
+            add(item["nativeName"], item["code"])
 
         # Add native-language names without diacritics, for people who
         # are typing on an English-language keyboard.
         for name, alpha in (
-            ('francais', 'fr'),
-            ('espanol', 'es'),
-            ('portugues', 'pt'),
-            ('castellano', 'es'),
+            ("francais", "fr"),
+            ("espanol", "es"),
+            ("portugues", "pt"),
+            ("castellano", "es"),
         ):
             add(name, alpha)
         return name_to_codes
@@ -696,10 +700,9 @@ class LanguageNames(object):
     @classmethod
     def _build_name_re(cls):
         return re.compile(
-            r"(\b%s\b)" %
-            r"\b|\b".join(list(cls.name_to_codes.keys())),
-            re.I
+            r"(\b%s\b)" % r"\b|\b".join(list(cls.name_to_codes.keys())), re.I
         )
+
 
 # Instantiate the class variables.
 LanguageNames.name_to_codes = LanguageNames._build_name_to_codes()

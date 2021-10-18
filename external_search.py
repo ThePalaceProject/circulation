@@ -1,20 +1,16 @@
-from collections import defaultdict
 import contextlib
 import datetime
-
 import json
+import logging
+import os
+import re
+import time
+from collections import defaultdict
+
 from elasticsearch import Elasticsearch
+from elasticsearch.exceptions import ElasticsearchException, RequestError
 from elasticsearch.helpers import bulk as elasticsearch_bulk
-from elasticsearch.exceptions import (
-    RequestError,
-    ElasticsearchException,
-)
-from elasticsearch_dsl import (
-    Index,
-    MultiSearch,
-    Search,
-    SF,
-)
+from elasticsearch_dsl import SF, Index, MultiSearch, Search
 from elasticsearch_dsl.query import (
     Bool,
     DisMax,
@@ -26,31 +22,27 @@ from elasticsearch_dsl.query import (
     MatchPhrase,
     MultiMatch,
     Nested,
-    Query as BaseQuery,
-    SimpleQueryString,
-    Term,
-    Terms,
 )
+from elasticsearch_dsl.query import Query as BaseQuery
+from elasticsearch_dsl.query import SimpleQueryString, Term, Terms
+from flask_babel import lazy_gettext as _
 from spellchecker import SpellChecker
 
-from flask_babel import lazy_gettext as _
-from .config import (
-    Configuration,
-    CannotLoadConfiguration,
-)
 from .classifier import (
-    KeywordBasedClassifier,
-    GradeLevelClassifier,
     AgeClassifier,
     Classifier,
+    GradeLevelClassifier,
+    KeywordBasedClassifier,
 )
+from .config import CannotLoadConfiguration, Configuration
+from .coverage import CoverageFailure, WorkPresentationProvider
 from .facets import FacetConstants
+from .lane import Pagination
 from .metadata_layer import IdentifierData
 from .model import (
-    numericrange_to_tuple,
     Collection,
-    Contributor,
     ConfigurationSetting,
+    Contributor,
     DataSource,
     Edition,
     ExternalIntegration,
@@ -58,27 +50,16 @@ from .model import (
     Library,
     Work,
     WorkCoverageRecord,
+    numericrange_to_tuple,
 )
-from .lane import Pagination
 from .monitor import WorkSweepMonitor
-from .coverage import (
-    CoverageFailure,
-    WorkPresentationProvider,
-)
 from .problem_details import INVALID_INPUT
-from .selftest import (
-    HasSelfTests,
-    SelfTestResult,
-)
+from .selftest import HasSelfTests, SelfTestResult
+from .util.datetime_helpers import from_timestamp
 from .util.personal_names import display_name_to_sort_name
 from .util.problem_detail import ProblemDetail
 from .util.stopwords import ENGLISH_STOPWORDS
-from .util.datetime_helpers import from_timestamp
 
-import os
-import logging
-import re
-import time
 
 @contextlib.contextmanager
 def mock_search_index(mock=None):
@@ -101,30 +82,40 @@ class ExternalSearchIndex(HasSelfTests):
     # instantiating new ExternalSearchIndex objects.
     MOCK_IMPLEMENTATION = None
 
-    WORKS_INDEX_PREFIX_KEY = 'works_index_prefix'
-    DEFAULT_WORKS_INDEX_PREFIX = 'circulation-works'
+    WORKS_INDEX_PREFIX_KEY = "works_index_prefix"
+    DEFAULT_WORKS_INDEX_PREFIX = "circulation-works"
 
-    TEST_SEARCH_TERM_KEY = 'test_search_term'
-    DEFAULT_TEST_SEARCH_TERM = 'test'
+    TEST_SEARCH_TERM_KEY = "test_search_term"
+    DEFAULT_TEST_SEARCH_TERM = "test"
 
-    work_document_type = 'work-type'
+    work_document_type = "work-type"
     __client = None
 
-    CURRENT_ALIAS_SUFFIX = 'current'
-    VERSION_RE = re.compile('-v([0-9]+)$')
+    CURRENT_ALIAS_SUFFIX = "current"
+    VERSION_RE = re.compile("-v([0-9]+)$")
 
     SETTINGS = [
-        { "key": ExternalIntegration.URL, "label": _("URL"), "required": True, "format": "url" },
-        { "key": WORKS_INDEX_PREFIX_KEY, "label": _("Index prefix"),
-          "default": DEFAULT_WORKS_INDEX_PREFIX,
-          "required": True,
-          "description": _("Any Elasticsearch indexes needed for this application will be created with this unique prefix. In most cases, the default will work fine. You may need to change this if you have multiple application servers using a single Elasticsearch server.")
+        {
+            "key": ExternalIntegration.URL,
+            "label": _("URL"),
+            "required": True,
+            "format": "url",
         },
-        { "key": TEST_SEARCH_TERM_KEY,
-          "label": _("Test search term"),
-          "default": DEFAULT_TEST_SEARCH_TERM,
-          "description": _("Self tests will use this value as the search term.")
-        }
+        {
+            "key": WORKS_INDEX_PREFIX_KEY,
+            "label": _("Index prefix"),
+            "default": DEFAULT_WORKS_INDEX_PREFIX,
+            "required": True,
+            "description": _(
+                "Any Elasticsearch indexes needed for this application will be created with this unique prefix. In most cases, the default will work fine. You may need to change this if you have multiple application servers using a single Elasticsearch server."
+            ),
+        },
+        {
+            "key": TEST_SEARCH_TERM_KEY,
+            "label": _("Test search term"),
+            "default": DEFAULT_TEST_SEARCH_TERM,
+            "description": _("Self tests will use this value as the search term."),
+        },
     ]
 
     SITEWIDE = True
@@ -142,8 +133,7 @@ class ExternalSearchIndex(HasSelfTests):
     def search_integration(cls, _db):
         """Look up the ExternalIntegration for ElasticSearch."""
         return ExternalIntegration.lookup(
-            _db, ExternalIntegration.ELASTICSEARCH,
-            goal=ExternalIntegration.SEARCH_GOAL
+            _db, ExternalIntegration.ELASTICSEARCH, goal=ExternalIntegration.SEARCH_GOAL
         )
 
     @classmethod
@@ -159,7 +149,7 @@ class ExternalSearchIndex(HasSelfTests):
             return None
         setting = integration.setting(cls.WORKS_INDEX_PREFIX_KEY)
         prefix = setting.value_or_default(cls.DEFAULT_WORKS_INDEX_PREFIX)
-        return prefix + '-' + value
+        return prefix + "-" + value
 
     @classmethod
     def works_index_name(cls, _db):
@@ -184,8 +174,15 @@ class ExternalSearchIndex(HasSelfTests):
             return cls.MOCK_IMPLEMENTATION
         return cls(_db, *args, **kwargs)
 
-    def __init__(self, _db, url=None, works_index=None, test_search_term=None,
-                 in_testing=False, mapping=None):
+    def __init__(
+        self,
+        _db,
+        url=None,
+        works_index=None,
+        test_search_term=None,
+        in_testing=False,
+        mapping=None,
+    ):
         """Constructor
 
         :param in_testing: Set this to true if you don't want an
@@ -221,21 +218,17 @@ class ExternalSearchIndex(HasSelfTests):
             url = url or integration.url
             if not works_index:
                 works_index = self.works_index_name(_db)
-            test_search_term = integration.setting(
-                self.TEST_SEARCH_TERM_KEY).value
+            test_search_term = integration.setting(self.TEST_SEARCH_TERM_KEY).value
         if not url:
-            raise CannotLoadConfiguration(
-                "No URL configured to Elasticsearch server."
-            )
-        self.test_search_term = (
-            test_search_term or self.DEFAULT_TEST_SEARCH_TERM
-        )
+            raise CannotLoadConfiguration("No URL configured to Elasticsearch server.")
+        self.test_search_term = test_search_term or self.DEFAULT_TEST_SEARCH_TERM
         if not in_testing:
             if not ExternalSearchIndex.__client:
-                use_ssl = url.startswith('https://')
+                use_ssl = url.startswith("https://")
                 self.log.info(
                     "Connecting to index %s in Elasticsearch cluster at %s",
-                    works_index, url
+                    works_index,
+                    url,
                 )
                 ExternalSearchIndex.__client = Elasticsearch(
                     url, use_ssl=use_ssl, timeout=20, maxsize=25
@@ -259,14 +252,14 @@ class ExternalSearchIndex(HasSelfTests):
                 raise
             except ElasticsearchException as e:
                 raise CannotLoadConfiguration(
-                    "Exception communicating with Elasticsearch server: %s" %
-                    repr(e)
+                    "Exception communicating with Elasticsearch server: %s" % repr(e)
                 )
 
         self.search = Search(using=self.__client, index=self.works_alias)
 
         def bulk(docs, **kwargs):
             return elasticsearch_bulk(self.__client, docs, **kwargs)
+
         self.bulk = bulk
 
     def set_works_index_and_alias(self, _db):
@@ -320,10 +313,8 @@ class ExternalSearchIndex(HasSelfTests):
             return
 
         # Create the alias and search against it.
-        response = self.indices.put_alias(
-            index=self.works_index, name=alias_name
-        )
-        if not response.get('acknowledged'):
+        response = self.indices.put_alias(index=self.works_index, name=alias_name)
+        if not response.get("acknowledged"):
             self.log.error("Alias '%s' could not be created", alias_name)
             # Work against the index instead of an alias.
             _use_as_works_alias(self.works_index)
@@ -345,7 +336,7 @@ class ExternalSearchIndex(HasSelfTests):
 
         self.log.info("Creating index %s", index_name)
         body = self.mapping.body()
-        body.setdefault('settings', {}).update(index_settings)
+        body.setdefault("settings", {}).update(index_settings)
         index = self.indices.create(index=index_name, body=body)
 
     def set_stored_scripts(self):
@@ -365,17 +356,20 @@ class ExternalSearchIndex(HasSelfTests):
     def transfer_current_alias(self, _db, new_index):
         """Force -current alias onto a new index"""
         if not self.indices.exists(index=new_index):
-            raise ValueError(
-                "Index '%s' does not exist on this client." % new_index)
+            raise ValueError("Index '%s' does not exist on this client." % new_index)
 
         current_base_name = self.base_index_name(self.works_index)
         new_base_name = self.base_index_name(new_index)
 
         if new_base_name != current_base_name:
             raise ValueError(
-                ("Index '%s' is not in series with current index '%s'. "
-                 "Confirm the base name (without version number) of both indices"
-                 "is the same.") % (new_index, self.works_index))
+                (
+                    "Index '%s' is not in series with current index '%s'. "
+                    "Confirm the base name (without version number) of both indices"
+                    "is the same."
+                )
+                % (new_index, self.works_index)
+            )
 
         self.works_index = self.__client.works_index = new_index
         alias_name = self.works_alias_name(_db)
@@ -401,24 +395,21 @@ class ExternalSearchIndex(HasSelfTests):
             # The alias exists on one or more other indices.  Remove
             # the alias altogether, then put it back on the works
             # index.
-            self.indices.delete_alias(index='_all', name=alias_name)
-            self.indices.put_alias(
-                index=self.works_index, name=alias_name
-            )
+            self.indices.delete_alias(index="_all", name=alias_name)
+            self.indices.put_alias(index=self.works_index, name=alias_name)
 
         self.works_alias = self.__client.works_alias = alias_name
 
     def base_index_name(self, index_or_alias):
         """Removes version or current suffix from base index name"""
 
-        current_re = re.compile(self.CURRENT_ALIAS_SUFFIX+'$')
-        base_works_index = re.sub(current_re, '', index_or_alias)
-        base_works_index = re.sub(self.VERSION_RE, '', base_works_index)
+        current_re = re.compile(self.CURRENT_ALIAS_SUFFIX + "$")
+        base_works_index = re.sub(current_re, "", index_or_alias)
+        base_works_index = re.sub(self.VERSION_RE, "", base_works_index)
 
         return base_works_index
 
-    def create_search_doc(self, query_string, filter, pagination,
-                          debug):
+    def create_search_doc(self, query_string, filter, pagination, debug):
 
         query = Query(query_string, filter)
         search = query.build(self.search, pagination)
@@ -433,7 +424,7 @@ class ExternalSearchIndex(HasSelfTests):
             # Don't restrict the fields at all -- get everything.
             # This makes it easy to investigate everything about the
             # results we do get.
-            fields = ['*']
+            fields = ["*"]
         else:
             # All we absolutely need is the work ID, which is a
             # key into the database, plus the values of any script fields,
@@ -448,8 +439,7 @@ class ExternalSearchIndex(HasSelfTests):
             search = search.source(fields)
         return search
 
-    def query_works(self, query_string, filter=None, pagination=None,
-                    debug=False):
+    def query_works(self, query_string, filter=None, pagination=None, debug=False):
         """Run a search query.
 
         This works by calling query_works_multi().
@@ -513,7 +503,7 @@ class ExternalSearchIndex(HasSelfTests):
                 function_score = FunctionScore(
                     query=dict(match_all=dict()),
                     functions=function_scores,
-                    score_mode="sum"
+                    score_mode="sum",
                 )
                 search = search.query(function_score)
             multi = multi.add(search)
@@ -526,15 +516,18 @@ class ExternalSearchIndex(HasSelfTests):
         if debug:
             b = time.time()
             self.log.debug(
-                "Elasticsearch query %r completed in %.3fsec",
-                query_string, b-a
+                "Elasticsearch query %r completed in %.3fsec", query_string, b - a
             )
             for results in resultset:
                 for i, result in enumerate(results):
                     self.log.debug(
                         '%02d "%s" (%s) work=%s score=%.3f shard=%s',
-                        i, result.sort_title, result.sort_author, result.meta['id'],
-                        result.meta.explanation['value'] or 0, result.meta['shard']
+                        i,
+                        result.sort_title,
+                        result.sort_author,
+                        result.meta["id"],
+                        result.meta.explanation["value"] or 0,
+                        result.meta["shard"],
                     )
 
         for i, results in enumerate(resultset):
@@ -595,26 +588,34 @@ class ExternalSearchIndex(HasSelfTests):
                 docs = []
 
         time3 = time.time()
-        self.log.info("Created %i search documents in %.2f seconds" % (len(docs), time2 - time1))
-        self.log.info("Uploaded %i search documents in  %.2f seconds" % (len(docs), time3 - time2))
+        self.log.info(
+            "Created %i search documents in %.2f seconds" % (len(docs), time2 - time1)
+        )
+        self.log.info(
+            "Uploaded %i search documents in  %.2f seconds" % (len(docs), time3 - time2)
+        )
 
-        doc_ids = [d['_id'] for d in docs]
+        doc_ids = [d["_id"] for d in docs]
 
         # We weren't able to create search documents for these works, maybe
         # because they don't have presentation editions yet.
         def get_error_id(error):
-            return error.get('data', {}).get('_id', None) or error.get('index', {}).get('_id', None)
+            return error.get("data", {}).get("_id", None) or error.get("index", {}).get(
+                "_id", None
+            )
+
         error_ids = [get_error_id(error) for error in errors]
 
         missing_works = [
-            work for work in works
-            if work.id not in doc_ids and work.id not in error_ids
+            work
+            for work in works
+            if work.id not in doc_ids
+            and work.id not in error_ids
             and work not in successes
         ]
 
         successes.extend(
-            [work for work in works
-             if work.id in doc_ids and work.id not in error_ids]
+            [work for work in works if work.id in doc_ids and work.id not in error_ids]
         )
 
         failures = []
@@ -629,22 +630,25 @@ class ExternalSearchIndex(HasSelfTests):
             if works_with_error:
                 work = works_with_error[0]
 
-            exception = error.get('exception', None)
-            error_message = error.get('error', None)
+            exception = error.get("exception", None)
+            error_message = error.get("error", None)
             if not error_message:
-                error_message = error.get('index', {}).get('error', None)
+                error_message = error.get("index", {}).get("error", None)
 
             failures.append((work, error_message))
 
-        self.log.info("Successfully indexed %i documents, failed to index %i." % (success_count, len(failures)))
+        self.log.info(
+            "Successfully indexed %i documents, failed to index %i."
+            % (success_count, len(failures))
+        )
 
         return successes, failures
 
     def remove_work(self, work):
-        """Remove the search document for `work` from the search index.
-        """
-        args = dict(index=self.works_index, doc_type=self.work_document_type,
-                    id=work.id)
+        """Remove the search document for `work` from the search index."""
+        args = dict(
+            index=self.works_index, doc_type=self.work_document_type, id=work.id
+        )
         if self.exists(**args):
             self.delete(**args)
 
@@ -653,25 +657,22 @@ class ExternalSearchIndex(HasSelfTests):
 
         def _search():
             return self.create_search_doc(
-                self.test_search_term, filter=None,
-                pagination=None, debug=True
+                self.test_search_term, filter=None, pagination=None, debug=True
             )
 
         def _works():
             return self.query_works(
-                self.test_search_term, filter=None, pagination=None,
-                debug=True
+                self.test_search_term, filter=None, pagination=None, debug=True
             )
 
         # The self-tests:
 
         def _search_for_term():
-            titles = [("%s (%s)" %(x.sort_title, x.sort_author)) for x in _works()]
+            titles = [("%s (%s)" % (x.sort_title, x.sort_author)) for x in _works()]
             return titles
 
         yield self.run_test(
-            ("Search results for '%s':" %(self.test_search_term)),
-            _search_for_term
+            ("Search results for '%s':" % (self.test_search_term)), _search_for_term
         )
 
         def _get_raw_doc():
@@ -683,16 +684,14 @@ class ExternalSearchIndex(HasSelfTests):
             return json.dumps(search.to_dict(), indent=1)
 
         yield self.run_test(
-            ("Search document for '%s':" %(self.test_search_term)),
-            _get_raw_doc
+            ("Search document for '%s':" % (self.test_search_term)), _get_raw_doc
         )
 
         def _get_raw_results():
             return [json.dumps(x.to_dict(), indent=1) for x in _works()]
 
         yield self.run_test(
-            ("Raw search results for '%s':" %(self.test_search_term)),
-            _get_raw_results
+            ("Raw search results for '%s':" % (self.test_search_term)), _get_raw_results
         )
 
         def _count_docs():
@@ -702,16 +701,15 @@ class ExternalSearchIndex(HasSelfTests):
             return str(self.search.count())
 
         yield self.run_test(
-            ("Total number of search results for '%s':" %(self.test_search_term)),
-            _count_docs
+            ("Total number of search results for '%s':" % (self.test_search_term)),
+            _count_docs,
         )
 
         def _total_count():
             return str(self.count_works(None))
 
         yield self.run_test(
-            "Total number of documents in this search index:",
-            _total_count
+            "Total number of documents in this search index:", _total_count
         )
 
         def _collections():
@@ -724,10 +722,7 @@ class ExternalSearchIndex(HasSelfTests):
 
             return json.dumps(result, indent=1)
 
-        yield self.run_test(
-            "Total number of documents per collection:",
-            _collections
-        )
+        yield self.run_test("Total number of documents per collection:", _collections)
 
 
 class MappingDocument(object):
@@ -755,7 +750,7 @@ class MappingDocument(object):
         # side-by-side comparison.
 
         defaults = dict(index=True, store=False)
-        description['type'] = type
+        description["type"] = type
         for default_name, default_value in list(defaults.items()):
             if default_name not in description:
                 description[default_name] = default_value
@@ -798,16 +793,13 @@ class MappingDocument(object):
         using an analyzer that leaves stopwords in place, for searches
         that rely on stopwords.
         """
-        description['type'] = 'text'
-        description['analyzer'] = 'en_default_text_analyzer'
-        description['fields'] = {
-            "minimal": {
-                "type": "text",
-                "analyzer": "en_minimal_text_analyzer"
-            },
+        description["type"] = "text"
+        description["analyzer"] = "en_default_text_analyzer"
+        description["fields"] = {
+            "minimal": {"type": "text", "analyzer": "en_minimal_text_analyzer"},
             "with_stopwords": {
                 "type": "text",
-                "analyzer": "en_with_stopwords_text_analyzer"
+                "analyzer": "en_with_stopwords_text_analyzer",
             },
         }
 
@@ -846,8 +838,8 @@ class Mapping(MappingDocument):
         version = cls.VERSION_NAME
         if not version:
             raise NotImplementedError("VERSION_NAME not defined")
-        if not version.startswith('v'):
-            version = 'v%s' % version
+        if not version.startswith("v"):
+            version = "v%s" % version
         return version
 
     @classmethod
@@ -872,7 +864,7 @@ class Mapping(MappingDocument):
 
         :return: True or False, indicating whether the index was created new.
         """
-        versioned_index = base_index_name+'-'+self.version_name()
+        versioned_index = base_index_name + "-" + self.version_name()
         if search_client.indices.exists(index=versioned_index):
             return False
         else:
@@ -881,9 +873,9 @@ class Mapping(MappingDocument):
 
     def sort_author_keyword_property_hook(self, description):
         """Give the `sort_author` property its custom analyzer."""
-        description['type'] = 'text'
-        description['analyzer'] = 'en_sort_author_analyzer'
-        description['fielddata'] = True
+        description["type"] = "text"
+        description["analyzer"] = "en_sort_author_analyzer"
+        description["fielddata"] = True
 
     def body(self):
         """Generate the body of the mapping document for this version of the
@@ -894,7 +886,7 @@ class Mapping(MappingDocument):
                 filter=self.filters,
                 char_filter=self.char_filters,
                 normalizer=self.normalizers,
-                analyzer=self.analyzers
+                analyzer=self.analyzers,
             )
         )
 
@@ -903,13 +895,9 @@ class Mapping(MappingDocument):
 
         # Add subdocuments as additional properties.
         for name, subdocument in list(self.subdocuments.items()):
-            properties[name] = dict(
-                type="nested", properties=subdocument.properties
-            )
+            properties[name] = dict(type="nested", properties=subdocument.properties)
 
-        mappings = {
-            ExternalSearchIndex.work_document_type : dict(properties=properties)
-        }
+        mappings = {ExternalSearchIndex.work_document_type: dict(properties=properties)}
         return dict(settings=settings, mappings=mappings)
 
 
@@ -935,7 +923,8 @@ class CurrentMapping(Mapping):
     # becomes "H G Wells" becomes "HG Wells".
     CHAR_FILTERS = {
         "remove_apostrophes": dict(
-            type="pattern_replace", pattern="'",
+            type="pattern_replace",
+            pattern="'",
             replacement="",
         )
     }
@@ -944,25 +933,21 @@ class CurrentMapping(Mapping):
         # The special author name "[Unknown]" should sort after everything
         # else. REPLACEMENT CHARACTER is the final valid Unicode character.
         ("unknown_author", "\[Unknown\]", "\N{REPLACEMENT CHARACTER}"),
-
         # Works by a given primary author should be secondarily sorted
         # by title, not by the other contributors.
         ("primary_author_only", "\s+;.*", ""),
-
         # Remove parentheticals (e.g. the full name of someone who
         # goes by initials).
         ("strip_parentheticals", "\s+\([^)]+\)", ""),
-
         # Remove periods from consideration.
         ("strip_periods", "\.", ""),
-
         # Collapse spaces for people whose sort names end with initials.
         ("collapse_three_initials", " ([A-Z]) ([A-Z]) ([A-Z])$", " $1$2$3"),
         ("collapse_two_initials", " ([A-Z]) ([A-Z])$", " $1$2"),
     ]:
-        normalizer = dict(type="pattern_replace",
-                          pattern=pattern,
-                          replacement=replacement)
+        normalizer = dict(
+            type="pattern_replace", pattern=pattern, replacement=replacement
+        )
         CHAR_FILTERS[name] = normalizer
         AUTHOR_CHAR_FILTER_NAMES.append(name)
 
@@ -978,7 +963,7 @@ class CurrentMapping(Mapping):
         # e.g. ignore capitalization when considering whether
         # two books belong to the same series or whether two
         # author names are the same.
-        self.normalizers['filterable_string'] = dict(
+        self.normalizers["filterable_string"] = dict(
             type="custom", filter=["lowercase", "asciifolding"]
         )
 
@@ -1011,22 +996,18 @@ class CurrentMapping(Mapping):
         # analyzer. We'll be using these to build our own analyzers.
 
         # Filter out English stopwords.
-        self.filters['english_stop'] = dict(
-            type="stop", stopwords=["_english_"]
-        )
+        self.filters["english_stop"] = dict(type="stop", stopwords=["_english_"])
 
         # The default English stemmer, used in the en_default analyzer.
-        self.filters['english_stemmer'] = dict(
-            type="stemmer", language="english"
-        )
+        self.filters["english_stemmer"] = dict(type="stemmer", language="english")
 
         # A less aggressive English stemmer, used in the en_minimal analyzer.
-        self.filters['minimal_english_stemmer'] = dict(
+        self.filters["minimal_english_stemmer"] = dict(
             type="stemmer", language="minimal_english"
         )
 
         # A filter that removes English posessives such as "'s"
-        self.filters['english_posessive_stemmer'] = dict(
+        self.filters["english_posessive_stemmer"] = dict(
             type="stemmer", language="possessive_english"
         )
 
@@ -1042,34 +1023,36 @@ class CurrentMapping(Mapping):
         # default configuration for the English analyzer.
         common_text_analyzer = dict(
             type="custom",
-            char_filter=["html_strip", "remove_apostrophes"], # NEW
+            char_filter=["html_strip", "remove_apostrophes"],  # NEW
             tokenizer="standard",
         )
         common_filter = [
             "lowercase",
-            "asciifolding",                          # NEW
+            "asciifolding",  # NEW
         ]
 
         # The default_text_analyzer uses Elasticsearch's standard
         # English stemmer and removes stopwords.
-        self.analyzers['en_default_text_analyzer'] = dict(common_text_analyzer)
-        self.analyzers['en_default_text_analyzer']['filter'] = (
-            common_filter + ["english_stop", 'english_stemmer']
-        )
+        self.analyzers["en_default_text_analyzer"] = dict(common_text_analyzer)
+        self.analyzers["en_default_text_analyzer"]["filter"] = common_filter + [
+            "english_stop",
+            "english_stemmer",
+        ]
 
         # The minimal_text_analyzer uses a less aggressive English
         # stemmer, and removes stopwords.
-        self.analyzers['en_minimal_text_analyzer'] = dict(common_text_analyzer)
-        self.analyzers['en_minimal_text_analyzer']['filter'] = (
-            common_filter + ['english_stop', 'minimal_english_stemmer']
-        )
+        self.analyzers["en_minimal_text_analyzer"] = dict(common_text_analyzer)
+        self.analyzers["en_minimal_text_analyzer"]["filter"] = common_filter + [
+            "english_stop",
+            "minimal_english_stemmer",
+        ]
 
         # The en_with_stopwords_text_analyzer uses the less aggressive
         # stemmer and does not remove stopwords.
-        self.analyzers['en_with_stopwords_text_analyzer'] = dict(common_text_analyzer)
-        self.analyzers['en_with_stopwords_text_analyzer']['filter'] = (
-            common_filter + ['minimal_english_stemmer']
-        )
+        self.analyzers["en_with_stopwords_text_analyzer"] = dict(common_text_analyzer)
+        self.analyzers["en_with_stopwords_text_analyzer"]["filter"] = common_filter + [
+            "minimal_english_stemmer"
+        ]
 
         # Now we need to define a special analyzer used only by the
         # 'sort_author' property.
@@ -1077,7 +1060,7 @@ class CurrentMapping(Mapping):
         # Here's a special filter used only by that analyzer. It
         # duplicates the filter used by the icu_collation_keyword data
         # type.
-        self.filters['en_sortable_filter'] = dict(
+        self.filters["en_sortable_filter"] = dict(
             type="icu_collation", language="en", country="US"
         )
 
@@ -1088,63 +1071,66 @@ class CurrentMapping(Mapping):
         #
         # This is necessary because normal icu_collation_keyword
         # fields can't specify char_filter.
-        self.analyzers['en_sort_author_analyzer'] = dict(
+        self.analyzers["en_sort_author_analyzer"] = dict(
             tokenizer="keyword",
-            filter = ["en_sortable_filter"],
-            char_filter = self.AUTHOR_CHAR_FILTER_NAMES,
+            filter=["en_sortable_filter"],
+            char_filter=self.AUTHOR_CHAR_FILTER_NAMES,
         )
 
         # Now, the main event. Set up the field properties for the
         # base document.
         fields_by_type = {
-            "basic_text": ['summary'],
-            'filterable_text': [
-                'title', 'subtitle', 'series', 'classifications.term',
-                'author', 'publisher', 'imprint'
+            "basic_text": ["summary"],
+            "filterable_text": [
+                "title",
+                "subtitle",
+                "series",
+                "classifications.term",
+                "author",
+                "publisher",
+                "imprint",
             ],
-            'boolean': ['presentation_ready'],
-            'icu_collation_keyword': ['sort_title'],
-            'sort_author_keyword' : ['sort_author'],
-            'integer': ['series_position', 'work_id'],
-            'long': ['last_update_time'],
+            "boolean": ["presentation_ready"],
+            "icu_collation_keyword": ["sort_title"],
+            "sort_author_keyword": ["sort_author"],
+            "integer": ["series_position", "work_id"],
+            "long": ["last_update_time"],
         }
         self.add_properties(fields_by_type)
 
         # Set up subdocuments.
         contributors = self.subdocument("contributors")
         contributor_fields = {
-            'filterable_text' : ['sort_name', 'display_name', 'family_name'],
-            'keyword': ['role', 'lc', 'viaf'],
+            "filterable_text": ["sort_name", "display_name", "family_name"],
+            "keyword": ["role", "lc", "viaf"],
         }
         contributors.add_properties(contributor_fields)
 
         licensepools = self.subdocument("licensepools")
         licensepool_fields = {
-            'integer': ['collection_id', 'data_source_id'],
-            'long': ['availability_time'],
-            'boolean': ['available', 'open_access', 'suppressed', 'licensed'],
-            'keyword': ['medium'],
+            "integer": ["collection_id", "data_source_id"],
+            "long": ["availability_time"],
+            "boolean": ["available", "open_access", "suppressed", "licensed"],
+            "keyword": ["medium"],
         }
         licensepools.add_properties(licensepool_fields)
 
         identifiers = self.subdocument("identifiers")
-        identifier_fields = {
-            'keyword': ['identifier', 'type']
-        }
+        identifier_fields = {"keyword": ["identifier", "type"]}
         identifiers.add_properties(identifier_fields)
 
         genres = self.subdocument("genres")
         genre_fields = {
-            'keyword': ['scheme', 'name', 'term'],
-            'float': ['weight'],
+            "keyword": ["scheme", "name", "term"],
+            "float": ["weight"],
         }
         genres.add_properties(genre_fields)
 
         customlists = self.subdocument("customlists")
         customlist_fields = {
-            'integer': ['list_id'],
-            'long':  ['first_appearance'],
-            'boolean': ['featured'],
+            "integer": ["list_id"],
+            "long": ["first_appearance"],
+            "boolean": ["featured"],
         }
         customlists.add_properties(customlist_fields)
 
@@ -1241,11 +1227,11 @@ class SearchBase(object):
     @classmethod
     def _nestable(cls, field, query):
         """Make a query against a field nestable, if necessary."""
-        if 's.' in field:
+        if "s." in field:
             # This is a query against a field from a subdocument. We
             # can't run it against the top-level document; it has to
             # be run in the context of its subdocument.
-            subdocument = field.split('.', 1)[0]
+            subdocument = field.split(".", 1)[0]
             query = cls._nest(subdocument, query)
         return query
 
@@ -1265,7 +1251,7 @@ class SearchBase(object):
         e.g. _match_range("field.name", "gte", 5) will match
         any value for field.name greater than 5.
         """
-        match = {field : {operation: value}}
+        match = {field: {operation: value}}
         return dict(range=match)
 
     @classmethod
@@ -1282,7 +1268,7 @@ class SearchBase(object):
         # There must be _some_ overlap with the provided range.
         must = [
             cls._match_range("target_age.upper", "gte", lower),
-            cls._match_range("target_age.lower", "lte", upper)
+            cls._match_range("target_age.lower", "lte", upper),
         ]
 
         # Results with ranges contained within the query range are
@@ -1311,6 +1297,7 @@ class SearchBase(object):
             qu = MatchAll()
         return qu
 
+
 class Query(SearchBase):
     """An attempt to find something in the search index."""
 
@@ -1331,8 +1318,8 @@ class Query(SearchBase):
     )
     # The contributor names in the contributors sub-document have the
     # same weight as the 'author' field in the main document.
-    for field in ['contributors.sort_name', 'contributors.display_name']:
-        WEIGHT_FOR_FIELD[field] = WEIGHT_FOR_FIELD['author']
+    for field in ["contributors.sort_name", "contributors.display_name"]:
+        WEIGHT_FOR_FIELD[field] = WEIGHT_FOR_FIELD["author"]
 
     # When someone searches for a person's name, they're most likely
     # searching for that person's contributions in one of these roles.
@@ -1380,9 +1367,7 @@ class Query(SearchBase):
     # For each of these fields, we're going to test the hypothesis
     # that the query string is nothing but an attempt to match this
     # field.
-    SIMPLE_MATCH_FIELDS = [
-        'title', 'subtitle', 'series', 'publisher', 'imprint'
-    ]
+    SIMPLE_MATCH_FIELDS = ["title", "subtitle", "series", "publisher", "imprint"]
 
     # For each of these fields, we're going to test the hypothesis
     # that the query string contains words from the book's title
@@ -1392,18 +1377,18 @@ class Query(SearchBase):
     # looking at the .author field -- the display name of the primary
     # author associated with the Work's presentation Editon -- not
     # the .display_names in the 'contributors' subdocument.
-    MULTI_MATCH_FIELDS = ['subtitle', 'series', 'author']
+    MULTI_MATCH_FIELDS = ["subtitle", "series", "author"]
 
     # For each of these fields, we're going to test the hypothesis
     # that the query string is a good match for an aggressively
     # stemmed version of this field.
-    STEMMABLE_FIELDS = ['title', 'subtitle', 'series']
+    STEMMABLE_FIELDS = ["title", "subtitle", "series"]
 
     # Although we index all text fields using an analyzer that
     # preserves stopwords, these are the only fields where we
     # currently think it's worth testing a hypothesis that stopwords
     # in a query string are _important_.
-    STOPWORD_FIELDS = ['title', 'subtitle', 'series']
+    STOPWORD_FIELDS = ["title", "subtitle", "series"]
 
     # SpellChecker is expensive to initialize, so keep around
     # a class-level instance.
@@ -1499,9 +1484,7 @@ class Query(SearchBase):
         # filter -- works must be presentation-ready, etc.
         universal_base_filter = Filter.universal_base_filter()
         if universal_base_filter:
-            query_filter = Filter._chain_filters(
-                base_filter, universal_base_filter
-            )
+            query_filter = Filter._chain_filters(base_filter, universal_base_filter)
         else:
             query_filter = base_filter
         if query_filter:
@@ -1527,7 +1510,7 @@ class Query(SearchBase):
                 # filter context rather than query context.
                 subquery = Bool(filter=subfilter)
                 search = search.filter(
-                    name_or_query='nested', path=path, query=subquery
+                    name_or_query="nested", path=path, query=subquery
                 )
 
         if self.filter:
@@ -1633,8 +1616,11 @@ class Query(SearchBase):
                     # better results by filtering out junk.
                     boost = self.SLIGHTLY_ABOVE_BASELINE
                 self._hypothesize(
-                    hypotheses, sub_hypotheses, boost, all_must_match=True,
-                    filters=filters
+                    hypotheses,
+                    sub_hypotheses,
+                    boost,
+                    all_must_match=True,
+                    filters=filters,
                 )
 
         # That's it!
@@ -1666,23 +1652,19 @@ class Query(SearchBase):
 
         query_string = query_string or self.query_string
 
-        keyword_match_coefficient = (
-            self.KEYWORD_MATCH_COEFFICIENT_FOR_FIELD.get(
-                base_field,
-                self.DEFAULT_KEYWORD_MATCH_COEFFICIENT
-            )
+        keyword_match_coefficient = self.KEYWORD_MATCH_COEFFICIENT_FOR_FIELD.get(
+            base_field, self.DEFAULT_KEYWORD_MATCH_COEFFICIENT
         )
 
         fields = [
             # A keyword match means the field value is a near-exact
             # match for the query string. This is one of the best
             # search results we can possibly return.
-            ('keyword', keyword_match_coefficient, Term),
-
+            ("keyword", keyword_match_coefficient, Term),
             # This is the baseline query -- a phrase match against a
             # single field. Most queries turn out to represent
             # consecutive words from a single field.
-            ('minimal', self.BASELINE_COEFFICIENT, MatchPhrase)
+            ("minimal", self.BASELINE_COEFFICIENT, MatchPhrase),
         ]
 
         if self.contains_stopwords and base_field in self.STOPWORD_FIELDS:
@@ -1691,9 +1673,7 @@ class Query(SearchBase):
             #
             # Boost this slightly above the baseline so that if
             # it matches, it'll beat out baseline queries.
-            fields.append(
-                ('with_stopwords', self.SLIGHTLY_ABOVE_BASELINE, MatchPhrase)
-            )
+            fields.append(("with_stopwords", self.SLIGHTLY_ABOVE_BASELINE, MatchPhrase))
 
         if base_field in self.STEMMABLE_FIELDS:
             # This query might benefit from a non-phrase Match against
@@ -1707,7 +1687,7 @@ class Query(SearchBase):
 
         for subfield, match_type_coefficient, query_class in fields:
             if subfield:
-                field_name = base_field + '.' + subfield
+                field_name = base_field + "." + subfield
             else:
                 field_name = base_field
 
@@ -1739,7 +1719,7 @@ class Query(SearchBase):
             qu = query_class(**kwargs)
             yield qu, field_weight
 
-            if self.fuzzy_coefficient and subfield == 'minimal':
+            if self.fuzzy_coefficient and subfield == "minimal":
                 # Trying one or more fuzzy versions of this hypothesis
                 # would also be appropriate. We only do fuzzy searches
                 # on the subfield with minimal stemming, because we
@@ -1764,9 +1744,7 @@ class Query(SearchBase):
 
         # Ask Elasticsearch to match what was typed against
         # contributors.display_name.
-        for x in self._author_field_must_match(
-            'display_name', self.query_string
-        ):
+        for x in self._author_field_must_match("display_name", self.query_string):
             yield x
 
         # Although almost nobody types a sort name into a search box,
@@ -1776,7 +1754,7 @@ class Query(SearchBase):
         # that against contributors.sort_name.
         sort_name = display_name_to_sort_name(self.query_string)
         if sort_name:
-            for x in self._author_field_must_match('sort_name', sort_name):
+            for x in self._author_field_must_match("sort_name", sort_name):
                 yield x
 
     def _author_field_must_match(self, base_field, query_string=None):
@@ -1791,7 +1769,7 @@ class Query(SearchBase):
         :param must_match: The query string to match against.
         """
         query_string = query_string or self.query_string
-        field_name = 'contributors.%s' % base_field
+        field_name = "contributors.%s" % base_field
         for author_matches, weight in self.match_one_field_hypotheses(
             field_name, query_string
         ):
@@ -1817,7 +1795,7 @@ class Query(SearchBase):
         """
         match_role = Terms(**{"contributors.role": cls.SEARCH_RELEVANT_ROLES})
         match_both = Bool(must=[base_query, match_role])
-        return cls._nest('contributors', match_both)
+        return cls._nest("contributors", match_both)
 
     @property
     def match_topic_hypotheses(self):
@@ -1836,7 +1814,7 @@ class Query(SearchBase):
             fields=["summary", "classifications.term"],
             type="best_fields",
         )
-        yield qu, self.WEIGHT_FOR_FIELD['summary']
+        yield qu, self.WEIGHT_FOR_FIELD["summary"]
 
     def title_multi_match_for(self, other_field):
         """Helper method to create a MultiMatch hypothesis that crosses
@@ -1855,20 +1833,19 @@ class Query(SearchBase):
             return
 
         # We only search the '.minimal' variants of these fields.
-        field_names = ['title.minimal', other_field + ".minimal"]
+        field_names = ["title.minimal", other_field + ".minimal"]
 
         # The weight of this hypothesis should be somewhere between
         # the weight of a pure title match, and the weight of a pure
         # match against the field we're checking.
-        title_weight = self.WEIGHT_FOR_FIELD['title']
+        title_weight = self.WEIGHT_FOR_FIELD["title"]
         other_weight = self.WEIGHT_FOR_FIELD[other_field]
-        combined_weight = other_weight * (other_weight/title_weight)
+        combined_weight = other_weight * (other_weight / title_weight)
 
         hypothesis = MultiMatch(
             query=self.query_string,
-            fields = field_names,
+            fields=field_names,
             type="cross_fields",
-
             # This hypothesis must be able to explain the entire query
             # string. Otherwise the weight contributed by the title
             # will boost _partial_ title matches over better matches
@@ -1904,15 +1881,15 @@ class Query(SearchBase):
         # max_expansions limits the number of possible alternates
         # Elasticsearch will consider for any given word.
         kwargs.update(fuzziness="AUTO", max_expansions=2)
-        yield Match(**{field_name : kwargs}), self.fuzzy_coefficient * 0.50
+        yield Match(**{field_name: kwargs}), self.fuzzy_coefficient * 0.50
 
         # Assuming that no typoes were made in the first
         # character of a word (usually a safe assumption) we
         # can bump the score up to 75% of the non-fuzzy
         # hypothesis.
         kwargs = dict(kwargs)
-        kwargs['prefix_length'] = 1
-        yield Match(**{field_name : kwargs}), self.fuzzy_coefficient * 0.75
+        kwargs["prefix_length"] = 1
+        yield Match(**{field_name: kwargs}), self.fuzzy_coefficient * 0.75
 
     @classmethod
     def _hypothesize(cls, hypotheses, query, boost, filters=None, **kwargs):
@@ -1979,17 +1956,17 @@ class QueryParser(object):
         genre, genre_match = KeywordBasedClassifier.genre_match(query_string)
         if genre:
             query_string = self.add_match_term_filter(
-                genre.name, 'genres.name', query_string, genre_match
+                genre.name, "genres.name", query_string, genre_match
             )
 
         # Handle the 'young adult' part of 'young adult romance'
-        audience, audience_match = KeywordBasedClassifier.audience_match(
-            query_string
-        )
+        audience, audience_match = KeywordBasedClassifier.audience_match(query_string)
         if audience:
             query_string = self.add_match_term_filter(
-                audience.replace(" ", "").lower(), 'audience', query_string,
-                audience_match
+                audience.replace(" ", "").lower(),
+                "audience",
+                query_string,
+                audience_match,
             )
 
         # Handle the 'nonfiction' part of 'asteroids nonfiction'
@@ -1999,7 +1976,7 @@ class QueryParser(object):
         elif re.compile(r"\bfiction\b", re.IGNORECASE).search(query_string):
             fiction = "fiction"
         query_string = self.add_match_term_filter(
-            fiction, 'fiction', query_string, fiction
+            fiction, "fiction", query_string, fiction
         )
         # Handle the 'grade 5' part of 'grade 5 dogs'
         age_from_grade, grade_match = GradeLevelClassifier.target_age_match(
@@ -2036,8 +2013,10 @@ class QueryParser(object):
         # different hypotheses, fuzzy matches, etc. So the simplest thing
         # to do is to create a Query object for the smaller search query
         # and see what its .elasticsearch_query is.
-        if (self.final_query_string
-            and self.final_query_string != self.original_query_string):
+        if (
+            self.final_query_string
+            and self.final_query_string != self.original_query_string
+        ):
             recursive = self.query_class(
                 self.final_query_string, use_query_parser=False
             ).elasticsearch_query
@@ -2093,9 +2072,9 @@ class QueryParser(object):
         # dash.
         word_boundary_pattern = r"\b%s[\w'\-]*\b"
 
-        return re.compile(
-            word_boundary_pattern % match.strip(), re.IGNORECASE
-        ).sub("", query_string)
+        return re.compile(word_boundary_pattern % match.strip(), re.IGNORECASE).sub(
+            "", query_string
+        )
 
 
 class Filter(SearchBase):
@@ -2116,13 +2095,15 @@ class Filter(SearchBase):
     # When search results include known script fields, we need to
     # wrap the works we would be returning in WorkSearchResults so
     # the useful information from the search engine isn't lost.
-    KNOWN_SCRIPT_FIELDS = ['last_update']
+    KNOWN_SCRIPT_FIELDS = ["last_update"]
 
     # In general, someone looking for things "by this person" is
     # probably looking for one of these roles.
     AUTHOR_MATCH_ROLES = list(Contributor.AUTHOR_ROLES) + [
-        Contributor.NARRATOR_ROLE, Contributor.EDITOR_ROLE,
-        Contributor.DIRECTOR_ROLE, Contributor.ACTOR_ROLE
+        Contributor.NARRATOR_ROLE,
+        Contributor.EDITOR_ROLE,
+        Contributor.DIRECTOR_ROLE,
+        Contributor.ACTOR_ROLE,
     ]
 
     @classmethod
@@ -2137,46 +2118,58 @@ class Filter(SearchBase):
         # For most configuration settings there is a single value --
         # either defined on the WorkList or defined by its parent.
         inherit_one = worklist.inherited_value
-        media = inherit_one('media')
-        languages = inherit_one('languages')
-        fiction = inherit_one('fiction')
-        audiences = inherit_one('audiences')
-        target_age = inherit_one('target_age')
-        collections = inherit_one('collection_ids') or library
+        media = inherit_one("media")
+        languages = inherit_one("languages")
+        fiction = inherit_one("fiction")
+        audiences = inherit_one("audiences")
+        target_age = inherit_one("target_age")
+        collections = inherit_one("collection_ids") or library
 
-        license_datasource_id = inherit_one('license_datasource_id')
+        license_datasource_id = inherit_one("license_datasource_id")
 
         # For genre IDs and CustomList IDs, we might get a separate
         # set of restrictions from every item in the WorkList hierarchy.
         # _All_ restrictions must be met for a work to match the filter.
         inherit_some = worklist.inherited_values
-        genre_id_restrictions = inherit_some('genre_ids')
-        customlist_id_restrictions = inherit_some('customlist_ids')
+        genre_id_restrictions = inherit_some("genre_ids")
+        customlist_id_restrictions = inherit_some("customlist_ids")
 
         # See if there are any excluded audiobook sources on this
         # site.
-        excluded = (
-            ConfigurationSetting.excluded_audio_data_sources(_db)
-        )
-        excluded_audiobook_data_sources = [
-            DataSource.lookup(_db, x) for x in excluded
-        ]
+        excluded = ConfigurationSetting.excluded_audio_data_sources(_db)
+        excluded_audiobook_data_sources = [DataSource.lookup(_db, x) for x in excluded]
         if library is None:
             allow_holds = True
         else:
             allow_holds = library.allow_holds
         return cls(
-            collections, media, languages, fiction, audiences,
-            target_age, genre_id_restrictions, customlist_id_restrictions,
+            collections,
+            media,
+            languages,
+            fiction,
+            audiences,
+            target_age,
+            genre_id_restrictions,
+            customlist_id_restrictions,
             facets,
             excluded_audiobook_data_sources=excluded_audiobook_data_sources,
-            allow_holds=allow_holds, license_datasource=license_datasource_id
+            allow_holds=allow_holds,
+            license_datasource=license_datasource_id,
         )
 
-    def __init__(self, collections=None, media=None, languages=None,
-                 fiction=None, audiences=None, target_age=None,
-                 genre_restriction_sets=None, customlist_restriction_sets=None,
-                 facets=None, script_fields=None, **kwargs
+    def __init__(
+        self,
+        collections=None,
+        media=None,
+        languages=None,
+        fiction=None,
+        audiences=None,
+        target_age=None,
+        genre_restriction_sets=None,
+        customlist_restriction_sets=None,
+        facets=None,
+        script_fields=None,
+        **kwargs
     ):
         """Constructor.
 
@@ -2291,27 +2284,27 @@ class Filter(SearchBase):
 
         # Pull less-important values out of the keyword arguments.
         excluded_audiobook_data_sources = kwargs.pop(
-            'excluded_audiobook_data_sources', []
+            "excluded_audiobook_data_sources", []
         )
         self.excluded_audiobook_data_sources = self._filter_ids(
             excluded_audiobook_data_sources
         )
-        self.allow_holds = kwargs.pop('allow_holds', True)
+        self.allow_holds = kwargs.pop("allow_holds", True)
 
-        self.updated_after = kwargs.pop('updated_after', None)
+        self.updated_after = kwargs.pop("updated_after", None)
 
-        self.series = kwargs.pop('series', None)
+        self.series = kwargs.pop("series", None)
 
-        self.author = kwargs.pop('author', None)
+        self.author = kwargs.pop("author", None)
 
-        self.min_score = kwargs.pop('min_score', None)
+        self.min_score = kwargs.pop("min_score", None)
 
-        self.match_nothing = kwargs.pop('match_nothing', False)
+        self.match_nothing = kwargs.pop("match_nothing", False)
 
-        license_datasources = kwargs.pop('license_datasource', None)
+        license_datasources = kwargs.pop("license_datasource", None)
         self.license_datasources = self._filter_ids(license_datasources)
 
-        identifiers = kwargs.pop('identifiers', [])
+        identifiers = kwargs.pop("identifiers", [])
         self.identifiers = list(self._scrub_identifiers(identifiers))
 
         # At this point there should be no keyword arguments -- you can't pass
@@ -2363,8 +2356,10 @@ class Filter(SearchBase):
 
         # If YOUNG_ADULT or ADULT is an audience, then ALL_AGES is
         # always going to be an additional audience.
-        if any(x in as_is for x in [Classifier.AUDIENCE_YOUNG_ADULT,
-                                    Classifier.AUDIENCE_ADULT]):
+        if any(
+            x in as_is
+            for x in [Classifier.AUDIENCE_YOUNG_ADULT, Classifier.AUDIENCE_ADULT]
+        ):
             return with_all_ages
 
         # At this point, if CHILDREN is _not_ included, we know that
@@ -2375,8 +2370,11 @@ class Filter(SearchBase):
 
         # Now we know that CHILDREN is an audience. It's going to come
         # down to the upper bound on the target age.
-        if (self.target_age and self.target_age[1] is not None
-            and self.target_age[1] < Classifier.ALL_AGES_AGE_CUTOFF):
+        if (
+            self.target_age
+            and self.target_age[1] is not None
+            and self.target_age[1] < Classifier.ALL_AGES_AGE_CUTOFF
+        ):
             # The audience for this query does not include any kids
             # who are expected to have the reading fluency necessary
             # for ALL_AGES books.
@@ -2414,20 +2412,18 @@ class Filter(SearchBase):
 
         collection_ids = filter_ids(self.collection_ids)
         if collection_ids:
-            collection_match = Terms(
-                **{'licensepools.collection_id' : collection_ids}
-            )
-            nested_filters['licensepools'].append(collection_match)
+            collection_match = Terms(**{"licensepools.collection_id": collection_ids})
+            nested_filters["licensepools"].append(collection_match)
 
         license_datasources = filter_ids(self.license_datasources)
         if license_datasources:
             datasource_match = Terms(
-                **{'licensepools.data_source_id' : license_datasources}
+                **{"licensepools.data_source_id": license_datasources}
             )
-            nested_filters['licensepools'].append(datasource_match)
+            nested_filters["licensepools"].append(datasource_match)
 
         if self.author is not None:
-            nested_filters['contributors'].append(self.author_filter)
+            nested_filters["contributors"].append(self.author_filter)
 
         if self.media:
             f = chain(f, Terms(medium=scrub_list(self.media)))
@@ -2437,9 +2433,9 @@ class Filter(SearchBase):
 
         if self.fiction is not None:
             if self.fiction:
-                value = 'fiction'
+                value = "fiction"
             else:
-                value = 'nonfiction'
+                value = "nonfiction"
             f = chain(f, Term(fiction=value))
 
         if self.series:
@@ -2465,41 +2461,39 @@ class Filter(SearchBase):
 
         for genre_ids in self.genre_restriction_sets:
             ids = filter_ids(genre_ids)
-            nested_filters['genres'].append(
-                Terms(**{'genres.term' : filter_ids(genre_ids)})
+            nested_filters["genres"].append(
+                Terms(**{"genres.term": filter_ids(genre_ids)})
             )
 
         for customlist_ids in self.customlist_restriction_sets:
             ids = filter_ids(customlist_ids)
-            nested_filters['customlists'].append(
-                Terms(**{'customlists.list_id' : ids})
-            )
+            nested_filters["customlists"].append(Terms(**{"customlists.list_id": ids}))
 
-        open_access = Term(**{'licensepools.open_access' : True})
-        if self.availability==FacetConstants.AVAILABLE_NOW:
+        open_access = Term(**{"licensepools.open_access": True})
+        if self.availability == FacetConstants.AVAILABLE_NOW:
             # Only open-access books and books with currently available
             # copies should be displayed.
-            available = Term(**{'licensepools.available' : True})
-            nested_filters['licensepools'].append(
+            available = Term(**{"licensepools.available": True})
+            nested_filters["licensepools"].append(
                 Bool(should=[open_access, available], minimum_should_match=1)
             )
-        elif self.availability==FacetConstants.AVAILABLE_OPEN_ACCESS:
+        elif self.availability == FacetConstants.AVAILABLE_OPEN_ACCESS:
             # Only open-access books should be displayed.
-            nested_filters['licensepools'].append(open_access)
-        elif self.availability==FacetConstants.AVAILABLE_NOT_NOW:
+            nested_filters["licensepools"].append(open_access)
+        elif self.availability == FacetConstants.AVAILABLE_NOT_NOW:
             # Only books that are _not_ currently available should be displayed.
-            not_open_access = Term(**{'licensepools.open_access' : False})
-            licensed = Term(**{'licensepools.licensed' : True})
-            not_available = Term(**{'licensepools.available' : False})
-            nested_filters['licensepools'].append(
+            not_open_access = Term(**{"licensepools.open_access": False})
+            licensed = Term(**{"licensepools.licensed": True})
+            not_available = Term(**{"licensepools.available": False})
+            nested_filters["licensepools"].append(
                 Bool(must=[not_open_access, licensed, not_available])
             )
 
-        if self.subcollection==FacetConstants.COLLECTION_FEATURED:
+        if self.subcollection == FacetConstants.COLLECTION_FEATURED:
             # Exclude books with a quality of less than the library's
             # minimum featured quality.
             range_query = self._match_range(
-                'quality', 'gte', self.minimum_featured_quality
+                "quality", "gte", self.minimum_featured_quality
             )
             f = chain(f, Bool(must=range_query))
 
@@ -2511,38 +2505,34 @@ class Filter(SearchBase):
                 # Both identifier and type must match for the match
                 # to count.
                 for name, value in (
-                    ('identifier', identifier.identifier),
-                    ('type', identifier.type),
+                    ("identifier", identifier.identifier),
+                    ("type", identifier.type),
                 ):
-                    subclauses.append(
-                        Term(**{'identifiers.%s' % name : value})
-                    )
+                    subclauses.append(Term(**{"identifiers.%s" % name: value}))
                 clauses.append(Bool(must=subclauses))
 
             # At least one the identifiers must match for the work to
             # match.
             identifier_f = Bool(should=clauses, minimum_should_match=1)
-            nested_filters['identifiers'].append(identifier_f)
+            nested_filters["identifiers"].append(identifier_f)
 
         # Some sources of audiobooks may be excluded because the
         # server can't fulfill them or the anticipated client can't
         # play them.
         excluded = self.excluded_audiobook_data_sources
         if excluded:
-            audio = Term(**{'licensepools.medium': Edition.AUDIO_MEDIUM})
-            excluded_audio_source = Terms(
-                **{'licensepools.data_source_id' : excluded}
-            )
+            audio = Term(**{"licensepools.medium": Edition.AUDIO_MEDIUM})
+            excluded_audio_source = Terms(**{"licensepools.data_source_id": excluded})
             excluded_audio = Bool(must=[audio, excluded_audio_source])
             not_excluded_audio = Bool(must_not=excluded_audio)
-            nested_filters['licensepools'].append(not_excluded_audio)
+            nested_filters["licensepools"].append(not_excluded_audio)
 
         # If holds are not allowed, only license pools that are
         # currently available should be considered.
         if not self.allow_holds:
-            licenses_available = Term(**{'licensepools.available' : True})
+            licenses_available = Term(**{"licensepools.available": True})
             currently_available = Bool(should=[licenses_available, open_access])
-            nested_filters['licensepools'].append(currently_available)
+            nested_filters["licensepools"].append(currently_available)
 
         # Perhaps only books whose bibliographic metadata was updated
         # recently should be included.
@@ -2551,11 +2541,9 @@ class Filter(SearchBase):
             # .last_update is probably a datetime. Convert it here.
             updated_after = self.updated_after
             if isinstance(updated_after, datetime.datetime):
-                updated_after = (
-                    updated_after - from_timestamp(0)
-                ).total_seconds()
+                updated_after = (updated_after - from_timestamp(0)).total_seconds()
             last_update_time_query = self._match_range(
-                'last_update_time', 'gte', updated_after
+                "last_update_time", "gte", updated_after
             )
             f = chain(f, Bool(must=last_update_time_query))
 
@@ -2578,9 +2566,7 @@ class Filter(SearchBase):
         base_filter = None
 
         # We only want to show works that are presentation-ready.
-        base_filter = _chain_filters(
-            base_filter, Term(**{"presentation_ready":True})
-        )
+        base_filter = _chain_filters(base_filter, Term(**{"presentation_ready": True}))
 
         return base_filter
 
@@ -2604,13 +2590,13 @@ class Filter(SearchBase):
         # It's easier to stay consistent by indexing all Works and
         # filtering them out later, than to do it by adding and
         # removing works from the index.
-        not_suppressed = Term(**{'licensepools.suppressed' : False})
-        nested_filters['licensepools'].append(not_suppressed)
+        not_suppressed = Term(**{"licensepools.suppressed": False})
+        nested_filters["licensepools"].append(not_suppressed)
 
-        owns_licenses = Term(**{'licensepools.licensed' : True})
-        open_access = Term(**{'licensepools.open_access' : True})
+        owns_licenses = Term(**{"licensepools.licensed": True})
+        open_access = Term(**{"licensepools.open_access": True})
         currently_owned = Bool(should=[owns_licenses, open_access])
-        nested_filters['licensepools'].append(currently_owned)
+        nested_filters["licensepools"].append(currently_owned)
 
         return nested_filters
 
@@ -2634,14 +2620,12 @@ class Filter(SearchBase):
         # as long as possible. For example, a feed sorted by author
         # will be secondarily sorted by title and work ID, not just by
         # work ID.
-        default_sort_order = ['sort_author', 'sort_title', 'work_id']
+        default_sort_order = ["sort_author", "sort_title", "work_id"]
 
         order_field_keys = self.order
         if not isinstance(order_field_keys, list):
             order_field_keys = [order_field_keys]
-        order_fields = [
-            self._make_order_field(key) for key in order_field_keys
-        ]
+        order_fields = [self._make_order_field(key) for key in order_field_keys]
 
         # Apply any parts of the default sort order not yet covered,
         # concluding (in most cases) with work_id, the tiebreaker field.
@@ -2659,7 +2643,7 @@ class Filter(SearchBase):
             return "asc"
 
     def _make_order_field(self, key):
-        if key == 'last_update_time':
+        if key == "last_update_time":
             # Sorting by last_update_time may be very simple or very
             # complex, depending on whether or not the filter
             # involves collection or list membership.
@@ -2670,22 +2654,20 @@ class Filter(SearchBase):
                 # The simple case, handled below.
                 pass
 
-        if '.' not in key:
+        if "." not in key:
             # A simple case.
-            return { key : self.asc }
+            return {key: self.asc}
 
         # At this point we're sorting by a nested field.
         nested = None
-        if key == 'licensepools.availability_time':
+        if key == "licensepools.availability_time":
             nested, mode = self._availability_time_sort_order
         else:
-            raise ValueError(
-                "I don't know how to sort by %s." % key
-            )
+            raise ValueError("I don't know how to sort by %s." % key)
         sort_description = dict(order=self.asc, mode=mode)
         if nested:
-            sort_description['nested']=nested
-        return { key : sort_description }
+            sort_description["nested"] = nested
+        return {key: sort_description}
 
     @property
     def _availability_time_sort_order(self):
@@ -2698,15 +2680,11 @@ class Filter(SearchBase):
         if collection_ids:
             nested = dict(
                 path="licensepools",
-                filter=dict(
-                    terms={
-                        "licensepools.collection_id": collection_ids
-                    }
-                ),
+                filter=dict(terms={"licensepools.collection_id": collection_ids}),
             )
         # If a book shows up in multiple collections, we're only
         # interested in the collection that had it the earliest.
-        mode = 'min'
+        mode = "min"
         return nested, mode
 
     @property
@@ -2731,18 +2709,12 @@ class Filter(SearchBase):
             all_list_ids.update(self._filter_ids(restriction))
         nested = dict(
             path="customlists",
-            filter=dict(
-                terms={"customlists.list_id": list(all_list_ids)}
-            )
+            filter=dict(terms={"customlists.list_id": list(all_list_ids)}),
         )
-        params = dict(
-            collection_ids=collection_ids,
-            list_ids=list(all_list_ids)
-        )
+        params = dict(collection_ids=collection_ids, list_ids=list(all_list_ids))
         return dict(
             script=dict(
-                stored=CurrentMapping.script_name("work_last_update"),
-                params=params
+                stored=CurrentMapping.script_name("work_last_update"), params=params
             )
         )
 
@@ -2756,12 +2728,12 @@ class Filter(SearchBase):
         time as the script to use for a sort value.
         """
         field = self.last_update_time_script_field
-        if not 'last_update' in self.script_fields:
-            self.script_fields['last_update'] = field
+        if not "last_update" in self.script_fields:
+            self.script_fields["last_update"] = field
         return dict(
             _script=dict(
                 type="number",
-                script=field['script'],
+                script=field["script"],
                 order=self.asc,
             ),
         )
@@ -2781,7 +2753,9 @@ class Filter(SearchBase):
     # Below that point, we prefer higher-quality works to
     # lower-quality works, such that a work's score is proportional to
     # the square of its quality.
-    FEATURABLE_SCRIPT = "Math.pow(Math.min(%(cutoff).5f, doc['quality'].value), %(exponent).5f) * 5"
+    FEATURABLE_SCRIPT = (
+        "Math.pow(Math.min(%(cutoff).5f, doc['quality'].value), %(exponent).5f) * 5"
+    )
 
     # Used in tests to deactivate the random component of
     # featurability_scoring_functions.
@@ -2793,15 +2767,13 @@ class Filter(SearchBase):
         """
 
         exponent = 2
-        cutoff = (self.minimum_featured_quality ** exponent)
-        script = self.FEATURABLE_SCRIPT % dict(
-            cutoff=cutoff, exponent=exponent
-        )
-        quality_field = SF('script_score', script=dict(source=script))
+        cutoff = self.minimum_featured_quality ** exponent
+        script = self.FEATURABLE_SCRIPT % dict(cutoff=cutoff, exponent=exponent)
+        quality_field = SF("script_score", script=dict(source=script))
 
         # Currently available works are more featurable.
-        available = Term(**{'licensepools.available' : True})
-        nested = Nested(path='licensepools', query=available)
+        available = Term(**{"licensepools.available": True})
+        nested = Nested(path="licensepools", query=available)
         available_now = dict(filter=nested, weight=5)
 
         function_scores = [quality_field, available_now]
@@ -2811,10 +2783,10 @@ class Filter(SearchBase):
         # books every time.
         if random_seed != self.DETERMINISTIC:
             random = SF(
-                'random_score',
+                "random_score",
                 seed=random_seed or int(time.time()),
                 field="work_id",
-                weight=1.1
+                weight=1.1,
             )
             function_scores.append(random)
 
@@ -2825,10 +2797,10 @@ class Filter(SearchBase):
             # We're looking for works on certain custom lists. A work
             # that's _featured_ on one of these lists will be boosted
             # quite a lot versus one that's not.
-            featured = Term(**{'customlists.featured' : True})
-            on_list = Terms(**{'customlists.list_id' : list(list_ids)})
+            featured = Term(**{"customlists.featured": True})
+            on_list = Terms(**{"customlists.list_id": list(list_ids)})
             featured_on_list = Bool(must=[featured, on_list])
-            nested = Nested(path='customlists', query=featured_on_list)
+            nested = Nested(path="customlists", query=featured_on_list)
             featured_on_relevant_list = dict(filter=nested, weight=11)
             function_scores.append(featured_on_relevant_list)
         return function_scores
@@ -2846,6 +2818,7 @@ class Filter(SearchBase):
         lower, upper = self.target_age
         if lower is None and upper is None:
             return None
+
         def does_not_exist(field):
             """A filter that matches if there is no value for `field`."""
             return Bool(must_not=[Exists(field=field)])
@@ -2854,8 +2827,7 @@ class Filter(SearchBase):
             """Either the given `clause` matches or the given field
             does not exist.
             """
-            return Bool(should=[clause, does_not_exist(field)],
-                     minimum_should_match=1)
+            return Bool(should=[clause, does_not_exist(field)], minimum_should_match=1)
 
         clauses = []
 
@@ -2889,25 +2861,20 @@ class Filter(SearchBase):
         """
         if not self.author:
             return None
-        authorship_role = Terms(
-            **{'contributors.role' : self.AUTHOR_MATCH_ROLES}
-        )
+        authorship_role = Terms(**{"contributors.role": self.AUTHOR_MATCH_ROLES})
         clauses = []
         for field, value in [
-            ('sort_name.keyword', self.author.sort_name),
-            ('display_name.keyword', self.author.display_name),
-            ('viaf', self.author.viaf),
-            ('lc', self.author.lc)
+            ("sort_name.keyword", self.author.sort_name),
+            ("display_name.keyword", self.author.display_name),
+            ("viaf", self.author.viaf),
+            ("lc", self.author.lc),
         ]:
             if not value or value == Edition.UNKNOWN_AUTHOR:
                 continue
-            clauses.append(
-                Term(**{'contributors.%s' % field : value})
-            )
+            clauses.append(Term(**{"contributors.%s" % field: value}))
 
         same_person = Bool(should=clauses, minimum_should_match=1)
         return Bool(must=[authorship_role, same_person])
-
 
     @classmethod
     def _scrub(cls, s):
@@ -2986,8 +2953,7 @@ class SortKeyPagination(Pagination):
     list.
     """
 
-    def __init__(self, last_item_on_previous_page=None,
-                 size=Pagination.DEFAULT_SIZE):
+    def __init__(self, last_item_on_previous_page=None, size=Pagination.DEFAULT_SIZE):
         self.size = size
         self.last_item_on_previous_page = last_item_on_previous_page
 
@@ -3003,7 +2969,7 @@ class SortKeyPagination(Pagination):
         size = cls.size_from_request(get_arg, default_size)
         if isinstance(size, ProblemDetail):
             return size
-        pagination_key = get_arg('key', None)
+        pagination_key = get_arg("key", None)
         if pagination_key:
             try:
                 pagination_key = json.loads(pagination_key)
@@ -3019,8 +2985,8 @@ class SortKeyPagination(Pagination):
         """
         pagination_key = self.pagination_key
         if pagination_key:
-            yield("key", self.pagination_key)
-        yield("size", self.size)
+            yield ("key", self.pagination_key)
+        yield ("size", self.size)
 
     @property
     def pagination_key(self):
@@ -3119,6 +3085,7 @@ class WorkSearchResult(object):
     obtained through Elasticsearch, such as its 'last modified' date
     the context of a specific lane.
     """
+
     def __init__(self, work, hit):
         self._work = work
         self._hit = hit
@@ -3129,7 +3096,7 @@ class WorkSearchResult(object):
 
 class MockExternalSearchIndex(ExternalSearchIndex):
 
-    work_document_type = 'work-type'
+    work_document_type = "work-type"
 
     def __init__(self, url=None):
         self.url = url
@@ -3156,7 +3123,9 @@ class MockExternalSearchIndex(ExternalSearchIndex):
     def exists(self, index, doc_type, id):
         return self._key(index, doc_type, id) in self.docs
 
-    def create_search_doc(self, query_string, filter=None, pagination=None, debug=False):
+    def create_search_doc(
+        self, query_string, filter=None, pagination=None, debug=False
+    ):
         return list(self.docs.values())
 
     def query_works(self, query_string, filter, pagination, debug=False):
@@ -3170,7 +3139,8 @@ class MockExternalSearchIndex(ExternalSearchIndex):
             if isinstance(x, MockSearchResult):
                 return x.work_id
             else:
-                return x['_id']
+                return x["_id"]
+
         docs = sorted(list(self.docs.values()), key=sort_key)
         if pagination:
             start_at = 0
@@ -3180,7 +3150,7 @@ class MockExternalSearchIndex(ExternalSearchIndex):
                 if pagination.last_item_on_previous_page:
                     look_for = pagination.last_item_on_previous_page[-1]
                     for i, x in enumerate(docs):
-                        if x['_id'] == look_for:
+                        if x["_id"] == look_for:
                             start_at = i + 1
                             break
             else:
@@ -3193,9 +3163,7 @@ class MockExternalSearchIndex(ExternalSearchIndex):
             if isinstance(x, MockSearchResult):
                 results.append(x)
             else:
-                results.append(
-                    MockSearchResult(x["title"], x["author"], {}, x['_id'])
-                )
+                results.append(MockSearchResult(x["title"], x["author"], {}, x["_id"]))
 
         if pagination:
             pagination.page_loaded(results)
@@ -3214,20 +3182,22 @@ class MockExternalSearchIndex(ExternalSearchIndex):
 
     def bulk(self, docs, **kwargs):
         for doc in docs:
-            self.index(doc['_index'], doc['_type'], doc['_id'], doc)
+            self.index(doc["_index"], doc["_type"], doc["_id"], doc)
         return len(docs), []
+
 
 class MockMeta(dict):
     """Mock the .meta object associated with an Elasticsearch search
     result.  This is necessary to get SortKeyPagination to work with
     MockExternalSearchIndex.
     """
+
     @property
     def sort(self):
-        return self['_sort']
+        return self["_sort"]
+
 
 class MockSearchResult(object):
-
     def __init__(self, sort_title, sort_author, meta, id):
         self.sort_title = sort_title
         self.sort_author = sort_author
@@ -3253,18 +3223,16 @@ class SearchIndexCoverageProvider(WorkPresentationProvider):
     search index.
     """
 
-    SERVICE_NAME = 'Search index coverage provider'
+    SERVICE_NAME = "Search index coverage provider"
 
     DEFAULT_BATCH_SIZE = 500
 
     OPERATION = WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION
 
     def __init__(self, *args, **kwargs):
-        search_index_client = kwargs.pop('search_index_client', None)
+        search_index_client = kwargs.pop("search_index_client", None)
         super(SearchIndexCoverageProvider, self).__init__(*args, **kwargs)
-        self.search_index_client = (
-            search_index_client or ExternalSearchIndex(self._db)
-        )
+        self.search_index_client = search_index_client or ExternalSearchIndex(self._db)
 
     def process_batch(self, works):
         """

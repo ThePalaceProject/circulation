@@ -1,4 +1,5 @@
 import operator
+import types
 from copy import copy, deepcopy
 
 from multipledispatch import dispatch
@@ -20,7 +21,7 @@ from .ast import (
     Visitor,
 )
 from .parser import DSLParser
-import types
+
 
 class DSLEvaluationError(BaseError):
     """Raised when evaluation of a DSL expression fails."""

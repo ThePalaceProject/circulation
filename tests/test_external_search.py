@@ -1,65 +1,30 @@
 # encoding: utf-8
-import pytest
-from collections import defaultdict
 import json
 import logging
 import re
 import time
-from psycopg2.extras import NumericRange
+from collections import defaultdict
 
-from ..testing import (
-    DatabaseTest,
-)
-
+import pytest
+from elasticsearch.exceptions import ElasticsearchException
 from elasticsearch_dsl import Q
-from elasticsearch_dsl.function import (
-    ScriptScore,
-    RandomScore,
-)
+from elasticsearch_dsl.function import RandomScore, ScriptScore
 from elasticsearch_dsl.query import (
     Bool,
     DisMax,
-    Query as elasticsearch_dsl_query,
-    MatchAll,
     Match,
+    MatchAll,
     MatchNone,
     MatchPhrase,
     MultiMatch,
     Nested,
-    Range,
-    Term,
-    Terms,
 )
-from elasticsearch.exceptions import ElasticsearchException
+from elasticsearch_dsl.query import Query as elasticsearch_dsl_query
+from elasticsearch_dsl.query import Range, Term, Terms
+from psycopg2.extras import NumericRange
 
-from ..config import (
-    Configuration,
-    CannotLoadConfiguration,
-)
-from ..lane import (
-    Facets,
-    FeaturedFacets,
-    Lane,
-    Pagination,
-    SearchFacets,
-    WorkList,
-)
-from ..metadata_layer import (
-    ContributorData,
-    IdentifierData,
-)
-from ..model import (
-    ConfigurationSetting,
-    Contribution,
-    Contributor,
-    DataSource,
-    Edition,
-    ExternalIntegration,
-    Genre,
-    Work,
-    WorkCoverageRecord,
-    get_one_or_create,
-)
+from ..classifier import Classifier
+from ..config import CannotLoadConfiguration, Configuration
 from ..external_search import (
     CurrentMapping,
     ExternalSearchIndex,
@@ -75,22 +40,28 @@ from ..external_search import (
     WorkSearchResult,
     mock_search_index,
 )
-
-from ..classifier import Classifier
-
-from ..problem_details import INVALID_INPUT
-
-from ..testing import (
-    ExternalSearchTest,
-    EndToEndSearchTest,
+from ..lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
+from ..metadata_layer import ContributorData, IdentifierData
+from ..model import (
+    ConfigurationSetting,
+    Contribution,
+    Contributor,
+    DataSource,
+    Edition,
+    ExternalIntegration,
+    Genre,
+    Work,
+    WorkCoverageRecord,
+    get_one_or_create,
 )
+from ..problem_details import INVALID_INPUT
+from ..testing import DatabaseTest, EndToEndSearchTest, ExternalSearchTest
 from ..util.datetime_helpers import datetime_utc, from_timestamp
-
 
 RESEARCH = Term(audience=Classifier.AUDIENCE_RESEARCH.lower())
 
-class TestExternalSearch(ExternalSearchTest):
 
+class TestExternalSearch(ExternalSearchTest):
     def test_load(self):
         # Normally, load() returns a brand new ExternalSearchIndex
         # object.
@@ -135,7 +106,9 @@ class TestExternalSearch(ExternalSearchTest):
 
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             Mock(self._db)
-        assert "Exception communicating with Elasticsearch server: " in str(excinfo.value)
+        assert "Exception communicating with Elasticsearch server: " in str(
+            excinfo.value
+        )
         assert "very bad" in str(excinfo.value)
 
     def test_works_index_name(self):
@@ -149,29 +122,31 @@ class TestExternalSearch(ExternalSearchTest):
         current_index = self.search.works_index
         # This calls self.search.setup_index (which is what we're testing)
         # and also registers the index to be torn down at the end of the test.
-        self.setup_index('the_other_index')
+        self.setup_index("the_other_index")
 
         # Both indices exist.
         assert True == self.search.indices.exists(current_index)
-        assert True == self.search.indices.exists('the_other_index')
+        assert True == self.search.indices.exists("the_other_index")
 
         # The index for the app's search is still the original index.
         assert current_index == self.search.works_index
 
         # The alias hasn't been passed over to the new index.
-        alias = 'test_index-' + self.search.CURRENT_ALIAS_SUFFIX
+        alias = "test_index-" + self.search.CURRENT_ALIAS_SUFFIX
         assert alias == self.search.works_alias
         assert True == self.search.indices.exists_alias(current_index, alias)
-        assert False == self.search.indices.exists_alias('the_other_index', alias)
+        assert False == self.search.indices.exists_alias("the_other_index", alias)
 
     def test_set_works_index_and_alias(self):
         # If the index or alias don't exist, set_works_index_and_alias
         # will create them.
-        self.integration.set_setting(ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY, 'banana')
+        self.integration.set_setting(
+            ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY, "banana"
+        )
         self.search.set_works_index_and_alias(self._db)
 
-        expected_index = 'banana-' + CurrentMapping.version_name()
-        expected_alias = 'banana-' + self.search.CURRENT_ALIAS_SUFFIX
+        expected_index = "banana-" + CurrentMapping.version_name()
+        expected_alias = "banana-" + self.search.CURRENT_ALIAS_SUFFIX
         assert expected_index == self.search.works_index
         assert expected_alias == self.search.works_alias
 
@@ -184,12 +159,12 @@ class TestExternalSearch(ExternalSearchTest):
     def test_setup_current_alias(self):
         # The index was generated from the string in configuration.
         version = CurrentMapping.version_name()
-        index_name = 'test_index-' + version
+        index_name = "test_index-" + version
         assert index_name == self.search.works_index
         assert True == self.search.indices.exists(index_name)
 
         # The alias is also created from the configuration.
-        alias = 'test_index-' + self.search.CURRENT_ALIAS_SUFFIX
+        alias = "test_index-" + self.search.CURRENT_ALIAS_SUFFIX
         assert alias == self.search.works_alias
         assert True == self.search.indices.exists_alias(index_name, alias)
 
@@ -197,18 +172,19 @@ class TestExternalSearch(ExternalSearchTest):
         # won't be reassigned. Instead, search will occur against the
         # index itself.
         ExternalSearchIndex.reset()
-        self.integration.set_setting(ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY, 'my-app')
+        self.integration.set_setting(
+            ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY, "my-app"
+        )
         self.search = ExternalSearchIndex(self._db)
 
-        assert 'my-app-%s' % version == self.search.works_index
-        assert 'my-app-' + self.search.CURRENT_ALIAS_SUFFIX == self.search.works_alias
+        assert "my-app-%s" % version == self.search.works_index
+        assert "my-app-" + self.search.CURRENT_ALIAS_SUFFIX == self.search.works_alias
 
     def test_transfer_current_alias(self):
         # An error is raised if you try to set the alias to point to
         # an index that doesn't already exist.
         pytest.raises(
-            ValueError, self.search.transfer_current_alias, self._db,
-            'no-such-index'
+            ValueError, self.search.transfer_current_alias, self._db, "no-such-index"
         )
 
         original_index = self.search.works_index
@@ -216,38 +192,40 @@ class TestExternalSearch(ExternalSearchTest):
         # If the -current alias doesn't exist, it's created
         # and everything is updated accordingly.
         self.search.indices.delete_alias(
-            index=original_index, name='test_index-current', ignore=[404]
+            index=original_index, name="test_index-current", ignore=[404]
         )
-        self.setup_index(new_index='test_index-v9999')
-        self.search.transfer_current_alias(self._db, 'test_index-v9999')
-        assert 'test_index-v9999' == self.search.works_index
-        assert 'test_index-current' == self.search.works_alias
+        self.setup_index(new_index="test_index-v9999")
+        self.search.transfer_current_alias(self._db, "test_index-v9999")
+        assert "test_index-v9999" == self.search.works_index
+        assert "test_index-current" == self.search.works_alias
 
         # If the -current alias already exists on the index,
         # it's used without a problem.
-        self.search.transfer_current_alias(self._db, 'test_index-v9999')
-        assert 'test_index-v9999' == self.search.works_index
-        assert 'test_index-current' == self.search.works_alias
+        self.search.transfer_current_alias(self._db, "test_index-v9999")
+        assert "test_index-v9999" == self.search.works_index
+        assert "test_index-current" == self.search.works_alias
 
         # If the -current alias is being used on a different version of the
         # index, it's deleted from that index and placed on the new one.
         self.setup_index(original_index)
         self.search.transfer_current_alias(self._db, original_index)
         assert original_index == self.search.works_index
-        assert 'test_index-current' == self.search.works_alias
+        assert "test_index-current" == self.search.works_alias
 
         # It has been removed from other index.
         assert False == self.search.indices.exists_alias(
-            index='test_index-v9999', name='test_index-current')
+            index="test_index-v9999", name="test_index-current"
+        )
 
         # And only exists on the new index.
-        alias_indices = list(self.search.indices.get_alias(name='test_index-current').keys())
+        alias_indices = list(
+            self.search.indices.get_alias(name="test_index-current").keys()
+        )
         assert [original_index] == alias_indices
 
         # If the index doesn't have the same base name, an error is raised.
         pytest.raises(
-            ValueError, self.search.transfer_current_alias, self._db,
-            'banana-v10'
+            ValueError, self.search.transfer_current_alias, self._db, "banana-v10"
         )
 
     def test_query_works(self):
@@ -318,7 +296,10 @@ class TestExternalSearch(ExternalSearchTest):
         assert True == test_results[2].success
         assert [] == test_results[2].result
 
-        assert "Total number of search results for 'a search term':" == test_results[3].name
+        assert (
+            "Total number of search results for 'a search term':"
+            == test_results[3].name
+        )
         assert True == test_results[3].success
         assert "0" == test_results[3].result
 
@@ -333,12 +314,9 @@ class TestExternalSearch(ExternalSearchTest):
         # Set up the search index so it will return a result.
         collection = self._collection()
 
-        search_result = MockSearchResult(
-            "Sample Book Title", "author", {}, "id"
-        )
+        search_result = MockSearchResult("Sample Book Title", "author", {}, "id")
         index.index("index", "doc type", "id", search_result)
         test_results = [x for x in index._run_self_tests(self._db, in_testing=True)]
-
 
         assert "Search results for 'a search term':" == test_results[0].name
         assert True == test_results[0].success
@@ -347,7 +325,12 @@ class TestExternalSearch(ExternalSearchTest):
         assert "Search document for 'a search term':" == test_results[1].name
         assert True == test_results[1].success
         result = json.loads(test_results[1].result)
-        sample_book = {"author": "author", "meta": {"id": "id", "_sort": ['Sample Book Title', 'author', 'id']}, "id": "id", "title": "Sample Book Title"}
+        sample_book = {
+            "author": "author",
+            "meta": {"id": "id", "_sort": ["Sample Book Title", "author", "id"]},
+            "id": "id",
+            "title": "Sample Book Title",
+        }
         assert sample_book == result
 
         assert "Raw search results for 'a search term':" == test_results[2].name
@@ -355,7 +338,10 @@ class TestExternalSearch(ExternalSearchTest):
         result = json.loads(test_results[2].result[0])
         assert sample_book == result
 
-        assert "Total number of search results for 'a search term':" == test_results[3].name
+        assert (
+            "Total number of search results for 'a search term':"
+            == test_results[3].name
+        )
         assert True == test_results[3].success
         assert "1" == test_results[3].result
 
@@ -370,7 +356,6 @@ class TestExternalSearch(ExternalSearchTest):
 
 
 class TestCurrentMapping(object):
-
     def test_character_filters(self):
         # Verify the functionality of the regular expressions we tell
         # Elasticsearch to use when normalizing fields that will be used
@@ -378,8 +363,8 @@ class TestCurrentMapping(object):
         filters = []
         for filter_name in CurrentMapping.AUTHOR_CHAR_FILTER_NAMES:
             configuration = CurrentMapping.CHAR_FILTERS[filter_name]
-            find = re.compile(configuration['pattern'])
-            replace = configuration['replacement']
+            find = re.compile(configuration["pattern"])
+            replace = configuration["replacement"]
             # Hack to (imperfectly) convert Java regex format to Python format.
             # $1 -> \1
             replace = replace.replace("$", "\\")
@@ -429,7 +414,9 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         _work = self.default_work
 
         self.moby_dick = _work(
-            title="Moby Dick", authors="Herman Melville", fiction=True,
+            title="Moby Dick",
+            authors="Herman Melville",
+            fiction=True,
         )
         self.moby_dick.presentation_edition.subtitle = "Or, the Whale"
         self.moby_dick.presentation_edition.series = "Classics"
@@ -438,7 +425,9 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         self.moby_dick.last_update_time = datetime_utc(2019, 1, 1)
 
         self.moby_duck = _work(title="Moby Duck", authors="Donovan Hohn", fiction=False)
-        self.moby_duck.presentation_edition.subtitle = "The True Story of 28,800 Bath Toys Lost at Sea"
+        self.moby_duck.presentation_edition.subtitle = (
+            "The True Story of 28,800 Bath Toys Lost at Sea"
+        )
         self.moby_duck.summary_text = "A compulsively readable narrative"
         self.moby_duck.presentation_edition.publisher = "Penguin"
         self.moby_duck.last_update_time = datetime_utc(2019, 1, 2)
@@ -470,24 +459,33 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
 
         self.washington = _work(genre="Biography", title="George Washington")
 
-        self.lincoln_vampire = _work(title="Abraham Lincoln: Vampire Hunter", genre="Fantasy")
+        self.lincoln_vampire = _work(
+            title="Abraham Lincoln: Vampire Hunter", genre="Fantasy"
+        )
 
-        self.children_work = _work(title="Alice in Wonderland", audience=Classifier.AUDIENCE_CHILDREN)
+        self.children_work = _work(
+            title="Alice in Wonderland", audience=Classifier.AUDIENCE_CHILDREN
+        )
 
-        self.all_ages_work = _work(title="The Annotated Alice", audience=Classifier.AUDIENCE_ALL_AGES)
+        self.all_ages_work = _work(
+            title="The Annotated Alice", audience=Classifier.AUDIENCE_ALL_AGES
+        )
 
-        self.ya_work = _work(title="Go Ask Alice", audience=Classifier.AUDIENCE_YOUNG_ADULT)
+        self.ya_work = _work(
+            title="Go Ask Alice", audience=Classifier.AUDIENCE_YOUNG_ADULT
+        )
 
         self.adult_work = _work(title="Still Alice", audience=Classifier.AUDIENCE_ADULT)
 
         self.research_work = _work(
             title="Curiouser and Curiouser: Surrealism and Repression in 'Alice in Wonderland'",
-            audience=Classifier.AUDIENCE_RESEARCH
+            audience=Classifier.AUDIENCE_RESEARCH,
         )
 
         self.ya_romance = _work(
             title="Gumby In Love",
-            audience=Classifier.AUDIENCE_YOUNG_ADULT, genre="Romance"
+            audience=Classifier.AUDIENCE_YOUNG_ADULT,
+            genre="Romance",
         )
         self.ya_romance.presentation_edition.subtitle = (
             "Modern Fairytale Series, Volume 7"
@@ -495,35 +493,43 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         self.ya_romance.presentation_edition.series = "Modern Fairytales"
 
         self.no_age = _work()
-        self.no_age.summary_text = "President Barack Obama's election in 2008 energized the United States"
+        self.no_age.summary_text = (
+            "President Barack Obama's election in 2008 energized the United States"
+        )
 
         # Set the series to the empty string rather than None -- this isn't counted
         # as the book belonging to a series.
         self.no_age.presentation_edition.series = ""
 
         self.age_4_5 = _work()
-        self.age_4_5.target_age = NumericRange(4, 5, '[]')
-        self.age_4_5.summary_text = "President Barack Obama's election in 2008 energized the United States"
+        self.age_4_5.target_age = NumericRange(4, 5, "[]")
+        self.age_4_5.summary_text = (
+            "President Barack Obama's election in 2008 energized the United States"
+        )
 
         self.age_5_6 = _work(fiction=False)
-        self.age_5_6.target_age = NumericRange(5, 6, '[]')
+        self.age_5_6.target_age = NumericRange(5, 6, "[]")
 
-        self.obama = _work(
-            title="Barack Obama", genre="Biography & Memoir"
+        self.obama = _work(title="Barack Obama", genre="Biography & Memoir")
+        self.obama.target_age = NumericRange(8, 8, "[]")
+        self.obama.summary_text = (
+            "President Barack Obama's election in 2008 energized the United States"
         )
-        self.obama.target_age = NumericRange(8, 8, '[]')
-        self.obama.summary_text = "President Barack Obama's election in 2008 energized the United States"
 
         self.dodger = _work()
-        self.dodger.target_age = NumericRange(8, 8, '[]')
-        self.dodger.summary_text = "Willie finds himself running for student council president"
+        self.dodger.target_age = NumericRange(8, 8, "[]")
+        self.dodger.summary_text = (
+            "Willie finds himself running for student council president"
+        )
 
         self.age_9_10 = _work()
-        self.age_9_10.target_age = NumericRange(9, 10, '[]')
-        self.age_9_10.summary_text = "President Barack Obama's election in 2008 energized the United States"
+        self.age_9_10.target_age = NumericRange(9, 10, "[]")
+        self.age_9_10.summary_text = (
+            "President Barack Obama's election in 2008 energized the United States"
+        )
 
         self.age_2_10 = _work()
-        self.age_2_10.target_age = NumericRange(2, 10, '[]')
+        self.age_2_10.target_age = NumericRange(2, 10, "[]")
 
         self.pride = _work(title="Pride and Prejudice (E)")
         self.pride.presentation_edition.medium = Edition.BOOK_MEDIUM
@@ -532,8 +538,7 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         self.pride_audio.presentation_edition.medium = Edition.AUDIO_MEDIUM
 
         self.sherlock = _work(
-            title="The Adventures of Sherlock Holmes",
-            with_open_access_download=True
+            title="The Adventures of Sherlock Holmes", with_open_access_download=True
         )
         self.sherlock.presentation_edition.language = "eng"
 
@@ -550,8 +555,7 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         # Create a second collection that only contains a few books.
         self.tiny_collection = self._collection("A Tiny Collection")
         self.tiny_book = self._work(
-            title="A Tiny Book", with_license_pool=True,
-            collection=self.tiny_collection
+            title="A Tiny Book", with_license_pool=True, collection=self.tiny_collection
         )
         self.tiny_book.license_pools[0].self_hosted = True
 
@@ -559,8 +563,7 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         # Holmes", but each collection licenses the book through a
         # different mechanism.
         self.sherlock_pool_2 = self._licensepool(
-            edition=self.sherlock.presentation_edition,
-            collection=self.tiny_collection
+            edition=self.sherlock.presentation_edition, collection=self.tiny_collection
         )
 
         sherlock_2, is_new = self.sherlock_pool_2.calculate_work()
@@ -595,9 +598,11 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         # document query doesn't contain over-zealous joins. This test
         # class is the main place where we make a large number of
         # works and generate search documents for them.
-        assert 1 == len(self.moby_dick.to_search_document()['licensepools'])
-        assert ("Audio" ==
-            self.pride_audio.to_search_document()['licensepools'][0]['medium'])
+        assert 1 == len(self.moby_dick.to_search_document()["licensepools"])
+        assert (
+            "Audio"
+            == self.pride_audio.to_search_document()["licensepools"][0]["medium"]
+        )
 
         # Set up convenient aliases for methods we'll be calling a
         # lot.
@@ -612,10 +617,7 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         expect(self.moby_duck, "moby dick", None, second_item)
 
         two_per_page = Pagination(size=2, offset=0)
-        expect(
-            [self.moby_dick, self.moby_duck],
-            "moby dick", None, two_per_page
-        )
+        expect([self.moby_dick, self.moby_duck], "moby dick", None, two_per_page)
 
         # Now try some different search queries.
 
@@ -648,10 +650,7 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
 
         # A search for a partial title match + a partial author match
         # considers only books that match both fields.
-        expect(
-            [self.moby_dick],
-            "moby melville"
-        )
+        expect([self.moby_dick], "moby melville")
 
         # Match a quoted phrase
         # 'Moby-Dick' is the first result because it's an exact title
@@ -706,8 +705,7 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
 
         # This finds books that belong to _some_ series.
         some_series = Filter(series=True)
-        expect([self.moby_dick, self.ya_romance], "", some_series,
-               ordered=False)
+        expect([self.moby_dick, self.ya_romance], "", some_series, ordered=False)
 
         # Find results based on genre.
 
@@ -719,12 +717,10 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         # Find results based on audience.
         expect(self.children_work, "children's")
 
-        expect(
-            [self.ya_work, self.ya_romance], "young adult", ordered=False
-        )
+        expect([self.ya_work, self.ya_romance], "young adult", ordered=False)
 
         # Find results based on grade level or target age.
-        for q in ('grade 4', 'grade 4-6', 'age 9'):
+        for q in ("grade 4", "grade 4-6", "age 9"):
             # ages 9-10 is a better result because a book targeted
             # toward a narrow range is a better match than a book
             # targeted toward a wide range.
@@ -782,10 +778,7 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
 
         expect(self.sherlock, "sherlock", english)
         expect(self.sherlock_spanish, "sherlock", spanish)
-        expect(
-            [self.sherlock, self.sherlock_spanish], "sherlock", both,
-            ordered=False
-        )
+        expect([self.sherlock, self.sherlock_spanish], "sherlock", both, ordered=False)
 
         # Filters on fiction status
         fiction = Filter(fiction=True)
@@ -805,8 +798,7 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         ya = Filter(audiences=Classifier.AUDIENCE_YOUNG_ADULT)
         children = Filter(audiences=Classifier.AUDIENCE_CHILDREN)
         ya_and_children = Filter(
-            audiences=[Classifier.AUDIENCE_CHILDREN,
-                       Classifier.AUDIENCE_YOUNG_ADULT]
+            audiences=[Classifier.AUDIENCE_CHILDREN, Classifier.AUDIENCE_YOUNG_ADULT]
         )
         research = Filter(audiences=[Classifier.AUDIENCE_RESEARCH])
 
@@ -816,8 +808,9 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         expect_alice([self.adult_work, self.all_ages_work], adult)
         expect_alice([self.ya_work, self.all_ages_work], ya)
         expect_alice([self.children_work, self.all_ages_work], children)
-        expect_alice([self.children_work, self.ya_work, self.all_ages_work],
-                     ya_and_children)
+        expect_alice(
+            [self.children_work, self.ya_work, self.all_ages_work], ya_and_children
+        )
 
         # The 'all ages' work appears except when the audience would make
         # that inappropriate...
@@ -828,53 +821,55 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         # to have the necessary reading fluency.
         expect_alice(
             [self.children_work],
-            Filter(audiences=Classifier.AUDIENCE_CHILDREN, target_age=(2,3))
+            Filter(audiences=Classifier.AUDIENCE_CHILDREN, target_age=(2, 3)),
         )
 
         # If there is no filter, the research work is excluded by
         # default, but everything else is included.
         default_filter = Filter()
         expect_alice(
-            [self.children_work, self.ya_work, self.adult_work,
-             self.all_ages_work],
-            default_filter
+            [self.children_work, self.ya_work, self.adult_work, self.all_ages_work],
+            default_filter,
         )
 
         # Filters on age range
         age_8 = Filter(target_age=8)
-        age_5_8 = Filter(target_age=(5,8))
-        age_5_10 = Filter(target_age=(5,10))
-        age_8_10 = Filter(target_age=(8,10))
+        age_5_8 = Filter(target_age=(5, 8))
+        age_5_10 = Filter(target_age=(5, 10))
+        age_8_10 = Filter(target_age=(8, 10))
 
         # As the age filter changes, different books appear and
         # disappear. no_age is always present since it has no age
         # restrictions.
         expect(
-            [self.no_age, self.obama, self.dodger],
-            "president", age_8, ordered=False
+            [self.no_age, self.obama, self.dodger], "president", age_8, ordered=False
         )
 
         expect(
             [self.no_age, self.age_4_5, self.obama, self.dodger],
-            "president", age_5_8, ordered=False
+            "president",
+            age_5_8,
+            ordered=False,
         )
 
         expect(
-            [self.no_age, self.age_4_5, self.obama, self.dodger,
-             self.age_9_10],
-            "president", age_5_10, ordered=False
+            [self.no_age, self.age_4_5, self.obama, self.dodger, self.age_9_10],
+            "president",
+            age_5_10,
+            ordered=False,
         )
 
         expect(
             [self.no_age, self.obama, self.dodger, self.age_9_10],
-            "president", age_8_10, ordered=False
+            "president",
+            age_8_10,
+            ordered=False,
         )
 
         # Filters on license source.
         gutenberg = DataSource.lookup(self._db, DataSource.GUTENBERG)
         gutenberg_only = Filter(license_datasource=gutenberg)
-        expect([self.moby_dick, self.moby_duck], "moby", gutenberg_only,
-               ordered=False)
+        expect([self.moby_dick, self.moby_duck], "moby", gutenberg_only, ordered=False)
 
         overdrive = DataSource.lookup(self._db, DataSource.OVERDRIVE)
         overdrive_only = Filter(license_datasource=overdrive)
@@ -899,16 +894,13 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
 
         expect(self.lincoln, "lincoln", biography_filter)
         expect(self.lincoln_vampire, "lincoln", fantasy_filter)
-        expect([self.lincoln, self.lincoln_vampire], "lincoln", both,
-               ordered=False)
+        expect([self.lincoln, self.lincoln_vampire], "lincoln", both, ordered=False)
 
         # Filters on list membership.
 
         # This ignores 'Abraham Lincoln, Vampire Hunter' because that
         # book isn't on the self.presidential list.
-        on_presidential_list = Filter(
-            customlist_restriction_sets=[[self.presidential]]
-        )
+        on_presidential_list = Filter(customlist_restriction_sets=[[self.presidential]])
         expect(self.lincoln, "lincoln", on_presidential_list)
 
         # This filters everything, since the query is restricted to
@@ -929,15 +921,12 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         # being searched, it only shows up in search results once.
         f = Filter(
             collections=[self._default_collection, self.tiny_collection],
-            languages="eng"
+            languages="eng",
         )
         expect(self.sherlock, "sherlock holmes", f)
 
         # Filter on identifier -- one or many.
-        for results in [
-            [self.lincoln],
-            [self.sherlock, self.pride_audio]
-        ]:
+        for results in [[self.lincoln], [self.sherlock, self.pride_audio]]:
             identifiers = [w.license_pools[0].identifier for w in results]
             f = Filter(identifiers=identifiers)
             expect(results, None, f, ordered=False)
@@ -964,10 +953,7 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
                 DataSource.lookup(self._db, DataSource.BIBLIOTHECA)
             ]
         )
-        expect(
-            [self.pride, self.pride_audio], "pride and prejudice", f,
-            ordered=False
-        )
+        expect([self.pride, self.pride_audio], "pride and prejudice", f, ordered=False)
 
         # "Moby Duck" is not currently available, so it won't show up in
         # search results if allow_holds is False.
@@ -984,14 +970,10 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
             pages.
             """
             pagination = SortKeyPagination(size=2)
-            facets = Facets(
-                self._default_library, None, None, order=Facets.ORDER_TITLE
-            )
+            facets = Facets(self._default_library, None, None, order=Facets.ORDER_TITLE)
             pages = []
             while pagination:
-                pages.append(worklist.works(
-                    self._db, facets, pagination, self.search
-                ))
+                pages.append(worklist.works(self._db, facets, pagination, self.search))
                 pagination = pagination.next_page
 
             # The last page should always be empty -- that's how we
@@ -1003,16 +985,14 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
 
         # Test a WorkList based on a custom list.
         presidential = WorkList()
-        presidential.initialize(
-            self._default_library, customlists=[self.presidential]
-        )
+        presidential.initialize(self._default_library, customlists=[self.presidential])
         p1, p2 = pages(presidential)
         assert [self.lincoln, self.obama] == p1
         assert [self.washington] == p2
 
         # Test a WorkList based on a language.
         spanish = WorkList()
-        spanish.initialize(self._default_library, languages=['spa'])
+        spanish.initialize(self._default_library, languages=["spa"])
         assert [[self.sherlock_spanish]] == pages(spanish)
 
         # Test a WorkList based on a genre.
@@ -1024,14 +1004,18 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         # quality.
         f = SearchFacets
         by_author = f(
-            library=self._default_library, collection=f.COLLECTION_FULL,
-            availability=f.AVAILABLE_ALL, order=f.ORDER_AUTHOR
+            library=self._default_library,
+            collection=f.COLLECTION_FULL,
+            availability=f.AVAILABLE_ALL,
+            order=f.ORDER_AUTHOR,
         )
         by_author = Filter(facets=by_author)
 
         by_title = f(
-            library=self._default_library, collection=f.COLLECTION_FULL,
-            availability=f.AVAILABLE_ALL, order=f.ORDER_TITLE
+            library=self._default_library,
+            collection=f.COLLECTION_FULL,
+            availability=f.AVAILABLE_ALL,
+            order=f.ORDER_TITLE,
         )
         by_title = Filter(facets=by_title)
 
@@ -1056,10 +1040,9 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
 
         # Lower it even more and we can start picking up search results
         # that only match because of words in the description.
-        by_title.min_score=10
-        by_author.min_score=10
-        results = [self.no_age, self.age_4_5, self.dodger,
-                   self.age_9_10, self.obama]
+        by_title.min_score = 10
+        by_author.min_score = 10
+        results = [self.no_age, self.age_4_5, self.dodger, self.age_9_10, self.obama]
         expect(results, "president", by_title)
 
         # Reverse the sort order to demonstrate that these works are being
@@ -1073,15 +1056,13 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         # Different query strings.
         self._expect_results_multi(
             [[self.moby_dick], [self.moby_duck]],
-            [("moby dick", None, first_item),
-             ("moby duck", None, first_item)]
+            [("moby dick", None, first_item), ("moby duck", None, first_item)],
         )
 
         # Same query string, different pagination settings.
         self._expect_results_multi(
             [[self.moby_dick], [self.moby_duck]],
-            [("moby dick", None, first_item),
-             ("moby dick", None, second_item)]
+            [("moby dick", None, first_item), ("moby dick", None, second_item)],
         )
 
         # Same query string, same pagination settings, different
@@ -1092,13 +1073,14 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         match_nothing = Filter(match_nothing=True)
         self._expect_results_multi(
             [[self.moby_duck], []],
-            [("moby dick", Filter(fiction=False), first_item),
-             (None, match_nothing, first_item)]
+            [
+                ("moby dick", Filter(fiction=False), first_item),
+                (None, match_nothing, first_item),
+            ],
         )
 
 
 class TestFacetFilters(EndToEndSearchTest):
-
     def populate_works(self):
         _work = self.default_work
 
@@ -1109,18 +1091,16 @@ class TestFacetFilters(EndToEndSearchTest):
         self.horse.quality = 0.2
 
         # A high-quality open-access work.
-        self.moby = _work(
-            title="Moby Dick", with_open_access_download=True
-        )
+        self.moby = _work(title="Moby Dick", with_open_access_download=True)
         self.moby.quality = 0.8
 
         # A currently available commercially-licensed work.
-        self.duck = _work(title='Moby Duck')
+        self.duck = _work(title="Moby Duck")
         self.duck.license_pools[0].licenses_available = 1
         self.duck.quality = 0.5
 
         # A currently unavailable commercially-licensed work.
-        self.becoming = _work(title='Becoming')
+        self.becoming = _work(title="Becoming")
         self.becoming.license_pools[0].licenses_available = 0
         self.becoming.quality = 0.9
 
@@ -1135,35 +1115,44 @@ class TestFacetFilters(EndToEndSearchTest):
 
         def expect(availability, collection, works):
             facets = Facets(
-                self._default_library, availability, collection,
-                order=Facets.ORDER_TITLE
+                self._default_library,
+                availability,
+                collection,
+                order=Facets.ORDER_TITLE,
             )
-            self._expect_results(
-                works, None, Filter(facets=facets), ordered=False
-            )
+            self._expect_results(works, None, Filter(facets=facets), ordered=False)
 
         # Get all the books in alphabetical order by title.
-        expect(Facets.COLLECTION_FULL, Facets.AVAILABLE_ALL,
-               [self.becoming, self.horse, self.moby, self.duck])
+        expect(
+            Facets.COLLECTION_FULL,
+            Facets.AVAILABLE_ALL,
+            [self.becoming, self.horse, self.moby, self.duck],
+        )
 
         # Show only works that can be borrowed right now.
-        expect(Facets.COLLECTION_FULL, Facets.AVAILABLE_NOW,
-               [self.horse, self.moby, self.duck])
+        expect(
+            Facets.COLLECTION_FULL,
+            Facets.AVAILABLE_NOW,
+            [self.horse, self.moby, self.duck],
+        )
 
         # Show only works that can *not* be borrowed right now.
         expect(Facets.COLLECTION_FULL, Facets.AVAILABLE_NOT_NOW, [self.becoming])
 
         # Show only open-access works.
-        expect(Facets.COLLECTION_FULL, Facets.AVAILABLE_OPEN_ACCESS,
-               [self.horse, self.moby])
+        expect(
+            Facets.COLLECTION_FULL,
+            Facets.AVAILABLE_OPEN_ACCESS,
+            [self.horse, self.moby],
+        )
 
         # Show only featured-quality works.
-        expect(Facets.COLLECTION_FEATURED, Facets.AVAILABLE_ALL,
-               [self.becoming, self.moby])
+        expect(
+            Facets.COLLECTION_FEATURED, Facets.AVAILABLE_ALL, [self.becoming, self.moby]
+        )
 
 
 class TestSearchOrder(EndToEndSearchTest):
-
     def populate_works(self):
         _work = self.default_work
 
@@ -1202,7 +1191,9 @@ class TestSearchOrder(EndToEndSearchTest):
         #           the Filter.
         # c, a - when two sets of custom list restrictions [1], [3]
         #        are associated with the filter.
-        self.moby_dick = _work(title="moby dick", authors="Herman Melville", fiction=True)
+        self.moby_dick = _work(
+            title="moby dick", authors="Herman Melville", fiction=True
+        )
         self.moby_dick.presentation_edition.subtitle = "Or, the Whale"
         self.moby_dick.presentation_edition.series = "Classics"
         self.moby_dick.presentation_edition.series_position = 10
@@ -1211,7 +1202,9 @@ class TestSearchOrder(EndToEndSearchTest):
         self.moby_dick.random = 0.1
 
         self.moby_duck = _work(title="Moby Duck", authors="donovan hohn", fiction=False)
-        self.moby_duck.presentation_edition.subtitle = "The True Story of 28,800 Bath Toys Lost at Sea"
+        self.moby_duck.presentation_edition.subtitle = (
+            "The True Story of 28,800 Bath Toys Lost at Sea"
+        )
         self.moby_duck.summary_text = "A compulsively readable narrative"
         self.moby_duck.presentation_edition.series_position = 1
         self.moby_duck.presentation_edition.publisher = "Penguin"
@@ -1246,21 +1239,21 @@ class TestSearchOrder(EndToEndSearchTest):
         # order.
         self.collection2 = self._collection(name="Collection 2 - BAC")
         self.a2 = self._licensepool(
-            edition=self.a.presentation_edition, collection=self.collection2,
-            with_open_access_download=True
-
+            edition=self.a.presentation_edition,
+            collection=self.collection2,
+            with_open_access_download=True,
         )
         self.a.license_pools.append(self.a2)
         self.b2 = self._licensepool(
-            edition=self.b.presentation_edition, collection=self.collection2,
-            with_open_access_download=True
-
+            edition=self.b.presentation_edition,
+            collection=self.collection2,
+            with_open_access_download=True,
         )
         self.b.license_pools.append(self.b2)
         self.c2 = self._licensepool(
-            edition=self.c.presentation_edition, collection=self.collection2,
-            with_open_access_download=True
-
+            edition=self.c.presentation_edition,
+            collection=self.collection2,
+            with_open_access_download=True,
         )
         self.c.license_pools.append(self.c2)
         self.b2.availability_time = datetime_utc(2020, 1, 1)
@@ -1269,48 +1262,25 @@ class TestSearchOrder(EndToEndSearchTest):
 
         # Here are three custom lists which contain the same books but
         # with different first appearances.
-        self.list1, ignore = self._customlist(
-            name="Custom list 1 - BCA", num_entries=0
-        )
-        self.list1.add_entry(
-            self.b, first_appearance=datetime_utc(2030, 1, 1)
-        )
-        self.list1.add_entry(
-            self.c, first_appearance=datetime_utc(2031, 1, 1)
-        )
-        self.list1.add_entry(
-            self.a, first_appearance=datetime_utc(2032, 1, 1)
-        )
+        self.list1, ignore = self._customlist(name="Custom list 1 - BCA", num_entries=0)
+        self.list1.add_entry(self.b, first_appearance=datetime_utc(2030, 1, 1))
+        self.list1.add_entry(self.c, first_appearance=datetime_utc(2031, 1, 1))
+        self.list1.add_entry(self.a, first_appearance=datetime_utc(2032, 1, 1))
 
-        self.list2, ignore = self._customlist(
-            name="Custom list 2 - CAB", num_entries=0
-        )
-        self.list2.add_entry(
-            self.c, first_appearance=datetime_utc(2001, 1, 1)
-        )
-        self.list2.add_entry(
-            self.a, first_appearance=datetime_utc(2014, 1, 1)
-        )
-        self.list2.add_entry(
-            self.b, first_appearance=datetime_utc(2015, 1, 1)
-        )
+        self.list2, ignore = self._customlist(name="Custom list 2 - CAB", num_entries=0)
+        self.list2.add_entry(self.c, first_appearance=datetime_utc(2001, 1, 1))
+        self.list2.add_entry(self.a, first_appearance=datetime_utc(2014, 1, 1))
+        self.list2.add_entry(self.b, first_appearance=datetime_utc(2015, 1, 1))
 
-        self.list3, ignore = self._customlist(
-            name="Custom list 3 -- CA", num_entries=0
-        )
-        self.list3.add_entry(
-            self.a, first_appearance=datetime_utc(2032, 1, 1)
-        )
-        self.list3.add_entry(
-            self.c, first_appearance=datetime_utc(1999, 1, 1)
-        )
+        self.list3, ignore = self._customlist(name="Custom list 3 -- CA", num_entries=0)
+        self.list3.add_entry(self.a, first_appearance=datetime_utc(2032, 1, 1))
+        self.list3.add_entry(self.c, first_appearance=datetime_utc(1999, 1, 1))
 
         # Create two custom lists which contain some of the same books,
         # but with different first appearances.
 
         self.by_publication_date, ignore = self._customlist(
-            name="First appearance on list is publication date",
-            num_entries=0
+            name="First appearance on list is publication date", num_entries=0
         )
         self.by_publication_date.add_entry(
             self.moby_duck, first_appearance=datetime_utc(2011, 3, 1)
@@ -1320,8 +1290,7 @@ class TestSearchOrder(EndToEndSearchTest):
         )
 
         self.staff_picks, ignore = self._customlist(
-            name="First appearance is date book was made a staff pick",
-            num_entries=0
+            name="First appearance is date book was made a staff pick", num_entries=0
         )
         self.staff_picks.add_entry(
             self.moby_dick, first_appearance=datetime_utc(2015, 5, 2)
@@ -1342,18 +1311,13 @@ class TestSearchOrder(EndToEndSearchTest):
         self.e.license_pools[0].availability_time = datetime_utc(2011, 1, 1)
 
         self.extra_list, ignore = self._customlist(num_entries=0)
-        self.extra_list.add_entry(
-            self.d, first_appearance=datetime_utc(2020, 1, 1)
-        )
-        self.extra_list.add_entry(
-            self.e, first_appearance=datetime_utc(2021, 1, 1)
-        )
+        self.extra_list.add_entry(self.d, first_appearance=datetime_utc(2020, 1, 1))
+        self.extra_list.add_entry(self.e, first_appearance=datetime_utc(2021, 1, 1))
 
         self.e.last_update_time = datetime_utc(2090, 1, 1)
         self.d.last_update_time = datetime_utc(2091, 1, 1)
 
     def test_ordering(self):
-
         def assert_order(sort_field, order, **filter_kwargs):
             """Verify that when the books created during test setup are ordered by
             the given `sort_field`, they show up in the given `order`.
@@ -1370,8 +1334,11 @@ class TestSearchOrder(EndToEndSearchTest):
             """
             expect = self._expect_results
             facets = Facets(
-                self._default_library, Facets.COLLECTION_FULL,
-                Facets.AVAILABLE_ALL, order=sort_field, order_ascending=True
+                self._default_library,
+                Facets.COLLECTION_FULL,
+                Facets.AVAILABLE_ALL,
+                order=sort_field,
+                order_ascending=True,
             )
             expect(order, None, Filter(facets=facets, **filter_kwargs))
 
@@ -1382,9 +1349,7 @@ class TestSearchOrder(EndToEndSearchTest):
             # proves that pagination works for this sort order for
             # both Pagination and SortKeyPagination.
             facets.order_ascending = True
-            for pagination_class in (
-                Pagination, SortKeyPagination
-            ):
+            for pagination_class in (Pagination, SortKeyPagination):
                 pagination = pagination_class(size=1)
                 to_process = list(order) + [[]]
                 while to_process:
@@ -1399,9 +1364,7 @@ class TestSearchOrder(EndToEndSearchTest):
 
             # Now try the same tests but in reverse order.
             facets.order_ascending = False
-            for pagination_class in (
-                Pagination, SortKeyPagination
-            ):
+            for pagination_class in (Pagination, SortKeyPagination):
                 pagination = pagination_class(size=1)
                 to_process = list(reversed(order)) + [[]]
                 results = []
@@ -1417,15 +1380,17 @@ class TestSearchOrder(EndToEndSearchTest):
 
         # We can sort by title.
         assert_order(
-            Facets.ORDER_TITLE, [self.untitled, self.moby_dick, self.moby_duck],
-            collections=[self._default_collection]
+            Facets.ORDER_TITLE,
+            [self.untitled, self.moby_dick, self.moby_duck],
+            collections=[self._default_collection],
         )
 
         # We can sort by author; 'Hohn' sorts before 'Melville' sorts
         # before "[Unknown]"
         assert_order(
-            Facets.ORDER_AUTHOR, [self.moby_duck, self.moby_dick, self.untitled],
-            collections=[self._default_collection]
+            Facets.ORDER_AUTHOR,
+            [self.moby_duck, self.moby_dick, self.untitled],
+            collections=[self._default_collection],
         )
 
         # We can sort by series position. Here, the books aren't in
@@ -1434,14 +1399,14 @@ class TestSearchOrder(EndToEndSearchTest):
         assert_order(
             Facets.ORDER_SERIES_POSITION,
             [self.moby_duck, self.untitled, self.moby_dick],
-            collections=[self._default_collection]
+            collections=[self._default_collection],
         )
 
         # We can sort by internal work ID, which isn't very useful.
         assert_order(
             Facets.ORDER_WORK_ID,
             [self.moby_dick, self.moby_duck, self.untitled],
-            collections=[self._default_collection]
+            collections=[self._default_collection],
         )
 
         # We can sort by the time the Work's LicensePools were first
@@ -1452,12 +1417,14 @@ class TestSearchOrder(EndToEndSearchTest):
         # results.
         assert_order(
             Facets.ORDER_ADDED_TO_COLLECTION,
-            [self.a, self.c, self.b], collections=[self.collection1]
+            [self.a, self.c, self.b],
+            collections=[self.collection1],
         )
 
         assert_order(
             Facets.ORDER_ADDED_TO_COLLECTION,
-            [self.b, self.a, self.c], collections=[self.collection2]
+            [self.b, self.a, self.c],
+            collections=[self.collection2],
         )
 
         # If a work shows up with multiple availability times through
@@ -1468,44 +1435,49 @@ class TestSearchOrder(EndToEndSearchTest):
         assert_order(
             Facets.ORDER_ADDED_TO_COLLECTION,
             [self.a, self.c, self.b],
-            collections=[self.collection1, self.collection2]
+            collections=[self.collection1, self.collection2],
         )
-
 
         # Finally, here are the tests of ORDER_LAST_UPDATE, as described
         # above in setup().
         assert_order(Facets.ORDER_LAST_UPDATE, [self.a, self.b, self.c, self.e, self.d])
 
         assert_order(
-            Facets.ORDER_LAST_UPDATE, [self.a, self.c, self.b],
-            collections=[self.collection1]
-        )
-
-        assert_order(
-            Facets.ORDER_LAST_UPDATE, [self.b, self.a, self.c],
-            collections=[self.collection1, self.collection2]
-        )
-
-        assert_order(
-            Facets.ORDER_LAST_UPDATE, [self.b, self.c, self.a],
-            customlist_restriction_sets=[[self.list1]]
-        )
-
-        assert_order(
-            Facets.ORDER_LAST_UPDATE, [self.c, self.a, self.b],
+            Facets.ORDER_LAST_UPDATE,
+            [self.a, self.c, self.b],
             collections=[self.collection1],
-            customlist_restriction_sets=[[self.list2]]
         )
 
         assert_order(
-            Facets.ORDER_LAST_UPDATE, [self.c, self.a],
-            customlist_restriction_sets=[[self.list1], [self.list3]]
+            Facets.ORDER_LAST_UPDATE,
+            [self.b, self.a, self.c],
+            collections=[self.collection1, self.collection2],
         )
 
         assert_order(
-            Facets.ORDER_LAST_UPDATE, [self.e, self.d],
+            Facets.ORDER_LAST_UPDATE,
+            [self.b, self.c, self.a],
+            customlist_restriction_sets=[[self.list1]],
+        )
+
+        assert_order(
+            Facets.ORDER_LAST_UPDATE,
+            [self.c, self.a, self.b],
+            collections=[self.collection1],
+            customlist_restriction_sets=[[self.list2]],
+        )
+
+        assert_order(
+            Facets.ORDER_LAST_UPDATE,
+            [self.c, self.a],
+            customlist_restriction_sets=[[self.list1], [self.list3]],
+        )
+
+        assert_order(
+            Facets.ORDER_LAST_UPDATE,
+            [self.e, self.d],
             collections=[self.collection3],
-            customlist_restriction_sets=[[self.extra_list]]
+            customlist_restriction_sets=[[self.extra_list]],
         )
 
 
@@ -1519,39 +1491,41 @@ class TestAuthorFilter(EndToEndSearchTest):
         # Create a number of Contributor objects--some fragmentary--
         # representing the same person.
         self.full = Contributor(
-            display_name='Ann Leckie', sort_name='Leckie, Ann', viaf="73520345",
-            lc="n2013008575"
+            display_name="Ann Leckie",
+            sort_name="Leckie, Ann",
+            viaf="73520345",
+            lc="n2013008575",
         )
         self.display_name = Contributor(
-            sort_name=Edition.UNKNOWN_AUTHOR, display_name='ann leckie'
+            sort_name=Edition.UNKNOWN_AUTHOR, display_name="ann leckie"
         )
-        self.sort_name = Contributor(sort_name='LECKIE, ANN')
-        self.viaf = Contributor(
-            sort_name=Edition.UNKNOWN_AUTHOR, viaf="73520345"
-        )
-        self.lc = Contributor(
-            sort_name=Edition.UNKNOWN_AUTHOR, lc="n2013008575"
-        )
+        self.sort_name = Contributor(sort_name="LECKIE, ANN")
+        self.viaf = Contributor(sort_name=Edition.UNKNOWN_AUTHOR, viaf="73520345")
+        self.lc = Contributor(sort_name=Edition.UNKNOWN_AUTHOR, lc="n2013008575")
 
         # Create a different Work for every Contributor object.
         # Alternate among the various 'author match' roles.
         self.works = []
         roles = list(Filter.AUTHOR_MATCH_ROLES)
         for i, (contributor, title, attribute) in enumerate(
-            [(self.full, "Ancillary Justice", 'justice'),
-             (self.display_name, "Ancillary Sword", 'sword'),
-             (self.sort_name, "Ancillary Mercy", 'mercy'),
-             (self.viaf, "Provenance", 'provenance'),
-             (self.lc, "Raven Tower", 'raven'),
-            ]):
+            [
+                (self.full, "Ancillary Justice", "justice"),
+                (self.display_name, "Ancillary Sword", "sword"),
+                (self.sort_name, "Ancillary Mercy", "mercy"),
+                (self.viaf, "Provenance", "provenance"),
+                (self.lc, "Raven Tower", "raven"),
+            ]
+        ):
             self._db.add(contributor)
             edition, ignore = self._edition(
                 title=title, authors=[], with_license_pool=True
             )
             contribution, was_new = get_one_or_create(
-                self._db, Contribution, edition=edition,
+                self._db,
+                Contribution,
+                edition=edition,
                 contributor=contributor,
-                role=roles[i % len(roles)]
+                role=roles[i % len(roles)],
             )
             work = self.default_work(
                 presentation_edition=edition,
@@ -1564,30 +1538,28 @@ class TestAuthorFilter(EndToEndSearchTest):
         # always be filtered out.
         edition, ignore = self._edition(
             title="Science Fiction: The Best of the Year (2007 Edition)",
-            authors=[], with_license_pool=True
+            authors=[],
+            with_license_pool=True,
         )
         contribution, is_new = get_one_or_create(
-            self._db, Contribution, edition=edition, contributor=self.full,
-            role=Contributor.CONTRIBUTOR_ROLE
+            self._db,
+            Contribution,
+            edition=edition,
+            contributor=self.full,
+            role=Contributor.CONTRIBUTOR_ROLE,
         )
-        self.literary_wonderlands = self.default_work(
-            presentation_edition=edition
-        )
+        self.literary_wonderlands = self.default_work(presentation_edition=edition)
 
         # Another decoy. This work is by a different person and will
         # always be filtered out.
-        self.ubik = self.default_work(
-            title="Ubik", authors=["Phillip K. Dick"]
-        )
+        self.ubik = self.default_work(title="Ubik", authors=["Phillip K. Dick"])
 
     def test_author_match(self):
 
         # By providing a Contributor object with all the identifiers,
         # we get every work with an author-type contribution from
         # someone who can be identified with that Contributor.
-        self._expect_results(
-            self.works, None, Filter(author=self.full), ordered=False
-        )
+        self._expect_results(self.works, None, Filter(author=self.full), ordered=False)
 
         # If we provide a Contributor object with partial information,
         # we can only get works that are identifiable with that
@@ -1604,9 +1576,7 @@ class TestAuthorFilter(EndToEndSearchTest):
             (Filter(author=self.viaf), self.provenance),
             (Filter(author=self.lc), self.raven),
         ]:
-            self._expect_results(
-                [self.justice, extra], None, filter, ordered=False
-            )
+            self._expect_results([self.justice, extra], None, filter, ordered=False)
 
         # ContributorData also works here.
 
@@ -1616,8 +1586,10 @@ class TestAuthorFilter(EndToEndSearchTest):
         # that knows both.
         author = ContributorData(sort_name="Leckie, Ann", viaf="73520345")
         self._expect_results(
-            [self.justice, self.mercy, self.provenance], None,
-            Filter(author=author), ordered=False
+            [self.justice, self.mercy, self.provenance],
+            None,
+            Filter(author=author),
+            ordered=False,
         )
 
         # The filter can also accommodate very minor variants in names
@@ -1626,8 +1598,7 @@ class TestAuthorFilter(EndToEndSearchTest):
         for variant in ("ann leckie", "Àñn Léckiê"):
             author = ContributorData(display_name=variant)
             self._expect_results(
-                [self.justice, self.sword], None,
-                Filter(author=author), ordered=False
+                [self.justice, self.sword], None, Filter(author=author), ordered=False
             )
 
         # It cannot accommodate misspellings, no matter how minor.
@@ -1636,12 +1607,12 @@ class TestAuthorFilter(EndToEndSearchTest):
 
         # If the information in the ContributorData is inconsistent,
         # the results may also be inconsistent.
-        author = ContributorData(
-            sort_name="Dick, Phillip K.", lc="n2013008575"
-        )
+        author = ContributorData(sort_name="Dick, Phillip K.", lc="n2013008575")
         self._expect_results(
             [self.justice, self.raven, self.ubik],
-            None, Filter(author=author), ordered=False
+            None,
+            Filter(author=author),
+            ordered=False,
         )
 
 
@@ -1663,16 +1634,17 @@ class TestExactMatches(EndToEndSearchTest):
         self.ya_romance = _work(
             title="Gumby In Love",
             authors="Pokey",
-            audience=Classifier.AUDIENCE_YOUNG_ADULT, genre="Romance"
+            audience=Classifier.AUDIENCE_YOUNG_ADULT,
+            genre="Romance",
         )
         self.ya_romance.presentation_edition.subtitle = (
             "Modern Fairytale Series, Book 3"
         )
 
         self.parent_book = _work(
-             title="Our Son Aziz",
-             authors=["Fatima Ansari", "Shoukath Ansari"],
-             genre="Biography & Memoir",
+            title="Our Son Aziz",
+            authors=["Fatima Ansari", "Shoukath Ansari"],
+            genre="Biography & Memoir",
         )
 
         self.behind_the_scenes = _work(
@@ -1693,9 +1665,7 @@ class TestExactMatches(EndToEndSearchTest):
         )
 
         self.book_by_someone_else = _work(
-            title="The Deadly Graves",
-            authors="Peter Ansari",
-            genre="Mystery"
+            title="The Deadly Graves", authors="Peter Ansari", genre="Mystery"
         )
 
     def test_exact_matches(self):
@@ -1706,10 +1676,10 @@ class TestExactMatches(EndToEndSearchTest):
         # split across genre and subtitle.
         expect(
             [
-                self.modern_romance, # "modern romance" in title
-                self.ya_romance      # "modern" in subtitle, genre "romance"
+                self.modern_romance,  # "modern romance" in title
+                self.ya_romance,  # "modern" in subtitle, genre "romance"
             ],
-            "modern romance"
+            "modern romance",
         )
 
         # A full author match takes precedence over a partial author
@@ -1717,10 +1687,10 @@ class TestExactMatches(EndToEndSearchTest):
         # all all because it can't match two words.
         expect(
             [
-                self.modern_romance,      # "Aziz Ansari" in author
-                self.parent_book,         # "Aziz" in title, "Ansari" in author
+                self.modern_romance,  # "Aziz Ansari" in author
+                self.parent_book,  # "Aziz" in title, "Ansari" in author
             ],
-            "aziz ansari"
+            "aziz ansari",
         )
 
         # 'peter graves' is a string that has exact matches in both
@@ -1751,17 +1721,16 @@ class TestExactMatches(EndToEndSearchTest):
         #    if there are more than two search terms, only two must match.
 
         order = [
-            self.behind_the_scenes,         # all words match in title
-            self.biography_of_peter_graves, # title + genre 'biography'
-            self.book_by_peter_graves,      # author (no 'biography')
+            self.behind_the_scenes,  # all words match in title
+            self.biography_of_peter_graves,  # title + genre 'biography'
+            self.book_by_peter_graves,  # author (no 'biography')
         ]
 
         expect(order, "peter graves biography")
 
 
 class TestFeaturedFacets(EndToEndSearchTest):
-    """Test how a FeaturedFacets object affects search ordering.
-    """
+    """Test how a FeaturedFacets object affects search ordering."""
 
     def populate_works(self):
         _work = self.default_work
@@ -1804,17 +1773,20 @@ class TestFeaturedFacets(EndToEndSearchTest):
         source = filter.FEATURABLE_SCRIPT % dict(
             cutoff=f.minimum_featured_quality ** 2, exponent=2
         )
-        assert source == featurable.script['source']
+        assert source == featurable.script["source"]
 
         # It can be currently available.
-        availability_filter = available_now['filter']
+        availability_filter = available_now["filter"]
         assert (
-            dict(nested=dict(
-                path='licensepools',
-                query=dict(term={'licensepools.available': True})
-            )) ==
-            availability_filter.to_dict())
-        assert 5 == available_now['weight']
+            dict(
+                nested=dict(
+                    path="licensepools",
+                    query=dict(term={"licensepools.available": True}),
+                )
+            )
+            == availability_filter.to_dict()
+        )
+        assert 5 == available_now["weight"]
 
         # It can get lucky.
         assert isinstance(random, RandomScore)
@@ -1830,30 +1802,35 @@ class TestFeaturedFacets(EndToEndSearchTest):
 
         # If custom lists are in play, it can also be featured on one
         # of its custom lists.
-        filter.customlist_restriction_sets = [[1,2], [3]]
-        [featurable_2, available_now_2,
-         featured_on_list] = f.scoring_functions(filter)
+        filter.customlist_restriction_sets = [[1, 2], [3]]
+        [featurable_2, available_now_2, featured_on_list] = f.scoring_functions(filter)
         assert featurable_2 == featurable
         assert available_now_2 == available_now
 
         # Any list will do -- the customlist restriction sets aren't
         # relevant here.
-        featured_filter = featured_on_list['filter']
-        assert (dict(
-            nested=dict(
-                path='customlists',
-                query=dict(bool=dict(
-                    must=[{'term': {'customlists.featured': True}},
-                          {'terms': {'customlists.list_id': [1, 2, 3]}}])))) ==
-            featured_filter.to_dict())
-        assert 11 == featured_on_list['weight']
+        featured_filter = featured_on_list["filter"]
+        assert (
+            dict(
+                nested=dict(
+                    path="customlists",
+                    query=dict(
+                        bool=dict(
+                            must=[
+                                {"term": {"customlists.featured": True}},
+                                {"terms": {"customlists.list_id": [1, 2, 3]}},
+                            ]
+                        )
+                    ),
+                )
+            )
+            == featured_filter.to_dict()
+        )
+        assert 11 == featured_on_list["weight"]
 
     def test_run(self):
-
         def works(worklist, facets):
-            return worklist.works(
-                self._db, facets, None, self.search, debug=True
-            )
+            return worklist.works(self._db, facets, None, self.search, debug=True)
 
         def assert_featured(description, worklist, facets, expect):
             # Generate a list of featured works for the given `worklist`
@@ -1869,15 +1846,11 @@ class TestFeaturedFacets(EndToEndSearchTest):
         # not_featured_on_list, not_featured_on_list shows up first because
         # it's available right now.
         w = works(worklist, facets)
-        assert w.index(self.not_featured_on_list) < w.index(
-            self.hq_not_available
-        )
+        assert w.index(self.not_featured_on_list) < w.index(self.hq_not_available)
 
         # not_featured_on_list shows up before featured_on_list because
         # it's higher-quality and list membership isn't relevant.
-        assert w.index(self.not_featured_on_list) < w.index(
-            self.featured_on_list
-        )
+        assert w.index(self.not_featured_on_list) < w.index(self.featured_on_list)
 
         # Create a WorkList that's restricted to best-sellers.
         best_sellers = WorkList()
@@ -1887,7 +1860,9 @@ class TestFeaturedFacets(EndToEndSearchTest):
         # The featured work appears above the non-featured work,
         # even though it's lower quality and is not available.
         assert_featured(
-            "Works from WorkList based on CustomList", best_sellers, facets,
+            "Works from WorkList based on CustomList",
+            best_sellers,
+            facets,
             [self.featured_on_list, self.not_featured_on_list],
         )
 
@@ -1899,9 +1874,7 @@ class TestFeaturedFacets(EndToEndSearchTest):
         # to 0, which makes all works 'featured' and stops quality
         # from being considered altogether. Basically all that matters
         # is availability.
-        all_featured_facets = FeaturedFacets(
-            0, random_seed=Filter.DETERMINISTIC
-        )
+        all_featured_facets = FeaturedFacets(0, random_seed=Filter.DETERMINISTIC)
         # We don't know exactly what order the books will be in,
         # because even without the random element Elasticsearch is
         # slightly nondeterministic, but we do expect that all of the
@@ -1924,15 +1897,19 @@ class TestFeaturedFacets(EndToEndSearchTest):
         random_facets = FeaturedFacets(1, random_seed=43)
         assert_featured(
             "Works permuted by a random seed",
-            worklist, random_facets,
-            [self.hq_available_2, self.hq_available,
-             self.not_featured_on_list, self.hq_not_available,
-             self.featured_on_list],
+            worklist,
+            random_facets,
+            [
+                self.hq_available_2,
+                self.hq_available,
+                self.not_featured_on_list,
+                self.hq_not_available,
+                self.featured_on_list,
+            ],
         )
 
 
 class TestSearchBase(object):
-
     def test__boost(self):
         # Verify that _boost() converts a regular query (or list of queries)
         # into a boosted query.
@@ -1962,10 +1939,9 @@ class TestSearchBase(object):
     def test__nest(self):
         # Test the _nest method, which turns a normal query into a
         # nested query.
-        query = Term(**{"nested_field" : "value"})
+        query = Term(**{"nested_field": "value"})
         nested = SearchBase._nest("subdocument", query)
-        assert (Nested(path='subdocument', query=query) ==
-            nested)
+        assert Nested(path="subdocument", query=query) == nested
 
     def test_nestable(self):
         # Test the _nestable helper method, which turns a normal
@@ -1975,35 +1951,29 @@ class TestSearchBase(object):
         # A query on a field that's not in a subdocument is
         # unaffected.
         field = "name.minimal"
-        normal_query = Term(**{field : "name"})
+        normal_query = Term(**{field: "name"})
         assert normal_query == m(field, normal_query)
 
         # A query on a subdocument field becomes a nested query on
         # that subdocument.
         field = "contributors.sort_name.minimal"
-        subdocument_query = Term(**{field : "name"})
+        subdocument_query = Term(**{field: "name"})
         nested = m(field, subdocument_query)
-        assert (
-            Nested(path='contributors', query=subdocument_query) ==
-            nested)
+        assert Nested(path="contributors", query=subdocument_query) == nested
 
     def test__match_term(self):
         # _match_term creates a Match Elasticsearch object which does a
         # match against a specific field.
         m = SearchBase._match_term
         qu = m("author", "flannery o'connor")
-        assert (
-            Term(author="flannery o'connor") ==
-            qu)
+        assert Term(author="flannery o'connor") == qu
 
         # If the field name references a subdocument, the query is
         # embedded in a Nested object that describes how to match it
         # against that subdocument.
         field = "genres.name"
         qu = m(field, "Biography")
-        assert (
-            Nested(path='genres', query=Term(**{field: "Biography"})) ==
-            qu)
+        assert Nested(path="genres", query=Term(**{field: "Biography"})) == qu
 
     def test__match_range(self):
         # Test the _match_range helper method.
@@ -2012,7 +1982,7 @@ class TestSearchBase(object):
 
         # This only matches if field.name has a value >= 5.
         r = SearchBase._match_range("field.name", "gte", 5)
-        assert r == {'range': {'field.name': {'gte': 5}}}
+        assert r == {"range": {"field.name": {"gte": 5}}}
 
     def test__combine_hypotheses(self):
         # Verify that _combine_hypotheses creates a DisMax query object
@@ -2036,28 +2006,26 @@ class TestSearchBase(object):
         #
         # This gives us two similar queries: one to use as a filter
         # and one to use as a boost query.
-        as_filter, as_query = Query.make_target_age_query((5,10))
+        as_filter, as_query = Query.make_target_age_query((5, 10))
 
         # Here's the filter part: a book's age range must be include the
         # 5-10 range, or it gets filtered out.
         filter_clauses = [
-            Range(**{"target_age.upper":dict(gte=5)}),
-            Range(**{"target_age.lower":dict(lte=10)}),
+            Range(**{"target_age.upper": dict(gte=5)}),
+            Range(**{"target_age.lower": dict(lte=10)}),
         ]
         assert Bool(must=filter_clauses) == as_filter
 
         # Here's the query part: a book gets boosted if its
         # age range fits _entirely_ within the target age range.
         query_clauses = [
-            Range(**{"target_age.upper":dict(lte=10)}),
-            Range(**{"target_age.lower":dict(gte=5)}),
+            Range(**{"target_age.upper": dict(lte=10)}),
+            Range(**{"target_age.lower": dict(gte=5)}),
         ]
-        assert (Bool(boost=1.1, must=filter_clauses, should=query_clauses) ==
-            as_query)
+        assert Bool(boost=1.1, must=filter_clauses, should=query_clauses) == as_query
 
 
 class TestQuery(DatabaseTest):
-
     def test_constructor(self):
         # Verify that the Query constructor sets members with
         # no processing.
@@ -2085,7 +2053,6 @@ class TestQuery(DatabaseTest):
         assert None == query.contains_stopwords
         assert 0 == query.fuzzy_coefficient
 
-
     def test_build(self):
         # Verify that the build() method combines the 'query' part of
         # a Query and the 'filter' part to create a single
@@ -2101,9 +2068,14 @@ class TestQuery(DatabaseTest):
             created by to get to a certain point by following the
             .parent relation.
             """
+
             def __init__(
-                    self, parent=None, query=None, nested_filter_calls=None,
-                    order=None, script_fields=None
+                self,
+                parent=None,
+                query=None,
+                nested_filter_calls=None,
+                order=None,
+                script_fields=None,
             ):
                 self.parent = parent
                 self._query = query
@@ -2118,8 +2090,7 @@ class TestQuery(DatabaseTest):
                 """
                 new_filters = self.nested_filter_calls + [kwargs]
                 return MockSearch(
-                    self, self._query, new_filters, self.order,
-                    self._script_fields
+                    self, self._query, new_filters, self.order, self._script_fields
                 )
 
             def query(self, query):
@@ -2129,22 +2100,27 @@ class TestQuery(DatabaseTest):
                 :return: A New MockSearch object.
                 """
                 return MockSearch(
-                    self, query, self.nested_filter_calls, self.order,
-                    self._script_fields
+                    self,
+                    query,
+                    self.nested_filter_calls,
+                    self.order,
+                    self._script_fields,
                 )
 
             def sort(self, *order_fields):
                 """Simulate the application of a sort order."""
                 return MockSearch(
-                    self, self._query, self.nested_filter_calls, order_fields,
-                    self._script_fields
+                    self,
+                    self._query,
+                    self.nested_filter_calls,
+                    order_fields,
+                    self._script_fields,
                 )
 
             def script_fields(self, **kwargs):
                 """Simulate the addition of script fields."""
                 return MockSearch(
-                    self, self._query, self.nested_filter_calls, self.order,
-                    kwargs
+                    self, self._query, self.nested_filter_calls, self.order, kwargs
                 )
 
         class MockQuery(Query):
@@ -2165,13 +2141,13 @@ class TestQuery(DatabaseTest):
         # replace them with simpler versions.
         class MockFilter(object):
 
-            universal_base_term = Q('term', universal_base_called=True)
-            universal_nested_term = Q('term', universal_nested_called=True)
+            universal_base_term = Q("term", universal_base_called=True)
+            universal_nested_term = Q("term", universal_nested_called=True)
             universal_nested_filter = dict(nested_called=[universal_nested_term])
 
             @classmethod
             def universal_base_filter(cls):
-                cls.universal_called=True
+                cls.universal_called = True
                 return cls.universal_base_term
 
             @classmethod
@@ -2223,18 +2199,19 @@ class TestQuery(DatabaseTest):
 
         # The pagination filter was the last one to be applied.
         pagination = built.nested_filter_calls.pop()
-        assert dict(name_or_query='pagination modified') == pagination
+        assert dict(name_or_query="pagination modified") == pagination
 
         # The mocked universal nested filter was applied
         # just before that.
         universal_nested = built.nested_filter_calls.pop()
         assert (
             dict(
-                name_or_query='nested',
-                path='nested_called',
-                query=Bool(filter=[MockFilter.universal_nested_term])
-            ) ==
-            universal_nested)
+                name_or_query="nested",
+                path="nested_called",
+                query=Bool(filter=[MockFilter.universal_nested_term]),
+            )
+            == universal_nested
+        )
 
         # The result of Query.elasticsearch_query is used as the basis
         # for the Search object.
@@ -2263,20 +2240,19 @@ class TestQuery(DatabaseTest):
         # The filter we passed in was combined with the universal
         # base filter into a boolean query, with its own 'must'.
         main_filter.must = main_filter.must + [MockFilter.universal_base_term]
-        assert (
-            underlying_query.filter ==
-            [main_filter])
+        assert underlying_query.filter == [main_filter]
 
         # There are no nested filters, apart from the universal one.
         assert {} == nested_filters
         universal_nested = built.nested_filter_calls.pop()
         assert (
             dict(
-                name_or_query='nested',
-                path='nested_called',
-                query=Bool(filter=[MockFilter.universal_nested_term])
-            ) ==
-            universal_nested)
+                name_or_query="nested",
+                path="nested_called",
+                query=Bool(filter=[MockFilter.universal_nested_term]),
+            )
+            == universal_nested
+        )
         assert [] == built.nested_filter_calls
 
         # At this point the universal filters are more trouble than they're
@@ -2285,10 +2261,7 @@ class TestQuery(DatabaseTest):
         MockFilter.universal_nested_filter = None
 
         # Now let's try a combination of regular filters and nested filters.
-        filter = Filter(
-            fiction=True,
-            collections=[self._default_collection]
-        )
+        filter = Filter(fiction=True, collections=[self._default_collection])
         qu = MockQuery("query string", filter=filter)
         built = qu.build(search)
         underlying_query = built._query
@@ -2296,7 +2269,7 @@ class TestQuery(DatabaseTest):
         # We get a main filter (for the fiction restriction) and one
         # nested filter.
         main_filter, nested_filters = filter.build()
-        [nested_licensepool_filter] = nested_filters.pop('licensepools')
+        [nested_licensepool_filter] = nested_filters.pop("licensepools")
         assert {} == nested_filters
 
         # As before, the main filter has been applied to the underlying
@@ -2307,9 +2280,9 @@ class TestQuery(DatabaseTest):
         # into Search.filter(). This applied an additional filter on the
         # 'licensepools' subdocument.
         [filter_call] = built.nested_filter_calls
-        assert 'nested' == filter_call['name_or_query']
-        assert 'licensepools' == filter_call['path']
-        filter_as_query = filter_call['query']
+        assert "nested" == filter_call["name_or_query"]
+        assert "licensepools" == filter_call["path"]
+        filter_as_query = filter_call["query"]
         assert Bool(filter=nested_licensepool_filter) == filter_as_query
 
         # Now we're going to test how queries are built to accommodate
@@ -2335,65 +2308,73 @@ class TestQuery(DatabaseTest):
         # A non-nested filter is applied on the 'quality' field.
         [quality_filter] = built._query.filter
         quality_range = Filter._match_range(
-            'quality', 'gte', self._default_library.minimum_featured_quality
+            "quality", "gte", self._default_library.minimum_featured_quality
         )
-        assert Q('bool', must=[quality_range], must_not=[RESEARCH]) == quality_filter
+        assert Q("bool", must=[quality_range], must_not=[RESEARCH]) == quality_filter
 
         # When using the AVAILABLE_OPEN_ACCESS availability restriction...
-        built = from_facets(Facets.COLLECTION_FULL,
-                            Facets.AVAILABLE_OPEN_ACCESS, None)
+        built = from_facets(Facets.COLLECTION_FULL, Facets.AVAILABLE_OPEN_ACCESS, None)
 
         # An additional nested filter is applied.
         [available_now] = built.nested_filter_calls
-        assert 'nested' == available_now['name_or_query']
-        assert 'licensepools' == available_now['path']
+        assert "nested" == available_now["name_or_query"]
+        assert "licensepools" == available_now["path"]
 
         # It finds only license pools that are open access.
-        nested_filter = available_now['query']
-        open_access = dict(term={'licensepools.open_access': True})
-        assert (
-            nested_filter.to_dict() ==
-            {'bool': {'filter': [open_access]}})
+        nested_filter = available_now["query"]
+        open_access = dict(term={"licensepools.open_access": True})
+        assert nested_filter.to_dict() == {"bool": {"filter": [open_access]}}
 
         # When using the AVAILABLE_NOW restriction...
         built = from_facets(Facets.COLLECTION_FULL, Facets.AVAILABLE_NOW, None)
 
         # An additional nested filter is applied.
         [available_now] = built.nested_filter_calls
-        assert 'nested' == available_now['name_or_query']
-        assert 'licensepools' == available_now['path']
+        assert "nested" == available_now["name_or_query"]
+        assert "licensepools" == available_now["path"]
 
         # It finds only license pools that are open access *or* that have
         # active licenses.
-        nested_filter = available_now['query']
-        available = {'term': {'licensepools.available': True}}
-        assert (
-            nested_filter.to_dict() ==
-            {'bool': {'filter': [{'bool': {'should': [open_access, available],
-                                           'minimum_should_match': 1}}]}})
+        nested_filter = available_now["query"]
+        available = {"term": {"licensepools.available": True}}
+        assert nested_filter.to_dict() == {
+            "bool": {
+                "filter": [
+                    {
+                        "bool": {
+                            "should": [open_access, available],
+                            "minimum_should_match": 1,
+                        }
+                    }
+                ]
+            }
+        }
 
         # When using the AVAILABLE_NOT_NOW restriction...
         built = from_facets(Facets.COLLECTION_FULL, Facets.AVAILABLE_NOT_NOW, None)
 
         # An additional nested filter is applied.
         [not_available_now] = built.nested_filter_calls
-        assert 'nested' == available_now['name_or_query']
-        assert 'licensepools' == available_now['path']
+        assert "nested" == available_now["name_or_query"]
+        assert "licensepools" == available_now["path"]
 
         # It finds only license pools that are licensed, but not
         # currently available or open access.
-        nested_filter = not_available_now['query']
-        not_available = {'term': {'licensepools.available': False}}
-        licensed = {'term': {'licensepools.licensed': True}}
-        not_open_access = {'term': {'licensepools.open_access': False}}
-        assert (
-            nested_filter.to_dict() ==
-            {'bool': {'filter': [{'bool': {'must': [not_open_access, licensed, not_available]}}]}})
+        nested_filter = not_available_now["query"]
+        not_available = {"term": {"licensepools.available": False}}
+        licensed = {"term": {"licensepools.licensed": True}}
+        not_open_access = {"term": {"licensepools.open_access": False}}
+        assert nested_filter.to_dict() == {
+            "bool": {
+                "filter": [
+                    {"bool": {"must": [not_open_access, licensed, not_available]}}
+                ]
+            }
+        }
 
         # If the Filter specifies script fields, those fields are
         # added to the Query through a call to script_fields()
-        script_fields = dict(field1="Definition1",
-                             field2="Definition2")
+        script_fields = dict(field1="Definition1", field2="Definition2")
         filter = Filter(script_fields=script_fields)
         qu = MockQuery("query string", filter=filter)
         built = qu.build(search)
@@ -2413,7 +2394,7 @@ class TestQuery(DatabaseTest):
 
         # But a number of other sort fields are also employed to act
         # as tiebreakers.
-        for tiebreaker_field in ('sort_author', 'sort_title', 'work_id'):
+        for tiebreaker_field in ("sort_author", "sort_title", "work_id"):
             assert {tiebreaker_field: "asc"} == order.pop(0)
         assert [] == order
 
@@ -2426,9 +2407,7 @@ class TestQuery(DatabaseTest):
         # is set, it gets built into a simple filter that matches
         # nothing, with no nested subfilters.
         filter = Filter(
-            fiction=True,
-            collections=[self._default_collection],
-            match_nothing = True
+            fiction=True, collections=[self._default_collection], match_nothing=True
         )
         main, nested = filter.build()
         assert MatchNone() == main
@@ -2467,13 +2446,18 @@ class TestQuery(DatabaseTest):
                 "hypothesis based on substring",
                 "another such hypothesis",
             )
+
             @property
             def parsed_query_matches(self):
                 return self.SUBSTRING_HYPOTHESES, "only valid with this filter"
 
             def _hypothesize(
-                    self, hypotheses, new_hypothesis, boost="default",
-                    filters=None, **kwargs
+                self,
+                hypotheses,
+                new_hypothesis,
+                boost="default",
+                filters=None,
+                **kwargs
             ):
                 self._boosts[new_hypothesis] = boost
                 if kwargs:
@@ -2504,33 +2488,28 @@ class TestQuery(DatabaseTest):
         assert result == query._combine_hypotheses_called_with
 
         # We ended up with a number of hypothesis:
-        assert (result ==
-            [
-                # Several hypotheses checking whether the search query is an attempt to
-                # match a single field -- the results of calling match_one_field()
-                # many times.
-                'match title',
-                'match subtitle',
-                'match series',
-                'match publisher',
-                'match imprint',
-
-                # The results of calling match_author_queries() once.
-                'author query 1',
-                'author query 2',
-
-                # The results of calling match_topic_queries() once.
-                'topic query',
-
-                # The results of calling multi_match() for three fields.
-                'multi match title+subtitle',
-                'multi match title+series',
-                'multi match title+author',
-
-                # The 'query' part of the return value of
-                # parsed_query_matches()
-                Mock.SUBSTRING_HYPOTHESES
-            ])
+        assert result == [
+            # Several hypotheses checking whether the search query is an attempt to
+            # match a single field -- the results of calling match_one_field()
+            # many times.
+            "match title",
+            "match subtitle",
+            "match series",
+            "match publisher",
+            "match imprint",
+            # The results of calling match_author_queries() once.
+            "author query 1",
+            "author query 2",
+            # The results of calling match_topic_queries() once.
+            "topic query",
+            # The results of calling multi_match() for three fields.
+            "multi match title+subtitle",
+            "multi match title+series",
+            "multi match title+author",
+            # The 'query' part of the return value of
+            # parsed_query_matches()
+            Mock.SUBSTRING_HYPOTHESES,
+        ]
 
         # That's not the whole story, though. parsed_query_matches()
         # said it was okay to test certain hypotheses, but only
@@ -2540,9 +2519,9 @@ class TestQuery(DatabaseTest):
         # of _hypothesize added it to the 'filters' dict to indicate
         # we know that those filters go with the substring
         # hypotheses. That's the only time 'filters' was touched.
-        assert (
-            {Mock.SUBSTRING_HYPOTHESES: 'only valid with this filter'} ==
-            query._filters)
+        assert {
+            Mock.SUBSTRING_HYPOTHESES: "only valid with this filter"
+        } == query._filters
 
         # Each call to _hypothesize included a boost factor indicating
         # how heavily to weight that hypothesis. Rather than do
@@ -2550,29 +2529,28 @@ class TestQuery(DatabaseTest):
         # anyway -- we just stored it in _boosts.
         boosts = sorted(list(query._boosts.items()), key=lambda x: str(x[0]))
         boosts = sorted(boosts, key=lambda x: x[1])
-        assert (boosts ==
-            [
-                ('match imprint', 1),
-                ('match publisher', 1),
-                ('match series', 1),
-                ('match subtitle', 1),
-                ('match title', 1),
-                # The only non-mocked value here is this one. The
-                # substring hypotheses have their own weights, which
-                # we don't see in this test. This is saying that if a
-                # book matches those sub-hypotheses and _also_ matches
-                # the filter, then whatever weight it got from the
-                # sub-hypotheses should be boosted slighty. This gives
-                # works that match the filter an edge over works that
-                # don't.
-                (Mock.SUBSTRING_HYPOTHESES, 1.1),
-                ('author query 1', 2),
-                ('author query 2', 3),
-                ('topic query', 4),
-                ('multi match title+author', 5),
-                ('multi match title+series', 5),
-                ('multi match title+subtitle', 5),
-            ])
+        assert boosts == [
+            ("match imprint", 1),
+            ("match publisher", 1),
+            ("match series", 1),
+            ("match subtitle", 1),
+            ("match title", 1),
+            # The only non-mocked value here is this one. The
+            # substring hypotheses have their own weights, which
+            # we don't see in this test. This is saying that if a
+            # book matches those sub-hypotheses and _also_ matches
+            # the filter, then whatever weight it got from the
+            # sub-hypotheses should be boosted slighty. This gives
+            # works that match the filter an edge over works that
+            # don't.
+            (Mock.SUBSTRING_HYPOTHESES, 1.1),
+            ("author query 1", 2),
+            ("author query 2", 3),
+            ("topic query", 4),
+            ("multi match title+author", 5),
+            ("multi match title+series", 5),
+            ("multi match title+subtitle", 5),
+        ]
 
     def test_match_one_field_hypotheses(self):
         # Test our ability to generate hypotheses that a search string
@@ -2583,8 +2561,8 @@ class TestQuery(DatabaseTest):
                 stopword_field=3,
                 stemmable_field=4,
             )
-            STOPWORD_FIELDS = ['stopword_field']
-            STEMMABLE_FIELDS = ['stemmable_field']
+            STOPWORD_FIELDS = ["stopword_field"]
+            STEMMABLE_FIELDS = ["stemmable_field"]
 
             def __init__(self, *args, **kwargs):
                 super(Mock, self).__init__(*args, **kwargs)
@@ -2603,7 +2581,7 @@ class TestQuery(DatabaseTest):
         m = query.match_one_field_hypotheses
 
         # We'll get a Term query and a MatchPhrase query.
-        term, phrase = list(m('regular_field'))
+        term, phrase = list(m("regular_field"))
 
         # The Term hypothesis tries to find an exact match for 'book'
         # in this field. It is boosted 1000x relative to the baseline
@@ -2612,6 +2590,7 @@ class TestQuery(DatabaseTest):
             hypothesis, weight = hypothesis
             assert Term(**{"%s.keyword" % field: "book"}) == hypothesis
             assert expect_weight == weight
+
         validate_keyword("regular_field", term, 2000)
 
         # The MatchPhrase hypothesis tries to find a partial phrase
@@ -2621,6 +2600,7 @@ class TestQuery(DatabaseTest):
             hypothesis, weight = hypothesis
             assert MatchPhrase(**{"%s.minimal" % field: "book"}) == hypothesis
             assert expect_weight == weight
+
         validate_minimal("regular_field", phrase, 2)
 
         # Now let's try the same query, but with fuzzy searching
@@ -2638,15 +2618,18 @@ class TestQuery(DatabaseTest):
         def validate_fuzzy(field, hypothesis, phrase_weight):
             minimal_field = field + ".minimal"
             hypothesis, weight = fuzzy
-            assert 'fuzzy match for %s' % minimal_field == hypothesis
-            assert phrase_weight*0.66 == weight
+            assert "fuzzy match for %s" % minimal_field == hypothesis
+            assert phrase_weight * 0.66 == weight
 
             # Validate standard arguments passed into _fuzzy_matches.
             # Since a fuzzy match is kind of loose, we don't allow a
             # match on a single word of a multi-word query. At least
             # two of the words have to be involved.
-            assert (dict(minimum_should_match=2, query='book') ==
-                query.fuzzy_calls[minimal_field])
+            assert (
+                dict(minimum_should_match=2, query="book")
+                == query.fuzzy_calls[minimal_field]
+            )
+
         validate_fuzzy("regular_field", fuzzy, 2)
 
         # Now try a field where stopwords might be relevant.
@@ -2668,8 +2651,7 @@ class TestQuery(DatabaseTest):
         # stopword_field that leaves the stopwords in place.  This
         # hypothesis is boosted just above the baseline hypothesis.
         hypothesis, weight = stopword
-        assert (hypothesis ==
-            MatchPhrase(**{"stopword_field.with_stopwords": "book"}))
+        assert hypothesis == MatchPhrase(**{"stopword_field.with_stopwords": "book"})
         assert weight == 3 * Mock.SLIGHTLY_ABOVE_BASELINE
 
         # Finally, let's try a stemmable field.
@@ -2683,13 +2665,9 @@ class TestQuery(DatabaseTest):
         # minimum_should_match=2 here for the same reason we do it for
         # the fuzzy search -- a normal Match query is kind of loose.
         hypothesis, weight = stemmable
-        assert (hypothesis ==
-            Match(
-                stemmable_field=dict(
-                    minimum_should_match=2,
-                    query="book"
-                )
-            ))
+        assert hypothesis == Match(
+            stemmable_field=dict(minimum_should_match=2, query="book")
+        )
         assert weight == 4 * 0.75
 
     def test_match_author_hypotheses(self):
@@ -2708,24 +2686,20 @@ class TestQuery(DatabaseTest):
         # display name, it's the author's sort name, or it matches the
         # author's sort name when automatically converted to a sort
         # name.
-        assert (
-            [
-                'display_name must match ursula le guin',
-                'sort_name must match le guin, ursula'
-            ] ==
-            hypotheses)
+        assert [
+            "display_name must match ursula le guin",
+            "sort_name must match le guin, ursula",
+        ] == hypotheses
 
         # If the string passed in already looks like a sort name, we
         # don't try to convert it -- but someone's name may contain a
         # comma, so we do check both fields.
         query = Mock("le guin, ursula")
         hypotheses = list(query.match_author_hypotheses)
-        assert (
-            [
-                'display_name must match le guin, ursula',
-                'sort_name must match le guin, ursula',
-            ] ==
-            hypotheses)
+        assert [
+            "display_name must match le guin, ursula",
+            "sort_name must match le guin, ursula",
+        ] == hypotheses
 
     def test__author_field_must_match(self):
         class Mock(Query):
@@ -2743,20 +2717,20 @@ class TestQuery(DatabaseTest):
         # run the result through _role_must_also_match() to ensure we
         # only get works where this author made a major contribution.
         [(hypothesis, weight)] = list(m("display_name"))
-        assert (
-            ['maybe contributors.display_name matches ursula le guin',
-             '(but the role must be appropriate)'] ==
-            hypothesis)
+        assert [
+            "maybe contributors.display_name matches ursula le guin",
+            "(but the role must be appropriate)",
+        ] == hypothesis
         assert 6 == weight
 
         # We can pass in a different query string to override
         # .query_string. This is how we test a match against our guess
         # at an author's sort name.
         [(hypothesis, weight)] = list(m("sort_name", "le guin, ursula"))
-        assert (
-            ['maybe contributors.sort_name matches le guin, ursula',
-             '(but the role must be appropriate)'] ==
-            hypothesis)
+        assert [
+            "maybe contributors.sort_name matches le guin, ursula",
+            "(but the role must be appropriate)",
+        ] == hypothesis
         assert 6 == weight
 
     def test__role_must_also_match(self):
@@ -2768,7 +2742,7 @@ class TestQuery(DatabaseTest):
         # Verify that _role_must_also_match() puts an appropriate
         # restriction on a match against a field in the 'contributors'
         # sub-document.
-        original_query = Term(**{'contributors.sort_name': 'ursula le guin'})
+        original_query = Term(**{"contributors.sort_name": "ursula le guin"})
         modified = Mock._role_must_also_match(original_query)
 
         # The resulting query was run through Mock._nest. In a real
@@ -2781,7 +2755,7 @@ class TestQuery(DatabaseTest):
         # The original query was combined with an extra clause, which
         # only matches people if their contribution to a book was of
         # the type that library patrons are likely to search for.
-        extra = Terms(**{"contributors.role": ['Primary Author', 'Author', 'Narrator']})
+        extra = Terms(**{"contributors.role": ["Primary Author", "Author", "Narrator"]})
         assert Bool(must=[original_query, extra]) == modified_base
 
     def test_match_topic_hypotheses(self):
@@ -2797,11 +2771,12 @@ class TestQuery(DatabaseTest):
                 query="whales",
                 fields=["summary", "classifications.term"],
                 type="best_fields",
-            ) ==
-            hypothesis)
+            )
+            == hypothesis
+        )
         # The weight of the hypothesis is the base weight associated
         # with the 'summary' field.
-        assert Query.WEIGHT_FOR_FIELD['summary'] == weight
+        assert Query.WEIGHT_FOR_FIELD["summary"] == weight
 
     def test_title_multi_match_for(self):
         # Test our ability to hypothesize that a query string might
@@ -2810,16 +2785,14 @@ class TestQuery(DatabaseTest):
 
         # If there's only one word in the query, then we don't bother
         # making this hypothesis at all.
-        assert (
-            [] ==
-            list(Query("grasslands").title_multi_match_for("other field")))
+        assert [] == list(Query("grasslands").title_multi_match_for("other field"))
 
         query = Query("grass lands")
         [(hypothesis, weight)] = list(query.title_multi_match_for("author"))
 
         expect = MultiMatch(
             query="grass lands",
-            fields = ['title.minimal', 'author.minimal'],
+            fields=["title.minimal", "author.minimal"],
             type="cross_fields",
             operator="and",
             minimum_should_match="100%",
@@ -2828,9 +2801,9 @@ class TestQuery(DatabaseTest):
 
         # The weight of this hypothesis is between the weight of a
         # pure title match and the weight of a pure author match.
-        title_weight = Query.WEIGHT_FOR_FIELD['title']
-        author_weight = Query.WEIGHT_FOR_FIELD['author']
-        assert weight == author_weight * (author_weight/title_weight)
+        title_weight = Query.WEIGHT_FOR_FIELD["title"]
+        author_weight = Query.WEIGHT_FOR_FIELD["author"]
+        assert weight == author_weight * (author_weight / title_weight)
 
     def test_parsed_query_matches(self):
         # Test our ability to take a query like "asteroids
@@ -2851,6 +2824,7 @@ class TestQuery(DatabaseTest):
         # boosting it if necessary.
         class Mock(Query):
             boost_extras = []
+
             @classmethod
             def _boost(cls, boost, queries, filters=None, **kwargs):
                 if filters or kwargs:
@@ -2872,15 +2846,22 @@ class TestQuery(DatabaseTest):
         assert [] == Mock.boost_extras
 
         Mock._hypothesize(hypotheses, "another query object", 1)
-        assert (["query object boosted by 10", "another query object boosted by 1"] ==
-            hypotheses)
+        assert [
+            "query object boosted by 10",
+            "another query object boosted by 1",
+        ] == hypotheses
         assert [] == Mock.boost_extras
 
         # If a filter or any other arguments are passed in, those arguments
         # are propagated to _boost().
         hypotheses = []
-        Mock._hypothesize(hypotheses, "query with filter", 2, filters="some filters",
-                          extra="extra kwarg")
+        Mock._hypothesize(
+            hypotheses,
+            "query with filter",
+            2,
+            filters="some filters",
+            extra="extra kwarg",
+        )
         assert ["query with filter boosted by 2"] == hypotheses
         assert [("some filters", dict(extra="extra kwarg"))] == Mock.boost_extras
 
@@ -2899,13 +2880,18 @@ class TestQueryParser(DatabaseTest):
             """Create 'query' objects that are easier to test than
             the ones the Query class makes.
             """
+
             @classmethod
             def _match_term(cls, field, query):
                 return (field, query)
 
             @classmethod
             def make_target_age_query(cls, query, boost="default boost"):
-                return ("target age (filter)", query), ("target age (query)", query, boost)
+                return ("target age (filter)", query), (
+                    "target age (query)",
+                    query,
+                    boost,
+                )
 
             @property
             def elasticsearch_query(self):
@@ -2931,7 +2917,7 @@ class TestQueryParser(DatabaseTest):
 
         # parser.filters contains the filters that we think we were
         # able to derive from the query string.
-        assert [('genres.name', 'Science Fiction')] == parser.filters
+        assert [("genres.name", "Science Fiction")] == parser.filters
 
         # parser.match_queries contains the result of putting the rest
         # of the query string into a Query object (or, here, our
@@ -2963,41 +2949,33 @@ class TestQueryParser(DatabaseTest):
         assert_parses_as(
             "science fiction about dogs",
             ("genres.name", "Science Fiction"),
-            "about dogs"
+            "about dogs",
         )
 
         # Test audiences.
 
         assert_parses_as(
-            "children's picture books",
-            ("audience", "children"),
-            "picture books"
+            "children's picture books", ("audience", "children"), "picture books"
         )
 
         # (It's possible for the entire query string to be eaten up,
         # such that there is no remainder match at all.)
         assert_parses_as(
             "young adult romance",
-            [("genres.name", "Romance"),
-             ("audience", "youngadult")],
-            ''
+            [("genres.name", "Romance"), ("audience", "youngadult")],
+            "",
         )
 
         # Test fiction/nonfiction status.
-        assert_parses_as(
-            "fiction dinosaurs",
-            ("fiction", "fiction"),
-            "dinosaurs"
-        )
+        assert_parses_as("fiction dinosaurs", ("fiction", "fiction"), "dinosaurs")
 
         # (Genres are parsed before fiction/nonfiction; otherwise
         # "science fiction" would be chomped by a search for "fiction"
         # and "nonfiction" would not be picked up.)
         assert_parses_as(
             "science fiction or nonfiction dinosaurs",
-            [("genres.name", "Science Fiction"),
-             ("fiction", "nonfiction")],
-            "or  dinosaurs"
+            [("genres.name", "Science Fiction"), ("fiction", "nonfiction")],
+            "or  dinosaurs",
         )
 
         # Test target age.
@@ -3010,17 +2988,16 @@ class TestQueryParser(DatabaseTest):
         # age range).
         assert_parses_as(
             "grade 5 science",
-            [("genres.name", "Science"),
-             ("target age (filter)", (10, 10))],
-            '',
-            ("target age (query)", (10, 10), 'default boost')
+            [("genres.name", "Science"), ("target age (filter)", (10, 10))],
+            "",
+            ("target age (query)", (10, 10), "default boost"),
         )
 
         assert_parses_as(
-            'divorce ages 10 and up',
+            "divorce ages 10 and up",
             ("target age (filter)", (10, 14)),
-            'divorce  and up', # TODO: not ideal
-            ("target age (query)", (10, 14), 'default boost'),
+            "divorce  and up",  # TODO: not ideal
+            ("target age (query)", (10, 14), "default boost"),
         )
 
         # Nothing can be parsed out from this query--it's an author's name
@@ -3062,19 +3039,20 @@ class TestQueryParser(DatabaseTest):
         # Here's the filter part: a book's age range must be include the
         # 10-11 range, or it gets filtered out.
         filter_clauses = [
-            Range(**{"target_age.upper":dict(gte=10)}),
-            Range(**{"target_age.lower":dict(lte=11)}),
+            Range(**{"target_age.upper": dict(gte=10)}),
+            Range(**{"target_age.lower": dict(lte=11)}),
         ]
         assert [Bool(must=filter_clauses)] == parser.filters
 
         # Here's the query part: a book gets boosted if its
         # age range fits _entirely_ within the target age range.
         query_clauses = [
-            Range(**{"target_age.upper":dict(lte=11)}),
-            Range(**{"target_age.lower":dict(gte=10)}),
+            Range(**{"target_age.upper": dict(lte=11)}),
+            Range(**{"target_age.lower": dict(gte=10)}),
         ]
-        assert ([Bool(boost=1.1, must=filter_clauses, should=query_clauses)] ==
-            parser.match_queries)
+        assert [
+            Bool(boost=1.1, must=filter_clauses, should=query_clauses)
+        ] == parser.match_queries
 
     def test__without_match(self):
         # Test our ability to remove matched text from a string.
@@ -3089,14 +3067,11 @@ class TestQueryParser(DatabaseTest):
 
 
 class TestFilter(DatabaseTest):
-
     def setup_method(self):
         super(TestFilter, self).setup_method()
 
         # Look up three Genre objects which can be used to make filters.
-        self.literary_fiction, ignore = Genre.lookup(
-            self._db, "Literary Fiction"
-        )
+        self.literary_fiction, ignore = Genre.lookup(self._db, "Literary Fiction")
         self.fantasy, ignore = Genre.lookup(self._db, "Fantasy")
         self.horror, ignore = Genre.lookup(self._db, "Horror")
 
@@ -3121,9 +3096,13 @@ class TestFilter(DatabaseTest):
         # the Filter object. If necessary, they'll be cleaned up
         # later, during build().
         filter = Filter(
-            media=media, languages=languages,
-            fiction=fiction, audiences=audiences, author=author,
-            match_nothing=match_nothing, min_score=min_score
+            media=media,
+            languages=languages,
+            fiction=fiction,
+            audiences=audiences,
+            author=author,
+            match_nothing=match_nothing,
+            min_score=min_score,
         )
         assert media == filter.media
         assert languages == filter.languages
@@ -3166,12 +3145,12 @@ class TestFilter(DatabaseTest):
         assert None == empty_filter.target_age
 
         one_year = Filter(target_age=8)
-        assert (8,8) == one_year.target_age
+        assert (8, 8) == one_year.target_age
 
-        year_range = Filter(target_age=(8,10))
-        assert (8,10) == year_range.target_age
+        year_range = Filter(target_age=(8, 10))
+        assert (8, 10) == year_range.target_age
 
-        year_range = Filter(target_age=NumericRange(3, 6, '()'))
+        year_range = Filter(target_age=NumericRange(3, 6, "()"))
         assert (4, 5) == year_range.target_age
 
         # Test genre_restriction_sets
@@ -3184,15 +3163,15 @@ class TestFilter(DatabaseTest):
         # Restrict to books that are literary fiction AND (horror OR
         # fantasy).
         restricted = Filter(
-            genre_restriction_sets = [
+            genre_restriction_sets=[
                 [self.horror, self.fantasy],
                 [self.literary_fiction],
             ]
         )
-        assert (
-            [[self.horror.id, self.fantasy.id],
-             [self.literary_fiction.id]] ==
-            restricted.genre_restriction_sets)
+        assert [
+            [self.horror.id, self.fantasy.id],
+            [self.literary_fiction.id],
+        ] == restricted.genre_restriction_sets
 
         # This is a restriction: 'only books that have no genre'
         assert [[]] == Filter(genre_restriction_sets=[[]]).genre_restriction_sets
@@ -3201,26 +3180,28 @@ class TestFilter(DatabaseTest):
 
         # In these three cases, there are no restrictions.
         assert [] == empty_filter.customlist_restriction_sets
-        assert [] == Filter(customlist_restriction_sets=None).customlist_restriction_sets
+        assert (
+            [] == Filter(customlist_restriction_sets=None).customlist_restriction_sets
+        )
         assert [] == Filter(customlist_restriction_sets=[]).customlist_restriction_sets
 
         # Restrict to books that are on *both* the best sellers list and the
         # staff picks list.
         restricted = Filter(
-            customlist_restriction_sets = [
+            customlist_restriction_sets=[
                 [self.best_sellers],
                 [self.staff_picks],
             ]
         )
-        assert (
-            [[self.best_sellers.id],
-             [self.staff_picks.id]] ==
-            restricted.customlist_restriction_sets)
+        assert [
+            [self.best_sellers.id],
+            [self.staff_picks.id],
+        ] == restricted.customlist_restriction_sets
 
         # This is a restriction -- 'only books that are not on any lists'.
-        assert (
-            [[]] ==
-            Filter(customlist_restriction_sets=[[]]).customlist_restriction_sets)
+        assert [[]] == Filter(
+            customlist_restriction_sets=[[]]
+        ).customlist_restriction_sets
 
         # Test the license_datasource argument
         overdrive = DataSource.lookup(self._db, DataSource.OVERDRIVE)
@@ -3268,32 +3249,28 @@ class TestFilter(DatabaseTest):
         library = self._default_library
         assert True == library.allow_holds
 
-        parent = self._lane(
-            display_name="Parent Lane", library=library
-        )
+        parent = self._lane(display_name="Parent Lane", library=library)
         parent.media = Edition.AUDIO_MEDIUM
         parent.languages = ["eng", "fra"]
         parent.fiction = True
         parent.audiences = set([Classifier.AUDIENCE_CHILDREN])
-        parent.target_age = NumericRange(10, 11, '[]')
+        parent.target_age = NumericRange(10, 11, "[]")
         parent.genres = [self.horror, self.fantasy]
         parent.customlists = [self.best_sellers]
-        parent.license_datasource = DataSource.lookup(
-            self._db, DataSource.GUTENBERG
-        )
+        parent.license_datasource = DataSource.lookup(self._db, DataSource.GUTENBERG)
 
         # This lane inherits most of its configuration from its parent.
-        inherits = self._lane(
-            display_name="Child who inherits", parent=parent
-        )
+        inherits = self._lane(display_name="Child who inherits", parent=parent)
         inherits.genres = [self.literary_fiction]
         inherits.customlists = [self.staff_picks]
 
         class Mock(object):
             def modify_search_filter(self, filter):
                 self.called_with = filter
+
             def scoring_functions(self, filter):
                 return []
+
         facets = Mock()
 
         filter = Filter.from_worklist(self._db, inherits, facets)
@@ -3303,8 +3280,7 @@ class TestFilter(DatabaseTest):
         assert parent.fiction == filter.fiction
         assert parent.audiences + [Classifier.AUDIENCE_ALL_AGES] == filter.audiences
         assert [parent.license_datasource_id] == filter.license_datasources
-        assert ((parent.target_age.lower, parent.target_age.upper) ==
-            filter.target_age)
+        assert (parent.target_age.lower, parent.target_age.upper) == filter.target_age
         assert True == filter.allow_holds
 
         # Filter.from_worklist passed the mock Facets object in to
@@ -3314,11 +3290,14 @@ class TestFilter(DatabaseTest):
 
         # For genre and custom list restrictions, the child values are
         # appended to the parent's rather than replacing it.
-        assert ([parent.genre_ids, inherits.genre_ids] ==
-            [set(x) for x in filter.genre_restriction_sets])
+        assert [parent.genre_ids, inherits.genre_ids] == [
+            set(x) for x in filter.genre_restriction_sets
+        ]
 
-        assert ([parent.customlist_ids, inherits.customlist_ids] ==
-            filter.customlist_restriction_sets)
+        assert [
+            parent.customlist_ids,
+            inherits.customlist_ids,
+        ] == filter.customlist_restriction_sets
 
         # If any other value is set on the child lane, the parent value
         # is overridden.
@@ -3344,9 +3323,10 @@ class TestFilter(DatabaseTest):
         # filter; rather it's in a subfilter that will be applied to the
         # 'licensepools' subdocument, where the collection ID lives.
 
-        [subfilter] = subfilters.pop('licensepools')
-        assert ({'terms': {'licensepools.collection_id': [self._default_collection.id]}} ==
-            subfilter.to_dict())
+        [subfilter] = subfilters.pop("licensepools")
+        assert {
+            "terms": {"licensepools.collection_id": [self._default_collection.id]}
+        } == subfilter.to_dict()
 
         # No other subfilters were specified.
         assert {} == subfilters
@@ -3405,10 +3385,10 @@ class TestFilter(DatabaseTest):
         """Helper method for the most common case, where a
         Filter.build() returns a main filter and no nested filters.
         """
-        final_query = {'bool': {'must_not': [RESEARCH.to_dict()]}}
+        final_query = {"bool": {"must_not": [RESEARCH.to_dict()]}}
 
         if expect:
-            final_query['bool']['must'] = expect
+            final_query["bool"]["must"] = expect
         main, nested = filter.build(_chain_filters)
         assert final_query == main.to_dict()
 
@@ -3431,30 +3411,33 @@ class TestFilter(DatabaseTest):
         # "all ages" should always be an audience if the audience is
         # young adult or adult.
         filter = Filter(audiences=Classifier.AUDIENCE_YOUNG_ADULT)
-        assert filter.audiences == [Classifier.AUDIENCE_YOUNG_ADULT, Classifier.AUDIENCE_ALL_AGES]
-        filter = Filter(audiences=Classifier.AUDIENCE_ADULT)
-        assert filter.audiences == [Classifier.AUDIENCE_ADULT, Classifier.AUDIENCE_ALL_AGES]
-        filter = Filter(audiences=[Classifier.AUDIENCE_ADULT, Classifier.AUDIENCE_YOUNG_ADULT])
-        assert (
-            filter.audiences ==
-            [Classifier.AUDIENCE_ADULT,
+        assert filter.audiences == [
             Classifier.AUDIENCE_YOUNG_ADULT,
-            Classifier.AUDIENCE_ALL_AGES])
+            Classifier.AUDIENCE_ALL_AGES,
+        ]
+        filter = Filter(audiences=Classifier.AUDIENCE_ADULT)
+        assert filter.audiences == [
+            Classifier.AUDIENCE_ADULT,
+            Classifier.AUDIENCE_ALL_AGES,
+        ]
+        filter = Filter(
+            audiences=[Classifier.AUDIENCE_ADULT, Classifier.AUDIENCE_YOUNG_ADULT]
+        )
+        assert filter.audiences == [
+            Classifier.AUDIENCE_ADULT,
+            Classifier.AUDIENCE_YOUNG_ADULT,
+            Classifier.AUDIENCE_ALL_AGES,
+        ]
 
         # If the audience is meant for adults, then "all ages" should not
         # be included
-        for audience in (
-                Classifier.AUDIENCE_ADULTS_ONLY, Classifier.AUDIENCE_RESEARCH
-        ):
+        for audience in (Classifier.AUDIENCE_ADULTS_ONLY, Classifier.AUDIENCE_RESEARCH):
             filter = Filter(audiences=audience)
-            assert(Classifier.AUDIENCE_ALL_AGES not in filter.audiences)
+            assert Classifier.AUDIENCE_ALL_AGES not in filter.audiences
 
         # If the audience and target age is meant for children, then the
         # audience should only be for children
-        filter = Filter(
-            audiences=Classifier.AUDIENCE_CHILDREN,
-            target_age=5
-        )
+        filter = Filter(audiences=Classifier.AUDIENCE_CHILDREN, target_age=5)
         assert filter.audiences == [Classifier.AUDIENCE_CHILDREN]
 
         # If the children's target age includes children older than
@@ -3463,9 +3446,10 @@ class TestFilter(DatabaseTest):
         all_children = Filter(audiences=Classifier.AUDIENCE_CHILDREN)
         nine_years = Filter(audiences=Classifier.AUDIENCE_CHILDREN, target_age=9)
         for filter in (all_children, nine_years):
-            assert (
-                filter.audiences ==
-                [Classifier.AUDIENCE_CHILDREN, Classifier.AUDIENCE_ALL_AGES])
+            assert filter.audiences == [
+                Classifier.AUDIENCE_CHILDREN,
+                Classifier.AUDIENCE_ALL_AGES,
+            ]
 
     def test_build(self):
         # Test the ability to turn a Filter into an ElasticSearch
@@ -3488,18 +3472,17 @@ class TestFilter(DatabaseTest):
 
         # Add a medium clause to the filter.
         filter.media = "a medium"
-        medium_built = {'terms': {'medium': ['amedium']}}
+        medium_built = {"terms": {"medium": ["amedium"]}}
         built_filters, subfilters = self.assert_filter_builds_to([medium_built], filter)
         assert {} == subfilters
 
         # Add a language clause to the filter.
         filter.languages = ["lang1", "LANG2"]
-        language_built = {'terms': {'language': ['lang1', 'lang2']}}
+        language_built = {"terms": {"language": ["lang1", "lang2"]}}
 
         # Now both the medium clause and the language clause must match.
         built_filters, subfilters = self.assert_filter_builds_to(
-            [medium_built, language_built],
-            filter
+            [medium_built, language_built], filter
         )
         assert {} == subfilters
 
@@ -3507,8 +3490,8 @@ class TestFilter(DatabaseTest):
 
         filter.collection_ids = [self._default_collection]
         filter.fiction = True
-        filter._audiences = 'CHILDREN'
-        filter.target_age = (2,3)
+        filter._audiences = "CHILDREN"
+        filter.target_age = (2, 3)
         overdrive = DataSource.lookup(self._db, DataSource.OVERDRIVE)
         filter.excluded_audiobook_data_sources = [overdrive.id]
         filter.allow_holds = False
@@ -3527,13 +3510,12 @@ class TestFilter(DatabaseTest):
         # We want books that are literary fiction, *and* either
         # fantasy or horror.
         filter.genre_restriction_sets = [
-            [self.literary_fiction], [self.fantasy, self.horror]
+            [self.literary_fiction],
+            [self.fantasy, self.horror],
         ]
 
         # We want books that are on _both_ of the custom lists.
-        filter.customlist_restriction_sets = [
-            [self.best_sellers], [self.staff_picks]
-        ]
+        filter.customlist_restriction_sets = [[self.best_sellers], [self.staff_picks]]
 
         # At this point every item on this Filter that can be set, has been
         # set. When we run build, we'll end up with the output of our mocked
@@ -3546,43 +3528,50 @@ class TestFilter(DatabaseTest):
         # restrictions is kept in the nested 'licensepools' document,
         # so those restrictions must be described in terms of nested
         # filters on that document.
-        [licensepool_filter, datasource_filter, excluded_audiobooks_filter,
-         no_holds_filter] = nested.pop('licensepools')
+        [
+            licensepool_filter,
+            datasource_filter,
+            excluded_audiobooks_filter,
+            no_holds_filter,
+        ] = nested.pop("licensepools")
 
         # The 'current collection' filter.
-        assert (
-            {'terms': {'licensepools.collection_id': [self._default_collection.id]}} ==
-            licensepool_filter.to_dict())
+        assert {
+            "terms": {"licensepools.collection_id": [self._default_collection.id]}
+        } == licensepool_filter.to_dict()
 
         # The 'only certain data sources' filter.
-        assert ({'terms': {'licensepools.data_source_id': [overdrive.id]}} ==
-            datasource_filter.to_dict())
+        assert {
+            "terms": {"licensepools.data_source_id": [overdrive.id]}
+        } == datasource_filter.to_dict()
 
         # The 'excluded audiobooks' filter.
-        audio = Q('term', **{'licensepools.medium': Edition.AUDIO_MEDIUM})
+        audio = Q("term", **{"licensepools.medium": Edition.AUDIO_MEDIUM})
         excluded_audio_source = Q(
-            'terms', **{'licensepools.data_source_id' : [overdrive.id]}
+            "terms", **{"licensepools.data_source_id": [overdrive.id]}
         )
         excluded_audio = Bool(must=[audio, excluded_audio_source])
         not_excluded_audio = Bool(must_not=excluded_audio)
         assert not_excluded_audio == excluded_audiobooks_filter
 
         # The 'no holds' filter.
-        open_access = Q('term', **{'licensepools.open_access' : True})
-        licenses_available = Q('term', **{'licensepools.available' : True})
+        open_access = Q("term", **{"licensepools.open_access": True})
+        licenses_available = Q("term", **{"licensepools.available": True})
         currently_available = Bool(should=[licenses_available, open_access])
         assert currently_available == no_holds_filter
 
         # The best-seller list and staff picks restrictions are also
         # expressed as nested filters.
-        [best_sellers_filter, staff_picks_filter] = nested.pop('customlists')
-        assert ({'terms': {'customlists.list_id': [self.best_sellers.id]}} ==
-            best_sellers_filter.to_dict())
-        assert ({'terms': {'customlists.list_id': [self.staff_picks.id]}} ==
-            staff_picks_filter.to_dict())
+        [best_sellers_filter, staff_picks_filter] = nested.pop("customlists")
+        assert {
+            "terms": {"customlists.list_id": [self.best_sellers.id]}
+        } == best_sellers_filter.to_dict()
+        assert {
+            "terms": {"customlists.list_id": [self.staff_picks.id]}
+        } == staff_picks_filter.to_dict()
 
         # The author restriction is also expressed as a nested filter.
-        [contributor_filter] = nested.pop('contributors')
+        [contributor_filter] = nested.pop("contributors")
 
         # It's value is the value of .author_filter, which is tested
         # separately in test_author_filter.
@@ -3590,39 +3579,41 @@ class TestFilter(DatabaseTest):
         assert filter.author_filter == contributor_filter
 
         # The genre restrictions are also expressed as nested filters.
-        literary_fiction_filter, fantasy_or_horror_filter = nested.pop(
-            'genres'
-        )
+        literary_fiction_filter, fantasy_or_horror_filter = nested.pop("genres")
 
         # There are two different restrictions on genre, because
         # genre_restriction_sets was set to two lists of genres.
-        assert ({'terms': {'genres.term': [self.literary_fiction.id]}} ==
-            literary_fiction_filter.to_dict())
-        assert ({'terms': {'genres.term': [self.fantasy.id, self.horror.id]}} ==
-            fantasy_or_horror_filter.to_dict())
+        assert {
+            "terms": {"genres.term": [self.literary_fiction.id]}
+        } == literary_fiction_filter.to_dict()
+        assert {
+            "terms": {"genres.term": [self.fantasy.id, self.horror.id]}
+        } == fantasy_or_horror_filter.to_dict()
 
         # There's a restriction on the identifier.
-        [identifier_restriction] = nested.pop('identifiers')
+        [identifier_restriction] = nested.pop("identifiers")
 
         # The restriction includes subclases, each of which matches
         # the identifier and type of one of the Identifier objects.
         subclauses = [
-            Bool(must=[Term(identifiers__identifier=x.identifier),
-                       Term(identifiers__type=x.type)])
+            Bool(
+                must=[
+                    Term(identifiers__identifier=x.identifier),
+                    Term(identifiers__type=x.type),
+                ]
+            )
             for x in [i1, i2]
         ]
 
         # Any identifier will work, but at least one must match.
-        assert (Bool(minimum_should_match=1, should=subclauses) ==
-            identifier_restriction)
+        assert Bool(minimum_should_match=1, should=subclauses) == identifier_restriction
 
         # There are no other nested filters.
         assert {} == nested
 
         # Every other restriction imposed on the Filter object becomes an
         # Elasticsearch filter object in this list.
-        (medium, language, fiction, audience, target_age,
-         updated_after) = built
+        (medium, language, fiction, audience, target_age, updated_after) = built
 
         # Test them one at a time.
         #
@@ -3640,8 +3631,8 @@ class TestFilter(DatabaseTest):
         assert medium_built == medium.to_dict()
         assert language_built == language.to_dict()
 
-        assert {'term': {'fiction': 'fiction'}} == fiction.to_dict()
-        assert {'terms': {'audience': ['children']}} == audience.to_dict()
+        assert {"term": {"fiction": "fiction"}} == fiction.to_dict()
+        assert {"terms": {"audience": ["children"]}} == audience.to_dict()
 
         # The contents of target_age_filter are tested below -- this
         # just tests that the target_age_filter is included.
@@ -3650,19 +3641,17 @@ class TestFilter(DatabaseTest):
         # There's a restriction on the last updated time for bibliographic
         # metadata. The datetime is converted to a number of seconds since
         # the epoch, since that's how we index times.
-        expect = (
-            last_update_time - from_timestamp(0)
-        ).total_seconds()
-        assert (
-            {'bool': {'must': [
-                {'range': {'last_update_time': {'gte': expect}}}
-            ]}} ==
-            updated_after.to_dict())
+        expect = (last_update_time - from_timestamp(0)).total_seconds()
+        assert {
+            "bool": {"must": [{"range": {"last_update_time": {"gte": expect}}}]}
+        } == updated_after.to_dict()
 
         # We tried fiction; now try nonfiction.
         filter = Filter()
         filter.fiction = False
-        built_filters, subfilters = self.assert_filter_builds_to([{'term': {'fiction': 'nonfiction'}}], filter)
+        built_filters, subfilters = self.assert_filter_builds_to(
+            [{"term": {"fiction": "nonfiction"}}], filter
+        )
         assert {} == subfilters
 
     def test_build_series(self):
@@ -3673,9 +3662,9 @@ class TestFilter(DatabaseTest):
 
         # A match against a keyword field only matches on an exact
         # string match.
-        assert (
-            built.to_dict()['bool']['must'] ==
-            [{'term': {'series.keyword': 'Talking Hedgehog Mysteries'}}])
+        assert built.to_dict()["bool"]["must"] == [
+            {"term": {"series.keyword": "Talking Hedgehog Mysteries"}}
+        ]
 
         # Find books that are in _some_ series--which one doesn't
         # matter.
@@ -3684,12 +3673,10 @@ class TestFilter(DatabaseTest):
 
         assert {} == nested
         # The book must have an indexed series.
-        assert (
-            built.to_dict()['bool']['must'] ==
-            [{'exists': {'field': 'series'}}])
+        assert built.to_dict()["bool"]["must"] == [{"exists": {"field": "series"}}]
 
         # But the 'series' that got indexed must not be the empty string.
-        assert {'term': {'series.keyword': ''}} in built.to_dict()['bool']['must_not']
+        assert {"term": {"series.keyword": ""}} in built.to_dict()["bool"]["must_not"]
 
     def test_sort_order(self):
         # Test the Filter.sort_order property.
@@ -3712,34 +3699,33 @@ class TestFilter(DatabaseTest):
             # it's removed from the list -- there's no need to sort on
             # that field a second time.
             default_sort_fields = [
-                {x: "asc"} for x in ['sort_author', 'sort_title', 'work_id']
+                {x: "asc"}
+                for x in ["sort_author", "sort_title", "work_id"]
                 if x != main_field
             ]
             assert default_sort_fields == filter.sort_order[1:]
             return filter.sort_order[0]
 
         # A simple field, either ascending or descending.
-        f.order='field'
+        f.order = "field"
         assert False == f.order_ascending
-        first_field = validate_sort_order(f, 'field')
-        assert dict(field='desc') == first_field
+        first_field = validate_sort_order(f, "field")
+        assert dict(field="desc") == first_field
 
         f.order_ascending = True
-        first_field = validate_sort_order(f, 'field')
-        assert dict(field='asc') == first_field
+        first_field = validate_sort_order(f, "field")
+        assert dict(field="asc") == first_field
 
         # When multiple fields are given, they are put at the
         # beginning and any remaining tiebreaker fields are added.
-        f.order=['series_position', 'work_id', 'some_other_field']
-        assert (
-            [
-                dict(series_position='asc'),
-                dict(work_id='asc'),
-                dict(some_other_field='asc'),
-                dict(sort_author='asc'),
-                dict(sort_title='asc'),
-            ] ==
-            f.sort_order)
+        f.order = ["series_position", "work_id", "some_other_field"]
+        assert [
+            dict(series_position="asc"),
+            dict(work_id="asc"),
+            dict(some_other_field="asc"),
+            dict(sort_author="asc"),
+            dict(sort_title="asc"),
+        ] == f.sort_order
 
         # You can't sort by some random subdocument field, because there's
         # not enough information to know how to aggregate multiple values.
@@ -3747,7 +3733,7 @@ class TestFilter(DatabaseTest):
         # You _can_ sort by license pool availability time and first
         # appearance on custom list -- those are tested below -- but it's
         # complicated.
-        f.order = 'subdocument.field'
+        f.order = "subdocument.field"
         with pytest.raises(ValueError) as excinfo:
             f.sort_order()
         assert "I don't know how to sort by subdocument.field" in str(excinfo.value)
@@ -3759,25 +3745,21 @@ class TestFilter(DatabaseTest):
         series_position = used_orders[Facets.ORDER_SERIES_POSITION]
         last_update = used_orders[Facets.ORDER_LAST_UPDATE]
         for sort_field in list(used_orders.values()):
-            if sort_field in (added_to_collection, series_position,
-                              last_update):
+            if sort_field in (added_to_collection, series_position, last_update):
                 # These are complicated cases, tested below.
                 continue
             f.order = sort_field
             first_field = validate_sort_order(f, sort_field)
-            assert {sort_field: 'asc'} == first_field
+            assert {sort_field: "asc"} == first_field
 
         # A slightly more complicated case is when a feed is ordered by
         # series position -- there the second field is title rather than
         # author.
         f.order = series_position
-        assert (
-            [
-                {x:'asc'} for x in [
-                    'series_position', 'sort_title', 'sort_author', 'work_id'
-                ]
-            ] ==
-            f.sort_order)
+        assert [
+            {x: "asc"}
+            for x in ["series_position", "sort_title", "sort_author", "work_id"]
+        ] == f.sort_order
 
         # A more complicated case is when a feed is ordered by date
         # added to the collection. This requires an aggregate function
@@ -3789,13 +3771,13 @@ class TestFilter(DatabaseTest):
         # function. If a book is available through multiple
         # collections, we sort by the _earliest_ availability time.
         simple_nested_configuration = {
-            'licensepools.availability_time': {'mode': 'min', 'order': 'asc'}
+            "licensepools.availability_time": {"mode": "min", "order": "asc"}
         }
         assert simple_nested_configuration == first_field
 
         # Setting a collection ID restriction will add a nested filter.
         f.collection_ids = [self._default_collection]
-        first_field = validate_sort_order(f, 'licensepools.availability_time')
+        first_field = validate_sort_order(f, "licensepools.availability_time")
 
         # The nested filter ensures that when sorting the results, we
         # only consider availability times from license pools that
@@ -3807,16 +3789,13 @@ class TestFilter(DatabaseTest):
         #
         # This just makes sure that the books show up in the right _order_
         # for any given set of collections.
-        nested_filter = first_field['licensepools.availability_time'].pop('nested')
-        assert (
-            {'path': 'licensepools',
-             'filter': {
-                 'terms': {
-                     'licensepools.collection_id': [self._default_collection.id]
-                 }
-             }
-            } ==
-            nested_filter)
+        nested_filter = first_field["licensepools.availability_time"].pop("nested")
+        assert {
+            "path": "licensepools",
+            "filter": {
+                "terms": {"licensepools.collection_id": [self._default_collection.id]}
+            },
+        } == nested_filter
 
         # Apart from the nested filter, this is the same ordering
         # configuration as before.
@@ -3827,41 +3806,40 @@ class TestFilter(DatabaseTest):
         f.order = last_update
         f.collection_ids = []
         first_field = validate_sort_order(f, last_update)
-        assert dict(last_update_time='asc') == first_field
+        assert dict(last_update_time="asc") == first_field
 
         # Or it can be *incredibly complicated*, if there _are_
         # collections or lists associated with the filter. Which,
         # unfortunately, is almost all the time.
         f.collection_ids = [self._default_collection.id]
-        f.customlist_restriction_sets = [[1], [1,2]]
+        f.customlist_restriction_sets = [[1], [1, 2]]
         first_field = validate_sort_order(f, last_update)
 
         # Here, the ordering is done by a script that runs on the
         # ElasticSearch server.
-        sort = first_field.pop('_script')
+        sort = first_field.pop("_script")
         assert {} == first_field
 
         # The script returns a numeric value and we want to sort those
         # values in ascending order.
-        assert 'asc' == sort.pop('order')
-        assert 'number' == sort.pop('type')
+        assert "asc" == sort.pop("order")
+        assert "number" == sort.pop("type")
 
-        script = sort.pop('script')
+        script = sort.pop("script")
         assert {} == sort
 
         # The script is the 'simplified.work_last_update' stored script.
-        assert (CurrentMapping.script_name("work_last_update") ==
-            script.pop('stored'))
+        assert CurrentMapping.script_name("work_last_update") == script.pop("stored")
 
         # Two parameters are passed into the script -- the IDs of the
         # collections and the lists relevant to the query. This is so
         # the query knows which updates should actually be considered
         # for purposes of this query.
-        params = script.pop('params')
+        params = script.pop("params")
         assert {} == script
 
-        assert [self._default_collection.id] == params.pop('collection_ids')
-        assert [1,2] == params.pop('list_ids')
+        assert [self._default_collection.id] == params.pop("collection_ids")
+        assert [1, 2] == params.pop("list_ids")
         assert {} == params
 
     def test_author_filter(self):
@@ -3878,45 +3856,39 @@ class TestFilter(DatabaseTest):
 
             # We only count contributions that were in one of the
             # matching roles.
-            role_match = Terms(
-                **{"contributors.role": Filter.AUTHOR_MATCH_ROLES}
-            )
+            role_match = Terms(**{"contributors.role": Filter.AUTHOR_MATCH_ROLES})
 
             # Among the other restrictions on fields in the
             # 'contributors' subdocument (sort name, VIAF, etc.), at
             # least one must also be met.
             author_match = [Term(**should) for should in shoulds]
             expect = Bool(
-                must=[
-                    role_match,
-                    Bool(minimum_should_match=1, should=author_match)
-                ]
+                must=[role_match, Bool(minimum_should_match=1, should=author_match)]
             )
             assert expect == actual
 
         # You can apply the filter on any one of these four fields,
         # using a Contributor or a ContributorData
-        for contributor_field in ('sort_name', 'display_name', 'viaf', 'lc'):
+        for contributor_field in ("sort_name", "display_name", "viaf", "lc"):
             for cls in Contributor, ContributorData:
-                contributor = cls(**{contributor_field:"value"})
+                contributor = cls(**{contributor_field: "value"})
                 index_field = contributor_field
-                if contributor_field in ('sort_name', 'display_name'):
+                if contributor_field in ("sort_name", "display_name"):
                     # Sort name and display name are indexed both as
                     # searchable text fields and filterable keywords.
                     # We're filtering, so we want to use the keyword
                     # version.
-                    index_field += '.keyword'
-                check_filter(
-                    contributor,
-                    {"contributors.%s" % index_field: "value"}
-                )
+                    index_field += ".keyword"
+                check_filter(contributor, {"contributors.%s" % index_field: "value"})
 
         # You can also apply the filter using a combination of these
         # fields.  At least one of the provided fields must match.
         for cls in Contributor, ContributorData:
             contributor = cls(
-                display_name='Ann Leckie', sort_name='Leckie, Ann',
-                viaf="73520345", lc="n2013008575"
+                display_name="Ann Leckie",
+                sort_name="Leckie, Ann",
+                viaf="73520345",
+                lc="n2013008575",
             )
             check_filter(
                 contributor,
@@ -3932,7 +3904,7 @@ class TestFilter(DatabaseTest):
         unknown_viaf = ContributorData(
             sort_name=Edition.UNKNOWN_AUTHOR,
             display_name=Edition.UNKNOWN_AUTHOR,
-            viaf="123"
+            viaf="123",
         )
         check_filter(unknown_viaf, {"contributors.viaf": "123"})
 
@@ -3956,7 +3928,7 @@ class TestFilter(DatabaseTest):
         # a number of inputs.
 
         # First, let's create a filter that matches "ages 2 to 5".
-        two_to_five = Filter(target_age=(2,5))
+        two_to_five = Filter(target_age=(2, 5))
         filter = two_to_five.target_age_filter
 
         # The result is the combination of two filters -- both must
@@ -3977,35 +3949,30 @@ class TestFilter(DatabaseTest):
             assert "bool" == filter.name
             assert 1 == filter.minimum_should_match
             return filter.should
+
         more_than_two, no_upper_limit = dichotomy(upper_match)
 
-
         # Either the upper age limit must be greater than two...
-        assert (
-            {'range': {'target_age.upper': {'gte': 2}}} ==
-            more_than_two.to_dict())
+        assert {"range": {"target_age.upper": {"gte": 2}}} == more_than_two.to_dict()
 
         # ...or the upper age limit must be missing entirely.
         def assert_matches_nonexistent_field(f, field):
             """Verify that a filter only matches when there is
             no value for the given field.
             """
-            assert (
-                f.to_dict() ==
-                {'bool': {'must_not': [{'exists': {'field': field}}]}})
-        assert_matches_nonexistent_field(no_upper_limit, 'target_age.upper')
+            assert f.to_dict() == {"bool": {"must_not": [{"exists": {"field": field}}]}}
+
+        assert_matches_nonexistent_field(no_upper_limit, "target_age.upper")
 
         # We must also establish that five-year-olds are not too young
         # for the book. Again, there are two ways of doing this.
         less_than_five, no_lower_limit = dichotomy(lower_match)
 
         # Either the lower age limit must be less than five...
-        assert (
-            {'range': {'target_age.lower': {'lte': 5}}} ==
-            less_than_five.to_dict())
+        assert {"range": {"target_age.lower": {"lte": 5}}} == less_than_five.to_dict()
 
         # ...or the lower age limit must be missing entirely.
-        assert_matches_nonexistent_field(no_lower_limit, 'target_age.lower')
+        assert_matches_nonexistent_field(no_lower_limit, "target_age.lower")
 
         # Now let's try a filter that matches "ten and under"
         ten_and_under = Filter(target_age=(None, 10))
@@ -4017,9 +3984,8 @@ class TestFilter(DatabaseTest):
         # Either the lower part of the age range must be <= ten, or
         # there must be no lower age limit. If neither of these are
         # true, then ten-year-olds are too young for the book.
-        assert ({'range': {'target_age.lower': {'lte': 10}}} ==
-            less_than_ten.to_dict())
-        assert_matches_nonexistent_field(no_lower_limit, 'target_age.lower')
+        assert {"range": {"target_age.lower": {"lte": 10}}} == less_than_ten.to_dict()
+        assert_matches_nonexistent_field(no_lower_limit, "target_age.lower")
 
         # Next, let's try a filter that matches "twelve and up".
         twelve_and_up = Filter(target_age=(12, None))
@@ -4031,9 +3997,10 @@ class TestFilter(DatabaseTest):
         # Either the upper part of the age range must be >= twelve, or
         # there must be no upper age limit. If neither of these are true,
         # then twelve-year-olds are too old for the book.
-        assert ({'range': {'target_age.upper': {'gte': 12}}} ==
-            more_than_twelve.to_dict())
-        assert_matches_nonexistent_field(no_upper_limit, 'target_age.upper')
+        assert {
+            "range": {"target_age.upper": {"gte": 12}}
+        } == more_than_twelve.to_dict()
+        assert_matches_nonexistent_field(no_upper_limit, "target_age.upper")
 
         # Finally, test filters that put no restriction on target age.
         no_target_age = Filter()
@@ -4065,7 +4032,7 @@ class TestFilter(DatabaseTest):
         m = Filter._filter_ids
         assert None == m(None)
         assert [] == m([])
-        assert [1,2,3] == m([1,2,3])
+        assert [1, 2, 3] == m([1, 2, 3])
 
         library = self._default_library
         assert [library.id] == m([library])
@@ -4087,8 +4054,8 @@ class TestFilter(DatabaseTest):
     def test__chain_filters(self):
         # Test the _chain_filters method, which combines
         # two Elasticsearch filter objects.
-        f1 = Q('term', key="value")
-        f2 = Q('term', key2="value2")
+        f1 = Q("term", key="value")
+        f2 = Q("term", key2="value2")
 
         m = Filter._chain_filters
 
@@ -4116,15 +4083,14 @@ class TestFilter(DatabaseTest):
 
         # Currently all nested filters operate on the 'licensepools'
         # subdocument.
-        [not_suppressed, currently_owned] = nested.pop('licensepools')
+        [not_suppressed, currently_owned] = nested.pop("licensepools")
         assert {} == nested
 
         # Let's look at those filters.
 
         # The first one is simple -- the license pool must not be
         # suppressed.
-        assert (Term(**{"licensepools.suppressed": False}) ==
-            not_suppressed)
+        assert Term(**{"licensepools.suppressed": False}) == not_suppressed
 
         # The second one is a little more complex
         owned = Term(**{"licensepools.licensed": True})
@@ -4178,9 +4144,7 @@ class TestSortKeyPagination(DatabaseTest):
 
         pagination_key = json.dumps(["field 1", 2])
 
-        pagination = SortKeyPagination.from_request(
-            dict(key=pagination_key).get
-        )
+        pagination = SortKeyPagination.from_request(dict(key=pagination_key).get)
         assert isinstance(pagination, SortKeyPagination)
         assert SortKeyPagination.DEFAULT_SIZE == pagination.size
         assert pagination_key == pagination.pagination_key
@@ -4208,15 +4172,13 @@ class TestSortKeyPagination(DatabaseTest):
         assert [("size", 20)] == list(pagination.items())
         key = ["the last", "item"]
         pagination.last_item_on_previous_page = key
-        assert (
-            [("key", json.dumps(key)), ("size", 20)] ==
-            list(pagination.items()))
+        assert [("key", json.dumps(key)), ("size", 20)] == list(pagination.items())
 
     def test_pagination_key(self):
         # SortKeyPagination has no pagination key until it knows
         # about the last item on the previous page.
         pagination = SortKeyPagination()
-        assert None == pagination. pagination_key
+        assert None == pagination.pagination_key
 
         key = ["the last", "item"]
         pagination.last_item_on_previous_page = key
@@ -4245,12 +4207,15 @@ class TestSortKeyPagination(DatabaseTest):
 
         with pytest.raises(NotImplementedError) as excinfo:
             pagination.modify_database_query(object())
-        assert "SortKeyPagination does not work with database queries." in str(excinfo.value)
+        assert "SortKeyPagination does not work with database queries." in str(
+            excinfo.value
+        )
 
     def test_modify_search_query(self):
         class MockSearch(object):
             update_from_dict_called_with = "not called"
             getitem_called_with = "not called"
+
             def update_from_dict(self, dict):
                 self.update_from_dict_called_with = dict
                 return self
@@ -4316,9 +4281,7 @@ class TestSortKeyPagination(DatabaseTest):
                 self.meta = MockMeta(sort_key)
 
         # Make a page of results, each with a unique sort key.
-        hits = [
-            MockItem(['sort', 'key', num]) for num in range(5)
-        ]
+        hits = [MockItem(["sort", "key", num]) for num in range(5)]
         last_hit = hits[-1]
 
         # Tell the page about the results.
@@ -4372,7 +4335,6 @@ class TestSortKeyPagination(DatabaseTest):
 
 
 class TestBulkUpdate(DatabaseTest):
-
     def test_works_not_presentation_ready_kept_in_index(self):
         w1 = self._work()
         w1.set_presentation_ready()
@@ -4396,23 +4358,30 @@ class TestBulkUpdate(DatabaseTest):
         # index.
         w2.presentation_ready = False
         successes, failures = index.bulk_update([w1, w2, w3])
-        assert set([w1.id, w2.id, w3.id]) == set([x[-1] for x in list(index.docs.keys())])
+        assert set([w1.id, w2.id, w3.id]) == set(
+            [x[-1] for x in list(index.docs.keys())]
+        )
         assert set([w1, w2, w3]) == set(successes)
         assert [] == failures
 
-class TestSearchErrors(ExternalSearchTest):
 
+class TestSearchErrors(ExternalSearchTest):
     def test_search_connection_timeout(self):
         attempts = []
 
         def bulk_with_timeout(docs, raise_on_error=False, raise_on_exception=False):
             attempts.append(docs)
+
             def error(doc):
-                return dict(index=dict(status='TIMEOUT',
-                                       exception='ConnectionTimeout',
-                                       error='Connection Timeout!',
-                                       _id=doc['_id'],
-                                       data=doc))
+                return dict(
+                    index=dict(
+                        status="TIMEOUT",
+                        exception="ConnectionTimeout",
+                        error="Connection Timeout!",
+                        _id=doc["_id"],
+                        data=doc,
+                    )
+                )
 
             errors = list(map(error, docs))
             return 0, errors
@@ -4428,8 +4397,7 @@ class TestSearchErrors(ExternalSearchTest):
         assert "Connection Timeout!" == failures[0][1]
 
         # When all the documents fail, it tries again once with the same arguments.
-        assert ([work.id, work.id] ==
-            [docs[0]['_id'] for docs in attempts])
+        assert [work.id, work.id] == [docs[0]["_id"] for docs in attempts]
 
     def test_search_single_document_error(self):
         successful_work = self._work()
@@ -4438,9 +4406,13 @@ class TestSearchErrors(ExternalSearchTest):
         failing_work.set_presentation_ready()
 
         def bulk_with_error(docs, raise_on_error=False, raise_on_exception=False):
-            failures = [dict(data=dict(_id=failing_work.id),
-                             error="There was an error!",
-                             exception="Exception")]
+            failures = [
+                dict(
+                    data=dict(_id=failing_work.id),
+                    error="There was an error!",
+                    exception="Exception",
+                )
+            ]
             success_count = 1
             return success_count, failures
 
@@ -4474,22 +4446,16 @@ class TestWorkSearchResult(DatabaseTest):
 
 
 class TestSearchIndexCoverageProvider(DatabaseTest):
-
     def test_operation(self):
         index = MockExternalSearchIndex()
-        provider = SearchIndexCoverageProvider(
-            self._db, search_index_client=index
-        )
-        assert (WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION ==
-            provider.operation)
+        provider = SearchIndexCoverageProvider(self._db, search_index_client=index)
+        assert WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION == provider.operation
 
     def test_success(self):
         work = self._work()
         work.set_presentation_ready()
         index = MockExternalSearchIndex()
-        provider = SearchIndexCoverageProvider(
-            self._db, search_index_client=index
-        )
+        provider = SearchIndexCoverageProvider(self._db, search_index_client=index)
         results = provider.process_batch([work])
 
         # We got one success and no failures.
@@ -4501,24 +4467,25 @@ class TestSearchIndexCoverageProvider(DatabaseTest):
     def test_failure(self):
         class DoomedExternalSearchIndex(MockExternalSearchIndex):
             """All documents sent to this index will fail."""
+
             def bulk(self, docs, **kwargs):
                 return 0, [
-                    dict(data=dict(_id=failing_work['_id']),
-                         error="There was an error!",
-                         exception="Exception")
+                    dict(
+                        data=dict(_id=failing_work["_id"]),
+                        error="There was an error!",
+                        exception="Exception",
+                    )
                     for failing_work in docs
                 ]
 
         work = self._work()
         work.set_presentation_ready()
         index = DoomedExternalSearchIndex()
-        provider = SearchIndexCoverageProvider(
-            self._db, search_index_client=index
-        )
+        provider = SearchIndexCoverageProvider(self._db, search_index_client=index)
         results = provider.process_batch([work])
 
         # We have one transient failure.
         [record] = results
         assert work == record.obj
         assert True == record.transient
-        assert 'There was an error!' == record.exception
+        assert "There was an error!" == record.exception

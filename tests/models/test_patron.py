@@ -1,35 +1,26 @@
 # encoding: utf-8
-import pytest
 import datetime
-from mock import (
-    call,
-    MagicMock,
-)
 
-from ...testing import DatabaseTest
+import pytest
+from mock import MagicMock, call
+
 from ...classifier import Classifier
-from ...model import (
-    create,
-    tuple_to_numericrange,
-)
+from ...model import create, tuple_to_numericrange
 from ...model.credential import Credential
 from ...model.datasource import DataSource
 from ...model.library import Library
 from ...model.licensing import PolicyException
-from ...model.patron import (
-    Annotation,
-    Hold,
-    Loan,
-    Patron,
-    PatronProfileStorage,
-)
+from ...model.patron import Annotation, Hold, Loan, Patron, PatronProfileStorage
+from ...testing import DatabaseTest
 from ...util.datetime_helpers import datetime_utc, utc_now
+
 
 class TestAnnotation(DatabaseTest):
     def test_set_inactive(self):
         pool = self._licensepool(None)
         annotation, ignore = create(
-            self._db, Annotation,
+            self._db,
+            Annotation,
             patron=self._patron(),
             identifier=pool.identifier,
             motivation=Annotation.IDLING,
@@ -49,7 +40,8 @@ class TestAnnotation(DatabaseTest):
         pool2 = self._licensepool(None)
         patron = self._patron()
         annotation1, ignore = create(
-            self._db, Annotation,
+            self._db,
+            Annotation,
             patron=patron,
             identifier=pool2.identifier,
             motivation=Annotation.IDLING,
@@ -57,7 +49,8 @@ class TestAnnotation(DatabaseTest):
             active=True,
         )
         annotation2, ignore = create(
-            self._db, Annotation,
+            self._db,
+            Annotation,
             patron=patron,
             identifier=pool2.identifier,
             motivation=Annotation.IDLING,
@@ -74,8 +67,8 @@ class TestAnnotation(DatabaseTest):
         assert annotation2 == patron.annotations[0]
         assert annotation1 == patron.annotations[1]
 
-class TestHold(DatabaseTest):
 
+class TestHold(DatabaseTest):
     def test_on_hold_to(self):
         now = utc_now()
         later = now + datetime.timedelta(days=1)
@@ -172,15 +165,21 @@ class TestHold(DatabaseTest):
             """Track the arguments passed into _calculate_until."""
             self.called_with = args
             return "mock until"
+
         old__calculate_until = hold._calculate_until
         Hold._calculate_until = _mock__calculate_until
 
         assert "mock until" == m(one_day, two_days)
 
-        (calculate_from, position, licenses_available, default_loan_period,
-         default_reservation_period) = hold.called_with
+        (
+            calculate_from,
+            position,
+            licenses_available,
+            default_loan_period,
+            default_reservation_period,
+        ) = hold.called_with
 
-        assert (calculate_from-now).total_seconds() < 5
+        assert (calculate_from - now).total_seconds() < 5
         assert hold.position == position
         assert pool.licenses_available == licenses_available
         assert one_day == default_loan_period
@@ -190,8 +189,13 @@ class TestHold(DatabaseTest):
         # assume they're at the end.
         hold.position = None
         assert "mock until" == m(one_day, two_days)
-        (calculate_from, position, licenses_available, default_loan_period,
-         default_reservation_period) = hold.called_with
+        (
+            calculate_from,
+            position,
+            licenses_available,
+            default_loan_period,
+            default_reservation_period,
+        ) = hold.called_with
         assert pool.patrons_in_hold_queue == position
 
         Hold._calculate_until = old__calculate_until
@@ -210,44 +214,36 @@ class TestHold(DatabaseTest):
         # After 21 days, those copies are released and I am 8th in line.
         # After 28 days, those copies are released and I am 4th in line.
         # After 35 days, those copies are released and get my notification.
-        a = Hold._calculate_until(
-            start, 20, 4, default_loan, default_reservation)
-        assert a == start + datetime.timedelta(days=(7*5))
+        a = Hold._calculate_until(start, 20, 4, default_loan, default_reservation)
+        assert a == start + datetime.timedelta(days=(7 * 5))
 
         # If I am 21st in line, I need to wait six weeks.
-        b = Hold._calculate_until(
-            start, 21, 4, default_loan, default_reservation)
-        assert b == start + datetime.timedelta(days=(7*6))
+        b = Hold._calculate_until(start, 21, 4, default_loan, default_reservation)
+        assert b == start + datetime.timedelta(days=(7 * 6))
 
         # If I am 3rd in line, I only need to wait seven days--that's when
         # I'll get the notification message.
-        b = Hold._calculate_until(
-            start, 3, 4, default_loan, default_reservation)
+        b = Hold._calculate_until(start, 3, 4, default_loan, default_reservation)
         assert b == start + datetime.timedelta(days=7)
 
         # A new person gets the book every week. Someone has the book now
         # and there are 3 people ahead of me in the queue. I will get
         # the book in 7 days + 3 weeks
-        c = Hold._calculate_until(
-            start, 3, 1, default_loan, default_reservation)
-        assert c == start + datetime.timedelta(days=(7*4))
+        c = Hold._calculate_until(start, 3, 1, default_loan, default_reservation)
+        assert c == start + datetime.timedelta(days=(7 * 4))
 
         # I'm first in line for 1 book. After 7 days, one copy is
         # released and I'll get my notification.
-        a = Hold._calculate_until(
-            start, 1, 1, default_loan, default_reservation)
+        a = Hold._calculate_until(start, 1, 1, default_loan, default_reservation)
         assert a == start + datetime.timedelta(days=7)
 
         # The book is reserved to me. I need to hurry up and check it out.
-        d = Hold._calculate_until(
-            start, 0, 1, default_loan, default_reservation)
+        d = Hold._calculate_until(start, 0, 1, default_loan, default_reservation)
         assert d == start + datetime.timedelta(days=1)
 
         # If there are no licenses, I will never get the book.
-        e = Hold._calculate_until(
-            start, 10, 0, default_loan, default_reservation)
+        e = Hold._calculate_until(start, 10, 0, default_loan, default_reservation)
         assert e == None
-
 
     def test_vendor_hold_end_value_takes_precedence_over_calculated_value(self):
         """If the vendor has provided an estimated availability time,
@@ -268,15 +264,19 @@ class TestHold(DatabaseTest):
         assert tomorrow == hold.until(default_loan, default_reservation)
 
         calculated_value = hold._calculate_until(
-            now, hold.position, pool.licenses_available,
-            default_loan, default_reservation
+            now,
+            hold.position,
+            pool.licenses_available,
+            default_loan,
+            default_reservation,
         )
 
         # If the vendor value is not in the future, it's ignored
         # and the calculated value is used instead.
         def assert_calculated_value_used():
             result = hold.until(default_loan, default_reservation)
-            assert (result-calculated_value).seconds < 5
+            assert (result - calculated_value).seconds < 5
+
         hold.end = now
         assert_calculated_value_used()
 
@@ -285,8 +285,8 @@ class TestHold(DatabaseTest):
         hold.end = None
         assert_calculated_value_used()
 
-class TestLoans(DatabaseTest):
 
+class TestLoans(DatabaseTest):
     def test_open_access_loan(self):
         patron = self._patron()
         work = self._work(with_license_pool=True)
@@ -378,8 +378,8 @@ class TestLoans(DatabaseTest):
         loan.patron = patron
         assert patron.library == loan.library
 
-class TestPatron(DatabaseTest):
 
+class TestPatron(DatabaseTest):
     def test_repr(self):
 
         patron = self._patron(external_identifier="a patron")
@@ -387,8 +387,9 @@ class TestPatron(DatabaseTest):
         patron.authorization_expires = datetime_utc(2018, 1, 2, 3, 4, 5)
         patron.last_external_sync = None
         assert (
-            "<Patron authentication_identifier=None expires=2018-01-02 sync=None>" ==
-            repr(patron))
+            "<Patron authentication_identifier=None expires=2018-01-02 sync=None>"
+            == repr(patron)
+        )
 
     def test_identifier_to_remote_service(self):
 
@@ -419,17 +420,16 @@ class TestPatron(DatabaseTest):
         # patron identifier.
         def fake_generator():
             return "fake string"
+
         bib = DataSource.BIBLIOTHECA
-        assert ("fake string" ==
-            patron.identifier_to_remote_service(bib, fake_generator))
+        assert "fake string" == patron.identifier_to_remote_service(bib, fake_generator)
 
         # Once the identifier is created, specifying a different generator
         # does nothing.
-        assert ("fake string" ==
-            patron.identifier_to_remote_service(bib))
-        assert (
-            axis_identifier ==
-            patron.identifier_to_remote_service(axis, fake_generator))
+        assert "fake string" == patron.identifier_to_remote_service(bib)
+        assert axis_identifier == patron.identifier_to_remote_service(
+            axis, fake_generator
+        )
 
     def test_set_synchronize_annotations(self):
         # Two patrons.
@@ -451,7 +451,7 @@ class TestPatron(DatabaseTest):
                 identifier=identifier,
                 motivation=Annotation.IDLING,
             )
-            annotation.content="The content for %s" % patron.id,
+            annotation.content = ("The content for %s" % patron.id,)
 
             assert 1 == len(patron.annotations)
 
@@ -464,8 +464,11 @@ class TestPatron(DatabaseTest):
 
         # Patron #1 can no longer use Annotation.get_one_or_create.
         pytest.raises(
-            ValueError, Annotation.get_one_or_create,
-            self._db, patron=p1, identifier=identifier,
+            ValueError,
+            Annotation.get_one_or_create,
+            self._db,
+            patron=p1,
+            identifier=identifier,
             motivation=Annotation.IDLING,
         )
 
@@ -474,7 +477,9 @@ class TestPatron(DatabaseTest):
 
         # But patron #2 can use Annotation.get_one_or_create.
         i2, is_new = Annotation.get_one_or_create(
-            self._db, patron=p2, identifier=self._identifier(),
+            self._db,
+            patron=p2,
+            identifier=self._identifier(),
             motivation=Annotation.IDLING,
         )
         assert True == is_new
@@ -483,6 +488,7 @@ class TestPatron(DatabaseTest):
         # can't go back to not having made the decision.
         def try_to_set_none(patron):
             patron.synchronize_annotations = None
+
         pytest.raises(ValueError, try_to_set_none, p2)
 
     def test_cascade_delete(self):
@@ -527,7 +533,7 @@ class TestPatron(DatabaseTest):
     def test_loan_activity_max_age(self):
         # Currently, patron.loan_activity_max_age is a constant
         # and cannot be changed.
-        assert 15*60 == self._patron().loan_activity_max_age
+        assert 15 * 60 == self._patron().loan_activity_max_age
 
     def test_last_loan_activity_sync(self):
         # Verify that last_loan_activity_sync is cleared out
@@ -535,8 +541,8 @@ class TestPatron(DatabaseTest):
         patron = self._patron()
         now = utc_now()
         max_age = patron.loan_activity_max_age
-        recently = now - datetime.timedelta(seconds=max_age/2)
-        long_ago = now - datetime.timedelta(seconds=max_age*2)
+        recently = now - datetime.timedelta(seconds=max_age / 2)
+        long_ago = now - datetime.timedelta(seconds=max_age * 2)
 
         # So long as last_loan_activity_sync is relatively recent,
         # it's treated as a normal piece of data.
@@ -595,14 +601,13 @@ class TestPatron(DatabaseTest):
         # The target audience and age of a patron's root lane controls
         # whether a given book is 'age-appropriate' for them.
         lane = self._lane()
-        lane.audiences = [Classifier.AUDIENCE_CHILDREN,
-                         Classifier.AUDIENCE_YOUNG_ADULT]
-        lane.target_age = (9,14)
+        lane.audiences = [Classifier.AUDIENCE_CHILDREN, Classifier.AUDIENCE_YOUNG_ADULT]
+        lane.target_age = (9, 14)
         lane.root_for_patron_type = ["1"]
         self._db.flush()
 
-        def mock_age_appropriate(work_audience, work_target_age,
-                 reader_audience, reader_target_age
+        def mock_age_appropriate(
+            work_audience, work_target_age, reader_audience, reader_target_age
         ):
             """Returns True only if reader_audience is the preconfigured
             expected value.
@@ -631,12 +636,22 @@ class TestPatron(DatabaseTest):
 
         # age_appropriate_match method was called on
         # each audience associated with the patron's root lane.
-        mock.assert_has_calls([
-            call(work_audience, work_target_age,
-                 Classifier.AUDIENCE_CHILDREN, lane.target_age),
-            call(work_audience, work_target_age,
-                 Classifier.AUDIENCE_YOUNG_ADULT, lane.target_age)
-        ])
+        mock.assert_has_calls(
+            [
+                call(
+                    work_audience,
+                    work_target_age,
+                    Classifier.AUDIENCE_CHILDREN,
+                    lane.target_age,
+                ),
+                call(
+                    work_audience,
+                    work_target_age,
+                    Classifier.AUDIENCE_YOUNG_ADULT,
+                    lane.target_age,
+                ),
+            ]
+        )
 
         # work_is_age_appropriate() will only return True if at least
         # one of the age_appropriate_match() calls returns True.
@@ -686,7 +701,7 @@ class TestPatron(DatabaseTest):
             # a value that would allow for this (as can happen when
             # the patron's root lane is set up to show both children's
             # and YA titles).
-            assert False == m(work_audience, object(), children, (14,18))
+            assert False == m(work_audience, object(), children, (14, 18))
 
         # YA readers can see any children's title.
         assert True == m(children, object(), ya, object())
@@ -694,9 +709,7 @@ class TestPatron(DatabaseTest):
         # A YA reader is treated as an adult (with no reading
         # restrictions) if they have no associated age range, or their
         # age range includes ADULT_AGE_CUTOFF.
-        for reader_age in [
-            None, 18, (14, 18), tuple_to_numericrange((14, 18))
-        ]:
+        for reader_age in [None, 18, (14, 18), tuple_to_numericrange((14, 18))]:
             assert True == m(adult, object(), ya, reader_age)
 
         # Otherwise, YA readers cannot see books for adults.
@@ -711,26 +724,31 @@ class TestPatron(DatabaseTest):
             # we don't have the information necessary to say it's not
             # fine).
             work_target_age = None
-            assert True == m(work_audience, work_target_age,
-                        reader_audience, object())
+            assert True == m(work_audience, work_target_age, reader_audience, object())
 
             # Now give the work a specific target age range.
-            for work_target_age in [(5, 7), tuple_to_numericrange((5,7))]:
+            for work_target_age in [(5, 7), tuple_to_numericrange((5, 7))]:
                 # The lower end of the age range is old enough.
-                for age in range(5,9):
+                for age in range(5, 9):
                     for reader_age in (
-                        age, (age-1, age), tuple_to_numericrange((age-1, age))
+                        age,
+                        (age - 1, age),
+                        tuple_to_numericrange((age - 1, age)),
                     ):
-                        assert True ==  m(work_audience, work_target_age,
-                                     reader_audience, reader_age)
+                        assert True == m(
+                            work_audience, work_target_age, reader_audience, reader_age
+                        )
 
                 # Anything lower than that is not.
-                for age in range(2,5):
+                for age in range(2, 5):
                     for reader_age in (
-                        age, (age-1, age), tuple_to_numericrange((age-1, age))
+                        age,
+                        (age - 1, age),
+                        tuple_to_numericrange((age - 1, age)),
                     ):
-                        assert False == m(work_audience, work_target_age,
-                                     reader_audience, reader_age)
+                        assert False == m(
+                            work_audience, work_target_age, reader_audience, reader_age
+                        )
 
         # Similar rules apply for a YA reader who wants to read a YA
         # book.
@@ -740,30 +758,34 @@ class TestPatron(DatabaseTest):
         # If there's no target age, it's fine (or at least we don't
         # have the information necessary to say it's not fine).
         work_target_age = None
-        assert True == m(work_audience, work_target_age,
-                    reader_audience, object())
+        assert True == m(work_audience, work_target_age, reader_audience, object())
 
         # Now give the work a specific target age range.
         for work_target_age in ((14, 16), tuple_to_numericrange((14, 16))):
             # The lower end of the age range is old enough
             for age in range(14, 20):
                 for reader_age in (
-                    age, (age-1, age), tuple_to_numericrange((age-1, age))
+                    age,
+                    (age - 1, age),
+                    tuple_to_numericrange((age - 1, age)),
                 ):
-                    assert True ==  m(work_audience, work_target_age,
-                                 reader_audience, reader_age)
+                    assert True == m(
+                        work_audience, work_target_age, reader_audience, reader_age
+                    )
 
             # Anything lower than that is not.
             for age in range(7, 14):
                 for reader_age in (
-                    age, (age-1, age), tuple_to_numericrange((age-1, age))
+                    age,
+                    (age - 1, age),
+                    tuple_to_numericrange((age - 1, age)),
                 ):
-                    assert False == m(work_audience, work_target_age,
-                                 reader_audience, reader_age)
+                    assert False == m(
+                        work_audience, work_target_age, reader_audience, reader_age
+                    )
 
 
 class TestPatronProfileStorage(DatabaseTest):
-
     def setup_method(self):
         super(TestPatronProfileStorage, self).setup_method()
         self.patron = self._patron()
@@ -771,8 +793,10 @@ class TestPatronProfileStorage(DatabaseTest):
 
     def test_writable_setting_names(self):
         """Only one setting is currently writable."""
-        assert (set([self.store.SYNCHRONIZE_ANNOTATIONS]) ==
-            self.store.writable_setting_names)
+        assert (
+            set([self.store.SYNCHRONIZE_ANNOTATIONS])
+            == self.store.writable_setting_names
+        )
 
     def test_profile_document(self):
         # synchronize_annotations always shows up as settable, even if
@@ -780,25 +804,19 @@ class TestPatronProfileStorage(DatabaseTest):
         self.patron.authorization_identifier = "abcd"
         assert None == self.patron.synchronize_annotations
         rep = self.store.profile_document
-        assert (
-            {
-             'simplified:authorization_identifier': 'abcd',
-             'settings': {'simplified:synchronize_annotations': None}
-            } ==
-            rep)
+        assert {
+            "simplified:authorization_identifier": "abcd",
+            "settings": {"simplified:synchronize_annotations": None},
+        } == rep
 
         self.patron.synchronize_annotations = True
-        self.patron.authorization_expires = datetime_utc(
-            2016, 1, 1, 10, 20, 30
-        )
+        self.patron.authorization_expires = datetime_utc(2016, 1, 1, 10, 20, 30)
         rep = self.store.profile_document
-        assert (
-            {
-             'simplified:authorization_expires': '2016-01-01T10:20:30Z',
-             'simplified:authorization_identifier': 'abcd',
-             'settings': {'simplified:synchronize_annotations': True}
-            } ==
-            rep)
+        assert {
+            "simplified:authorization_expires": "2016-01-01T10:20:30Z",
+            "simplified:authorization_identifier": "abcd",
+            "settings": {"simplified:synchronize_annotations": True},
+        } == rep
 
     def test_update(self):
         # This is a no-op.
@@ -806,5 +824,5 @@ class TestPatronProfileStorage(DatabaseTest):
         assert None == self.patron.synchronize_annotations
 
         # This is not.
-        self.store.update({self.store.SYNCHRONIZE_ANNOTATIONS : True}, {})
+        self.store.update({self.store.SYNCHRONIZE_ANNOTATIONS: True}, {})
         assert True == self.patron.synchronize_annotations

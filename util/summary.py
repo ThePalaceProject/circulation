@@ -1,13 +1,12 @@
 import logging
-from textblob import TextBlob
-from textblob.exceptions import MissingCorpusError
+import re
 from collections import Counter
 
-from . import (
-    Bigrams,
-    english_bigrams,
-)
-import re
+from textblob import TextBlob
+from textblob.exceptions import MissingCorpusError
+
+from . import Bigrams, english_bigrams
+
 
 class SummaryEvaluator(object):
 
@@ -26,41 +25,49 @@ class SummaryEvaluator(object):
 
     # These phrases are indicative of a description we can't use for
     # whatever reason.
-    default_bad_phrases = set([
-        "version of",
-        "retelling of",
-        "abridged",
-        "retelling",
-        "condensed",
-        "adaptation of",
-        "look for",
-        "new edition",
-        "excerpts",
-        "version",
-        "edition",
-        "selections",
-        "complete texts",
-        "in one volume",
-        "contains",
-        "--container",
-        "--original container",
-        "playaway",
-        "complete novels",
-        "all rights reserved",
-    ])
+    default_bad_phrases = set(
+        [
+            "version of",
+            "retelling of",
+            "abridged",
+            "retelling",
+            "condensed",
+            "adaptation of",
+            "look for",
+            "new edition",
+            "excerpts",
+            "version",
+            "edition",
+            "selections",
+            "complete texts",
+            "in one volume",
+            "contains",
+            "--container",
+            "--original container",
+            "playaway",
+            "complete novels",
+            "all rights reserved",
+        ]
+    )
 
-    bad_res = set([
-        re.compile("the [^ ]+ Collection"),
-        re.compile("Includes"),
-        re.compile("This is"),
-    ])
+    bad_res = set(
+        [
+            re.compile("the [^ ]+ Collection"),
+            re.compile("Includes"),
+            re.compile("This is"),
+        ]
+    )
 
     _nltk_installed = True
     log = logging.getLogger("Summary Evaluator")
 
-    def __init__(self, optimal_number_of_sentences=4,
-                 noun_phrases_to_consider=10, bad_phrases=None):
-        self.optimal_number_of_sentences=optimal_number_of_sentences
+    def __init__(
+        self,
+        optimal_number_of_sentences=4,
+        noun_phrases_to_consider=10,
+        bad_phrases=None,
+    ):
+        self.optimal_number_of_sentences = optimal_number_of_sentences
         self.summaries = []
         self.noun_phrases = Counter()
         self.blobs = dict()
@@ -93,9 +100,14 @@ class SummaryEvaluator(object):
 
     def ready(self):
         """We are done adding to the corpus and ready to start evaluating."""
-        self.top_noun_phrases = set([
-            k for k, v in self.noun_phrases.most_common(
-                int(self.noun_phrases_to_consider))])
+        self.top_noun_phrases = set(
+            [
+                k
+                for k, v in self.noun_phrases.most_common(
+                    int(self.noun_phrases_to_consider)
+                )
+            ]
+        )
 
     def best_choice(self):
         c = self.best_choices(1)
@@ -125,8 +137,9 @@ class SummaryEvaluator(object):
         blob = self.blobs[summary]
 
         top_noun_phrases_used = len(
-            [p for p in self.top_noun_phrases if p in blob.noun_phrases])
-        score = 1 * (top_noun_phrases_used/self.noun_phrases_to_consider)
+            [p for p in self.top_noun_phrases if p in blob.noun_phrases]
+        )
+        score = 1 * (top_noun_phrases_used / self.noun_phrases_to_consider)
 
         try:
             sentences = len(blob.sentences)
@@ -134,12 +147,12 @@ class SummaryEvaluator(object):
             # Can't parse into sentences for whatever reason.
             # Make a really bad guess.
             sentences = summary.count(". ") + 1
-        off_from_optimal = abs(sentences-self.optimal_number_of_sentences)
+        off_from_optimal = abs(sentences - self.optimal_number_of_sentences)
         if off_from_optimal == 1:
             off_from_optimal = 1.5
         if off_from_optimal:
             # This summary is too long or too short.
-            score /= (off_from_optimal ** 1.5)
+            score /= off_from_optimal ** 1.5
 
         bad_phrases = 0
         l = summary.lower()
@@ -152,14 +165,15 @@ class SummaryEvaluator(object):
                 bad_phrases += 1
 
         if l.count(" -- ") > 3:
-            bad_phrases += (l.count(" -- ") - 3)
+            bad_phrases += l.count(" -- ") - 3
 
-        score *= (0.5 ** bad_phrases)
+        score *= 0.5 ** bad_phrases
 
         if apply_language_penalty:
             language_difference = english_bigrams.difference_from(
-                Bigrams.from_string(summary))
+                Bigrams.from_string(summary)
+            )
             if language_difference > 1:
-                score *= (0.5 ** (language_difference-1))
+                score *= 0.5 ** (language_difference - 1)
 
         return score

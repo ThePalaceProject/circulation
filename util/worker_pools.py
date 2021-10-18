@@ -1,12 +1,7 @@
 import logging
 from contextlib import contextmanager
-
-from threading import (
-    RLock,
-    Thread,
-    settrace,
-)
 from queue import Queue
+from threading import RLock, Thread, settrace
 
 # Much of the work in this file is based on
 # https://github.com/shazow/workerpool, with
@@ -113,7 +108,7 @@ class Pool(object):
     def __exit__(self, type, value, traceback):
         self.join()
         if type:
-            self.log.error('Error with %r: %r', self, value, exc_info=traceback)
+            self.log.error("Error with %r: %r", self, value, exc_info=traceback)
             raise value
         return
 
@@ -131,19 +126,20 @@ class Pool(object):
         self.jobs.join()
         self.log.info(
             "%d/%d job errors occurred. %.2f%% success rate.",
-            self.error_count, self.job_total, self.success_rate*100
+            self.error_count,
+            self.job_total,
+            self.success_rate * 100,
         )
 
 
 class DatabasePool(Pool):
     """A pool of DatabaseWorker threads and a job queue to keep them busy."""
+
     def __init__(self, size, session_factory, worker_factory=None):
         self.session_factory = session_factory
 
         self.worker_factory = worker_factory or DatabaseWorker.factory
-        super(DatabasePool, self).__init__(
-            size, worker_factory=self.worker_factory
-        )
+        super(DatabasePool, self).__init__(size, worker_factory=self.worker_factory)
 
     def create_worker(self):
         worker_session = self.session_factory()
@@ -178,7 +174,6 @@ class Job(object):
 
 
 class DatabaseJob(Job):
-
     def rollback(self, _db):
         _db.rollback()
 

@@ -1,9 +1,10 @@
 # encoding: utf-8
 # CustomList, CustomListEntry
 
-from pdb import set_trace
-from functools import total_ordering
 import logging
+from functools import total_ordering
+from pdb import set_trace
+
 from sqlalchemy import (
     Boolean,
     Column,
@@ -15,18 +16,16 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql.expression import or_
 from sqlalchemy.orm.session import Session
+from sqlalchemy.sql.expression import or_
 
-from . import (
-    Base,
-    get_one_or_create,
-)
+from ..util.datetime_helpers import utc_now
+from . import Base, get_one_or_create
 from .datasource import DataSource
 from .identifier import Identifier
 from .licensing import LicensePool
 from .work import Work
-from ..util.datetime_helpers import utc_now
+
 
 @total_ordering
 class CustomList(Base):
@@ -34,28 +33,27 @@ class CustomList(Base):
 
     STAFF_PICKS_NAME = "Staff Picks"
 
-    __tablename__ = 'customlists'
+    __tablename__ = "customlists"
     id = Column(Integer, primary_key=True)
     primary_language = Column(Unicode, index=True)
-    data_source_id = Column(Integer, ForeignKey('datasources.id'), index=True)
+    data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
     foreign_identifier = Column(Unicode, index=True)
     name = Column(Unicode, index=True)
     description = Column(Unicode)
     created = Column(DateTime(timezone=True), index=True)
     updated = Column(DateTime(timezone=True), index=True)
     responsible_party = Column(Unicode)
-    library_id = Column(Integer, ForeignKey('libraries.id'), index=True, nullable=True)
+    library_id = Column(Integer, ForeignKey("libraries.id"), index=True, nullable=True)
 
     # How many titles are in this list? This is calculated and
     # cached when the list contents change.
     size = Column(Integer, nullable=False, default=0)
 
-    entries = relationship(
-        "CustomListEntry", backref="customlist")
+    entries = relationship("CustomListEntry", backref="customlist")
 
     __table_args__ = (
-        UniqueConstraint('data_source_id', 'foreign_identifier'),
-        UniqueConstraint('name', 'library_id'),
+        UniqueConstraint("data_source_id", "foreign_identifier"),
+        UniqueConstraint("name", "library_id"),
     )
 
     # TODO: It should be possible to associate a CustomList with an
@@ -64,7 +62,9 @@ class CustomList(Base):
 
     def __repr__(self):
         return '<Custom List name="%s" foreign_identifier="%s" [%d entries]>' % (
-            self.name, self.foreign_identifier, len(self.entries)
+            self.name,
+            self.foreign_identifier,
+            len(self.entries),
         )
 
     def __eq__(self, other):
@@ -72,17 +72,17 @@ class CustomList(Base):
         if other is None or not isinstance(other, CustomList):
             return False
         return (self.foreign_identifier, self.name) == (
-            other.foreign_identifier, other.name
+            other.foreign_identifier,
+            other.name,
         )
 
     def __lt__(self, other):
         """Comparison implementation for total_ordering."""
         if other is None or not isinstance(other, CustomList):
             return False
-        return (
-            self.foreign_identifier, self.name
-        ) < (
-            other.foreign_identifier, other.name
+        return (self.foreign_identifier, self.name) < (
+            other.foreign_identifier,
+            other.name,
         )
 
     @classmethod
@@ -110,15 +110,19 @@ class CustomList(Base):
         qu = _db.query(cls)
         if source_name:
             qu = qu.join(CustomList.data_source).filter(
-                DataSource.name==str(source_name))
+                DataSource.name == str(source_name)
+            )
 
         qu = qu.filter(
-            or_(CustomList.foreign_identifier==foreign_identifier,
-                CustomList.name==foreign_identifier))
+            or_(
+                CustomList.foreign_identifier == foreign_identifier,
+                CustomList.name == foreign_identifier,
+            )
+        )
         if library:
-            qu = qu.filter(CustomList.library_id==library.id)
+            qu = qu.filter(CustomList.library_id == library.id)
         else:
-            qu = qu.filter(CustomList.library_id==None)
+            qu = qu.filter(CustomList.library_id == None)
 
         custom_lists = qu.all()
 
@@ -136,8 +140,14 @@ class CustomList(Base):
         identifiers = [ed.primary_identifier for ed in editions]
         return Work.from_identifiers(_db, identifiers)
 
-    def add_entry(self, work_or_edition, annotation=None, first_appearance=None,
-                  featured=None, update_external_index=True):
+    def add_entry(
+        self,
+        work_or_edition,
+        annotation=None,
+        first_appearance=None,
+        featured=None,
+        update_external_index=True,
+    ):
         """Add a Work or Edition to a CustomList.
 
         :param work_or_edition: A Work or an Edition. If this is a
@@ -195,13 +205,18 @@ class CustomList(Base):
             # exact same book may already be on the list. Either find
             # an exact duplicate, or create a new entry.
             entry, was_new = get_one_or_create(
-                _db, CustomListEntry,
-                customlist=self, edition=edition, work=work,
+                _db,
+                CustomListEntry,
+                customlist=self,
+                edition=edition,
+                work=work,
                 create_method_kwargs=dict(first_appearance=first_appearance),
             )
 
-        if (not entry.most_recent_appearance
-            or entry.most_recent_appearance < first_appearance):
+        if (
+            not entry.most_recent_appearance
+            or entry.most_recent_appearance < first_appearance
+        ):
             entry.most_recent_appearance = first_appearance
         if annotation:
             entry.annotation = str(annotation)
@@ -258,7 +273,7 @@ class CustomList(Base):
         if equivalent_ids:
             clauses.append(CustomListEntry.edition_id.in_(equivalent_ids))
         if work:
-            clauses.append(CustomListEntry.work==work)
+            clauses.append(CustomListEntry.work == work)
         if len(clauses) == 0:
             # This shouldn't happen, but if it does, there can be
             # no matching results.
@@ -268,10 +283,11 @@ class CustomList(Base):
         else:
             clause = or_(*clauses)
 
-        qu = _db.query(CustomListEntry).filter(
-            CustomListEntry.customlist==self).filter(
-                clause
-            )
+        qu = (
+            _db.query(CustomListEntry)
+            .filter(CustomListEntry.customlist == self)
+            .filter(clause)
+        )
         return qu
 
     def update_size(self):
@@ -280,11 +296,11 @@ class CustomList(Base):
 
 class CustomListEntry(Base):
 
-    __tablename__ = 'customlistentries'
+    __tablename__ = "customlistentries"
     id = Column(Integer, primary_key=True)
-    list_id = Column(Integer, ForeignKey('customlists.id'), index=True)
-    edition_id = Column(Integer, ForeignKey('editions.id'), index=True)
-    work_id = Column(Integer, ForeignKey('works.id'), index=True)
+    list_id = Column(Integer, ForeignKey("customlists.id"), index=True)
+    edition_id = Column(Integer, ForeignKey("editions.id"), index=True)
+    work_id = Column(Integer, ForeignKey("works.id"), index=True)
     featured = Column(Boolean, nullable=False, default=False)
     annotation = Column(Unicode)
 
@@ -312,14 +328,15 @@ class CustomListEntry(Base):
         new_work = None
         if not metadata:
             from ..metadata_layer import Metadata
+
             metadata = Metadata.from_edition(edition)
 
         # Try to guess based on metadata, if we can get a high-quality
         # guess.
-        potential_license_pools = metadata.guess_license_pools(
-            _db, metadata_client)
+        potential_license_pools = metadata.guess_license_pools(_db, metadata_client)
         for lp, quality in sorted(
-                list(potential_license_pools.items()), key=lambda x: -x[1]):
+            list(potential_license_pools.items()), key=lambda x: -x[1]
+        ):
             if lp.deliverable and lp.work and quality >= 0.8:
                 # This work has at least one deliverable LicensePool
                 # associated with it, so it's likely to be real
@@ -330,13 +347,21 @@ class CustomListEntry(Base):
         if not new_work:
             # Try using the less reliable, more expensive method of
             # matching based on equivalent identifiers.
-            equivalent_identifier_id_subquery = Identifier.recursively_equivalent_identifier_ids_query(
-                self.edition.primary_identifier.id, policy=policy
+            equivalent_identifier_id_subquery = (
+                Identifier.recursively_equivalent_identifier_ids_query(
+                    self.edition.primary_identifier.id, policy=policy
+                )
             )
-            pool_q = _db.query(LicensePool).filter(
-                LicensePool.identifier_id.in_(equivalent_identifier_id_subquery)).order_by(
+            pool_q = (
+                _db.query(LicensePool)
+                .filter(
+                    LicensePool.identifier_id.in_(equivalent_identifier_id_subquery)
+                )
+                .order_by(
                     LicensePool.licenses_available.desc(),
-                    LicensePool.patrons_in_hold_queue.asc())
+                    LicensePool.patrons_in_hold_queue.asc(),
+                )
+            )
             pools = [x for x in pool_q if x.deliverable]
             for pool in pools:
                 if pool.deliverable and pool.work:
@@ -348,12 +373,13 @@ class CustomListEntry(Base):
             if old_work:
                 logging.info(
                     "Changing work for list entry %r to %r (was %r)",
-                    self.edition, new_work, old_work
+                    self.edition,
+                    new_work,
+                    old_work,
                 )
             else:
                 logging.info(
-                    "Setting work for list entry %r to %r",
-                    self.edition, new_work
+                    "Setting work for list entry %r to %r", self.edition, new_work
                 )
         self.work = new_work
         return self.work
@@ -371,7 +397,7 @@ class CustomListEntry(Base):
 
         # Confirm that all the entries are from the same CustomList.
         list_ids = set([e.list_id for e in equivalent_entries])
-        if not len(list_ids)==1:
+        if not len(list_ids) == 1:
             raise ValueError("Cannot combine entries on different CustomLists.")
 
         # Confirm that all the entries are equivalent.
@@ -390,20 +416,17 @@ class CustomListEntry(Base):
         works = [w for w in works if w]
 
         if works:
-            if not len(works)==1:
+            if not len(works) == 1:
                 # This shouldn't happen, given all the Editions are equivalent.
                 raise ValueError(error)
             [work] = works
 
-        self.first_appearance = min(
-            [e.first_appearance for e in equivalent_entries]
-        )
+        self.first_appearance = min([e.first_appearance for e in equivalent_entries])
         self.most_recent_appearance = max(
             [e.most_recent_appearance for e in equivalent_entries]
         )
 
-        annotations = [str(e.annotation) for e in equivalent_entries
-                       if e.annotation]
+        annotations = [str(e.annotation) for e in equivalent_entries if e.annotation]
         if annotations:
             if len(annotations) > 1:
                 # Just pick the longest one?
@@ -419,10 +442,12 @@ class CustomListEntry(Base):
         if work and not best_edition:
             work.calculate_presentation()
             best_edition = work.presentation_edition
-        if best_edition and not best_edition==self.edition:
+        if best_edition and not best_edition == self.edition:
             logging.info(
                 "Changing edition for list entry %r to %r from %r",
-                self, best_edition, self.edition
+                self,
+                best_edition,
+                self.edition,
             )
             self.edition = best_edition
 
@@ -433,9 +458,14 @@ class CustomListEntry(Base):
                 _db.delete(entry)
         _db.commit
 
+
 # TODO: This was originally designed to speed up queries against the
 # materialized view that use custom list membership as a way to cut
 # down on the result set. Now that we've removed the materialized
 # view, is this still necessary? It might still be necessary for
 # similar queries against Work.
-Index("ix_customlistentries_work_id_list_id", CustomListEntry.work_id, CustomListEntry.list_id)
+Index(
+    "ix_customlistentries_work_id_list_id",
+    CustomListEntry.work_id,
+    CustomListEntry.list_id,
+)

@@ -1,25 +1,28 @@
 import datetime
-import isbnlib
-import os
 import json
 import logging
-from urllib.parse import urlsplit, quote, urlunsplit
+import os
 import sys
-from sqlalchemy.orm.exc import (
-    NoResultFound,
-)
+from urllib.parse import quote, urlsplit, urlunsplit
+
+import isbnlib
+from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 
 from .classifier import Classifier
-from .config import (
-    temp_config,
-    CannotLoadConfiguration,
-    Configuration,
+from .config import CannotLoadConfiguration, Configuration, temp_config
+from .coverage import BibliographicCoverageProvider
+from .metadata_layer import (
+    CirculationData,
+    ContributorData,
+    FormatData,
+    IdentifierData,
+    LinkData,
+    MeasurementData,
+    Metadata,
+    SubjectData,
 )
-
 from .model import (
-    get_one,
-    get_one_or_create,
     Classification,
     Collection,
     ConfigurationSetting,
@@ -36,33 +39,15 @@ from .model import (
     MediaTypes,
     Representation,
     Subject,
+    get_one,
+    get_one_or_create,
 )
-
-from .metadata_layer import (
-    CirculationData,
-    ContributorData,
-    FormatData,
-    IdentifierData,
-    Metadata,
-    MeasurementData,
-    LinkData,
-    SubjectData,
-)
-
-from .coverage import (
-    BibliographicCoverageProvider,
-)
-
-from .testing import DatabaseTest
-
-from .util.http import (
-    HTTP,
-    BadResponseException,
-)
+from .testing import DatabaseTest, MockRequestsResponse
+from .util.datetime_helpers import strptime_utc, to_utc, utc_now
+from .util.http import HTTP, BadResponseException
 from .util.string_helpers import base64
 from .util.worker_pools import RLock
-from .util.datetime_helpers import strptime_utc, to_utc, utc_now
-from .testing import MockRequestsResponse
+
 
 class OverdriveAPI(object):
 
@@ -77,14 +62,14 @@ class OverdriveAPI(object):
     PRODUCTION_SERVERS = "production"
     TESTING_SERVERS = "testing"
     HOSTS = {
-        PRODUCTION_SERVERS : dict(
+        PRODUCTION_SERVERS: dict(
             host="https://api.overdrive.com",
             patron_host="https://patron.api.overdrive.com",
         ),
-        TESTING_SERVERS : dict(
+        TESTING_SERVERS: dict(
             host="https://integration.api.overdrive.com",
             patron_host="https://integration-patron.api.overdrive.com",
-        )
+        ),
     }
 
     # Production and testing setups use the same URLs for Client
@@ -92,8 +77,8 @@ class OverdriveAPI(object):
     # system as for other hostnames to give a consistent look to the
     # templates.
     for host in list(HOSTS.values()):
-        host['oauth_patron_host'] = "https://oauth-patron.overdrive.com"
-        host['oauth_host'] = "https://oauth.overdrive.com"
+        host["oauth_patron_host"] = "https://oauth-patron.overdrive.com"
+        host["oauth_host"] = "https://oauth.overdrive.com"
 
     # Each of these endpoint URLs has a slot to plug in one of the
     # appropriate servers. This will be filled in either by a call to
@@ -104,16 +89,24 @@ class OverdriveAPI(object):
     PATRON_TOKEN_ENDPOINT = "%(oauth_patron_host)s/patrontoken"
 
     LIBRARY_ENDPOINT = "%(host)s/v1/libraries/%(library_id)s"
-    ADVANTAGE_LIBRARY_ENDPOINT = "%(host)s/v1/libraries/%(parent_library_id)s/advantageAccounts/%(library_id)s"
-    ALL_PRODUCTS_ENDPOINT = "%(host)s/v1/collections/%(collection_token)s/products?sort=%(sort)s"
-    METADATA_ENDPOINT = "%(host)s/v1/collections/%(collection_token)s/products/%(item_id)s/metadata"
+    ADVANTAGE_LIBRARY_ENDPOINT = (
+        "%(host)s/v1/libraries/%(parent_library_id)s/advantageAccounts/%(library_id)s"
+    )
+    ALL_PRODUCTS_ENDPOINT = (
+        "%(host)s/v1/collections/%(collection_token)s/products?sort=%(sort)s"
+    )
+    METADATA_ENDPOINT = (
+        "%(host)s/v1/collections/%(collection_token)s/products/%(item_id)s/metadata"
+    )
     EVENTS_ENDPOINT = "%(host)s/v1/collections/%(collection_token)s/products?lastUpdateTime=%(lastupdatetime)s&sort=%(sort)s&limit=%(limit)s"
     AVAILABILITY_ENDPOINT = "%(host)s/v2/collections/%(collection_token)s/products/%(product_id)s/availability"
 
     PATRON_INFORMATION_ENDPOINT = "%(patron_host)s/v1/patrons/me"
     CHECKOUTS_ENDPOINT = "%(patron_host)s/v1/patrons/me/checkouts"
     CHECKOUT_ENDPOINT = "%(patron_host)s/v1/patrons/me/checkouts/%(overdrive_id)s"
-    FORMATS_ENDPOINT = "%(patron_host)s/v1/patrons/me/checkouts/%(overdrive_id)s/formats"
+    FORMATS_ENDPOINT = (
+        "%(patron_host)s/v1/patrons/me/checkouts/%(overdrive_id)s/formats"
+    )
     HOLDS_ENDPOINT = "%(patron_host)s/v1/patrons/me/holds"
     HOLD_ENDPOINT = "%(patron_host)s/v1/patrons/me/holds/%(product_id)s"
     ME_ENDPOINT = "%(patron_host)s/v1/patrons/me"
@@ -126,12 +119,13 @@ class OverdriveAPI(object):
     EVENT_DELAY = datetime.timedelta(minutes=120)
 
     # The formats we care about.
-    FORMATS = "ebook-epub-open,ebook-epub-adobe,ebook-pdf-adobe,ebook-pdf-open,audiobook-overdrive".split(",")
+    FORMATS = "ebook-epub-open,ebook-epub-adobe,ebook-pdf-adobe,ebook-pdf-open,audiobook-overdrive".split(
+        ","
+    )
 
     # The formats that can be read by the default Library Simplified reader.
     DEFAULT_READABLE_FORMATS = set(
-        ["ebook-epub-open", "ebook-epub-adobe", "ebook-pdf-open", 
-         "audiobook-overdrive"]
+        ["ebook-epub-open", "ebook-epub-adobe", "ebook-pdf-open", "audiobook-overdrive"]
     )
 
     # The formats that indicate the book has been fulfilled on an
@@ -155,8 +149,8 @@ class OverdriveAPI(object):
     def __init__(self, _db, collection):
         if collection.protocol != ExternalIntegration.OVERDRIVE:
             raise ValueError(
-                "Collection protocol is %s, but passed into OverdriveAPI!" %
-                collection.protocol
+                "Collection protocol is %s, but passed into OverdriveAPI!"
+                % collection.protocol
             )
         self._db = _db
         self.library_id = collection.external_account_id
@@ -176,17 +170,18 @@ class OverdriveAPI(object):
         self.client_key = integration.username
         self.client_secret = integration.password
         self.website_id = integration.setting(self.WEBSITE_ID).value
-        if (not self.client_key or not self.client_secret or not self.website_id
-            or not self.library_id):
-            raise CannotLoadConfiguration(
-                "Overdrive configuration is incomplete."
-            )
+        if (
+            not self.client_key
+            or not self.client_secret
+            or not self.website_id
+            or not self.library_id
+        ):
+            raise CannotLoadConfiguration("Overdrive configuration is incomplete.")
 
         # Figure out which hostnames we'll be using when constructing
         # endpoint URLs.
         server_nickname = (
-            integration.setting(self.SERVER_NICKNAME).value
-            or self.PRODUCTION_SERVERS
+            integration.setting(self.SERVER_NICKNAME).value or self.PRODUCTION_SERVERS
         )
         if server_nickname not in self.HOSTS:
             server_nickname = self.PRODUCTION_SERVERS
@@ -198,7 +193,7 @@ class OverdriveAPI(object):
         # Use utf8 instead of unicode encoding
         settings = [self.client_key, self.client_secret, self.website_id]
         self.client_key, self.client_secret, self.website_id = (
-            setting.encode('utf8') for setting in settings
+            setting.encode("utf8") for setting in settings
         )
 
         # This is set by an access to .token, or by a call to
@@ -216,7 +211,7 @@ class OverdriveAPI(object):
            The server hostname will be interpolated automatically; you
            don't have to pass it in.
         """
-        if not '%(' in url:
+        if not "%(" in url:
             # Nothing to interpolate.
             return url
         kwargs.update(self.hosts)
@@ -238,14 +233,14 @@ class OverdriveAPI(object):
         if not self._collection_token:
             self.check_creds()
             library = self.get_library()
-            error = library.get('errorCode')
+            error = library.get("errorCode")
             if error:
-                message = library.get('message')
+                message = library.get("message")
                 raise CannotLoadConfiguration(
                     "Overdrive credentials are valid but could not fetch library: %s"
                     % message
                 )
-            self._collection_token = library['collectionToken']
+            self._collection_token = library["collectionToken"]
         return self._collection_token
 
     @property
@@ -257,8 +252,7 @@ class OverdriveAPI(object):
         return DataSource.lookup(self._db, DataSource.OVERDRIVE)
 
     def ils_name(self, library):
-        """Determine the ILS name to use for the given Library.
-        """
+        """Determine the ILS name to use for the given Library."""
         return self.ils_name_setting(
             self._db, self.collection, library
         ).value_or_default(self.ILS_NAME_DEFAULT)
@@ -308,8 +302,12 @@ class OverdriveAPI(object):
         the Overdrive API.
         """
         return Credential.lookup(
-            self._db, DataSource.OVERDRIVE, None, None, refresh,
-            collection=self.collection
+            self._db,
+            DataSource.OVERDRIVE,
+            None,
+            None,
+            refresh,
+            collection=self.collection,
         )
 
     def refresh_creds(self, credential):
@@ -317,7 +315,7 @@ class OverdriveAPI(object):
         response = self.token_post(
             self.TOKEN_ENDPOINT,
             dict(grant_type="client_credentials"),
-            allowed_response_codes=[200]
+            allowed_response_codes=[200],
         )
         data = response.json()
         self._update_credential(credential, data)
@@ -334,7 +332,7 @@ class OverdriveAPI(object):
                 raise BadResponseException.from_response(
                     url,
                     "Something's wrong with the Overdrive OAuth Bearer Token!",
-                    (status_code, headers, content)
+                    (status_code, headers, content),
                 )
             else:
                 # Refresh the token and try again.
@@ -351,15 +349,14 @@ class OverdriveAPI(object):
     def token_post(self, url, payload, headers={}, **kwargs):
         """Make an HTTP POST request for purposes of getting an OAuth token."""
         headers = dict(headers)
-        headers['Authorization'] = self.token_authorization_header
+        headers["Authorization"] = self.token_authorization_header
         return self._do_post(url, payload, headers, **kwargs)
 
     def _update_credential(self, credential, overdrive_data):
         """Copy Overdrive OAuth data into a Credential object."""
-        credential.credential = overdrive_data['access_token']
-        expires_in = (overdrive_data['expires_in'] * 0.9)
-        credential.expires = utc_now() + datetime.timedelta(
-            seconds=expires_in)
+        credential.credential = overdrive_data["access_token"]
+        expires_in = overdrive_data["expires_in"] * 0.9
+        credential.expires = utc_now() + datetime.timedelta(seconds=expires_in)
 
     @property
     def _library_endpoint(self):
@@ -374,7 +371,7 @@ class OverdriveAPI(object):
         args = dict(library_id=self.library_id)
         if self.parent_library_id:
             # This is an Overdrive advantage account.
-            args['parent_library_id'] = self.parent_library_id
+            args["parent_library_id"] = self.parent_library_id
             endpoint = self.ADVANTAGE_LIBRARY_ENDPOINT
         else:
             endpoint = self.LIBRARY_ENDPOINT
@@ -387,7 +384,9 @@ class OverdriveAPI(object):
         url = self._library_endpoint
         with self.lock:
             representation, cached = Representation.get(
-                self._db, url, self.get,
+                self._db,
+                url,
+                self.get,
                 exception_handler=Representation.reraise_exception,
             )
             return json.loads(representation.content)
@@ -398,23 +397,23 @@ class OverdriveAPI(object):
         :yield: A sequence of OverdriveAdvantageAccount objects.
         """
         library = self.get_library()
-        links = library.get('links', {})
-        advantage = links.get('advantageAccounts')
+        links = library.get("links", {})
+        advantage = links.get("advantageAccounts")
         if not advantage:
             return []
         if advantage:
             # This library has Overdrive Advantage accounts, or at
             # least a link where some may be found.
-            advantage_url = advantage.get('href')
+            advantage_url = advantage.get("href")
             if not advantage_url:
                 return
             representation, cached = Representation.get(
-                self._db, advantage_url, self.get,
+                self._db,
+                advantage_url,
+                self.get,
                 exception_handler=Representation.reraise_exception,
             )
-            return OverdriveAdvantageAccount.from_representation(
-                representation.content
-            )
+            return OverdriveAdvantageAccount.from_representation(representation.content)
 
     def all_ids(self):
         """Get IDs for every book in the system, with the most recently added
@@ -422,9 +421,7 @@ class OverdriveAPI(object):
         """
         next_link = self._all_products_link
         while next_link:
-            page_inventory, next_link = self._get_book_list_page(
-                next_link, 'next'
-            )
+            page_inventory, next_link = self._get_book_list_page(next_link, "next")
 
             for i in page_inventory:
                 yield i
@@ -434,12 +431,11 @@ class OverdriveAPI(object):
         url = self.endpoint(
             self.ALL_PRODUCTS_ENDPOINT,
             collection_token=self.collection_token,
-            sort="dateAdded:desc"
+            sort="dateAdded:desc",
         )
         return self.make_link_safe(url)
 
-    def _get_book_list_page(self, link, rel_to_follow='next',
-                            extractor_class=None):
+    def _get_book_list_page(self, link, rel_to_follow="next", extractor_class=None):
         """Process a page of inventory whose circulation we need to check.
 
         Returns a 2-tuple: (availability_info, next_link).
@@ -459,7 +455,7 @@ class OverdriveAPI(object):
 
         # Prepare to get availability information for all the books on
         # this page.
-        availability_queue = (extractor_class.availability_link_list(content))
+        availability_queue = extractor_class.availability_link_list(content)
         return availability_queue, next_link
 
     def recently_changed_ids(self, start, cutoff):
@@ -469,11 +465,8 @@ class OverdriveAPI(object):
         # `cutoff` is not supported by Overdrive, so we ignore it. All
         # we can do is get events between the start time and now.
 
-        last_update_time = start-self.EVENT_DELAY
-        self.log.info(
-            "Asking for circulation changes since %s",
-            last_update_time
-        )
+        last_update_time = start - self.EVENT_DELAY
+        self.log.info("Asking for circulation changes since %s", last_update_time)
         last_update = last_update_time.strftime(self.TIME_FORMAT)
 
         next_link = self.endpoint(
@@ -481,7 +474,7 @@ class OverdriveAPI(object):
             lastupdatetime=last_update,
             sort="popularity:desc",
             limit=self.PAGE_SIZE_LIMIT,
-            collection_token=self.collection_token
+            collection_token=self.collection_token,
         )
         next_link = self.make_link_safe(next_link)
         while next_link:
@@ -494,12 +487,11 @@ class OverdriveAPI(object):
                 yield i
 
     def metadata_lookup(self, identifier):
-        """Look up metadata for an Overdrive identifier.
-        """
+        """Look up metadata for an Overdrive identifier."""
         url = self.endpoint(
             self.METADATA_ENDPOINT,
             collection_token=self.collection_token,
-            item_id=identifier.identifier
+            item_id=identifier.identifier,
         )
         status_code, headers, content = self.get(url, {})
         if isinstance(content, (bytes, str)):
@@ -510,13 +502,12 @@ class OverdriveAPI(object):
         url = self.endpoint(
             self.METADATA_ENDPOINT,
             collection_token=self.collection_token,
-            item_id=identifier
+            item_id=identifier,
         )
         status_code, headers, content = self.get(url, {})
         if isinstance(content, (bytes, str)):
             content = json.loads(content)
         return OverdriveRepresentationExtractor.book_info_to_metadata(content)
-
 
     @classmethod
     def make_link_safe(self, url):
@@ -531,11 +522,10 @@ class OverdriveAPI(object):
         parts = list(urlsplit(url))
         parts[2] = quote(parts[2])
         endings = ("/availability", "/availability/")
-        if (parts[2].startswith("/v1/collections/")
-            and any(parts[2].endswith(x) for x in endings)):
-            parts[2] = parts[2].replace(
-                "/v1/collections/", "/v2/collections/", 1
-            )
+        if parts[2].startswith("/v1/collections/") and any(
+            parts[2].endswith(x) for x in endings
+        ):
+            parts[2] = parts[2].replace("/v1/collections/", "/v2/collections/", 1)
         query_string = parts[3]
         query_string = query_string.replace("+", "%2B")
         query_string = query_string.replace(":", "%3A")
@@ -547,9 +537,7 @@ class OverdriveAPI(object):
     def _do_get(self, url, headers):
         """This method is overridden in MockOverdriveAPI."""
         url = self.endpoint(url)
-        return Representation.simple_http_get(
-            url, headers
-        )
+        return Representation.simple_http_get(url, headers)
 
     def _do_post(self, url, payload, headers, **kwargs):
         """This method is overridden in MockOverdriveAPI."""
@@ -558,30 +546,33 @@ class OverdriveAPI(object):
 
 
 class MockOverdriveAPI(OverdriveAPI):
-
     @classmethod
-    def mock_collection(self, _db, library=None,
-                        name="Test Overdrive Collection",
-                        client_key="a", client_secret="b",
-                        library_id="c", website_id="d",
-                        ils_name="e",
-                        ):
+    def mock_collection(
+        self,
+        _db,
+        library=None,
+        name="Test Overdrive Collection",
+        client_key="a",
+        client_secret="b",
+        library_id="c",
+        website_id="d",
+        ils_name="e",
+    ):
         """Create a mock Overdrive collection for use in tests."""
         if library is None:
             library = DatabaseTest.make_default_library(_db)
         collection, ignore = get_one_or_create(
-            _db, Collection,
-                name=name,
-                create_method_kwargs=dict(
-                    external_account_id=library_id
-                )
-            )
+            _db,
+            Collection,
+            name=name,
+            create_method_kwargs=dict(external_account_id=library_id),
+        )
         integration = collection.create_external_integration(
             protocol=ExternalIntegration.OVERDRIVE
         )
         integration.username = client_key
         integration.password = client_secret
-        integration.set_setting('website_id', website_id)
+        integration.set_setting("website_id", website_id)
         library.collections.append(collection)
         OverdriveAPI.ils_name_setting(_db, collection, library).value = ils_name
         return collection
@@ -594,18 +585,14 @@ class MockOverdriveAPI(OverdriveAPI):
         # Almost all tests will try to request the access token, so
         # set the response that will be returned if an attempt is
         # made.
-        self.access_token_response = self.mock_access_token_response(
-            "bearer token"
-        )
+        self.access_token_response = self.mock_access_token_response("bearer token")
         super(MockOverdriveAPI, self).__init__(_db, collection, *args, **kwargs)
 
     def queue_collection_token(self):
         # Many tests immediately try to access the
         # collection token. This is a helper method to make it easy to
         # queue up the response.
-        self.queue_response(
-            200, content=self.mock_collection_token("collection token")
-        )
+        self.queue_response(200, content=self.mock_collection_token("collection token"))
 
     def token_post(self, url, payload, headers={}, **kwargs):
         """Mock the request for an OAuth token.
@@ -630,9 +617,7 @@ class MockOverdriveAPI(OverdriveAPI):
         return json.dumps(dict(collectionToken=token))
 
     def queue_response(self, status_code, headers={}, content=None):
-        self.responses.insert(
-            0, MockRequestsResponse(status_code, headers, content)
-        )
+        self.responses.insert(0, MockRequestsResponse(status_code, headers, content))
 
     def _do_get(self, url, *args, **kwargs):
         """Simulate Representation.simple_http_get."""
@@ -647,8 +632,10 @@ class MockOverdriveAPI(OverdriveAPI):
         response = self.responses.pop()
         self.requests.append((url, args, kwargs))
         return HTTP._process_response(
-            url, response, kwargs.get('allowed_response_codes'),
-            kwargs.get('disallowed_response_codes')
+            url,
+            response,
+            kwargs.get("allowed_response_codes"),
+            kwargs.get("disallowed_response_codes"),
         )
 
 
@@ -669,98 +656,88 @@ class OverdriveRepresentationExtractor(object):
 
     @classmethod
     def availability_link_list(cls, book_list):
-        """:return: A list of dictionaries with keys `id`, `title`, `availability_link`.
-        """
+        """:return: A list of dictionaries with keys `id`, `title`, `availability_link`."""
         l = []
-        if not 'products' in book_list:
+        if not "products" in book_list:
             return []
 
-        products = book_list['products']
+        products = book_list["products"]
         for product in products:
-            if not 'id' in product:
+            if not "id" in product:
                 cls.log.warn("No ID found in %r", product)
                 continue
-            book_id = product['id']
+            book_id = product["id"]
             data = dict(
                 id=book_id,
-                title=product.get('title'),
+                title=product.get("title"),
                 author_name=None,
-                date_added=product.get('dateAdded')
+                date_added=product.get("dateAdded"),
             )
-            if 'primaryCreator' in product:
-                creator = product['primaryCreator']
-                if creator.get('role') == 'Author':
-                    data['author_name'] = creator.get('name')
-            links = product.get('links', [])
-            if 'availability' in links:
-                link = links['availability']['href']
-                data['availability_link'] = OverdriveAPI.make_link_safe(link)
+            if "primaryCreator" in product:
+                creator = product["primaryCreator"]
+                if creator.get("role") == "Author":
+                    data["author_name"] = creator.get("name")
+            links = product.get("links", [])
+            if "availability" in links:
+                link = links["availability"]["href"]
+                data["availability_link"] = OverdriveAPI.make_link_safe(link)
             else:
                 logging.getLogger("Overdrive API").warn(
-                    "No availability link for %s", book_id)
+                    "No availability link for %s", book_id
+                )
             l.append(data)
         return l
 
     @classmethod
     def link(self, page, rel):
-        if 'links' in page and rel in page['links']:
-            raw_link = page['links'][rel]['href']
+        if "links" in page and rel in page["links"]:
+            raw_link = page["links"][rel]["href"]
             link = OverdriveAPI.make_link_safe(raw_link)
         else:
             link = None
         return link
 
     format_data_for_overdrive_format = {
-
-        "ebook-pdf-adobe" : (
-            Representation.PDF_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM
+        "ebook-pdf-adobe": (Representation.PDF_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
+        "ebook-pdf-open": (Representation.PDF_MEDIA_TYPE, DeliveryMechanism.NO_DRM),
+        "ebook-epub-adobe": (
+            Representation.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.ADOBE_DRM,
         ),
-        "ebook-pdf-open" : (
-            Representation.PDF_MEDIA_TYPE, DeliveryMechanism.NO_DRM
-        ),
-        "ebook-epub-adobe" : (
-            Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM
-        ),
-        "ebook-epub-open" : (
-            Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM
-        ),
-        "audiobook-mp3" : (
-            "application/x-od-media", DeliveryMechanism.OVERDRIVE_DRM
-        ),
-        "music-mp3" : (
-            "application/x-od-media", DeliveryMechanism.OVERDRIVE_DRM
-        ),
-        "ebook-overdrive" : [
+        "ebook-epub-open": (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM),
+        "audiobook-mp3": ("application/x-od-media", DeliveryMechanism.OVERDRIVE_DRM),
+        "music-mp3": ("application/x-od-media", DeliveryMechanism.OVERDRIVE_DRM),
+        "ebook-overdrive": [
             (
                 MediaTypes.OVERDRIVE_EBOOK_MANIFEST_MEDIA_TYPE,
-                DeliveryMechanism.LIBBY_DRM
+                DeliveryMechanism.LIBBY_DRM,
             ),
             (
                 DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
-                DeliveryMechanism.STREAMING_DRM
+                DeliveryMechanism.STREAMING_DRM,
             ),
         ],
-        "audiobook-overdrive" : [
+        "audiobook-overdrive": [
             (
                 MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE,
                 DeliveryMechanism.LIBBY_DRM,
             ),
             (
                 DeliveryMechanism.STREAMING_AUDIO_CONTENT_TYPE,
-                DeliveryMechanism.STREAMING_DRM
+                DeliveryMechanism.STREAMING_DRM,
             ),
         ],
-        'video-streaming' : (
+        "video-streaming": (
             DeliveryMechanism.STREAMING_VIDEO_CONTENT_TYPE,
-            DeliveryMechanism.STREAMING_DRM
+            DeliveryMechanism.STREAMING_DRM,
         ),
-        "ebook-kindle" : (
+        "ebook-kindle": (
             DeliveryMechanism.KINDLE_CONTENT_TYPE,
-            DeliveryMechanism.KINDLE_DRM
+            DeliveryMechanism.KINDLE_DRM,
         ),
-        "periodicals-nook" : (
+        "periodicals-nook": (
             DeliveryMechanism.NOOK_CONTENT_TYPE,
-            DeliveryMechanism.NOOK_DRM
+            DeliveryMechanism.NOOK_DRM,
         ),
     }
 
@@ -784,46 +761,46 @@ class OverdriveRepresentationExtractor(object):
     ignorable_overdrive_formats = set([])
 
     overdrive_role_to_simplified_role = {
-        "actor" : Contributor.ACTOR_ROLE,
-        "artist" : Contributor.ARTIST_ROLE,
-        "book producer" : Contributor.PRODUCER_ROLE,
-        "associated name" : Contributor.ASSOCIATED_ROLE,
-        "author" : Contributor.AUTHOR_ROLE,
-        "author of introduction" : Contributor.INTRODUCTION_ROLE,
-        "author of foreword" : Contributor.FOREWORD_ROLE,
-        "author of afterword" : Contributor.AFTERWORD_ROLE,
-        "contributor" : Contributor.CONTRIBUTOR_ROLE,
-        "colophon" : Contributor.COLOPHON_ROLE,
-        "adapter" : Contributor.ADAPTER_ROLE,
-        "etc." : Contributor.UNKNOWN_ROLE,
-        "cast member" : Contributor.ACTOR_ROLE,
-        "collaborator" : Contributor.COLLABORATOR_ROLE,
-        "compiler" : Contributor.COMPILER_ROLE,
-        "composer" : Contributor.COMPOSER_ROLE,
-        "copyright holder" : Contributor.COPYRIGHT_HOLDER_ROLE,
-        "director" : Contributor.DIRECTOR_ROLE,
-        "editor" : Contributor.EDITOR_ROLE,
-        "engineer" : Contributor.ENGINEER_ROLE,
-        "executive producer" : Contributor.EXECUTIVE_PRODUCER_ROLE,
-        "illustrator" : Contributor.ILLUSTRATOR_ROLE,
-        "musician" : Contributor.MUSICIAN_ROLE,
-        "narrator" : Contributor.NARRATOR_ROLE,
-        "other" : Contributor.UNKNOWN_ROLE,
-        "performer" : Contributor.PERFORMER_ROLE,
-        "producer" : Contributor.PRODUCER_ROLE,
-        "translator" : Contributor.TRANSLATOR_ROLE,
-        "photographer" : Contributor.PHOTOGRAPHER_ROLE,
-        "lyricist" : Contributor.LYRICIST_ROLE,
-        "transcriber" : Contributor.TRANSCRIBER_ROLE,
-        "designer" : Contributor.DESIGNER_ROLE,
+        "actor": Contributor.ACTOR_ROLE,
+        "artist": Contributor.ARTIST_ROLE,
+        "book producer": Contributor.PRODUCER_ROLE,
+        "associated name": Contributor.ASSOCIATED_ROLE,
+        "author": Contributor.AUTHOR_ROLE,
+        "author of introduction": Contributor.INTRODUCTION_ROLE,
+        "author of foreword": Contributor.FOREWORD_ROLE,
+        "author of afterword": Contributor.AFTERWORD_ROLE,
+        "contributor": Contributor.CONTRIBUTOR_ROLE,
+        "colophon": Contributor.COLOPHON_ROLE,
+        "adapter": Contributor.ADAPTER_ROLE,
+        "etc.": Contributor.UNKNOWN_ROLE,
+        "cast member": Contributor.ACTOR_ROLE,
+        "collaborator": Contributor.COLLABORATOR_ROLE,
+        "compiler": Contributor.COMPILER_ROLE,
+        "composer": Contributor.COMPOSER_ROLE,
+        "copyright holder": Contributor.COPYRIGHT_HOLDER_ROLE,
+        "director": Contributor.DIRECTOR_ROLE,
+        "editor": Contributor.EDITOR_ROLE,
+        "engineer": Contributor.ENGINEER_ROLE,
+        "executive producer": Contributor.EXECUTIVE_PRODUCER_ROLE,
+        "illustrator": Contributor.ILLUSTRATOR_ROLE,
+        "musician": Contributor.MUSICIAN_ROLE,
+        "narrator": Contributor.NARRATOR_ROLE,
+        "other": Contributor.UNKNOWN_ROLE,
+        "performer": Contributor.PERFORMER_ROLE,
+        "producer": Contributor.PRODUCER_ROLE,
+        "translator": Contributor.TRANSLATOR_ROLE,
+        "photographer": Contributor.PHOTOGRAPHER_ROLE,
+        "lyricist": Contributor.LYRICIST_ROLE,
+        "transcriber": Contributor.TRANSCRIBER_ROLE,
+        "designer": Contributor.DESIGNER_ROLE,
     }
 
     overdrive_medium_to_simplified_medium = {
-        "eBook" : Edition.BOOK_MEDIUM,
-        "Video" : Edition.VIDEO_MEDIUM,
-        "Audiobook" : Edition.AUDIO_MEDIUM,
-        "Music" : Edition.MUSIC_MEDIUM,
-        "Periodicals" : Edition.PERIODICAL_MEDIUM,
+        "eBook": Edition.BOOK_MEDIUM,
+        "Video": Edition.VIDEO_MEDIUM,
+        "Audiobook": Edition.AUDIO_MEDIUM,
+        "Music": Edition.MUSIC_MEDIUM,
+        "Periodicals": Edition.PERIODICAL_MEDIUM,
     }
 
     DATE_FORMAT = "%Y-%m-%d"
@@ -832,19 +809,18 @@ class OverdriveRepresentationExtractor(object):
     def parse_roles(cls, id, rolestring):
         rolestring = rolestring.lower()
         roles = [x.strip() for x in rolestring.split(",")]
-        if ' and '  in roles[-1]:
+        if " and " in roles[-1]:
             roles = roles[:-1] + [x.strip() for x in roles[-1].split(" and ")]
         processed = []
         for x in roles:
             if x not in cls.overdrive_role_to_simplified_role:
-                cls.log.error(
-                    "Could not process role %s for %s", x, id)
+                cls.log.error("Could not process role %s for %s", x, id)
             else:
                 processed.append(cls.overdrive_role_to_simplified_role[x])
         return processed
 
     def book_info_to_circulation(self, book):
-        """ Note:  The json data passed into this method is from a different file/stream
+        """Note:  The json data passed into this method is from a different file/stream
         from the json data that goes into the book_info_to_metadata() method.
         """
         # In Overdrive, 'reserved' books show up as books on
@@ -859,14 +835,12 @@ class OverdriveRepresentationExtractor(object):
         # circulation code sticks the known book ID into `book` ahead
         # of time. That's a code smell indicating that this system
         # needs to be refactored.
-        if 'reserveId' in book and not 'id' in book:
-            book['id'] = book['reserveId']
-        if not 'id' in book:
+        if "reserveId" in book and not "id" in book:
+            book["id"] = book["reserveId"]
+        if not "id" in book:
             return None
-        overdrive_id = book['id']
-        primary_identifier = IdentifierData(
-            Identifier.OVERDRIVE_ID, overdrive_id
-        )
+        overdrive_id = book["id"]
+        primary_identifier = IdentifierData(Identifier.OVERDRIVE_ID, overdrive_id)
         # TODO: We might be able to use this information to avoid the
         # need for explicit configuration of Advantage collections, or
         # at least to keep Advantage collections more up-to-date than
@@ -884,35 +858,35 @@ class OverdriveRepresentationExtractor(object):
         # similarly, though those can abruptly become unavailable, so
         # UNLIMITED_ACCESS is probably not appropriate.
 
-        error_code = book.get('errorCode')
+        error_code = book.get("errorCode")
         # TODO: It's not clear what other error codes there might be.
         # The current behavior will respond to errors other than
         # NotFound by leaving the book alone, but this might not be
         # the right behavior.
-        if error_code == 'NotFound':
+        if error_code == "NotFound":
             licenses_owned = 0
             licenses_available = 0
             patrons_in_hold_queue = 0
-        elif book.get('isOwnedByCollections') is not False:
+        elif book.get("isOwnedByCollections") is not False:
             # We own this book.
-            for account in book.get('accounts', []):
+            for account in book.get("accounts", []):
                 # Only keep track of copies owned by the collection
                 # we're tracking.
-                if account.get('id') != self.library_id:
+                if account.get("id") != self.library_id:
                     continue
 
-                if 'copiesOwned' in account:
+                if "copiesOwned" in account:
                     if licenses_owned is None:
                         licenses_owned = 0
-                    licenses_owned += int(account['copiesOwned'])
-                if 'copiesAvailable' in account:
+                    licenses_owned += int(account["copiesOwned"])
+                if "copiesAvailable" in account:
                     if licenses_available is None:
                         licenses_available = 0
-                    licenses_available += int(account['copiesAvailable'])
-            if 'numberOfHolds' in book:
+                    licenses_available += int(account["copiesAvailable"])
+            if "numberOfHolds" in book:
                 if patrons_in_hold_queue is None:
                     patrons_in_hold_queue = 0
-                patrons_in_hold_queue += book['numberOfHolds']
+                patrons_in_hold_queue += book["numberOfHolds"]
         return CirculationData(
             data_source=DataSource.OVERDRIVE,
             primary_identifier=primary_identifier,
@@ -924,154 +898,163 @@ class OverdriveRepresentationExtractor(object):
 
     @classmethod
     def image_link_to_linkdata(cls, link, rel):
-        if not link or not 'href' in link:
+        if not link or not "href" in link:
             return None
-        href = link['href']
-        if '00000000-0000-0000-0000' in href:
+        href = link["href"]
+        if "00000000-0000-0000-0000" in href:
             # This is a stand-in cover for preorders. It's better not
             # to have a cover at all -- we might be able to get one
             # later, or from another source.
             return None
         href = OverdriveAPI.make_link_safe(href)
-        media_type = link.get('type', None)
+        media_type = link.get("type", None)
         return LinkData(rel=rel, href=href, media_type=media_type)
 
-
     @classmethod
-    def book_info_to_metadata(cls, book, include_bibliographic=True, include_formats=True):
+    def book_info_to_metadata(
+        cls, book, include_bibliographic=True, include_formats=True
+    ):
         """Turn Overdrive's JSON representation of a book into a Metadata
         object.
 
         Note:  The json data passed into this method is from a different file/stream
         from the json data that goes into the book_info_to_circulation() method.
         """
-        if not 'id' in book:
+        if not "id" in book:
             return None
-        overdrive_id = book['id']
-        primary_identifier = IdentifierData(
-            Identifier.OVERDRIVE_ID, overdrive_id
-        )
+        overdrive_id = book["id"]
+        primary_identifier = IdentifierData(Identifier.OVERDRIVE_ID, overdrive_id)
 
         # If we trust classification data, we'll give it this weight.
         # Otherwise we'll probably give it a fraction of this weight.
         trusted_weight = Classification.TRUSTED_DISTRIBUTOR_WEIGHT
 
         if include_bibliographic:
-            title = book.get('title', None)
-            sort_title = book.get('sortTitle')
-            subtitle = book.get('subtitle', None)
-            series = book.get('series', None)
-            publisher = book.get('publisher', None)
-            imprint = book.get('imprint', None)
+            title = book.get("title", None)
+            sort_title = book.get("sortTitle")
+            subtitle = book.get("subtitle", None)
+            series = book.get("series", None)
+            publisher = book.get("publisher", None)
+            imprint = book.get("imprint", None)
 
-            if 'publishDate' in book:
-                published = strptime_utc(
-                    book['publishDate'][:10], cls.DATE_FORMAT)
+            if "publishDate" in book:
+                published = strptime_utc(book["publishDate"][:10], cls.DATE_FORMAT)
             else:
                 published = None
 
-            languages = [l['code'] for l in book.get('languages', [])]
-            if 'eng' in languages or not languages:
-                language = 'eng'
+            languages = [l["code"] for l in book.get("languages", [])]
+            if "eng" in languages or not languages:
+                language = "eng"
             else:
                 language = sorted(languages)[0]
 
             contributors = []
-            for creator in book.get('creators', []):
-                sort_name = creator['fileAs']
-                display_name = creator['name']
-                role = creator['role']
-                roles = cls.parse_roles(overdrive_id, role) or [Contributor.UNKNOWN_ROLE]
+            for creator in book.get("creators", []):
+                sort_name = creator["fileAs"]
+                display_name = creator["name"]
+                role = creator["role"]
+                roles = cls.parse_roles(overdrive_id, role) or [
+                    Contributor.UNKNOWN_ROLE
+                ]
                 contributor = ContributorData(
-                    sort_name=sort_name, display_name=display_name,
-                    roles=roles, biography = creator.get('bioText', None)
+                    sort_name=sort_name,
+                    display_name=display_name,
+                    roles=roles,
+                    biography=creator.get("bioText", None),
                 )
                 contributors.append(contributor)
 
             subjects = []
-            for sub in book.get('subjects', []):
+            for sub in book.get("subjects", []):
                 subject = SubjectData(
-                    type=Subject.OVERDRIVE, identifier=sub['value'],
+                    type=Subject.OVERDRIVE,
+                    identifier=sub["value"],
                     weight=trusted_weight,
                 )
                 subjects.append(subject)
 
-            for sub in book.get('keywords', []):
+            for sub in book.get("keywords", []):
                 subject = SubjectData(
-                    type=Subject.TAG, identifier=sub['value'],
+                    type=Subject.TAG,
+                    identifier=sub["value"],
                     # We don't use TRUSTED_DISTRIBUTOR_WEIGHT because
                     # we don't know where the tags come from --
                     # probably Overdrive users -- and they're
                     # frequently wrong.
-                    weight=1
+                    weight=1,
                 )
                 subjects.append(subject)
 
             extra = dict()
-            if 'grade_levels' in book:
+            if "grade_levels" in book:
                 # n.b. Grade levels are measurements of reading level, not
                 # age appropriateness. We can use them as a measure of age
                 # appropriateness in a pinch, but we weight them less
                 # heavily than TRUSTED_DISTRIBUTOR_WEIGHT.
-                for i in book['grade_levels']:
+                for i in book["grade_levels"]:
                     subject = SubjectData(
                         type=Subject.GRADE_LEVEL,
-                        identifier=i['value'],
-                        weight=trusted_weight / 10
+                        identifier=i["value"],
+                        weight=trusted_weight / 10,
                     )
                     subjects.append(subject)
 
-            overdrive_medium = book.get('mediaType', None)
-            if overdrive_medium and overdrive_medium not in cls.overdrive_medium_to_simplified_medium:
+            overdrive_medium = book.get("mediaType", None)
+            if (
+                overdrive_medium
+                and overdrive_medium not in cls.overdrive_medium_to_simplified_medium
+            ):
                 cls.log.error(
-                    "Could not process medium %s for %s", overdrive_medium, overdrive_id)
+                    "Could not process medium %s for %s", overdrive_medium, overdrive_id
+                )
 
             medium = cls.overdrive_medium_to_simplified_medium.get(
                 overdrive_medium, Edition.BOOK_MEDIUM
             )
 
             measurements = []
-            if 'awards' in book:
-                extra['awards'] = book.get('awards', [])
-                num_awards = len(extra['awards'])
+            if "awards" in book:
+                extra["awards"] = book.get("awards", [])
+                num_awards = len(extra["awards"])
                 measurements.append(
-                    MeasurementData(
-                        Measurement.AWARDS, str(num_awards)
-                    )
+                    MeasurementData(Measurement.AWARDS, str(num_awards))
                 )
 
             for name, subject_type in (
-                ('ATOS', Subject.ATOS_SCORE),
-                ('lexileScore', Subject.LEXILE_SCORE),
-                ('interestLevel', Subject.INTEREST_LEVEL)
+                ("ATOS", Subject.ATOS_SCORE),
+                ("lexileScore", Subject.LEXILE_SCORE),
+                ("interestLevel", Subject.INTEREST_LEVEL),
             ):
                 if not name in book:
                     continue
                 identifier = str(book[name])
                 subjects.append(
-                    SubjectData(type=subject_type, identifier=identifier,
-                                weight=trusted_weight
-                            )
+                    SubjectData(
+                        type=subject_type, identifier=identifier, weight=trusted_weight
+                    )
                 )
 
-            for grade_level_info in book.get('gradeLevels', []):
-                grade_level = grade_level_info.get('value')
+            for grade_level_info in book.get("gradeLevels", []):
+                grade_level = grade_level_info.get("value")
                 subjects.append(
-                    SubjectData(type=Subject.GRADE_LEVEL, identifier=grade_level,
-                                weight=trusted_weight)
+                    SubjectData(
+                        type=Subject.GRADE_LEVEL,
+                        identifier=grade_level,
+                        weight=trusted_weight,
+                    )
                 )
 
             identifiers = []
             links = []
-            for format in book.get('formats', []):
-                for new_id in format.get('identifiers', []):
-                    t = new_id['type']
-                    v = new_id['value']
+            for format in book.get("formats", []):
+                for new_id in format.get("identifiers", []):
+                    t = new_id["type"]
+                    v = new_id["value"]
                     orig_v = v
                     type_key = None
-                    if t == 'ASIN':
+                    if t == "ASIN":
                         type_key = Identifier.ASIN
-                    elif t == 'ISBN':
+                    elif t == "ISBN":
                         type_key = Identifier.ISBN
                         if len(v) == 10:
                             v = isbnlib.to_isbn13(v)
@@ -1082,47 +1065,43 @@ class OverdriveRepresentationExtractor(object):
                             # books appear to have the same ISBN. ISBNs
                             # which fail check digit checks or are invalid
                             # also can occur. Log them for review.
-                            cls.log.info(
-                                "Bad ISBN value provided: %s", orig_v
-                            )
+                            cls.log.info("Bad ISBN value provided: %s", orig_v)
                             continue
-                    elif t == 'DOI':
+                    elif t == "DOI":
                         type_key = Identifier.DOI
-                    elif t == 'UPC':
+                    elif t == "UPC":
                         type_key = Identifier.UPC
-                    elif t == 'PublisherCatalogNumber':
+                    elif t == "PublisherCatalogNumber":
                         continue
                     if type_key and v:
-                        identifiers.append(
-                            IdentifierData(type_key, v, 1)
-                        )
+                        identifiers.append(IdentifierData(type_key, v, 1))
 
                 # Samples become links.
-                if 'samples' in format:
-                    overdrive_name = format['id']
+                if "samples" in format:
+                    overdrive_name = format["id"]
                     internal_names = list(cls.internal_formats(overdrive_name))
                     if not internal_names:
                         # Useless to us.
                         continue
                     for content_type, drm_scheme in internal_names:
                         if Representation.is_media_type(content_type):
-                            for sample_info in format['samples']:
-                                href = sample_info['url']
+                            for sample_info in format["samples"]:
+                                href = sample_info["url"]
                                 links.append(
                                     LinkData(
                                         rel=Hyperlink.SAMPLE,
                                         href=href,
-                                        media_type=content_type
+                                        media_type=content_type,
                                     )
                                 )
 
             # A cover and its thumbnail become a single LinkData.
-            if 'images' in book:
-                images = book['images']
+            if "images" in book:
+                images = book["images"]
                 image_data = cls.image_link_to_linkdata(
-                    images.get('cover'), Hyperlink.IMAGE
+                    images.get("cover"), Hyperlink.IMAGE
                 )
-                for name in ['cover300Wide', 'cover150Wide', 'thumbnail']:
+                for name in ["cover300Wide", "cover150Wide", "thumbnail"]:
                     # Try to get a thumbnail that's as close as possible
                     # to the size we use.
                     image = images.get(name)
@@ -1130,9 +1109,7 @@ class OverdriveRepresentationExtractor(object):
                         image, Hyperlink.THUMBNAIL_IMAGE
                     )
                     if not image_data:
-                        image_data = cls.image_link_to_linkdata(
-                            image, Hyperlink.IMAGE
-                        )
+                        image_data = cls.image_link_to_linkdata(image, Hyperlink.IMAGE)
                     if thumbnail_data:
                         break
 
@@ -1142,8 +1119,8 @@ class OverdriveRepresentationExtractor(object):
                     links.append(image_data)
 
             # Descriptions become links.
-            short = book.get('shortDescription')
-            full = book.get('fullDescription')
+            short = book.get("shortDescription")
+            full = book.get("fullDescription")
             if full:
                 links.append(
                     LinkData(
@@ -1163,19 +1140,18 @@ class OverdriveRepresentationExtractor(object):
                 )
 
             # Add measurements: rating and popularity
-            if book.get('starRating') is not None and book['starRating'] > 0:
+            if book.get("starRating") is not None and book["starRating"] > 0:
                 measurements.append(
                     MeasurementData(
-                        quantity_measured=Measurement.RATING,
-                        value=book['starRating']
+                        quantity_measured=Measurement.RATING, value=book["starRating"]
                     )
                 )
 
-            if book.get('popularity'):
+            if book.get("popularity"):
                 measurements.append(
                     MeasurementData(
                         quantity_measured=Measurement.POPULARITY,
-                        value=book['popularity']
+                        value=book["popularity"],
                     )
                 )
 
@@ -1205,8 +1181,8 @@ class OverdriveRepresentationExtractor(object):
 
         if include_formats:
             formats = []
-            for format in book.get('formats', []):
-                format_id = format['id']
+            for format in book.get("formats", []):
+                format_id = format["id"]
                 internal_formats = list(cls.internal_formats(format_id))
                 if internal_formats:
                     for content_type, drm_scheme in internal_formats:
@@ -1214,7 +1190,8 @@ class OverdriveRepresentationExtractor(object):
                 elif format_id not in cls.ignorable_overdrive_formats:
                     cls.log.error(
                         "Could not process Overdrive format %s for %s",
-                        format_id, overdrive_id
+                        format_id,
+                        overdrive_id,
                     )
 
             # Also make a CirculationData so we can write the formats,
@@ -1230,8 +1207,7 @@ class OverdriveRepresentationExtractor(object):
 
 
 class OverdriveAdvantageAccount(object):
-    """Holder and parser for data associated with Overdrive Advantage.
-    """
+    """Holder and parser for data associated with Overdrive Advantage."""
 
     def __init__(self, parent_library_id, library_id, name):
         """Constructor.
@@ -1255,15 +1231,14 @@ class OverdriveAdvantageAccount(object):
         :yield: A sequence of OverdriveAdvantageAccount objects.
         """
         data = json.loads(content)
-        parent_id = str(data.get('id'))
-        accounts = data.get('advantageAccounts', {})
+        parent_id = str(data.get("id"))
+        accounts = data.get("advantageAccounts", {})
         for account in accounts:
-            name = account['name']
-            products_link = account['links']['products']['href']
-            library_id = str(account.get('id'))
-            name = account.get('name')
-            yield cls(parent_library_id=parent_id, library_id=library_id,
-                      name=name)
+            name = account["name"]
+            products_link = account["links"]["products"]["href"]
+            library_id = str(account.get("id"))
+            name = account.get("name")
+            yield cls(parent_library_id=parent_id, library_id=library_id, name=name)
 
     def to_collection(self, _db):
         """Find or create a Collection object for this Overdrive Advantage
@@ -1274,9 +1249,11 @@ class OverdriveAdvantageAccount(object):
         """
         # First find the parent Collection.
         try:
-            parent = Collection.by_protocol(_db, ExternalIntegration.OVERDRIVE).filter(
-                Collection.external_account_id==self.parent_library_id
-            ).one()
+            parent = (
+                Collection.by_protocol(_db, ExternalIntegration.OVERDRIVE)
+                .filter(Collection.external_account_id == self.parent_library_id)
+                .one()
+            )
         except NoResultFound as e:
             # Without the parent's credentials we can't access the child.
             raise ValueError(
@@ -1284,9 +1261,11 @@ class OverdriveAdvantageAccount(object):
             )
         name = parent.name + " / " + self.name
         child, is_new = get_one_or_create(
-            _db, Collection, parent_id=parent.id,
+            _db,
+            Collection,
+            parent_id=parent.id,
             external_account_id=self.library_id,
-            create_method_kwargs=dict(name=name)
+            create_method_kwargs=dict(name=name),
         )
         if is_new:
             # Make sure the child has its protocol set appropriately.
@@ -1337,17 +1316,15 @@ class OverdriveBibliographicCoverageProvider(BibliographicCoverageProvider):
     def process_item(self, identifier):
         info = self.api.metadata_lookup(identifier)
         error = None
-        if info.get('errorCode') == 'NotFound':
+        if info.get("errorCode") == "NotFound":
             error = "ID not recognized by Overdrive: %s" % identifier.identifier
-        elif info.get('errorCode') == 'InvalidGuid':
+        elif info.get("errorCode") == "InvalidGuid":
             error = "Invalid Overdrive ID: %s" % identifier.identifier
 
         if error:
             return self.failure(identifier, error, transient=False)
 
-        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(
-            info
-        )
+        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
 
         if not metadata:
             e = "Could not extract metadata from Overdrive data: %r" % info

@@ -1,9 +1,9 @@
-from ...classifier.ddc import DeweyDecimalClassifier as DDC
-from ...classifier import *
 from ... import classifier
+from ...classifier import *
+from ...classifier.ddc import DeweyDecimalClassifier as DDC
+
 
 class TestDewey(object):
-
     def test_name_for(self):
         assert "General statistics of Europe" == DDC.name_for("314")
         assert "Biography" == DDC.name_for("B")
@@ -30,16 +30,13 @@ class TestDewey(object):
         assert None == aud("FIC")
         assert None == aud("Fic")
 
-
         # We could derive audience=Adult from the lack of a
         # distinguishing "J" or "E" here, but we've seen this go
         # wrong, and it's not terribly important overall, so we don't.
         assert None == aud("B")
         assert None == aud("400")
 
-
     def test_is_fiction(self):
-
         def fic(identifier):
             return DDC.is_fiction(*DDC.scrub_identifier(identifier))
 

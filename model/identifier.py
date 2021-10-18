@@ -2,10 +2,11 @@
 # Identifier, Equivalency
 import logging
 import random
-from urllib.parse import quote, unquote
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from functools import total_ordering
+from urllib.parse import quote, unquote
+
 import isbnlib
 from sqlalchemy import (
     Boolean,
@@ -23,15 +24,15 @@ from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import select
 from sqlalchemy.sql.expression import and_, or_
 
+from ..util.datetime_helpers import utc_now
+from ..util.summary import SummaryEvaluator
+from . import Base, PresentationCalculationPolicy, create, get_one, get_one_or_create
 from .classification import Classification, Subject
 from .constants import IdentifierConstants, LinkRelations
 from .coverage import CoverageRecord
 from .datasource import DataSource
 from .licensing import LicensePoolDeliveryMechanism, RightsStatus
 from .measurement import Measurement
-from . import Base, PresentationCalculationPolicy, create, get_one, get_one_or_create
-from ..util.summary import SummaryEvaluator
-from ..util.datetime_helpers import utc_now
 
 
 class IdentifierParser(metaclass=ABCMeta):
@@ -53,10 +54,9 @@ class IdentifierParser(metaclass=ABCMeta):
 
 @total_ordering
 class Identifier(Base, IdentifierConstants):
-    """A way of uniquely referring to a particular edition.
-    """
+    """A way of uniquely referring to a particular edition."""
 
-    __tablename__ = 'identifiers'
+    __tablename__ = "identifiers"
     id = Column(Integer, primary_key=True)
     type = Column(String(64), index=True)
     identifier = Column(String, index=True)
@@ -64,13 +64,15 @@ class Identifier(Base, IdentifierConstants):
     equivalencies = relationship(
         "Equivalency",
         primaryjoin=("Identifier.id==Equivalency.input_id"),
-        backref="input_identifiers", cascade="all, delete-orphan"
+        backref="input_identifiers",
+        cascade="all, delete-orphan",
     )
 
     inbound_equivalencies = relationship(
         "Equivalency",
         primaryjoin=("Identifier.id==Equivalency.output_id"),
-        backref="output_identifiers", cascade="all, delete-orphan"
+        backref="output_identifiers",
+        cascade="all, delete-orphan",
     )
 
     # One Identifier may have many associated CoverageRecords.
@@ -86,46 +88,37 @@ class Identifier(Base, IdentifierConstants):
 
     # One Identifier may serve as the primary identifier for
     # several Editions.
-    primarily_identifies = relationship(
-        "Edition", backref="primary_identifier"
-    )
+    primarily_identifies = relationship("Edition", backref="primary_identifier")
 
     # One Identifier may serve as the identifier for many
     # LicensePools, through different Collections.
     licensed_through = relationship(
-        "LicensePool", backref="identifier", lazy='joined',
+        "LicensePool",
+        backref="identifier",
+        lazy="joined",
     )
 
     # One Identifier may have many Links.
-    links = relationship(
-        "Hyperlink", backref="identifier"
-    )
+    links = relationship("Hyperlink", backref="identifier")
 
     # One Identifier may be the subject of many Measurements.
-    measurements = relationship(
-        "Measurement", backref="identifier"
-    )
+    measurements = relationship("Measurement", backref="identifier")
 
     # One Identifier may participate in many Classifications.
-    classifications = relationship(
-        "Classification", backref="identifier"
-    )
+    classifications = relationship("Classification", backref="identifier")
 
     # One identifier may participate in many Annotations.
-    annotations = relationship(
-        "Annotation", backref="identifier"
-    )
+    annotations = relationship("Annotation", backref="identifier")
 
     # One Identifier can have have many LicensePoolDeliveryMechanisms.
     delivery_mechanisms = relationship(
-        "LicensePoolDeliveryMechanism", backref="identifier",
-        foreign_keys=lambda: [LicensePoolDeliveryMechanism.identifier_id]
+        "LicensePoolDeliveryMechanism",
+        backref="identifier",
+        foreign_keys=lambda: [LicensePoolDeliveryMechanism.identifier_id],
     )
 
     # Type + identifier is unique.
-    __table_args__ = (
-        UniqueConstraint('type', 'identifier'),
-    )
+    __table_args__ = (UniqueConstraint("type", "identifier"),)
 
     @classmethod
     def from_asin(cls, _db, asin, autocreate=True):
@@ -145,8 +138,7 @@ class Identifier(Base, IdentifierConstants):
         return cls.for_foreign_id(_db, type, asin, autocreate)
 
     @classmethod
-    def for_foreign_id(cls, _db, foreign_identifier_type, foreign_id,
-                       autocreate=True):
+    def for_foreign_id(cls, _db, foreign_identifier_type, foreign_id, autocreate=True):
         """Turn a foreign ID into an Identifier."""
         foreign_identifier_type, foreign_id = cls.prepare_foreign_type_and_identifier(
             foreign_identifier_type, foreign_id
@@ -159,8 +151,7 @@ class Identifier(Base, IdentifierConstants):
         else:
             m = get_one
 
-        result = m(_db, cls, type=foreign_identifier_type,
-                   identifier=foreign_id)
+        result = m(_db, cls, type=foreign_identifier_type, identifier=foreign_id)
 
         if isinstance(result, tuple):
             return result
@@ -180,9 +171,9 @@ class Identifier(Base, IdentifierConstants):
             foreign_identifier = foreign_identifier.lower()
 
         if not cls.valid_as_foreign_identifier(foreign_type, foreign_identifier):
-            raise ValueError('"%s" is not a valid %s.' % (
-                foreign_identifier, foreign_type
-            ))
+            raise ValueError(
+                '"%s" is not a valid %s.' % (foreign_identifier, foreign_type)
+            )
 
         return (foreign_type, foreign_identifier)
 
@@ -197,16 +188,16 @@ class Identifier(Base, IdentifierConstants):
         currently don't enforce that). We only reject an ID out of
         hand if it will cause problems with a third-party API.
         """
-        forbidden_characters = ''
+        forbidden_characters = ""
         if type == Identifier.BIBLIOTHECA_ID:
             # IDs are joined with commas and provided as a URL path
             # element.  Embedded commas or slashes will confuse the
             # Bibliotheca API.
-            forbidden_characters = ',/'
+            forbidden_characters = ",/"
         elif type == Identifier.AXIS_360_ID:
             # IDs are joined with commas during a lookup. Embedded
             # commas will confuse the Axis 360 API.
-            forbidden_characters = ','
+            forbidden_characters = ","
         if any(x in id for x in forbidden_characters):
             return False
         return True
@@ -222,8 +213,7 @@ class Identifier(Base, IdentifierConstants):
             return self.GUTENBERG_URN_SCHEME_PREFIX + identifier_text
         else:
             identifier_type = quote(self.type)
-            return self.URN_SCHEME_PREFIX + "%s/%s" % (
-                identifier_type, identifier_text)
+            return self.URN_SCHEME_PREFIX + "%s/%s" % (identifier_type, identifier_text)
 
     @property
     def work(self):
@@ -248,19 +238,26 @@ class Identifier(Base, IdentifierConstants):
         if m:
             type = Identifier.GUTENBERG_ID
             identifier_string = m.groups()[0]
-        elif identifier_string.startswith("http:") or identifier_string.startswith("https:"):
+        elif identifier_string.startswith("http:") or identifier_string.startswith(
+            "https:"
+        ):
             type = Identifier.URI
         elif identifier_string.startswith(Identifier.URN_SCHEME_PREFIX):
-            identifier_string = identifier_string[len(Identifier.URN_SCHEME_PREFIX):]
-            type, identifier_string = list(map(
-                unquote, identifier_string.split("/", 1)))
+            identifier_string = identifier_string[len(Identifier.URN_SCHEME_PREFIX) :]
+            type, identifier_string = list(
+                map(unquote, identifier_string.split("/", 1))
+            )
         elif identifier_string.lower().startswith(Identifier.ISBN_URN_SCHEME_PREFIX):
             type = Identifier.ISBN
-            identifier_string = identifier_string[len(Identifier.ISBN_URN_SCHEME_PREFIX):]
+            identifier_string = identifier_string[
+                len(Identifier.ISBN_URN_SCHEME_PREFIX) :
+            ]
             identifier_string = unquote(identifier_string)
             # Make sure this is a valid ISBN, and convert it to an ISBN-13.
-            if not (isbnlib.is_isbn10(identifier_string) or
-                    isbnlib.is_isbn13(identifier_string)):
+            if not (
+                isbnlib.is_isbn10(identifier_string)
+                or isbnlib.is_isbn13(identifier_string)
+            ):
                 raise ValueError("%s is not a valid ISBN." % identifier_string)
             if isbnlib.is_isbn10(identifier_string):
                 identifier_string = isbnlib.to_isbn13(identifier_string)
@@ -268,13 +265,12 @@ class Identifier(Base, IdentifierConstants):
             type = Identifier.URI
         else:
             raise ValueError(
-                "Could not turn %s into a recognized identifier." %
-                identifier_string)
+                "Could not turn %s into a recognized identifier." % identifier_string
+            )
         return (type, identifier_string)
 
     @classmethod
-    def parse_urns(cls, _db, identifier_strings, autocreate=True,
-                   allowed_types=None):
+    def parse_urns(cls, _db, identifier_strings, autocreate=True, allowed_types=None):
         """Converts a batch of URNs into Identifier objects.
 
         :param _db: A database connection
@@ -300,8 +296,11 @@ class Identifier(Base, IdentifierConstants):
                 (type, identifier) = cls.prepare_foreign_type_and_identifier(
                     *cls.type_and_identifier_for_urn(urn)
                 )
-                if (type and identifier and
-                    (allowed_types is None or type in allowed_types)):
+                if (
+                    type
+                    and identifier
+                    and (allowed_types is None or type in allowed_types)
+                ):
                     identifier_details[urn] = (type, identifier)
                 else:
                     failures.append(urn)
@@ -309,14 +308,13 @@ class Identifier(Base, IdentifierConstants):
                 failures.append(urn)
 
         identifiers_by_urn = dict()
+
         def find_existing_identifiers(identifier_details):
             if not identifier_details:
                 return
             and_clauses = list()
             for type, identifier in identifier_details:
-                and_clauses.append(
-                    and_(cls.type==type, cls.identifier==identifier)
-                )
+                and_clauses.append(and_(cls.type == type, cls.identifier == identifier))
 
             identifiers = _db.query(cls).filter(or_(*and_clauses)).all()
             for identifier in identifiers:
@@ -327,9 +325,12 @@ class Identifier(Base, IdentifierConstants):
 
         # Remove the existing identifiers from the identifier_details list,
         # regardless of whether the provided URN was accurate.
-        existing_details = [(i.type, i.identifier) for i in list(identifiers_by_urn.values())]
+        existing_details = [
+            (i.type, i.identifier) for i in list(identifiers_by_urn.values())
+        ]
         identifier_details = {
-            k: v for k, v in list(identifier_details.items())
+            k: v
+            for k, v in list(identifier_details.items())
             if v not in existing_details and k not in list(identifiers_by_urn.keys())
         }
 
@@ -360,7 +361,9 @@ class Identifier(Base, IdentifierConstants):
         return identifiers_by_urn, failures
 
     @classmethod
-    def _parse_urn(cls, _db, identifier_string, identifier_type, must_support_license_pools=False):
+    def _parse_urn(
+        cls, _db, identifier_string, identifier_type, must_support_license_pools=False
+    ):
         """Parse identifier string.
 
         :param _db: Database session
@@ -407,9 +410,13 @@ class Identifier(Base, IdentifierConstants):
         :return: 2-tuple containing Identifier object and a boolean value indicating whether it's new
         :rtype: Tuple[core.model.identifier.Identifier, bool]
         """
-        identifier_type, identifier_string = cls.type_and_identifier_for_urn(identifier_string)
+        identifier_type, identifier_string = cls.type_and_identifier_for_urn(
+            identifier_string
+        )
 
-        return cls._parse_urn(_db, identifier_string, identifier_type, must_support_license_pools)
+        return cls._parse_urn(
+            _db, identifier_string, identifier_type, must_support_license_pools
+        )
 
     @classmethod
     def parse(cls, _db, identifier_string, parser, must_support_license_pools=False):
@@ -433,7 +440,9 @@ class Identifier(Base, IdentifierConstants):
         """
         identifier_type, identifier_string = parser.parse(identifier_string)
 
-        return cls._parse_urn(_db, identifier_string, identifier_type, must_support_license_pools)
+        return cls._parse_urn(
+            _db, identifier_string, identifier_type, must_support_license_pools
+        )
 
     def equivalent_to(self, data_source, identifier, strength):
         """Make one Identifier equivalent to another.
@@ -446,23 +455,24 @@ class Identifier(Base, IdentifierConstants):
             # Do nothing.
             return None
         eq, new = get_one_or_create(
-            _db, Equivalency,
+            _db,
+            Equivalency,
             data_source=data_source,
             input=self,
             output=identifier,
-            on_multiple='interchangeable'
+            on_multiple="interchangeable",
         )
-        eq.strength=strength
+        eq.strength = strength
         if new:
             logging.info(
-                "Identifier equivalency: %r==%r p=%.2f", self, identifier,
-                strength
+                "Identifier equivalency: %r==%r p=%.2f", self, identifier, strength
             )
         return eq
 
     @classmethod
     def recursively_equivalent_identifier_ids_query(
-            cls, identifier_id_column, policy=None):
+        cls, identifier_id_column, policy=None
+    ):
         """Get a SQL statement that will return all Identifier IDs
         equivalent to a given ID at the given confidence threshold.
         `identifier_id_column` can be a single Identifier ID, or a column
@@ -489,8 +499,7 @@ class Identifier(Base, IdentifierConstants):
         )
 
     @classmethod
-    def recursively_equivalent_identifier_ids(
-            cls, _db, identifier_ids, policy=None):
+    def recursively_equivalent_identifier_ids(cls, _db, identifier_ids, policy=None):
         """All Identifier IDs equivalent to the given set of Identifier
         IDs at the given confidence threshold.
         This uses the function defined in files/recursive_equivalents.sql.
@@ -503,9 +512,7 @@ class Identifier(Base, IdentifierConstants):
            how you've chosen to make the tradeoff between performance,
            data quality, and sheer number of equivalent identifiers.
         """
-        fn = cls._recursively_equivalent_identifier_ids_query(
-            Identifier.id, policy
-        )
+        fn = cls._recursively_equivalent_identifier_ids_query(Identifier.id, policy)
         query = select([Identifier.id, fn], Identifier.id.in_(identifier_ids))
         results = _db.execute(query)
         equivalents = defaultdict(list)
@@ -517,9 +524,7 @@ class Identifier(Base, IdentifierConstants):
 
     def equivalent_identifier_ids(self, policy=None):
         _db = Session.object_session(self)
-        return Identifier.recursively_equivalent_identifier_ids(
-            _db, [self.id], policy
-        )
+        return Identifier.recursively_equivalent_identifier_ids(_db, [self.id], policy)
 
     def licensed_through_collection(self, collection):
         """Find the LicensePool, if any, for this Identifier
@@ -530,9 +535,19 @@ class Identifier(Base, IdentifierConstants):
             if lp.collection == collection:
                 return lp
 
-    def add_link(self, rel, href, data_source, media_type=None, content=None,
-                 content_path=None, rights_status_uri=None, rights_explanation=None,
-                 original_resource=None, transformation_settings=None):
+    def add_link(
+        self,
+        rel,
+        href,
+        data_source,
+        media_type=None,
+        content=None,
+        content_path=None,
+        rights_status_uri=None,
+        rights_explanation=None,
+        original_resource=None,
+        transformation_settings=None,
+    ):
         """Create a link between this Identifier and a (potentially new)
         Resource.
         TODO: There's some code in metadata_layer for automatically
@@ -540,6 +555,7 @@ class Identifier(Base, IdentifierConstants):
         created. It might be good to move that code into here.
         """
         from .resource import Hyperlink, Representation, Resource
+
         _db = Session.object_session(self)
 
         # Find or create the Resource.
@@ -549,22 +565,30 @@ class Identifier(Base, IdentifierConstants):
         if rights_status_uri:
             rights_status = RightsStatus.lookup(_db, rights_status_uri)
         resource, new_resource = get_one_or_create(
-            _db, Resource, url=href,
-            create_method_kwargs=dict(data_source=data_source,
-                                      rights_status=rights_status,
-                                      rights_explanation=rights_explanation)
+            _db,
+            Resource,
+            url=href,
+            create_method_kwargs=dict(
+                data_source=data_source,
+                rights_status=rights_status,
+                rights_explanation=rights_explanation,
+            ),
         )
 
         # Find or create the Hyperlink.
         link, new_link = get_one_or_create(
-            _db, Hyperlink, rel=rel, data_source=data_source,
-            identifier=self, resource=resource,
+            _db,
+            Hyperlink,
+            rel=rel,
+            data_source=data_source,
+            identifier=self,
+            resource=resource,
         )
 
         if content or content_path:
             # We have content for this resource.
             resource.set_fetched_content(media_type, content, content_path)
-        elif (media_type and not resource.representation):
+        elif media_type and not resource.representation:
             # We know the type of the resource, so make a
             # Representation for it.
             resource.representation, is_new = get_one_or_create(
@@ -578,24 +602,33 @@ class Identifier(Base, IdentifierConstants):
         # wanted to.
         return link, new_link
 
-    def add_measurement(self, data_source, quantity_measured, value,
-                        weight=1, taken_at=None):
+    def add_measurement(
+        self, data_source, quantity_measured, value, weight=1, taken_at=None
+    ):
         """Associate a new Measurement with this Identifier."""
         _db = Session.object_session(self)
 
         logging.debug(
             "MEASUREMENT: %s on %s/%s: %s == %s (wt=%d)",
-            data_source.name, self.type, self.identifier,
-            quantity_measured, value, weight)
+            data_source.name,
+            self.type,
+            self.identifier,
+            quantity_measured,
+            value,
+            weight,
+        )
 
         now = utc_now()
         taken_at = taken_at or now
         # Is there an existing most recent measurement?
         most_recent = get_one(
-            _db, Measurement, identifier=self,
+            _db,
+            Measurement,
+            identifier=self,
             data_source=data_source,
             quantity_measured=quantity_measured,
-            is_most_recent=True, on_multiple='interchangeable'
+            is_most_recent=True,
+            on_multiple="interchangeable",
         )
         if most_recent and most_recent.value == value and taken_at == now:
             # The value hasn't changed since last time. Just update
@@ -606,13 +639,20 @@ class Identifier(Base, IdentifierConstants):
             most_recent.is_most_recent = False
 
         return create(
-            _db, Measurement,
-            identifier=self, data_source=data_source,
-            quantity_measured=quantity_measured, taken_at=taken_at,
-            value=value, weight=weight, is_most_recent=True)[0]
+            _db,
+            Measurement,
+            identifier=self,
+            data_source=data_source,
+            quantity_measured=quantity_measured,
+            taken_at=taken_at,
+            value=value,
+            weight=weight,
+            is_most_recent=True,
+        )[0]
 
-    def classify(self, data_source, subject_type, subject_identifier,
-                 subject_name=None, weight=1):
+    def classify(
+        self, data_source, subject_type, subject_identifier, subject_name=None, weight=1
+    ):
         """Classify this Identifier under a Subject.
 
         :param type: Classification scheme; one of the constants from Subject.
@@ -628,30 +668,40 @@ class Identifier(Base, IdentifierConstants):
         # Turn the subject type and identifier into a Subject.
         classifications = []
         subject, is_new = Subject.lookup(
-            _db, subject_type, subject_identifier, subject_name,
+            _db,
+            subject_type,
+            subject_identifier,
+            subject_name,
         )
 
         logging.debug(
             "CLASSIFICATION: %s on %s/%s: %s %s/%s (wt=%d)",
-            data_source.name, self.type, self.identifier,
-            subject.type, subject.identifier, subject.name,
-            weight
+            data_source.name,
+            self.type,
+            self.identifier,
+            subject.type,
+            subject.identifier,
+            subject.name,
+            weight,
         )
 
         # Use a Classification to connect the Identifier to the
         # Subject.
         try:
             classification, is_new = get_one_or_create(
-                _db, Classification,
+                _db,
+                Classification,
                 identifier=self,
                 subject=subject,
-                data_source=data_source)
+                data_source=data_source,
+            )
         except MultipleResultsFound as e:
             # TODO: This is a hack.
             all_classifications = _db.query(Classification).filter(
-                Classification.identifier==self,
-                Classification.subject==subject,
-                Classification.data_source==data_source)
+                Classification.identifier == self,
+                Classification.subject == subject,
+                Classification.data_source == data_source,
+            )
             all_classifications = all_classifications.all()
             classification = all_classifications[0]
             for i in all_classifications[1:]:
@@ -661,37 +711,45 @@ class Identifier(Base, IdentifierConstants):
         return classification
 
     @classmethod
-    def resources_for_identifier_ids(self, _db, identifier_ids, rel=None,
-                                     data_source=None):
+    def resources_for_identifier_ids(
+        self, _db, identifier_ids, rel=None, data_source=None
+    ):
         from .resource import Hyperlink, Resource
-        resources = _db.query(Resource).join(Resource.links).filter(
-                Hyperlink.identifier_id.in_(identifier_ids))
+
+        resources = (
+            _db.query(Resource)
+            .join(Resource.links)
+            .filter(Hyperlink.identifier_id.in_(identifier_ids))
+        )
         if data_source:
             if isinstance(data_source, DataSource):
                 data_source = [data_source]
-            resources = resources.filter(Hyperlink.data_source_id.in_([d.id for d in data_source]))
+            resources = resources.filter(
+                Hyperlink.data_source_id.in_([d.id for d in data_source])
+            )
         if rel:
             if isinstance(rel, list):
                 resources = resources.filter(Hyperlink.rel.in_(rel))
             else:
-                resources = resources.filter(Hyperlink.rel==rel)
-        resources = resources.options(joinedload('representation'))
+                resources = resources.filter(Hyperlink.rel == rel)
+        resources = resources.options(joinedload("representation"))
         return resources
 
     @classmethod
     def classifications_for_identifier_ids(self, _db, identifier_ids):
         classifications = _db.query(Classification).filter(
-                Classification.identifier_id.in_(identifier_ids))
-        return classifications.options(joinedload('subject'))
+            Classification.identifier_id.in_(identifier_ids)
+        )
+        return classifications.options(joinedload("subject"))
 
     @classmethod
     def best_cover_for(cls, _db, identifier_ids, rel=None):
         # Find all image resources associated with any of
         # these identifiers.
         from .resource import Hyperlink, Resource
+
         rel = rel or Hyperlink.IMAGE
-        images = cls.resources_for_identifier_ids(
-            _db, identifier_ids, rel)
+        images = cls.resources_for_identifier_ids(_db, identifier_ids, rel)
         images = images.join(Resource.representation)
         images = images.all()
 
@@ -706,8 +764,9 @@ class Identifier(Base, IdentifierConstants):
         return champion, images
 
     @classmethod
-    def evaluate_summary_quality(cls, _db, identifier_ids,
-                                 privileged_data_sources=None):
+    def evaluate_summary_quality(
+        cls, _db, identifier_ids, privileged_data_sources=None
+    ):
         """Evaluate the summaries for the given group of Identifier IDs.
         This is an automatic evaluation based solely on the content of
         the summaries. It will be combined with human-entered ratings
@@ -732,7 +791,8 @@ class Identifier(Base, IdentifierConstants):
         # these records.
         rels = [LinkRelations.DESCRIPTION, LinkRelations.SHORT_DESCRIPTION]
         descriptions = cls.resources_for_identifier_ids(
-            _db, identifier_ids, rels, privileged_data_source).all()
+            _db, identifier_ids, rels, privileged_data_source
+        ).all()
 
         champion = None
         # Add each resource's content to the evaluator's corpus.
@@ -753,14 +813,22 @@ class Identifier(Base, IdentifierConstants):
         if privileged_data_source and not champion:
             # We could not find any descriptions from the privileged
             # data source. Try relaxing that restriction.
-            return cls.evaluate_summary_quality(_db, identifier_ids, privileged_data_sources[1:])
+            return cls.evaluate_summary_quality(
+                _db, identifier_ids, privileged_data_sources[1:]
+            )
         return champion, descriptions
 
     @classmethod
     def missing_coverage_from(
-            cls, _db, identifier_types, coverage_data_source, operation=None,
-            count_as_covered=None, count_as_missing_before=None, identifiers=None,
-            collection=None
+        cls,
+        _db,
+        identifier_types,
+        coverage_data_source,
+        operation=None,
+        count_as_covered=None,
+        count_as_missing_before=None,
+        identifiers=None,
+        collection=None,
     ):
         """Find identifiers of the given types which have no CoverageRecord
         from `coverage_data_source`.
@@ -777,17 +845,16 @@ class Identifier(Base, IdentifierConstants):
         if coverage_data_source:
             data_source_id = coverage_data_source.id
 
-        clause = and_(Identifier.id==CoverageRecord.identifier_id,
-                      CoverageRecord.data_source_id==data_source_id,
-                      CoverageRecord.operation==operation,
-                      CoverageRecord.collection_id==collection_id
+        clause = and_(
+            Identifier.id == CoverageRecord.identifier_id,
+            CoverageRecord.data_source_id == data_source_id,
+            CoverageRecord.operation == operation,
+            CoverageRecord.collection_id == collection_id,
         )
         qu = _db.query(Identifier).outerjoin(CoverageRecord, clause)
         if identifier_types:
             qu = qu.filter(Identifier.type.in_(identifier_types))
-        missing = CoverageRecord.not_covered(
-            count_as_covered, count_as_missing_before
-        )
+        missing = CoverageRecord.not_covered(count_as_covered, count_as_missing_before)
         qu = qu.filter(missing)
 
         if identifiers:
@@ -816,8 +883,9 @@ class Identifier(Base, IdentifierConstants):
             resource = link.resource
             if link.rel == LinkRelations.IMAGE:
                 if not cover_image or (
-                        not cover_image.representation.thumbnails and
-                        resource.representation.thumbnails):
+                    not cover_image.representation.thumbnails
+                    and resource.representation.thumbnails
+                ):
                     cover_image = resource
                     if cover_image.representation:
                         # This is technically redundant because
@@ -831,19 +899,22 @@ class Identifier(Base, IdentifierConstants):
                     description = resource
 
         if self.coverage_records:
-            timestamps.extend([
-                c.timestamp for c in self.coverage_records if c.timestamp
-            ])
+            timestamps.extend(
+                [c.timestamp for c in self.coverage_records if c.timestamp]
+            )
         if timestamps:
             most_recent_update = max(timestamps)
 
         quality = Measurement.overall_quality(self.measurements)
         from ..opds import AcquisitionFeed
-        return AcquisitionFeed.minimal_opds_entry(
-            identifier=self, cover=cover_image, description=description,
-            quality=quality, most_recent_update=most_recent_update
-        )
 
+        return AcquisitionFeed.minimal_opds_entry(
+            identifier=self,
+            cover=cover_image,
+            description=description,
+            quality=quality,
+            most_recent_update=most_recent_update,
+        )
 
     def __eq__(self, other):
         """Equality implementation for total_ordering."""
@@ -852,7 +923,7 @@ class Identifier(Base, IdentifierConstants):
         if other is None or not isinstance(other, Identifier):
             return False
         return (self.type, self.identifier) == (other.type, other.identifier)
-    
+
     def __hash__(self):
         return hash((self.type, self.identifier))
 
@@ -868,18 +939,19 @@ class Equivalency(Base):
     This assertion comes with a 'strength' which represents how confident
     the data source is in the assertion.
     """
-    __tablename__ = 'equivalents'
+
+    __tablename__ = "equivalents"
 
     # 'input' is the ID that was used as input to the datasource.
     # 'output' is the output
     id = Column(Integer, primary_key=True)
-    input_id = Column(Integer, ForeignKey('identifiers.id'), index=True)
+    input_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
     input = relationship("Identifier", foreign_keys=input_id)
-    output_id = Column(Integer, ForeignKey('identifiers.id'), index=True)
+    output_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
     output = relationship("Identifier", foreign_keys=output_id)
 
     # Who says?
-    data_source_id = Column(Integer, ForeignKey('datasources.id'), index=True)
+    data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
 
     # How many distinct votes went into this assertion? This will let
     # us scale the change to the strength when additional votes come
@@ -901,7 +973,9 @@ class Equivalency(Base):
         r = "[%s ->\n %s\n source=%s strength=%.2f votes=%d)]" % (
             repr(self.input).decode("utf8"),
             repr(self.output).decode("utf8"),
-            self.data_source.name, self.strength, self.votes
+            self.data_source.name,
+            self.strength,
+            self.votes,
         )
         return r
 
@@ -912,9 +986,15 @@ class Equivalency(Base):
             return []
         if isinstance(identifiers, list) and isinstance(identifiers[0], Identifier):
             identifiers = [x.id for x in identifiers]
-        q = _db.query(Equivalency).distinct().filter(
-            or_(Equivalency.input_id.in_(identifiers),
-                Equivalency.output_id.in_(identifiers))
+        q = (
+            _db.query(Equivalency)
+            .distinct()
+            .filter(
+                or_(
+                    Equivalency.input_id.in_(identifiers),
+                    Equivalency.output_id.in_(identifiers),
+                )
+            )
         )
         if exclude_ids:
             q = q.filter(~Equivalency.id.in_(exclude_ids))

@@ -2,6 +2,7 @@
 # PolicyException LicensePool, LicensePoolDeliveryMechanism, DeliveryMechanism,
 # RightsStatus
 import logging
+
 from sqlalchemy import (
     Boolean,
     Column,
@@ -18,13 +19,13 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
 
+from ..util.datetime_helpers import utc_now
+from . import Base, create, flush, get_one, get_one_or_create
 from .circulationevent import CirculationEvent
 from .complaint import Complaint
 from .constants import DataSourceConstants, EditionConstants, LinkRelations, MediaTypes
 from .hasfulltablecache import HasFullTableCache
 from .patron import Hold, Loan, Patron
-from . import Base, create, flush, get_one, get_one_or_create
-from ..util.datetime_helpers import utc_now
 
 
 class PolicyException(Exception):
@@ -38,7 +39,7 @@ class License(Base):
     delivery mechanisms, which may not always be true.
     """
 
-    __tablename__ = 'licenses'
+    __tablename__ = "licenses"
     id = Column(Integer, primary_key=True)
 
     identifier = Column(Unicode)
@@ -50,16 +51,12 @@ class License(Base):
     concurrent_checkouts = Column(Integer)
 
     # A License belongs to one LicensePool.
-    license_pool_id = Column(Integer, ForeignKey('licensepools.id'), index=True)
+    license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
 
     # One License can have many Loans.
-    loans = relationship(
-        'Loan', backref='license', cascade='all, delete-orphan'
-    )
+    loans = relationship("Loan", backref="license", cascade="all, delete-orphan")
 
-    __table_args__ = (
-        UniqueConstraint('identifier', 'license_pool_id'),
-    )
+    __table_args__ = (UniqueConstraint("identifier", "license_pool_id"),)
 
     def loan_to(self, patron_or_client, **kwargs):
         loan, is_new = self.license_pool.loan_to(patron_or_client, **kwargs)
@@ -81,8 +78,9 @@ class License(Base):
     @property
     def is_expired(self):
         now = utc_now()
-        return ((self.expires and self.expires <= now) or
-                (self.remaining_checkouts is not None and self.remaining_checkouts <= 0))
+        return (self.expires and self.expires <= now) or (
+            self.remaining_checkouts is not None and self.remaining_checkouts <= 0
+        )
 
 
 class LicensePool(Base):
@@ -90,51 +88,47 @@ class LicensePool(Base):
 
     UNLIMITED_ACCESS = -1
 
-    __tablename__ = 'licensepools'
+    __tablename__ = "licensepools"
     id = Column(Integer, primary_key=True)
 
     # A LicensePool may be associated with a Work. (If it's not, no one
     # can check it out.)
-    work_id = Column(Integer, ForeignKey('works.id'), index=True)
+    work_id = Column(Integer, ForeignKey("works.id"), index=True)
 
     # Each LicensePool is associated with one DataSource and one
     # Identifier.
-    data_source_id = Column(Integer, ForeignKey('datasources.id'), index=True)
-    identifier_id = Column(Integer, ForeignKey('identifiers.id'), index=True)
+    data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
+    identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
 
     # Each LicensePool belongs to one Collection.
-    collection_id = Column(Integer, ForeignKey('collections.id'),
-                           index=True, nullable=False)
+    collection_id = Column(
+        Integer, ForeignKey("collections.id"), index=True, nullable=False
+    )
 
     # Each LicensePool has an Edition which contains the metadata used
     # to describe this book.
-    presentation_edition_id = Column(Integer, ForeignKey('editions.id'), index=True)
+    presentation_edition_id = Column(Integer, ForeignKey("editions.id"), index=True)
 
     # If the source provides information about individual licenses, the
     # LicensePool may have many Licenses.
     licenses = relationship(
-        'License', backref='license_pool', cascade='all, delete-orphan'
+        "License", backref="license_pool", cascade="all, delete-orphan"
     )
 
     # One LicensePool can have many Loans.
-    loans = relationship(
-        'Loan', backref='license_pool', cascade='all, delete-orphan'
-    )
+    loans = relationship("Loan", backref="license_pool", cascade="all, delete-orphan")
 
     # One LicensePool can have many Holds.
-    holds = relationship(
-        'Hold', backref='license_pool', cascade='all, delete-orphan'
-    )
+    holds = relationship("Hold", backref="license_pool", cascade="all, delete-orphan")
 
     # One LicensePool can have many CirculationEvents
     circulation_events = relationship(
-        "CirculationEvent", backref="license_pool",
-        cascade='all, delete-orphan'
+        "CirculationEvent", backref="license_pool", cascade="all, delete-orphan"
     )
 
     # One LicensePool can be associated with many Complaints.
     complaints = relationship(
-        'Complaint', backref='license_pool', cascade='all, delete-orphan'
+        "Complaint", backref="license_pool", cascade="all, delete-orphan"
     )
 
     # The date this LicensePool was first created in our db
@@ -158,9 +152,9 @@ class LicensePool(Base):
     open_access = Column(Boolean, index=True)
     last_checked = Column(DateTime(timezone=True), index=True)
     licenses_owned = Column(Integer, default=0, index=True)
-    licenses_available = Column(Integer,default=0, index=True)
-    licenses_reserved = Column(Integer,default=0)
-    patrons_in_hold_queue = Column(Integer,default=0)
+    licenses_available = Column(Integer, default=0, index=True)
+    licenses_reserved = Column(Integer, default=0)
+    patrons_in_hold_queue = Column(Integer, default=0)
 
     # Set to True for collections imported using MirrorUploaded
     self_hosted = Column(Boolean, index=True, nullable=False, default=False)
@@ -172,7 +166,7 @@ class LicensePool(Base):
     # A Collection can not have more than one LicensePool for a given
     # Identifier from a given DataSource.
     __table_args__ = (
-        UniqueConstraint('identifier_id', 'data_source_id', 'collection_id'),
+        UniqueConstraint("identifier_id", "data_source_id", "collection_id"),
     )
 
     delivery_mechanisms = relationship(
@@ -184,13 +178,19 @@ class LicensePool(Base):
 
     def __repr__(self):
         if self.identifier:
-            identifier = "%s/%s" % (self.identifier.type,
-                                    self.identifier.identifier)
+            identifier = "%s/%s" % (self.identifier.type, self.identifier.identifier)
         else:
             identifier = "unknown identifier"
-        return "<LicensePool #%s for %s: owned=%d available=%d reserved=%d holds=%d>" % (
-            self.id, identifier, self.licenses_owned, self.licenses_available,
-            self.licenses_reserved, self.patrons_in_hold_queue
+        return (
+            "<LicensePool #%s for %s: owned=%d available=%d reserved=%d holds=%d>"
+            % (
+                self.id,
+                identifier,
+                self.licenses_owned,
+                self.licenses_available,
+                self.licenses_reserved,
+                self.patrons_in_hold_queue,
+            )
         )
 
     @hybrid_property
@@ -219,12 +219,21 @@ class LicensePool(Base):
             self.licenses_available = 0
 
     @classmethod
-    def for_foreign_id(self, _db, data_source, foreign_id_type, foreign_id,
-                       rights_status=None, collection=None, autocreate=True):
+    def for_foreign_id(
+        self,
+        _db,
+        data_source,
+        foreign_id_type,
+        foreign_id,
+        rights_status=None,
+        collection=None,
+        autocreate=True,
+    ):
         """Find or create a LicensePool for the given foreign ID."""
         from .collection import CollectionMissing
         from .datasource import DataSource
         from .identifier import Identifier
+
         if not collection:
             raise CollectionMissing()
 
@@ -234,27 +243,28 @@ class LicensePool(Base):
 
         # The type of the foreign ID must be the primary identifier
         # type for the data source.
-        if (data_source.primary_identifier_type and
-            foreign_id_type != data_source.primary_identifier_type
-            and foreign_id_type != Identifier.DEPRECATED_NAMES.get(data_source.primary_identifier_type)
+        if (
+            data_source.primary_identifier_type
+            and foreign_id_type != data_source.primary_identifier_type
+            and foreign_id_type
+            != Identifier.DEPRECATED_NAMES.get(data_source.primary_identifier_type)
         ):
             raise ValueError(
                 "License pools for data source '%s' are keyed to "
-                "identifier type '%s' (not '%s', which was provided)" % (
-                    data_source.name, data_source.primary_identifier_type,
-                    foreign_id_type
+                "identifier type '%s' (not '%s', which was provided)"
+                % (
+                    data_source.name,
+                    data_source.primary_identifier_type,
+                    foreign_id_type,
                 )
             )
 
         # Get the Identifier.
-        identifier, ignore = Identifier.for_foreign_id(
-            _db, foreign_id_type, foreign_id
-            )
+        identifier, ignore = Identifier.for_foreign_id(_db, foreign_id_type, foreign_id)
 
-        kw = dict(data_source=data_source, identifier=identifier,
-                  collection=collection)
+        kw = dict(data_source=data_source, identifier=identifier, collection=collection)
         if rights_status:
-            kw['rights_status'] = rights_status
+            kw["rights_status"] = rights_status
 
         # Get the LicensePool that corresponds to the
         # DataSource/Identifier/Collection.
@@ -282,8 +292,8 @@ class LicensePool(Base):
     def with_no_work(cls, _db):
         """Find LicensePools that have no corresponding Work."""
         from .work import Work
-        return _db.query(LicensePool).outerjoin(Work).filter(
-            Work.id==None).all()
+
+        return _db.query(LicensePool).outerjoin(Work).filter(Work.id == None).all()
 
     @classmethod
     def with_no_delivery_mechanisms(cls, _db):
@@ -291,21 +301,20 @@ class LicensePool(Base):
 
         :return: A query object.
         """
-        return _db.query(LicensePool).outerjoin(
-            LicensePool.delivery_mechanisms).filter(
-                LicensePoolDeliveryMechanism.id==None
-            )
+        return (
+            _db.query(LicensePool)
+            .outerjoin(LicensePool.delivery_mechanisms)
+            .filter(LicensePoolDeliveryMechanism.id == None)
+        )
 
     @property
     def deliverable(self):
-        """This LicensePool can actually be delivered to patrons.
-        """
-        return (
-            (self.open_access or self.licenses_owned > 0)
-            and any(
-                [dm.delivery_mechanism.default_client_can_fulfill
-                for dm in self.delivery_mechanisms]
-            )
+        """This LicensePool can actually be delivered to patrons."""
+        return (self.open_access or self.licenses_owned > 0) and any(
+            [
+                dm.delivery_mechanism.default_client_can_fulfill
+                for dm in self.delivery_mechanisms
+            ]
         )
 
     @classmethod
@@ -313,19 +322,19 @@ class LicensePool(Base):
         """Return query for LicensePools that have at least one Complaint."""
         from .collection import Collection
         from .library import Library
+
         _db = Session.object_session(library)
-        subquery = _db.query(
-                LicensePool.id,
-                func.count(LicensePool.id).label("complaint_count")
-            ).select_from(LicensePool).join(
-                LicensePool.collection).join(
-                    Collection.libraries).filter(
-                        Library.id==library.id
-                    ).join(
-                        LicensePool.complaints
-                    ).group_by(
-                        LicensePool.id
-                    )
+        subquery = (
+            _db.query(
+                LicensePool.id, func.count(LicensePool.id).label("complaint_count")
+            )
+            .select_from(LicensePool)
+            .join(LicensePool.collection)
+            .join(Collection.libraries)
+            .filter(Library.id == library.id)
+            .join(LicensePool.complaints)
+            .group_by(LicensePool.id)
+        )
 
         if resolved == False:
             subquery = subquery.filter(Complaint.resolved == None)
@@ -334,10 +343,12 @@ class LicensePool(Base):
 
         subquery = subquery.subquery()
 
-        return _db.query(LicensePool).\
-            join(subquery, LicensePool.id == subquery.c.id).\
-            order_by(subquery.c.complaint_count.desc()).\
-            add_columns(subquery.c.complaint_count)
+        return (
+            _db.query(LicensePool)
+            .join(subquery, LicensePool.id == subquery.c.id)
+            .order_by(subquery.c.complaint_count.desc())
+            .add_columns(subquery.c.complaint_count)
+        )
 
     @property
     def open_access_source_priority(self):
@@ -358,7 +369,7 @@ class LicensePool(Base):
         return priority
 
     def better_open_access_pool_than(self, champion):
-        """ Is this open-access pool generally known for better-quality
+        """Is this open-access pool generally known for better-quality
         download files than the passed-in pool?
         """
         # A license pool with no identifier shouldn't happen, but it
@@ -401,8 +412,10 @@ class LicensePool(Base):
         if challenger_priority < champion_priority:
             return False
 
-        if (self.data_source.name == DataSourceConstants.GUTENBERG
-            and champion.data_source == self.data_source):
+        if (
+            self.data_source.name == DataSourceConstants.GUTENBERG
+            and champion.data_source == self.data_source
+        ):
             # These two LicensePools are both from Gutenberg, and
             # normally this wouldn't matter, but higher Gutenberg
             # numbers beat lower Gutenberg numbers.
@@ -411,8 +424,7 @@ class LicensePool(Base):
 
             if challenger_id > champion_id:
                 logging.info(
-                    "Gutenberg %d beats Gutenberg %d",
-                    challenger_id, champion_id
+                    "Gutenberg %d beats Gutenberg %d", challenger_id, champion_id
                 )
                 return True
         return False
@@ -441,6 +453,7 @@ class LicensePool(Base):
         information associated with this LicensePool actually changed.
         """
         from .edition import Edition
+
         _db = Session.object_session(self)
         old_presentation_edition = self.presentation_edition
         changed = False
@@ -460,11 +473,16 @@ class LicensePool(Base):
             # than creating an identical composite.
             self.presentation_edition = all_editions[0]
         else:
-            edition_identifier = IdentifierData(self.identifier.type, self.identifier.identifier)
-            metadata = Metadata(data_source=DataSourceConstants.PRESENTATION_EDITION, primary_identifier=edition_identifier)
+            edition_identifier = IdentifierData(
+                self.identifier.type, self.identifier.identifier
+            )
+            metadata = Metadata(
+                data_source=DataSourceConstants.PRESENTATION_EDITION,
+                primary_identifier=edition_identifier,
+            )
 
             for edition in all_editions:
-                if (edition.data_source.name != DataSourceConstants.PRESENTATION_EDITION):
+                if edition.data_source.name != DataSourceConstants.PRESENTATION_EDITION:
                     metadata.update(Metadata.from_edition(edition))
 
             # Note: Since this is a presentation edition it does not have a
@@ -488,16 +506,21 @@ class LicensePool(Base):
         if self.work and not self.work.presentation_edition:
             self.work.set_presentation_edition(self.presentation_edition)
 
-        return (
-            self.presentation_edition != old_presentation_edition
-            or changed
-        )
+        return self.presentation_edition != old_presentation_edition or changed
 
-    def add_link(self, rel, href, data_source, media_type=None,
-                 content=None, content_path=None,
-                 rights_status_uri=None, rights_explanation=None,
-                 original_resource=None, transformation_settings=None,
-                 ):
+    def add_link(
+        self,
+        rel,
+        href,
+        data_source,
+        media_type=None,
+        content=None,
+        content_path=None,
+        rights_status_uri=None,
+        rights_explanation=None,
+        original_resource=None,
+        transformation_settings=None,
+    ):
         """Add a link between this LicensePool and a Resource.
 
         :param rel: The relationship between this LicensePool and the resource
@@ -517,9 +540,17 @@ class LicensePool(Base):
             resource into this resource.
         """
         return self.identifier.add_link(
-            rel, href, data_source, media_type, content, content_path,
-            rights_status_uri, rights_explanation, original_resource,
-            transformation_settings)
+            rel,
+            href,
+            data_source,
+            media_type,
+            content,
+            content_path,
+            rights_status_uri,
+            rights_explanation,
+            original_resource,
+            transformation_settings,
+        )
 
     def needs_update(self):
         """Is it time to update the circulation info for this license pool?"""
@@ -528,7 +559,8 @@ class LicensePool(Base):
             # This pool has never had its circulation info checked.
             return True
         maximum_stale_time = self.data_source.extra.get(
-            'circulation_refresh_rate_seconds')
+            "circulation_refresh_rate_seconds"
+        )
         if maximum_stale_time is None:
             # This pool never needs to have its circulation info checked.
             return False
@@ -536,9 +568,14 @@ class LicensePool(Base):
         return age > maximum_stale_time
 
     def update_availability(
-            self, new_licenses_owned, new_licenses_available,
-            new_licenses_reserved, new_patrons_in_hold_queue,
-            analytics=None, as_of=None):
+        self,
+        new_licenses_owned,
+        new_licenses_available,
+        new_licenses_reserved,
+        new_patrons_in_hold_queue,
+        analytics=None,
+        as_of=None,
+    ):
         """Update the LicensePool with new availability information.
         Log the implied changes with the analytics provider.
         """
@@ -557,15 +594,31 @@ class LicensePool(Base):
         old_patrons_in_hold_queue = self.patrons_in_hold_queue
 
         for old_value, new_value, more_event, fewer_event in (
-                [self.patrons_in_hold_queue,  new_patrons_in_hold_queue,
-                 CirculationEvent.DISTRIBUTOR_HOLD_PLACE, CirculationEvent.DISTRIBUTOR_HOLD_RELEASE],
-                [self.licenses_available, new_licenses_available,
-                 CirculationEvent.DISTRIBUTOR_CHECKIN, CirculationEvent.DISTRIBUTOR_CHECKOUT],
-                [self.licenses_reserved, new_licenses_reserved,
-                 CirculationEvent.DISTRIBUTOR_AVAILABILITY_NOTIFY, None],
-                [self.licenses_owned, new_licenses_owned,
-                 CirculationEvent.DISTRIBUTOR_LICENSE_ADD,
-                 CirculationEvent.DISTRIBUTOR_LICENSE_REMOVE]):
+            [
+                self.patrons_in_hold_queue,
+                new_patrons_in_hold_queue,
+                CirculationEvent.DISTRIBUTOR_HOLD_PLACE,
+                CirculationEvent.DISTRIBUTOR_HOLD_RELEASE,
+            ],
+            [
+                self.licenses_available,
+                new_licenses_available,
+                CirculationEvent.DISTRIBUTOR_CHECKIN,
+                CirculationEvent.DISTRIBUTOR_CHECKOUT,
+            ],
+            [
+                self.licenses_reserved,
+                new_licenses_reserved,
+                CirculationEvent.DISTRIBUTOR_AVAILABILITY_NOTIFY,
+                None,
+            ],
+            [
+                self.licenses_owned,
+                new_licenses_owned,
+                CirculationEvent.DISTRIBUTOR_LICENSE_ADD,
+                CirculationEvent.DISTRIBUTOR_LICENSE_REMOVE,
+            ],
+        ):
             if new_value is None:
                 continue
             if old_value == new_value:
@@ -610,24 +663,33 @@ class LicensePool(Base):
 
         if changes_made:
             message, args = self.circulation_changelog(
-                old_licenses_owned, old_licenses_available,
-                old_licenses_reserved, old_patrons_in_hold_queue
+                old_licenses_owned,
+                old_licenses_available,
+                old_licenses_reserved,
+                old_patrons_in_hold_queue,
             )
             logging.info(message, *args)
 
         return changes_made
 
-    def collect_analytics_event(self, analytics, event_name, as_of,
-                                old_value, new_value):
+    def collect_analytics_event(
+        self, analytics, event_name, as_of, old_value, new_value
+    ):
         if not analytics:
             return
         for library in self.collection.libraries:
             analytics.collect_event(
-                library, self, event_name, as_of,
-                old_value=old_value, new_value=new_value
+                library,
+                self,
+                event_name,
+                as_of,
+                old_value=old_value,
+                new_value=new_value,
             )
 
-    def update_availability_from_delta(self, event_type, event_date, delta, analytics=None):
+    def update_availability_from_delta(
+        self, event_type, event_date, delta, analytics=None
+    ):
         """Call update_availability based on a single change seen in the
         distributor data, rather than a complete snapshot of
         distributor information as of a certain time.
@@ -647,7 +709,11 @@ class LicensePool(Base):
         :param delta: The magnitude of the change that was seen.
         """
         ignore = False
-        if event_date != CirculationEvent.NO_DATE and self.last_checked and event_date < self.last_checked:
+        if (
+            event_date != CirculationEvent.NO_DATE
+            and self.last_checked
+            and event_date < self.last_checked
+        ):
             # This is an old event and its effect on availability has
             # already been taken into account.
             ignore = True
@@ -659,24 +725,26 @@ class LicensePool(Base):
             ignore = True
 
         if not ignore:
-            (new_licenses_owned, new_licenses_available,
-             new_licenses_reserved,
-             new_patrons_in_hold_queue) = self._calculate_change_from_one_event(
-                 event_type, delta
-             )
+            (
+                new_licenses_owned,
+                new_licenses_available,
+                new_licenses_reserved,
+                new_patrons_in_hold_queue,
+            ) = self._calculate_change_from_one_event(event_type, delta)
 
             changes_made = self.update_availability(
-                new_licenses_owned, new_licenses_available,
-                new_licenses_reserved, new_patrons_in_hold_queue,
-                analytics=analytics, as_of=event_date
+                new_licenses_owned,
+                new_licenses_available,
+                new_licenses_reserved,
+                new_patrons_in_hold_queue,
+                analytics=analytics,
+                as_of=event_date,
             )
         if ignore or not changes_made:
             # Even if the event was ignored or didn't actually change
             # availability, we want to record receipt of the event
             # in the analytics.
-            self.collect_analytics_event(
-                analytics, event_type, event_date, 0, 0
-            )
+            self.collect_analytics_event(analytics, event_type, event_date, 0, 0)
 
     def _calculate_change_from_one_event(self, type, delta):
         new_licenses_owned = self.licenses_owned
@@ -687,7 +755,7 @@ class LicensePool(Base):
         def deduct(value):
             # It's impossible for any of these numbers to be
             # negative.
-            return max(value-delta, 0)
+            return max(value - delta, 0)
 
         CE = CirculationEvent
         added = False
@@ -712,7 +780,7 @@ class LicensePool(Base):
                 # future as DISTRIBUTOR_AVAILABILITY_NOTIFICATION events
                 # are sent out.
                 if delta > new_patrons_in_hold_queue:
-                    new_licenses_available += (delta-new_patrons_in_hold_queue)
+                    new_licenses_available += delta - new_patrons_in_hold_queue
         elif type == CE.DISTRIBUTOR_CHECKOUT:
             if new_licenses_available == 0:
                 # The only way to borrow books while there are no
@@ -746,30 +814,42 @@ class LicensePool(Base):
             # latter is more likely.
             new_licenses_available = new_licenses_owned
 
-        return (new_licenses_owned, new_licenses_available,
-                new_licenses_reserved, new_patrons_in_hold_queue)
+        return (
+            new_licenses_owned,
+            new_licenses_available,
+            new_licenses_reserved,
+            new_patrons_in_hold_queue,
+        )
 
-    def circulation_changelog(self, old_licenses_owned, old_licenses_available,
-                              old_licenses_reserved, old_patrons_in_hold_queue):
+    def circulation_changelog(
+        self,
+        old_licenses_owned,
+        old_licenses_available,
+        old_licenses_reserved,
+        old_patrons_in_hold_queue,
+    ):
         """Generate a log message describing a change to the circulation.
         :return: a 2-tuple (message, args) suitable for passing into
         logging.info or a similar method
         """
         edition = self.presentation_edition
-        message = 'CHANGED '
+        message = "CHANGED "
         args = []
         if self.identifier:
-            identifier_template = '%s/%s'
+            identifier_template = "%s/%s"
             identifier_args = [self.identifier.type, self.identifier.identifier]
         else:
-            identifier_template = '%s'
+            identifier_template = "%s"
             identifier_args = [self.identifier]
         if edition:
-            message += '%s "%s" %s (' + identifier_template + ')'
-            args.extend([edition.medium,
-                         edition.title or "[NO TITLE]",
-                         edition.author or "[NO AUTHOR]"]
-                    )
+            message += '%s "%s" %s (' + identifier_template + ")"
+            args.extend(
+                [
+                    edition.medium,
+                    edition.title or "[NO TITLE]",
+                    edition.author or "[NO AUTHOR]",
+                ]
+            )
             args.extend(identifier_args)
         else:
             message += identifier_template
@@ -778,7 +858,7 @@ class LicensePool(Base):
         def _part(message, args, string, old_value, new_value):
             if old_value != new_value:
                 args.extend([string, old_value, new_value])
-                message += ' %s: %s=>%s'
+                message += " %s: %s=>%s"
             return message, args
 
         message, args = _part(
@@ -786,29 +866,35 @@ class LicensePool(Base):
         )
 
         message, args = _part(
-            message, args, "AVAIL", old_licenses_available,
-            self.licenses_available
+            message, args, "AVAIL", old_licenses_available, self.licenses_available
         )
 
         message, args = _part(
-            message, args, "RSRV", old_licenses_reserved,
-            self.licenses_reserved
+            message, args, "RSRV", old_licenses_reserved, self.licenses_reserved
         )
 
-        message, args =_part(
-            message, args, "HOLD", old_patrons_in_hold_queue,
-            self.patrons_in_hold_queue
+        message, args = _part(
+            message, args, "HOLD", old_patrons_in_hold_queue, self.patrons_in_hold_queue
         )
         return message, tuple(args)
 
-    def loan_to(self, patron_or_client, start=None, end=None, fulfillment=None, external_identifier=None):
+    def loan_to(
+        self,
+        patron_or_client,
+        start=None,
+        end=None,
+        fulfillment=None,
+        external_identifier=None,
+    ):
         _db = Session.object_session(patron_or_client)
-        kwargs = dict(start=start or utc_now(),
-                      end=end)
+        kwargs = dict(start=start or utc_now(), end=end)
         if isinstance(patron_or_client, Patron):
             loan, is_new = get_one_or_create(
-                _db, Loan, patron=patron_or_client, license_pool=self,
-                create_method_kwargs=kwargs
+                _db,
+                Loan,
+                patron=patron_or_client,
+                license_pool=self,
+                create_method_kwargs=kwargs,
             )
 
             if is_new:
@@ -820,17 +906,31 @@ class LicensePool(Base):
             # An IntegrationClient can have multiple loans, so this always creates
             # a new loan rather than returning an existing loan.
             loan, is_new = create(
-                _db, Loan, integration_client=patron_or_client, license_pool=self,
-                create_method_kwargs=kwargs)
+                _db,
+                Loan,
+                integration_client=patron_or_client,
+                license_pool=self,
+                create_method_kwargs=kwargs,
+            )
         if fulfillment:
             loan.fulfillment = fulfillment
         if external_identifier:
             loan.external_identifier = external_identifier
         return loan, is_new
 
-    def on_hold_to(self, patron_or_client, start=None, end=None, position=None, external_identifier=None):
+    def on_hold_to(
+        self,
+        patron_or_client,
+        start=None,
+        end=None,
+        position=None,
+        external_identifier=None,
+    ):
         _db = Session.object_session(patron_or_client)
-        if isinstance(patron_or_client, Patron) and not patron_or_client.library.allow_holds:
+        if (
+            isinstance(patron_or_client, Patron)
+            and not patron_or_client.library.allow_holds
+        ):
             raise PolicyException("Holds are disabled for this library.")
         start = start or utc_now()
         if isinstance(patron_or_client, Patron):
@@ -846,7 +946,8 @@ class LicensePool(Base):
             # An IntegrationClient can have multiple holds, so this always creates
             # a new hold rather than returning an existing loan.
             hold, new = create(
-                _db, Hold, integration_client=patron_or_client, license_pool=self)
+                _db, Hold, integration_client=patron_or_client, license_pool=self
+            )
         hold.update(start, end, position)
         if external_identifier:
             hold.external_identifier = external_identifier
@@ -876,17 +977,27 @@ class LicensePool(Base):
             if license.is_expired:
                 continue
 
-            active_loan_count = len([l for l in license.loans if not l.end or l.end > now])
+            active_loan_count = len(
+                [l for l in license.loans if not l.end or l.end > now]
+            )
             if active_loan_count >= license.concurrent_checkouts:
                 continue
 
             if (
-                not best or
-                (license.is_time_limited and not best.is_time_limited) or
-                (license.is_time_limited and best.is_time_limited and license.expires < best.expires) or
-                (license.is_perpetual and not best.is_time_limited) or
-                (license.is_loan_limited and best.is_loan_limited and license.remaining_checkouts > best.remaining_checkouts)
-                ):
+                not best
+                or (license.is_time_limited and not best.is_time_limited)
+                or (
+                    license.is_time_limited
+                    and best.is_time_limited
+                    and license.expires < best.expires
+                )
+                or (license.is_perpetual and not best.is_time_limited)
+                or (
+                    license.is_loan_limited
+                    and best.is_loan_limited
+                    and license.remaining_checkouts > best.remaining_checkouts
+                )
+            ):
                 best = license
 
         return best
@@ -896,9 +1007,7 @@ class LicensePool(Base):
         """Assign a (possibly new) Work to every unassigned LicensePool."""
         a = 0
         lps = cls.with_no_work(_db)
-        logging.info(
-            "Assigning Works to %d LicensePools with no Work.", len(lps)
-        )
+        logging.info("Assigning Works to %d LicensePools with no Work.", len(lps))
         for unassigned in lps:
             etext, new = unassigned.calculate_work()
             if not etext:
@@ -912,10 +1021,8 @@ class LicensePool(Base):
                 _db.commit()
         _db.commit()
 
-
     def calculate_work(
-        self, known_edition=None, exclude_search=False,
-        even_if_no_title=False
+        self, known_edition=None, exclude_search=False, even_if_no_title=False
     ):
         """Find or create a Work for this LicensePool.
         A pool that is not open-access will always have its own
@@ -955,8 +1062,9 @@ class LicensePool(Base):
         if not presentation_edition:
             # We don't have any information about the identifier
             # associated with this LicensePool, so we can't create a work.
-            logging.warn("NO EDITION for %s, cowardly refusing to create work.",
-                     self.identifier)
+            logging.warn(
+                "NO EDITION for %s, cowardly refusing to create work.", self.identifier
+            )
 
             # If there was a work associated with this LicensePool,
             # it was by mistake. Remove it.
@@ -969,10 +1077,14 @@ class LicensePool(Base):
         if not presentation_edition.title and not even_if_no_title:
             if presentation_edition.work:
                 logging.warn(
-                    "Edition %r has no title but has a Work assigned. This will not stand.", presentation_edition
+                    "Edition %r has no title but has a Work assigned. This will not stand.",
+                    presentation_edition,
                 )
             else:
-                logging.info("Edition %r has no title and it will not get a Work.", presentation_edition)
+                logging.info(
+                    "Edition %r has no title and it will not get a Work.",
+                    presentation_edition,
+                )
             self.work = None
             self.work_id = None
             return None, False
@@ -992,8 +1104,10 @@ class LicensePool(Base):
             # Work.open_access_for_permanent_work_id may result in works being
             # merged.
             work, is_new = Work.open_access_for_permanent_work_id(
-                _db, presentation_edition.permanent_work_id,
-                presentation_edition.medium, presentation_edition.language
+                _db,
+                presentation_edition.permanent_work_id,
+                presentation_edition.medium,
+                presentation_edition.language,
             )
 
             # Run a sanity check to make sure every LicensePool
@@ -1015,7 +1129,8 @@ class LicensePool(Base):
         existing_works = set([x.work for x in self.identifier.licensed_through])
         if len(existing_works) > 1:
             logging.warn(
-                "LicensePools for %r have more than one Work between them. Removing them all and starting over.", self.identifier
+                "LicensePools for %r have more than one Work between them. Removing them all and starting over.",
+                self.identifier,
             )
             for lp in self.identifier.licensed_through:
                 lp.work = None
@@ -1054,17 +1169,14 @@ class LicensePool(Base):
                 if not (self.open_access and pool.open_access):
                     pool.work = None
                     pool.calculate_work(
-                        exclude_search=exclude_search,
-                        even_if_no_title=even_if_no_title
+                        exclude_search=exclude_search, even_if_no_title=even_if_no_title
                     )
                     licensepools_changed = True
 
         else:
             # There is no better choice than creating a brand new Work.
             is_new = True
-            logging.info(
-                "Creating a new work for %r" % presentation_edition.title
-            )
+            logging.info("Creating a new work for %r" % presentation_edition.title)
             work = Work()
             _db = Session.object_session(self)
             _db.add(work)
@@ -1096,11 +1208,11 @@ class LicensePool(Base):
         # All done!
         return work, is_new
 
-
     @property
     def open_access_links(self):
         """Yield all open-access Resources for this LicensePool."""
         from .identifier import Identifier
+
         open_access = LinkRelations.OPEN_ACCESS_DOWNLOAD
         _db = Session.object_session(self)
         if not self.identifier:
@@ -1143,10 +1255,13 @@ class LicensePool(Base):
         best_priority = -1
         for resource in self.open_access_links:
             if not any(
-                    [resource.representation and
-                     resource.representation.media_type and
-                     resource.representation.media_type.startswith(x)
-                     for x in MediaTypes.SUPPORTED_BOOK_MEDIA_TYPES]):
+                [
+                    resource.representation
+                    and resource.representation.media_type
+                    and resource.representation.media_type.startswith(x)
+                    for x in MediaTypes.SUPPORTED_BOOK_MEDIA_TYPES
+                ]
+            ):
                 # This representation is not in a media type we
                 # support. We can't serve it, so we won't consider it.
                 continue
@@ -1158,10 +1273,12 @@ class LicensePool(Base):
                 best_priority = data_source_priority
                 continue
 
-            if (best.data_source.name==DataSourceConstants.GUTENBERG
-                and resource.data_source.name==DataSourceConstants.GUTENBERG
-                and 'noimages' in best.representation.public_url
-                and not 'noimages' in resource.representation.public_url):
+            if (
+                best.data_source.name == DataSourceConstants.GUTENBERG
+                and resource.data_source.name == DataSourceConstants.GUTENBERG
+                and "noimages" in best.representation.public_url
+                and not "noimages" in resource.representation.public_url
+            ):
                 # A Project Gutenberg-ism: an epub without 'noimages'
                 # in the filename is better than an epub with
                 # 'noimages' in the filename.
@@ -1203,7 +1320,15 @@ class LicensePool(Base):
             self.data_source, self.identifier, *args, **kwargs
         )
 
-Index("ix_licensepools_data_source_id_identifier_id_collection_id", LicensePool.collection_id, LicensePool.data_source_id, LicensePool.identifier_id, unique=True)
+
+Index(
+    "ix_licensepools_data_source_id_identifier_id_collection_id",
+    LicensePool.collection_id,
+    LicensePool.data_source_id,
+    LicensePool.identifier_id,
+    unique=True,
+)
+
 
 class LicensePoolDeliveryMechanism(Base):
     """A mechanism for delivering a specific book from a specific
@@ -1215,36 +1340,42 @@ class LicensePoolDeliveryMechanism(Base):
     (i.e. a static link to a downloadable file) which explains exactly
     where to go for delivery.
     """
-    __tablename__ = 'licensepooldeliveries'
+
+    __tablename__ = "licensepooldeliveries"
 
     id = Column(Integer, primary_key=True)
 
     data_source_id = Column(
-        Integer, ForeignKey('datasources.id'), index=True, nullable=False
+        Integer, ForeignKey("datasources.id"), index=True, nullable=False
     )
 
     identifier_id = Column(
-        Integer, ForeignKey('identifiers.id'), index=True, nullable=False
+        Integer, ForeignKey("identifiers.id"), index=True, nullable=False
     )
 
     delivery_mechanism_id = Column(
-        Integer, ForeignKey('deliverymechanisms.id'),
-        index=True,
-        nullable=False
+        Integer, ForeignKey("deliverymechanisms.id"), index=True, nullable=False
     )
 
-    resource_id = Column(Integer, ForeignKey('resources.id'), nullable=True)
+    resource_id = Column(Integer, ForeignKey("resources.id"), nullable=True)
 
     # One LicensePoolDeliveryMechanism may fulfill many Loans.
     fulfills = relationship("Loan", backref="fulfillment")
 
     # One LicensePoolDeliveryMechanism may be associated with one RightsStatus.
-    rightsstatus_id = Column(
-        Integer, ForeignKey('rightsstatus.id'), index=True)
+    rightsstatus_id = Column(Integer, ForeignKey("rightsstatus.id"), index=True)
 
     @classmethod
-    def set(cls, data_source, identifier, content_type, drm_scheme, rights_uri,
-            resource=None, autocommit=True):
+    def set(
+        cls,
+        data_source,
+        identifier,
+        content_type,
+        drm_scheme,
+        rights_uri,
+        resource=None,
+        autocommit=True,
+    ):
         """Register the fact that a distributor makes a title available in a
         certain format.
 
@@ -1271,11 +1402,12 @@ class LicensePoolDeliveryMechanism(Base):
         )
         rights_status = RightsStatus.lookup(_db, rights_uri)
         lpdm, dirty = get_one_or_create(
-            _db, LicensePoolDeliveryMechanism,
+            _db,
+            LicensePoolDeliveryMechanism,
             identifier=identifier,
             data_source=data_source,
             delivery_mechanism=delivery_mechanism,
-            resource=resource
+            resource=resource,
         )
         if not lpdm.rights_status or rights_status.uri != RightsStatus.UNKNOWN:
             # We have better information available about the
@@ -1301,8 +1433,7 @@ class LicensePoolDeliveryMechanism(Base):
     @property
     def is_open_access(self):
         """Is this an open-access delivery mechanism?"""
-        return (self.rights_status
-                and self.rights_status.uri in RightsStatus.OPEN_ACCESS)
+        return self.rights_status and self.rights_status.uri in RightsStatus.OPEN_ACCESS
 
     def compatible_with(self, other):
         """Can a single loan be fulfilled with both this
@@ -1313,7 +1444,7 @@ class LicensePoolDeliveryMechanism(Base):
         if not isinstance(other, LicensePoolDeliveryMechanism):
             return False
 
-        if other.id==self.id:
+        if other.id == self.id:
             # They two LicensePoolDeliveryMechanisms are the same object.
             return True
 
@@ -1338,11 +1469,8 @@ class LicensePoolDeliveryMechanism(Base):
         # DeliveryMechanisms are the same or that one of them is a
         # streaming mechanism.
         open_access_rules = self.is_open_access and other.is_open_access
-        return (
-            other.delivery_mechanism
-            and self.delivery_mechanism.compatible_with(
-                other.delivery_mechanism, open_access_rules
-            )
+        return other.delivery_mechanism and self.delivery_mechanism.compatible_with(
+            other.delivery_mechanism, open_access_rules
         )
 
     def delete(self):
@@ -1376,36 +1504,37 @@ class LicensePoolDeliveryMechanism(Base):
 
     @property
     def license_pools(self):
-        """Find all LicensePools for this LicensePoolDeliveryMechanism.
-        """
+        """Find all LicensePools for this LicensePoolDeliveryMechanism."""
         _db = Session.object_session(self)
-        return _db.query(LicensePool).filter(
-            LicensePool.data_source==self.data_source).filter(
-                LicensePool.identifier==self.identifier)
+        return (
+            _db.query(LicensePool)
+            .filter(LicensePool.data_source == self.data_source)
+            .filter(LicensePool.identifier == self.identifier)
+        )
 
     def __repr__(self):
-        return  "<LicensePoolDeliveryMechanism: data_source={0}, identifier={1}, mechanism={2}>".format(
-            str(self.data_source),
-            repr(self.identifier),
-            repr(self.delivery_mechanism)
+        return "<LicensePoolDeliveryMechanism: data_source={0}, identifier={1}, mechanism={2}>".format(
+            str(self.data_source), repr(self.identifier), repr(self.delivery_mechanism)
         )
 
     __table_args__ = (
-        UniqueConstraint('data_source_id', 'identifier_id',
-                         'delivery_mechanism_id', 'resource_id'),
+        UniqueConstraint(
+            "data_source_id", "identifier_id", "delivery_mechanism_id", "resource_id"
+        ),
     )
+
 
 # The uniqueness constraint doesn't enforce uniqueness when one of the
 # fields is null, and one of these fields -- resource_id -- is
 # _usually_ null. So we also need a unique partial index to properly
 # enforce the constraint.
 Index(
-    'ix_licensepooldeliveries_unique_when_no_resource',
+    "ix_licensepooldeliveries_unique_when_no_resource",
     LicensePoolDeliveryMechanism.data_source_id,
     LicensePoolDeliveryMechanism.identifier_id,
     LicensePoolDeliveryMechanism.delivery_mechanism_id,
     unique=True,
-    postgresql_where=(LicensePoolDeliveryMechanism.resource_id==None)
+    postgresql_where=(LicensePoolDeliveryMechanism.resource_id == None),
 )
 
 
@@ -1416,6 +1545,7 @@ class DeliveryMechanism(Base, HasFullTableCache):
     (e.g. "application/vnd.adobe.adept+xml" or "application/epub+zip") or an
     informal name ("Kindle via Amazon").
     """
+
     KINDLE_CONTENT_TYPE = "Kindle via Amazon"
     NOOK_CONTENT_TYPE = "Nook via B&N"
     STREAMING_TEXT_CONTENT_TYPE = "Streaming Text"
@@ -1442,20 +1572,30 @@ class DeliveryMechanism(Base, HasFullTableCache):
     LIBBY_DRM = "Libby DRM"
 
     KNOWN_DRM_TYPES = {
-        ADOBE_DRM, FINDAWAY_DRM, AXISNOW_DRM, KINDLE_DRM, NOOK_DRM, STREAMING_DRM, LCP_DRM, OVERDRIVE_DRM, LIBBY_DRM
+        ADOBE_DRM,
+        FINDAWAY_DRM,
+        AXISNOW_DRM,
+        KINDLE_DRM,
+        NOOK_DRM,
+        STREAMING_DRM,
+        LCP_DRM,
+        OVERDRIVE_DRM,
+        LIBBY_DRM,
     }
 
     BEARER_TOKEN = "application/vnd.librarysimplified.bearer-token+json"
     FEEDBOOKS_AUDIOBOOK_DRM = "http://www.feedbooks.com/audiobooks/access-restriction"
 
     FEEDBOOKS_AUDIOBOOK_PROFILE = ';profile="%s"' % FEEDBOOKS_AUDIOBOOK_DRM
-    STREAMING_PROFILE = ';profile="http://librarysimplified.org/terms/profiles/streaming-media"'
+    STREAMING_PROFILE = (
+        ';profile="http://librarysimplified.org/terms/profiles/streaming-media"'
+    )
     MEDIA_TYPES_FOR_STREAMING = {
         STREAMING_TEXT_CONTENT_TYPE: MediaTypes.TEXT_HTML_MEDIA_TYPE,
         STREAMING_AUDIO_CONTENT_TYPE: MediaTypes.TEXT_HTML_MEDIA_TYPE,
     }
 
-    __tablename__ = 'deliverymechanisms'
+    __tablename__ = "deliverymechanisms"
     id = Column(Integer, primary_key=True)
     content_type = Column(String)
     drm_scheme = Column(String)
@@ -1469,29 +1609,26 @@ class DeliveryMechanism(Base, HasFullTableCache):
     #
     # This is primarily used when deciding which books can be imported
     # from an OPDS For Distributors collection.
-    default_client_can_fulfill_lookup = set([
-        # EPUB books
-        (MediaTypes.EPUB_MEDIA_TYPE, NO_DRM),
-        (MediaTypes.EPUB_MEDIA_TYPE, ADOBE_DRM),
-
-        # PDF books
-        (MediaTypes.PDF_MEDIA_TYPE, NO_DRM),
-
-        # Various audiobook formats
-        (None, FINDAWAY_DRM),
-        (MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, NO_DRM),
-
-        (MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE, LIBBY_DRM),
-    ])
+    default_client_can_fulfill_lookup = set(
+        [
+            # EPUB books
+            (MediaTypes.EPUB_MEDIA_TYPE, NO_DRM),
+            (MediaTypes.EPUB_MEDIA_TYPE, ADOBE_DRM),
+            # PDF books
+            (MediaTypes.PDF_MEDIA_TYPE, NO_DRM),
+            # Various audiobook formats
+            (None, FINDAWAY_DRM),
+            (MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, NO_DRM),
+            (MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE, LIBBY_DRM),
+        ]
+    )
 
     # If the default client supports a given media type with no DRM,
     # we can infer that the client _also_ supports that media type via
     # bearer token exchange.
     for _media_type, _drm in list(default_client_can_fulfill_lookup):
         if _media_type is not None and _drm == NO_DRM:
-            default_client_can_fulfill_lookup.add(
-                (_media_type, BEARER_TOKEN)
-            )
+            default_client_can_fulfill_lookup.add((_media_type, BEARER_TOKEN))
 
     license_pool_delivery_mechanisms = relationship(
         "LicensePoolDeliveryMechanism",
@@ -1501,9 +1638,7 @@ class DeliveryMechanism(Base, HasFullTableCache):
     _cache = HasFullTableCache.RESET
     _id_cache = HasFullTableCache.RESET
 
-    __table_args__ = (
-        UniqueConstraint('content_type', 'drm_scheme'),
-    )
+    __table_args__ = (UniqueConstraint("content_type", "drm_scheme"),)
 
     @property
     def name(self):
@@ -1523,17 +1658,15 @@ class DeliveryMechanism(Base, HasFullTableCache):
         else:
             fulfillable = "not fulfillable"
 
-        return "<Delivery mechanism: %s, %s)>" % (
-            self.name, fulfillable
-        )
+        return "<Delivery mechanism: %s, %s)>" % (self.name, fulfillable)
 
     @classmethod
     def lookup(cls, _db, content_type, drm_scheme):
         def lookup_hook():
             return get_one_or_create(
-                _db, DeliveryMechanism, content_type=content_type,
-                drm_scheme=drm_scheme
+                _db, DeliveryMechanism, content_type=content_type, drm_scheme=drm_scheme
             )
+
         return cls.by_cache_key(_db, (content_type, drm_scheme), lookup_hook)
 
     @property
@@ -1542,13 +1675,14 @@ class DeliveryMechanism(Base, HasFullTableCache):
         available through this DeliveryMechanism?
         """
         if self.content_type in (
-                MediaTypes.EPUB_MEDIA_TYPE,
-                MediaTypes.PDF_MEDIA_TYPE,
-                "Kindle via Amazon",
-                "Streaming Text"):
+            MediaTypes.EPUB_MEDIA_TYPE,
+            MediaTypes.PDF_MEDIA_TYPE,
+            "Kindle via Amazon",
+            "Streaming Text",
+        ):
             return EditionConstants.BOOK_MEDIUM
         elif self.content_type in (
-                "Streaming Video" or self.content_type.startswith('video/')
+            "Streaming Video" or self.content_type.startswith("video/")
         ):
             return EditionConstants.VIDEO_MEDIUM
         else:
@@ -1560,8 +1694,10 @@ class DeliveryMechanism(Base, HasFullTableCache):
         if x is None:
             return False
 
-        return any(x.startswith(prefix) for prefix in
-                   ['vnd.', 'application', 'text', 'video', 'audio', 'image'])
+        return any(
+            x.startswith(prefix)
+            for prefix in ["vnd.", "application", "text", "video", "audio", "image"]
+        )
 
     @property
     def is_streaming(self):
@@ -1617,8 +1753,11 @@ class DeliveryMechanism(Base, HasFullTableCache):
         # For an open-access book, loans are not locked to delivery
         # mechanisms, so as long as neither delivery mechanism has
         # DRM, they're compatible.
-        if (open_access_rules and self.drm_scheme==self.NO_DRM
-            and other.drm_scheme==self.NO_DRM):
+        if (
+            open_access_rules
+            and self.drm_scheme == self.NO_DRM
+            and other.drm_scheme == self.NO_DRM
+        ):
             return True
 
         # For non-open-access books, locking a license pool to a
@@ -1626,15 +1765,16 @@ class DeliveryMechanism(Base, HasFullTableCache):
         # other non-streaming delivery mechanism.
         return False
 
+
 # The uniqueness constraint doesn't enforce uniqueness when one of the
 # fields is null, and one of these fields -- drm_scheme -- is
 # frequently null. So we also need a unique partial index to properly
 # enforce the constraint.
 Index(
-    'ix_deliverymechanisms_unique_when_no_drm',
+    "ix_deliverymechanisms_unique_when_no_drm",
     DeliveryMechanism.content_type,
     unique=True,
-    postgresql_where=(DeliveryMechanism.drm_scheme==None)
+    postgresql_where=(DeliveryMechanism.drm_scheme == None),
 )
 
 
@@ -1650,10 +1790,14 @@ class RightsStatus(Base):
     IN_COPYRIGHT = "http://librarysimplified.org/terms/rights-status/in-copyright"
 
     # Public domain in the USA.
-    PUBLIC_DOMAIN_USA = "http://librarysimplified.org/terms/rights-status/public-domain-usa"
+    PUBLIC_DOMAIN_USA = (
+        "http://librarysimplified.org/terms/rights-status/public-domain-usa"
+    )
 
     # Public domain in some unknown territory
-    PUBLIC_DOMAIN_UNKNOWN = "http://librarysimplified.org/terms/rights-status/public-domain-unknown"
+    PUBLIC_DOMAIN_UNKNOWN = (
+        "http://librarysimplified.org/terms/rights-status/public-domain-unknown"
+    )
 
     # Creative Commons Public Domain Dedication (No rights reserved)
     CC0 = "https://creativecommons.org/publicdomain/zero/1.0/"
@@ -1677,7 +1821,9 @@ class RightsStatus(Base):
     CC_BY_NC_ND = "https://creativecommons.org/licenses/by-nc-nd/4.0"
 
     # Open access download but no explicit license
-    GENERIC_OPEN_ACCESS = "http://librarysimplified.org/terms/rights-status/generic-open-access"
+    GENERIC_OPEN_ACCESS = (
+        "http://librarysimplified.org/terms/rights-status/generic-open-access"
+    )
 
     # Unknown copyright status.
     UNKNOWN = "http://librarysimplified.org/terms/rights-status/unknown"
@@ -1723,14 +1869,13 @@ class RightsStatus(Base):
         DataSourceConstants.GUTENBERG: PUBLIC_DOMAIN_USA,
         DataSourceConstants.PLYMPTON: CC_BY_NC,
         # workaround for opds-imported license pools with 'content server' as data source
-        DataSourceConstants.OA_CONTENT_SERVER : GENERIC_OPEN_ACCESS,
-
+        DataSourceConstants.OA_CONTENT_SERVER: GENERIC_OPEN_ACCESS,
         DataSourceConstants.OVERDRIVE: IN_COPYRIGHT,
         DataSourceConstants.BIBLIOTHECA: IN_COPYRIGHT,
         DataSourceConstants.AXIS_360: IN_COPYRIGHT,
     }
 
-    __tablename__ = 'rightsstatus'
+    __tablename__ = "rightsstatus"
     id = Column(Integer, primary_key=True)
 
     # A URI unique to the license. This may be a URL (e.g. Creative
@@ -1741,7 +1886,9 @@ class RightsStatus(Base):
     name = Column(String, index=True)
 
     # One RightsStatus may apply to many LicensePoolDeliveryMechanisms.
-    licensepooldeliverymechanisms = relationship("LicensePoolDeliveryMechanism", backref="rights_status")
+    licensepooldeliverymechanisms = relationship(
+        "LicensePoolDeliveryMechanism", backref="rights_status"
+    )
 
     # One RightsStatus may apply to many Resources.
     resources = relationship("Resource", backref="rights_status")
@@ -1753,40 +1900,38 @@ class RightsStatus(Base):
         name = cls.NAMES.get(uri)
         create_method_kwargs = dict(name=name)
         status, ignore = get_one_or_create(
-            _db, RightsStatus, uri=uri,
-            create_method_kwargs=create_method_kwargs
+            _db, RightsStatus, uri=uri, create_method_kwargs=create_method_kwargs
         )
         return status
 
     @classmethod
     def rights_uri_from_string(cls, rights):
         rights = rights.lower()
-        if rights == 'public domain in the usa.':
+        if rights == "public domain in the usa.":
             return RightsStatus.PUBLIC_DOMAIN_USA
-        elif rights == 'public domain in the united states.':
+        elif rights == "public domain in the united states.":
             return RightsStatus.PUBLIC_DOMAIN_USA
-        elif rights == 'pd-us':
+        elif rights == "pd-us":
             return RightsStatus.PUBLIC_DOMAIN_USA
-        elif rights.startswith('public domain'):
+        elif rights.startswith("public domain"):
             return RightsStatus.PUBLIC_DOMAIN_UNKNOWN
-        elif rights.startswith('copyrighted.'):
+        elif rights.startswith("copyrighted."):
             return RightsStatus.IN_COPYRIGHT
-        elif rights == 'cc0':
+        elif rights == "cc0":
             return RightsStatus.CC0
-        elif rights == 'cc by':
+        elif rights == "cc by":
             return RightsStatus.CC_BY
-        elif rights == 'cc by-sa':
+        elif rights == "cc by-sa":
             return RightsStatus.CC_BY_SA
-        elif rights == 'cc by-nd':
+        elif rights == "cc by-nd":
             return RightsStatus.CC_BY_ND
-        elif rights == 'cc by-nc':
+        elif rights == "cc by-nc":
             return RightsStatus.CC_BY_NC
-        elif rights == 'cc by-nc-sa':
+        elif rights == "cc by-nc-sa":
             return RightsStatus.CC_BY_NC_SA
-        elif rights == 'cc by-nc-nd':
+        elif rights == "cc by-nc-nd":
             return RightsStatus.CC_BY_NC_ND
-        elif (rights in RightsStatus.OPEN_ACCESS
-              or rights == RightsStatus.IN_COPYRIGHT):
+        elif rights in RightsStatus.OPEN_ACCESS or rights == RightsStatus.IN_COPYRIGHT:
             return rights
         else:
             return RightsStatus.UNKNOWN

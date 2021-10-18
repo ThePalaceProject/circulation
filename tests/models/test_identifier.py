@@ -1,7 +1,8 @@
 # encoding: utf-8
-import pytest
 import datetime
+
 import feedparser
+import pytest
 from lxml import etree
 from mock import PropertyMock, create_autospec
 from parameterized import parameterized
@@ -15,21 +16,22 @@ from ...testing import DatabaseTest
 from ...util.datetime_helpers import utc_now
 from ...util.opds_writer import AtomFeed
 
+
 class TestIdentifier(DatabaseTest):
     def test_for_foreign_id(self):
         identifier_type = Identifier.ISBN
         isbn = "3293000061"
 
         # Getting the data automatically creates a database record.
-        identifier, was_new = Identifier.for_foreign_id(
-            self._db, identifier_type, isbn)
+        identifier, was_new = Identifier.for_foreign_id(self._db, identifier_type, isbn)
         assert Identifier.ISBN == identifier.type
         assert isbn == identifier.identifier
         assert True == was_new
 
         # If we get it again we get the same data, but it's no longer new.
         identifier2, was_new = Identifier.for_foreign_id(
-            self._db, identifier_type, isbn)
+            self._db, identifier_type, isbn
+        )
         assert identifier == identifier2
         assert False == was_new
 
@@ -37,9 +39,7 @@ class TestIdentifier(DatabaseTest):
         assert None == Identifier.for_foreign_id(self._db, None, None)
 
     def test_for_foreign_id_by_deprecated_type(self):
-        threem_id, is_new = Identifier.for_foreign_id(
-            self._db, "3M ID", self._str
-        )
+        threem_id, is_new = Identifier.for_foreign_id(self._db, "3M ID", self._str)
         assert Identifier.BIBLIOTHECA_ID == threem_id.type
         assert Identifier.BIBLIOTHECA_ID != "3M ID"
 
@@ -65,15 +65,16 @@ class TestIdentifier(DatabaseTest):
         # We don't want to auto-create a database record, so we set
         # autocreate=False
         identifier, was_new = Identifier.for_foreign_id(
-            self._db, identifier_type, isbn, autocreate=False)
+            self._db, identifier_type, isbn, autocreate=False
+        )
         assert None == identifier
         assert False == was_new
 
     def test_from_asin(self):
-        isbn10 = '1449358063'
-        isbn13 = '9781449358068'
-        asin = 'B0088IYM3C'
-        isbn13_with_dashes = '978-144-935-8068'
+        isbn10 = "1449358063"
+        isbn13 = "9781449358068"
+        asin = "B0088IYM3C"
+        isbn13_with_dashes = "978-144-935-8068"
 
         i_isbn10, new1 = Identifier.from_asin(self._db, isbn10)
         i_isbn13, new2 = Identifier.from_asin(self._db, isbn13)
@@ -96,18 +97,22 @@ class TestIdentifier(DatabaseTest):
     def test_urn(self):
         # ISBN identifiers use the ISBN URN scheme.
         identifier, ignore = Identifier.for_foreign_id(
-            self._db, Identifier.ISBN, "9781449358068")
+            self._db, Identifier.ISBN, "9781449358068"
+        )
         assert "urn:isbn:9781449358068" == identifier.urn
 
         # URI identifiers don't need a URN scheme.
         identifier, ignore = Identifier.for_foreign_id(
-            self._db, Identifier.URI, "http://example.com/")
+            self._db, Identifier.URI, "http://example.com/"
+        )
         assert identifier.identifier == identifier.urn
 
         # Gutenberg identifiers use Gutenberg's URL-based sceheme
         identifier = self._identifier(Identifier.GUTENBERG_ID)
-        assert (Identifier.GUTENBERG_URN_SCHEME_PREFIX + identifier.identifier ==
-            identifier.urn)
+        assert (
+            Identifier.GUTENBERG_URN_SCHEME_PREFIX + identifier.identifier
+            == identifier.urn
+        )
 
         # All other identifiers use our custom URN scheme.
         identifier = self._identifier(Identifier.OVERDRIVE_ID)
@@ -130,7 +135,7 @@ class TestIdentifier(DatabaseTest):
 
         # Only the existing identifier is included in the results.
         assert 1 == len(identifiers_by_urn)
-        assert {identifier.urn : identifier} == identifiers_by_urn
+        assert {identifier.urn: identifier} == identifiers_by_urn
 
         # By default, new identifiers are created, too.
         results = Identifier.parse_urns(self._db, urns)
@@ -168,9 +173,7 @@ class TestIdentifier(DatabaseTest):
         assert isbn_urn in failure
 
         success, failure = Identifier.parse_urns(
-            self._db, urns, allowed_types=[
-                Identifier.OVERDRIVE_ID, Identifier.ISBN
-            ]
+            self._db, urns, allowed_types=[Identifier.OVERDRIVE_ID, Identifier.ISBN]
         )
         assert new_urn in success
         assert isbn_urn in success
@@ -178,9 +181,7 @@ class TestIdentifier(DatabaseTest):
 
         # If the allowed_types is empty, no URNs can be looked up
         # -- this is most likely the caller's mistake.
-        success, failure = Identifier.parse_urns(
-            self._db, urns, allowed_types=[]
-        )
+        success, failure = Identifier.parse_urns(self._db, urns, allowed_types=[])
         assert new_urn in failure
         assert isbn_urn in failure
 
@@ -195,7 +196,8 @@ class TestIdentifier(DatabaseTest):
         # We can parse urn:isbn URNs into ISBN identifiers. ISBN-10s are
         # converted to ISBN-13s.
         identifier, ignore = Identifier.for_foreign_id(
-            self._db, Identifier.ISBN, "9781449358068")
+            self._db, Identifier.ISBN, "9781449358068"
+        )
         isbn_urn = "urn:isbn:1449358063"
         isbn_identifier, ignore = Identifier.parse_urn(self._db, isbn_urn)
         assert Identifier.ISBN == isbn_identifier.type
@@ -207,21 +209,23 @@ class TestIdentifier(DatabaseTest):
 
         # We can parse ordinary http: or https: URLs into URI
         # identifiers.
-        http_identifier, ignore = Identifier.parse_urn(
-            self._db, "http://example.com")
+        http_identifier, ignore = Identifier.parse_urn(self._db, "http://example.com")
         assert Identifier.URI == http_identifier.type
         assert "http://example.com" == http_identifier.identifier
 
-        https_identifier, ignore = Identifier.parse_urn(
-            self._db, "https://example.com")
+        https_identifier, ignore = Identifier.parse_urn(self._db, "https://example.com")
         assert Identifier.URI == https_identifier.type
         assert "https://example.com" == https_identifier.identifier
 
         # We can parse UUIDs.
         uuid_identifier, ignore = Identifier.parse_urn(
-            self._db, "urn:uuid:04377e87-ab69-41c8-a2a4-812d55dc0952")
+            self._db, "urn:uuid:04377e87-ab69-41c8-a2a4-812d55dc0952"
+        )
         assert Identifier.URI == uuid_identifier.type
-        assert "urn:uuid:04377e87-ab69-41c8-a2a4-812d55dc0952" == uuid_identifier.identifier
+        assert (
+            "urn:uuid:04377e87-ab69-41c8-a2a4-812d55dc0952"
+            == uuid_identifier.identifier
+        )
 
         # A URN we can't handle raises an exception.
         ftp_urn = "ftp://example.com"
@@ -240,8 +244,11 @@ class TestIdentifier(DatabaseTest):
         isbn_urn = "urn:isbn:1449358063"
         pytest.raises(
             Identifier.UnresolvableIdentifierException,
-            Identifier.parse_urn, self._db, isbn_urn,
-            must_support_license_pools=True)
+            Identifier.parse_urn,
+            self._db,
+            isbn_urn,
+            must_support_license_pools=True,
+        )
 
     def test_recursively_equivalent_identifier_ids(self):
         identifier = self._identifier()
@@ -266,44 +273,44 @@ class TestIdentifier(DatabaseTest):
 
         # With a low threshold and enough levels, we find all the identifiers.
         high_levels_low_threshold = PresentationCalculationPolicy(
-            equivalent_identifier_levels=5,
-            equivalent_identifier_threshold=0.1
+            equivalent_identifier_levels=5, equivalent_identifier_threshold=0.1
         )
         equivs = Identifier.recursively_equivalent_identifier_ids(
             self._db, [identifier.id], policy=high_levels_low_threshold
         )
-        assert (set([identifier.id,
-                 strong_equivalent.id,
-                 weak_equivalent.id,
-                 level_2_equivalent.id,
-                 level_3_equivalent.id,
-                 level_4_equivalent.id]) ==
-            set(equivs[identifier.id]))
+        assert (
+            set(
+                [
+                    identifier.id,
+                    strong_equivalent.id,
+                    weak_equivalent.id,
+                    level_2_equivalent.id,
+                    level_3_equivalent.id,
+                    level_4_equivalent.id,
+                ]
+            )
+            == set(equivs[identifier.id])
+        )
 
         # If we only look at one level, we don't find the level 2, 3, or 4 identifiers.
         one_level = PresentationCalculationPolicy(
-            equivalent_identifier_levels=1,
-            equivalent_identifier_threshold=0.1
+            equivalent_identifier_levels=1, equivalent_identifier_threshold=0.1
         )
         equivs = Identifier.recursively_equivalent_identifier_ids(
             self._db, [identifier.id], policy=one_level
         )
-        assert (set([identifier.id,
-                 strong_equivalent.id,
-                 weak_equivalent.id]) ==
-            set(equivs[identifier.id]))
+        assert set([identifier.id, strong_equivalent.id, weak_equivalent.id]) == set(
+            equivs[identifier.id]
+        )
 
         # If we raise the threshold, we don't find the weak identifier.
         one_level_high_threshold = PresentationCalculationPolicy(
-            equivalent_identifier_levels=1,
-            equivalent_identifier_threshold=0.4
-        )        
+            equivalent_identifier_levels=1, equivalent_identifier_threshold=0.4
+        )
         equivs = Identifier.recursively_equivalent_identifier_ids(
             self._db, [identifier.id], policy=one_level_high_threshold
         )
-        assert (set([identifier.id,
-                 strong_equivalent.id]) ==
-            set(equivs[identifier.id]))
+        assert set([identifier.id, strong_equivalent.id]) == set(equivs[identifier.id])
 
         # For deeper levels, the strength is the product of the strengths
         # of all the equivalencies in between the two identifiers.
@@ -315,60 +322,73 @@ class TestIdentifier(DatabaseTest):
 
         # With a threshold of 0.5, level 2 and all subsequent levels are too weak.
         high_levels_high_threshold = PresentationCalculationPolicy(
-            equivalent_identifier_levels=5,
-            equivalent_identifier_threshold=0.5
-        )        
+            equivalent_identifier_levels=5, equivalent_identifier_threshold=0.5
+        )
         equivs = Identifier.recursively_equivalent_identifier_ids(
             self._db, [identifier.id], policy=high_levels_high_threshold
         )
-        assert (set([identifier.id,
-                 strong_equivalent.id]) ==
-            set(equivs[identifier.id]))
+        assert set([identifier.id, strong_equivalent.id]) == set(equivs[identifier.id])
 
         # With a threshold of 0.25, level 2 is strong enough, but level
         # 4 is too weak.
         high_levels_lower_threshold = PresentationCalculationPolicy(
-            equivalent_identifier_levels=5,
-            equivalent_identifier_threshold=0.25
-        )        
+            equivalent_identifier_levels=5, equivalent_identifier_threshold=0.25
+        )
         equivs = Identifier.recursively_equivalent_identifier_ids(
             self._db, [identifier.id], policy=high_levels_lower_threshold
         )
-        assert (set([identifier.id,
-                 strong_equivalent.id,
-                 level_2_equivalent.id,
-                 level_3_equivalent.id]) ==
-            set(equivs[identifier.id]))
+        assert (
+            set(
+                [
+                    identifier.id,
+                    strong_equivalent.id,
+                    level_2_equivalent.id,
+                    level_3_equivalent.id,
+                ]
+            )
+            == set(equivs[identifier.id])
+        )
 
         # It also works if we start from other identifiers.
         equivs = Identifier.recursively_equivalent_identifier_ids(
             self._db, [strong_equivalent.id], policy=high_levels_low_threshold
         )
-        assert (set([identifier.id,
-                 strong_equivalent.id,
-                 weak_equivalent.id,
-                 level_2_equivalent.id,
-                 level_3_equivalent.id,
-                 level_4_equivalent.id]) ==
-            set(equivs[strong_equivalent.id]))
+        assert (
+            set(
+                [
+                    identifier.id,
+                    strong_equivalent.id,
+                    weak_equivalent.id,
+                    level_2_equivalent.id,
+                    level_3_equivalent.id,
+                    level_4_equivalent.id,
+                ]
+            )
+            == set(equivs[strong_equivalent.id])
+        )
 
         equivs = Identifier.recursively_equivalent_identifier_ids(
             self._db, [level_4_equivalent.id], policy=high_levels_low_threshold
         )
-        assert (set([identifier.id,
-                 strong_equivalent.id,
-                 level_2_equivalent.id,
-                 level_3_equivalent.id,
-                 level_4_equivalent.id]) ==
-            set(equivs[level_4_equivalent.id]))
+        assert (
+            set(
+                [
+                    identifier.id,
+                    strong_equivalent.id,
+                    level_2_equivalent.id,
+                    level_3_equivalent.id,
+                    level_4_equivalent.id,
+                ]
+            )
+            == set(equivs[level_4_equivalent.id])
+        )
 
         equivs = Identifier.recursively_equivalent_identifier_ids(
             self._db, [level_4_equivalent.id], policy=high_levels_high_threshold
         )
-        assert (set([level_2_equivalent.id,
-                 level_3_equivalent.id,
-                 level_4_equivalent.id]) ==
-            set(equivs[level_4_equivalent.id]))
+        assert set(
+            [level_2_equivalent.id, level_3_equivalent.id, level_4_equivalent.id]
+        ) == set(equivs[level_4_equivalent.id])
 
         # A chain of very strong equivalents can keep a high strength
         # even at deep levels. This wouldn't work if we changed the strength
@@ -381,34 +401,28 @@ class TestIdentifier(DatabaseTest):
         l3.equivalent_to(data_source, l2, 1)
         l4.equivalent_to(data_source, l3, 0.9)
         high_levels_fairly_high_threshold = PresentationCalculationPolicy(
-            equivalent_identifier_levels=5,
-            equivalent_identifier_threshold=0.89
+            equivalent_identifier_levels=5, equivalent_identifier_threshold=0.89
         )
         equivs = Identifier.recursively_equivalent_identifier_ids(
-            self._db, [another_identifier.id],
-            high_levels_fairly_high_threshold
+            self._db, [another_identifier.id], high_levels_fairly_high_threshold
         )
-        assert (set([another_identifier.id,
-                 l2.id,
-                 l3.id,
-                 l4.id]) ==
-            set(equivs[another_identifier.id]))
+        assert set([another_identifier.id, l2.id, l3.id, l4.id]) == set(
+            equivs[another_identifier.id]
+        )
 
         # We can look for multiple identifiers at once.
         two_levels_high_threshold = PresentationCalculationPolicy(
-            equivalent_identifier_levels=2,
-            equivalent_identifier_threshold=0.8
+            equivalent_identifier_levels=2, equivalent_identifier_threshold=0.8
         )
         equivs = Identifier.recursively_equivalent_identifier_ids(
-            self._db, [identifier.id, level_3_equivalent.id], 
-            policy=two_levels_high_threshold
+            self._db,
+            [identifier.id, level_3_equivalent.id],
+            policy=two_levels_high_threshold,
         )
-        assert (set([identifier.id,
-                 strong_equivalent.id]) ==
-            set(equivs[identifier.id]))
-        assert (set([level_2_equivalent.id,
-                 level_3_equivalent.id]) ==
-            set(equivs[level_3_equivalent.id]))
+        assert set([identifier.id, strong_equivalent.id]) == set(equivs[identifier.id])
+        assert set([level_2_equivalent.id, level_3_equivalent.id]) == set(
+            equivs[level_3_equivalent.id]
+        )
 
         # By setting a cutoff, you can say to look deep in the tree,
         # but stop looking as soon as you have a certain number of
@@ -416,19 +430,19 @@ class TestIdentifier(DatabaseTest):
         with_cutoff = PresentationCalculationPolicy(
             equivalent_identifier_levels=5,
             equivalent_identifier_threshold=0.1,
-            equivalent_identifier_cutoff=1, 
-       )
+            equivalent_identifier_cutoff=1,
+        )
         equivs = Identifier.recursively_equivalent_identifier_ids(
             self._db, [identifier.id], policy=with_cutoff
         )
-        
+
         # The cutoff was set to 1, but we always go at least one level
         # deep, and that gives us three equivalent identifiers. We
         # don't artificially trim it back down to 1.
         assert 3 == len(equivs[identifier.id])
 
         # Increase the cutoff, and we get more identifiers.
-        with_cutoff.equivalent_identifier_cutoff=5
+        with_cutoff.equivalent_identifier_cutoff = 5
         equivs = Identifier.recursively_equivalent_identifier_ids(
             self._db, [identifier.id], policy=with_cutoff
         )
@@ -440,16 +454,22 @@ class TestIdentifier(DatabaseTest):
         query = Identifier.recursively_equivalent_identifier_ids_query(
             Identifier.id, policy=high_levels_low_threshold
         )
-        query = query.where(Identifier.id==identifier.id)
+        query = query.where(Identifier.id == identifier.id)
         results = self._db.execute(query)
         equivalent_ids = [r[0] for r in results]
-        assert (set([identifier.id,
-                 strong_equivalent.id,
-                 weak_equivalent.id,
-                 level_2_equivalent.id,
-                 level_3_equivalent.id,
-                 level_4_equivalent.id]) ==
-            set(equivalent_ids))
+        assert (
+            set(
+                [
+                    identifier.id,
+                    strong_equivalent.id,
+                    weak_equivalent.id,
+                    level_2_equivalent.id,
+                    level_3_equivalent.id,
+                    level_4_equivalent.id,
+                ]
+            )
+            == set(equivalent_ids)
+        )
 
         query = Identifier.recursively_equivalent_identifier_ids_query(
             Identifier.id, policy=two_levels_high_threshold
@@ -457,11 +477,17 @@ class TestIdentifier(DatabaseTest):
         query = query.where(Identifier.id.in_([identifier.id, level_3_equivalent.id]))
         results = self._db.execute(query)
         equivalent_ids = [r[0] for r in results]
-        assert (set([identifier.id,
-                 strong_equivalent.id,
-                 level_2_equivalent.id,
-                 level_3_equivalent.id]) ==
-            set(equivalent_ids))
+        assert (
+            set(
+                [
+                    identifier.id,
+                    strong_equivalent.id,
+                    level_2_equivalent.id,
+                    level_3_equivalent.id,
+                ]
+            )
+            == set(equivalent_ids)
+        )
 
     def test_licensed_through_collection(self):
         c1 = self._default_collection
@@ -485,10 +511,12 @@ class TestIdentifier(DatabaseTest):
 
         # Here are two Gutenberg records.
         g1, ignore = Edition.for_foreign_id(
-            self._db, gutenberg, Identifier.GUTENBERG_ID, "1")
+            self._db, gutenberg, Identifier.GUTENBERG_ID, "1"
+        )
 
         g2, ignore = Edition.for_foreign_id(
-            self._db, gutenberg, Identifier.GUTENBERG_ID, "2")
+            self._db, gutenberg, Identifier.GUTENBERG_ID, "2"
+        )
 
         # One of them has coverage from OCLC Classify
         c1 = self._coverage_record(g1, oclc)
@@ -498,7 +526,8 @@ class TestIdentifier(DatabaseTest):
 
         # Here's a web record, just sitting there.
         w, ignore = Edition.for_foreign_id(
-            self._db, web, Identifier.URI, "http://www.foo.com/")
+            self._db, web, Identifier.URI, "http://www.foo.com/"
+        )
 
         # If we run missing_coverage_from we pick up the Gutenberg
         # record with no generic OCLC coverage. It doesn't pick up the
@@ -506,7 +535,8 @@ class TestIdentifier(DatabaseTest):
         # and it doesn't pick up the OCLC coverage for a specific
         # operation.
         [in_gutenberg_but_not_in_oclc] = Identifier.missing_coverage_from(
-            self._db, [Identifier.GUTENBERG_ID], oclc).all()
+            self._db, [Identifier.GUTENBERG_ID], oclc
+        ).all()
 
         assert g2.primary_identifier == in_gutenberg_but_not_in_oclc
 
@@ -515,20 +545,27 @@ class TestIdentifier(DatabaseTest):
         # that has generic OCLC coverage.
 
         [has_generic_coverage_only] = Identifier.missing_coverage_from(
-            self._db, [Identifier.GUTENBERG_ID], oclc, "some operation").all()
+            self._db, [Identifier.GUTENBERG_ID], oclc, "some operation"
+        ).all()
         assert g1.primary_identifier == has_generic_coverage_only
 
         # We don't put web sites into OCLC, so this will pick up the
         # web record (but not the Gutenberg record).
         [in_web_but_not_in_oclc] = Identifier.missing_coverage_from(
-            self._db, [Identifier.URI], oclc).all()
+            self._db, [Identifier.URI], oclc
+        ).all()
         assert w.primary_identifier == in_web_but_not_in_oclc
 
         # We don't use the web as a source of coverage, so this will
         # return both Gutenberg records (but not the web record).
         assert [g1.primary_identifier.id, g2.primary_identifier.id] == sorted(
-            [x.id for x in Identifier.missing_coverage_from(
-                self._db, [Identifier.GUTENBERG_ID], web)])
+            [
+                x.id
+                for x in Identifier.missing_coverage_from(
+                    self._db, [Identifier.GUTENBERG_ID], web
+                )
+            ]
+        )
 
     def test_missing_coverage_from_with_collection(self):
         gutenberg = DataSource.lookup(self._db, DataSource.GUTENBERG)
@@ -538,24 +575,24 @@ class TestIdentifier(DatabaseTest):
         self._coverage_record(identifier, gutenberg, collection=collection1)
 
         # The Identifier has coverage in collection 1.
-        assert ([] ==
-            Identifier.missing_coverage_from(
+        assert (
+            []
+            == Identifier.missing_coverage_from(
                 self._db, [identifier.type], gutenberg, collection=collection1
-            ).all())
+            ).all()
+        )
 
         # It is missing coverage in collection 2.
-        assert (
-            [identifier] == Identifier.missing_coverage_from(
-                self._db, [identifier.type], gutenberg, collection=collection2
-            ).all())
+        assert [identifier] == Identifier.missing_coverage_from(
+            self._db, [identifier.type], gutenberg, collection=collection2
+        ).all()
 
         # If no collection is specified, we look for a CoverageRecord
         # that also has no collection specified, and the Identifier is
         # not treated as covered.
-        assert ([identifier] ==
-            Identifier.missing_coverage_from(
-                self._db, [identifier.type], gutenberg
-            ).all())
+        assert [identifier] == Identifier.missing_coverage_from(
+            self._db, [identifier.type], gutenberg
+        ).all()
 
     def test_missing_coverage_from_with_cutoff_date(self):
         gutenberg = DataSource.lookup(self._db, DataSource.GUTENBERG)
@@ -564,7 +601,8 @@ class TestIdentifier(DatabaseTest):
 
         # Here's an Edition with a coverage record from OCLC classify.
         gutenberg, ignore = Edition.for_foreign_id(
-            self._db, gutenberg, Identifier.GUTENBERG_ID, "1")
+            self._db, gutenberg, Identifier.GUTENBERG_ID, "1"
+        )
         identifier = gutenberg.primary_identifier
         oclc = DataSource.lookup(self._db, DataSource.OCLC)
         coverage = self._coverage_record(gutenberg, oclc)
@@ -575,43 +613,50 @@ class TestIdentifier(DatabaseTest):
         # If we ask for Identifiers that are missing coverage records
         # as of that time, we see nothing.
         assert (
-            [] ==
-            Identifier.missing_coverage_from(
-                self._db, [identifier.type], oclc,
-                count_as_missing_before=timestamp
-            ).all())
+            []
+            == Identifier.missing_coverage_from(
+                self._db, [identifier.type], oclc, count_as_missing_before=timestamp
+            ).all()
+        )
 
         # But if we give a time one second later, the Identifier is
         # missing coverage.
-        assert (
-            [identifier] ==
-            Identifier.missing_coverage_from(
-                self._db, [identifier.type], oclc,
-                count_as_missing_before=timestamp+datetime.timedelta(seconds=1)
-            ).all())
+        assert [identifier] == Identifier.missing_coverage_from(
+            self._db,
+            [identifier.type],
+            oclc,
+            count_as_missing_before=timestamp + datetime.timedelta(seconds=1),
+        ).all()
 
     def test_opds_entry(self):
         identifier = self._identifier()
         source = DataSource.lookup(self._db, DataSource.CONTENT_CAFE)
 
         summary = identifier.add_link(
-            Hyperlink.DESCRIPTION, 'http://description', source,
-            media_type=Representation.TEXT_PLAIN, content='a book'
+            Hyperlink.DESCRIPTION,
+            "http://description",
+            source,
+            media_type=Representation.TEXT_PLAIN,
+            content="a book",
         )[0]
         cover = identifier.add_link(
-            Hyperlink.IMAGE, 'http://cover', source,
-            media_type=Representation.JPEG_MEDIA_TYPE
+            Hyperlink.IMAGE,
+            "http://cover",
+            source,
+            media_type=Representation.JPEG_MEDIA_TYPE,
         )[0]
 
         def get_entry_dict(entry):
-            return feedparser.parse(etree.tostring(entry, encoding="unicode")).entries[0]
+            return feedparser.parse(etree.tostring(entry, encoding="unicode")).entries[
+                0
+            ]
 
         # The entry includes the urn, description, and cover link.
         entry = get_entry_dict(identifier.opds_entry())
         assert identifier.urn == entry.id
-        assert 'a book' == entry.summary
+        assert "a book" == entry.summary
         [cover_link] = entry.links
-        assert 'http://cover' == cover_link.href
+        assert "http://cover" == cover_link.href
 
         # The 'updated' time is set to the latest timestamp associated
         # with the Identifier.
@@ -648,8 +693,10 @@ class TestIdentifier(DatabaseTest):
         # or a representation.
         even_later = now + datetime.timedelta(minutes=120)
         thumbnail = identifier.add_link(
-            Hyperlink.THUMBNAIL_IMAGE, 'http://thumb', source,
-            media_type=Representation.JPEG_MEDIA_TYPE
+            Hyperlink.THUMBNAIL_IMAGE,
+            "http://thumb",
+            source,
+            media_type=Representation.JPEG_MEDIA_TYPE,
         )[0]
         thumb_rep = thumbnail.resource.representation
         cover_rep = cover.resource.representation
@@ -660,27 +707,27 @@ class TestIdentifier(DatabaseTest):
         entry = get_entry_dict(identifier.opds_entry())
         # The thumbnail has been added to the links.
         assert 2 == len(entry.links)
-        assert any(filter(lambda l: l.href=='http://thumb', entry.links))
+        assert any(filter(lambda l: l.href == "http://thumb", entry.links))
         # And the updated time has been changed accordingly.
         expected = thumbnail.resource.representation.mirrored_at
         assert AtomFeed._strftime(even_later) == entry.updated
 
-    @parameterized.expand([
-        ('ascii_type_ascii_identifier_no_title', 'a', 'a', None),
-        ('ascii_type_non_ascii_identifier_no_title', 'a', 'ą', None),
-        ('non_ascii_type_ascii_identifier_no_title', 'ą', 'a', None),
-        ('non_ascii_type_non_ascii_identifier_no_title', 'ą', 'ą', None),
-
-        ('ascii_type_ascii_identifier_ascii_title', 'a', 'a', 'a'),
-        ('ascii_type_non_ascii_identifier_ascii_title', 'a', 'ą', 'a'),
-        ('non_ascii_type_ascii_identifier_ascii_title', 'ą', 'a', 'a'),
-        ('non_ascii_type_non_ascii_identifier_ascii_title', 'ą', 'ą', 'a'),
-
-        ('ascii_type_ascii_identifier_non_ascii_title', 'a', 'a', 'ą'),
-        ('ascii_type_non_ascii_identifier_non_ascii_title', 'a', 'ą', 'ą'),
-        ('non_ascii_type_ascii_identifier_non_ascii_title', 'ą', 'a', 'ą'),
-        ('non_ascii_type_non_ascii_identifier_non_ascii_title', 'ą', 'ą', 'ą'),
-    ])
+    @parameterized.expand(
+        [
+            ("ascii_type_ascii_identifier_no_title", "a", "a", None),
+            ("ascii_type_non_ascii_identifier_no_title", "a", "ą", None),
+            ("non_ascii_type_ascii_identifier_no_title", "ą", "a", None),
+            ("non_ascii_type_non_ascii_identifier_no_title", "ą", "ą", None),
+            ("ascii_type_ascii_identifier_ascii_title", "a", "a", "a"),
+            ("ascii_type_non_ascii_identifier_ascii_title", "a", "ą", "a"),
+            ("non_ascii_type_ascii_identifier_ascii_title", "ą", "a", "a"),
+            ("non_ascii_type_non_ascii_identifier_ascii_title", "ą", "ą", "a"),
+            ("ascii_type_ascii_identifier_non_ascii_title", "a", "a", "ą"),
+            ("ascii_type_non_ascii_identifier_non_ascii_title", "a", "ą", "ą"),
+            ("non_ascii_type_ascii_identifier_non_ascii_title", "ą", "a", "ą"),
+            ("non_ascii_type_non_ascii_identifier_non_ascii_title", "ą", "ą", "ą"),
+        ]
+    )
     def test_repr(self, _, identifier_type, identifier, title):
         """Test that Identifier.__repr__ correctly works with both ASCII and non-ASCII symbols.
 

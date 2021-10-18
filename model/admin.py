@@ -2,32 +2,19 @@
 # Admin, AdminRole
 
 
-from . import (
-    Base,
-    get_one,
-    get_one_or_create
-)
+import bcrypt
+from sqlalchemy import Column, ForeignKey, Index, Integer, Unicode, UniqueConstraint
+from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.orm import relationship, validates
+from sqlalchemy.orm.session import Session
+
+from . import Base, get_one, get_one_or_create
 from .hasfulltablecache import HasFullTableCache
 
-import bcrypt
-from sqlalchemy import (
-    Column,
-    ForeignKey,
-    Index,
-    Integer,
-    Unicode,
-    UniqueConstraint,
-)
-from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import (
-    relationship,
-    validates
-)
-from sqlalchemy.orm.session import Session
 
 class Admin(Base, HasFullTableCache):
 
-    __tablename__ = 'admins'
+    __tablename__ = "admins"
 
     id = Column(Integer, primary_key=True)
     email = Column(Unicode, unique=True, nullable=False)
@@ -52,7 +39,7 @@ class Admin(Base, HasFullTableCache):
             self.credential = credential
         _db.commit()
 
-    @validates('email')
+    @validates("email")
     def validate_email(self, key, address):
         # strip any whitespace from email address
         return address.strip()
@@ -73,6 +60,7 @@ class Admin(Base, HasFullTableCache):
         """Finds an authenticated Admin by email and password
         :return: Admin or None
         """
+
         def lookup_hook():
             return get_one(_db, Admin, email=str(email)), False
 
@@ -89,9 +77,16 @@ class Admin(Base, HasFullTableCache):
 
     def is_system_admin(self):
         _db = Session.object_session(self)
+
         def lookup_hook():
-            return get_one(_db, AdminRole, admin=self, role=AdminRole.SYSTEM_ADMIN), False
-        role, ignore = AdminRole.by_cache_key(_db, (self.id, None, AdminRole.SYSTEM_ADMIN), lookup_hook)
+            return (
+                get_one(_db, AdminRole, admin=self, role=AdminRole.SYSTEM_ADMIN),
+                False,
+            )
+
+        role, ignore = AdminRole.by_cache_key(
+            _db, (self.id, None, AdminRole.SYSTEM_ADMIN), lookup_hook
+        )
         if role:
             return True
         return False
@@ -100,9 +95,18 @@ class Admin(Base, HasFullTableCache):
         _db = Session.object_session(self)
         if self.is_system_admin():
             return True
+
         def lookup_hook():
-            return get_one(_db, AdminRole, admin=self, role=AdminRole.SITEWIDE_LIBRARY_MANAGER), False
-        role, ignore = AdminRole.by_cache_key(_db, (self.id, None, AdminRole.SITEWIDE_LIBRARY_MANAGER), lookup_hook)
+            return (
+                get_one(
+                    _db, AdminRole, admin=self, role=AdminRole.SITEWIDE_LIBRARY_MANAGER
+                ),
+                False,
+            )
+
+        role, ignore = AdminRole.by_cache_key(
+            _db, (self.id, None, AdminRole.SITEWIDE_LIBRARY_MANAGER), lookup_hook
+        )
         if role:
             return True
         return False
@@ -111,9 +115,16 @@ class Admin(Base, HasFullTableCache):
         _db = Session.object_session(self)
         if self.is_sitewide_library_manager():
             return True
+
         def lookup_hook():
-            return get_one(_db, AdminRole, admin=self, role=AdminRole.SITEWIDE_LIBRARIAN), False
-        role, ignore = AdminRole.by_cache_key(_db, (self.id, None, AdminRole.SITEWIDE_LIBRARIAN), lookup_hook)
+            return (
+                get_one(_db, AdminRole, admin=self, role=AdminRole.SITEWIDE_LIBRARIAN),
+                False,
+            )
+
+        role, ignore = AdminRole.by_cache_key(
+            _db, (self.id, None, AdminRole.SITEWIDE_LIBRARIAN), lookup_hook
+        )
         if role:
             return True
         return False
@@ -125,8 +136,20 @@ class Admin(Base, HasFullTableCache):
             return True
         # If not, they could stil be a manager of _this_ library.
         def lookup_hook():
-            return get_one(_db, AdminRole, admin=self, library=library, role=AdminRole.LIBRARY_MANAGER), False
-        role, ignore = AdminRole.by_cache_key(_db, (self.id, library.id, AdminRole.LIBRARY_MANAGER), lookup_hook)
+            return (
+                get_one(
+                    _db,
+                    AdminRole,
+                    admin=self,
+                    library=library,
+                    role=AdminRole.LIBRARY_MANAGER,
+                ),
+                False,
+            )
+
+        role, ignore = AdminRole.by_cache_key(
+            _db, (self.id, library.id, AdminRole.LIBRARY_MANAGER), lookup_hook
+        )
         if role:
             return True
         return False
@@ -141,8 +164,20 @@ class Admin(Base, HasFullTableCache):
             return True
         # If not, they might be a librarian of _this_ library.
         def lookup_hook():
-            return get_one(_db, AdminRole, admin=self, library=library, role=AdminRole.LIBRARIAN), False
-        role, ignore = AdminRole.by_cache_key(_db, (self.id, library.id, AdminRole.LIBRARIAN), lookup_hook)
+            return (
+                get_one(
+                    _db,
+                    AdminRole,
+                    admin=self,
+                    library=library,
+                    role=AdminRole.LIBRARIAN,
+                ),
+                False,
+            )
+
+        role, ignore = AdminRole.by_cache_key(
+            _db, (self.id, library.id, AdminRole.LIBRARIAN), lookup_hook
+        )
         if role:
             return True
         return False
@@ -157,7 +192,9 @@ class Admin(Base, HasFullTableCache):
 
     def add_role(self, role, library=None):
         _db = Session.object_session(self)
-        role, is_new = get_one_or_create(_db, AdminRole, admin=self, role=role, library=library)
+        role, is_new = get_one_or_create(
+            _db, AdminRole, admin=self, role=role, library=library
+        )
         return role
 
     def remove_role(self, role, library=None):
@@ -169,18 +206,17 @@ class Admin(Base, HasFullTableCache):
     def __repr__(self):
         return "<Admin: email=%s>" % self.email
 
+
 class AdminRole(Base, HasFullTableCache):
 
-    __tablename__ = 'adminroles'
+    __tablename__ = "adminroles"
 
     id = Column(Integer, primary_key=True)
     admin_id = Column(Integer, ForeignKey("admins.id"), nullable=False, index=True)
     library_id = Column(Integer, ForeignKey("libraries.id"), nullable=True, index=True)
     role = Column(Unicode, nullable=False, index=True)
 
-    __table_args__ = (
-        UniqueConstraint('admin_id', 'library_id', 'role'),
-    )
+    __table_args__ = (UniqueConstraint("admin_id", "library_id", "role"),)
 
     SYSTEM_ADMIN = "system"
     SITEWIDE_LIBRARY_MANAGER = "manager-all"
@@ -188,7 +224,13 @@ class AdminRole(Base, HasFullTableCache):
     SITEWIDE_LIBRARIAN = "librarian-all"
     LIBRARIAN = "librarian"
 
-    ROLES = [SYSTEM_ADMIN, SITEWIDE_LIBRARY_MANAGER, LIBRARY_MANAGER, SITEWIDE_LIBRARIAN, LIBRARIAN]
+    ROLES = [
+        SYSTEM_ADMIN,
+        SITEWIDE_LIBRARY_MANAGER,
+        LIBRARY_MANAGER,
+        SITEWIDE_LIBRARIAN,
+        LIBRARIAN,
+    ]
 
     _cache = HasFullTableCache.RESET
     _id_cache = HasFullTableCache.RESET
@@ -203,7 +245,15 @@ class AdminRole(Base, HasFullTableCache):
 
     def __repr__(self):
         return "<AdminRole: role=%s library=%s admin=%s>" % (
-            self.role, (self.library and self.library.short_name), self.admin.email)
+            self.role,
+            (self.library and self.library.short_name),
+            self.admin.email,
+        )
 
 
-Index("ix_adminroles_admin_id_library_id_role", AdminRole.admin_id, AdminRole.library_id, AdminRole.role)
+Index(
+    "ix_adminroles_admin_id_library_id_role",
+    AdminRole.admin_id,
+    AdminRole.library_id,
+    AdminRole.role,
+)

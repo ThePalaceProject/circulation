@@ -1,22 +1,23 @@
 import contextlib
-import os
+import copy
 import json
 import logging
-import copy
+import os
+
+from flask_babel import lazy_gettext as _
 from sqlalchemy import create_engine
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import ArgumentError
 from sqlalchemy.orm.session import Session
-from flask_babel import lazy_gettext as _
 
-from .facets import FacetConstants
 from .entrypoint import EntryPoint
+from .facets import FacetConstants
 from .util import LanguageCodes
-from .util.datetime_helpers import utc_now
+from .util.datetime_helpers import to_utc, utc_now
+
 # It's convenient for other modules import IntegrationException
 # from this module, alongside CannotLoadConfiguration.
 from .util.http import IntegrationException
-from .util.datetime_helpers import to_utc
 
 
 class CannotLoadConfiguration(IntegrationException):
@@ -28,6 +29,7 @@ class CannotLoadConfiguration(IntegrationException):
     configuration, with no need to actually talk to the foreign
     server.
     """
+
     pass
 
 
@@ -45,6 +47,7 @@ def temp_config(new_config=None, replacement_classes=None):
         for c in replacement_classes:
             c.instance = old_config
 
+
 @contextlib.contextmanager
 def empty_config(replacement_classes=None):
     with temp_config({}, replacement_classes) as i:
@@ -58,13 +61,14 @@ class ConfigurationConstants(object):
     # one configuring which facet is the default.
     ENABLED_FACETS_KEY_PREFIX = "facets_enabled_"
     DEFAULT_FACET_KEY_PREFIX = "facets_default_"
-    
+
     # The "level" property determines which admins will be able to modify the setting.  Level 1 settings can be modified by anyone.
     # Level 2 settings can be modified only by library managers and system admins (i.e. not by librarians).  Level 3 settings can be changed only by system admins.
     # If no level is specified, the setting will be treated as Level 1 by default.
     ALL_ACCESS = 1
     SYS_ADMIN_OR_MANAGER = 2
     SYS_ADMIN_ONLY = 3
+
 
 class Configuration(ConfigurationConstants):
 
@@ -75,14 +79,13 @@ class Configuration(ConfigurationConstants):
     # this class is defined.
     instance = None
 
-
     # Environment variables that contain URLs to the database
-    DATABASE_TEST_ENVIRONMENT_VARIABLE = 'SIMPLIFIED_TEST_DATABASE'
-    DATABASE_PRODUCTION_ENVIRONMENT_VARIABLE = 'SIMPLIFIED_PRODUCTION_DATABASE'
+    DATABASE_TEST_ENVIRONMENT_VARIABLE = "SIMPLIFIED_TEST_DATABASE"
+    DATABASE_PRODUCTION_ENVIRONMENT_VARIABLE = "SIMPLIFIED_PRODUCTION_DATABASE"
 
     # The version of the app.
-    APP_VERSION = 'app_version'
-    VERSION_FILENAME = '.version'
+    APP_VERSION = "app_version"
+    VERSION_FILENAME = ".version"
     NO_APP_VERSION_FOUND = object()
 
     # Logging stuff
@@ -101,10 +104,10 @@ class Configuration(ConfigurationConstants):
     DATA_DIRECTORY = "data_directory"
 
     # ConfigurationSetting key for the base url of the app.
-    BASE_URL_KEY = 'base_url'
+    BASE_URL_KEY = "base_url"
 
     # ConfigurationSetting to enable the MeasurementReaper script
-    MEASUREMENT_REAPER = 'measurement_reaper_enabled'
+    MEASUREMENT_REAPER = "measurement_reaper_enabled"
 
     # Policies, mostly circulation specific
     POLICIES = "policies"
@@ -133,7 +136,7 @@ class Configuration(ConfigurationConstants):
     THREEM_INTEGRATION = "3M"
 
     # ConfigurationSetting key for a CDN's mirror domain
-    CDN_MIRRORED_DOMAIN_KEY = 'mirrored_domain'
+    CDN_MIRRORED_DOMAIN_KEY = "mirrored_domain"
 
     # The name of the per-library configuration policy that controls whether
     # books may be put on hold.
@@ -151,11 +154,11 @@ class Configuration(ConfigurationConstants):
     # The name of the per-library per-patron authentication integration
     # regular expression used to derive a patron's external_type from
     # their authorization_identifier.
-    EXTERNAL_TYPE_REGULAR_EXPRESSION = 'external_type_regular_expression'
+    EXTERNAL_TYPE_REGULAR_EXPRESSION = "external_type_regular_expression"
 
-    WEBSITE_URL = 'website'
-    NAME = 'name'
-    SHORT_NAME = 'short_name'
+    WEBSITE_URL = "website"
+    NAME = "name"
+    SHORT_NAME = "short_name"
 
     DEBUG = "DEBUG"
     INFO = "INFO"
@@ -164,20 +167,20 @@ class Configuration(ConfigurationConstants):
 
     # The default value to put into the 'app' field of JSON-format logs,
     # unless LOG_APP_NAME overrides it.
-    DEFAULT_APP_NAME = 'simplified'
+    DEFAULT_APP_NAME = "simplified"
 
     # Settings for the integration with protocol=INTERNAL_LOGGING
-    LOG_LEVEL = 'log_level'
-    LOG_APP_NAME = 'log_app'
-    DATABASE_LOG_LEVEL = 'database_log_level'
+    LOG_LEVEL = "log_level"
+    LOG_APP_NAME = "log_app"
+    DATABASE_LOG_LEVEL = "database_log_level"
     LOG_LEVEL_UI = [
-        { "key": DEBUG, "label": _("Debug") },
-        { "key": INFO, "label": _("Info") },
-        { "key": WARN, "label": _("Warn") },
-        { "key": ERROR, "label": _("Error") },
+        {"key": DEBUG, "label": _("Debug")},
+        {"key": INFO, "label": _("Info")},
+        {"key": WARN, "label": _("Warn")},
+        {"key": ERROR, "label": _("Error")},
     ]
 
-    EXCLUDED_AUDIO_DATA_SOURCES = 'excluded_audio_data_sources'
+    EXCLUDED_AUDIO_DATA_SOURCES = "excluded_audio_data_sources"
 
     SITEWIDE_SETTINGS = [
         {
@@ -187,141 +190,181 @@ class Configuration(ConfigurationConstants):
             "format": "url",
         },
         {
-            "key": LOG_LEVEL, "label": _("Log Level"), "type": "select",
-            "options": LOG_LEVEL_UI, "default": INFO,
+            "key": LOG_LEVEL,
+            "label": _("Log Level"),
+            "type": "select",
+            "options": LOG_LEVEL_UI,
+            "default": INFO,
         },
         {
-            "key": LOG_APP_NAME, "label": _("Application name"),
-            "description": _("Log messages originating from this application will be tagged with this name. If you run multiple instances, giving each one a different application name will help you determine which instance is having problems."),
+            "key": LOG_APP_NAME,
+            "label": _("Application name"),
+            "description": _(
+                "Log messages originating from this application will be tagged with this name. If you run multiple instances, giving each one a different application name will help you determine which instance is having problems."
+            ),
             "default": DEFAULT_APP_NAME,
             "required": True,
         },
         {
-            "key": DATABASE_LOG_LEVEL, "label": _("Database Log Level"),
-            "type": "select", "options": LOG_LEVEL_UI,
-            "description": _("Database logs are extremely verbose, so unless you're diagnosing a database-related problem, it's a good idea to set a higher log level for database messages."),
+            "key": DATABASE_LOG_LEVEL,
+            "label": _("Database Log Level"),
+            "type": "select",
+            "options": LOG_LEVEL_UI,
+            "description": _(
+                "Database logs are extremely verbose, so unless you're diagnosing a database-related problem, it's a good idea to set a higher log level for database messages."
+            ),
             "default": WARN,
         },
         {
             "key": EXCLUDED_AUDIO_DATA_SOURCES,
             "label": _("Excluded audiobook sources"),
-            "description": _("Audiobooks from these data sources will be hidden from the collection, even if they would otherwise show up as available."),
+            "description": _(
+                "Audiobooks from these data sources will be hidden from the collection, even if they would otherwise show up as available."
+            ),
             "default": None,
             "required": True,
         },
         {
             "key": MEASUREMENT_REAPER,
-            "label": _("Cleanup old measurement data"), "type": "select",
-            "description": _("If this settings is 'true' old book measurement data will be cleaned out of the database. Some sites may want to keep this data for later analysis."),
-            "options": { "true": "true", "false": "false" }, "default": "true",
-        },
-    ]
-
-    LIBRARY_SETTINGS = [
-        {
-            "key": NAME,
-            "label": _("Name"),
-            "description": _("The human-readable name of this library."),
-            "category": "Basic Information",
-            "level": ConfigurationConstants.SYS_ADMIN_ONLY,
-            "required": True
-        },
-        {
-            "key": SHORT_NAME,
-            "label": _("Short name"),
-            "description": _("A short name of this library, to use when identifying it in scripts or URLs, e.g. 'NYPL'."),
-            "category": "Basic Information",
-            "level": ConfigurationConstants.SYS_ADMIN_ONLY,
-            "required": True
-        },
-        {
-            "key": WEBSITE_URL,
-            "label": _("URL of the library's website"),
-            "description": _("The library's main website, e.g. \"https://www.nypl.org/\" (not this Circulation Manager's URL)."),
-            "required": True,
-            "format": "url",
-            "level": ConfigurationConstants.SYS_ADMIN_ONLY,
-            "category": "Basic Information"
-        },
-        {
-            "key": ALLOW_HOLDS,
-            "label": _("Allow books to be put on hold"),
+            "label": _("Cleanup old measurement data"),
             "type": "select",
-            "options": [
-                { "key": "true", "label": _("Allow holds") },
-                { "key": "false", "label": _("Disable holds") },
-            ],
+            "description": _(
+                "If this settings is 'true' old book measurement data will be cleaned out of the database. Some sites may want to keep this data for later analysis."
+            ),
+            "options": {"true": "true", "false": "false"},
             "default": "true",
-            "category": "Loans, Holds, & Fines",
-            "level": ConfigurationConstants.SYS_ADMIN_ONLY
         },
-        { "key": EntryPoint.ENABLED_SETTING,
-          "label": _("Enabled entry points"),
-          "description": _("Patrons will see the selected entry points at the top level and in search results. <p>Currently supported audiobook vendors: Bibliotheca, Axis 360"),
-          "type": "list",
-          "options": [
-              { "key": entrypoint.INTERNAL_NAME,
-                "label": EntryPoint.DISPLAY_TITLES.get(entrypoint) }
-              for entrypoint in EntryPoint.ENTRY_POINTS
-          ],
-          "default": [x.INTERNAL_NAME for x in EntryPoint.DEFAULT_ENABLED],
-          "category": "Lanes & Filters",
-          # Renders a component with options that get narrowed down as the user makes selections.
-          "format": "narrow",
-          # Renders an input field that cannot be edited.
-          "readOnly": True,
-          "level": ConfigurationConstants.SYS_ADMIN_ONLY
-        },
-        {
-            "key": FEATURED_LANE_SIZE,
-            "label": _("Maximum number of books in the 'featured' lanes"),
-            "type": "number",
-            "default": 15,
-            "category": "Lanes & Filters",
-            "level": ConfigurationConstants.ALL_ACCESS
-
-        },
-        {
-            "key": MINIMUM_FEATURED_QUALITY,
-            "label": _("Minimum quality for books that show up in 'featured' lanes"),
-            "description": _("Between 0 and 1."),
-            "type": "number",
-            "max": 1,
-            "default": DEFAULT_MINIMUM_FEATURED_QUALITY,
-            "category": "Lanes & Filters",
-            "level": ConfigurationConstants.ALL_ACCESS
-        },
-    ] + [
-        { "key": ConfigurationConstants.ENABLED_FACETS_KEY_PREFIX + group,
-          "label": description,
-          "type": "list",
-          "options": [
-              { "key": facet, "label": FacetConstants.FACET_DISPLAY_TITLES.get(facet) }
-              for facet in FacetConstants.FACETS_BY_GROUP.get(group)
-          ],
-          "default": FacetConstants.FACETS_BY_GROUP.get(group),
-          "category": "Lanes & Filters",
-          # Tells the front end that each of these settings is related to the corresponding default setting.
-          "paired": ConfigurationConstants.DEFAULT_FACET_KEY_PREFIX + group,
-          "level": ConfigurationConstants.SYS_ADMIN_OR_MANAGER
-        } for group, description in FacetConstants.GROUP_DESCRIPTIONS.items()
-    ] + [
-        { "key": ConfigurationConstants.DEFAULT_FACET_KEY_PREFIX + group,
-          "label": _("Default %(group)s", group=display_name),
-          "type": "select",
-          "options": [
-              { "key": facet, "label": FacetConstants.FACET_DISPLAY_TITLES.get(facet) }
-              for facet in FacetConstants.FACETS_BY_GROUP.get(group)
-          ],
-          "default": FacetConstants.DEFAULT_FACET.get(group),
-          "category": "Lanes & Filters",
-          "skip": True
-        } for group, display_name in FacetConstants.GROUP_DISPLAY_TITLES.items()
     ]
+
+    LIBRARY_SETTINGS = (
+        [
+            {
+                "key": NAME,
+                "label": _("Name"),
+                "description": _("The human-readable name of this library."),
+                "category": "Basic Information",
+                "level": ConfigurationConstants.SYS_ADMIN_ONLY,
+                "required": True,
+            },
+            {
+                "key": SHORT_NAME,
+                "label": _("Short name"),
+                "description": _(
+                    "A short name of this library, to use when identifying it in scripts or URLs, e.g. 'NYPL'."
+                ),
+                "category": "Basic Information",
+                "level": ConfigurationConstants.SYS_ADMIN_ONLY,
+                "required": True,
+            },
+            {
+                "key": WEBSITE_URL,
+                "label": _("URL of the library's website"),
+                "description": _(
+                    "The library's main website, e.g. \"https://www.nypl.org/\" (not this Circulation Manager's URL)."
+                ),
+                "required": True,
+                "format": "url",
+                "level": ConfigurationConstants.SYS_ADMIN_ONLY,
+                "category": "Basic Information",
+            },
+            {
+                "key": ALLOW_HOLDS,
+                "label": _("Allow books to be put on hold"),
+                "type": "select",
+                "options": [
+                    {"key": "true", "label": _("Allow holds")},
+                    {"key": "false", "label": _("Disable holds")},
+                ],
+                "default": "true",
+                "category": "Loans, Holds, & Fines",
+                "level": ConfigurationConstants.SYS_ADMIN_ONLY,
+            },
+            {
+                "key": EntryPoint.ENABLED_SETTING,
+                "label": _("Enabled entry points"),
+                "description": _(
+                    "Patrons will see the selected entry points at the top level and in search results. <p>Currently supported audiobook vendors: Bibliotheca, Axis 360"
+                ),
+                "type": "list",
+                "options": [
+                    {
+                        "key": entrypoint.INTERNAL_NAME,
+                        "label": EntryPoint.DISPLAY_TITLES.get(entrypoint),
+                    }
+                    for entrypoint in EntryPoint.ENTRY_POINTS
+                ],
+                "default": [x.INTERNAL_NAME for x in EntryPoint.DEFAULT_ENABLED],
+                "category": "Lanes & Filters",
+                # Renders a component with options that get narrowed down as the user makes selections.
+                "format": "narrow",
+                # Renders an input field that cannot be edited.
+                "readOnly": True,
+                "level": ConfigurationConstants.SYS_ADMIN_ONLY,
+            },
+            {
+                "key": FEATURED_LANE_SIZE,
+                "label": _("Maximum number of books in the 'featured' lanes"),
+                "type": "number",
+                "default": 15,
+                "category": "Lanes & Filters",
+                "level": ConfigurationConstants.ALL_ACCESS,
+            },
+            {
+                "key": MINIMUM_FEATURED_QUALITY,
+                "label": _(
+                    "Minimum quality for books that show up in 'featured' lanes"
+                ),
+                "description": _("Between 0 and 1."),
+                "type": "number",
+                "max": 1,
+                "default": DEFAULT_MINIMUM_FEATURED_QUALITY,
+                "category": "Lanes & Filters",
+                "level": ConfigurationConstants.ALL_ACCESS,
+            },
+        ]
+        + [
+            {
+                "key": ConfigurationConstants.ENABLED_FACETS_KEY_PREFIX + group,
+                "label": description,
+                "type": "list",
+                "options": [
+                    {
+                        "key": facet,
+                        "label": FacetConstants.FACET_DISPLAY_TITLES.get(facet),
+                    }
+                    for facet in FacetConstants.FACETS_BY_GROUP.get(group)
+                ],
+                "default": FacetConstants.FACETS_BY_GROUP.get(group),
+                "category": "Lanes & Filters",
+                # Tells the front end that each of these settings is related to the corresponding default setting.
+                "paired": ConfigurationConstants.DEFAULT_FACET_KEY_PREFIX + group,
+                "level": ConfigurationConstants.SYS_ADMIN_OR_MANAGER,
+            }
+            for group, description in FacetConstants.GROUP_DESCRIPTIONS.items()
+        ]
+        + [
+            {
+                "key": ConfigurationConstants.DEFAULT_FACET_KEY_PREFIX + group,
+                "label": _("Default %(group)s", group=display_name),
+                "type": "select",
+                "options": [
+                    {
+                        "key": facet,
+                        "label": FacetConstants.FACET_DISPLAY_TITLES.get(facet),
+                    }
+                    for facet in FacetConstants.FACETS_BY_GROUP.get(group)
+                ],
+                "default": FacetConstants.DEFAULT_FACET.get(group),
+                "category": "Lanes & Filters",
+                "skip": True,
+            }
+            for group, display_name in FacetConstants.GROUP_DISPLAY_TITLES.items()
+        ]
+    )
 
     # This is set once CDN data is loaded from the database and
     # inserted into the Configuration object.
-    CDNS_LOADED_FROM_DATABASE = 'loaded_from_database'
+    CDNS_LOADED_FROM_DATABASE = "loaded_from_database"
 
     @classmethod
     def load(cls, _db=None):
@@ -335,15 +378,13 @@ class Configuration(ConfigurationConstants):
             cls.load_cdns(_db)
         cls.app_version()
         for parent in cls.__bases__:
-            if parent.__name__.endswith('Configuration'):
+            if parent.__name__.endswith("Configuration"):
                 parent.load(_db)
 
     @classmethod
     def cdns_loaded_from_database(cls):
         """Has the site configuration been loaded from the database yet?"""
-        return cls.instance and cls.instance.get(
-            cls.CDNS_LOADED_FROM_DATABASE, False
-        )
+        return cls.instance and cls.instance.get(cls.CDNS_LOADED_FROM_DATABASE, False)
 
     # General getters
 
@@ -363,9 +404,7 @@ class Configuration(ConfigurationConstants):
         value = cls.get(key)
         if value is not None:
             return value
-        raise ValueError(
-            "Required configuration variable %s was not defined!" % key
-        )
+        raise ValueError("Required configuration variable %s was not defined!" % key)
 
     @classmethod
     def integration(cls, name, required=False):
@@ -374,9 +413,8 @@ class Configuration(ConfigurationConstants):
         v = integrations.get(name, {})
         if not v and required:
             raise ValueError(
-                "Required integration '%s' was not defined! I see: %r" % (
-                    name, ", ".join(sorted(integrations.keys()))
-                )
+                "Required integration '%s' was not defined! I see: %r"
+                % (name, ", ".join(sorted(integrations.keys())))
             )
         return v
 
@@ -386,9 +424,7 @@ class Configuration(ConfigurationConstants):
         integration = cls.integration(name, required=required)
         v = integration.get(cls.URL, None)
         if not v and required:
-            raise ValueError(
-                "Integration '%s' did not define a required 'url'!" % name
-            )
+            raise ValueError("Integration '%s' did not define a required 'url'!" % name)
         return v
 
     @classmethod
@@ -401,11 +437,13 @@ class Configuration(ConfigurationConstants):
             # Create a new database connection and find that
             # information now.
             from .model import SessionManager
+
             url = cls.database_url()
             _db = SessionManager.session(url)
             cls.load_cdns(_db)
 
         from .model import ExternalIntegration
+
         return cls.integration(ExternalIntegration.CDN)
 
     @classmethod
@@ -413,9 +451,7 @@ class Configuration(ConfigurationConstants):
         """Find a policy configuration by name."""
         v = cls.get(cls.POLICIES, {}).get(name, default)
         if not v and required:
-            raise ValueError(
-                "Required policy %s was not defined!" % name
-            )
+            raise ValueError("Required policy %s was not defined!" % name)
         return v
 
     # More specific getters.
@@ -436,7 +472,7 @@ class Configuration(ConfigurationConstants):
         # controls which database is used, and it's set by the
         # package_setup() function called in every component's
         # tests/__init__.py.
-        test = os.environ.get('TESTING', False)
+        test = os.environ.get("TESTING", False)
         if test:
             config_key = cls.DATABASE_TEST_URL
             environment_variable = cls.DATABASE_TEST_ENVIRONMENT_VARIABLE
@@ -447,7 +483,8 @@ class Configuration(ConfigurationConstants):
         url = os.environ.get(environment_variable)
         if not url:
             raise CannotLoadConfiguration(
-                "Database URL was not defined in environment variable (%s)." % environment_variable
+                "Database URL was not defined in environment variable (%s)."
+                % environment_variable
             )
 
         url_obj = None
@@ -457,8 +494,8 @@ class Configuration(ConfigurationConstants):
             # Improve the error message by giving a guide as to what's
             # likely to work.
             raise ArgumentError(
-                "Bad format for database URL (%s). Expected something like postgres://[username]:[password]@[hostname]:[port]/[database name]" %
-                url
+                "Bad format for database URL (%s). Expected something like postgres://[username]:[password]@[hostname]:[port]/[database name]"
+                % url
             )
 
         # Calling __to_string__ will hide the password.
@@ -492,7 +529,8 @@ class Configuration(ConfigurationConstants):
     @classmethod
     def load_cdns(cls, _db, config_instance=None):
         from .model import ExternalIntegration as EI
-        cdns = _db.query(EI).filter(EI.goal==EI.CDN_GOAL).all()
+
+        cdns = _db.query(EI).filter(EI.goal == EI.CDN_GOAL).all()
         cdn_integration = dict()
         for cdn in cdns:
             cdn_integration[cdn.setting(cls.CDN_MIRRORED_DOMAIN_KEY).value] = cdn.url
@@ -512,7 +550,9 @@ class Configuration(ConfigurationConstants):
 
     # The last time we *checked* whether the database configuration had
     # changed.
-    LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE = "last_checked_for_site_configuration_update"
+    LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE = (
+        "last_checked_for_site_configuration_update"
+    )
 
     # A sitewide configuration setting controlling *how often* to check
     # whether the database configuration has changed.
@@ -520,7 +560,7 @@ class Configuration(ConfigurationConstants):
     # NOTE: This setting is currently not used; the most reliable
     # value seems to be zero. Assuming that's true, this whole
     # subsystem can be removed.
-    SITE_CONFIGURATION_TIMEOUT = 'site_configuration_timeout'
+    SITE_CONFIGURATION_TIMEOUT = "site_configuration_timeout"
 
     # The name of the service associated with a Timestamp that tracks
     # the last time the site's configuration changed in the database.
@@ -531,13 +571,10 @@ class Configuration(ConfigurationConstants):
         """When was the last time we actually checked when the database
         was updated?
         """
-        return cls.instance.get(
-            cls.LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE, None
-        )
+        return cls.instance.get(cls.LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE, None)
 
     @classmethod
-    def site_configuration_last_update(cls, _db, known_value=None,
-                                       timeout=0):
+    def site_configuration_last_update(cls, _db, known_value=None, timeout=0):
         """Check when the site configuration was last updated.
 
         Updates Configuration.instance[Configuration.SITE_CONFIGURATION_LAST_UPDATE].
@@ -564,6 +601,7 @@ class Configuration(ConfigurationConstants):
         # never set to None). This code will hopefully be removed soon.
         if _db and timeout is None:
             from .model import ConfigurationSetting
+
             timeout = ConfigurationSetting.sitewide(
                 _db, cls.SITE_CONFIGURATION_TIMEOUT
             ).int_value
@@ -575,12 +613,13 @@ class Configuration(ConfigurationConstants):
             # None.
             timeout = 60
 
-        last_check = cls.instance.get(
-            cls.LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE
-        )
+        last_check = cls.instance.get(cls.LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE)
 
-        if (not known_value
-            and last_check and (now - last_check).total_seconds() < timeout):
+        if (
+            not known_value
+            and last_check
+            and (now - last_check).total_seconds() < timeout
+        ):
             # We went to the database less than [timeout] seconds ago.
             # Assume there has been no change.
             return cls._site_configuration_last_update()
@@ -591,9 +630,9 @@ class Configuration(ConfigurationConstants):
         # called.
         if not known_value:
             from .model import Timestamp
+
             known_value = Timestamp.value(
-                _db, cls.SITE_CONFIGURATION_CHANGED, service_type=None,
-                collection=None
+                _db, cls.SITE_CONFIGURATION_CHANGED, service_type=None, collection=None
             )
         if not known_value:
             # The site configuration has never changed.
@@ -626,7 +665,7 @@ class Configuration(ConfigurationConstants):
         This is being phased out in favor of taking all configuration from a
         database.
         """
-        cfv = 'SIMPLIFIED_CONFIGURATION_FILE'
+        cfv = "SIMPLIFIED_CONFIGURATION_FILE"
         config_path = os.environ.get(cfv)
         if config_path:
             try:
@@ -634,19 +673,22 @@ class Configuration(ConfigurationConstants):
                 configuration = cls._load(open(config_path).read())
             except Exception as e:
                 raise CannotLoadConfiguration(
-                    "Error loading configuration file %s: %s" % (
-                        config_path, e)
+                    "Error loading configuration file %s: %s" % (config_path, e)
                 )
         else:
-            configuration = cls._load('{}')
+            configuration = cls._load("{}")
 
         return configuration
 
     @classmethod
     def _load(cls, str):
-        lines = [x for x in str.split("\n")
-                 if not (x.strip().startswith("#") or x.strip().startswith("//"))]
+        lines = [
+            x
+            for x in str.split("\n")
+            if not (x.strip().startswith("#") or x.strip().startswith("//"))
+        ]
         return json.loads("\n".join(lines))
+
 
 # Immediately load the configuration file (if any).
 Configuration.instance = Configuration.load_from_file()

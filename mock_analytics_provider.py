@@ -12,4 +12,5 @@ class MockAnalyticsProvider(object):
         self.event_type = event_type
         self.time = time
 
+
 Provider = MockAnalyticsProvider

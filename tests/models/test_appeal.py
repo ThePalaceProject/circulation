@@ -1,13 +1,8 @@
-from ...testing import (
-    DatabaseTest,
-)
+from ...model import Work
+from ...testing import DatabaseTest
 
-from ...model import (
-    Work,
-)
 
 class TestAppealAssignment(DatabaseTest):
-
     def test_assign_appeals(self):
         work = self._work()
         work.assign_appeals(0.50, 0.25, 0.20, 0.05)

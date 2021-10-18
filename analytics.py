@@ -1,13 +1,14 @@
-
-import importlib
 import contextlib
+import importlib
 import os
 from collections import defaultdict
+
 from sqlalchemy.orm.session import Session
 
-from .model import ExternalIntegration
 from .config import CannotLoadConfiguration
+from .model import ExternalIntegration
 from .util.datetime_helpers import utc_now
+
 
 class Analytics(object):
 
@@ -22,15 +23,17 @@ class Analytics(object):
         Analytics.LIBRARY_ENABLED = set()
         # Find a list of all the ExternalIntegrations set up with a
         # goal of analytics.
-        integrations = _db.query(ExternalIntegration).filter(ExternalIntegration.goal==ExternalIntegration.ANALYTICS_GOAL)
+        integrations = _db.query(ExternalIntegration).filter(
+            ExternalIntegration.goal == ExternalIntegration.ANALYTICS_GOAL
+        )
         # Turn each integration into an analytics provider.
         for integration in integrations:
             kwargs = {}
             module = integration.protocol
-            if module.startswith('.'):
+            if module.startswith("."):
                 # This is a relative import. Import it relative to
                 # this module. This should only happen during tests.
-                kwargs['package'] =__name__
+                kwargs["package"] = __name__
             else:
                 # This is an absolute import. Trust sys.path to find it.
                 pass
@@ -48,7 +51,9 @@ class Analytics(object):
                             self.library_providers[library.id].append(provider)
                             Analytics.LIBRARY_ENABLED.add(library.id)
                 else:
-                    self.initialization_exceptions[integration.id] = "Module %s does not have Provider defined." % module
+                    self.initialization_exceptions[integration.id] = (
+                        "Module %s does not have Provider defined." % module
+                    )
             except (ImportError, CannotLoadConfiguration) as e:
                 self.initialization_exceptions[integration.id] = e
 

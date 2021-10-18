@@ -1,48 +1,50 @@
 # encoding: utf-8
-import pytest
 from pdb import set_trace
 
-from ...testing import DatabaseTest
+import pytest
+
 from ...model import get_one_or_create
 from ...model.coverage import WorkCoverageRecord
-from ...model.customlist import (
-    CustomList,
-    CustomListEntry,
-)
+from ...model.customlist import CustomList, CustomListEntry
 from ...model.datasource import DataSource
+from ...testing import DatabaseTest
 from ...util.datetime_helpers import utc_now
 
-class TestCustomList(DatabaseTest):
 
+class TestCustomList(DatabaseTest):
     def test_find(self):
         source = DataSource.lookup(self._db, DataSource.NYT)
         # When there's no CustomList to find, nothing is returned.
-        result = CustomList.find(self._db, 'my-list', source)
+        result = CustomList.find(self._db, "my-list", source)
         assert None == result
 
         custom_list = self._customlist(
-            foreign_identifier='a-list', name='My List', num_entries=0
+            foreign_identifier="a-list", name="My List", num_entries=0
         )[0]
         # A CustomList can be found by its foreign_identifier.
-        result = CustomList.find(self._db, 'a-list', source)
+        result = CustomList.find(self._db, "a-list", source)
         assert custom_list == result
 
         # Or its name.
-        result = CustomList.find(self._db, 'My List', source.name)
+        result = CustomList.find(self._db, "My List", source.name)
         assert custom_list == result
 
         # The list can also be found by name without a data source.
-        result = CustomList.find(self._db, 'My List')
+        result = CustomList.find(self._db, "My List")
         assert custom_list == result
 
         # By default, we only find lists with no associated Library.
         # If we look for a list from a library, there isn't one.
-        result = CustomList.find(self._db, 'My List', source, library=self._default_library)
+        result = CustomList.find(
+            self._db, "My List", source, library=self._default_library
+        )
         assert None == result
 
         # If we add the Library to the list, it's returned.
         custom_list.library = self._default_library
-        result = CustomList.find(self._db, 'My List', source, library=self._default_library)
+        result = CustomList.find(
+            self._db, "My List", source, library=self._default_library
+        )
         assert custom_list == result
 
     def assert_reindexing_scheduled(self, work):
@@ -50,8 +52,9 @@ class TestCustomList(DatabaseTest):
         indicates that it needs to have its search index updated.
         """
         [needs_reindex] = work.coverage_records
-        assert (WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION ==
-            needs_reindex.operation)
+        assert (
+            WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION == needs_reindex.operation
+        )
         assert WorkCoverageRecord.REGISTERED == needs_reindex.status
 
     def test_add_entry(self):
@@ -124,7 +127,9 @@ class TestCustomList(DatabaseTest):
         # If the entry already exists, the most_recent_appearance can be
         # updated by passing in a later first_appearance.
         later = utc_now()
-        new_timed_entry = custom_list.add_entry(timed_edition, first_appearance=later)[0]
+        new_timed_entry = custom_list.add_entry(timed_edition, first_appearance=later)[
+            0
+        ]
         assert timed_entry == new_timed_entry
         assert now == new_timed_entry.first_appearance
         assert later == new_timed_entry.most_recent_appearance
@@ -242,7 +247,8 @@ class TestCustomList(DatabaseTest):
         w2 = self._work()
         w1.presentation_edition.primary_identifier.equivalent_to(
             w1.presentation_edition.data_source,
-            w2.presentation_edition.primary_identifier, 1
+            w2.presentation_edition.primary_identifier,
+            1,
         )
 
         custom_list, ignore = self._customlist(num_entries=0)
@@ -273,7 +279,9 @@ class TestCustomList(DatabaseTest):
         first.work.coverage_records = []
         custom_list.remove_entry(first)
         assert 2 == len(custom_list.entries)
-        assert set([second, third]) == set([entry.edition for entry in custom_list.entries])
+        assert set([second, third]) == set(
+            [entry.edition for entry in custom_list.entries]
+        )
         # And CustomList.updated and size are changed.
         assert True == (custom_list.updated > now)
         assert 2 == custom_list.size
@@ -317,7 +325,7 @@ class TestCustomList(DatabaseTest):
     def test_entries_for_work(self):
         custom_list, editions = self._customlist(num_entries=2)
         edition = editions[0]
-        [entry] = [e for e in custom_list.entries if e.edition==edition]
+        [entry] = [e for e in custom_list.entries if e.edition == edition]
 
         # The entry is returned when you search by Edition.
         assert [entry] == list(custom_list.entries_for_work(edition))
@@ -338,12 +346,11 @@ class TestCustomList(DatabaseTest):
         not_yet_equivalent = self._edition()
         other_entry = custom_list.add_entry(not_yet_equivalent)[0]
         edition.primary_identifier.equivalent_to(
-            not_yet_equivalent.data_source,
-            not_yet_equivalent.primary_identifier, 1
+            not_yet_equivalent.data_source, not_yet_equivalent.primary_identifier, 1
         )
-        assert (
-            set([entry, other_entry]) ==
-            set(custom_list.entries_for_work(not_yet_equivalent)))
+        assert set([entry, other_entry]) == set(
+            custom_list.entries_for_work(not_yet_equivalent)
+        )
 
     def test_update_size(self):
         list, ignore = self._customlist(num_entries=4)
@@ -354,7 +361,6 @@ class TestCustomList(DatabaseTest):
 
 
 class TestCustomListEntry(DatabaseTest):
-
     def test_set_work(self):
 
         # Start with a custom list with no entries
@@ -364,8 +370,10 @@ class TestCustomListEntry(DatabaseTest):
         edition = self._edition()
 
         entry, ignore = get_one_or_create(
-            self._db, CustomListEntry,
-            list_id=list.id, edition_id=edition.id,
+            self._db,
+            CustomListEntry,
+            list_id=list.id,
+            edition_id=edition.id,
         )
 
         assert edition == entry.edition
@@ -412,8 +420,7 @@ class TestCustomListEntry(DatabaseTest):
         other_custom_list = self._customlist()[0]
         [external_entry] = other_custom_list.entries
         pytest.raises(
-            ValueError, entry.update, self._db,
-            equivalent_entries=[external_entry]
+            ValueError, entry.update, self._db, equivalent_entries=[external_entry]
         )
 
         # So is attempting to update an entry with other entries that
@@ -422,8 +429,7 @@ class TestCustomListEntry(DatabaseTest):
         external_work_edition = external_work.presentation_edition
         external_work_entry = custom_list.add_entry(external_work_edition)[0]
         pytest.raises(
-            ValueError, entry.update, self._db,
-            equivalent_entries=[external_work_entry]
+            ValueError, entry.update, self._db, equivalent_entries=[external_work_entry]
         )
 
         # Okay, but with an actual equivalent entry...
@@ -448,17 +454,23 @@ class TestCustomListEntry(DatabaseTest):
         assert entry.edition == work.presentation_edition
         assert entry.work == equivalent.work
         # The equivalent entry has been deleted.
-        assert ([] == self._db.query(CustomListEntry).\
-                filter(CustomListEntry.id==equivalent_entry.id).all())
+        assert (
+            []
+            == self._db.query(CustomListEntry)
+            .filter(CustomListEntry.id == equivalent_entry.id)
+            .all()
+        )
 
         # The entry with the longest annotation wins the annotation awards.
         long_annotation = "Wow books are so great especially when they're annotated."
         longwinded = self._edition()
         longwinded_entry = custom_list.add_entry(
-            longwinded, annotation=long_annotation)[0]
+            longwinded, annotation=long_annotation
+        )[0]
 
         identifier.equivalent_to(
-            longwinded.data_source, longwinded.primary_identifier, 1)
+            longwinded.data_source, longwinded.primary_identifier, 1
+        )
         entry.update(self._db, equivalent_entries=[longwinded_entry])
         assert long_annotation == entry.annotation
         assert longwinded_entry.most_recent_appearance == entry.most_recent_appearance

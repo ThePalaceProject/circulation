@@ -3,24 +3,14 @@
 
 import os
 import re
-from sqlalchemy import (
-    Boolean,
-    Column,
-    DateTime,
-    Integer,
-    Unicode,
-)
-from sqlalchemy.orm import (
-    relationship,
-)
 
-from . import (
-    Base,
-    get_one,
-    get_one_or_create,
-)
-from ..util.string_helpers import random_string
+from sqlalchemy import Boolean, Column, DateTime, Integer, Unicode
+from sqlalchemy.orm import relationship
+
 from ..util.datetime_helpers import utc_now
+from ..util.string_helpers import random_string
+from . import Base, get_one, get_one_or_create
+
 
 class IntegrationClient(Base):
     """A client that has authenticated access to this application.
@@ -28,7 +18,8 @@ class IntegrationClient(Base):
     Currently used to represent circulation managers that have access
     to the metadata wrangler.
     """
-    __tablename__ = 'integrationclients'
+
+    __tablename__ = "integrationclients"
 
     id = Column(Integer, primary_key=True)
 
@@ -45,8 +36,8 @@ class IntegrationClient(Base):
     created = Column(DateTime(timezone=True))
     last_accessed = Column(DateTime(timezone=True))
 
-    loans = relationship('Loan', backref='integration_client')
-    holds = relationship('Hold', backref='integration_client')
+    loans = relationship("Loan", backref="integration_client")
+    holds = relationship("Hold", backref="integration_client")
 
     def __repr__(self):
         return "<IntegrationClient: URL=%s ID=%s>" % (self.url, self.id)
@@ -72,8 +63,12 @@ class IntegrationClient(Base):
         """Creates a new server with client details."""
         client, is_new = cls.for_url(_db, url)
 
-        if not is_new and (not submitted_secret or submitted_secret != client.shared_secret):
-            raise ValueError('Cannot update existing IntegratedClient without valid shared_secret')
+        if not is_new and (
+            not submitted_secret or submitted_secret != client.shared_secret
+        ):
+            raise ValueError(
+                "Cannot update existing IntegratedClient without valid shared_secret"
+            )
 
         generate_secret = (client.shared_secret is None) or submitted_secret
         if generate_secret:
@@ -83,9 +78,9 @@ class IntegrationClient(Base):
 
     @classmethod
     def normalize_url(cls, url):
-        url = re.sub(r'^(http://|https://)', '', url)
-        url = re.sub(r'^www\.', '', url)
-        if url.endswith('/'):
+        url = re.sub(r"^(http://|https://)", "", url)
+        url = re.sub(r"^www\.", "", url)
+        if url.endswith("/"):
             url = url[:-1]
         return str(url.lower())
 

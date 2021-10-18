@@ -20,15 +20,14 @@ limitations under the License.
 
 import logging
 import re
-
 from collections import namedtuple
 from operator import attrgetter
 
-VALIDATE_LANG_REGEX = re.compile('^[a-z]+$', flags=re.IGNORECASE)
-QUALITY_VAL_SUB_REGEX = re.compile('^q=', flags=re.IGNORECASE)
+VALIDATE_LANG_REGEX = re.compile("^[a-z]+$", flags=re.IGNORECASE)
+QUALITY_VAL_SUB_REGEX = re.compile("^q=", flags=re.IGNORECASE)
 DEFAULT_QUALITY_VALUE = 1.0
 MAX_HEADER_LEN = 8192
-Lang = namedtuple('Lang', ('language', 'locale', 'quality'))
+Lang = namedtuple("Lang", ("language", "locale", "quality"))
 
 logger = logging.getLogger(__name__)
 
@@ -56,17 +55,17 @@ def parse_accept_language(accept_language_str, default_quality=None):
         return []
 
     if len(accept_language_str) > MAX_HEADER_LEN:
-        raise ValueError('Accept-Language too long, max length is 8192')
+        raise ValueError("Accept-Language too long, max length is 8192")
 
     parsed_langs = []
-    for accept_lang_segment in accept_language_str.split(','):
+    for accept_lang_segment in accept_language_str.split(","):
         quality_value = default_quality or DEFAULT_QUALITY_VALUE
         lang_code = accept_lang_segment.strip()
-        if ';' in accept_lang_segment:
-            lang_code, quality_value = accept_lang_segment.split(';')
-            quality_value = float(QUALITY_VAL_SUB_REGEX.sub('', quality_value))
+        if ";" in accept_lang_segment:
+            lang_code, quality_value = accept_lang_segment.split(";")
+            quality_value = float(QUALITY_VAL_SUB_REGEX.sub("", quality_value))
 
-        lang_code_components = re.split('-|_', lang_code)
+        lang_code_components = re.split("-|_", lang_code)
 
         if not all(VALIDATE_LANG_REGEX.match(c.strip()) for c in lang_code_components):
             continue
@@ -78,10 +77,11 @@ def parse_accept_language(accept_language_str, default_quality=None):
         else:
             # full language tag, e.g. en-US
             language = lang_code_components[0].lower()
-            locale = '{}_{}'.format(
-                language, lang_code_components[1].upper(),
+            locale = "{}_{}".format(
+                language,
+                lang_code_components[1].upper(),
             )
         parsed_langs.append(
             Lang(locale=locale, language=language.strip(), quality=quality_value)
         )
-    return sorted(parsed_langs, key=attrgetter('quality'), reverse=True)
+    return sorted(parsed_langs, key=attrgetter("quality"), reverse=True)

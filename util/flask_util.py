@@ -1,27 +1,27 @@
 """Utilities for Flask applications."""
 import datetime
-import flask
-from lxml import etree
-from flask import Response as FlaskResponse
-from wsgiref.handlers import format_date_time
 import time
+from wsgiref.handlers import format_date_time
 
-from . import (
-    problem_detail,
-)
-from .opds_writer import OPDSFeed
+import flask
+from flask import Response as FlaskResponse
+from lxml import etree
+
+from . import problem_detail
 from .datetime_helpers import utc_now
+from .opds_writer import OPDSFeed
+
 
 def problem_raw(type, status, title, detail=None, instance=None, headers={}):
     data = problem_detail.json(type, status, title, detail, instance)
-    final_headers = { "Content-Type" : problem_detail.JSON_MEDIA_TYPE }
+    final_headers = {"Content-Type": problem_detail.JSON_MEDIA_TYPE}
     final_headers.update(headers)
     return status, final_headers, data
 
+
 def problem(type, status, title, detail=None, instance=None, headers={}):
     """Create a Response that includes a Problem Detail Document."""
-    status, headers, data = problem_raw(
-        type, status, title, detail, instance, headers)
+    status, headers, data = problem_raw(type, status, title, detail, instance, headers)
     return FlaskResponse(data, status, headers)
 
 
@@ -35,9 +35,17 @@ class Response(FlaskResponse):
          tests.
     """
 
-    def __init__(self, response=None, status=None, headers=None, mimetype=None,
-                 content_type=None, direct_passthrough=False, max_age=0,
-                 private=None):
+    def __init__(
+        self,
+        response=None,
+        status=None,
+        headers=None,
+        mimetype=None,
+        content_type=None,
+        direct_passthrough=False,
+        max_age=0,
+        private=None,
+    ):
         """Constructor.
 
         All parameters are the same as for the Flask/Werkzeug Response class,
@@ -77,7 +85,7 @@ class Response(FlaskResponse):
             headers=self._headers(headers or {}),
             mimetype=mimetype,
             content_type=content_type,
-            direct_passthrough=direct_passthrough
+            direct_passthrough=direct_passthrough,
         )
 
     def __str__(self):
@@ -99,7 +107,7 @@ class Response(FlaskResponse):
             # A private resource should be re-requested, rather than
             # retrieved from cache, if the authorization credentials
             # change from those originally used to retrieve it.
-            headers['Vary'] = 'Authorization'
+            headers["Vary"] = "Authorization"
         else:
             private = "public"
         if self.max_age and isinstance(self.max_age, int):
@@ -113,44 +121,56 @@ class Response(FlaskResponse):
                 # for half as long as the end-user can cache it.
                 s_maxage = ", s-maxage=%d" % (self.max_age / 2)
             cache_control = "%s, no-transform, max-age=%d%s" % (
-                private, client_cache, s_maxage
+                private,
+                client_cache,
+                s_maxage,
             )
 
             # Explicitly set Expires based on max-age; some clients need this.
-            expires_at = utc_now() + datetime.timedelta(
-                seconds=self.max_age
-            )
-            headers['Expires'] = format_date_time(
-                time.mktime(expires_at.timetuple())
-            )
+            expires_at = utc_now() + datetime.timedelta(seconds=self.max_age)
+            headers["Expires"] = format_date_time(time.mktime(expires_at.timetuple()))
         else:
             # Missing, invalid or zero max-age means don't cache at all.
             cache_control = "%s, no-cache" % private
-        headers['Cache-Control'] = cache_control
+        headers["Cache-Control"] = cache_control
 
         return headers
 
 
 class OPDSFeedResponse(Response):
     """A convenience specialization of Response for typical OPDS feeds."""
-    def __init__(self, response=None, status=None, headers=None, mimetype=None,
-                 content_type=None, direct_passthrough=False, max_age=None,
-                 private=None):
+
+    def __init__(
+        self,
+        response=None,
+        status=None,
+        headers=None,
+        mimetype=None,
+        content_type=None,
+        direct_passthrough=False,
+        max_age=None,
+        private=None,
+    ):
 
         mimetype = mimetype or OPDSFeed.ACQUISITION_FEED_TYPE
         status = status or 200
         if max_age is None:
             max_age = OPDSFeed.DEFAULT_MAX_AGE
         super(OPDSFeedResponse, self).__init__(
-            response=response, status=status, headers=headers,
-            mimetype=mimetype, content_type=content_type,
-            direct_passthrough=direct_passthrough, max_age=max_age,
-            private=private
+            response=response,
+            status=status,
+            headers=headers,
+            mimetype=mimetype,
+            content_type=content_type,
+            direct_passthrough=direct_passthrough,
+            max_age=max_age,
+            private=private,
         )
 
 
 class OPDSEntryResponse(Response):
     """A convenience specialization of Response for typical OPDS entries."""
+
     def __init__(self, response=None, **kwargs):
-        kwargs.setdefault('mimetype', OPDSFeed.ENTRY_TYPE)
+        kwargs.setdefault("mimetype", OPDSFeed.ENTRY_TYPE)
         super(OPDSEntryResponse, self).__init__(response, **kwargs)

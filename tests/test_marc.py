@@ -1,11 +1,15 @@
 import datetime
-import pytest
-from pymarc import Record, MARCReader
 from io import StringIO
 from urllib.parse import quote
+
+import pytest
+from pymarc import MARCReader, Record
 from sqlalchemy.orm.session import Session
 
-from ..testing import DatabaseTest
+from ..config import CannotLoadConfiguration
+from ..external_search import Filter, MockExternalSearchIndex
+from ..lane import WorkList
+from ..marc import Annotator, MARCExporter, MARCExporterFacets
 from ..model import (
     CachedMARCFile,
     Contributor,
@@ -21,32 +25,21 @@ from ..model import (
     Work,
     get_one,
 )
-from ..config import CannotLoadConfiguration
-from ..external_search import (
-    MockExternalSearchIndex,
-    Filter,
-)
-from ..marc import (
-  Annotator,
-  MARCExporter,
-  MARCExporterFacets,
-)
-from ..s3 import (
-    MockS3Uploader,
-    S3Uploader,
-)
-from ..lane import WorkList
+from ..s3 import MockS3Uploader, S3Uploader
+from ..testing import DatabaseTest
 from ..util.datetime_helpers import datetime_utc, utc_now
 
-class TestAnnotator(DatabaseTest):
 
+class TestAnnotator(DatabaseTest):
     def test_annotate_work_record(self):
         # Verify that annotate_work_record adds the distributor and formats.
         class MockAnnotator(Annotator):
             add_distributor_called_with = None
             add_formats_called_with = None
+
             def add_distributor(self, record, pool):
                 self.add_distributor_called_with = [record, pool]
+
             def add_formats(self, record, pool):
                 self.add_formats_called_with = [record, pool]
 
@@ -96,8 +89,8 @@ class TestAnnotator(DatabaseTest):
         self._check_control_field(record, "006", "m        d        ")
         self._check_control_field(record, "007", "cr cn ---anuuu")
         self._check_control_field(
-            record, "008",
-            now.strftime("%y%m%d") + "s0956    xxu                 eng  ")
+            record, "008", now.strftime("%y%m%d") + "s0956    xxu                 eng  "
+        )
 
         # This French edition has two formats and was published in 2018.
         edition2, pool2 = self._edition(with_license_pool=True)
@@ -105,8 +98,12 @@ class TestAnnotator(DatabaseTest):
         edition2.issued = datetime_utc(2018, 2, 3)
         edition2.language = "fre"
         LicensePoolDeliveryMechanism.set(
-            pool2.data_source, identifier2, Representation.PDF_MEDIA_TYPE,
-            DeliveryMechanism.ADOBE_DRM, RightsStatus.IN_COPYRIGHT)
+            pool2.data_source,
+            identifier2,
+            Representation.PDF_MEDIA_TYPE,
+            DeliveryMechanism.ADOBE_DRM,
+            RightsStatus.IN_COPYRIGHT,
+        )
 
         record = Record()
         Annotator.add_control_fields(record, identifier2, pool2, edition2)
@@ -115,8 +112,8 @@ class TestAnnotator(DatabaseTest):
         self._check_control_field(record, "006", "m        d        ")
         self._check_control_field(record, "007", "cr cn ---mnuuu")
         self._check_control_field(
-            record, "008",
-            now.strftime("%y%m%d") + "s2018    xxu                 fre  ")
+            record, "008", now.strftime("%y%m%d") + "s2018    xxu                 fre  "
+        )
 
     def test_add_marc_organization_code(self):
         record = Record()
@@ -154,11 +151,15 @@ class TestAnnotator(DatabaseTest):
         Annotator.add_title(record, edition)
         [field] = record.get_fields("245")
         self._check_field(
-            record, "245", {
+            record,
+            "245",
+            {
                 "a": edition.title,
                 "b": edition.subtitle,
                 "c": edition.author,
-            }, ["0", "4"])
+            },
+            ["0", "4"],
+        )
 
         # If there's no subtitle or no author, those subfields are left out.
         edition.subtitle = None
@@ -168,9 +169,13 @@ class TestAnnotator(DatabaseTest):
         Annotator.add_title(record, edition)
         [field] = record.get_fields("245")
         self._check_field(
-            record, "245", {
+            record,
+            "245",
+            {
                 "a": edition.title,
-            }, ["0", "4"])
+            },
+            ["0", "4"],
+        )
         assert [] == field.get_subfields("b")
         assert [] == field.get_subfields("c")
 
@@ -198,7 +203,9 @@ class TestAnnotator(DatabaseTest):
         fields = record.get_fields("700")
         for field in fields:
             assert ["1", " "] == field.indicators
-        [author_field, author2_field, translator_field] = sorted(fields, key=lambda x: x.get_subfields("a")[0])
+        [author_field, author2_field, translator_field] = sorted(
+            fields, key=lambda x: x.get_subfields("a")[0]
+        )
         assert author == author_field.get_subfields("a")[0]
         assert Contributor.PRIMARY_AUTHOR_ROLE == author_field.get_subfields("e")[0]
         assert author2 == author2_field.get_subfields("a")[0]
@@ -214,11 +221,15 @@ class TestAnnotator(DatabaseTest):
         record = Record()
         Annotator.add_publisher(record, edition)
         self._check_field(
-            record, "264", {
+            record,
+            "264",
+            {
                 "a": "[Place of publication not identified]",
                 "b": edition.publisher,
                 "c": "1894",
-            }, [" ", "1"])
+            },
+            [" ", "1"],
+        )
 
         # If there's no publisher, the field is left out.
         record = Record()
@@ -241,55 +252,95 @@ class TestAnnotator(DatabaseTest):
         record = Record()
         Annotator.add_physical_description(record, book)
         self._check_field(record, "300", {"a": "1 online resource"})
-        self._check_field(record, "336", {
-            "a": "text",
-            "b": "txt",
-            "2": "rdacontent",
-        })
-        self._check_field(record, "337", {
-            "a": "computer",
-            "b": "c",
-            "2": "rdamedia",
-        })
-        self._check_field(record, "338", {
-            "a": "online resource",
-            "b": "cr",
-            "2": "rdacarrier",
-        })
-        self._check_field(record, "347", {
-            "a": "text file",
-            "2": "rda",
-        })
-        self._check_field(record, "380", {
-            "a": "eBook",
-            "2": "tlcgt",
-        })
+        self._check_field(
+            record,
+            "336",
+            {
+                "a": "text",
+                "b": "txt",
+                "2": "rdacontent",
+            },
+        )
+        self._check_field(
+            record,
+            "337",
+            {
+                "a": "computer",
+                "b": "c",
+                "2": "rdamedia",
+            },
+        )
+        self._check_field(
+            record,
+            "338",
+            {
+                "a": "online resource",
+                "b": "cr",
+                "2": "rdacarrier",
+            },
+        )
+        self._check_field(
+            record,
+            "347",
+            {
+                "a": "text file",
+                "2": "rda",
+            },
+        )
+        self._check_field(
+            record,
+            "380",
+            {
+                "a": "eBook",
+                "2": "tlcgt",
+            },
+        )
 
         record = Record()
         Annotator.add_physical_description(record, audio)
-        self._check_field(record, "300", {
-            "a": "1 sound file",
-            "b": "digital",
-        })
-        self._check_field(record, "336", {
-            "a": "spoken word",
-            "b": "spw",
-            "2": "rdacontent",
-        })
-        self._check_field(record, "337", {
-            "a": "computer",
-            "b": "c",
-            "2": "rdamedia",
-        })
-        self._check_field(record, "338", {
-            "a": "online resource",
-            "b": "cr",
-            "2": "rdacarrier",
-        })
-        self._check_field(record, "347", {
-            "a": "audio file",
-            "2": "rda",
-        })
+        self._check_field(
+            record,
+            "300",
+            {
+                "a": "1 sound file",
+                "b": "digital",
+            },
+        )
+        self._check_field(
+            record,
+            "336",
+            {
+                "a": "spoken word",
+                "b": "spw",
+                "2": "rdacontent",
+            },
+        )
+        self._check_field(
+            record,
+            "337",
+            {
+                "a": "computer",
+                "b": "c",
+                "2": "rdamedia",
+            },
+        )
+        self._check_field(
+            record,
+            "338",
+            {
+                "a": "online resource",
+                "b": "cr",
+                "2": "rdacarrier",
+            },
+        )
+        self._check_field(
+            record,
+            "347",
+            {
+                "a": "audio file",
+                "2": "rda",
+            },
+        )
         assert [] == record.get_fields("380")
 
     def test_add_audience(self):
@@ -297,10 +348,14 @@ class TestAnnotator(DatabaseTest):
             work = self._work(audience=audience)
             record = Record()
             Annotator.add_audience(record, work)
-            self._check_field(record, "385", {
-                "a": term,
-                "2": "tlctarget",
-            })
+            self._check_field(
+                record,
+                "385",
+                {
+                    "a": term,
+                    "2": "tlctarget",
+                },
+            )
 
     def test_add_series(self):
         edition = self._edition()
@@ -308,19 +363,29 @@ class TestAnnotator(DatabaseTest):
         edition.series_position = 5
         record = Record()
         Annotator.add_series(record, edition)
-        self._check_field(record, "490", {
-            "a": edition.series,
-            "v": str(edition.series_position),
-        }, ["0", " "])
+        self._check_field(
+            record,
+            "490",
+            {
+                "a": edition.series,
+                "v": str(edition.series_position),
+            },
+            ["0", " "],
+        )
 
         # If there's no series position, the same field is used without
         # the v subfield.
         edition.series_position = None
         record = Record()
         Annotator.add_series(record, edition)
-        self._check_field(record, "490", {
-            "a": edition.series,
-        }, ["0", " "])
+        self._check_field(
+            record,
+            "490",
+            {
+                "a": edition.series,
+            },
+            ["0", " "],
+        )
         [field] = record.get_fields("490")
         assert [] == field.get_subfields("v")
 
@@ -338,11 +403,16 @@ class TestAnnotator(DatabaseTest):
     def test_add_formats(self):
         edition, pool = self._edition(with_license_pool=True)
         epub_no_drm, ignore = DeliveryMechanism.lookup(
-            self._db, Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM)
+            self._db, Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM
+        )
         pool.delivery_mechanisms[0].delivery_mechanism = epub_no_drm
         LicensePoolDeliveryMechanism.set(
-            pool.data_source, pool.identifier, Representation.PDF_MEDIA_TYPE,
-            DeliveryMechanism.ADOBE_DRM, RightsStatus.IN_COPYRIGHT)
+            pool.data_source,
+            pool.identifier,
+            Representation.PDF_MEDIA_TYPE,
+            DeliveryMechanism.ADOBE_DRM,
+            RightsStatus.IN_COPYRIGHT,
+        )
 
         record = Record()
         Annotator.add_formats(record, pool)
@@ -371,7 +441,9 @@ class TestAnnotator(DatabaseTest):
         record = Record()
         Annotator.add_simplified_genres(record, work)
         fields = record.get_fields("650")
-        [fantasy_field, romance_field] = sorted(fields, key=lambda x: x.get_subfields("a")[0])
+        [fantasy_field, romance_field] = sorted(
+            fields, key=lambda x: x.get_subfields("a")[0]
+        )
         assert ["0", "7"] == fantasy_field.indicators
         assert "Fantasy" == fantasy_field.get_subfields("a")[0]
         assert "Library Simplified" == fantasy_field.get_subfields("2")[0]
@@ -384,16 +456,19 @@ class TestAnnotator(DatabaseTest):
         Annotator.add_ebooks_subject(record)
         self._check_field(record, "655", {"a": "Electronic books."}, [" ", "0"])
 
-class TestMARCExporter(DatabaseTest):
 
+class TestMARCExporter(DatabaseTest):
     def _integration(self):
         return self._external_integration(
             ExternalIntegration.MARC_EXPORT,
             ExternalIntegration.CATALOG_GOAL,
-            libraries=[self._default_library])
+            libraries=[self._default_library],
+        )
 
     def test_from_config(self):
-        pytest.raises(CannotLoadConfiguration, MARCExporter.from_config, self._default_library)
+        pytest.raises(
+            CannotLoadConfiguration, MARCExporter.from_config, self._default_library
+        )
 
         integration = self._integration()
         exporter = MARCExporter.from_config(self._default_library)
@@ -404,8 +479,12 @@ class TestMARCExporter(DatabaseTest):
         pytest.raises(CannotLoadConfiguration, MARCExporter.from_config, other_library)
 
     def test_create_record(self):
-        work = self._work(with_license_pool=True, title="old title",
-                          authors=["old author"], data_source_name=DataSource.OVERDRIVE)
+        work = self._work(
+            with_license_pool=True,
+            title="old title",
+            authors=["old author"],
+            data_source_name=DataSource.OVERDRIVE,
+        )
         annotator = Annotator()
 
         # The record isn't cached yet, so a new record is created and cached.
@@ -455,9 +534,13 @@ class TestMARCExporter(DatabaseTest):
 
         # If we pass in an integration, it's passed along to the annotator.
         integration = self._integration()
+
         class MockAnnotator(Annotator):
             integration = None
-            def annotate_work_record(self, work, pool, edition, identifier, record, integration):
+
+            def annotate_work_record(
+                self, work, pool, edition, identifier, record, integration
+            ):
                 self.integration = integration
 
         annotator = MockAnnotator()
@@ -474,9 +557,9 @@ class TestMARCExporter(DatabaseTest):
 
         # Creates a new record and saves it to the database
         work = self._work(
-          title="Little Mimi\u2019s First Counting Lesson",
-          authors=["Lagerlo\xf6f, Selma Ottiliana Lovisa,"],
-          with_license_pool=True
+            title="Little Mimi\u2019s First Counting Lesson",
+            authors=["Lagerlo\xf6f, Selma Ottiliana Lovisa,"],
+            with_license_pool=True,
         )
         record = MARCExporter.create_record(work, annotator)
         loaded_record = MARCExporter.create_record(work, annotator)
@@ -506,13 +589,23 @@ class TestMARCExporter(DatabaseTest):
 
         # If there is a storage integration, the output file is mirrored.
         mirror_integration = self._external_integration(
-            ExternalIntegration.S3, ExternalIntegration.STORAGE_GOAL,
-            username="username", password="password",
+            ExternalIntegration.S3,
+            ExternalIntegration.STORAGE_GOAL,
+            username="username",
+            password="password",
         )
 
         mirror = MockS3Uploader()
 
-        exporter.records(lane, annotator, mirror_integration, mirror=mirror, query_batch_size=1, upload_batch_size=1, search_engine=search_engine)
+        exporter.records(
+            lane,
+            annotator,
+            mirror_integration,
+            mirror=mirror,
+            query_batch_size=1,
+            upload_batch_size=1,
+            search_engine=search_engine,
+        )
 
         # The file was mirrored and a CachedMARCFile was created to track the mirrored file.
         assert 1 == len(mirror.uploaded)
@@ -521,11 +614,15 @@ class TestMARCExporter(DatabaseTest):
         assert lane == cache.lane
         assert mirror.uploaded[0] == cache.representation
         assert None == cache.representation.content
-        assert ("https://test-marc-bucket.s3.amazonaws.com/%s/%s/%s.mrc" % (
-            self._default_library.short_name,
-            quote(str(cache.representation.fetched_at)),
-            quote(lane.display_name)) ==
-            mirror.uploaded[0].mirror_url)
+        assert (
+            "https://test-marc-bucket.s3.amazonaws.com/%s/%s/%s.mrc"
+            % (
+                self._default_library.short_name,
+                quote(str(cache.representation.fetched_at)),
+                quote(lane.display_name),
+            )
+            == mirror.uploaded[0].mirror_url
+        )
         assert None == cache.start_time
         assert cache.end_time > now
 
@@ -550,7 +647,15 @@ class TestMARCExporter(DatabaseTest):
         worklist.initialize(self._default_library, display_name="All Books")
 
         mirror = MockS3Uploader()
-        exporter.records(worklist, annotator, mirror_integration, mirror=mirror, query_batch_size=1, upload_batch_size=1, search_engine=search_engine)
+        exporter.records(
+            worklist,
+            annotator,
+            mirror_integration,
+            mirror=mirror,
+            query_batch_size=1,
+            upload_batch_size=1,
+            search_engine=search_engine,
+        )
 
         assert 1 == len(mirror.uploaded)
         [cache] = self._db.query(CachedMARCFile).all()
@@ -558,11 +663,15 @@ class TestMARCExporter(DatabaseTest):
         assert None == cache.lane
         assert mirror.uploaded[0] == cache.representation
         assert None == cache.representation.content
-        assert ("https://test-marc-bucket.s3.amazonaws.com/%s/%s/%s.mrc" % (
-            self._default_library.short_name,
-            quote(str(cache.representation.fetched_at)),
-            quote(worklist.display_name)) ==
-            mirror.uploaded[0].mirror_url)
+        assert (
+            "https://test-marc-bucket.s3.amazonaws.com/%s/%s/%s.mrc"
+            % (
+                self._default_library.short_name,
+                quote(str(cache.representation.fetched_at)),
+                quote(worklist.display_name),
+            )
+            == mirror.uploaded[0].mirror_url
+        )
         assert None == cache.start_time
         assert cache.end_time > now
 
@@ -583,9 +692,14 @@ class TestMARCExporter(DatabaseTest):
 
         mirror = MockS3Uploader()
         exporter.records(
-            lane, annotator, mirror_integration, start_time=start_time,
-            mirror=mirror, query_batch_size=2,
-            upload_batch_size=2, search_engine=search_engine
+            lane,
+            annotator,
+            mirror_integration,
+            start_time=start_time,
+            mirror=mirror,
+            query_batch_size=2,
+            upload_batch_size=2,
+            search_engine=search_engine,
         )
         [cache] = self._db.query(CachedMARCFile).all()
 
@@ -593,11 +707,16 @@ class TestMARCExporter(DatabaseTest):
         assert lane == cache.lane
         assert mirror.uploaded[0] == cache.representation
         assert None == cache.representation.content
-        assert ("https://test-marc-bucket.s3.amazonaws.com/%s/%s-%s/%s.mrc" % (
-            self._default_library.short_name, quote(str(start_time)),
-            quote(str(cache.representation.fetched_at)),
-            quote(lane.display_name)) ==
-            mirror.uploaded[0].mirror_url)
+        assert (
+            "https://test-marc-bucket.s3.amazonaws.com/%s/%s-%s/%s.mrc"
+            % (
+                self._default_library.short_name,
+                quote(str(start_time)),
+                quote(str(cache.representation.fetched_at)),
+                quote(lane.display_name),
+            )
+            == mirror.uploaded[0].mirror_url
+        )
         assert start_time == cache.start_time
         assert cache.end_time > now
         self._db.delete(cache)
@@ -608,8 +727,13 @@ class TestMARCExporter(DatabaseTest):
         empty_search_engine = MockExternalSearchIndex()
 
         mirror = MockS3Uploader()
-        exporter.records(lane, annotator, mirror_integration,
-                         mirror=mirror, search_engine=empty_search_engine)
+        exporter.records(
+            lane,
+            annotator,
+            mirror_integration,
+            mirror=mirror,
+            search_engine=empty_search_engine,
+        )
 
         assert [] == mirror.content[0]
         [cache] = self._db.query(CachedMARCFile).all()

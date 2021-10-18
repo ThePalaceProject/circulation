@@ -2,53 +2,52 @@ import re
 
 from . import Classifier
 
+
 class GradeLevelClassifier(Classifier):
     # How old a kid is when they start grade N in the US.
     american_grade_to_age = {
         # Preschool: 3-4 years
-        'preschool' : 3,
-        'pre-school' : 3,
-        'p' : 3,
-        'pk' : 4,
-
+        "preschool": 3,
+        "pre-school": 3,
+        "p": 3,
+        "pk": 4,
         # Easy readers
-        'kindergarten' : 5,
-        'k' : 5,
-        '0' : 5,
-        'first' : 6,
-        '1' : 6,
-        'second' : 7,
-        '2' : 7,
-
+        "kindergarten": 5,
+        "k": 5,
+        "0": 5,
+        "first": 6,
+        "1": 6,
+        "second": 7,
+        "2": 7,
         # Chapter Books
-        'third' : 8,
-        '3' : 8,
-        'fourth' : 9,
-        '4' : 9,
-        'fifth' : 10,
-        '5' : 10,
-        'sixth' : 11,
-        '6' : 11,
-        '7' : 12,
-        'seventh' : 12,
-        '8' : 13,
-        'eighth' : 13,
-
+        "third": 8,
+        "3": 8,
+        "fourth": 9,
+        "4": 9,
+        "fifth": 10,
+        "5": 10,
+        "sixth": 11,
+        "6": 11,
+        "7": 12,
+        "seventh": 12,
+        "8": 13,
+        "eighth": 13,
         # YA
-        '9' : 14,
-        'ninth' : 14,
-        '10' : 15,
-        'tenth': 15,
-        '11' : 16,
-        'eleventh' : 17,
-        '12': 17,
-        'twelfth': 17,
+        "9": 14,
+        "ninth": 14,
+        "10": 15,
+        "tenth": 15,
+        "11": 16,
+        "eleventh": 17,
+        "12": 17,
+        "twelfth": 17,
     }
 
     # Regular expressions that match common ways of expressing grade
     # levels.
     grade_res = [
-        re.compile(x, re.I) for x in [
+        re.compile(x, re.I)
+        for x in [
             "grades? ([kp0-9]+) to ([kp0-9]+)?",
             "grades? ([kp0-9]+) ?-? ?([kp0-9]+)?",
             "gr\.? ([kp0-9]+) ?-? ?([kp0-9]+)?",
@@ -57,7 +56,7 @@ class GradeLevelClassifier(Classifier):
             "gr\.? ([kp0-9]+)",
             "([0-9]+)[tnsr][hdt] grade",
             "([a-z]+) grade",
-            r'\b(kindergarten|preschool)\b',
+            r"\b(kindergarten|preschool)\b",
         ]
     ]
 
@@ -73,15 +72,14 @@ class GradeLevelClassifier(Classifier):
         target_age = cls.target_age(identifier, name, require_explicit_age_marker)
         return cls.default_audience_for_target_age(target_age)
 
-
     @classmethod
     def target_age(cls, identifier, name, require_explicit_grade_marker=False):
 
-        if (identifier and "education" in identifier) or (name and 'education' in name):
+        if (identifier and "education" in identifier) or (name and "education" in name):
             # This is a book about teaching, e.g. fifth grade.
             return cls.range_tuple(None, None)
 
-        if (identifier and 'grader' in identifier) or (name and 'grader' in name):
+        if (identifier and "grader" in identifier) or (name and "grader" in name):
             # This is a book about, e.g. fifth graders.
             return cls.range_tuple(None, None)
 
@@ -104,9 +102,9 @@ class GradeLevelClassifier(Classifier):
                         young, old = gr
 
                     # Strip leading zeros
-                    if young and young.lstrip('0'):
+                    if young and young.lstrip("0"):
                         young = young.lstrip("0")
-                    if old and old.lstrip('0'):
+                    if old and old.lstrip("0"):
                         old = old.lstrip("0")
 
                     young = cls.american_grade_to_age.get(young)
@@ -125,7 +123,7 @@ class GradeLevelClassifier(Classifier):
                         old = young
                     if young is None and old is not None:
                         young = old
-                    if old and young and  old < young:
+                    if old and young and old < young:
                         young, old = old, young
                     return cls.range_tuple(young, old)
         return cls.range_tuple(None, None)
@@ -143,32 +141,33 @@ class GradeLevelClassifier(Classifier):
                     break
         return (target_age, grade_words)
 
-class InterestLevelClassifier(Classifier):
 
+class InterestLevelClassifier(Classifier):
     @classmethod
     def audience(cls, identifier, name):
-        if identifier in ('lg', 'mg+', 'mg'):
+        if identifier in ("lg", "mg+", "mg"):
             return cls.AUDIENCE_CHILDREN
-        elif identifier == 'ug':
+        elif identifier == "ug":
             return cls.AUDIENCE_YOUNG_ADULT
         else:
             return None
 
     @classmethod
     def target_age(cls, identifier, name):
-        if identifier == 'lg':
-            return cls.range_tuple(5,8)
-        if identifier in ('mg+', 'mg'):
-            return cls.range_tuple(9,13)
-        if identifier == 'ug':
-            return cls.range_tuple(14,17)
+        if identifier == "lg":
+            return cls.range_tuple(5, 8)
+        if identifier in ("mg+", "mg"):
+            return cls.range_tuple(9, 13)
+        if identifier == "ug":
+            return cls.range_tuple(14, 17)
         return None
 
 
 class AgeClassifier(Classifier):
     # Regular expressions that match common ways of expressing ages.
     age_res = [
-        re.compile(x, re.I) for x in [
+        re.compile(x, re.I)
+        for x in [
             "age ([0-9]+) ?-? ?([0-9]+)?",
             "age: ([0-9]+) ?-? ?([0-9]+)?",
             "age: ([0-9]+) to ([0-9]+)",
@@ -230,7 +229,7 @@ class AgeClassifier(Classifier):
                     if young > 99:
                         # This is not an age at all.
                         young = None
-                    if (young is not None and old is not None and young > old):
+                    if young is not None and old is not None and young > old:
                         young, old = old, young
                     return cls.range_tuple(young, old)
         return cls.range_tuple(None, None)
@@ -247,6 +246,7 @@ class AgeClassifier(Classifier):
                     age_words = match.group()
                     break
         return (target_age, age_words)
+
 
 Classifier.classifiers[Classifier.AGE_RANGE] = AgeClassifier
 Classifier.classifiers[Classifier.GRADE_LEVEL] = GradeLevelClassifier

@@ -2,15 +2,16 @@ import datetime
 import logging
 import traceback
 from io import BytesIO
+from urllib.parse import quote, urljoin, urlparse
 
 import dateutil
 import feedparser
 from flask_babel import lazy_gettext as _
 from lxml import etree
-from urllib.parse import urljoin, urlparse, quote
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.session import Session
 
+from .classifier import Classifier
 from .config import CannotLoadConfiguration, IntegrationException
 from .coverage import CoverageFailure
 from .metadata_layer import (
@@ -44,12 +45,11 @@ from .model import (
 from .model.configuration import ExternalIntegrationLink
 from .monitor import CollectionMonitor
 from .selftest import HasSelfTests, SelfTestResult
-from .classifier import Classifier
+from .util.datetime_helpers import datetime_utc, to_utc, utc_now
 from .util.http import HTTP, BadResponseException
 from .util.opds_writer import OPDSFeed, OPDSMessage
 from .util.string_helpers import base64
 from .util.xmlparser import XMLParser
-from .util.datetime_helpers import datetime_utc, utc_now, to_utc
 
 
 def parse_identifier(db, identifier):
@@ -75,6 +75,7 @@ def parse_identifier(db, identifier):
 
 class AccessNotAuthenticated(Exception):
     """No authentication is configured for this service"""
+
     pass
 
 
@@ -85,27 +86,23 @@ class SimplifiedOPDSLookup(object):
 
     @classmethod
     def check_content_type(cls, response):
-        content_type = response.headers.get('content-type')
+        content_type = response.headers.get("content-type")
         if content_type != OPDSFeed.ACQUISITION_FEED_TYPE:
             raise BadResponseException.from_response(
-                response.url,
-                "Wrong media type: %s" % content_type,
-                response
+                response.url, "Wrong media type: %s" % content_type, response
             )
 
     @classmethod
-    def from_protocol(cls, _db, protocol,
-                      goal=ExternalIntegration.LICENSE_GOAL, library=None
+    def from_protocol(
+        cls, _db, protocol, goal=ExternalIntegration.LICENSE_GOAL, library=None
     ):
-        integration = ExternalIntegration.lookup(
-            _db, protocol, goal, library=library
-        )
+        integration = ExternalIntegration.lookup(_db, protocol, goal, library=library)
         if not integration or not integration.url:
             return None
         return cls(integration.url)
 
     def __init__(self, base_url):
-        if not base_url.endswith('/'):
+        if not base_url.endswith("/"):
             base_url += "/"
         self.base_url = base_url
 
@@ -115,9 +112,9 @@ class SimplifiedOPDSLookup(object):
 
     def _get(self, url, **kwargs):
         """Make an HTTP request. This method is overridden in the mock class."""
-        kwargs['timeout'] = kwargs.get('timeout', 300)
-        kwargs['allowed_response_codes'] = kwargs.get('allowed_response_codes', [])
-        kwargs['allowed_response_codes'] += ['2xx', '3xx']
+        kwargs["timeout"] = kwargs.get("timeout", 300)
+        kwargs["allowed_response_codes"] = kwargs.get("allowed_response_codes", [])
+        kwargs["allowed_response_codes"] += ["2xx", "3xx"]
         return HTTP.get_with_timeout(url, **kwargs)
 
     def urn_args(self, identifiers):
@@ -138,47 +135,50 @@ class MetadataWranglerOPDSLookup(SimplifiedOPDSLookup, HasSelfTests):
     CARDINALITY = 1
 
     SETTINGS = [
-        { "key": ExternalIntegration.URL,
-          "label": _("URL"),
-          "default": "http://metadata.librarysimplified.org/",
-          "required": True,
-          "format": "url",
+        {
+            "key": ExternalIntegration.URL,
+            "label": _("URL"),
+            "default": "http://metadata.librarysimplified.org/",
+            "required": True,
+            "format": "url",
         },
     ]
 
     SITEWIDE = True
 
-    ADD_ENDPOINT = 'add'
-    ADD_WITH_METADATA_ENDPOINT = 'add_with_metadata'
-    METADATA_NEEDED_ENDPOINT = 'metadata_needed'
-    REMOVE_ENDPOINT = 'remove'
-    UPDATES_ENDPOINT = 'updates'
-    CANONICALIZE_ENDPOINT = 'canonical-author-name'
+    ADD_ENDPOINT = "add"
+    ADD_WITH_METADATA_ENDPOINT = "add_with_metadata"
+    METADATA_NEEDED_ENDPOINT = "metadata_needed"
+    REMOVE_ENDPOINT = "remove"
+    UPDATES_ENDPOINT = "updates"
+    CANONICALIZE_ENDPOINT = "canonical-author-name"
 
     @classmethod
     def from_config(cls, _db, collection=None):
         integration = ExternalIntegration.lookup(
-            _db, ExternalIntegration.METADATA_WRANGLER,
-            ExternalIntegration.METADATA_GOAL
+            _db,
+            ExternalIntegration.METADATA_WRANGLER,
+            ExternalIntegration.METADATA_GOAL,
         )
 
         if not integration:
             raise CannotLoadConfiguration(
-                "No ExternalIntegration found for the Metadata Wrangler.")
+                "No ExternalIntegration found for the Metadata Wrangler."
+            )
 
         if not integration.url:
             raise CannotLoadConfiguration("Metadata Wrangler improperly configured.")
 
         return cls(
-            integration.url, shared_secret=integration.password,
-            collection=collection
+            integration.url, shared_secret=integration.password, collection=collection
         )
 
     @classmethod
     def external_integration(cls, _db):
         return ExternalIntegration.lookup(
-            _db, ExternalIntegration.METADATA_WRANGLER,
-            ExternalIntegration.METADATA_GOAL
+            _db,
+            ExternalIntegration.METADATA_WRANGLER,
+            ExternalIntegration.METADATA_GOAL,
         )
 
     def _run_self_tests(self, _db, lookup_class=None):
@@ -225,14 +225,12 @@ class MetadataWranglerOPDSLookup(SimplifiedOPDSLookup, HasSelfTests):
         # Check various endpoints that yield OPDS feeds.
         one_day_ago = utc_now() - datetime.timedelta(days=1)
         for title, m, args in (
-            (
-                "Metadata updates in last 24 hours",
-                self.updates, [one_day_ago]
-            ),
+            ("Metadata updates in last 24 hours", self.updates, [one_day_ago]),
             (
                 "Titles where we could (but haven't) provide information to the metadata wrangler",
-                self.metadata_needed, []
-            )
+                self.metadata_needed,
+                [],
+            ),
         ):
             yield self._feed_self_test(title, m, *args)
 
@@ -246,7 +244,7 @@ class MetadataWranglerOPDSLookup(SimplifiedOPDSLookup, HasSelfTests):
         # If the server returns a 500 error we don't want to raise an
         # exception -- we want to record it as part of the test
         # result.
-        kwargs = dict(allowed_response_codes=['%sxx' % f for f in range(1,6)])
+        kwargs = dict(allowed_response_codes=["%sxx" % f for f in range(1, 6)])
 
         response = method(*args, **kwargs)
         self._annotate_feed_response(result, response)
@@ -272,23 +270,21 @@ class MetadataWranglerOPDSLookup(SimplifiedOPDSLookup, HasSelfTests):
         lines = []
         lines.append("Request URL: %s" % response.url)
         lines.append(
-            "Request authorization: %s" %
-            response.request.headers.get('Authorization')
+            "Request authorization: %s" % response.request.headers.get("Authorization")
         )
         lines.append("Status code: %d" % response.status_code)
         result.success = response.status_code == 200
         if result.success:
             feed = feedparser.parse(response.content)
-            total_results = feed['feed'].get('opensearch_totalresults')
+            total_results = feed["feed"].get("opensearch_totalresults")
             if total_results is not None:
                 lines.append(
-                    "Total identifiers registered with this collection: %s" % (
-                        total_results
-                    )
+                    "Total identifiers registered with this collection: %s"
+                    % (total_results)
                 )
-            lines.append("Entries on this page: %d" % len(feed['entries']))
-            for i in feed['entries']:
-                lines.append(" " + i['title'])
+            lines.append("Entries on this page: %d" % len(feed["entries"]))
+            for i in feed["entries"]:
+                lines.append(" " + i["title"])
         result.result = lines
 
     def __init__(self, url, shared_secret=None, collection=None):
@@ -303,40 +299,40 @@ class MetadataWranglerOPDSLookup(SimplifiedOPDSLookup, HasSelfTests):
     @property
     def authorization(self):
         if self.authenticated:
-            token = 'Bearer ' + base64.b64encode(self.shared_secret)
-            return { 'Authorization' : token }
+            token = "Bearer " + base64.b64encode(self.shared_secret)
+            return {"Authorization": token}
         return None
 
     @property
     def lookup_endpoint(self):
         if not (self.authenticated and self.collection):
             return self.LOOKUP_ENDPOINT
-        return self.collection.metadata_identifier + '/' + self.LOOKUP_ENDPOINT
+        return self.collection.metadata_identifier + "/" + self.LOOKUP_ENDPOINT
 
     def _get(self, url, **kwargs):
         if self.authenticated:
-            headers = kwargs.get('headers', {})
+            headers = kwargs.get("headers", {})
             headers.update(self.authorization)
-            kwargs['headers'] = headers
+            kwargs["headers"] = headers
         return super(MetadataWranglerOPDSLookup, self)._get(url, **kwargs)
 
     def _post(self, url, data="", **kwargs):
         """Make an HTTP request. This method is overridden in the mock class."""
         if self.authenticated:
-            headers = kwargs.get('headers', {})
+            headers = kwargs.get("headers", {})
             headers.update(self.authorization)
-            kwargs['headers'] = headers
-        kwargs['timeout'] = kwargs.get('timeout', 120)
-        kwargs['allowed_response_codes'] = kwargs.get('allowed_response_codes', [])
-        kwargs['allowed_response_codes'] += ['2xx', '3xx']
+            kwargs["headers"] = headers
+        kwargs["timeout"] = kwargs.get("timeout", 120)
+        kwargs["allowed_response_codes"] = kwargs.get("allowed_response_codes", [])
+        kwargs["allowed_response_codes"] += ["2xx", "3xx"]
         return HTTP.post_with_timeout(url, data, **kwargs)
 
     def add_args(self, url, arg_string):
-        joiner = '?'
+        joiner = "?"
         if joiner in url:
             # This URL already has an argument (namely: data_source), so
             # append the new arguments.
-            joiner = '&'
+            joiner = "&"
         return url + joiner + arg_string
 
     def get_collection_url(self, endpoint):
@@ -345,15 +341,19 @@ class MetadataWranglerOPDSLookup(SimplifiedOPDSLookup, HasSelfTests):
         if not self.collection:
             raise ValueError("No Collection provided.")
 
-        data_source = ''
+        data_source = ""
         if self.collection.protocol == ExternalIntegration.OPDS_IMPORT:
             # Open access OPDS_IMPORT collections need to send a DataSource to
             # allow OPDS lookups on the Metadata Wrangler.
-            data_source = '?data_source=' + quote(self.collection.data_source.name)
+            data_source = "?data_source=" + quote(self.collection.data_source.name)
 
-        return (self.base_url
+        return (
+            self.base_url
             + self.collection.metadata_identifier
-            + '/' + endpoint + data_source)
+            + "/"
+            + endpoint
+            + data_source
+        )
 
     def add(self, identifiers):
         """Add items to an authenticated Metadata Wrangler Collection"""
@@ -372,9 +372,7 @@ class MetadataWranglerOPDSLookup(SimplifiedOPDSLookup, HasSelfTests):
         """Get a feed of items that need additional metadata to be processed
         by the Metadata Wrangler.
         """
-        metadata_needed_url = self.get_collection_url(
-            self.METADATA_NEEDED_ENDPOINT
-        )
+        metadata_needed_url = self.get_collection_url(self.METADATA_NEEDED_ENDPOINT)
         return self._get(metadata_needed_url, **kwargs)
 
     def remove(self, identifiers):
@@ -394,8 +392,8 @@ class MetadataWranglerOPDSLookup(SimplifiedOPDSLookup, HasSelfTests):
         """
         url = self.get_collection_url(self.UPDATES_ENDPOINT)
         if last_update_time:
-            formatted_time = last_update_time.strftime('%Y-%m-%dT%H:%M:%SZ')
-            url = self.add_args(url, ('last_update_time='+formatted_time))
+            formatted_time = last_update_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+            url = self.add_args(url, ("last_update_time=" + formatted_time))
         logging.info("Metadata Wrangler Collection Updates URL: %s", url)
         return self._get(url, **kwargs)
 
@@ -408,9 +406,7 @@ class MetadataWranglerOPDSLookup(SimplifiedOPDSLookup, HasSelfTests):
             (i.e. the name format human being used as opposed to the name
             that goes into library records).
         """
-        args = "display_name=%s" % (
-            quote(working_display_name.encode("utf8"))
-        )
+        args = "display_name=%s" % (quote(working_display_name.encode("utf8")))
         if identifier:
             args += "&urn=%s" % quote(identifier.urn)
         url = self.base_url + self.CANONICALIZE_ENDPOINT + "?" + args
@@ -419,7 +415,6 @@ class MetadataWranglerOPDSLookup(SimplifiedOPDSLookup, HasSelfTests):
 
 
 class MockSimplifiedOPDSLookup(SimplifiedOPDSLookup):
-
     def __init__(self, *args, **kwargs):
         self.requests = []
         self.responses = []
@@ -427,45 +422,50 @@ class MockSimplifiedOPDSLookup(SimplifiedOPDSLookup):
 
     def queue_response(self, status_code, headers={}, content=None):
         from .testing import MockRequestsResponse
-        self.responses.insert(
-            0, MockRequestsResponse(status_code, headers, content)
-        )
+
+        self.responses.insert(0, MockRequestsResponse(status_code, headers, content))
 
     def _get(self, url, *args, **kwargs):
         self.requests.append((url, args, kwargs))
         response = self.responses.pop()
         return HTTP._process_response(
-            url, response, kwargs.get('allowed_response_codes'),
-            kwargs.get('disallowed_response_codes')
+            url,
+            response,
+            kwargs.get("allowed_response_codes"),
+            kwargs.get("disallowed_response_codes"),
         )
 
 
-class MockMetadataWranglerOPDSLookup(MockSimplifiedOPDSLookup, MetadataWranglerOPDSLookup):
-
+class MockMetadataWranglerOPDSLookup(
+    MockSimplifiedOPDSLookup, MetadataWranglerOPDSLookup
+):
     def _post(self, url, *args, **kwargs):
         self.requests.append((url, args, kwargs))
         response = self.responses.pop()
         return HTTP._process_response(
-            url, response, kwargs.get('allowed_response_codes'),
-            kwargs.get('disallowed_response_codes')
+            url,
+            response,
+            kwargs.get("allowed_response_codes"),
+            kwargs.get("disallowed_response_codes"),
         )
 
 
 class OPDSXMLParser(XMLParser):
 
-    NAMESPACES = { "simplified": "http://librarysimplified.org/terms/",
-                   "app" : "http://www.w3.org/2007/app",
-                   "dcterms" : "http://purl.org/dc/terms/",
-                   "dc" : "http://purl.org/dc/elements/1.1/",
-                   "opds": "http://opds-spec.org/2010/catalog",
-                   "schema" : "http://schema.org/",
-                   "atom" : "http://www.w3.org/2005/Atom",
-                   "drm": "http://librarysimplified.org/terms/drm",
+    NAMESPACES = {
+        "simplified": "http://librarysimplified.org/terms/",
+        "app": "http://www.w3.org/2007/app",
+        "dcterms": "http://purl.org/dc/terms/",
+        "dc": "http://purl.org/dc/elements/1.1/",
+        "opds": "http://opds-spec.org/2010/catalog",
+        "schema": "http://schema.org/",
+        "atom": "http://www.w3.org/2005/Atom",
+        "drm": "http://librarysimplified.org/terms/drm",
     }
 
 
 class OPDSImporter(object):
-    """ Imports editions and license pools from an OPDS feed.
+    """Imports editions and license pools from an OPDS feed.
     Creates Edition, LicensePool and Work rows in the database, if those
     don't already exist.
 
@@ -475,12 +475,13 @@ class OPDSImporter(object):
     """
 
     COULD_NOT_CREATE_LICENSE_POOL = (
-        "No existing license pool for this identifier and no way of creating one.")
+        "No existing license pool for this identifier and no way of creating one."
+    )
 
     NAME = ExternalIntegration.OPDS_IMPORT
     DESCRIPTION = _("Import books from a publicly-accessible OPDS feed.")
 
-    NO_DEFAULT_AUDIENCE = ''
+    NO_DEFAULT_AUDIENCE = ""
 
     # These settings are used by all OPDS-derived import methods.
     BASE_SETTINGS = [
@@ -488,7 +489,7 @@ class OPDSImporter(object):
             "key": Collection.EXTERNAL_ACCOUNT_ID_KEY,
             "label": _("URL"),
             "required": True,
-            "format": "url"
+            "format": "url",
         },
         {
             "key": Collection.DATA_SOURCE_NAME_SETTING,
@@ -504,21 +505,14 @@ class OPDSImporter(object):
             ),
             "type": "select",
             "format": "narrow",
-            "options": [
-               {
-                   "key": NO_DEFAULT_AUDIENCE,
-                   "label": _("No default audience")
-               }
-            ] + [
-                {
-                   "key": audience,
-                   "label": audience
-                }
+            "options": [{"key": NO_DEFAULT_AUDIENCE, "label": _("No default audience")}]
+            + [
+                {"key": audience, "label": audience}
                 for audience in sorted(Classifier.AUDIENCES)
             ],
             "default": NO_DEFAULT_AUDIENCE,
             "required": False,
-            "readOnly": True
+            "readOnly": True,
         },
     ]
 
@@ -528,24 +522,32 @@ class OPDSImporter(object):
         {
             "key": ExternalIntegration.USERNAME,
             "label": _("Username"),
-            "description": _("If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the username here."),
+            "description": _(
+                "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the username here."
+            ),
         },
         {
             "key": ExternalIntegration.PASSWORD,
             "label": _("Password"),
-            "description": _("If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the password here."),
+            "description": _(
+                "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the password here."
+            ),
         },
         {
             "key": ExternalIntegration.CUSTOM_ACCEPT_HEADER,
             "label": _("Custom accept header"),
             "required": False,
-            "description": _("Some servers expect an accept header to decide which file to send. You can use */* if the server doesn't expect anything."),
-            "default": ','.join([
-                OPDSFeed.ACQUISITION_FEED_TYPE,
-                "application/atom+xml;q=0.9",
-                "application/xml;q=0.8",
-                "*/*;q=0.1",
-            ])
+            "description": _(
+                "Some servers expect an accept header to decide which file to send. You can use */* if the server doesn't expect anything."
+            ),
+            "default": ",".join(
+                [
+                    OPDSFeed.ACQUISITION_FEED_TYPE,
+                    "application/atom+xml;q=0.9",
+                    "application/xml;q=0.8",
+                    "*/*;q=0.1",
+                ]
+            ),
         },
         {
             "key": ExternalIntegration.PRIMARY_IDENTIFIER_SOURCE,
@@ -554,14 +556,11 @@ class OPDSImporter(object):
             "description": _("Which book identifier to use as ID."),
             "type": "select",
             "options": [
-               {
-                   "key": "",
-                   "label": _("(Default) Use <id>")
-               },
-               {
-                   "key": ExternalIntegration.DCTERMS_IDENTIFIER,
-                   "label": _("Use <dcterms:identifier> first, if not exist use <id>")
-               },
+                {"key": "", "label": _("(Default) Use <id>")},
+                {
+                    "key": ExternalIntegration.DCTERMS_IDENTIFIER,
+                    "label": _("Use <dcterms:identifier> first, if not exist use <id>"),
+                },
             ],
         },
     ]
@@ -576,10 +575,17 @@ class OPDSImporter(object):
     # when they show up in <simplified:message> tags.
     SUCCESS_STATUS_CODES = None
 
-    def __init__(self, _db, collection, data_source_name=None,
-                 identifier_mapping=None, http_get=None,
-                 metadata_client=None, content_modifier=None,
-                 map_from_collection=None, mirrors=None,
+    def __init__(
+        self,
+        _db,
+        collection,
+        data_source_name=None,
+        identifier_mapping=None,
+        http_get=None,
+        metadata_client=None,
+        content_modifier=None,
+        map_from_collection=None,
+        mirrors=None,
     ):
         """:param collection: LicensePools created by this OPDS import
         will be associated with the given Collection. If this is None,
@@ -629,16 +635,27 @@ class OPDSImporter(object):
         self.data_source_name = data_source_name
         self.identifier_mapping = identifier_mapping
         try:
-            self.metadata_client = metadata_client or MetadataWranglerOPDSLookup.from_config(_db, collection=collection)
+            self.metadata_client = (
+                metadata_client
+                or MetadataWranglerOPDSLookup.from_config(_db, collection=collection)
+            )
         except CannotLoadConfiguration:
             # The Metadata Wrangler isn't configured, but we can import without it.
-            self.log.warn("Metadata Wrangler integration couldn't be loaded, importing without it.")
+            self.log.warn(
+                "Metadata Wrangler integration couldn't be loaded, importing without it."
+            )
             self.metadata_client = None
 
         # Check to see if a mirror for each purpose was passed in.
         # If not, then attempt to create one.
-        covers_mirror = mirrors.get(ExternalIntegrationLink.COVERS, None) if mirrors else None
-        books_mirror = mirrors.get(ExternalIntegrationLink.OPEN_ACCESS_BOOKS, None) if mirrors else None
+        covers_mirror = (
+            mirrors.get(ExternalIntegrationLink.COVERS, None) if mirrors else None
+        )
+        books_mirror = (
+            mirrors.get(ExternalIntegrationLink.OPEN_ACCESS_BOOKS, None)
+            if mirrors
+            else None
+        )
         self.primary_identifier_source = None
         if collection:
             if not covers_mirror:
@@ -680,10 +697,12 @@ class OPDSImporter(object):
         """Look up or create a DataSource object representing the
         source of this OPDS feed.
         """
-        offers_licenses = (self.collection is not None)
+        offers_licenses = self.collection is not None
         return DataSource.lookup(
-            self._db, self.data_source_name, autocreate=True,
-            offers_licenses = offers_licenses
+            self._db,
+            self.data_source_name,
+            autocreate=True,
+            offers_licenses=offers_licenses,
         )
 
     def assert_importable_content(self, feed, feed_url, max_get_attempts=5):
@@ -709,15 +728,16 @@ class OPDSImporter(object):
                 return success
             get_attempts += 1
             if get_attempts >= max_get_attempts:
-                error = "Was unable to GET supposedly open-access content such as %s (tried %s times)" % (
-                    url, get_attempts
+                error = (
+                    "Was unable to GET supposedly open-access content such as %s (tried %s times)"
+                    % (url, get_attempts)
                 )
                 explanation = "This might be an OPDS For Distributors feed, or it might require different authentication credentials."
                 raise IntegrationException(error, explanation)
 
         raise IntegrationException(
             "No open-access links were found in the OPDS feed.",
-            "This might be an OPDS for Distributors feed."
+            "This might be an OPDS for Distributors feed.",
         )
 
     @classmethod
@@ -750,7 +770,9 @@ class OPDSImporter(object):
             return "Found a book-like thing at %s" % url
         self.log.error(
             "Supposedly open-access link %s didn't give us a book. Status=%s, body length=%s",
-            url, status, len(body)
+            url,
+            status,
+            len(body),
         )
         return False
 
@@ -797,7 +819,12 @@ class OPDSImporter(object):
                 self.log.error("Error importing an OPDS item", exc_info=e)
                 identifier, ignore = Identifier.parse_urn(self._db, key)
                 data_source = self.data_source
-                failure = CoverageFailure(identifier, traceback.format_exc(), data_source=data_source, transient=False)
+                failure = CoverageFailure(
+                    identifier,
+                    traceback.format_exc(),
+                    data_source=data_source,
+                    transient=False,
+                )
                 failures[key] = failure
                 # clean up any edition might have created
                 if key in imported_editions:
@@ -814,17 +841,25 @@ class OPDSImporter(object):
             except Exception as e:
                 identifier, ignore = Identifier.parse_urn(self._db, key)
                 data_source = self.data_source
-                failure = CoverageFailure(identifier, traceback.format_exc(), data_source=data_source, transient=False)
+                failure = CoverageFailure(
+                    identifier,
+                    traceback.format_exc(),
+                    data_source=data_source,
+                    transient=False,
+                )
                 failures[key] = failure
 
-        return list(imported_editions.values()), list(pools.values()), list(works.values()), failures
+        return (
+            list(imported_editions.values()),
+            list(pools.values()),
+            list(works.values()),
+            failures,
+        )
 
-    def import_edition_from_metadata(
-            self, metadata
-    ):
-        """ For the passed-in Metadata object, see if can find or create an Edition
-            in the database. Also create a LicensePool if the Metadata has
-            CirculationData in it.
+    def import_edition_from_metadata(self, metadata):
+        """For the passed-in Metadata object, see if can find or create an Edition
+        in the database. Also create a LicensePool if the Metadata has
+        CirculationData in it.
         """
         # Locate or create an Edition for this book.
         edition, is_new_edition = metadata.edition(self._db)
@@ -841,8 +876,10 @@ class OPDSImporter(object):
             http_get=self.http_get,
         )
         metadata.apply(
-            edition=edition, collection=self.collection,
-            metadata_client=self.metadata_client, replace=policy
+            edition=edition,
+            collection=self.collection,
+            metadata_client=self.metadata_client,
+            replace=policy,
         )
 
         return edition
@@ -862,8 +899,10 @@ class OPDSImporter(object):
         # different data source or a different collection, that's fine
         # too.
         pool = get_one(
-            self._db, LicensePool, identifier=edition.primary_identifier,
-            on_multiple='interchangeable'
+            self._db,
+            LicensePool,
+            identifier=edition.primary_identifier,
+            on_multiple="interchangeable",
         )
 
         if pool:
@@ -889,12 +928,11 @@ class OPDSImporter(object):
             parsed = feedparser.parse(feed)
         else:
             parsed = feed
-        feed = parsed['feed']
+        feed = parsed["feed"]
         next_links = []
-        if feed and 'links' in feed:
+        if feed and "links" in feed:
             next_links = [
-                link['href'] for link in feed['links']
-                if link['rel'] == 'next'
+                link["href"] for link in feed["links"] if link["rel"] == "next"
             ]
         return next_links
 
@@ -905,7 +943,7 @@ class OPDSImporter(object):
             parsed_feed = feed
         dates = [
             self.last_update_date_for_feedparser_entry(entry)
-            for entry in parsed_feed['entries']
+            for entry in parsed_feed["entries"]
         ]
         return [x for x in dates if x and x[1]]
 
@@ -928,14 +966,16 @@ class OPDSImporter(object):
         external_identifiers = list(identifiers_by_urn.values())
 
         internal_identifier = aliased(Identifier)
-        qu = self._db.query(Identifier, internal_identifier)\
-            .join(Identifier.inbound_equivalencies)\
-            .join(internal_identifier, Equivalency.input)\
-            .join(internal_identifier.licensed_through)\
+        qu = (
+            self._db.query(Identifier, internal_identifier)
+            .join(Identifier.inbound_equivalencies)
+            .join(internal_identifier, Equivalency.input)
+            .join(internal_identifier.licensed_through)
             .filter(
                 Identifier.id.in_([x.id for x in external_identifiers]),
-                LicensePool.collection==self.collection
+                LicensePool.collection == self.collection,
             )
+        )
 
         for external_identifier, internal_identifier in qu:
             mapping[external_identifier] = internal_identifier
@@ -947,7 +987,9 @@ class OPDSImporter(object):
         with associated messages and next_links.
         """
         data_source = self.data_source
-        fp_metadata, fp_failures = self.extract_data_from_feedparser(feed=feed, data_source=data_source)
+        fp_metadata, fp_failures = self.extract_data_from_feedparser(
+            feed=feed, data_source=data_source
+        )
         # gets: medium, measurements, links, contributors, etc.
         xml_data_meta, xml_failures = self.extract_metadata_from_elementtree(
             feed, data_source=data_source, feed_url=feed_url, do_get=self.http_get
@@ -955,7 +997,9 @@ class OPDSImporter(object):
 
         if self.map_from_collection:
             # Build the identifier_mapping based on the Collection.
-            self.build_identifier_mapping(list(fp_metadata.keys()) + list(fp_failures.keys()))
+            self.build_identifier_mapping(
+                list(fp_metadata.keys()) + list(fp_failures.keys())
+            )
 
         # translate the id in failures to identifier.urn
         identified_failures = {}
@@ -975,25 +1019,28 @@ class OPDSImporter(object):
                 # first value from the dcterms identifier, that came from the metadata as an
                 # IdentifierData object and it must be validated as a foreign_id before be used
                 # as and external_identifier.
-                dcterms_ids = xml_data_dict.get('dcterms_identifiers', [])
+                dcterms_ids = xml_data_dict.get("dcterms_identifiers", [])
                 if len(dcterms_ids) > 0:
                     external_identifier, ignore = Identifier.for_foreign_id(
-                            self._db, dcterms_ids[0].type, dcterms_ids[0].identifier
+                        self._db, dcterms_ids[0].type, dcterms_ids[0].identifier
                     )
                     # the external identifier will be add later, so it must be removed at this point
                     new_identifiers = dcterms_ids[1:]
                     # Id must be in the identifiers with lower weight.
                     id_type, id_identifier = Identifier.type_and_identifier_for_urn(id)
                     id_weight = 1
-                    new_identifiers.append(IdentifierData(id_type, id_identifier, id_weight))
-                    xml_data_dict['identifiers'] = new_identifiers
+                    new_identifiers.append(
+                        IdentifierData(id_type, id_identifier, id_weight)
+                    )
+                    xml_data_dict["identifiers"] = new_identifiers
 
             if external_identifier is None:
                 external_identifier, ignore = Identifier.parse_urn(self._db, id)
 
             if self.identifier_mapping:
                 internal_identifier = self.identifier_mapping.get(
-                    external_identifier, external_identifier)
+                    external_identifier, external_identifier
+                )
             else:
                 internal_identifier = external_identifier
 
@@ -1002,16 +1049,15 @@ class OPDSImporter(object):
                 continue
 
             identifier_obj = IdentifierData(
-                type=internal_identifier.type,
-                identifier=internal_identifier.identifier
+                type=internal_identifier.type, identifier=internal_identifier.identifier
             )
 
             # form the Metadata object
             combined_meta = self.combine(m_data_dict, xml_data_dict)
-            if combined_meta.get('data_source') is None:
-                combined_meta['data_source'] = self.data_source_name
+            if combined_meta.get("data_source") is None:
+                combined_meta["data_source"] = self.data_source_name
 
-            combined_meta['primary_identifier'] = identifier_obj
+            combined_meta["primary_identifier"] = identifier_obj
 
             metadata[internal_identifier.urn] = Metadata(**combined_meta)
 
@@ -1020,8 +1066,8 @@ class OPDSImporter(object):
             # would result.
             c_data_dict = None
             if self.collection:
-                c_circulation_dict = m_data_dict.get('circulation')
-                xml_circulation_dict = xml_data_dict.get('circulation', {})
+                c_circulation_dict = m_data_dict.get("circulation")
+                xml_circulation_dict = xml_data_dict.get("circulation", {})
                 c_data_dict = self.combine(c_circulation_dict, xml_circulation_dict)
 
             # Unless there's something useful in c_data_dict, we're
@@ -1032,13 +1078,13 @@ class OPDSImporter(object):
             if c_data_dict:
                 circ_links_dict = {}
                 # extract just the links to pass to CirculationData constructor
-                if 'links' in xml_data_dict:
-                    circ_links_dict['links'] = xml_data_dict['links']
+                if "links" in xml_data_dict:
+                    circ_links_dict["links"] = xml_data_dict["links"]
                 combined_circ = self.combine(c_data_dict, circ_links_dict)
-                if combined_circ.get('data_source') is None:
-                    combined_circ['data_source'] = self.data_source_name
+                if combined_circ.get("data_source") is None:
+                    combined_circ["data_source"] = self.data_source_name
 
-                combined_circ['primary_identifier'] = identifier_obj
+                combined_circ["primary_identifier"] = identifier_obj
                 circulation = CirculationData(**combined_circ)
 
                 self._add_format_data(circulation)
@@ -1072,7 +1118,8 @@ class OPDSImporter(object):
             # The identifier found in the OPDS feed is different from
             # the identifier we want to export.
             internal_identifier = self.identifier_mapping.get(
-                external_identifier, external_identifier)
+                external_identifier, external_identifier
+            )
         else:
             internal_identifier = external_identifier
         if isinstance(failure, Identifier):
@@ -1135,8 +1182,10 @@ class OPDSImporter(object):
         feedparser_parsed = feedparser.parse(feed)
         values = {}
         failures = {}
-        for entry in feedparser_parsed['entries']:
-            identifier, detail, failure = self.data_detail_for_feedparser_entry(entry=entry, data_source=data_source)
+        for entry in feedparser_parsed["entries"]:
+            identifier, detail, failure = self.data_detail_for_feedparser_entry(
+                entry=entry, data_source=data_source
+            )
 
             if identifier:
                 if failure:
@@ -1147,11 +1196,16 @@ class OPDSImporter(object):
             else:
                 # That's bad. Can't make an item-specific error message, but write to
                 # log that something very wrong happened.
-                logging.error("Tried to parse an element without a valid identifier.  feed=%s" % feed)
+                logging.error(
+                    "Tried to parse an element without a valid identifier.  feed=%s"
+                    % feed
+                )
         return values, failures
 
     @classmethod
-    def extract_metadata_from_elementtree(cls, feed, data_source, feed_url=None, do_get=None):
+    def extract_metadata_from_elementtree(
+        cls, feed, data_source, feed_url=None, do_get=None
+    ):
         """Parse the OPDS as XML and extract all author and subject
         information, as well as ratings and medium.
 
@@ -1178,16 +1232,14 @@ class OPDSImporter(object):
         # for this, so if anyone actually uses that we'll get around
         # to checking it.
         if not feed_url:
-            links = [child.attrib for child in root.getroot() if 'link' in child.tag]
-            self_links = [link['href'] for link in links if link.get('rel') == 'self']
+            links = [child.attrib for child in root.getroot() if "link" in child.tag]
+            self_links = [link["href"] for link in links if link.get("rel") == "self"]
             if self_links:
                 feed_url = self_links[0]
 
         # First, turn Simplified <message> tags into CoverageFailure
         # objects.
-        for failure in cls.coveragefailures_from_messages(
-                data_source, parser, root
-        ):
+        for failure in cls.coveragefailures_from_messages(data_source, parser, root):
             if isinstance(failure, Identifier):
                 # The Simplified <message> tag does not actually
                 # represent a failure -- it was turned into an
@@ -1198,7 +1250,7 @@ class OPDSImporter(object):
             failures[urn] = failure
 
         # Then turn Atom <entry> tags into Metadata objects.
-        for entry in parser._xpath(root, '/atom:feed/atom:entry'):
+        for entry in parser._xpath(root, "/atom:feed/atom:entry"):
             identifier, detail, failure = cls.detail_for_elementtree_entry(
                 parser, entry, data_source, feed_url, do_get=do_get
             )
@@ -1217,8 +1269,8 @@ class OPDSImporter(object):
         return datetime_utc(*value[:6])
 
     def last_update_date_for_feedparser_entry(self, entry):
-        identifier = entry.get('id')
-        updated = self._datetime(entry, 'updated_parsed')
+        identifier = entry.get("id")
+        updated = self._datetime(entry, "updated_parsed")
         return (identifier, updated)
 
     @classmethod
@@ -1228,7 +1280,7 @@ class OPDSImporter(object):
 
         :return: A 3-tuple (identifier, kwargs for Metadata constructor, failure)
         """
-        identifier = entry.get('id')
+        identifier = entry.get("id")
         if not identifier:
             return None, None, None
 
@@ -1241,8 +1293,7 @@ class OPDSImporter(object):
             _db = Session.object_session(data_source)
             identifier_obj, ignore = Identifier.parse_urn(_db, identifier)
             failure = CoverageFailure(
-                identifier_obj, traceback.format_exc(), data_source,
-                transient=True
+                identifier_obj, traceback.format_exc(), data_source, transient=True
             )
             return identifier, None, failure
 
@@ -1252,10 +1303,10 @@ class OPDSImporter(object):
         entry. This method can be overridden in tests to check that callers handle things
         properly when it throws an exception.
         """
-        title = entry.get('title', None)
+        title = entry.get("title", None)
         if title == OPDSFeed.NO_TITLE:
             title = None
-        subtitle = entry.get('schema_alternativeheadline', None)
+        subtitle = entry.get("schema_alternativeheadline", None)
 
         # Generally speaking, a data source will provide either
         # metadata (e.g. the Simplified metadata wrangler) or both
@@ -1274,10 +1325,10 @@ class OPDSImporter(object):
         # <bibframe:distribution> tag to keep track of which data
         # source provides the circulation data.
         circulation_data_source = metadata_data_source
-        circulation_data_source_tag = entry.get('bibframe_distribution')
+        circulation_data_source_tag = entry.get("bibframe_distribution")
         if circulation_data_source_tag:
             circulation_data_source_name = circulation_data_source_tag.get(
-                'bibframe:providername'
+                "bibframe:providername"
             )
             if circulation_data_source_name:
                 _db = Session.object_session(metadata_data_source)
@@ -1285,47 +1336,46 @@ class OPDSImporter(object):
                 # that's what the <bibframe:distribution> is there
                 # to say.
                 circulation_data_source = DataSource.lookup(
-                    _db, circulation_data_source_name, autocreate=True,
-                    offers_licenses=True
+                    _db,
+                    circulation_data_source_name,
+                    autocreate=True,
+                    offers_licenses=True,
                 )
                 if not circulation_data_source:
                     raise ValueError(
-                        "Unrecognized circulation data source: %s" % (
-                            circulation_data_source_name
-                        )
+                        "Unrecognized circulation data source: %s"
+                        % (circulation_data_source_name)
                     )
-        last_opds_update = cls._datetime(entry, 'updated_parsed')
+        last_opds_update = cls._datetime(entry, "updated_parsed")
 
-        publisher = entry.get('publisher', None)
+        publisher = entry.get("publisher", None)
         if not publisher:
-            publisher = entry.get('dcterms_publisher', None)
+            publisher = entry.get("dcterms_publisher", None)
 
-        language = entry.get('language', None)
+        language = entry.get("language", None)
         if not language:
-            language = entry.get('dcterms_language', None)
+            language = entry.get("dcterms_language", None)
 
         links = []
 
         def summary_to_linkdata(detail):
             if not detail:
                 return None
-            if not 'value' in detail or not detail['value']:
+            if not "value" in detail or not detail["value"]:
                 return None
 
-            content = detail['value']
-            media_type = detail.get('type', 'text/plain')
+            content = detail["value"]
+            media_type = detail.get("type", "text/plain")
             return cls.make_link_data(
-                rel=Hyperlink.DESCRIPTION,
-                media_type=media_type,
-                content=content
+                rel=Hyperlink.DESCRIPTION, media_type=media_type, content=content
             )
 
-        summary_detail = entry.get('summary_detail', None)
+        summary_detail = entry.get("summary_detail", None)
         link = summary_to_linkdata(summary_detail)
         if link:
             links.append(link)
 
-        for content_detail in entry.get('content', []):
+        for content_detail in entry.get("content", []):
             link = summary_to_linkdata(content_detail)
             if link:
                 links.append(link)
@@ -1350,7 +1400,7 @@ class OPDSImporter(object):
             links=list(links),
             default_rights_uri=rights_uri,
         )
-        kwargs_meta['circulation'] = kwargs_circ
+        kwargs_meta["circulation"] = kwargs_circ
         return kwargs_meta
 
     @classmethod
@@ -1366,7 +1416,7 @@ class OPDSImporter(object):
 
         :return: A rights URI.
         """
-        rights = entry.get('rights', "")
+        rights = entry.get("rights", "")
         return cls.rights_uri(rights)
 
     @classmethod
@@ -1375,7 +1425,7 @@ class OPDSImporter(object):
 
         :return: A rights URI.
         """
-        rights = cls.PARSER_CLASS._xpath1(entry, 'rights')
+        rights = cls.PARSER_CLASS._xpath1(entry, "rights")
         if rights:
             return cls.rights_uri(rights)
 
@@ -1384,19 +1434,19 @@ class OPDSImporter(object):
         """Extract <simplified:message> tags from an OPDS feed and convert
         them into OPDSMessage objects.
         """
-        path = '/atom:feed/simplified:message'
+        path = "/atom:feed/simplified:message"
         for message_tag in parser._xpath(feed_tag, path):
 
             # First thing to do is determine which Identifier we're
             # talking about.
-            identifier_tag = parser._xpath1(message_tag, 'atom:id')
+            identifier_tag = parser._xpath1(message_tag, "atom:id")
             if identifier_tag is None:
                 urn = None
             else:
                 urn = identifier_tag.text
 
             # What status code is associated with the message?
-            status_code_tag = parser._xpath1(message_tag, 'simplified:status_code')
+            status_code_tag = parser._xpath1(message_tag, "simplified:status_code")
             if status_code_tag is None:
                 status_code = None
             else:
@@ -1406,9 +1456,9 @@ class OPDSImporter(object):
                     status_code = None
 
             # What is the human-readable message?
-            description_tag = parser._xpath1(message_tag, 'schema:description')
+            description_tag = parser._xpath1(message_tag, "schema:description")
             if description_tag is None:
-                description = ''
+                description = ""
             else:
                 description = description_tag.text
 
@@ -1445,8 +1495,7 @@ class OPDSImporter(object):
             # Identifier so we can't turn it into a CoverageFailure.
             return None
 
-        if (cls.SUCCESS_STATUS_CODES
-            and message.status_code in cls.SUCCESS_STATUS_CODES):
+        if cls.SUCCESS_STATUS_CODES and message.status_code in cls.SUCCESS_STATUS_CODES:
             # This message is telling us that nothing went wrong. It
             # should be treated as a success.
             return identifier
@@ -1465,17 +1514,15 @@ class OPDSImporter(object):
         elif description:
             exception = description
         else:
-            exception = 'No detail provided.'
+            exception = "No detail provided."
 
         # All these CoverageFailures are transient because ATM we can
         # only assume that the server will eventually have the data.
-        return CoverageFailure(
-            identifier, exception, data_source, transient=True
-        )
+        return CoverageFailure(identifier, exception, data_source, transient=True)
 
     @classmethod
     def detail_for_elementtree_entry(
-            cls, parser, entry_tag, data_source, feed_url=None, do_get=None
+        cls, parser, entry_tag, data_source, feed_url=None, do_get=None
     ):
 
         """Turn an <atom:entry> tag into a dictionary of metadata that can be
@@ -1483,7 +1530,7 @@ class OPDSImporter(object):
 
         :return: A 2-tuple (identifier, kwargs)
         """
-        identifier = parser._xpath1(entry_tag, 'atom:id')
+        identifier = parser._xpath1(entry_tag, "atom:id")
         if identifier is None or not identifier.text:
             # This <entry> tag doesn't identify a book so we
             # can't derive any information from it.
@@ -1500,13 +1547,14 @@ class OPDSImporter(object):
             _db = Session.object_session(data_source)
             identifier_obj, ignore = Identifier.parse_urn(_db, identifier)
             failure = CoverageFailure(
-                identifier_obj, traceback.format_exc(), data_source,
-                transient=True
+                identifier_obj, traceback.format_exc(), data_source, transient=True
             )
             return identifier, None, failure
 
     @classmethod
-    def _detail_for_elementtree_entry(cls, parser, entry_tag, feed_url=None, do_get=None):
+    def _detail_for_elementtree_entry(
+        cls, parser, entry_tag, feed_url=None, do_get=None
+    ):
         """Helper method that extracts metadata and circulation data from an elementtree
         entry. This method can be overridden in tests to check that callers handle things
         properly when it throws an exception.
@@ -1520,43 +1568,45 @@ class OPDSImporter(object):
             v = cls.extract_identifier(id_tag)
             if v:
                 alternate_identifiers.append(v)
-        data['dcterms_identifiers'] = alternate_identifiers
+        data["dcterms_identifiers"] = alternate_identifiers
 
         # If exist another identifer, add here
-        data['identifiers'] = data['dcterms_identifiers']
+        data["identifiers"] = data["dcterms_identifiers"]
 
-        data['contributors'] = []
-        for author_tag in parser._xpath(entry_tag, 'atom:author'):
+        data["contributors"] = []
+        for author_tag in parser._xpath(entry_tag, "atom:author"):
             contributor = cls.extract_contributor(parser, author_tag)
             if contributor is not None:
-                data['contributors'].append(contributor)
+                data["contributors"].append(contributor)
 
-        data['subjects'] = [
+        data["subjects"] = [
             cls.extract_subject(parser, category_tag)
-            for category_tag in parser._xpath(entry_tag, 'atom:category')
+            for category_tag in parser._xpath(entry_tag, "atom:category")
         ]
 
         ratings = []
-        for rating_tag in parser._xpath(entry_tag, 'schema:Rating'):
+        for rating_tag in parser._xpath(entry_tag, "schema:Rating"):
             v = cls.extract_measurement(rating_tag)
             if v:
                 ratings.append(v)
-        data['measurements'] = ratings
+        data["measurements"] = ratings
         rights_uri = cls.rights_uri_from_entry_tag(entry_tag)
 
-        data['links'] = cls.consolidate_links([
-            cls.extract_link(link_tag, feed_url, rights_uri)
-            for link_tag in parser._xpath(entry_tag, 'atom:link')
-        ])
+        data["links"] = cls.consolidate_links(
+            [
+                cls.extract_link(link_tag, feed_url, rights_uri)
+                for link_tag in parser._xpath(entry_tag, "atom:link")
+            ]
+        )
 
-        derived_medium = cls.get_medium_from_links(data['links'])
-        data['medium'] = cls.extract_medium(entry_tag, derived_medium)
+        derived_medium = cls.get_medium_from_links(data["links"])
+        data["medium"] = cls.extract_medium(entry_tag, derived_medium)
 
-        series_tag = parser._xpath(entry_tag, 'schema:Series')
+        series_tag = parser._xpath(entry_tag, "schema:Series")
         if series_tag:
-            data['series'], data['series_position'] = cls.extract_series(series_tag[0])
+            data["series"], data["series_position"] = cls.extract_series(series_tag[0])
 
-        issued_tag = parser._xpath(entry_tag, 'dcterms:issued')
+        issued_tag = parser._xpath(entry_tag, "dcterms:issued")
         if issued_tag:
             date_string = issued_tag[0].text
             # By default, the date for strings that only have a year will
@@ -1575,9 +1625,10 @@ class OPDSImporter(object):
         """Get medium if derivable from information in an acquisition link."""
         derived = None
         for link in links:
-            if (not link.rel
+            if (
+                not link.rel
                 or not link.media_type
-                or not link.rel.startswith('http://opds-spec.org/acquisition/')
+                or not link.rel.startswith("http://opds-spec.org/acquisition/")
             ):
                 continue
             derived = Edition.medium_from_media_type(link.media_type)
@@ -1589,7 +1640,9 @@ class OPDSImporter(object):
     def extract_identifier(cls, identifier_tag):
         """Turn a <dcterms:identifier> tag into an IdentifierData object."""
         try:
-            type, identifier = Identifier.type_and_identifier_for_urn(identifier_tag.text.lower())
+            type, identifier = Identifier.type_and_identifier_for_urn(
+                identifier_tag.text.lower()
+            )
             return IdentifierData(type, identifier)
         except ValueError:
             return None
@@ -1606,13 +1659,11 @@ class OPDSImporter(object):
             return default
 
         medium = None
-        additional_type = entry_tag.get('{http://schema.org/}additionalType')
+        additional_type = entry_tag.get("{http://schema.org/}additionalType")
         if additional_type:
-            medium = Edition.additional_type_to_medium.get(
-                additional_type, None
-            )
+            medium = Edition.additional_type_to_medium.get(additional_type, None)
         if not medium:
-            format_tag = entry_tag.find('{http://purl.org/dc/terms/}format')
+            format_tag = entry_tag.find("{http://purl.org/dc/terms/}format")
             if format_tag is not None:
                 media_type = format_tag.text
                 medium = Edition.medium_from_media_type(media_type)
@@ -1622,8 +1673,8 @@ class OPDSImporter(object):
     def extract_contributor(cls, parser, author_tag):
         """Turn an <atom:author> tag into a ContributorData object."""
         subtag = parser.text_of_optional_subtag
-        sort_name = subtag(author_tag, 'simplified:sort_name')
-        display_name = subtag(author_tag, 'atom:name')
+        sort_name = subtag(author_tag, "simplified:sort_name")
+        display_name = subtag(author_tag, "atom:name")
         family_name = subtag(author_tag, "simplified:family_name")
         wikipedia_name = subtag(author_tag, "simplified:wikipedia_name")
         # TODO: we need a way of conveying roles. I believe Bibframe
@@ -1636,13 +1687,16 @@ class OPDSImporter(object):
         viaf = None
         if sort_name or display_name or viaf:
             return ContributorData(
-                sort_name=sort_name, display_name=display_name,
+                sort_name=sort_name,
+                display_name=display_name,
                 family_name=family_name,
                 wikipedia_name=wikipedia_name,
-                roles=None
+                roles=None,
             )
 
-        logging.info("Refusing to create ContributorData for contributor with no sort name, display name, or VIAF.")
+        logging.info(
+            "Refusing to create ContributorData for contributor with no sort name, display name, or VIAF."
+        )
         return None
 
     @classmethod
@@ -1652,7 +1706,7 @@ class OPDSImporter(object):
 
         # Retrieve the type of this subject - FAST, Dewey Decimal,
         # etc.
-        scheme = attr.get('scheme')
+        scheme = attr.get("scheme")
         subject_type = Subject.by_uri.get(scheme)
         if not subject_type:
             # We can't represent this subject because we don't
@@ -1661,22 +1715,17 @@ class OPDSImporter(object):
 
         # Retrieve the term (e.g. "827") and human-readable name
         # (e.g. "English Satire & Humor") for this subject.
-        term = attr.get('term')
-        name = attr.get('label')
+        term = attr.get("term")
+        name = attr.get("label")
         default_weight = 1
 
-        weight = attr.get('{http://schema.org/}ratingValue', default_weight)
+        weight = attr.get("{http://schema.org/}ratingValue", default_weight)
         try:
             weight = int(weight)
         except ValueError as e:
             weight = default_weight
 
-        return SubjectData(
-            type=subject_type,
-            identifier=term,
-            name=name,
-            weight=weight
-        )
+        return SubjectData(type=subject_type, identifier=term, name=name, weight=weight)
 
     @classmethod
     def extract_link(cls, link_tag, feed_url=None, entry_rights_uri=None):
@@ -1691,14 +1740,14 @@ class OPDSImporter(object):
             if made available on these terms.
         """
         attr = link_tag.attrib
-        rel = attr.get('rel')
-        media_type = attr.get('type')
-        href = attr.get('href')
+        rel = attr.get("rel")
+        media_type = attr.get("type")
+        href = attr.get("href")
         if not href or not rel:
             # The link exists but has no destination, or no specified
             # relationship to the entry.
             return None
-        rights = attr.get('{%s}rights' % OPDSXMLParser.NAMESPACES["dcterms"])
+        rights = attr.get("{%s}rights" % OPDSXMLParser.NAMESPACES["dcterms"])
         if rights:
             # Rights associated with the link override rights
             # associated with the entry.
@@ -1711,14 +1760,19 @@ class OPDSImporter(object):
         return cls.make_link_data(rel, href, media_type, rights_uri)
 
     @classmethod
-    def make_link_data(cls, rel, href=None, media_type=None, rights_uri=None,
-                       content=None):
+    def make_link_data(
+        cls, rel, href=None, media_type=None, rights_uri=None, content=None
+    ):
         """Hook method for creating a LinkData object.
 
         Intended to be overridden in subclasses.
         """
-        return LinkData(rel=rel, href=href, media_type=media_type,
-                        rights_uri=rights_uri, content=content
+        return LinkData(
+            rel=rel,
+            href=href,
+            media_type=media_type,
+            rights_uri=rights_uri,
+            content=content,
         )
 
     @classmethod
@@ -1752,23 +1806,26 @@ class OPDSImporter(object):
                 next_link_already_handled = False
                 continue
 
-            if i == len(links)-1:
+            if i == len(links) - 1:
                 # This is the last link. Since there is no next link
                 # there's nothing to do here.
                 continue
 
             # Peek at the next link.
-            next_link = links[i+1]
+            next_link = links[i + 1]
 
-
-            if (link.rel == Hyperlink.THUMBNAIL_IMAGE
-                and next_link.rel == Hyperlink.IMAGE):
+            if (
+                link.rel == Hyperlink.THUMBNAIL_IMAGE
+                and next_link.rel == Hyperlink.IMAGE
+            ):
                 # This link is a thumbnail and the next link is
                 # (presumably) the corresponding image.
                 thumbnail_link = link
                 image_link = next_link
-            elif (link.rel == Hyperlink.IMAGE
-                  and next_link.rel == Hyperlink.THUMBNAIL_IMAGE):
+            elif (
+                link.rel == Hyperlink.IMAGE
+                and next_link.rel == Hyperlink.THUMBNAIL_IMAGE
+            ):
                 thumbnail_link = next_link
                 image_link = link
             else:
@@ -1784,10 +1841,10 @@ class OPDSImporter(object):
 
     @classmethod
     def extract_measurement(cls, rating_tag):
-        type = rating_tag.get('{http://schema.org/}additionalType')
-        value = rating_tag.get('{http://schema.org/}ratingValue')
+        type = rating_tag.get("{http://schema.org/}additionalType")
+        value = rating_tag.get("{http://schema.org/}ratingValue")
         if not value:
-            value = rating_tag.attrib.get('{http://schema.org}ratingValue')
+            value = rating_tag.attrib.get("{http://schema.org}ratingValue")
         if not type:
             type = Measurement.RATING
         try:
@@ -1802,8 +1859,8 @@ class OPDSImporter(object):
     @classmethod
     def extract_series(cls, series_tag):
         attr = series_tag.attrib
-        series_name = attr.get('{http://schema.org/}name', None)
-        series_position = attr.get('{http://schema.org/}position', None)
+        series_name = attr.get("{http://schema.org/}name", None)
+        series_position = attr.get("{http://schema.org/}position", None)
         return series_name, series_position
 
 
@@ -1822,8 +1879,9 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests):
     # specialize OPDS import should override this.
     PROTOCOL = ExternalIntegration.OPDS_IMPORT
 
-    def __init__(self, _db, collection, import_class,
-                 force_reimport=False, **import_class_kwargs):
+    def __init__(
+        self, _db, collection, import_class, force_reimport=False, **import_class_kwargs
+    ):
         if not collection:
             raise ValueError(
                 "OPDSImportMonitor can only be run in the context of a Collection."
@@ -1831,9 +1889,8 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests):
 
         if collection.protocol != self.PROTOCOL:
             raise ValueError(
-                "Collection %s is configured for protocol %s, not %s." % (
-                    collection.name, collection.protocol, self.PROTOCOL
-                )
+                "Collection %s is configured for protocol %s, not %s."
+                % (collection.name, collection.protocol, self.PROTOCOL)
             )
 
         data_source = self.data_source(collection)
@@ -1849,21 +1906,18 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests):
         self.password = collection.external_integration.password
         self.custom_accept_header = collection.external_integration.custom_accept_header
 
-        self.importer = import_class(
-            _db, collection=collection,
-            **import_class_kwargs
-        )
+        self.importer = import_class(_db, collection=collection, **import_class_kwargs)
         super(OPDSImportMonitor, self).__init__(_db, collection)
 
     def external_integration(self, _db):
-        return get_one(_db, ExternalIntegration,
-                       id=self.external_integration_id)
+        return get_one(_db, ExternalIntegration, id=self.external_integration_id)
 
     def _run_self_tests(self, _db):
         """Retrieve the first page of the OPDS feed"""
         first_page = self.run_test(
             "Retrieve the first page of the OPDS feed (%s)" % self.feed_url,
-            self.follow_one_link, self.feed_url
+            self.follow_one_link,
+            self.feed_url,
         )
         yield first_page
         if not first_page.result:
@@ -1877,7 +1931,8 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests):
         yield self.run_test(
             "Checking for importable content",
             self.importer.assert_importable_content,
-            content, self.feed_url
+            content,
+            self.feed_url,
         )
 
     def _get(self, url, headers):
@@ -1886,28 +1941,31 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests):
         Long timeout, raise error on anything but 2xx or 3xx.
         """
         headers = self._update_headers(headers)
-        kwargs = dict(timeout=120, allowed_response_codes=['2xx', '3xx'])
+        kwargs = dict(timeout=120, allowed_response_codes=["2xx", "3xx"])
         response = HTTP.get_with_timeout(url, headers=headers, **kwargs)
         return response.status_code, response.headers, response.content
 
     def _get_accept_header(self):
-        return ','.join([
-            OPDSFeed.ACQUISITION_FEED_TYPE,
-            "application/atom+xml;q=0.9",
-            "application/xml;q=0.8",
-            "*/*;q=0.1",
-        ])
+        return ",".join(
+            [
+                OPDSFeed.ACQUISITION_FEED_TYPE,
+                "application/atom+xml;q=0.9",
+                "application/xml;q=0.8",
+                "*/*;q=0.1",
+            ]
+        )
 
     def _update_headers(self, headers):
         headers = dict(headers) if headers else {}
-        if self.username and self.password and not 'Authorization' in headers:
-            headers['Authorization'] = "Basic %s" % base64.b64encode("%s:%s" % (self.username,
-                                                                                self.password))
+        if self.username and self.password and not "Authorization" in headers:
+            headers["Authorization"] = "Basic %s" % base64.b64encode(
+                "%s:%s" % (self.username, self.password)
+            )
 
         if self.custom_accept_header:
-            headers['Accept'] = self.custom_accept_header
-        elif not 'Accept' in headers:
-            headers['Accept'] = self._get_accept_header()
+            headers["Accept"] = self.custom_accept_header
+        elif not "Accept" in headers:
+            headers["Accept"] = self._get_accept_header()
 
         return headers
 
@@ -1959,9 +2017,7 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests):
                 # Maybe this is new, maybe not, but we can't associate
                 # the information with an Identifier, so we can't do
                 # anything about it.
-                self.log.info(
-                    "Ignoring %s because unable to turn into an Identifier."
-                )
+                self.log.info("Ignoring %s because unable to turn into an Identifier.")
                 continue
 
             if self.identifier_needs_import(identifier, remote_updated):
@@ -1980,16 +2036,16 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests):
             return False
 
         record = CoverageRecord.lookup(
-            identifier, self.importer.data_source,
-            operation=CoverageRecord.IMPORT_OPERATION
+            identifier,
+            self.importer.data_source,
+            operation=CoverageRecord.IMPORT_OPERATION,
         )
 
         if not record:
             # We have no record of importing this Identifier. Import
             # it now.
             self.log.info(
-                "Counting %s as new because it has no CoverageRecord.",
-                identifier
+                "Counting %s as new because it has no CoverageRecord.", identifier
             )
             return True
 
@@ -1999,7 +2055,8 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests):
         if record.status == CoverageRecord.TRANSIENT_FAILURE:
             self.log.info(
                 "Counting %s as new because previous attempt resulted in transient failure: %s",
-                identifier, record.exception
+                identifier,
+                record.exception,
             )
             return True
 
@@ -2016,7 +2073,7 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests):
                 # has been updated. Import it again to be safe.
                 self.log.info(
                     "Counting %s as new because remote has no information about when it was updated.",
-                    identifier
+                    identifier,
                 )
                 return True
 
@@ -2024,21 +2081,22 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests):
                 # This book has been updated.
                 self.log.info(
                     "Counting %s as new because its coverage date is %s and remote has %s.",
-                    identifier, record.timestamp, last_updated_remote
+                    identifier,
+                    record.timestamp,
+                    last_updated_remote,
                 )
                 return True
 
     def _verify_media_type(self, url, status_code, headers, feed):
         # Make sure we got an OPDS feed, and not an error page that was
         # sent with a 200 status code.
-        media_type = headers.get('content-type')
+        media_type = headers.get("content-type")
         if not media_type or not any(
             x in media_type for x in (OPDSFeed.ATOM_LIKE_TYPES)
         ):
             message = "Expected Atom feed, got %s" % media_type
             raise BadResponseException(
-                url, message=message, debug_message=feed,
-                status_code=status_code
+                url, message=message, debug_message=feed, status_code=status_code
             )
 
     def follow_one_link(self, url, do_get=None):
@@ -2074,16 +2132,16 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests):
         # Because we are importing into a Collection, we will immediately
         # mark a book as presentation-ready if possible.
         imported_editions, pools, works, failures = self.importer.import_from_feed(
-            feed,
-            feed_url=self.opds_url(self.collection)
+            feed, feed_url=self.opds_url(self.collection)
         )
 
         # Create CoverageRecords for the successful imports.
         for edition in imported_editions:
             record = CoverageRecord.add_for(
-                edition, self.importer.data_source,
+                edition,
+                self.importer.data_source,
                 CoverageRecord.IMPORT_OPERATION,
-                status=CoverageRecord.SUCCESS
+                status=CoverageRecord.SUCCESS,
             )
 
         # Create CoverageRecords for the failures.
@@ -2141,7 +2199,8 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests):
             self._db.commit()
 
         achievements = "Items imported: %d. Failures: %d." % (
-            total_imported, total_failures
+            total_imported,
+            total_failures,
         )
 
         return TimestampData(achievements=achievements)

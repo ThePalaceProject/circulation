@@ -1,19 +1,11 @@
-from ..config import (
-    Configuration,
-    temp_config,
-)
-from ..analytics import Analytics
-from ..mock_analytics_provider import MockAnalyticsProvider
-from ..local_analytics_provider import LocalAnalyticsProvider
-from ..testing import DatabaseTest
-from ..model import (
-    CirculationEvent,
-    ExternalIntegration,
-    Library,
-    create,
-    get_one
-)
 import json
+
+from ..analytics import Analytics
+from ..config import Configuration, temp_config
+from ..local_analytics_provider import LocalAnalyticsProvider
+from ..mock_analytics_provider import MockAnalyticsProvider
+from ..model import CirculationEvent, ExternalIntegration, Library, create, get_one
+from ..testing import DatabaseTest
 
 # We can't import mock_analytics_provider from within a test,
 # and we can't tell Analytics to do so either. We need to tell
@@ -21,29 +13,32 @@ import json
 # class is in.
 MOCK_PROTOCOL = "..mock_analytics_provider"
 
-class TestAnalytics(DatabaseTest):
 
+class TestAnalytics(DatabaseTest):
     def test_initialize(self):
         # supports multiple analytics providers, site-wide or with libraries
 
         # Two site-wide integrations
         mock_integration, ignore = create(
-            self._db, ExternalIntegration,
+            self._db,
+            ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol=MOCK_PROTOCOL
+            protocol=MOCK_PROTOCOL,
         )
         mock_integration.url = self._str
         local_integration, ignore = create(
-            self._db, ExternalIntegration,
+            self._db,
+            ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol="..local_analytics_provider"
+            protocol="..local_analytics_provider",
         )
 
         # A broken integration
         missing_integration, ignore = create(
-            self._db, ExternalIntegration,
+            self._db,
+            ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol="missing_provider"
+            protocol="missing_provider",
         )
 
         # Two library-specific integrations
@@ -51,17 +46,19 @@ class TestAnalytics(DatabaseTest):
         l2, ignore = create(self._db, Library, short_name="L2")
 
         library_integration1, ignore = create(
-            self._db, ExternalIntegration,
+            self._db,
+            ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol=MOCK_PROTOCOL
-         )
+            protocol=MOCK_PROTOCOL,
+        )
         library_integration1.libraries += [l1, l2]
 
         library_integration2, ignore = create(
-            self._db, ExternalIntegration,
+            self._db,
+            ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol=MOCK_PROTOCOL
-         )
+            protocol=MOCK_PROTOCOL,
+        )
         library_integration2.libraries += [l2]
 
         analytics = Analytics(self._db)
@@ -123,14 +120,16 @@ class TestAnalytics(DatabaseTest):
 
     def test_collect_event(self):
         sitewide_integration, ignore = create(
-            self._db, ExternalIntegration,
+            self._db,
+            ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol=MOCK_PROTOCOL
+            protocol=MOCK_PROTOCOL,
         )
 
         library, ignore = create(self._db, Library, short_name="library")
         library_integration, ignore = create(
-            self._db, ExternalIntegration,
+            self._db,
+            ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol=MOCK_PROTOCOL,
         )
@@ -142,7 +141,9 @@ class TestAnalytics(DatabaseTest):
         sitewide_provider = analytics.sitewide_providers[0]
         library_provider = analytics.library_providers[library.id][0]
 
-        analytics.collect_event(self._default_library, lp, CirculationEvent.DISTRIBUTOR_CHECKIN, None)
+        analytics.collect_event(
+            self._default_library, lp, CirculationEvent.DISTRIBUTOR_CHECKIN, None
+        )
 
         # The sitewide provider was called.
         assert 1 == sitewide_provider.count
@@ -169,9 +170,10 @@ class TestAnalytics(DatabaseTest):
     def test_initialize(self):
 
         local_analytics = get_one(
-            self._db, ExternalIntegration,
+            self._db,
+            ExternalIntegration,
             protocol=LocalAnalyticsProvider.__module__,
-            goal=ExternalIntegration.ANALYTICS_GOAL
+            goal=ExternalIntegration.ANALYTICS_GOAL,
         )
 
         # There shouldn't exist a local analytics service.
@@ -189,9 +191,10 @@ class TestAnalytics(DatabaseTest):
         local_analytics = LocalAnalyticsProvider.initialize(self._db)
 
         local_analytics_2 = get_one(
-            self._db, ExternalIntegration,
+            self._db,
+            ExternalIntegration,
             protocol=LocalAnalyticsProvider.__module__,
-            goal=ExternalIntegration.ANALYTICS_GOAL
+            goal=ExternalIntegration.ANALYTICS_GOAL,
         )
 
         assert local_analytics_2.id == local_analytics.id

@@ -1,46 +1,37 @@
 """Test logic surrounding classification schemes."""
 
-from ...testing import DatabaseTest
 from collections import Counter
+
 from psycopg2.extras import NumericRange
-from ...model import (
-    Genre,
-    DataSource,
-    Subject,
-    Classification,
-)
 
 from ... import classifier
 from ...classifier import (
-        Classifier,
-        Lowercased,
-        WorkClassifier,
-        Lowercased,
-        fiction_genres,
-        nonfiction_genres,
-        GenreData,
-        FreeformAudienceClassifier,
-    )
-
+    Classifier,
+    FreeformAudienceClassifier,
+    GenreData,
+    Lowercased,
+    WorkClassifier,
+    fiction_genres,
+    nonfiction_genres,
+)
 from ...classifier.age import (
     AgeClassifier,
     GradeLevelClassifier,
     InterestLevelClassifier,
 )
 from ...classifier.ddc import DeweyDecimalClassifier as DDC
-from ...classifier.keyword import (
-    LCSHClassifier as LCSH,
-    FASTClassifier as FAST,
-)
+from ...classifier.keyword import FASTClassifier as FAST
+from ...classifier.keyword import LCSHClassifier as LCSH
 from ...classifier.lcc import LCCClassifier as LCC
 from ...classifier.simplified import SimplifiedGenreClassifier
+from ...model import Classification, DataSource, Genre, Subject
+from ...testing import DatabaseTest
 
 genres = dict()
 GenreData.populate(globals(), genres, fiction_genres, nonfiction_genres)
 
 
 class TestLowercased(object):
-
     def test_constructor(self):
 
         l = Lowercased("A string")
@@ -64,7 +55,6 @@ class TestLowercased(object):
 
 
 class TestGenreData(object):
-
     def test_fiction_default(self):
         # In general, genres are restricted to either fiction or
         # nonfiction.
@@ -73,21 +63,20 @@ class TestGenreData(object):
 
 
 class TestClassifier(object):
-
     def test_default_target_age_for_audience(self):
 
-        assert (
-            (None, None) ==
-            Classifier.default_target_age_for_audience(Classifier.AUDIENCE_CHILDREN))
-        assert (
-            (14, 17) ==
-            Classifier.default_target_age_for_audience(Classifier.AUDIENCE_YOUNG_ADULT))
-        assert (
-            (18, None) ==
-            Classifier.default_target_age_for_audience(Classifier.AUDIENCE_ADULT))
-        assert (
-            (18, None) ==
-            Classifier.default_target_age_for_audience(Classifier.AUDIENCE_ADULTS_ONLY))
+        assert (None, None) == Classifier.default_target_age_for_audience(
+            Classifier.AUDIENCE_CHILDREN
+        )
+        assert (14, 17) == Classifier.default_target_age_for_audience(
+            Classifier.AUDIENCE_YOUNG_ADULT
+        )
+        assert (18, None) == Classifier.default_target_age_for_audience(
+            Classifier.AUDIENCE_ADULT
+        )
+        assert (18, None) == Classifier.default_target_age_for_audience(
+            Classifier.AUDIENCE_ADULTS_ONLY
+        )
 
     def test_default_audience_for_target_age(self):
         def aud(low, high, expect):
@@ -119,6 +108,7 @@ class TestClassifier(object):
 
     def test_and_up(self):
         """Test the code that determines what "x and up" actually means."""
+
         def u(young, keyword):
             return Classifier.and_up(young, keyword)
 
@@ -132,7 +122,6 @@ class TestClassifier(object):
         assert 17 == u(14, "14+.")
         assert 18 == u(18, "18+")
 
-
     def test_scrub_identifier_can_override_name(self):
         """Test the ability of scrub_identifier to override the name
         of the subject for classification purposes.
@@ -140,12 +129,14 @@ class TestClassifier(object):
         This is used e.g. in the BISACClassifier to ensure that a known BISAC
         code is always mapped to its canonical name.
         """
+
         class SetsNameForOneIdentifier(Classifier):
             "A Classifier that insists on a certain name for one specific identifier"
+
             @classmethod
             def scrub_identifier(self, identifier):
-                if identifier == 'A':
-                    return ('A', 'Use this name!')
+                if identifier == "A":
+                    return ("A", "Use this name!")
                 else:
                     return identifier
 
@@ -172,7 +163,6 @@ class TestClassifier(object):
 
 
 class TestClassifierLookup(object):
-
     def test_lookup(self):
         assert DDC == Classifier.lookup(Classifier.DDC)
         assert LCC == Classifier.lookup(Classifier.LCC)
@@ -181,15 +171,14 @@ class TestClassifierLookup(object):
         assert GradeLevelClassifier == Classifier.lookup(Classifier.GRADE_LEVEL)
         assert AgeClassifier == Classifier.lookup(Classifier.AGE_RANGE)
         assert InterestLevelClassifier == Classifier.lookup(Classifier.INTEREST_LEVEL)
-        assert None == Classifier.lookup('no-such-key')
+        assert None == Classifier.lookup("no-such-key")
+
 
 class TestNestedSubgenres(object):
-
     def test_parents(self):
-        assert ([classifier.Romance] ==
-            list(classifier.Romantic_Suspense.parents))
+        assert [classifier.Romance] == list(classifier.Romantic_Suspense.parents)
 
-        #eq_([classifier.Crime_Thrillers_Mystery, classifier.Mystery],
+        # eq_([classifier.Crime_Thrillers_Mystery, classifier.Mystery],
         #    list(classifier.Police_Procedurals.parents))
 
     def test_self_and_subgenres(self):
@@ -198,13 +187,19 @@ class TestNestedSubgenres(object):
         #  - Historical Fantasy
         #  - Urban Fantasy
         assert (
-            set([classifier.Fantasy, classifier.Epic_Fantasy,
-                 classifier.Historical_Fantasy, classifier.Urban_Fantasy,
-             ]) ==
-            set(list(classifier.Fantasy.self_and_subgenres)))
+            set(
+                [
+                    classifier.Fantasy,
+                    classifier.Epic_Fantasy,
+                    classifier.Historical_Fantasy,
+                    classifier.Urban_Fantasy,
+                ]
+            )
+            == set(list(classifier.Fantasy.self_and_subgenres))
+        )
+
 
 class TestConsolidateWeights(object):
-
     def test_consolidate(self):
         # Asian History is a subcategory of the top-level category History.
         weights = dict()
@@ -258,37 +253,44 @@ class TestConsolidateWeights(object):
         assert 100 == w2[classifier.History]
         assert 1 == w2[classifier.Middle_East_History]
 
+
 class TestFreeformAudienceClassifier(DatabaseTest):
     def test_audience(self):
         def audience(aud):
             # The second param, `name`, is not used in the audience method
             return FreeformAudienceClassifier.audience(aud, None)
 
-        for val in ['children', 'pre-adolescent', 'beginning reader']:
+        for val in ["children", "pre-adolescent", "beginning reader"]:
             assert Classifier.AUDIENCE_CHILDREN == audience(val)
 
-        for val in ['young adult', 'ya', 'teenagers', 'adolescent', 'early adolescents']:
+        for val in [
+            "young adult",
+            "ya",
+            "teenagers",
+            "adolescent",
+            "early adolescents",
+        ]:
             assert Classifier.AUDIENCE_YOUNG_ADULT == audience(val)
 
-        assert audience('adult') == Classifier.AUDIENCE_ADULT
-        assert audience('adults only') == Classifier.AUDIENCE_ADULTS_ONLY
-        assert audience('all ages') == Classifier.AUDIENCE_ALL_AGES
-        assert audience('research') == Classifier.AUDIENCE_RESEARCH
+        assert audience("adult") == Classifier.AUDIENCE_ADULT
+        assert audience("adults only") == Classifier.AUDIENCE_ADULTS_ONLY
+        assert audience("all ages") == Classifier.AUDIENCE_ALL_AGES
+        assert audience("research") == Classifier.AUDIENCE_RESEARCH
 
-        assert audience('books for all ages') == None
+        assert audience("books for all ages") == None
 
     def test_target_age(self):
         def target_age(age):
             return FreeformAudienceClassifier.target_age(age, None)
 
-        assert target_age('beginning reader') == (5, 8)
-        assert target_age('pre-adolescent') == (9, 12)
-        assert target_age('all ages') == (Classifier.ALL_AGES_AGE_CUTOFF, None)
+        assert target_age("beginning reader") == (5, 8)
+        assert target_age("pre-adolescent") == (9, 12)
+        assert target_age("all ages") == (Classifier.ALL_AGES_AGE_CUTOFF, None)
 
-        assert target_age('babies') == (None, None)
+        assert target_age("babies") == (None, None)
+
 
 class TestWorkClassifier(DatabaseTest):
-
     def setup_method(self):
         super(TestWorkClassifier, self).setup_method()
         self.work = self._work(with_license_pool=True)
@@ -375,28 +377,28 @@ class TestWorkClassifier(DatabaseTest):
         # to 500.
         i = self.identifier
         source = DataSource.lookup(self._db, DataSource.OVERDRIVE)
-        for subject in ('Nonfiction', 'Science Fiction', 'History'):
+        for subject in ("Nonfiction", "Science Fiction", "History"):
             c = i.classify(source, Subject.OVERDRIVE, subject, weight=1000)
             self.classifier.add(c)
 
         # There's a little bit of evidence that it's a children's book,
         # but not enough to outweight the distributor's silence.
-        c2 = self.identifier.classify(
-            source, Subject.TAG, "Children's books", weight=1
-        )
+        c2 = self.identifier.classify(source, Subject.TAG, "Children's books", weight=1)
         self.classifier.add(c2)
         self.classifier.prepare_to_classify()
         # Overdrive classifications are regarded as 50 times more reliable
         # than their actual weight, as per Classification.scaled_weight
         assert 50000 == self.classifier.audience_weights[Classifier.AUDIENCE_ADULT]
 
-    def test_adults_only_indication_from_distributor_has_no_implication_for_audience(self):
+    def test_adults_only_indication_from_distributor_has_no_implication_for_audience(
+        self,
+    ):
         # Create some classifications that end up in
         # direct_from_license_source, one of which implies the book is
         # for adults only.
         i = self.identifier
         source = DataSource.lookup(self._db, DataSource.OVERDRIVE)
-        for subject in ('Erotic Literature', 'Science Fiction', 'History'):
+        for subject in ("Erotic Literature", "Science Fiction", "History"):
             c = i.classify(source, Subject.OVERDRIVE, subject, weight=1)
             self.classifier.add(c)
 
@@ -420,12 +422,16 @@ class TestWorkClassifier(DatabaseTest):
         # distributor.
         assert {} == self.classifier.audience_weights
 
-    def test_children_or_ya_signal_from_distributor_has_no_immediate_implication_for_audience(self):
+    def test_children_or_ya_signal_from_distributor_has_no_immediate_implication_for_audience(
+        self,
+    ):
         # This work has a classification direct from the distributor
         # that implies the book is for children, so no conclusions are
         # drawn in the prepare_to_classify() step.
         source = DataSource.lookup(self._db, DataSource.OVERDRIVE)
-        c = self.identifier.classify(source, Subject.OVERDRIVE, "Picture Books", weight=1000)
+        c = self.identifier.classify(
+            source, Subject.OVERDRIVE, "Picture Books", weight=1000
+        )
         self.classifier.prepare_to_classify()
         assert {} == self.classifier.audience_weights
 
@@ -444,10 +450,7 @@ class TestWorkClassifier(DatabaseTest):
 
         # (This classification has no bearing on audience and its
         # weight will be ignored.)
-        c2 = i.classify(
-            source, Subject.TAG, "Pets",
-            weight=1000
-        )
+        c2 = i.classify(source, Subject.TAG, "Pets", weight=1000)
         self.classifier.add(c2)
         self.classifier.prepare_to_classify
         genres, fiction, audience, target_age = self.classifier.classify()
@@ -481,9 +484,9 @@ class TestWorkClassifier(DatabaseTest):
         # The evidence that this is a children's book is strong but
         # not overwhelming.
         self.classifier.audience_weights = {
-            Classifier.AUDIENCE_ADULT : 10,
-            Classifier.AUDIENCE_ADULTS_ONLY : 1,
-            Classifier.AUDIENCE_CHILDREN : 22,
+            Classifier.AUDIENCE_ADULT: 10,
+            Classifier.AUDIENCE_ADULTS_ONLY: 1,
+            Classifier.AUDIENCE_CHILDREN: 22,
         }
         assert Classifier.AUDIENCE_ADULT == self.classifier.audience()
 
@@ -505,73 +508,70 @@ class TestWorkClassifier(DatabaseTest):
         # but it's more accurate than 'adult' and less likely to be
         # a costly mistake than 'children'.
         self.classifier.audience_weights = {
-            Classifier.AUDIENCE_ADULT : 9,
-            Classifier.AUDIENCE_ADULTS_ONLY : 0,
-            Classifier.AUDIENCE_CHILDREN : 10,
-            Classifier.AUDIENCE_YOUNG_ADULT : 9,
+            Classifier.AUDIENCE_ADULT: 9,
+            Classifier.AUDIENCE_ADULTS_ONLY: 0,
+            Classifier.AUDIENCE_CHILDREN: 10,
+            Classifier.AUDIENCE_YOUNG_ADULT: 9,
         }
         assert Classifier.AUDIENCE_YOUNG_ADULT == self.classifier.audience()
 
     def test_genre_may_restrict_audience(self):
 
         # The audience info says this is a YA book.
-        self.classifier.audience_weights = {
-            Classifier.AUDIENCE_YOUNG_ADULT : 1000
-        }
+        self.classifier.audience_weights = {Classifier.AUDIENCE_YOUNG_ADULT: 1000}
 
         # Without any genre information, it's classified as YA.
         assert Classifier.AUDIENCE_YOUNG_ADULT == self.classifier.audience()
 
         # But if it's Erotica, it is always classified as Adults Only.
-        genres = { classifier.Erotica : 50,
-                   classifier.Science_Fiction: 50}
+        genres = {classifier.Erotica: 50, classifier.Science_Fiction: 50}
         assert Classifier.AUDIENCE_ADULTS_ONLY == self.classifier.audience(genres)
-    
+
     def test_all_ages_audience(self):
         # If the All Ages weight is more than the total adult weight and
         # the total juvenile weight, then assign all ages as the audience.
         self.classifier.audience_weights = {
-            Classifier.AUDIENCE_ADULT : 50,
-            Classifier.AUDIENCE_ADULTS_ONLY : 30,
-            Classifier.AUDIENCE_ALL_AGES : 100,
-            Classifier.AUDIENCE_CHILDREN : 30,
-            Classifier.AUDIENCE_YOUNG_ADULT : 40,
+            Classifier.AUDIENCE_ADULT: 50,
+            Classifier.AUDIENCE_ADULTS_ONLY: 30,
+            Classifier.AUDIENCE_ALL_AGES: 100,
+            Classifier.AUDIENCE_CHILDREN: 30,
+            Classifier.AUDIENCE_YOUNG_ADULT: 40,
         }
         assert Classifier.AUDIENCE_ALL_AGES == self.classifier.audience()
 
         # This works even if 'Children' looks much better than 'Adult'.
         # 'All Ages' looks even better than that, so it wins.
         self.classifier.audience_weights = {
-            Classifier.AUDIENCE_ADULT : 1,
-            Classifier.AUDIENCE_ADULTS_ONLY : 0,
-            Classifier.AUDIENCE_ALL_AGES : 1000,
-            Classifier.AUDIENCE_CHILDREN : 30,
-            Classifier.AUDIENCE_YOUNG_ADULT : 29,
+            Classifier.AUDIENCE_ADULT: 1,
+            Classifier.AUDIENCE_ADULTS_ONLY: 0,
+            Classifier.AUDIENCE_ALL_AGES: 1000,
+            Classifier.AUDIENCE_CHILDREN: 30,
+            Classifier.AUDIENCE_YOUNG_ADULT: 29,
         }
         assert Classifier.AUDIENCE_ALL_AGES == self.classifier.audience()
 
         # If the All Ages weight is smaller than the total adult weight,
         # the audience is adults.
         self.classifier.audience_weights = {
-            Classifier.AUDIENCE_ADULT : 70,
-            Classifier.AUDIENCE_ADULTS_ONLY : 10,
-            Classifier.AUDIENCE_ALL_AGES : 79,
-            Classifier.AUDIENCE_CHILDREN : 30,
-            Classifier.AUDIENCE_YOUNG_ADULT : 40,
+            Classifier.AUDIENCE_ADULT: 70,
+            Classifier.AUDIENCE_ADULTS_ONLY: 10,
+            Classifier.AUDIENCE_ALL_AGES: 79,
+            Classifier.AUDIENCE_CHILDREN: 30,
+            Classifier.AUDIENCE_YOUNG_ADULT: 40,
         }
         assert Classifier.AUDIENCE_ADULT == self.classifier.audience()
-    
+
     def test_research_audience(self):
         # If the research weight is larger than the total adult weight +
         # all ages weight and larger than the total juvenile weight +
         # all ages weight, then assign research as the audience
         self.classifier.audience_weights = {
-            Classifier.AUDIENCE_ADULT : 50,
-            Classifier.AUDIENCE_ADULTS_ONLY : 30,
-            Classifier.AUDIENCE_ALL_AGES : 10,
-            Classifier.AUDIENCE_CHILDREN : 30,
-            Classifier.AUDIENCE_YOUNG_ADULT : 150,
-            Classifier.AUDIENCE_RESEARCH : 200,
+            Classifier.AUDIENCE_ADULT: 50,
+            Classifier.AUDIENCE_ADULTS_ONLY: 30,
+            Classifier.AUDIENCE_ALL_AGES: 10,
+            Classifier.AUDIENCE_CHILDREN: 30,
+            Classifier.AUDIENCE_YOUNG_ADULT: 150,
+            Classifier.AUDIENCE_RESEARCH: 200,
         }
         assert Classifier.AUDIENCE_RESEARCH == self.classifier.audience()
 
@@ -579,15 +579,14 @@ class TestWorkClassifier(DatabaseTest):
         # and all ages weight or total juvenile weight and all ages weight,
         # then we get those audience values instead.
         self.classifier.audience_weights = {
-            Classifier.AUDIENCE_ADULT : 80,
-            Classifier.AUDIENCE_ADULTS_ONLY : 10,
-            Classifier.AUDIENCE_ALL_AGES : 20,
-            Classifier.AUDIENCE_CHILDREN : 35,
-            Classifier.AUDIENCE_YOUNG_ADULT : 40,
-            Classifier.AUDIENCE_RESEARCH : 100,
+            Classifier.AUDIENCE_ADULT: 80,
+            Classifier.AUDIENCE_ADULTS_ONLY: 10,
+            Classifier.AUDIENCE_ALL_AGES: 20,
+            Classifier.AUDIENCE_CHILDREN: 35,
+            Classifier.AUDIENCE_YOUNG_ADULT: 40,
+            Classifier.AUDIENCE_RESEARCH: 100,
         }
         assert Classifier.AUDIENCE_ADULT == self.classifier.audience()
-
 
     def test_format_classification_from_license_source_is_used(self):
         # This book will be classified as a comic book, because
@@ -614,11 +613,11 @@ class TestWorkClassifier(DatabaseTest):
         # buckets, so minimal evidence in the 'children' bucket is
         # sufficient to be confident.
         self.classifier.audience_weights = {
-            Classifier.AUDIENCE_ADULT : 0,
-            Classifier.AUDIENCE_ADULTS_ONLY : 0,
-            Classifier.AUDIENCE_CHILDREN : 1,
-            Classifier.AUDIENCE_RESEARCH : 0,
-            Classifier.AUDIENCE_ALL_AGES : 0,
+            Classifier.AUDIENCE_ADULT: 0,
+            Classifier.AUDIENCE_ADULTS_ONLY: 0,
+            Classifier.AUDIENCE_CHILDREN: 1,
+            Classifier.AUDIENCE_RESEARCH: 0,
+            Classifier.AUDIENCE_ALL_AGES: 0,
         }
         assert Classifier.AUDIENCE_CHILDREN == self.classifier.audience()
 
@@ -627,11 +626,11 @@ class TestWorkClassifier(DatabaseTest):
         # majority, but it's high enough that we classify this work as
         # 'adults only' to be safe.
         self.classifier.audience_weights = {
-            Classifier.AUDIENCE_ADULT : 4,
-            Classifier.AUDIENCE_ADULTS_ONLY : 2,
-            Classifier.AUDIENCE_CHILDREN : 4,
-            Classifier.AUDIENCE_RESEARCH : 0,
-            Classifier.AUDIENCE_ALL_AGES : 0,
+            Classifier.AUDIENCE_ADULT: 4,
+            Classifier.AUDIENCE_ADULTS_ONLY: 2,
+            Classifier.AUDIENCE_CHILDREN: 4,
+            Classifier.AUDIENCE_RESEARCH: 0,
+            Classifier.AUDIENCE_ALL_AGES: 0,
         }
         assert Classifier.AUDIENCE_ADULTS_ONLY == self.classifier.audience()
 
@@ -659,9 +658,7 @@ class TestWorkClassifier(DatabaseTest):
         # We have a louder but less reliable signal that this is a
         # book for eleven-year-olds.
         oclc = DataSource.lookup(self._db, DataSource.OCLC)
-        c2 = self.identifier.classify(
-            oclc, Subject.TAG, "Grade 6", weight=3
-        )
+        c2 = self.identifier.classify(oclc, Subject.TAG, "Grade 6", weight=3)
         self.classifier.add(c2)
 
         # Both signals make it into the dataset, but they are weighted
@@ -675,9 +672,7 @@ class TestWorkClassifier(DatabaseTest):
 
         # And this affects the target age we choose.
         a = self.classifier.target_age(Classifier.AUDIENCE_CHILDREN)
-        assert (
-            (5,8) ==
-            self.classifier.target_age(Classifier.AUDIENCE_CHILDREN))
+        assert (5, 8) == self.classifier.target_age(Classifier.AUDIENCE_CHILDREN)
 
     def test_target_age_errs_towards_wider_span(self):
         i = self._identifier()
@@ -686,8 +681,9 @@ class TestWorkClassifier(DatabaseTest):
         c2 = i.classify(source, Subject.AGE_RANGE, "6-7", weight=1)
 
         overdrive_edition, lp = self._edition(
-            data_source_name=source.name, with_license_pool=True,
-            identifier_id=i.identifier
+            data_source_name=source.name,
+            with_license_pool=True,
+            identifier_id=i.identifier,
         )
         self.classifier.work = self._work(presentation_edition=overdrive_edition)
         for classification in i.classifications:
@@ -695,7 +691,7 @@ class TestWorkClassifier(DatabaseTest):
         genres, fiction, audience, target_age = self.classifier.classify()
 
         assert Classifier.AUDIENCE_CHILDREN == audience
-        assert (6,9) == target_age
+        assert (6, 9) == target_age
 
     def test_fiction_status_restricts_genre(self):
         # Classify a book to imply that it's 50% science fiction and
@@ -753,8 +749,7 @@ class TestWorkClassifier(DatabaseTest):
         # target age range of 9-12.
         i = self.identifier
         source = DataSource.lookup(self._db, DataSource.OVERDRIVE)
-        c = i.classify(source, Subject.OVERDRIVE, "Juvenile Fiction",
-                       weight=1)
+        c = i.classify(source, Subject.OVERDRIVE, "Juvenile Fiction", weight=1)
         self.classifier.add(c)
         self.classifier.prepare_to_classify()
         assert [9] == list(self.classifier.target_age_lower_weights.keys())
@@ -810,29 +805,43 @@ class TestWorkClassifier(DatabaseTest):
         assert 10 == target_age[1]
 
     def test_classify_uses_default_fiction_status(self):
-        genres, fiction, audience, target_age = self.classifier.classify(default_fiction=True)
+        genres, fiction, audience, target_age = self.classifier.classify(
+            default_fiction=True
+        )
         assert True == fiction
-        genres, fiction, audience, target_age = self.classifier.classify(default_fiction=False)
+        genres, fiction, audience, target_age = self.classifier.classify(
+            default_fiction=False
+        )
         assert False == fiction
-        genres, fiction, audience, target_age = self.classifier.classify(default_fiction=None)
+        genres, fiction, audience, target_age = self.classifier.classify(
+            default_fiction=None
+        )
         assert None == fiction
 
         # The default isn't used if there's any information about the fiction status.
         self.classifier.fiction_weights[False] = 1
-        genres, fiction, audience, target_age = self.classifier.classify(default_fiction=None)
+        genres, fiction, audience, target_age = self.classifier.classify(
+            default_fiction=None
+        )
         assert False == fiction
 
     def test_classify_uses_default_audience(self):
         genres, fiction, audience, target_age = self.classifier.classify()
         assert None == audience
-        genres, fiction, audience, target_age = self.classifier.classify(default_audience=Classifier.AUDIENCE_ADULT)
+        genres, fiction, audience, target_age = self.classifier.classify(
+            default_audience=Classifier.AUDIENCE_ADULT
+        )
         assert Classifier.AUDIENCE_ADULT == audience
-        genres, fiction, audience, target_age = self.classifier.classify(default_audience=Classifier.AUDIENCE_CHILDREN)
+        genres, fiction, audience, target_age = self.classifier.classify(
+            default_audience=Classifier.AUDIENCE_CHILDREN
+        )
         assert Classifier.AUDIENCE_CHILDREN == audience
 
         # The default isn't used if there's any information about the audience.
         self.classifier.audience_weights[Classifier.AUDIENCE_ADULT] = 1
-        genres, fiction, audience, target_age = self.classifier.classify(default_audience=None)
+        genres, fiction, audience, target_age = self.classifier.classify(
+            default_audience=None
+        )
         assert Classifier.AUDIENCE_ADULT == audience
 
     def test_classify(self):
@@ -840,7 +849,9 @@ class TestWorkClassifier(DatabaseTest):
         # do an overall test to verify that classify() returns a 4-tuple
         # (genres, fiction, audience, target_age)
 
-        self.work.presentation_edition.title = "Science Fiction: A Comprehensive History"
+        self.work.presentation_edition.title = (
+            "Science Fiction: A Comprehensive History"
+        )
         i = self.identifier
         source = DataSource.lookup(self._db, DataSource.OVERDRIVE)
         c1 = i.classify(source, Subject.OVERDRIVE, "History", weight=10)
@@ -859,7 +870,7 @@ class TestWorkClassifier(DatabaseTest):
         assert "History" == list(genres.keys())[0].name
         assert False == fiction
         assert Classifier.AUDIENCE_YOUNG_ADULT == audience
-        assert (12,17) == target_age
+        assert (12, 17) == target_age
 
     def test_top_tier_values(self):
         c = Counter()
@@ -868,9 +879,9 @@ class TestWorkClassifier(DatabaseTest):
         c = Counter(["a"])
         assert set(["a"]) == WorkClassifier.top_tier_values(c)
 
-        c = Counter([1,1,1,2,2,3,4,4,4])
-        assert set([1,4]) == WorkClassifier.top_tier_values(c)
-        c = Counter([1,1,1,2])
+        c = Counter([1, 1, 1, 2, 2, 3, 4, 4, 4])
+        assert set([1, 4]) == WorkClassifier.top_tier_values(c)
+        c = Counter([1, 1, 1, 2])
         assert set([1]) == WorkClassifier.top_tier_values(c)
 
     def test_duplicate_classification_ignored(self):
@@ -908,11 +919,14 @@ class TestWorkClassifier(DatabaseTest):
         source = DataSource.lookup(self._db, DataSource.AXIS_360)
         staff_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
         classification1 = self._classification(
-            identifier=self.identifier, subject=subject1,
-            data_source=source, weight=10)
+            identifier=self.identifier, subject=subject1, data_source=source, weight=10
+        )
         classification2 = self._classification(
-            identifier=self.identifier, subject=subject2,
-            data_source=staff_source, weight=1)
+            identifier=self.identifier,
+            subject=subject2,
+            data_source=staff_source,
+            weight=1,
+        )
         self.classifier.add(classification1)
         self.classifier.add(classification2)
         (genre_weights, fiction, audience, target_age) = self.classifier.classify()
@@ -925,15 +939,17 @@ class TestWorkClassifier(DatabaseTest):
         subject1 = self._subject(type="type1", identifier="subject1")
         subject1.genre = genre1
         subject2 = self._subject(
-            type=Subject.SIMPLIFIED_GENRE,
-            identifier=SimplifiedGenreClassifier.NONE
+            type=Subject.SIMPLIFIED_GENRE, identifier=SimplifiedGenreClassifier.NONE
         )
         classification1 = self._classification(
-            identifier=self.identifier, subject=subject1,
-            data_source=source, weight=10)
+            identifier=self.identifier, subject=subject1, data_source=source, weight=10
+        )
         classification2 = self._classification(
-            identifier=self.identifier, subject=subject2,
-            data_source=staff_source, weight=1)
+            identifier=self.identifier,
+            subject=subject2,
+            data_source=staff_source,
+            weight=1,
+        )
         self.classifier.add(classification1)
         self.classifier.add(classification2)
         (genre_weights, fiction, audience, target_age) = self.classifier.classify()
@@ -947,18 +963,20 @@ class TestWorkClassifier(DatabaseTest):
         subject2 = self._subject(type="type2", identifier="Psychology")
         subject2.fiction = False
         subject3 = self._subject(
-            type=Subject.SIMPLIFIED_FICTION_STATUS,
-            identifier="Fiction"
+            type=Subject.SIMPLIFIED_FICTION_STATUS, identifier="Fiction"
         )
         classification1 = self._classification(
-            identifier=self.identifier, subject=subject1,
-            data_source=source, weight=10)
+            identifier=self.identifier, subject=subject1, data_source=source, weight=10
+        )
         classification2 = self._classification(
-            identifier=self.identifier, subject=subject2,
-            data_source=source, weight=10)
+            identifier=self.identifier, subject=subject2, data_source=source, weight=10
+        )
         classification3 = self._classification(
-            identifier=self.identifier, subject=subject3,
-            data_source=staff_source, weight=1)
+            identifier=self.identifier,
+            subject=subject3,
+            data_source=staff_source,
+            weight=1,
+        )
         self.classifier.add(classification1)
         self.classifier.add(classification2)
         self.classifier.add(classification3)
@@ -973,19 +991,25 @@ class TestWorkClassifier(DatabaseTest):
         subject1.audience = "Adult"
         subject2 = self._subject(type="type2", identifier="subject2")
         subject2.audience = "Adult"
-        subject3 = self._subject(
-            type=Subject.FREEFORM_AUDIENCE,
-            identifier="Children"
-        )
+        subject3 = self._subject(type=Subject.FREEFORM_AUDIENCE, identifier="Children")
         classification1 = self._classification(
-            identifier=pool.identifier, subject=subject1,
-            data_source=license_source, weight=10)
+            identifier=pool.identifier,
+            subject=subject1,
+            data_source=license_source,
+            weight=10,
+        )
         classification2 = self._classification(
-            identifier=pool.identifier, subject=subject2,
-            data_source=license_source, weight=10)
+            identifier=pool.identifier,
+            subject=subject2,
+            data_source=license_source,
+            weight=10,
+        )
         classification3 = self._classification(
-            identifier=pool.identifier, subject=subject3,
-            data_source=staff_source, weight=1)
+            identifier=pool.identifier,
+            subject=subject3,
+            data_source=staff_source,
+            weight=1,
+        )
         self.classifier.add(classification1)
         self.classifier.add(classification2)
         self.classifier.add(classification3)
@@ -1001,19 +1025,19 @@ class TestWorkClassifier(DatabaseTest):
         subject2 = self._subject(type="type2", identifier="subject2")
         subject2.target_age = NumericRange(6, 8, "[)")
         subject2.weight_as_indicator_of_target_age = 1
-        subject3 = self._subject(
-            type=Subject.AGE_RANGE,
-            identifier="10-13"
-        )
+        subject3 = self._subject(type=Subject.AGE_RANGE, identifier="10-13")
         classification1 = self._classification(
-            identifier=self.identifier, subject=subject1,
-            data_source=source, weight=10)
+            identifier=self.identifier, subject=subject1, data_source=source, weight=10
+        )
         classification2 = self._classification(
-            identifier=self.identifier, subject=subject2,
-            data_source=source, weight=10)
+            identifier=self.identifier, subject=subject2, data_source=source, weight=10
+        )
         classification3 = self._classification(
-            identifier=self.identifier, subject=subject3,
-            data_source=staff_source, weight=1)
+            identifier=self.identifier,
+            subject=subject3,
+            data_source=staff_source,
+            weight=1,
+        )
         self.classifier.add(classification1)
         self.classifier.add(classification2)
         self.classifier.add(classification3)
@@ -1022,14 +1046,14 @@ class TestWorkClassifier(DatabaseTest):
 
     def test_not_inclusive_target_age(self):
         staff_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
-        subject = self._subject(
-            type=Subject.AGE_RANGE,
-            identifier="10-12"
-        )
+        subject = self._subject(type=Subject.AGE_RANGE, identifier="10-12")
         subject.target_age = NumericRange(9, 13, "()")
         classification = self._classification(
-            identifier=self.identifier, subject=subject,
-            data_source=staff_source, weight=1)
+            identifier=self.identifier,
+            subject=subject,
+            data_source=staff_source,
+            weight=1,
+        )
         self.classifier.add(classification)
         (genre_weights, fiction, audience, target_age) = self.classifier.classify()
         assert (10, 12) == target_age

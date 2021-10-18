@@ -1,12 +1,13 @@
 # encoding: utf-8
 import pytest
-from ...testing import DatabaseTest
+
 from ...model.configuration import ConfigurationSetting
 from ...model.hasfulltablecache import HasFullTableCache
 from ...model.library import Library
+from ...testing import DatabaseTest
+
 
 class TestLibrary(DatabaseTest):
-
     def test_library_registry_short_name(self):
         library = self._default_library
 
@@ -17,6 +18,7 @@ class TestLibrary(DatabaseTest):
         # Short name cannot contain a pipe character.
         def set_to_pipe():
             library.library_registry_short_name = "foo|bar"
+
         pytest.raises(ValueError, set_to_pipe)
 
         # You can set the short name to None. This isn't
@@ -68,8 +70,10 @@ class TestLibrary(DatabaseTest):
         assert False == l2.is_default
         with pytest.raises(ValueError) as excinfo:
             l1.is_default = False
-        assert "You cannot stop a library from being the default library; you must designate a different library as the default."  \
-          in str(excinfo.value)
+        assert (
+            "You cannot stop a library from being the default library; you must designate a different library as the default."
+            in str(excinfo.value)
+        )
 
     def test_has_root_lanes(self):
         # A library has root lanes if any of its lanes are the root for any
@@ -86,7 +90,7 @@ class TestLibrary(DatabaseTest):
         # (This is because there's a listener that resets
         # Library._has_default_lane_cache whenever lane configuration
         # changes.)
-        lane.root_for_patron_type = ["1","2"]
+        lane.root_for_patron_type = ["1", "2"]
         self._db.flush()
         assert True == library.has_root_lanes
 
@@ -101,8 +105,7 @@ class TestLibrary(DatabaseTest):
         self._default_collection.parent_id = parent.id
 
         assert [self._default_collection] == library.collections
-        assert (set([self._default_collection, parent]) ==
-            set(library.all_collections))
+        assert set([self._default_collection, parent]) == set(library.all_collections)
 
     def test_estimated_holdings_by_language(self):
         library = self._default_library
@@ -125,15 +128,13 @@ class TestLibrary(DatabaseTest):
         assert dict(eng=1, tgl=1) == estimate
 
         # If we disqualify open-access works, it only counts the Tagalog.
-        estimate = library.estimated_holdings_by_language(
-            include_open_access=False)
+        estimate = library.estimated_holdings_by_language(include_open_access=False)
         assert dict(tgl=1) == estimate
 
         # If we remove the default collection from the default library,
         # it loses all its works.
         self._default_library.collections = []
-        estimate = library.estimated_holdings_by_language(
-            include_open_access=False)
+        estimate = library.estimated_holdings_by_language(include_open_access=False)
         assert dict() == estimate
 
     def test_explain(self):
@@ -147,9 +148,7 @@ class TestLibrary(DatabaseTest):
         library.library_registry_short_name = "SHORT"
         library.library_registry_shared_secret = "secret"
 
-        integration = self._external_integration(
-            "protocol", "goal"
-        )
+        integration = self._external_integration("protocol", "goal")
         integration.url = "http://url/"
         integration.username = "someuser"
         integration.password = "somepass"
@@ -167,7 +166,8 @@ class TestLibrary(DatabaseTest):
 
         library.integrations.append(integration)
 
-        expect = """Library UUID: "uuid"
+        expect = (
+            """Library UUID: "uuid"
 Name: "The Library"
 Short name: "Short"
 Short name (for library registry): "SHORT"
@@ -180,7 +180,9 @@ library-specific='value for library1' (applies only to The Library)
 somesetting='somevalue'
 url='http://url/'
 username='someuser'
-""" % integration.id
+"""
+            % integration.id
+        )
         actual = library.explain()
         assert expect == "\n".join(actual)
 

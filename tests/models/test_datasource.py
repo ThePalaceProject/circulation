@@ -1,13 +1,14 @@
 # encoding: utf-8
 import pytest
 from sqlalchemy.orm.exc import NoResultFound
-from ...testing import DatabaseTest
+
 from ...model.datasource import DataSource
 from ...model.hasfulltablecache import HasFullTableCache
 from ...model.identifier import Identifier
+from ...testing import DatabaseTest
+
 
 class TestDataSource(DatabaseTest):
-
     def test_lookup(self):
         key = DataSource.GUTENBERG
 
@@ -49,8 +50,7 @@ class TestDataSource(DatabaseTest):
         assert DataSource.BIBLIOTHECA != "3M"
 
     def test_lookup_returns_none_for_nonexistent_source(self):
-        assert None == DataSource.lookup(
-            self._db, "No such data source " + self._str)
+        assert None == DataSource.lookup(self._db, "No such data source " + self._str)
 
     def test_lookup_with_autocreate(self):
         name = "Brand new data source " + self._str
@@ -79,11 +79,11 @@ class TestDataSource(DatabaseTest):
         assert DataSource.OVERDRIVE == source.name
 
     def test_license_source_for_string(self):
-        source = DataSource.license_source_for(
-            self._db, Identifier.THREEM_ID)
+        source = DataSource.license_source_for(self._db, Identifier.THREEM_ID)
         assert DataSource.THREEM == source.name
 
     def test_license_source_fails_if_identifier_type_does_not_provide_licenses(self):
         identifier = self._identifier(DataSource.MANUAL)
         pytest.raises(
-            NoResultFound, DataSource.license_source_for, self._db, identifier)
+            NoResultFound, DataSource.license_source_for, self._db, identifier
+        )

@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from enum import Enum
 
+
 class Visitor(metaclass=ABCMeta):
     """Interface for visitors walking through abstract syntax trees (AST)."""
 

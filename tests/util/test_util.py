@@ -1,35 +1,30 @@
 # encoding: utf-8
 """Test functionality of util/ that doesn't have its own module."""
 from collections import defaultdict
+
 from money import Money
 
-from ...model import (
-    Identifier,
-    Edition
-)
-
+from ...model import Edition, Identifier
 from ...testing import DatabaseTest
-
 from ...util import (
     Bigrams,
-    english_bigrams,
     MetadataSimilarity,
     MoneyUtility,
     TitleProcessor,
+    english_bigrams,
     fast_query_count,
-    slugify
+    slugify,
 )
 from ...util.median import median
 
-class DummyAuthor(object):
 
+class DummyAuthor(object):
     def __init__(self, name, aliases=[]):
         self.name = name
         self.aliases = aliases
 
 
 class TestMetadataSimilarity(object):
-
     def test_identity(self):
         """Verify that we ignore the order of words in titles,
         as well as non-alphanumeric characters."""
@@ -60,49 +55,50 @@ class TestMetadataSimilarity(object):
         # together, so OCLC maps them to plenty of the same
         # titles. They are also frequently included with other stories,
         # which adds random junk to the titles.
-        abroad = ["Tom Sawyer abroad",
-                  "The adventures of Tom Sawyer, Tom Sawyer abroad [and] Tom Sawyer, detective",
-                  "Tom Sawyer abroad",
-                  "Tom Sawyer abroad",
-                  "Tom Sawyer Abroad",
-                  "Tom Sawyer Abroad",
-                  "Tom Sawyer Abroad",
-                  "Tom Sawyer abroad : and other stories",
-                  "Tom Sawyer abroad Tom Sawyer, detective : and other stories, etc. etc.",
-                  "Tom Sawyer abroad",
-                  "Tom Sawyer abroad",
-                  "Tom Sawyer abroad",
-                  "Tom Sawyer abroad and other stories",
-                  "Tom Sawyer abroad and other stories",
-                  "Tom Sawyer abroad and the American claimant,",
-                  "Tom Sawyer abroad and the American claimant",
-                  "Tom Sawyer abroad : and The American claimant: novels.",
-                  "Tom Sawyer abroad : and The American claimant: novels.",
-                  "Tom Sawyer Abroad - Tom Sawyer, Detective",
-              ]
+        abroad = [
+            "Tom Sawyer abroad",
+            "The adventures of Tom Sawyer, Tom Sawyer abroad [and] Tom Sawyer, detective",
+            "Tom Sawyer abroad",
+            "Tom Sawyer abroad",
+            "Tom Sawyer Abroad",
+            "Tom Sawyer Abroad",
+            "Tom Sawyer Abroad",
+            "Tom Sawyer abroad : and other stories",
+            "Tom Sawyer abroad Tom Sawyer, detective : and other stories, etc. etc.",
+            "Tom Sawyer abroad",
+            "Tom Sawyer abroad",
+            "Tom Sawyer abroad",
+            "Tom Sawyer abroad and other stories",
+            "Tom Sawyer abroad and other stories",
+            "Tom Sawyer abroad and the American claimant,",
+            "Tom Sawyer abroad and the American claimant",
+            "Tom Sawyer abroad : and The American claimant: novels.",
+            "Tom Sawyer abroad : and The American claimant: novels.",
+            "Tom Sawyer Abroad - Tom Sawyer, Detective",
+        ]
 
-        detective = ["Tom Sawyer, Detective",
-                     "Tom Sawyer Abroad - Tom Sawyer, Detective",
-                     "Tom Sawyer Detective : As Told by Huck Finn : And Other Tales.",
-                     "Tom Sawyer, Detective",
-                     "Tom Sawyer, Detective.",
-                     "The adventures of Tom Sawyer, Tom Sawyer abroad [and] Tom Sawyer, detective",
-                     "Tom Sawyer detective : and other stories every child should know",
-                     "Tom Sawyer, detective : as told by Huck Finn and other tales",
-                     "Tom Sawyer, detective, as told by Huck Finn and other tales...",
-                     "The adventures of Tom Sawyer, Tom Sawyer abroad [and] Tom Sawyer, detective,",
-                     "Tom Sawyer abroad, Tom Sawyer, detective, and other stories",
-                     "Tom Sawyer, detective",
-                     "Tom Sawyer, detective",
-                     "Tom Sawyer, detective",
-                     "Tom Sawyer, detective",
-                     "Tom Sawyer, detective",
-                     "Tom Sawyer, detective",
-                     "Tom Sawyer abroad Tom Sawyer detective",
-                     "Tom Sawyer, detective : as told by Huck Finn",
-                     "Tom Sawyer : detective",
-                 ]
-
+        detective = [
+            "Tom Sawyer, Detective",
+            "Tom Sawyer Abroad - Tom Sawyer, Detective",
+            "Tom Sawyer Detective : As Told by Huck Finn : And Other Tales.",
+            "Tom Sawyer, Detective",
+            "Tom Sawyer, Detective.",
+            "The adventures of Tom Sawyer, Tom Sawyer abroad [and] Tom Sawyer, detective",
+            "Tom Sawyer detective : and other stories every child should know",
+            "Tom Sawyer, detective : as told by Huck Finn and other tales",
+            "Tom Sawyer, detective, as told by Huck Finn and other tales...",
+            "The adventures of Tom Sawyer, Tom Sawyer abroad [and] Tom Sawyer, detective,",
+            "Tom Sawyer abroad, Tom Sawyer, detective, and other stories",
+            "Tom Sawyer, detective",
+            "Tom Sawyer, detective",
+            "Tom Sawyer, detective",
+            "Tom Sawyer, detective",
+            "Tom Sawyer, detective",
+            "Tom Sawyer, detective",
+            "Tom Sawyer abroad Tom Sawyer detective",
+            "Tom Sawyer, detective : as told by Huck Finn",
+            "Tom Sawyer : detective",
+        ]
 
         # The histogram distance of the two sets of titles is not
         # huge, but it is significant.
@@ -110,17 +106,16 @@ class TestMetadataSimilarity(object):
 
         # The histogram distance between two lists is symmetrical, within
         # a small range of error for floating-point rounding.
-        difference = d - MetadataSimilarity.histogram_distance(
-            detective, abroad)
+        difference = d - MetadataSimilarity.histogram_distance(detective, abroad)
         assert abs(difference) < 0.000001
 
         # The histogram distance between the Gutenberg title of a book
         # and the set of all OCLC Classify titles for that book tends
         # to be fairly small.
-        ab_ab = MetadataSimilarity.histogram_distance(
-            ["Tom Sawyer Abroad"], abroad)
+        ab_ab = MetadataSimilarity.histogram_distance(["Tom Sawyer Abroad"], abroad)
         de_de = MetadataSimilarity.histogram_distance(
-            ["Tom Sawyer, Detective"], detective)
+            ["Tom Sawyer, Detective"], detective
+        )
 
         assert ab_ab < 0.5
         assert de_de < 0.5
@@ -128,10 +123,8 @@ class TestMetadataSimilarity(object):
         # The histogram distance between the Gutenberg title of a book
         # and the set of all OCLC Classify titles for that book tends
         # to be larger.
-        ab_de = MetadataSimilarity.histogram_distance(
-            ["Tom Sawyer Abroad"], detective)
-        de_ab = MetadataSimilarity.histogram_distance(
-            ["Tom Sawyer, Detective"], abroad)
+        ab_de = MetadataSimilarity.histogram_distance(["Tom Sawyer Abroad"], detective)
+        de_ab = MetadataSimilarity.histogram_distance(["Tom Sawyer, Detective"], abroad)
 
         assert ab_de > 0.5
         assert de_ab > 0.5
@@ -146,8 +139,9 @@ class TestMetadataSimilarity(object):
         stopwords = set(["the", "a", "an"])
         for other_title in other_titles:
             distance = MetadataSimilarity.histogram_distance(
-                [title], [other_title], stopwords)
-            similarity = 1-distance
+                [title], [other_title], stopwords
+            )
+            similarity = 1 - distance
             for confidence_level in 1, 0.8, 0.5, 0.25, 0:
                 if similarity >= confidence_level:
                     matches[confidence_level].append(other_title)
@@ -168,7 +162,6 @@ class TestMetadataSimilarity(object):
         # are abridged versions of Moby Dick.
         moby = self._arrange_by_confidence_level(
             "Moby Dick",
-
             "Moby Dick",
             "Moby-Dick",
             "Moby Dick Selections",
@@ -188,26 +181,26 @@ class TestMetadataSimilarity(object):
         # "Moby Dick" according to the histogram distance algorithm.
         assert ["Moby Dick", "Moby-Dick"] == sorted(moby[1])
         assert [] == sorted(moby[0.8])
-        assert (['Moby Dick Selections',
-             'Moby Dick, or, The whale',
-             'Moby Dick; notes',
-             'Moby Dick; or, The whale',
-             ] ==
-            sorted(moby[0.5]))
-        assert (['Moby-Dick : an authoritative text, reviews and letters'] ==
-            sorted(moby[0.25]))
+        assert [
+            "Moby Dick Selections",
+            "Moby Dick, or, The whale",
+            "Moby Dick; notes",
+            "Moby Dick; or, The whale",
+        ] == sorted(moby[0.5])
+        assert ["Moby-Dick : an authoritative text, reviews and letters"] == sorted(
+            moby[0.25]
+        )
 
         # Similarly for an edition of Huckleberry Finn with an
         # unusually long name.
         huck = self._arrange_by_confidence_level(
             "The Adventures of Huckleberry Finn (Tom Sawyer's Comrade)",
-
             "Adventures of Huckleberry Finn",
             "The Adventures of Huckleberry Finn",
             'Adventures of Huckleberry Finn : "Tom Sawyer\'s comrade", scene: the Mississippi Valley, time: early nineteenth century',
             "The adventures of Huckleberry Finn : (Tom Sawyer's Comrade) : Scene: The Mississippi Valley, Time: Firty to Fifty Years Ago : In 2 Volumes : Vol. 1-2.",
             "The adventures of Tom Sawyer",
-            )
+        )
 
         # Note that from a word frequency perspective, "The adventures
         # of Tom Sawyer" is just as likely as "The adventures of
@@ -215,22 +208,19 @@ class TestMetadataSimilarity(object):
         # be cleaned up later.
         assert [] == huck[1]
         assert [] == huck[0.8]
-        assert ([
-            'Adventures of Huckleberry Finn',
+        assert [
+            "Adventures of Huckleberry Finn",
             'Adventures of Huckleberry Finn : "Tom Sawyer\'s comrade", scene: the Mississippi Valley, time: early nineteenth century',
-            'The Adventures of Huckleberry Finn',
-            'The adventures of Tom Sawyer'
-        ] ==
-            sorted(huck[0.5]))
-        assert ([
+            "The Adventures of Huckleberry Finn",
+            "The adventures of Tom Sawyer",
+        ] == sorted(huck[0.5])
+        assert [
             "The adventures of Huckleberry Finn : (Tom Sawyer's Comrade) : Scene: The Mississippi Valley, Time: Firty to Fifty Years Ago : In 2 Volumes : Vol. 1-2."
-        ] ==
-            huck[0.25])
+        ] == huck[0.25]
 
         # An edition of Huckleberry Finn with a different title.
         huck2 = self._arrange_by_confidence_level(
             "Adventures of Huckleberry Finn",
-
             "The adventures of Huckleberry Finn",
             "Huckleberry Finn",
             "Mississippi writings",
@@ -245,37 +235,35 @@ class TestMetadataSimilarity(object):
             "Tom Sawyer. Huckleberry Finn.",
         )
 
-        assert ['The adventures of Huckleberry Finn'] == huck2[1]
+        assert ["The adventures of Huckleberry Finn"] == huck2[1]
 
         assert [] == huck2[0.8]
 
-        assert ([
-            'Huckleberry Finn',
-            'The adventures of Tom Sawyer',
-            'The adventures of Tom Sawyer and the adventures of Huckleberry Finn',
-            'The annotated Huckleberry Finn : Adventures of Huckleberry Finn',
+        assert [
+            "Huckleberry Finn",
+            "The adventures of Tom Sawyer",
+            "The adventures of Tom Sawyer and the adventures of Huckleberry Finn",
+            "The annotated Huckleberry Finn : Adventures of Huckleberry Finn",
             "The annotated Huckleberry Finn : Adventures of Huckleberry Finn (Tom Sawyer's comrade)",
-            'Tom Sawyer. Huckleberry Finn.',
-        ] ==
-            sorted(huck2[0.5]))
+            "Tom Sawyer. Huckleberry Finn.",
+        ] == sorted(huck2[0.5])
 
-        assert ([
-            'Adventures of Huckleberry Finn : a case study in critical controversy',
-            'Adventures of Huckleberry Finn : an authoritative text, contexts and sources, criticism', 'Tom Sawyer and Huckleberry Finn'
-        ] ==
-            sorted(huck2[0.25]))
+        assert [
+            "Adventures of Huckleberry Finn : a case study in critical controversy",
+            "Adventures of Huckleberry Finn : an authoritative text, contexts and sources, criticism",
+            "Tom Sawyer and Huckleberry Finn",
+        ] == sorted(huck2[0.25])
 
-        assert (['Mark Twain : four complete novels.', 'Mississippi writings'] ==
-            sorted(huck2[0]))
-
+        assert ["Mark Twain : four complete novels.", "Mississippi writings"] == sorted(
+            huck2[0]
+        )
 
         alice = self._arrange_by_confidence_level(
             "Alice's Adventures in Wonderland",
-
             'The nursery "Alice"',
-            'Alice in Wonderland',
-            'Alice in Zombieland',
-            'Through the looking-glass and what Alice found there',
+            "Alice in Wonderland",
+            "Alice in Zombieland",
+            "Through the looking-glass and what Alice found there",
             "Alice's adventures under ground",
             "Alice in Wonderland &amp; Through the looking glass",
             "Michael Foreman's Alice's adventures in Wonderland",
@@ -283,26 +271,28 @@ class TestMetadataSimilarity(object):
         )
 
         assert [] == alice[0.8]
-        assert (['Alice in Wonderland',
-             "Alice in Wonderland : comprising the two books, Alice's adventures in Wonderland and Through the looking-glass",
-             "Alice's adventures under ground",
-             "Michael Foreman's Alice's adventures in Wonderland"] ==
-            sorted(alice[0.5]))
+        assert [
+            "Alice in Wonderland",
+            "Alice in Wonderland : comprising the two books, Alice's adventures in Wonderland and Through the looking-glass",
+            "Alice's adventures under ground",
+            "Michael Foreman's Alice's adventures in Wonderland",
+        ] == sorted(alice[0.5])
 
-        assert (['Alice in Wonderland &amp; Through the looking glass',
-             "Alice in Zombieland"] ==
-            sorted(alice[0.25]))
+        assert [
+            "Alice in Wonderland &amp; Through the looking glass",
+            "Alice in Zombieland",
+        ] == sorted(alice[0.25])
 
-        assert (['The nursery "Alice"',
-             'Through the looking-glass and what Alice found there'] ==
-            sorted(alice[0]))
+        assert [
+            'The nursery "Alice"',
+            "Through the looking-glass and what Alice found there",
+        ] == sorted(alice[0])
 
     def test_author_similarity(self):
         assert 1 == MetadataSimilarity.author_similarity([], [])
 
 
 class TestTitleProcessor(object):
-
     def test_title_processor(self):
         p = TitleProcessor.sort_title_for
         assert None == p(None)
@@ -315,25 +305,24 @@ class TestTitleProcessor(object):
     def test_extract_subtitle(self):
         p = TitleProcessor.extract_subtitle
 
-        core_title = 'Vampire kisses'
-        full_title = 'Vampire kisses: blood relatives. Volume 1'
-        assert 'blood relatives. Volume 1' == p(core_title, full_title)
+        core_title = "Vampire kisses"
+        full_title = "Vampire kisses: blood relatives. Volume 1"
+        assert "blood relatives. Volume 1" == p(core_title, full_title)
 
-        core_title = 'Manufacturing Consent'
-        full_title = 'Manufacturing Consent. The Political Economy of the Mass Media'
-        assert 'The Political Economy of the Mass Media' == p(core_title, full_title)
+        core_title = "Manufacturing Consent"
+        full_title = "Manufacturing Consent. The Political Economy of the Mass Media"
+        assert "The Political Economy of the Mass Media" == p(core_title, full_title)
 
-        core_title = 'Harry Potter and the Chamber of Secrets'
-        full_title = 'Harry Potter and the Chamber of Secrets'
+        core_title = "Harry Potter and the Chamber of Secrets"
+        full_title = "Harry Potter and the Chamber of Secrets"
         assert None == p(core_title, full_title)
 
-        core_title = 'Pluto: A Wonder Story'
-        full_title = 'Pluto: A Wonder Story: '
+        core_title = "Pluto: A Wonder Story"
+        full_title = "Pluto: A Wonder Story: "
         assert None == p(core_title, full_title)
 
 
 class TestEnglishDetector(object):
-
     def test_proportional_bigram_difference(self):
         dutch_text = "Op haar nieuwe school leert de 17-jarige Bella (ik-figuur) een mysterieuze jongen kennen op wie ze ogenblikkelijk verliefd wordt. Hij blijkt een groot geheim te hebben. Vanaf ca. 14 jaar."
         dutch = Bigrams.from_string(dutch_text)
@@ -350,21 +339,32 @@ class TestEnglishDetector(object):
         # A longer text is a better fit.
         long_english_text = "U.S. Marshal Jake Taylor has seen plenty of action during his years in law enforcement. But he'd rather go back to Iraq than face his next assignment: protection detail for federal judge Liz Michaels. His feelings toward Liz haven't warmed in the five years since she lost her husband—and Jake's best friend—to possible suicide. How can Jake be expected to care for the coldhearted workaholic who drove his friend to despair?As the danger mounts and Jake gets to know Liz better, his feelings slowly start to change. When it becomes clear that an unknown enemy may want her dead, the stakes are raised. Because now both her life—and his heart—are in mortal danger.Full of the suspense and romance Irene Hannon's fans have come to love, Fatal Judgment is a thrilling story that will keep readers turning the pages late into the night."
         long_english = Bigrams.from_string(long_english_text)
-        assert (long_english.difference_from(english_bigrams)
-                < english.difference_from(english_bigrams))
+        assert long_english.difference_from(english_bigrams) < english.difference_from(
+            english_bigrams
+        )
 
         # Difference is commutable within the limits of floating-point
         # arithmetic.
-        diff = (dutch.difference_from(english_bigrams) -
-            english_bigrams.difference_from(dutch))
+        diff = dutch.difference_from(english_bigrams) - english_bigrams.difference_from(
+            dutch
+        )
         assert round(diff, 7) == 0
 
 
 class TestMedian(object):
-
     def test_median(self):
-        test_set = [228.56, 205.50, 202.64, 190.15, 188.86, 187.97, 182.49,
-                    181.44, 172.46, 171.91]
+        test_set = [
+            228.56,
+            205.50,
+            202.64,
+            190.15,
+            188.86,
+            187.97,
+            182.49,
+            181.44,
+            172.46,
+            171.91,
+        ]
         assert 188.41500000000002 == median(test_set)
 
         test_set = [90, 94, 53, 68, 79, 84, 87, 72, 70, 69, 65, 89, 85, 83]
@@ -375,7 +375,6 @@ class TestMedian(object):
 
 
 class TestFastQueryCount(DatabaseTest):
-
     def test_no_distinct(self):
         identifier = self._identifier()
         qu = self._db.query(Identifier)
@@ -417,25 +416,23 @@ class TestFastQueryCount(DatabaseTest):
 
 
 class TestSlugify(object):
-
     def test_slugify(self):
 
         # text are slugified.
-        assert 'hey-im-a-feed' == slugify("Hey! I'm a feed!!")
-        assert 'you-and-me-n-every_feed' == slugify("You & Me n Every_Feed")
-        assert 'money-honey' == slugify("Money $$$       Honey")
-        assert 'some-title-somewhere' == slugify('Some (???) Title Somewhere')
-        assert 'sly-and-the-family-stone' == slugify('sly & the family stone')
+        assert "hey-im-a-feed" == slugify("Hey! I'm a feed!!")
+        assert "you-and-me-n-every_feed" == slugify("You & Me n Every_Feed")
+        assert "money-honey" == slugify("Money $$$       Honey")
+        assert "some-title-somewhere" == slugify("Some (???) Title Somewhere")
+        assert "sly-and-the-family-stone" == slugify("sly & the family stone")
 
         # The results can be pared down according to length restrictions.
-        assert 'happ' == slugify('Happy birthday', length_limit=4)
+        assert "happ" == slugify("Happy birthday", length_limit=4)
 
         # Slugified text isn't altered
-        assert 'already-slugified' == slugify('already-slugified')
+        assert "already-slugified" == slugify("already-slugified")
 
 
 class TestMoneyUtility(object):
-
     def test_parse(self):
         p = MoneyUtility.parse
         assert Money("0", "USD") == p(None)

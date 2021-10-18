@@ -2,38 +2,24 @@
 # Contributor, Contribution
 
 
-from . import (
-    Base,
-    flush,
-    get_one_or_create,
-)
-
 import logging
 import re
-from sqlalchemy import (
-    Column,
-    ForeignKey,
-    Integer,
-    Unicode,
-    UniqueConstraint,
-)
-from sqlalchemy.dialects.postgresql import (
-    ARRAY,
-    JSON,
-)
+
+from sqlalchemy import Column, ForeignKey, Integer, Unicode, UniqueConstraint
+from sqlalchemy.dialects.postgresql import ARRAY, JSON
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.mutable import MutableDict
-from sqlalchemy.orm import (
-    relationship,
-    synonym,
-)
+from sqlalchemy.orm import relationship, synonym
 from sqlalchemy.orm.session import Session
+
 from ..util.personal_names import display_name_to_sort_name
+from . import Base, flush, get_one_or_create
+
 
 class Contributor(Base):
     """Someone (usually human) who contributes to books."""
 
-    __tablename__ = 'contributors'
+    __tablename__ = "contributors"
     id = Column(Integer, primary_key=True)
 
     # Standard identifiers for this contributor.
@@ -42,7 +28,7 @@ class Contributor(Base):
 
     # This is the name by which this person is known in the original
     # catalog. It is sortable, e.g. "Twain, Mark".
-    _sort_name = Column('sort_name', Unicode, index=True)
+    _sort_name = Column("sort_name", Unicode, index=True)
     aliases = Column(ARRAY(Unicode), default=[])
 
     # This is the name we will display publicly. Ideally it will be
@@ -82,25 +68,25 @@ class Contributor(Base):
     FOREWORD_ROLE = "Foreword Author"
     AFTERWORD_ROLE = "Afterword Author"
     COLOPHON_ROLE = "Colophon Author"
-    UNKNOWN_ROLE = 'Unknown'
-    DIRECTOR_ROLE = 'Director'
-    PRODUCER_ROLE = 'Producer'
-    EXECUTIVE_PRODUCER_ROLE = 'Executive Producer'
-    ACTOR_ROLE = 'Actor'
-    LYRICIST_ROLE = 'Lyricist'
-    CONTRIBUTOR_ROLE = 'Contributor'
-    COMPOSER_ROLE = 'Composer'
-    NARRATOR_ROLE = 'Narrator'
-    COMPILER_ROLE = 'Compiler'
-    ADAPTER_ROLE = 'Adapter'
-    PERFORMER_ROLE = 'Performer'
-    MUSICIAN_ROLE = 'Musician'
-    ASSOCIATED_ROLE = 'Associated name'
-    COLLABORATOR_ROLE = 'Collaborator'
-    ENGINEER_ROLE = 'Engineer'
-    COPYRIGHT_HOLDER_ROLE = 'Copyright holder'
-    TRANSCRIBER_ROLE = 'Transcriber'
-    DESIGNER_ROLE = 'Designer'
+    UNKNOWN_ROLE = "Unknown"
+    DIRECTOR_ROLE = "Director"
+    PRODUCER_ROLE = "Producer"
+    EXECUTIVE_PRODUCER_ROLE = "Executive Producer"
+    ACTOR_ROLE = "Actor"
+    LYRICIST_ROLE = "Lyricist"
+    CONTRIBUTOR_ROLE = "Contributor"
+    COMPOSER_ROLE = "Composer"
+    NARRATOR_ROLE = "Narrator"
+    COMPILER_ROLE = "Compiler"
+    ADAPTER_ROLE = "Adapter"
+    PERFORMER_ROLE = "Performer"
+    MUSICIAN_ROLE = "Musician"
+    ASSOCIATED_ROLE = "Associated name"
+    COLLABORATOR_ROLE = "Collaborator"
+    ENGINEER_ROLE = "Engineer"
+    COPYRIGHT_HOLDER_ROLE = "Copyright holder"
+    TRANSCRIBER_ROLE = "Transcriber"
+    DESIGNER_ROLE = "Designer"
     AUTHOR_ROLES = set([PRIMARY_AUTHOR_ROLE, AUTHOR_ROLE])
 
     # Map our recognized roles to MARC relators.
@@ -108,55 +94,63 @@ class Contributor(Base):
     #
     # This is used when crediting contributors in OPDS feeds.
     MARC_ROLE_CODES = {
-        ACTOR_ROLE : 'act',
-        ADAPTER_ROLE : 'adp',
-        AFTERWORD_ROLE : 'aft',
-        ARTIST_ROLE : 'art',
-        ASSOCIATED_ROLE : 'asn',
-        AUTHOR_ROLE : 'aut',            # Joint author: USE Author
-        COLLABORATOR_ROLE : 'ctb',      # USE Contributor
-        COLOPHON_ROLE : 'aft',          # Author of afterword, colophon, etc.
-        COMPILER_ROLE : 'com',
-        COMPOSER_ROLE : 'cmp',
-        CONTRIBUTOR_ROLE : 'ctb',
-        COPYRIGHT_HOLDER_ROLE : 'cph',
-        DESIGNER_ROLE : 'dsr',
-        DIRECTOR_ROLE : 'drt',
-        EDITOR_ROLE : 'edt',
-        ENGINEER_ROLE : 'eng',
-        EXECUTIVE_PRODUCER_ROLE : 'pro',
-        FOREWORD_ROLE : 'wpr',          # Writer of preface
-        ILLUSTRATOR_ROLE : 'ill',
-        INTRODUCTION_ROLE : 'win',
-        LYRICIST_ROLE : 'lyr',
-        MUSICIAN_ROLE : 'mus',
-        NARRATOR_ROLE : 'nrt',
-        PERFORMER_ROLE : 'prf',
-        PHOTOGRAPHER_ROLE : 'pht',
-        PRIMARY_AUTHOR_ROLE : 'aut',
-        PRODUCER_ROLE : 'pro',
-        TRANSCRIBER_ROLE : 'trc',
-        TRANSLATOR_ROLE : 'trl',
-        LETTERER_ROLE : 'ctb',
-        PENCILER_ROLE : 'ctb',
-        COLORIST_ROLE : 'clr',
-        INKER_ROLE : 'ctb',
-        UNKNOWN_ROLE : 'asn',
+        ACTOR_ROLE: "act",
+        ADAPTER_ROLE: "adp",
+        AFTERWORD_ROLE: "aft",
+        ARTIST_ROLE: "art",
+        ASSOCIATED_ROLE: "asn",
+        AUTHOR_ROLE: "aut",  # Joint author: USE Author
+        COLLABORATOR_ROLE: "ctb",  # USE Contributor
+        COLOPHON_ROLE: "aft",  # Author of afterword, colophon, etc.
+        COMPILER_ROLE: "com",
+        COMPOSER_ROLE: "cmp",
+        CONTRIBUTOR_ROLE: "ctb",
+        COPYRIGHT_HOLDER_ROLE: "cph",
+        DESIGNER_ROLE: "dsr",
+        DIRECTOR_ROLE: "drt",
+        EDITOR_ROLE: "edt",
+        ENGINEER_ROLE: "eng",
+        EXECUTIVE_PRODUCER_ROLE: "pro",
+        FOREWORD_ROLE: "wpr",  # Writer of preface
+        ILLUSTRATOR_ROLE: "ill",
+        INTRODUCTION_ROLE: "win",
+        LYRICIST_ROLE: "lyr",
+        MUSICIAN_ROLE: "mus",
+        NARRATOR_ROLE: "nrt",
+        PERFORMER_ROLE: "prf",
+        PHOTOGRAPHER_ROLE: "pht",
+        PRIMARY_AUTHOR_ROLE: "aut",
+        PRODUCER_ROLE: "pro",
+        TRANSCRIBER_ROLE: "trc",
+        TRANSLATOR_ROLE: "trl",
+        LETTERER_ROLE: "ctb",
+        PENCILER_ROLE: "ctb",
+        COLORIST_ROLE: "clr",
+        INKER_ROLE: "ctb",
+        UNKNOWN_ROLE: "asn",
     }
 
     # People from these roles can be put into the 'author' slot if no
     # author proper is given.
     AUTHOR_SUBSTITUTE_ROLES = [
-        EDITOR_ROLE, COMPILER_ROLE, COMPOSER_ROLE, DIRECTOR_ROLE,
-        CONTRIBUTOR_ROLE, TRANSLATOR_ROLE, ADAPTER_ROLE, PHOTOGRAPHER_ROLE,
-        ARTIST_ROLE, LYRICIST_ROLE, COPYRIGHT_HOLDER_ROLE
+        EDITOR_ROLE,
+        COMPILER_ROLE,
+        COMPOSER_ROLE,
+        DIRECTOR_ROLE,
+        CONTRIBUTOR_ROLE,
+        TRANSLATOR_ROLE,
+        ADAPTER_ROLE,
+        PHOTOGRAPHER_ROLE,
+        ARTIST_ROLE,
+        LYRICIST_ROLE,
+        COPYRIGHT_HOLDER_ROLE,
     ]
 
     PERFORMER_ROLES = [ACTOR_ROLE, PERFORMER_ROLE, NARRATOR_ROLE, MUSICIAN_ROLE]
 
     # Extra fields
-    BIRTH_DATE = 'birthDate'
-    DEATH_DATE = 'deathDate'
+    BIRTH_DATE = "birthDate"
+    DEATH_DATE = "deathDate"
 
     def __repr__(self):
         extra = ""
@@ -174,8 +168,17 @@ class Contributor(Base):
         yield cls.PERFORMER_ROLES
 
     @classmethod
-    def lookup(cls, _db, sort_name=None, viaf=None, lc=None, aliases=None,
-               extra=None, create_new=True, name=None):
+    def lookup(
+        cls,
+        _db,
+        sort_name=None,
+        viaf=None,
+        lc=None,
+        aliases=None,
+        extra=None,
+        create_new=True,
+        name=None,
+    ):
         """Find or create a record (or list of records) for the given Contributor.
         :return: A tuple of found Contributor (or None), and a boolean flag
         indicating if new Contributor database object has beed created.
@@ -189,15 +192,16 @@ class Contributor(Base):
         extra = extra or dict()
 
         create_method_kwargs = {
-            Contributor.sort_name.name : sort_name,
-            Contributor.aliases.name : aliases,
-            Contributor.extra.name : extra
+            Contributor.sort_name.name: sort_name,
+            Contributor.aliases.name: aliases,
+            Contributor.extra.name: extra,
         }
 
         if not sort_name and not lc and not viaf:
             raise ValueError(
                 "Cannot look up a Contributor without any identifying "
-                "information whatsoever!")
+                "information whatsoever!"
+            )
 
         if sort_name and not lc and not viaf:
             # We will not create a Contributor based solely on a name
@@ -207,7 +211,7 @@ class Contributor(Base):
             # return all of them.
             #
             # We currently do not check aliases when doing name lookups.
-            q = _db.query(Contributor).filter(Contributor.sort_name==sort_name)
+            q = _db.query(Contributor).filter(Contributor.sort_name == sort_name)
             contributors = q.all()
             if contributors:
                 return contributors, new
@@ -233,8 +237,10 @@ class Contributor(Base):
 
             if create_new:
                 contributor, new = get_one_or_create(
-                    _db, Contributor, create_method_kwargs=create_method_kwargs,
-                    on_multiple='interchangeable',
+                    _db,
+                    Contributor,
+                    create_method_kwargs=create_method_kwargs,
+                    on_multiple="interchangeable",
                     **query
                 )
                 if contributor:
@@ -246,14 +252,13 @@ class Contributor(Base):
 
         return contributors, new
 
-
     @property
     def sort_name(self):
         return self._sort_name
 
     @sort_name.setter
     def sort_name(self, new_sort_name):
-        """ See if the passed-in value is in the prescribed Last, First format.
+        """See if the passed-in value is in the prescribed Last, First format.
         If it is, great, set the self._sprt_name to the new value.
 
         If new value is not in correct format, then
@@ -280,8 +285,7 @@ class Contributor(Base):
         self._sort_name = new_sort_name
 
     # tell SQLAlchemy to use the sort_name setter for ort_name, not _sort_name, after all.
-    sort_name = synonym('_sort_name', descriptor=sort_name)
-
+    sort_name = synonym("_sort_name", descriptor=sort_name)
 
     def merge_into(self, destination):
         """Two Contributor records should be the same.
@@ -303,7 +307,7 @@ class Contributor(Base):
             self,
             self.viaf,
             destination,
-            destination.viaf
+            destination.viaf,
         )
 
         # make sure we're not losing any names we know for the contributor
@@ -343,9 +347,10 @@ class Contributor(Base):
             # the old contribution) or not (in which case we switch the
             # contributor ID)?
             existing_record = _db.query(Contribution).filter(
-                Contribution.contributor_id==destination.id,
-                Contribution.edition_id==contribution.edition.id,
-                Contribution.role==contribution.role)
+                Contribution.contributor_id == destination.id,
+                Contribution.edition_id == contribution.edition.id,
+                Contribution.role == contribution.role,
+            )
             if existing_record.count():
                 _db.delete(contribution)
             else:
@@ -360,14 +365,16 @@ class Contributor(Base):
     ALPHABETIC = re.compile("[a-zA-z]")
     NUMBERS = re.compile("[0-9]")
 
-    DATE_RES = [re.compile("\(?" + x + "\)?") for x in
-                ("[0-9?]+-",
-                "[0-9]+st cent",
-                "[0-9]+nd cent",
-                "[0-9]+th cent",
-                "\bcirca",)
-                ]
-
+    DATE_RES = [
+        re.compile("\(?" + x + "\)?")
+        for x in (
+            "[0-9?]+-",
+            "[0-9]+st cent",
+            "[0-9]+nd cent",
+            "[0-9]+th cent",
+            "\bcirca",
+        )
+    ]
 
     def default_names(self, default_display_name=None):
         """Attempt to derive a family name ("Twain") and a display name ("Mark
@@ -394,15 +401,16 @@ class Contributor(Base):
         name = cls.PARENTHETICAL.sub("", name)
         name = name.strip()
 
-        if ', ' in name:
+        if ", " in name:
             # This is probably a personal name.
             parts = name.split(", ")
             if len(parts) > 2:
                 # The most likely scenario is that the final part
                 # of the name is a date or a set of dates. If this
                 # seems true, just delete that part.
-                if (cls.NUMBERS.search(parts[-1])
-                    or not cls.ALPHABETIC.search(parts[-1])):
+                if cls.NUMBERS.search(parts[-1]) or not cls.ALPHABETIC.search(
+                    parts[-1]
+                ):
                     parts = parts[:-1]
             # The final part of the name may have a date or a set
             # of dates at the end. If so, remove it from that string.
@@ -410,7 +418,7 @@ class Contributor(Base):
             for date_re in cls.DATE_RES:
                 m = date_re.search(final)
                 if m:
-                    new_part = final[:m.start()].strip()
+                    new_part = final[: m.start()].strip()
                     if new_part:
                         parts[-1] = new_part
                     else:
@@ -419,9 +427,12 @@ class Contributor(Base):
 
             family_name = parts[0]
             p = parts[-1].lower()
-            if (p in ('llc', 'inc', 'inc.')
-                or p.endswith("company") or p.endswith(" co.")
-                or p.endswith(" co")):
+            if (
+                p in ("llc", "inc", "inc.")
+                or p.endswith("company")
+                or p.endswith(" co.")
+                or p.endswith(" co")
+            ):
                 # No, this is a corporate name that contains a comma.
                 # It can't be split on the comma, so don't bother.
                 family_name = None
@@ -436,7 +447,7 @@ class Contributor(Base):
                     display_name = parts[1] + " " + parts[0]
                 if len(parts) > 2:
                     # There's a leftover bit.
-                    if parts[2] in ('Mrs.', 'Mrs', 'Sir'):
+                    if parts[2] in ("Mrs.", "Mrs", "Sir"):
                         # "Jones, Bob, Mrs."
                         #  => "Mrs. Bob Jones"
                         display_name = parts[2] + " " + display_name
@@ -451,16 +462,15 @@ class Contributor(Base):
 
         return family_name, display_name
 
+
 class Contribution(Base):
     """A contribution made by a Contributor to a Edition."""
-    __tablename__ = 'contributions'
-    id = Column(Integer, primary_key=True)
-    edition_id = Column(Integer, ForeignKey('editions.id'), index=True,
-                           nullable=False)
-    contributor_id = Column(Integer, ForeignKey('contributors.id'), index=True,
-                            nullable=False)
-    role = Column(Unicode, index=True, nullable=False)
-    __table_args__ = (
-        UniqueConstraint('edition_id', 'contributor_id', 'role'),
-    )
 
+    __tablename__ = "contributions"
+    id = Column(Integer, primary_key=True)
+    edition_id = Column(Integer, ForeignKey("editions.id"), index=True, nullable=False)
+    contributor_id = Column(
+        Integer, ForeignKey("contributors.id"), index=True, nullable=False
+    )
+    role = Column(Unicode, index=True, nullable=False)
+    __table_args__ = (UniqueConstraint("edition_id", "contributor_id", "role"),)

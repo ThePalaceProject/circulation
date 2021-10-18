@@ -1,18 +1,17 @@
 import os
+
 from sqlalchemy.orm.session import Session
 
+from ..config import Configuration as BaseConfiguration
+from ..model import ConfigurationSetting, ExternalIntegration
 from ..testing import DatabaseTest
 
-from ..config import Configuration as BaseConfiguration
-from ..model import (
-    ConfigurationSetting,
-    ExternalIntegration,
-)
 
 # Create a configuration object that the tests can run against without
 # impacting the real configuration object.
 class MockConfiguration(BaseConfiguration):
     instance = None
+
 
 class TestConfiguration(DatabaseTest):
 
@@ -31,7 +30,7 @@ class TestConfiguration(DatabaseTest):
         super(TestConfiguration, self).teardown_method()
 
     def create_version_file(self, content):
-        with open(self.VERSION_FILENAME, 'w') as f:
+        with open(self.VERSION_FILENAME, "w") as f:
             f.write(content)
 
     def test_app_version(self):
@@ -41,40 +40,37 @@ class TestConfiguration(DatabaseTest):
         result = self.Conf.app_version()
         assert self.Conf.APP_VERSION in self.Conf.instance
         assert self.Conf.NO_APP_VERSION_FOUND == result
-        assert (
-            self.Conf.NO_APP_VERSION_FOUND ==
-            self.Conf.get(self.Conf.APP_VERSION))
+        assert self.Conf.NO_APP_VERSION_FOUND == self.Conf.get(self.Conf.APP_VERSION)
 
         # An empty .version file yields the same results.
         self.Conf.instance = dict()
-        self.create_version_file(' \n')
+        self.create_version_file(" \n")
         result = self.Conf.app_version()
         assert self.Conf.NO_APP_VERSION_FOUND == result
-        assert (
-            self.Conf.NO_APP_VERSION_FOUND ==
-            self.Conf.get(self.Conf.APP_VERSION))
+        assert self.Conf.NO_APP_VERSION_FOUND == self.Conf.get(self.Conf.APP_VERSION)
 
         # A .version file with content loads the content.
         self.Conf.instance = dict()
-        self.create_version_file('ba.na.na')
+        self.create_version_file("ba.na.na")
         result = self.Conf.app_version()
-        assert 'ba.na.na' == result
-        assert 'ba.na.na' == self.Conf.get(self.Conf.APP_VERSION)
+        assert "ba.na.na" == result
+        assert "ba.na.na" == self.Conf.get(self.Conf.APP_VERSION)
 
     def test_load_cdns(self):
-        """Test our ability to load CDN configuration from the database.
-        """
+        """Test our ability to load CDN configuration from the database."""
         self._external_integration(
             protocol=ExternalIntegration.CDN,
             goal=ExternalIntegration.CDN_GOAL,
-            settings = { self.Conf.CDN_MIRRORED_DOMAIN_KEY : "site.com",
-                         ExternalIntegration.URL : "http://cdn/" }
+            settings={
+                self.Conf.CDN_MIRRORED_DOMAIN_KEY: "site.com",
+                ExternalIntegration.URL: "http://cdn/",
+            },
         )
 
         self.Conf.load_cdns(self._db)
 
         integrations = self.Conf.instance[self.Conf.INTEGRATIONS]
-        assert {'site.com' : 'http://cdn/'} == integrations[ExternalIntegration.CDN]
+        assert {"site.com": "http://cdn/"} == integrations[ExternalIntegration.CDN]
         assert True == self.Conf.instance[self.Conf.CDNS_LOADED_FROM_DATABASE]
 
     def test_cdns_loaded_dynamically(self):

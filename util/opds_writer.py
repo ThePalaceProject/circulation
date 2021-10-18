@@ -1,10 +1,12 @@
 import datetime
 import logging
+
+import pytz
 from flask import Response
 from lxml import builder, etree
-import pytz
 
 from .datetime_helpers import utc_now
+
 
 class ElementMaker(builder.ElementMaker):
     """A helper object for creating etree elements."""
@@ -13,53 +15,57 @@ class ElementMaker(builder.ElementMaker):
         # Remove default_typemap from the dictionary -- it contains functions
         # that can't be pickled.
         return dict(
-            (k, v) for k, v in super(ElementMaker, self).__dict__
-            if k != 'default_typemap'
+            (k, v)
+            for k, v in super(ElementMaker, self).__dict__
+            if k != "default_typemap"
         )
+
 
 class AtomFeed(object):
 
-    ATOM_TYPE = 'application/atom+xml'
+    ATOM_TYPE = "application/atom+xml"
 
-    ATOM_LIKE_TYPES = [ATOM_TYPE, 'application/xml']
+    ATOM_LIKE_TYPES = [ATOM_TYPE, "application/xml"]
 
-    TIME_FORMAT_UTC = '%Y-%m-%dT%H:%M:%S+00:00'
-    TIME_FORMAT_NAIVE = '%Y-%m-%dT%H:%M:%SZ'
+    TIME_FORMAT_UTC = "%Y-%m-%dT%H:%M:%S+00:00"
+    TIME_FORMAT_NAIVE = "%Y-%m-%dT%H:%M:%SZ"
 
-    ATOM_NS = 'http://www.w3.org/2005/Atom'
-    APP_NS = 'http://www.w3.org/2007/app'
-    #xhtml_ns = 'http://www.w3.org/1999/xhtml'
-    DCTERMS_NS = 'http://purl.org/dc/terms/'
-    OPDS_NS = 'http://opds-spec.org/2010/catalog'
-    SCHEMA_NS = 'http://schema.org/'
-    DRM_NS = 'http://librarysimplified.org/terms/drm'
-    OPF_NS = 'http://www.idpf.org/2007/opf'
-    OPENSEARCH_NS = 'http://a9.com/-/spec/opensearch/1.1/'
+    ATOM_NS = "http://www.w3.org/2005/Atom"
+    APP_NS = "http://www.w3.org/2007/app"
+    # xhtml_ns = 'http://www.w3.org/1999/xhtml'
+    DCTERMS_NS = "http://purl.org/dc/terms/"
+    OPDS_NS = "http://opds-spec.org/2010/catalog"
+    SCHEMA_NS = "http://schema.org/"
+    DRM_NS = "http://librarysimplified.org/terms/drm"
+    OPF_NS = "http://www.idpf.org/2007/opf"
+    OPENSEARCH_NS = "http://a9.com/-/spec/opensearch/1.1/"
 
     SIMPLIFIED_NS = "http://librarysimplified.org/terms/"
     BIBFRAME_NS = "http://bibframe.org/vocab/"
     BIB_SCHEMA_NS = "http://bib.schema.org/"
 
-    LCP_NS = 'http://readium.org/lcp-specs/ns'
+    LCP_NS = "http://readium.org/lcp-specs/ns"
 
     nsmap = {
         None: ATOM_NS,
-        'app': APP_NS,
-        'dcterms' : DCTERMS_NS,
-        'opds' : OPDS_NS,
-        'opf' : OPF_NS,
-        'drm' : DRM_NS,
-        'schema' : SCHEMA_NS,
-        'simplified' : SIMPLIFIED_NS,
-        'bibframe' : BIBFRAME_NS,
-        'bib': BIB_SCHEMA_NS,
-        'opensearch': OPENSEARCH_NS,
-        'lcp': LCP_NS
+        "app": APP_NS,
+        "dcterms": DCTERMS_NS,
+        "opds": OPDS_NS,
+        "opf": OPF_NS,
+        "drm": DRM_NS,
+        "schema": SCHEMA_NS,
+        "simplified": SIMPLIFIED_NS,
+        "bibframe": BIBFRAME_NS,
+        "bib": BIB_SCHEMA_NS,
+        "opensearch": OPENSEARCH_NS,
+        "lcp": LCP_NS,
     }
 
     default_typemap = {datetime: lambda e, v: _strftime(v)}
     E = ElementMaker(typemap=default_typemap, nsmap=nsmap)
-    SIMPLIFIED = ElementMaker(typemap=default_typemap, nsmap=nsmap, namespace=SIMPLIFIED_NS)
+    SIMPLIFIED = ElementMaker(
+        typemap=default_typemap, nsmap=nsmap, namespace=SIMPLIFIED_NS
+    )
     SCHEMA = ElementMaker(typemap=default_typemap, nsmap=nsmap, namespace=SCHEMA_NS)
 
     @classmethod
@@ -82,7 +88,6 @@ class AtomFeed(object):
 
         return date.strftime(fmt)
 
-
     @classmethod
     def add_link_to_feed(cls, feed, children=None, **kwargs):
         link = cls.E.link(**kwargs)
@@ -91,11 +96,10 @@ class AtomFeed(object):
             for i in children:
                 link.append(i)
 
-
     @classmethod
     def add_link_to_entry(cls, entry, children=None, **kwargs):
-        if 'title' in kwargs:
-            kwargs['title'] = str(kwargs['title'])
+        if "title" in kwargs:
+            kwargs["title"] = str(kwargs["title"])
         link = cls.E.link(**kwargs)
         entry.append(link)
         if children:
@@ -114,31 +118,25 @@ class AtomFeed(object):
     def category(cls, *args, **kwargs):
         return cls.E.category(*args, **kwargs)
 
-
     @classmethod
     def entry(cls, *args, **kwargs):
         return cls.E.entry(*args, **kwargs)
-
 
     @classmethod
     def id(cls, *args, **kwargs):
         return cls.E.id(*args, **kwargs)
 
-
     @classmethod
     def link(cls, *args, **kwargs):
         return cls.E.link(*args, **kwargs)
-
 
     @classmethod
     def makeelement(cls, *args, **kwargs):
         return cls.E._makeelement(*args, **kwargs)
 
-
     @classmethod
     def name(cls, *args, **kwargs):
         return cls.E.name(*args, **kwargs)
-
 
     @classmethod
     def schema_(cls, field_name):
@@ -148,21 +146,17 @@ class AtomFeed(object):
     def summary(cls, *args, **kwargs):
         return cls.E.summary(*args, **kwargs)
 
-
     @classmethod
     def title(cls, *args, **kwargs):
         return cls.E.title(*args, **kwargs)
-
 
     @classmethod
     def update(cls, *args, **kwargs):
         return cls.E.update(*args, **kwargs)
 
-
     @classmethod
     def updated(cls, *args, **kwargs):
         return cls.E.updated(*args, **kwargs)
-
 
     def __init__(self, title, url, **kwargs):
         """Constructor.
@@ -186,7 +180,9 @@ class AtomFeed(object):
 
 class OPDSFeed(AtomFeed):
 
-    ACQUISITION_FEED_TYPE = AtomFeed.ATOM_TYPE + ";profile=opds-catalog;kind=acquisition"
+    ACQUISITION_FEED_TYPE = (
+        AtomFeed.ATOM_TYPE + ";profile=opds-catalog;kind=acquisition"
+    )
     NAVIGATION_FEED_TYPE = AtomFeed.ATOM_TYPE + ";profile=opds-catalog;kind=navigation"
     ENTRY_TYPE = AtomFeed.ATOM_TYPE + ";type=entry;profile=opds-catalog"
 
@@ -238,8 +234,11 @@ class OPDSMessage(object):
         if not isinstance(other, OPDSMessage):
             return False
 
-        if (self.urn != other.urn or self.status_code != other.status_code
-            or self.message != other.message):
+        if (
+            self.urn != other.urn
+            or self.status_code != other.status_code
+            or self.message != other.message
+        ):
             return False
         return True
 

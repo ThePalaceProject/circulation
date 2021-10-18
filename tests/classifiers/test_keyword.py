@@ -1,13 +1,11 @@
 from ... import classifier
 from ...classifier import *
-from ...classifier.keyword import (
-    KeywordBasedClassifier as Keyword,
-    LCSHClassifier as LCSH,
-    FASTClassifier as FAST,
-)
+from ...classifier.keyword import FASTClassifier as FAST
+from ...classifier.keyword import KeywordBasedClassifier as Keyword
+from ...classifier.keyword import LCSHClassifier as LCSH
+
 
 class TestLCSH(object):
-
     def test_is_fiction(self):
         def fic(lcsh):
             return LCSH.is_fiction(None, LCSH.scrub_name(lcsh))
@@ -25,9 +23,9 @@ class TestLCSH(object):
         assert None == fic("Kentucky")
         assert None == fic("Social life and customs")
 
-
     def test_audience(self):
         child = Classifier.AUDIENCE_CHILDREN
+
         def aud(lcsh):
             return LCSH.audience(None, LCSH.scrub_name(lcsh))
 
@@ -38,6 +36,7 @@ class TestLCSH(object):
         assert None == aud("Juvenile delinquency")
         assert None == aud("Runaway children")
         assert None == aud("Humor")
+
 
 class TestKeyword(object):
     def genre(self, keyword):
@@ -54,11 +53,11 @@ class TestKeyword(object):
         assert classifier.Romance == self.genre("Regency romances")
 
     def test_audience(self):
-        assert (Classifier.AUDIENCE_YOUNG_ADULT ==
-            Keyword.audience(None, "Teens / Fiction"))
+        assert Classifier.AUDIENCE_YOUNG_ADULT == Keyword.audience(
+            None, "Teens / Fiction"
+        )
 
-        assert (Classifier.AUDIENCE_YOUNG_ADULT ==
-            Keyword.audience(None, "teen books"))
+        assert Classifier.AUDIENCE_YOUNG_ADULT == Keyword.audience(None, "teen books")
 
     def test_subgenre_wins_over_genre(self):
         # Asian_History wins over History, even though they both
@@ -75,15 +74,18 @@ class TestKeyword(object):
         assert None == self.genre("Children's Books")
 
     def test_young_adult_wins_over_children(self):
-        assert (Classifier.AUDIENCE_YOUNG_ADULT ==
-            Keyword.audience(None, "children's books - young adult fiction"))
+        assert Classifier.AUDIENCE_YOUNG_ADULT == Keyword.audience(
+            None, "children's books - young adult fiction"
+        )
 
     def test_juvenile_romance_means_young_adult(self):
-        assert (Classifier.AUDIENCE_YOUNG_ADULT ==
-            Keyword.audience(None, "juvenile fiction / love & romance"))
+        assert Classifier.AUDIENCE_YOUNG_ADULT == Keyword.audience(
+            None, "juvenile fiction / love & romance"
+        )
 
-        assert (Classifier.AUDIENCE_YOUNG_ADULT ==
-            Keyword.audience(None, "teenage romance"))
+        assert Classifier.AUDIENCE_YOUNG_ADULT == Keyword.audience(
+            None, "teenage romance"
+        )
 
     def test_audience_match(self):
         (audience, match) = Keyword.audience_match("teen books")
@@ -108,40 +110,34 @@ class TestKeyword(object):
         since the original work.
         """
         # was Literary Fiction
-        assert (classifier.Science_Fiction ==
-            Keyword.genre(None, "Science Fiction - General"))
+        assert classifier.Science_Fiction == Keyword.genre(
+            None, "Science Fiction - General"
+        )
 
         # Was General Fiction (!)
-        assert (classifier.Science_Fiction ==
-            Keyword.genre(None, "Science Fiction"))
+        assert classifier.Science_Fiction == Keyword.genre(None, "Science Fiction")
 
-        assert (classifier.Science_Fiction ==
-            Keyword.genre(None, "Speculative Fiction"))
+        assert classifier.Science_Fiction == Keyword.genre(None, "Speculative Fiction")
 
-        assert (classifier.Social_Sciences ==
-            Keyword.genre(None, "Social Sciences"))
+        assert classifier.Social_Sciences == Keyword.genre(None, "Social Sciences")
 
-        assert (classifier.Social_Sciences ==
-            Keyword.genre(None, "Social Science"))
+        assert classifier.Social_Sciences == Keyword.genre(None, "Social Science")
 
-        assert (classifier.Social_Sciences ==
-            Keyword.genre(None, "Human Science"))
+        assert classifier.Social_Sciences == Keyword.genre(None, "Human Science")
 
         # was genreless
-        assert (classifier.Short_Stories ==
-            Keyword.genre(None, "Short Stories"))
+        assert classifier.Short_Stories == Keyword.genre(None, "Short Stories")
 
         # was Military History
-        assert (classifier.Military_SF ==
-            Keyword.genre(None, "Interstellar Warfare"))
+        assert classifier.Military_SF == Keyword.genre(None, "Interstellar Warfare")
 
         # was Fantasy
-        assert (classifier.Games ==
-            Keyword.genre(None, "Games / Role Playing & Fantasy"))
+        assert classifier.Games == Keyword.genre(None, "Games / Role Playing & Fantasy")
 
         # This isn't perfect but it covers most cases.
-        assert (classifier.Media_Tie_in_SF ==
-            Keyword.genre(None, "TV, Movie, Video game adaptations"))
+        assert classifier.Media_Tie_in_SF == Keyword.genre(
+            None, "TV, Movie, Video game adaptations"
+        )
 
         # Previously only 'nonfiction' was recognized.
         assert False == Keyword.is_fiction(None, "Non-Fiction")

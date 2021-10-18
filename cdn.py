@@ -1,7 +1,7 @@
 """Turn local URLs into CDN URLs."""
 from urllib.parse import urlsplit, urlunsplit
 
-from .config import Configuration, CannotLoadConfiguration
+from .config import CannotLoadConfiguration, Configuration
 
 
 def cdnify(url, cdns=None):

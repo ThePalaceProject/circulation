@@ -1,17 +1,16 @@
 import logging
-
 from enum import Enum
 
-from .exceptions import LCPError
 from ..model import Credential, DataSource
+from .exceptions import LCPError
 
 
 class LCPCredentialType(Enum):
     """Contains an enumeration of different LCP credential types"""
 
-    PATRON_ID = 'Patron ID passed to the LCP License Server'
-    LCP_PASSPHRASE = 'LCP Passphrase passed to the LCP License Server'
-    LCP_HASHED_PASSPHRASE = 'Hashed LCP Passphrase passed to the LCP License Server'
+    PATRON_ID = "Patron ID passed to the LCP License Server"
+    LCP_PASSPHRASE = "LCP Passphrase passed to the LCP License Server"
+    LCP_HASHED_PASSPHRASE = "Hashed LCP Passphrase passed to the LCP License Server"
 
 
 class LCPCredentialFactory(object):
@@ -21,7 +20,9 @@ class LCPCredentialFactory(object):
         """Initializes a new instance of LCPCredentialFactory class"""
         self._logger = logging.getLogger(__name__)
 
-    def _get_or_create_persistent_token(self, db, patron, data_source_type, credential_type, value=None):
+    def _get_or_create_persistent_token(
+        self, db, patron, data_source_type, credential_type, value=None
+    ):
         """Gets or creates a new persistent token
 
         :param db: Database session
@@ -42,17 +43,19 @@ class LCPCredentialFactory(object):
         data_source = DataSource.lookup(db, data_source_type)
 
         transaction = db.begin_nested()
-        credential, is_new = Credential.persistent_token_create(db, data_source, credential_type, patron, value)
+        credential, is_new = Credential.persistent_token_create(
+            db, data_source, credential_type, patron, value
+        )
         transaction.commit()
 
         self._logger.info(
             'Successfully {0} "{1}" {2} for {3} in "{4}" data source with value "{5}"'.format(
-                'created new' if is_new else 'fetched existing',
+                "created new" if is_new else "fetched existing",
                 credential_type,
                 credential,
                 patron,
                 data_source_type,
-                value
+                value,
             )
         )
 
@@ -71,7 +74,11 @@ class LCPCredentialFactory(object):
         :rtype: string
         """
         patron_id, _ = self._get_or_create_persistent_token(
-            db, patron, DataSource.INTERNAL_PROCESSING, LCPCredentialType.PATRON_ID.value)
+            db,
+            patron,
+            DataSource.INTERNAL_PROCESSING,
+            LCPCredentialType.PATRON_ID.value,
+        )
 
         return patron_id
 
@@ -88,7 +95,11 @@ class LCPCredentialFactory(object):
         :rtype: string
         """
         patron_passphrase, _ = self._get_or_create_persistent_token(
-            db, patron, DataSource.INTERNAL_PROCESSING, LCPCredentialType.LCP_PASSPHRASE.value)
+            db,
+            patron,
+            DataSource.INTERNAL_PROCESSING,
+            LCPCredentialType.LCP_PASSPHRASE.value,
+        )
 
         return patron_passphrase
 
@@ -105,10 +116,14 @@ class LCPCredentialFactory(object):
         :rtype: string
         """
         hashed_passphrase, is_new = self._get_or_create_persistent_token(
-            db, patron, DataSource.INTERNAL_PROCESSING, LCPCredentialType.LCP_HASHED_PASSPHRASE.value)
+            db,
+            patron,
+            DataSource.INTERNAL_PROCESSING,
+            LCPCredentialType.LCP_HASHED_PASSPHRASE.value,
+        )
 
         if is_new:
-            raise LCPError('Passphrase have to be explicitly set')
+            raise LCPError("Passphrase have to be explicitly set")
 
         return hashed_passphrase
 
@@ -125,4 +140,9 @@ class LCPCredentialFactory(object):
         :type hashed_passphrase: string
         """
         self._get_or_create_persistent_token(
-            db, patron, DataSource.INTERNAL_PROCESSING, LCPCredentialType.LCP_HASHED_PASSPHRASE.value, hashed_passphrase)
+            db,
+            patron,
+            DataSource.INTERNAL_PROCESSING,
+            LCPCredentialType.LCP_HASHED_PASSPHRASE.value,
+            hashed_passphrase,
+        )

@@ -1,53 +1,40 @@
 # encoding: utf-8
-import pytest
-import os
 import json
+import os
 import pkgutil
 
-from ..overdrive import (
-    OverdriveAPI,
-    MockOverdriveAPI,
-    OverdriveAdvantageAccount,
-    OverdriveRepresentationExtractor,
-    OverdriveBibliographicCoverageProvider,
-)
-
-from ..coverage import (
-    CoverageFailure,
-)
+import pytest
 
 from ..config import CannotLoadConfiguration
-
+from ..coverage import CoverageFailure
 from ..metadata_layer import LinkData
-
 from ..model import (
     Collection,
     Contributor,
     DeliveryMechanism,
     Edition,
     ExternalIntegration,
+    Hyperlink,
     Identifier,
-    Representation,
-    Subject,
     Measurement,
     MediaTypes,
-    Hyperlink,
+    Representation,
+    Subject,
+)
+from ..overdrive import (
+    MockOverdriveAPI,
+    OverdriveAdvantageAccount,
+    OverdriveAPI,
+    OverdriveBibliographicCoverageProvider,
+    OverdriveRepresentationExtractor,
 )
 from ..scripts import RunCollectionCoverageProviderScript
-
-from ..testing import MockRequestsResponse
-
-from ..util.http import (
-    BadResponseException,
-    HTTP,
-)
+from ..testing import DatabaseTest, MockRequestsResponse
+from ..util.http import HTTP, BadResponseException
 from ..util.string_helpers import base64
-
-from ..testing import DatabaseTest
 
 
 class OverdriveTest(DatabaseTest):
-
     def setup_method(self):
         super(OverdriveTest, self).setup_method()
         self.collection = MockOverdriveAPI.mock_collection(self._db)
@@ -59,6 +46,7 @@ class OverdriveTest(DatabaseTest):
         data = open(path).read()
         return data, json.loads(data)
 
+
 class OverdriveTestWithAPI(OverdriveTest):
     """Automatically create a MockOverdriveAPI class during setup.
 
@@ -68,13 +56,13 @@ class OverdriveTestWithAPI(OverdriveTest):
     MockOverdriveAPI request created in a test behaves differently
     from the first one.
     """
+
     def setup_method(self):
         super(OverdriveTestWithAPI, self).setup_method()
         self.api = MockOverdriveAPI(self._db, self.collection)
 
 
 class TestOverdriveAPI(OverdriveTestWithAPI):
-
     def test_constructor_makes_no_requests(self):
         # Invoking the OverdriveAPI constructor does not, by itself,
         # make any HTTP requests.
@@ -82,16 +70,19 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
 
         class NoRequests(OverdriveAPI):
             MSG = "This is a unit test, you can't make HTTP requests!"
+
             def no_requests(self, *args, **kwargs):
                 raise Exception(self.MSG)
+
             _do_get = no_requests
             _do_post = no_requests
             _make_request = no_requests
+
         api = NoRequests(self._db, collection)
 
         # Attempting to access .token or .collection_token _will_
         # try to make an HTTP request.
-        for field in 'token', 'collection_token':
+        for field in "token", "collection_token":
             with pytest.raises(Exception) as excinfo:
                 getattr(api, field)
             assert api.MSG in str(excinfo.value)
@@ -110,8 +101,9 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
 
     def test_make_link_safe(self):
         # Unsafe characters are escaped.
-        assert ("http://foo.com?q=%2B%3A%7B%7D" ==
-            OverdriveAPI.make_link_safe("http://foo.com?q=+:{}"))
+        assert "http://foo.com?q=%2B%3A%7B%7D" == OverdriveAPI.make_link_safe(
+            "http://foo.com?q=+:{}"
+        )
 
         # Links to version 1 of the availability API are converted
         # to links to version 2.
@@ -142,6 +134,7 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
             integration = self.collection.external_integration
             integration.setting(c.SERVER_NICKNAME).value = x
             return c(self._db, self.collection)
+
         testing = api_with_setting(c.TESTING_SERVERS)
         assert testing.hosts == c.HOSTS[c.TESTING_SERVERS]
 
@@ -153,32 +146,39 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
     def test_endpoint(self):
         # The .endpoint() method performs string interpolation, including
         # the names of servers.
-        template = "%(host)s %(patron_host)s %(oauth_host)s %(oauth_patron_host)s %(extra)s"
+        template = (
+            "%(host)s %(patron_host)s %(oauth_host)s %(oauth_patron_host)s %(extra)s"
+        )
         result = self.api.endpoint(template, extra="val")
 
         # The host names and the 'extra' argument have been used to
         # fill in the string interpolations.
         expect_args = dict(self.api.hosts)
-        expect_args['extra'] = 'val'
+        expect_args["extra"] = "val"
         assert result == template % expect_args
 
         # The string has been completely interpolated.
-        assert '%' not in result
+        assert "%" not in result
 
         # Once interpolation has happened, doing it again has no effect.
         assert result == self.api.endpoint(result, extra="something else")
 
         # This is important because an interpolated URL may superficially
         # appear to contain extra formatting characters.
-        assert (result + "%3A" ==
-            self.api.endpoint(result +"%3A", extra="something else"))
+        assert result + "%3A" == self.api.endpoint(
+            result + "%3A", extra="something else"
+        )
 
     def test_token_authorization_header(self):
         # Verify that the Authorization header needed to get an access
         # token for a given collection is encoded properly.
         assert self.api.token_authorization_header == "Basic YTpi"
-        assert self.api.token_authorization_header == "Basic " + base64.standard_b64encode(
-            b"%s:%s" % (self.api.client_key, self.api.client_secret)
+        assert (
+            self.api.token_authorization_header
+            == "Basic "
+            + base64.standard_b64encode(
+                b"%s:%s" % (self.api.client_key, self.api.client_secret)
+            )
         )
 
     def test_token_post_success(self):
@@ -204,8 +204,13 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
         class MisconfiguredOverdriveAPI(MockOverdriveAPI):
             """This Overdrive client has valid credentials but the library
             can't be found -- probably because the library ID is wrong."""
+
             def get_library(self):
-                return {'errorCode': 'Some error', 'message': 'Some message.', 'token': 'abc-def-ghi'}
+                return {
+                    "errorCode": "Some error",
+                    "message": "Some message.",
+                    "token": "abc-def-ghi",
+                }
 
         # Just instantiating the API doesn't cause this error.
         api = MisconfiguredOverdriveAPI(self._db, self.collection)
@@ -213,7 +218,10 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
         # But trying to access the collection token will cause it.
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             api.collection_token()
-        assert "Overdrive credentials are valid but could not fetch library: Some message." in str(excinfo.value)
+        assert (
+            "Overdrive credentials are valid but could not fetch library: Some message."
+            in str(excinfo.value)
+        )
 
     def test_401_on_get_refreshes_bearer_token(self):
         # We have a token.
@@ -241,8 +249,7 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
         assert "new bearer token" == self.api.token
 
     def test_credential_refresh_success(self):
-        """Verify the process of refreshing the Overdrive bearer token.
-        """
+        """Verify the process of refreshing the Overdrive bearer token."""
         # Perform the initial credential check.
         self.api.check_creds()
         credential = self.api.credential_object(lambda x: x)
@@ -281,7 +288,9 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
         with pytest.raises(BadResponseException) as excinfo:
             self.api.get_library()
         assert "Bad response from" in str(excinfo.value)
-        assert "Something's wrong with the Overdrive OAuth Bearer Token!" in str(excinfo.value)
+        assert "Something's wrong with the Overdrive OAuth Bearer Token!" in str(
+            excinfo.value
+        )
 
     def test_401_during_refresh_raises_error(self):
         """If we fail to refresh the OAuth bearer token, an exception is
@@ -299,19 +308,22 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
 
         # Here's a regular Overdrive collection.
         main = self._collection(
-            protocol=ExternalIntegration.OVERDRIVE, external_account_id="1",
+            protocol=ExternalIntegration.OVERDRIVE,
+            external_account_id="1",
         )
         main.external_integration.username = "user"
         main.external_integration.password = "password"
-        main.external_integration.setting('website_id').value = '100'
-        main.external_integration.setting('ils_name').value = 'default'
+        main.external_integration.setting("website_id").value = "100"
+        main.external_integration.setting("ils_name").value = "default"
 
         # Here's an Overdrive API client for that collection.
         overdrive_main = MockOverdriveAPI(self._db, main)
 
         # Note the "library" endpoint.
-        assert ("https://api.overdrive.com/v1/libraries/1" ==
-            overdrive_main._library_endpoint)
+        assert (
+            "https://api.overdrive.com/v1/libraries/1"
+            == overdrive_main._library_endpoint
+        )
 
         # The advantage_library_id of a non-Advantage Overdrive account
         # is always -1.
@@ -321,7 +333,8 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
         # Here's an Overdrive Advantage collection associated with the
         # main Overdrive collection.
         child = self._collection(
-            protocol=ExternalIntegration.OVERDRIVE, external_account_id="2",
+            protocol=ExternalIntegration.OVERDRIVE,
+            external_account_id="2",
         )
         child.parent = main
         overdrive_child = MockOverdriveAPI(self._db, child)
@@ -330,8 +343,9 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
         # collection is beneath the the parent collection's "library"
         # endpoint.
         assert (
-            'https://api.overdrive.com/v1/libraries/1/advantageAccounts/2' ==
-            overdrive_child._library_endpoint)
+            "https://api.overdrive.com/v1/libraries/1/advantageAccounts/2"
+            == overdrive_child._library_endpoint
+        )
 
         # The advantage_library_id of an Advantage collection is the
         # numeric value of its external_account_id.
@@ -352,9 +366,11 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
                 return ["an availability queue"]
 
         original_data = {"key": "value"}
-        for content in (original_data,
-                        json.dumps(original_data),
-                        json.dumps(original_data).encode("utf8")):
+        for content in (
+            original_data,
+            json.dumps(original_data),
+            json.dumps(original_data).encode("utf8"),
+        ):
             extractor = MockExtractor()
             self.api.queue_response(200, content=content)
             result = self.api._get_book_list_page(
@@ -384,36 +400,33 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
 
 
 class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
-
     def test_availability_info(self):
         data, raw = self.sample_json("overdrive_book_list.json")
-        availability = OverdriveRepresentationExtractor.availability_link_list(
-            raw)
+        availability = OverdriveRepresentationExtractor.availability_link_list(raw)
         # Every item in the list has a few important values.
         for item in availability:
-            for key in 'availability_link', 'author_name', 'id', 'title', 'date_added':
+            for key in "availability_link", "author_name", "id", "title", "date_added":
                 assert key in item
 
         # Also run a spot check on the actual values.
         spot = availability[0]
-        assert '210bdcad-29b7-445f-8d05-cdbb40abc03a' == spot['id']
-        assert 'King and Maxwell' == spot['title']
-        assert 'David Baldacci' == spot['author_name']
-        assert '2013-11-12T14:13:00-05:00' == spot['date_added']
+        assert "210bdcad-29b7-445f-8d05-cdbb40abc03a" == spot["id"]
+        assert "King and Maxwell" == spot["title"]
+        assert "David Baldacci" == spot["author_name"]
+        assert "2013-11-12T14:13:00-05:00" == spot["date_added"]
 
     def test_availability_info_missing_data(self):
         # overdrive_book_list_missing_data.json has two products. One
         # only has a title, the other only has an ID.
         data, raw = self.sample_json("overdrive_book_list_missing_data.json")
-        [item] = OverdriveRepresentationExtractor.availability_link_list(
-            raw)
+        [item] = OverdriveRepresentationExtractor.availability_link_list(raw)
 
         # We got a data structure -- full of missing data -- for the
         # item that has an ID.
-        assert 'i only have an id' == item['id']
-        assert None == item['title']
-        assert None == item['author_name']
-        assert None == item['date_added']
+        assert "i only have an id" == item["id"]
+        assert None == item["title"]
+        assert None == item["author_name"]
+        assert None == item["date_added"]
 
         # We did not get a data structure for the item that only has a
         # title, because an ID is required -- otherwise we don't know
@@ -421,9 +434,10 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
 
     def test_link(self):
         data, raw = self.sample_json("overdrive_book_list.json")
-        expect = OverdriveAPI.make_link_safe("http://api.overdrive.com/v1/collections/collection-id/products?limit=300&offset=0&lastupdatetime=2014-04-28%2009:25:09&sort=popularity:desc&formats=ebook-epub-open,ebook-epub-adobe,ebook-pdf-adobe,ebook-pdf-open")
+        expect = OverdriveAPI.make_link_safe(
+            "http://api.overdrive.com/v1/collections/collection-id/products?limit=300&offset=0&lastupdatetime=2014-04-28%2009:25:09&sort=popularity:desc&formats=ebook-epub-open,ebook-epub-adobe,ebook-pdf-adobe,ebook-pdf-open"
+        )
         assert expect == OverdriveRepresentationExtractor.link(raw, "first")
-
 
     def test_book_info_to_circulation(self):
         # Tests that can convert an overdrive json block into a CirculationData object.
@@ -442,8 +456,10 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
 
         # Related IDs.
         identifier = circulationdata.primary_identifier(self._db)
-        assert ((Identifier.OVERDRIVE_ID, '2a005d55-a417-4053-b90d-7a38ca6d2065') ==
-            (identifier.type, identifier.identifier))
+        assert (Identifier.OVERDRIVE_ID, "2a005d55-a417-4053-b90d-7a38ca6d2065") == (
+            identifier.type,
+            identifier.identifier,
+        )
 
     def test_book_info_to_circulation_advantage(self):
         # Overdrive Advantage accounts derive different information
@@ -482,12 +498,12 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
             # Pretend to be an API for an Overdrive Advantage collection with
             # library ID 62.
             advantage_library_id = 62
+
         extractor = OverdriveRepresentationExtractor(MockAPI())
         advantage_data = extractor.book_info_to_circulation(info)
         assert None == advantage_data.licenses_owned
         assert None == advantage_data.licenses_available
         assert 0 == consortial_data.patrons_in_hold_queue
-
 
     def test_not_found_error_to_circulationdata(self):
         raw, info = self.sample_json("overdrive_availability_not_found.json")
@@ -503,7 +519,7 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         # circulation code does), we do know, and we can create a
         # CirculationData.
         identifier = self._identifier(identifier_type=Identifier.OVERDRIVE_ID)
-        info['id'] = identifier.identifier
+        info["id"] = identifier.identifier
         data = m(info)
         assert identifier == data.primary_identifier(self._db)
         assert 0 == data.licenses_owned
@@ -517,8 +533,14 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
 
         assert "Agile Documentation" == metadata.title
-        assert "Agile Documentation A Pattern Guide to Producing Lightweight Documents for Software Projects" == metadata.sort_title
-        assert "A Pattern Guide to Producing Lightweight Documents for Software Projects" == metadata.subtitle
+        assert (
+            "Agile Documentation A Pattern Guide to Producing Lightweight Documents for Software Projects"
+            == metadata.sort_title
+        )
+        assert (
+            "A Pattern Guide to Producing Lightweight Documents for Software Projects"
+            == metadata.subtitle
+        )
         assert Edition.BOOK_MEDIUM == metadata.medium
         assert "Wiley Software Patterns" == metadata.series
         assert "eng" == metadata.language
@@ -535,15 +557,17 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
 
         subjects = sorted(metadata.subjects, key=lambda x: x.identifier)
 
-        assert ([("Computer Technology", Subject.OVERDRIVE, 100),
-             ("Nonfiction", Subject.OVERDRIVE, 100),
-             ('Object Technologies - Miscellaneous', 'tag', 1),
-         ] ==
-            [(x.identifier, x.type, x.weight) for x in subjects])
+        assert [
+            ("Computer Technology", Subject.OVERDRIVE, 100),
+            ("Nonfiction", Subject.OVERDRIVE, 100),
+            ("Object Technologies - Miscellaneous", "tag", 1),
+        ] == [(x.identifier, x.type, x.weight) for x in subjects]
 
         # Related IDs.
-        assert ((Identifier.OVERDRIVE_ID, '3896665d-9d81-4cac-bd43-ffc5066de1f5') ==
-            (metadata.primary_identifier.type, metadata.primary_identifier.identifier))
+        assert (Identifier.OVERDRIVE_ID, "3896665d-9d81-4cac-bd43-ffc5066de1f5") == (
+            metadata.primary_identifier.type,
+            metadata.primary_identifier.identifier,
+        )
 
         ids = [(x.type, x.identifier) for x in metadata.identifiers]
 
@@ -552,16 +576,16 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         # text, one which is mis-typed and has a bad check digit, and one
         # which has an invalid character; the bad identifiers do not show
         # up here.
-        assert (
-            [
-                (Identifier.ASIN, "B000VI88N2"),
-                (Identifier.ISBN, "9780470856246"),
-                (Identifier.OVERDRIVE_ID, '3896665d-9d81-4cac-bd43-ffc5066de1f5'),
-            ] ==
-            sorted(ids))
+        assert [
+            (Identifier.ASIN, "B000VI88N2"),
+            (Identifier.ISBN, "9780470856246"),
+            (Identifier.OVERDRIVE_ID, "3896665d-9d81-4cac-bd43-ffc5066de1f5"),
+        ] == sorted(ids)
 
         # Available formats.
-        [kindle, pdf] = sorted(metadata.circulation.formats, key=lambda x: x.content_type)
+        [kindle, pdf] = sorted(
+            metadata.circulation.formats, key=lambda x: x.content_type
+        )
         assert DeliveryMechanism.KINDLE_CONTENT_TYPE == kindle.content_type
         assert DeliveryMechanism.KINDLE_DRM == kindle.drm_scheme
 
@@ -569,9 +593,7 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         assert DeliveryMechanism.ADOBE_DRM == pdf.drm_scheme
 
         # Links to various resources.
-        shortd, image, longd = sorted(
-            metadata.links, key=lambda x:x.rel
-        )
+        shortd, image, longd = sorted(metadata.links, key=lambda x: x.rel)
 
         assert Hyperlink.DESCRIPTION == longd.rel
         assert longd.content.startswith("<p>Software documentation")
@@ -581,36 +603,50 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         assert len(shortd.content) < len(longd.content)
 
         assert Hyperlink.IMAGE == image.rel
-        assert 'http://images.contentreserve.com/ImageType-100/0128-1/%7B3896665D-9D81-4CAC-BD43-FFC5066DE1F5%7DImg100.jpg' == image.href
+        assert (
+            "http://images.contentreserve.com/ImageType-100/0128-1/%7B3896665D-9D81-4CAC-BD43-FFC5066DE1F5%7DImg100.jpg"
+            == image.href
+        )
 
         thumbnail = image.thumbnail
 
         assert Hyperlink.THUMBNAIL_IMAGE == thumbnail.rel
-        assert 'http://images.contentreserve.com/ImageType-200/0128-1/%7B3896665D-9D81-4CAC-BD43-FFC5066DE1F5%7DImg200.jpg' == thumbnail.href
+        assert (
+            "http://images.contentreserve.com/ImageType-200/0128-1/%7B3896665D-9D81-4CAC-BD43-FFC5066DE1F5%7DImg200.jpg"
+            == thumbnail.href
+        )
 
         # Measurements associated with the book.
 
         measurements = metadata.measurements
-        popularity = [x for x in measurements
-                      if x.quantity_measured==Measurement.POPULARITY][0]
+        popularity = [
+            x for x in measurements if x.quantity_measured == Measurement.POPULARITY
+        ][0]
         assert 2 == popularity.value
 
-        rating = [x for x in measurements
-                  if x.quantity_measured==Measurement.RATING][0]
+        rating = [x for x in measurements if x.quantity_measured == Measurement.RATING][
+            0
+        ]
         assert 1 == rating.value
 
         # Request only the bibliographic information.
-        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info, include_bibliographic=True, include_formats=False)
+        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(
+            info, include_bibliographic=True, include_formats=False
+        )
 
         assert "Agile Documentation" == metadata.title
         assert None == metadata.circulation
 
         # Request only the format information.
-        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info, include_bibliographic=False, include_formats=True)
+        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(
+            info, include_bibliographic=False, include_formats=True
+        )
 
         assert None == metadata.title
 
-        [kindle, pdf] = sorted(metadata.circulation.formats, key=lambda x: x.content_type)
+        [kindle, pdf] = sorted(
+            metadata.circulation.formats, key=lambda x: x.content_type
+        )
         assert DeliveryMechanism.KINDLE_CONTENT_TYPE == kindle.content_type
         assert DeliveryMechanism.KINDLE_DRM == kindle.drm_scheme
 
@@ -627,10 +663,10 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         streaming, manifest, legacy = sorted(
             metadata.circulation.formats, key=lambda x: x.content_type
         )
-        assert (DeliveryMechanism.STREAMING_AUDIO_CONTENT_TYPE ==
-            streaming.content_type)
-        assert (MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE ==
-            manifest.content_type)
+        assert DeliveryMechanism.STREAMING_AUDIO_CONTENT_TYPE == streaming.content_type
+        assert (
+            MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE == manifest.content_type
+        )
         assert "application/x-od-media" == legacy.content_type
 
     def test_book_info_with_sample(self):
@@ -639,47 +675,48 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         raw, info = self.sample_json("has_sample.json")
         metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
         samples = [x for x in metadata.links if x.rel == Hyperlink.SAMPLE]
-        epub_sample, manifest_sample = sorted(
-            samples, key=lambda x: x.media_type
-        )
+        epub_sample, manifest_sample = sorted(samples, key=lambda x: x.media_type)
 
         # Here's the direct download.
-        assert ("http://excerpts.contentreserve.com/FormatType-410/1071-1/9BD/24F/82/BridesofConvenienceBundle9781426803697.epub" ==
-            epub_sample.href)
+        assert (
+            "http://excerpts.contentreserve.com/FormatType-410/1071-1/9BD/24F/82/BridesofConvenienceBundle9781426803697.epub"
+            == epub_sample.href
+        )
         assert MediaTypes.EPUB_MEDIA_TYPE == epub_sample.media_type
 
         # Here's the manifest.
-        assert ("https://samples.overdrive.com/?crid=9BD24F82-35C0-4E0A-B5E7-BCFED07835CF&.epub-sample.overdrive.com" ==
-            manifest_sample.href)
-        assert (MediaTypes.OVERDRIVE_EBOOK_MANIFEST_MEDIA_TYPE ==
-            manifest_sample.media_type)
+        assert (
+            "https://samples.overdrive.com/?crid=9BD24F82-35C0-4E0A-B5E7-BCFED07835CF&.epub-sample.overdrive.com"
+            == manifest_sample.href
+        )
+        assert (
+            MediaTypes.OVERDRIVE_EBOOK_MANIFEST_MEDIA_TYPE == manifest_sample.media_type
+        )
 
     def test_book_info_with_grade_levels(self):
         raw, info = self.sample_json("has_grade_levels.json")
         metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
 
         grade_levels = sorted(
-            [x.identifier for x in metadata.subjects
-             if x.type==Subject.GRADE_LEVEL]
+            [x.identifier for x in metadata.subjects if x.type == Subject.GRADE_LEVEL]
         )
-        assert (['Grade 4', 'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8'] ==
-            grade_levels)
+        assert ["Grade 4", "Grade 5", "Grade 6", "Grade 7", "Grade 8"] == grade_levels
 
     def test_book_info_with_awards(self):
         raw, info = self.sample_json("has_awards.json")
         metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
 
-        [awards] = [x for x in metadata.measurements
-                    if Measurement.AWARDS == x.quantity_measured
+        [awards] = [
+            x
+            for x in metadata.measurements
+            if Measurement.AWARDS == x.quantity_measured
         ]
         assert 1 == awards.value
         assert 1 == awards.weight
 
     def test_image_link_to_linkdata(self):
         def m(link):
-            return OverdriveRepresentationExtractor.image_link_to_linkdata(
-                link, "rel"
-            )
+            return OverdriveRepresentationExtractor.image_link_to_linkdata(link, "rel")
 
         # Test missing data.
         assert None == m(None)
@@ -702,53 +739,61 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         assert "http://api.overdrive.com/v1/foo%3Abar" == data.href
 
         # Stand-in cover images are detected and filtered out.
-        data = m(dict(href="https://img1.od-cdn.com/ImageType-100/0293-1/{00000000-0000-0000-0000-000000000002}Img100.jpg"))
+        data = m(
+            dict(
+                href="https://img1.od-cdn.com/ImageType-100/0293-1/{00000000-0000-0000-0000-000000000002}Img100.jpg"
+            )
+        )
         assert None == data
 
     def test_internal_formats(self):
         # Overdrive's internal format names may correspond to one or more
         # delivery mechanisms.
         def assert_formats(overdrive_name, *expect):
-            actual = OverdriveRepresentationExtractor.internal_formats(
-                overdrive_name
-            )
+            actual = OverdriveRepresentationExtractor.internal_formats(overdrive_name)
             assert list(expect) == list(actual)
 
         # Most formats correspond to one delivery mechanism.
         assert_formats(
-            'ebook-pdf-adobe',
-            (MediaTypes.PDF_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM)
+            "ebook-pdf-adobe", (MediaTypes.PDF_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM)
         )
 
         assert_formats(
-            'ebook-epub-open',
-            (MediaTypes.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM)
+            "ebook-epub-open", (MediaTypes.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM)
         )
 
         # ebook-overdrive and audiobook-overdrive each correspond to
         # two delivery mechanisms.
         assert_formats(
-            'ebook-overdrive',
-            (MediaTypes.OVERDRIVE_EBOOK_MANIFEST_MEDIA_TYPE,
-             DeliveryMechanism.LIBBY_DRM),
-            (DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
-             DeliveryMechanism.STREAMING_DRM),
+            "ebook-overdrive",
+            (
+                MediaTypes.OVERDRIVE_EBOOK_MANIFEST_MEDIA_TYPE,
+                DeliveryMechanism.LIBBY_DRM,
+            ),
+            (
+                DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+                DeliveryMechanism.STREAMING_DRM,
+            ),
         )
 
         assert_formats(
-            'audiobook-overdrive',
-            (MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-             DeliveryMechanism.LIBBY_DRM),
-            (DeliveryMechanism.STREAMING_AUDIO_CONTENT_TYPE,
-             DeliveryMechanism.STREAMING_DRM),
+            "audiobook-overdrive",
+            (
+                MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+                DeliveryMechanism.LIBBY_DRM,
+            ),
+            (
+                DeliveryMechanism.STREAMING_AUDIO_CONTENT_TYPE,
+                DeliveryMechanism.STREAMING_DRM,
+            ),
         )
 
         # An unrecognized format does not correspond to any delivery
         # mechanisms.
-        assert_formats('no-such-format')
+        assert_formats("no-such-format")
+
 
 class TestOverdriveAdvantageAccount(OverdriveTestWithAPI):
-
     def test_no_advantage_accounts(self):
         """When there are no Advantage accounts, get_advantage_accounts()
         returns an empty list.
@@ -779,19 +824,24 @@ class TestOverdriveAdvantageAccount(OverdriveTestWithAPI):
         # a Collection object.
 
         account = OverdriveAdvantageAccount(
-            "parent_id", "child_id", "Library Name",
+            "parent_id",
+            "child_id",
+            "Library Name",
         )
 
         # We can't just create a Collection object for this object because
         # the parent doesn't exist.
         with pytest.raises(ValueError) as excinfo:
             account.to_collection(self._db)
-        assert "Cannot create a Collection whose parent does not already exist." in str(excinfo.value)
+        assert "Cannot create a Collection whose parent does not already exist." in str(
+            excinfo.value
+        )
 
         # So, create a Collection to be the parent.
         parent = self._collection(
-            name="Parent", protocol=ExternalIntegration.OVERDRIVE,
-            external_account_id="parent_id"
+            name="Parent",
+            protocol=ExternalIntegration.OVERDRIVE,
+            external_account_id="parent_id",
         )
 
         # Now it works.
@@ -799,10 +849,8 @@ class TestOverdriveAdvantageAccount(OverdriveTestWithAPI):
         assert p == parent
         assert parent == collection.parent
         assert collection.external_account_id == account.library_id
-        assert (ExternalIntegration.LICENSE_GOAL ==
-            collection.external_integration.goal)
-        assert (ExternalIntegration.OVERDRIVE ==
-            collection.protocol)
+        assert ExternalIntegration.LICENSE_GOAL == collection.external_integration.goal
+        assert ExternalIntegration.OVERDRIVE == collection.protocol
 
         # To ensure uniqueness, the collection was named after its
         # parent.
@@ -824,19 +872,17 @@ class TestOverdriveBibliographicCoverageProvider(OverdriveTest):
         the coverage provider.
         """
         script = RunCollectionCoverageProviderScript(
-            OverdriveBibliographicCoverageProvider, self._db,
-            api_class=MockOverdriveAPI
+            OverdriveBibliographicCoverageProvider, self._db, api_class=MockOverdriveAPI
         )
         [provider] = script.providers
-        assert isinstance(provider,
-                          OverdriveBibliographicCoverageProvider)
+        assert isinstance(provider, OverdriveBibliographicCoverageProvider)
         assert isinstance(provider.api, MockOverdriveAPI)
         assert self.collection == provider.collection
 
     def test_invalid_or_unrecognized_guid(self):
         """A bad or malformed GUID can't get coverage."""
         identifier = self._identifier()
-        identifier.identifier = 'bad guid'
+        identifier.identifier = "bad guid"
         self.api.queue_collection_token()
 
         error = '{"errorCode": "InvalidGuid", "message": "An invalid guid was given.", "token": "7aebce0e-2e88-41b3-b6d3-82bf15f8e1a2"}'
@@ -865,7 +911,7 @@ class TestOverdriveBibliographicCoverageProvider(OverdriveTest):
 
         # Here's the book mentioned in overdrive_metadata.json.
         identifier = self._identifier(identifier_type=Identifier.OVERDRIVE_ID)
-        identifier.identifier = '3896665d-9d81-4cac-bd43-ffc5066de1f5'
+        identifier.identifier = "3896665d-9d81-4cac-bd43-ffc5066de1f5"
 
         # This book has no LicensePool.
         assert [] == identifier.licensed_through
@@ -885,10 +931,16 @@ class TestOverdriveBibliographicCoverageProvider(OverdriveTest):
         assert 0 == pool.licenses_owned
         [lpdm1, lpdm2] = pool.delivery_mechanisms
         names = [x.delivery_mechanism.name for x in pool.delivery_mechanisms]
-        assert sorted(['application/pdf (application/vnd.adobe.adept+xml)',
-                    'Kindle via Amazon (Kindle DRM)']) == sorted(names)
+        assert (
+            sorted(
+                [
+                    "application/pdf (application/vnd.adobe.adept+xml)",
+                    "Kindle via Amazon (Kindle DRM)",
+                ]
+            )
+            == sorted(names)
+        )
 
         # A Work was created and made presentation ready.
         assert "Agile Documentation" == pool.work.title
         assert True == pool.work.presentation_ready
-
