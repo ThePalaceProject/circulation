@@ -532,7 +532,7 @@ class TestODLAPI(DatabaseTest, BaseODLTest):
         })
 
         self.api.queue_response(200, content=lsd)
-        fulfillment = self.api.fulfill(self.patron, "pin", self.pool, Representation.EPUB_MEDIA_TYPE)
+        fulfillment = self.api.fulfill(self.patron, "pin", self.pool, DeliveryMechanism.ADOBE_DRM)
         assert self.collection == fulfillment.collection(self._db)
         assert self.pool.data_source.name == fulfillment.data_source_name
         assert self.pool.identifier.type == fulfillment.identifier_type
