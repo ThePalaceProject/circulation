@@ -13,11 +13,7 @@ from api.saml.metadata.federations.validator import (
     SAMLFederatedMetadataValidationError,
     SAMLMetadataSignatureValidator,
 )
-from core.util.datetime_helpers import (
-    datetime_utc,
-    from_timestamp,
-    utc_now
-)
+from core.util.datetime_helpers import datetime_utc, from_timestamp, utc_now
 
 
 class TestSAMLFederatedMetadataExpirationValidator(object):

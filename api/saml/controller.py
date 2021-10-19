@@ -1,8 +1,5 @@
 import json
 import logging
-
-from flask import redirect
-from flask_babel import lazy_gettext as _
 from urllib.parse import (
     SplitResult,
     parse_qs,
@@ -11,6 +8,9 @@ from urllib.parse import (
     urlsplit,
     urlunparse,
 )
+
+from flask import redirect
+from flask_babel import lazy_gettext as _
 
 from api.problem_details import *
 from api.saml.auth import SAMLAuthenticationManager

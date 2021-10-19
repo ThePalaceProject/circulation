@@ -125,7 +125,7 @@ When running the `pip install ...` command, you may run into installation issues
 error: command '/usr/bin/clang' failed with exit code 1
   ----------------------------------------
   ERROR: Failed building wheel for xmlsec
-Failed to build dm.xmlsec.binding xmlsec
+Failed to build xmlsec
 ERROR: Could not build wheels for xmlsec which use PEP 517 and cannot be installed directly
 ```
 

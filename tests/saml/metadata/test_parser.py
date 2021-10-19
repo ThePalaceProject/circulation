@@ -1,4 +1,4 @@
-import defusedxml
+import onelogin
 import pytest
 from mock import MagicMock, create_autospec
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
@@ -78,7 +78,7 @@ class TestSAMLMetadataParser(object):
         assert True == isinstance(parsing_result, SAMLMetadataParsingResult)
         assert True == isinstance(parsing_result.provider, SAMLIdentityProviderMetadata)
         assert (
-            True == isinstance(parsing_result.xml_node, defusedxml.lxml.RestrictedElement))
+            True == isinstance(parsing_result.xml_node, onelogin.saml2.xmlparser.RestrictedElement))
         assert (
             SAMLIdentityProviderMetadata(
                 entity_id=fixtures.IDP_1_ENTITY_ID,
@@ -112,7 +112,7 @@ class TestSAMLMetadataParser(object):
         assert True == isinstance(parsing_result, SAMLMetadataParsingResult)
         assert True == isinstance(parsing_result.provider, SAMLIdentityProviderMetadata)
         assert (
-            True == isinstance(parsing_result.xml_node, defusedxml.lxml.RestrictedElement))
+            True == isinstance(parsing_result.xml_node, onelogin.saml2.xmlparser.RestrictedElement))
         assert (
             SAMLIdentityProviderMetadata(
                 entity_id=fixtures.IDP_1_ENTITY_ID,
@@ -198,7 +198,7 @@ class TestSAMLMetadataParser(object):
         assert True == isinstance(parsing_result, SAMLMetadataParsingResult)
         assert True == isinstance(parsing_result.provider, SAMLIdentityProviderMetadata)
         assert (
-            True == isinstance(parsing_result.xml_node, defusedxml.lxml.RestrictedElement))
+            True == isinstance(parsing_result.xml_node, onelogin.saml2.xmlparser.RestrictedElement))
         assert (
             SAMLIdentityProviderMetadata(
                 entity_id=fixtures.IDP_1_ENTITY_ID,
@@ -286,7 +286,7 @@ class TestSAMLMetadataParser(object):
         assert True == isinstance(parsing_result, SAMLMetadataParsingResult)
         assert True == isinstance(parsing_result.provider, SAMLIdentityProviderMetadata)
         assert (
-            True == isinstance(parsing_result.xml_node, defusedxml.lxml.RestrictedElement))
+            True == isinstance(parsing_result.xml_node, onelogin.saml2.xmlparser.RestrictedElement))
         assert (
             SAMLIdentityProviderMetadata(
                 entity_id=fixtures.IDP_1_ENTITY_ID,
@@ -371,7 +371,7 @@ class TestSAMLMetadataParser(object):
         assert True == isinstance(parsing_results[0].provider, SAMLIdentityProviderMetadata)
         assert (
             True ==
-            isinstance(parsing_results[0].xml_node, defusedxml.lxml.RestrictedElement))
+            isinstance(parsing_results[0].xml_node, onelogin.saml2.xmlparser.RestrictedElement))
         assert (
             SAMLIdentityProviderMetadata(
                 entity_id=fixtures.IDP_1_ENTITY_ID,
@@ -431,7 +431,7 @@ class TestSAMLMetadataParser(object):
         assert True == isinstance(parsing_results[1].provider, SAMLIdentityProviderMetadata)
         assert (
             True ==
-            isinstance(parsing_results[1].xml_node, defusedxml.lxml.RestrictedElement))
+            isinstance(parsing_results[1].xml_node, onelogin.saml2.xmlparser.RestrictedElement))
         assert (
             SAMLIdentityProviderMetadata(
                 entity_id=fixtures.IDP_2_ENTITY_ID,
@@ -511,7 +511,7 @@ class TestSAMLMetadataParser(object):
         assert True == isinstance(parsing_result, SAMLMetadataParsingResult)
         assert True == isinstance(parsing_result.provider, SAMLServiceProviderMetadata)
         assert (
-            True == isinstance(parsing_result.xml_node, defusedxml.lxml.RestrictedElement))
+            True == isinstance(parsing_result.xml_node, onelogin.saml2.xmlparser.RestrictedElement))
 
         assert (
             SAMLServiceProviderMetadata(

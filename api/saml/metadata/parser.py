@@ -1,10 +1,10 @@
 import logging
 
-from defusedxml.lxml import fromstring
 from flask_babel import lazy_gettext as _
 from lxml.etree import XMLSyntaxError
 from onelogin.saml2.constants import OneLogin_Saml2_Constants
 from onelogin.saml2.utils import OneLogin_Saml2_XML
+from onelogin.saml2.xmlparser import fromstring
 
 from api.saml.metadata.model import (
     SAMLAttribute,
@@ -36,7 +36,7 @@ class SAMLMetadataParsingResult(object):
         :type provider: api.saml.metadata.model.SAMLProviderMetadata
 
         :param xml_node: XML node containing metadata
-        :type xml_node: defusedxml.lxml.RestrictedElement
+        :type xml_node: onelogin.saml2.xmlparser.RestrictedElement
         """
         self._provider = provider
         self._xml_node = xml_node
@@ -55,7 +55,7 @@ class SAMLMetadataParsingResult(object):
         """Return the XML node containing metadata
 
         :return: XML node containing metadata
-        :rtype: defusedxml.lxml.RestrictedElement
+        :rtype: onelogin.saml2.xmlparser.RestrictedElement
         """
         return self._xml_node
 
@@ -94,7 +94,7 @@ class SAMLMetadataParser(object):
         :type xml_metadata: string
 
         :return: XML DOM tree containing SAML metadata
-        :rtype: defusedxml.lxml.RestrictedElement
+        :rtype: onelogin.saml2.xmlparser.RestrictedElement
 
         :raise: MetadataParsingError
         """
@@ -124,7 +124,7 @@ class SAMLMetadataParser(object):
         """Parses XML nodes containing X.509 certificates into a list of strings
 
         :param certificate_nodes: List of XML nodes containing X.509 certificates
-        :type certificate_nodes: List[defusedxml.lxml.RestrictedElement]
+        :type certificate_nodes: List[onelogin.saml2.xmlparser.RestrictedElement]
 
         :return: List of string containing X.509 certificates
         :rtype: List[string]
@@ -164,14 +164,14 @@ class SAMLMetadataParser(object):
         into IdentityProviderMetadata/ServiceProviderMetadata object
 
         :param entity_descriptor_node: Parent EntityDescriptor node
-        :type entity_descriptor_node: defusedxml.lxml.RestrictedElement
+        :type entity_descriptor_node: onelogin.saml2.xmlparser.RestrictedElement
 
         :param provider_nodes: List of IDPSSODescriptor/SPSSODescriptor nodes
-        :type provider_nodes: List[defusedxml.lxml.RestrictedElement]
+        :type provider_nodes: List[onelogin.saml2.xmlparser.RestrictedElement]
 
         :param parse_function: Function used to parse body of IDPSSODescriptor/SPSSODescriptor nodes
         and return corresponding IdentityProviderMetadata/ServiceProviderMetadata objects
-        :type parse_function: Callable[[defusedxml.lxml.RestrictedElement, string, UIInfo], ProviderMetadata]
+        :type parse_function: Callable[[onelogin.saml2.xmlparser.RestrictedElement, string, UIInfo], ProviderMetadata]
 
         :return: List of IdentityProviderMetadata/ServiceProviderMetadata objects containing SAML metadata from the XML
         :rtype: List[ProviderMetadata]
@@ -203,7 +203,7 @@ class SAMLMetadataParser(object):
         """Parses IDPSSODescriptor/SPSSODescriptor's mdui:UIInfo child elements (for example, mdui:DisplayName)
 
         :param provider_descriptor_node: Parent IDPSSODescriptor/SPSSODescriptor XML node
-        :type provider_descriptor_node: defusedxml.lxml.RestrictedElement
+        :type provider_descriptor_node: onelogin.saml2.xmlparser.RestrictedElement
 
         :param xpath: XPath expression for a particular md:localizedNameType child element
             (for example, mdui:DisplayName)
@@ -252,7 +252,7 @@ class SAMLMetadataParser(object):
         """Parses IDPSSODescriptor/SPSSODescriptor's mdui:UIInfo and translates it into UIInfo object
 
         :param provider_node: Parent IDPSSODescriptor/SPSSODescriptor node
-        :type provider_node: defusedxml.lxml.RestrictedElement
+        :type provider_node: onelogin.saml2.xmlparser.RestrictedElement
 
         :return: UIInfo object
         :rtype: UIInfo
@@ -285,7 +285,7 @@ class SAMLMetadataParser(object):
         """Parses IDPSSODescriptor/SPSSODescriptor's mdui:Organization and translates it into Organization object
 
         :param entity_descriptor_node: Parent EntityDescriptor node
-        :type entity_descriptor_node: defusedxml.lxml.RestrictedElement
+        :type entity_descriptor_node: onelogin.saml2.RestrictedElement
 
         :return: Organization object
         :rtype: Organization
@@ -315,7 +315,7 @@ class SAMLMetadataParser(object):
         If there are multiple name ID formats specified in the XML metadata, we select the first one.
 
         :param provider_node: Parent IDPSSODescriptor/SPSSODescriptor node
-        :type provider_node: defusedxml.lxml.RestrictedElement
+        :type provider_node: onelogin.saml2.xmlparser.RestrictedElement
 
         :return: Name ID format
         :rtype: string
@@ -342,7 +342,7 @@ class SAMLMetadataParser(object):
         """Parses IDPSSODescriptor node and translates it into an IdentityProviderMetadata object
 
         :param provider_node: IDPSSODescriptor node containing IdP metadata
-        :param provider_node: defusedxml.lxml.RestrictedElement
+        :param provider_node: onelogin.saml2.xmlparser.RestrictedElement
 
         :param entity_id: String containing IdP's entityID
         :type entity_id: string
@@ -434,7 +434,7 @@ class SAMLMetadataParser(object):
         """Parses SPSSODescriptor node and translates it into a ServiceProvider object
 
         :param provider_node: SPSSODescriptor node containing SP metadata
-        :param provider_node: defusedxml.lxml.RestrictedElement
+        :param provider_node: onelogin.saml2.xmlparser.RestrictedElement
 
         :param entity_id: String containing IdP's entityID
         :type entity_id: string
@@ -513,10 +513,10 @@ class SAMLMetadataParser(object):
         """Selects a node with attribute "isDefault=true"
 
         :param nodes: List of XML nodes
-        :type nodes: List[defusedxml.lxml.RestrictedElement]
+        :type nodes: List[onelogin.saml2.xmlparser.RestrictedElement]
 
         :return: "Default" node or None if there is no one
-        :rtype: Optional[defusedxml.lxml.RestrictedElement]
+        :rtype: Optional[onelogin.saml2.xmlparser.RestrictedElement]
         """
         default_nodes = [node for node in nodes if node.get("isDefault", False)]
 
@@ -528,10 +528,10 @@ class SAMLMetadataParser(object):
         """Sorts a list of XML nodes by "index" attribute and selects the first node
 
         :param nodes: List of XML nodes
-        :type nodes: List[defusedxml.lxml.RestrictedElement]
+        :type nodes: List[onelogin.saml2.xmlparser.RestrictedElement]
 
         :return: Node with the smallest index or None if there is no one
-        :rtype: Optional[defusedxml.lxml.RestrictedElement]
+        :rtype: Optional[onelogin.saml2.xmlparser.RestrictedElement]
         """
         if not nodes:
             return None
@@ -544,10 +544,10 @@ class SAMLMetadataParser(object):
         """Selects a node with attribute "isDefault=true" or a node with the smallest "index" attribute
 
         :param nodes: List of XML nodes
-        :type nodes: List[defusedxml.lxml.RestrictedElement]
+        :type nodes: List[onelogin.saml2.xmlparser.RestrictedElement]
 
         :return: "Default" node or the node with the smallest "index" attribute or None if there is no one
-        :rtype: Optional[defusedxml.lxml.RestrictedElement]
+        :rtype: Optional[onelogin.saml2.xmlparser.RestrictedElement]
         """
         default_node = self._select_default_element(nodes)
 
