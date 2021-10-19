@@ -6,9 +6,8 @@ from flask_babel import lazy_gettext as _
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
-from api.odl import ODLAPI, ODLExpiredItemsReaper
-from core import util
-from core.metadata_layer import FormatData, LicenseData
+from api.odl import ODLAPI, ODLExpiredItemsReaper, ODLImporter
+from core.metadata_layer import FormatData
 from core.model import DeliveryMechanism, Edition, MediaTypes, RightsStatus
 from core.model.configuration import (
     ConfigurationAttributeType,
@@ -16,6 +15,7 @@ from core.model.configuration import (
     ConfigurationGrouping,
     ConfigurationMetadata,
     ConfigurationStorage,
+    ExternalIntegration,
     HasExternalIntegration,
 )
 from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, RWPMManifestParser
@@ -25,8 +25,10 @@ from core.util import first_or_default
 class ODL2APIConfiguration(ConfigurationGrouping):
     skipped_license_formats = ConfigurationMetadata(
         key="odl2_skipped_license_formats",
-        label=_("License formats"),
-        description=_("Name of the data source associated with this collection."),
+        label=_("Skipped license formats"),
+        description=_(
+            "List of license formats that will NOT be imported into Circulation Manager."
+        ),
         type=ConfigurationAttributeType.LIST,
         required=False,
         default=["text/html"],
@@ -34,7 +36,7 @@ class ODL2APIConfiguration(ConfigurationGrouping):
 
 
 class ODL2API(ODLAPI):
-    NAME = "ODL 2.0"
+    NAME = ExternalIntegration.ODL2
     SETTINGS = ODLAPI.SETTINGS + ODL2APIConfiguration.to_settings()
 
 
@@ -58,7 +60,7 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
     LICENSE_FORMATS = {
         FEEDBOOKS_AUDIO: {
             CONTENT_TYPE: MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-            DRM_SCHEME: DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM
+            DRM_SCHEME: DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
         }
     }
 
@@ -195,8 +197,12 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
                     )
 
                     if license_format in self.LICENSE_FORMATS:
-                        drm_scheme = self.LICENSE_FORMATS[license_format][self.DRM_SCHEME]
-                        license_format = self.LICENSE_FORMATS[license_format][self.CONTENT_TYPE]
+                        drm_scheme = self.LICENSE_FORMATS[license_format][
+                            self.DRM_SCHEME
+                        ]
+                        license_format = self.LICENSE_FORMATS[license_format][
+                            self.CONTENT_TYPE
+                        ]
 
                         drm_schemes.append(drm_scheme)
 
@@ -208,11 +214,6 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
                                 rights_uri=RightsStatus.IN_COPYRIGHT,
                             )
                         )
-
-                expires = None
-                remaining_checkouts = None
-                available_checkouts = None
-                concurrent_checkouts = None
 
                 checkout_link = first_or_default(
                     license.links.get_by_rel(OPDS2LinkRelationsRegistry.BORROW.key)
@@ -226,41 +227,32 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
                 if odl_status_link:
                     odl_status_link = odl_status_link.href
 
-                if odl_status_link:
-                    status_code, _, response = self.http_get(
-                        odl_status_link, headers={}
-                    )
-
-                    if status_code < 400:
-                        status = json.loads(response)
-                        checkouts = status.get("checkouts", {})
-                        remaining_checkouts = checkouts.get("left")
-                        available_checkouts = checkouts.get("available")
+                expires = None
+                total_checkouts = None
+                concurrent_checkouts = None
 
                 if license.metadata.terms:
-                    expires = license.metadata.terms.expires
+                    total_checkouts = license.metadata.terms.checkouts
                     concurrent_checkouts = license.metadata.terms.concurrency
+                    expires = license.metadata.terms.expires
 
-                    if expires:
-                        expires = util.datetime_helpers.to_utc(expires)
-                        now = util.datetime_helpers.utc_now()
-
-                        if expires <= now:
-                            continue
-
-                licenses_owned += int(concurrent_checkouts or 0)
-                licenses_available += int(available_checkouts or 0)
-
-                licenses.append(
-                    LicenseData(
-                        identifier=identifier,
-                        checkout_url=checkout_link,
-                        status_url=odl_status_link,
-                        expires=expires,
-                        remaining_checkouts=remaining_checkouts,
-                        concurrent_checkouts=concurrent_checkouts,
-                    )
+                license = ODLImporter.parse_license(
+                    identifier,
+                    total_checkouts,
+                    concurrent_checkouts,
+                    expires,
+                    checkout_link,
+                    odl_status_link,
+                    self.http_get,
                 )
+
+                if not license:
+                    continue
+
+                licenses_owned += int(license.remaining_checkouts or 0)
+                licenses_available += int(license.concurrent_checkouts or 0)
+
+                licenses.append(license)
 
         metadata.circulation.licenses_owned = licenses_owned
         metadata.circulation.licenses_available = licenses_available
@@ -283,5 +275,6 @@ class ODL2ImportMonitor(OPDS2ImportMonitor):
 
 class ODL2ExpiredItemsReaper(ODLExpiredItemsReaper):
     """Responsible for removing expired ODL licenses."""
+
     SERVICE_NAME = "ODL 2 Expired Items Reaper"
     PROTOCOL = ODL2Importer.NAME

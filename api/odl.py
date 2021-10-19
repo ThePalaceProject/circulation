@@ -1,19 +1,26 @@
+import binascii
 import datetime
+import hashlib
 import json
+import logging
 import uuid
 from io import StringIO
+from typing import Callable, Optional
 
 import dateutil
 import feedparser
 import flask
+import sqlalchemy
 from flask import url_for
 from flask_babel import lazy_gettext as _
 from lxml import etree
 from sqlalchemy.sql.expression import or_
+from typing import Optional
 from uritemplate import URITemplate
 
 from core import util
 from core.analytics import Analytics
+from core.lcp.credential import LCPCredentialFactory
 from core.metadata_layer import (
     CirculationData,
     FormatData,
@@ -32,11 +39,14 @@ from core.model import (
     LicensePool,
     Loan,
     MediaTypes,
+    Representation,
     RightsStatus,
     Session,
     get_one,
     get_one_or_create,
-    Representation)
+    Representation, LicensePoolDeliveryMechanism)
+from core.model.configuration import ConfigurationFactory, ConfigurationStorage, HasExternalIntegration, \
+    ConfigurationGrouping, ConfigurationMetadata, ConfigurationAttributeType, ConfigurationOption
 from core.monitor import (
     CollectionMonitor,
     IdentifierSweepMonitor)
@@ -49,26 +59,97 @@ from core.testing import (
     DatabaseTest,
     MockRequestsResponse,
 )
-from core.util.datetime_helpers import (
-    utc_now,
-)
-from core.util.http import (
-    HTTP,
-    BadResponseException,
-    RemoteIntegrationException,
-)
+from core.monitor import CollectionMonitor, IdentifierSweepMonitor
+from core.opds_import import OPDSImporter, OPDSImportMonitor, OPDSXMLParser
+from core.testing import DatabaseTest, MockRequestsResponse
+from core.util.datetime_helpers import utc_now
+from core.util.http import HTTP, BadResponseException, RemoteIntegrationException
 from core.util.string_helpers import base64
-from .circulation import (
-    BaseCirculationAPI,
-    LoanInfo,
-    FulfillmentInfo,
-    HoldInfo,
-)
+
+from .circulation import BaseCirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
 from .circulation_exceptions import *
+from .lcp.hash import HasherFactory, Hasher, HashingAlgorithm
 from .shared_collection import BaseSharedCollectionAPI
 
 
-class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI):
+class ODLAPIConfiguration(ConfigurationGrouping):
+    """Contains LCP License Server's settings"""
+
+    DEFAULT_PASSPHRASE_HINT = 'Look in the Palace app.'
+    DEFAULT_ENCRYPTION_ALGORITHM = HashingAlgorithm.SHA256.value
+
+    feed_url = ConfigurationMetadata(
+        key=Collection.EXTERNAL_ACCOUNT_ID_KEY,
+        label=_("ODL feed URL"),
+        description="",
+        type=ConfigurationAttributeType.TEXT,
+        required=True,
+        format="url"
+    )
+
+    username = ConfigurationMetadata(
+        key=ExternalIntegration.USERNAME,
+        label=_("Library's API username"),
+        description="",
+        type=ConfigurationAttributeType.TEXT,
+        required=True,
+    )
+
+    password = ConfigurationMetadata(
+        key=ExternalIntegration.PASSWORD,
+        label=_("Library's API password"),
+        description="",
+        type=ConfigurationAttributeType.TEXT,
+        required=True,
+    )
+
+    datasource_name = ConfigurationMetadata(
+        key=Collection.DATA_SOURCE_NAME_SETTING,
+        label=_("Data source name"),
+        description="",
+        type=ConfigurationAttributeType.TEXT,
+        required=True,
+    )
+
+    default_reservation_period = ConfigurationMetadata(
+        key=Collection.DEFAULT_RESERVATION_PERIOD_KEY,
+        label=_("Default Reservation Period (in Days)"),
+        description=_("The number of days a patron has to check out a book after a hold becomes available."),
+        type=ConfigurationAttributeType.NUMBER,
+        required=False,
+        default=Collection.STANDARD_DEFAULT_RESERVATION_PERIOD
+    )
+
+    passphrase_hint = ConfigurationMetadata(
+        key="passphrase_hint",
+        label=_("Passphrase hint"),
+        description=_("Hint displayed to the user when opening an LCP protected publication."),
+        type=ConfigurationAttributeType.TEXT,
+        required=False,
+        default=DEFAULT_PASSPHRASE_HINT
+    )
+
+    passphrase_hint_url = ConfigurationMetadata(
+        key="passphrase_hint_url",
+        label=_("Passphrase hint URL"),
+        description=_("Hint URL available to the user when opening an LCP protected publication."),
+        type=ConfigurationAttributeType.TEXT,
+        required=False,
+        format="url"
+    )
+
+    encryption_algorithm = ConfigurationMetadata(
+        key="encryption_algorithm",
+        label=_("Passphrase encryption algorithm"),
+        description=_("Algorithm used for encrypting the passphrase."),
+        type=ConfigurationAttributeType.SELECT,
+        required=False,
+        default=DEFAULT_ENCRYPTION_ALGORITHM,
+        options=ConfigurationOption.from_enum(HashingAlgorithm)
+    )
+
+
+class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration):
     """ODL (Open Distribution to Libraries) is a specification that allows
     libraries to manage their own loans and holds. It offers a deeper level
     of control to the library, but it requires the circulation manager to
@@ -82,39 +163,10 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI):
     circulation manager.
     """
 
-    NAME = "ODL"
+    NAME = ExternalIntegration.ODL
     DESCRIPTION = _("Import books from a distributor that uses ODL (Open Distribution to Libraries).")
 
-    SETTINGS = [
-        {
-            "key": Collection.EXTERNAL_ACCOUNT_ID_KEY,
-            "label": _("ODL feed URL"),
-            "required": True,
-            "format": "url",
-        },
-        {
-            "key": ExternalIntegration.USERNAME,
-            "label": _("Library's API username"),
-            "required": True,
-        },
-        {
-            "key": ExternalIntegration.PASSWORD,
-            "label": _("Library's API password"),
-            "required": True,
-        },
-        {
-            "key": Collection.DATA_SOURCE_NAME_SETTING,
-            "label": _("Data source name"),
-            "required": True,
-        },
-        {
-            "key": Collection.DEFAULT_RESERVATION_PERIOD_KEY,
-            "label": _("Default Reservation Period (in Days)"),
-            "description": _("The number of days a patron has to check out a book after a hold becomes available."),
-            "type": "number",
-            "default": Collection.STANDARD_DEFAULT_RESERVATION_PERIOD,
-        },
-    ] + BaseSharedCollectionAPI.SETTINGS
+    SETTINGS = BaseSharedCollectionAPI.SETTINGS + ODLAPIConfiguration.to_settings()
 
     LIBRARY_SETTINGS = BaseCirculationAPI.LIBRARY_SETTINGS + [
         BaseCirculationAPI.EBOOK_LOAN_DURATION_SETTING
@@ -166,14 +218,50 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI):
         self.password = collection.external_integration.password
         self.analytics = Analytics(_db)
 
+        self._configuration_storage = ConfigurationStorage(self)
+        self._configuration_factory = ConfigurationFactory()
+        self._hasher_factory = HasherFactory()
+        self._credential_factory = LCPCredentialFactory()
+        self._hasher_instance: Optional[Hasher] = None
+
+    def external_integration(self, db: sqlalchemy.orm.session.Session) -> ExternalIntegration:
+        """Return an external integration associated with this object.
+
+        :param db: Database session
+        :return: External integration associated with this object
+        """
+        return self.collection(db).external_integration
+
     def internal_format(self, delivery_mechanism):
         """Each consolidated copy is only available in one format, so we don't need
         a mapping to internal formats.
         """
         return delivery_mechanism
 
-    def collection(self, _db):
-        return get_one(_db, Collection, id=self.collection_id)
+    def collection(self, db) -> Collection:
+        """Return a collection associated with this object.
+
+        :param db: Database session
+        :return: Collection associated with this object
+        """
+        return get_one(db, Collection, id=self.collection_id)
+
+    def _get_hasher(self, configuration):
+        """Returns a Hasher instance
+
+        :param configuration: Configuration object
+        :type configuration: LCPServerConfiguration
+
+        :return: Hasher instance
+        :rtype: hash.Hasher
+        """
+        if self._hasher_instance is None:
+            self._hasher_instance = self._hasher_factory.create(
+                configuration.encryption_algorithm
+                if configuration.encryption_algorithm
+                else ODLAPIConfiguration.DEFAULT_ENCRYPTION_ALGORITHM)
+
+        return self._hasher_instance
 
     def _get(self, url, headers=None):
         """Make a normal HTTP request, but include an authentication
@@ -231,21 +319,37 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI):
             else:
                 # If this is for an integration client, choose an arbitrary library.
                 library_short_name = self.collection(_db).libraries[0].short_name
-            notification_url = self._url_for(
-                "odl_notify",
-                library_short_name=library_short_name,
-                loan_id=loan.id,
-                _external=True,
-            )
 
-            url_template = URITemplate(loan.license.checkout_url)
-            url = url_template.expand(
-                id=id,
-                checkout_id=checkout_id,
-                patron_id=patron_id,
-                expires=expires.isoformat(),
-                notification_url=notification_url,
-            )
+            db = Session.object_session(loan)
+            patron = loan.patron
+
+            with self._configuration_factory.create(
+                    self._configuration_storage, db, ODLAPIConfiguration) as configuration:
+                hasher = self._get_hasher(configuration)
+                hashed_passphrase = hasher.hash(self._credential_factory.get_patron_passphrase(db, patron))
+                encoded_passphrase = base64.b64encode(binascii.unhexlify(hashed_passphrase))
+
+                self._credential_factory.set_hashed_passphrase(db, patron, hashed_passphrase)
+
+                notification_url = self._url_for(
+                    "odl_notify",
+                    library_short_name=library_short_name,
+                    loan_id=loan.id,
+                    _external=True,
+                )
+
+                url_template = URITemplate(loan.license.checkout_url)
+                url = url_template.expand(
+                    id=id,
+                    checkout_id=checkout_id,
+                    patron_id=patron_id,
+                    expires=expires.isoformat(),
+                    notification_url=notification_url,
+                    passphrase=encoded_passphrase,
+                    hint=configuration.passphrase_hint,
+                    hint_url=configuration.passphrase_hint_url
+                )
+
         response = self._get(url)
 
         try:
@@ -419,9 +523,13 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI):
             Loan.license_pool_id==licensepool.id
         )
         loan = loan.one()
-        return self._fulfill(loan)
+        return self._fulfill(loan, internal_format)
 
-    def _fulfill(self, loan):
+    def _fulfill(
+            self,
+            loan: Loan,
+            delivery_mechanism: Optional[LicensePoolDeliveryMechanism] = None
+    ) -> FulfillmentInfo:
         licensepool = loan.license_pool
         doc = self.get_license_status_document(loan)
         status = doc.get("status")
@@ -443,14 +551,33 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI):
         for link in links:
             # Depending on the format being served, the crucial information
             # may be in 'manifest' or in 'license'.
-            #
-            # TODO: when both links are present, access to the
-            # DeliveryMechanism would be great for figuring out which
-            # one to use.
             if link.get("rel") in ("manifest", "license"):
-                content_link = link.get("href")
-                content_type = link.get("type")
-                break
+                candidate_content_link = link.get("href")
+                candidate_content_type = link.get("type")
+
+                if not delivery_mechanism:
+                    # If we don't have a LicensePoolDeliveryMechanism instance,
+                    # we can't really decide whether the link has the correct content and DRM type,
+                    # so we take the first one.
+                    content_link = candidate_content_link
+                    content_type = candidate_content_type
+                    break
+                elif isinstance(delivery_mechanism, str):
+                    # If delivery mechanism is a string,
+                    # then we suppose that it contains the DRM type in the case of the DRM-protected content
+                    # and the content type in the case of OA content.
+                    if delivery_mechanism == candidate_content_type:
+                        content_link = candidate_content_link
+                        content_type = candidate_content_type
+                        break
+                elif isinstance(delivery_mechanism, LicensePoolDeliveryMechanism):
+                    # If we have a LicensePoolDeliveryMechanism instance,
+                    # then we use it to find a link with the correct content and DRM types.
+                    if candidate_content_type == delivery_mechanism.delivery_mechanism.drm_scheme or \
+                            candidate_content_type == delivery_mechanism.delivery_mechanism.content_type:
+                        content_link = candidate_content_link
+                        content_type = candidate_content_type
+                        break
 
         return FulfillmentInfo(
             licensepool.collection,
@@ -787,6 +914,105 @@ class ODLImporter(OPDSImporter):
     LICENSE_INFO_DOCUMENT_MEDIA_TYPE = 'application/vnd.odl.info+json'
 
     @classmethod
+    def parse_license(
+            cls,
+            identifier: str,
+            total_checkouts: Optional[int],
+            concurrent_checkouts: Optional[int],
+            expires: Optional[datetime.datetime],
+            checkout_link: Optional[str],
+            odl_status_link: Optional[str],
+            do_get: Callable
+    ) -> Optional[LicenseData]:
+        """Check the license's attributes passed as parameters:
+        - if they're correct, turn them into a LicenseData object
+        - otherwise, return a None
+
+        :param identifier: License's identifier
+        :param total_checkouts: Total number of checkouts before the license expires
+        :param concurrent_checkouts: Number of concurrent checkouts allowed for this license
+        :param expires: Date & time until the license is valid
+        :param checkout_link: License's checkout link
+        :param odl_status_link: License Info Document's link
+        :param do_get: Callback performing HTTP GET method
+
+        :return: LicenseData if all the license's attributes are correct, None, otherwise
+        """
+        remaining_checkouts = None
+        available_concurrent_checkouts = None
+
+        # This cycle ends in two different cases:
+        # - when at least one of the parameters is invalid; in this case, the method returns None.
+        # - when all the parameters are valid; in this case, the method returns a LicenseData object.
+        while True:
+            if total_checkouts is not None:
+                total_checkouts = int(total_checkouts)
+
+                if total_checkouts <= 0:
+                    logging.info(
+                        f"License # {identifier} expired since "
+                        f"the total number of checkouts is {total_checkouts}"
+                    )
+                    break
+
+            if expires:
+                if not isinstance(expires, datetime.datetime):
+                    expires = dateutil.parser.parse(expires)
+
+                expires = util.datetime_helpers.to_utc(expires)
+                now = util.datetime_helpers.utc_now()
+
+                if expires <= now:
+                    logging.info(
+                        f"License # {identifier} expired at {expires} (now is {now})"
+                    )
+                    break
+
+            if odl_status_link:
+                status_code, _, response = do_get(
+                    odl_status_link, headers={}
+                )
+
+                if status_code in (200, 201):
+                    status = json.loads(response)
+                    checkouts = status.get("checkouts", {})
+                    remaining_checkouts = checkouts.get("left")
+                    available_concurrent_checkouts = checkouts.get("available")
+                else:
+                    logging.warning(
+                        f"License # {identifier}'s Info Document is not available. "
+                        f"Status link failed with {status_code} code"
+                    )
+                    break
+
+            if remaining_checkouts is None:
+                remaining_checkouts = total_checkouts
+
+            if remaining_checkouts is not None:
+                remaining_checkouts = int(remaining_checkouts)
+
+                if remaining_checkouts <= 0:
+                    logging.info(
+                        f"License # {identifier} expired since "
+                        f"the remaining number of checkouts is {remaining_checkouts}"
+                    )
+                    break
+
+            if available_concurrent_checkouts is None:
+                available_concurrent_checkouts = concurrent_checkouts
+
+            return LicenseData(
+                identifier=identifier,
+                checkout_url=checkout_link,
+                status_url=odl_status_link,
+                expires=expires,
+                remaining_checkouts=remaining_checkouts,
+                concurrent_checkouts=available_concurrent_checkouts,
+            )
+
+        return None
+
+    @classmethod
     def _detail_for_elementtree_entry(cls, parser, entry_tag, feed_url=None, do_get=None):
         do_get = do_get or Representation.cautious_http_get
 
@@ -843,11 +1069,6 @@ class ODLImporter(OPDSImporter):
 
             data['medium'] = medium
 
-            expires = None
-            remaining_checkouts = None
-            available_checkouts = None
-            concurrent_checkouts = None
-
             checkout_link = None
             for link_tag in parser._xpath(odl_license_tag, 'odl:tlink') or []:
                 rel = link_tag.attrib.get("rel")
@@ -866,37 +1087,33 @@ class ODLImporter(OPDSImporter):
                     odl_status_link = attrib.get("href")
                     break
 
-            # If we found one, retrieve it and get licensing information about this book.
-            if odl_status_link:
-                ignore, ignore, response = do_get(odl_status_link, headers={})
-                status = json.loads(response)
-                checkouts = status.get("checkouts", {})
-                remaining_checkouts = checkouts.get("left")
-                available_checkouts = checkouts.get("available")
+            expires = None
+            total_checkouts = None
+            concurrent_checkouts = None
 
             terms = parser._xpath(odl_license_tag, "odl:terms")
             if terms:
+                total_checkouts = subtag(terms[0], "odl:total_checkouts")
                 concurrent_checkouts = subtag(terms[0], "odl:concurrent_checkouts")
                 expires = subtag(terms[0], "odl:expires")
 
-                if expires:
-                    expires = util.datetime_helpers.to_utc(dateutil.parser.parse(expires))
-                    now = util.datetime_helpers.utc_now()
+            license = cls.parse_license(
+                identifier,
+                total_checkouts,
+                concurrent_checkouts,
+                expires,
+                checkout_link,
+                odl_status_link,
+                do_get
+            )
 
-                    if expires <= now:
-                            continue
+            if not license:
+                continue
 
-            licenses_owned += int(concurrent_checkouts or 0)
-            licenses_available += int(available_checkouts or 0)
+            licenses_owned += int(license.remaining_checkouts or 0)
+            licenses_available += int(license.concurrent_checkouts or 0)
 
-            licenses.append(LicenseData(
-                identifier=identifier,
-                checkout_url=checkout_link,
-                status_url=odl_status_link,
-                expires=expires,
-                remaining_checkouts=remaining_checkouts,
-                concurrent_checkouts=concurrent_checkouts,
-            ))
+            licenses.append(license)
 
         if not data.get('circulation'):
             data['circulation'] = dict()
@@ -1552,17 +1769,20 @@ class ODLExpiredItemsReaper(IdentifierSweepMonitor):
 
     def process_item(self, identifier):
         for licensepool in identifier.licensed_through:
-            licenses_owned = licensepool.licenses_owned
-            licenses_available = licensepool.licenses_available
+            remaining_checkouts = 0   # total number of checkouts across all the licenses in the pool
+            concurrent_checkouts = 0  # number of concurrent checkouts allowed across all the licenses in the pool
 
-            for license in licensepool.licenses:
-                if license.is_expired:
-                    licenses_owned -= 1
-                    licenses_available -= 1
+            # 0 is a starting point,
+            # we're going through all the valid licenses in the pool and count up available checkouts.
+            for license_pool_license in licensepool.licenses:
+                if not license_pool_license.is_expired:
+                    remaining_checkouts += license_pool_license.remaining_checkouts
+                    concurrent_checkouts += license_pool_license.concurrent_checkouts
 
-            if licenses_owned != licensepool.licenses_owned or licenses_available != licensepool.licenses_available:
-                licenses_owned = max(licenses_owned, 0)
-                licenses_available = max(licenses_available, 0)
+            if remaining_checkouts != licensepool.licenses_owned or \
+                    concurrent_checkouts != licensepool.licenses_available:
+                licenses_owned = max(remaining_checkouts, 0)
+                licenses_available = max(concurrent_checkouts, 0)
 
                 circulation_data = CirculationData(
                     data_source=licensepool.data_source,
