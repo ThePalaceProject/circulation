@@ -22,6 +22,7 @@ from core.model.configuration import (
     ConfigurationMetadata,
     ConfigurationOption,
 )
+
 cgi.escape = html.escape
 
 class SAMLConfigurationError(BaseError):

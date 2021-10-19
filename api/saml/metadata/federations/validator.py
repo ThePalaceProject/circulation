@@ -3,8 +3,8 @@ import logging
 from abc import ABCMeta
 
 import six
-from defusedxml.lxml import fromstring
 from onelogin.saml2.utils import OneLogin_Saml2_Utils
+from onelogin.saml2.xmlparser import fromstring
 
 from core.exceptions import BaseError
 from core.util.datetime_helpers import from_timestamp, utc_now

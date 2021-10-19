@@ -1,14 +1,12 @@
-from core.util.string_helpers import base64
 from copy import copy
+from urllib.parse import parse_qs, urlsplit
 from xml.dom.minidom import Document
 
-from .database_test import DatabaseTest
-from defusedxml.lxml import fromstring
 from freezegun import freeze_time
 from mock import MagicMock, PropertyMock, create_autospec, patch
 from onelogin.saml2.utils import OneLogin_Saml2_Utils, OneLogin_Saml2_XML
+from onelogin.saml2.xmlparser import fromstring
 from parameterized import parameterized
-from urllib.parse import parse_qs, urlsplit
 
 from api.saml.auth import (
     SAML_NO_ACCESS_ERROR,
@@ -35,8 +33,11 @@ from core.model.configuration import HasExternalIntegration
 from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvaluator
 from core.python_expression_dsl.parser import DSLParser
 from core.util.datetime_helpers import datetime_utc
+from core.util.string_helpers import base64
 from tests.saml import fixtures
 from tests.test_controller import ControllerTest
+
+from .database_test import DatabaseTest
 
 SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS = SAMLServiceProviderMetadata(
     "http://opds.hilbertteam.net/metadata/",
