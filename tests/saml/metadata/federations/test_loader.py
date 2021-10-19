@@ -12,6 +12,7 @@ from api.saml.metadata.federations.validator import SAMLFederatedMetadataValidat
 from api.saml.metadata.parser import SAMLMetadataParser
 from tests.saml import fixtures
 
+
 class TestSAMLMetadataLoader(object):
     @patch("urllib.request.urlopen")
     def test_load_idp_metadata_raises_error_when_xml_is_incorrect(self, urlopen_mock):
