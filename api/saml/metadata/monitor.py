@@ -5,6 +5,7 @@ from api.saml.metadata.federations.model import SAMLFederation
 from core.monitor import Monitor
 from core.util.datetime_helpers import utc_now
 
+
 class SAMLMetadataMonitor(Monitor):
     SERVICE_NAME = "SAML Metadata Monitor"
 

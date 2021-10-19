@@ -1,7 +1,7 @@
 import logging
 
-from defusedxml.lxml import tostring
 from onelogin.saml2.idp_metadata_parser import OneLogin_Saml2_IdPMetadataParser
+from onelogin.saml2.xmlparser import tostring
 
 from api.saml.metadata.federations.model import (
     SAMLFederatedIdentityProvider,
