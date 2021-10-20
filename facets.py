@@ -51,7 +51,6 @@ class FacetConstants(object):
         ORDER_TITLE,
         ORDER_AUTHOR,
         ORDER_ADDED_TO_COLLECTION,
-        ORDER_RANDOM,
     ]
 
     ORDER_ASCENDING = "asc"
@@ -86,7 +85,6 @@ class FacetConstants(object):
         ORDER_ADDED_TO_COLLECTION: _("Recently Added"),
         ORDER_SERIES_POSITION: _("Series Position"),
         ORDER_WORK_ID: _("Work ID"),
-        ORDER_RANDOM: _("Random"),
         AVAILABLE_NOW: _("Available now"),
         AVAILABLE_ALL: _("All"),
         AVAILABLE_OPEN_ACCESS: _("Yours to keep"),
@@ -121,7 +119,6 @@ class FacetConstants(object):
         ORDER_ADDED_TO_COLLECTION: "licensepools.availability_time",
         ORDER_SERIES_POSITION: ["series_position", "sort_title"],
         ORDER_WORK_ID: "_id",
-        ORDER_RANDOM: "random",
     }
 
 
