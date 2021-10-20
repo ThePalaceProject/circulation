@@ -7,6 +7,7 @@ from typing import Callable, Tuple
 import urllib3
 from flask_babel import lazy_gettext as _
 from lxml import etree
+from requests import Response as RequestsResponse
 
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
@@ -1666,12 +1667,14 @@ class Axis360AcsFulfillmentInfo(FulfillmentInfo):
         def subn(cls, repl: Callable, string: str) -> Tuple[str, int]:
             return string, string.count("%")
 
+    MAKE_REQUEST: Callable[..., RequestsResponse] = HTTP.request_with_timeout
+
     @property
     def as_response(self) -> Response:
         original_percent_re = urllib3.util.url.PERCENT_RE
         urllib3.util.url.PERCENT_RE = self.Urllib3UtilUrlPercentReOverride
         try:
-            request = HTTP.request_with_timeout('GET', self.content_link)
+            request = self.MAKE_REQUEST('GET', self.content_link)
         finally:
             urllib3.util.url.PERCENT_RE = original_percent_re
         return Response(response=request.content, status=request.status_code, headers=request.headers)

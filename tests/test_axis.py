@@ -1,53 +1,14 @@
 import datetime
 import json
-import os
 
 import pytest
-from lxml import etree
-from io import StringIO
-from core.analytics import Analytics
-from core.mock_analytics_provider import MockAnalyticsProvider
-from core.coverage import CoverageFailure
-
-from core.model import (
-    ConfigurationSetting,
-    Contributor,
-    DataSource,
-    DeliveryMechanism,
-    Edition,
-    ExternalIntegration,
-    Hyperlink,
-    Identifier,
-    LicensePool,
-    LinkRelations,
-    MediaTypes,
-    Representation,
-    Subject,
-    create,
-)
-
-from core.metadata_layer import (
-    Metadata,
-    CirculationData,
-    IdentifierData,
-    ContributorData,
-    SubjectData,
-    TimestampData,
-)
-
-from core.scripts import RunCollectionCoverageProviderScript
-from core.testing import MockRequestsResponse
-
-from core.util.http import (
-    RemoteIntegrationException,
-    HTTP,
-)
+import requests
 
 from api.authenticator import BasicAuthenticationProvider
-
 from api.axis import (
     AudiobookMetadataParser,
     AvailabilityResponseParser,
+    Axis360AcsFulfillmentInfo,
     Axis360API,
     Axis360BibliographicCoverageProvider,
     Axis360CirculationMonitor,
@@ -61,33 +22,42 @@ from api.axis import (
     HoldResponseParser,
     JSONResponseParser,
     MockAxis360API,
-    ResponseParser,
 )
-
-from core.testing import DatabaseTest
-from core.util.datetime_helpers import (
-    datetime_utc,
-    utc_now,
-)
-from . import sample_data
-
-from api.circulation import (
-    LoanInfo,
-    HoldInfo,
-    FulfillmentInfo,
-)
-
+from api.circulation import FulfillmentInfo, HoldInfo, LoanInfo
 from api.circulation_exceptions import *
-
-from api.config import (
-    Configuration,
-    temp_config,
+from api.config import Configuration
+from api.web_publication_manifest import FindawayManifest, SpineItem
+from core.coverage import CoverageFailure
+from core.metadata_layer import (
+    CirculationData,
+    ContributorData,
+    IdentifierData,
+    Metadata,
+    SubjectData,
+    TimestampData,
 )
-
-from api.web_publication_manifest import (
-    FindawayManifest,
-    SpineItem,
+from core.mock_analytics_provider import MockAnalyticsProvider
+from core.model import (
+    ConfigurationSetting,
+    Contributor,
+    DataSource,
+    DeliveryMechanism,
+    Edition,
+    ExternalIntegration,
+    Hyperlink,
+    Identifier,
+    LinkRelations,
+    MediaTypes,
+    Representation,
+    Subject,
+    create,
 )
+from core.scripts import RunCollectionCoverageProviderScript
+from core.testing import DatabaseTest
+from core.util.datetime_helpers import datetime_utc, utc_now
+from core.util.http import RemoteIntegrationException
+
+from . import sample_data
 
 
 class Axis360Test(DatabaseTest):
@@ -1672,3 +1642,73 @@ class TestAxis360BibliographicCoverageProvider(Axis360Test):
         )
         assert [] == identifier.licensed_through
         assert [] == identifier.primarily_identifies
+
+
+class TestAxis360AcsFulfillmentInfo:
+    @pytest.fixture()
+    def fulfilmentclass(self, monkeypatch, request):
+        explode = request.node.get_closest_marker("explode")
+        if explode:
+            # If the explode marker is set we throw an exception
+            def mock_make_request(cls, method, url, **kwargs):
+                raise Exception()
+        else:
+            # Otherwise we prep the request, but don't make it
+            def mock_make_request(cls, method, url, **kwargs):
+                r = requests.Request(method, url)
+                cls.prep = r.prepare()
+                return requests.Response()
+        monkeypatch.setattr(Axis360AcsFulfillmentInfo, "MAKE_REQUEST", mock_make_request)
+        return Axis360AcsFulfillmentInfo
+
+    @pytest.fixture()
+    def fulfillment(self, fulfilmentclass, request):
+        marker = request.node.get_closest_marker("url")
+        if marker is not None:
+            url = marker.args[0]
+        else:
+            url = "https://test.com/?param=%3atest123"
+        return fulfilmentclass(
+            content_link=url,
+            collection=0,
+            content_type=None,
+            content=None,
+            content_expires=None,
+            data_source_name=None,
+            identifier_type=None,
+            identifier=None
+        )
+
+    def test_url_encoding_not_capitalized(self, fulfillment):
+        response = fulfillment.as_response
+        assert fulfillment.prep.url == fulfillment.content_link
+
+    @pytest.mark.url("https://test.com/?param=%3atest123&foo=bar%3a%3b%3chc%3a")
+    def test_url_encoding_not_capitalized_multiple(self, fulfillment):
+        response = fulfillment.as_response
+        assert fulfillment.prep.url == fulfillment.content_link
+        assert fulfillment.prep.url.count("%3a") == 3
+        assert fulfillment.prep.url.count("%3b") == 1
+        assert fulfillment.prep.url.count("%3c") == 1
+
+    def test_monkey_patch_unapplied(self, fulfillment):
+        # Make sure that the monkeypatch we use to make sure the
+        # url is not changed by urllib3 is correctly unapplied.
+        fulfillment.prep = None
+        response = fulfillment.as_response
+        assert fulfillment.prep is not None
+        r = requests.Request("GET", fulfillment.content_link)
+        prep = r.prepare()
+        assert prep.url != fulfillment.content_link
+        assert "%3A" in prep.url
+
+    @pytest.mark.explode()
+    def test_monkey_patch_unapplied_exception(self, fulfillment):
+        # Make sure the monkeypatch we use is correctly unapplied in
+        # the case where an exception is raised.
+        with pytest.raises(Exception):
+            response = fulfillment.as_response
+        r = requests.Request("GET", fulfillment.content_link)
+        prep = r.prepare()
+        assert prep.url != fulfillment.content_link
+        assert "%3A" in prep.url
