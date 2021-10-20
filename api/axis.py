@@ -1661,6 +1661,8 @@ class Axis360AcsFulfillmentInfo(FulfillmentInfo):
     the request to the Axis360 API, then unpatches the method. It is a pretty
     ugly fix in the end, but it allows us to not be stuck on an old version of
     urllib3 forever.
+
+    TODO: This is absolutely NOT thread safe. Do not taunt Urllib3UtilUrlPercentReOverride.
     """
     class Urllib3UtilUrlPercentReOverride:
         @classmethod
