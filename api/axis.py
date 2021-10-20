@@ -1,28 +1,16 @@
 import json
 import logging
-import os
 import re
+from datetime import timedelta
+from typing import Callable, Tuple
 
-from collections import defaultdict
-from datetime import datetime, timedelta
+import urllib3
 from flask_babel import lazy_gettext as _
 from lxml import etree
-from sqlalchemy.orm import contains_eager
-from sqlalchemy.orm.session import Session
 
 from core.analytics import Analytics
-
-from core.config import (
-    CannotLoadConfiguration,
-    Configuration,
-    temp_config,
-)
-
-from core.coverage import (
-    BibliographicCoverageProvider,
-    CoverageFailure,
-)
-
+from core.config import CannotLoadConfiguration
+from core.coverage import BibliographicCoverageProvider, CoverageFailure
 from core.metadata_layer import (
     CirculationData,
     ContributorData,
@@ -33,9 +21,7 @@ from core.metadata_layer import (
     ReplacementPolicy,
     SubjectData,
 )
-
 from core.model import (
-    CirculationEvent,
     Classification,
     Collection,
     Contributor,
@@ -43,64 +29,34 @@ from core.model import (
     DeliveryMechanism,
     Edition,
     ExternalIntegration,
-    get_one,
-    get_one_or_create,
     Hyperlink,
     Identifier,
-    Library,
-    LicensePool,
     LinkRelations,
     MediaTypes,
     Representation,
     Session,
     Subject,
+    get_one_or_create,
 )
-
-from core.monitor import (
-    CollectionMonitor,
-    IdentifierSweepMonitor,
-    TimelineMonitor,
-)
-
-from core.opds_import import (
-    MetadataWranglerOPDSLookup
-)
-
+from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
 from core.testing import DatabaseTest
-
-from core.util import LanguageCodes
-from core.util.datetime_helpers import (
-    datetime_utc,
-    strptime_utc,
-    utc_now,
-)
-from core.util.xmlparser import XMLParser
-from core.util.http import (
-    HTTP,
-    RemoteIntegrationException,
-)
+from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
+from core.util.flask_util import Response
+from core.util.http import HTTP
 from core.util.string_helpers import base64
+from core.util.xmlparser import XMLParser
 
 from .authenticator import Authenticator
-
 from .circulation import (
     APIAwareFulfillmentInfo,
-    LoanInfo,
+    BaseCirculationAPI,
     FulfillmentInfo,
     HoldInfo,
-    BaseCirculationAPI
+    LoanInfo,
 )
 from .circulation_exceptions import *
-
-from .selftest import (
-    HasCollectionSelfTests,
-    SelfTestResult,
-)
-
-from .web_publication_manifest import (
-    FindawayManifest,
-    SpineItem,
-)
+from .selftest import HasCollectionSelfTests, SelfTestResult
+from .web_publication_manifest import FindawayManifest, SpineItem
 
 
 class Axis360API(Authenticator, BaseCirculationAPI, HasCollectionSelfTests):
@@ -1399,7 +1355,7 @@ class AvailabilityResponseParser(ResponseParser):
             if download_url and self.internal_format != self.api.AXISNOW:
                 # The patron wants a direct link to the book, which we can deliver
                 # immediately, without making any more API requests.
-                fulfillment = FulfillmentInfo(
+                fulfillment = Axis360AcsFulfillmentInfo(
                     collection=self.collection,
                     content_link=download_url,
                     content_type=DeliveryMechanism.ADOBE_DRM,
@@ -1668,3 +1624,54 @@ class Axis360FulfillmentInfo(APIAwareFulfillmentInfo):
         self._content = str(manifest)
         self._content_type = manifest.MEDIA_TYPE
         self._content_expires = expires
+
+
+class Axis360AcsFulfillmentInfo(FulfillmentInfo):
+    """This implements a Axis 360 specific FulfillmentInfo for ACS content
+    served through AxisNow. The AxisNow API gives us a link that we can use
+    to get the ACSM file that we serve to the mobile apps.
+
+    This link resolves to a redirect, which resolves to the actual ACSM file.
+    The URL we are given in the redirect has a percent encoded query string
+    in it. The encoding used in this string has lower case characters in it
+    like "%3a" for :.
+
+    In versions of urllib3 > 1.24.3 the library normalizes the query string
+    before doing the actual request. In doing the normalization it follows the
+    recommendation of RFC 3986 and uppercases the percent encoded bytes.
+
+    This causes the Axis360 API to return an error from Adobe ACS:
+    ```
+    <error xmlns="http://ns.adobe.com/adept" data="E_URLLINK_AUTH
+    https://acsqa.digitalcontentcafe.com/fulfillment/URLLink.acsm"/>
+    ```
+    instead of the correct ACSM file.
+
+    Others have noted that this is a problem in the urllib3 github but they
+    do not seem interested in providing an option to override this behavior
+    and closed the ticket.
+    https://github.com/urllib3/urllib3/issues/1677
+
+    This FulfillmentInfo implementation takes the same approach used in this
+    github issue, where they had a similar problem:
+    https://github.com/streamlink/streamlink/issues/4002
+
+    It monkeypatches the check that is done in urllib3 temporarily, makes
+    the request to the Axis360 API, then unpatches the method. It is a pretty
+    ugly fix in the end, but it allows us to not be stuck on an old version of
+    urllib3 forever.
+    """
+    class Urllib3UtilUrlPercentReOverride:
+        @classmethod
+        def subn(cls, repl: Callable, string: str) -> Tuple[str, int]:
+            return string, string.count("%")
+
+    @property
+    def as_response(self) -> Response:
+        original_percent_re = urllib3.util.url.PERCENT_RE
+        urllib3.util.url.PERCENT_RE = self.Urllib3UtilUrlPercentReOverride
+        try:
+            request = HTTP.request_with_timeout('GET', self.content_link)
+        finally:
+            urllib3.util.url.PERCENT_RE = original_percent_re
+        return Response(response=request.content, status=request.status_code, headers=request.headers)
