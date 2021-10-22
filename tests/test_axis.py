@@ -1,8 +1,12 @@
 import datetime
 import json
+import socket
+import ssl
+import urllib
+from functools import partial
+from unittest.mock import MagicMock, Mock
 
 import pytest
-import requests
 
 from api.authenticator import BasicAuthenticationProvider
 from api.axis import (
@@ -55,7 +59,9 @@ from core.model import (
 from core.scripts import RunCollectionCoverageProviderScript
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import datetime_utc, utc_now
+from core.util.flask_util import Response
 from core.util.http import RemoteIntegrationException
+from core.util.problem_detail import ProblemDetail
 
 from . import sample_data
 
@@ -1645,70 +1651,60 @@ class TestAxis360BibliographicCoverageProvider(Axis360Test):
 
 
 class TestAxis360AcsFulfillmentInfo:
-    @pytest.fixture()
-    def fulfilmentclass(self, monkeypatch, request):
-        explode = request.node.get_closest_marker("explode")
-        if explode:
-            # If the explode marker is set we throw an exception
-            def mock_make_request(cls, method, url, **kwargs):
-                raise Exception()
-        else:
-            # Otherwise we prep the request, but don't make it
-            def mock_make_request(cls, method, url, **kwargs):
-                r = requests.Request(method, url)
-                cls.prep = r.prepare()
-                return requests.Response()
-        monkeypatch.setattr(Axis360AcsFulfillmentInfo, "MAKE_REQUEST", mock_make_request)
-        return Axis360AcsFulfillmentInfo
+    @pytest.fixture
+    def mock_request(self):
+        mock_request = MagicMock()
+        mock_request.__enter__.return_value = MagicMock(return_value="")
+        mock_request.__exit__.return_value = None
+        return mock_request
 
-    @pytest.fixture()
-    def fulfillment(self, fulfilmentclass, request):
-        marker = request.node.get_closest_marker("url")
-        if marker is not None:
-            url = marker.args[0]
-        else:
-            url = "https://test.com/?param=%3atest123"
-        return fulfilmentclass(
-            content_link=url,
-            collection=0,
-            content_type=None,
-            content=None,
-            content_expires=None,
-            data_source_name=None,
-            identifier_type=None,
-            identifier=None
-        )
+    @pytest.fixture
+    def fulfillmentinfo(self):
+        params = {
+            "collection": 0,
+            "content_type": None,
+            "content": None,
+            "content_expires": None,
+            "data_source_name": None,
+            "identifier_type": None,
+            "identifier": None
+        }
+        return partial(Axis360AcsFulfillmentInfo, **params)
 
-    def test_url_encoding_not_capitalized(self, fulfillment):
+    @pytest.fixture
+    def patch(self, monkeypatch):
+        def patch_urlopen(mock):
+            monkeypatch.setattr(urllib.request, "urlopen", mock)
+        return patch_urlopen
+
+    def test_url_encoding_not_capitalized(self, patch, mock_request, fulfillmentinfo):
+        def mock_urlopen(url, **kwargs):
+            TestAxis360AcsFulfillmentInfo.TEST_URL = url
+            return mock_request
+        patch(mock_urlopen)
+        fulfillment = fulfillmentinfo(content_link="https://test.com/?param=%3atest123")
         response = fulfillment.as_response
-        assert fulfillment.prep.url == fulfillment.content_link
+        assert self.TEST_URL.selector == "/?param=%3atest123"
+        assert self.TEST_URL.host == "test.com"
+        assert type(response) == Response
+        mock_request.__enter__.assert_called()
+        mock_request.__enter__.return_value.read.assert_called()
+        assert 'status' in dir(mock_request.__enter__.return_value)
+        assert 'headers' in dir(mock_request.__enter__.return_value)
+        mock_request.__exit__.assert_called()
 
-    @pytest.mark.url("https://test.com/?param=%3atest123&foo=bar%3a%3b%3chc%3a")
-    def test_url_encoding_not_capitalized_multiple(self, fulfillment):
+    @pytest.mark.parametrize(
+        "exception",
+        [
+            urllib.error.HTTPError(url="", code=301, msg="", hdrs={}, fp=Mock()),
+            socket.timeout(),
+            urllib.error.URLError(reason=""),
+            ssl.SSLError()
+        ],
+        ids=lambda val: val.__class__.__name__
+    )
+    def test_exception_returns_problem_detail(self, patch, fulfillmentinfo, exception):
+        patch(Mock(side_effect=exception))
+        fulfillment = fulfillmentinfo(content_link="https://test.com/?param=%3atest123")
         response = fulfillment.as_response
-        assert fulfillment.prep.url == fulfillment.content_link
-        assert fulfillment.prep.url.count("%3a") == 3
-        assert fulfillment.prep.url.count("%3b") == 1
-        assert fulfillment.prep.url.count("%3c") == 1
-
-    def test_monkey_patch_unapplied(self, fulfillment):
-        # Make sure that the monkeypatch we use to make sure the
-        # url is not changed by urllib3 is correctly unapplied.
-        fulfillment.prep = None
-        response = fulfillment.as_response
-        assert fulfillment.prep is not None
-        r = requests.Request("GET", fulfillment.content_link)
-        prep = r.prepare()
-        assert prep.url != fulfillment.content_link
-        assert "%3A" in prep.url
-
-    @pytest.mark.explode()
-    def test_monkey_patch_unapplied_exception(self, fulfillment):
-        # Make sure the monkeypatch we use is correctly unapplied in
-        # the case where an exception is raised.
-        with pytest.raises(Exception):
-            response = fulfillment.as_response
-        r = requests.Request("GET", fulfillment.content_link)
-        prep = r.prepare()
-        assert prep.url != fulfillment.content_link
-        assert "%3A" in prep.url
+        assert type(response) == ProblemDetail

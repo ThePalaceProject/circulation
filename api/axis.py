@@ -1,13 +1,14 @@
 import json
 import logging
 import re
+import socket
+import ssl
+import urllib
 from datetime import timedelta
-from typing import Callable, Tuple
+from typing import Union
 
-import urllib3
 from flask_babel import lazy_gettext as _
 from lxml import etree
-from requests import Response as RequestsResponse
 
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
@@ -43,7 +44,8 @@ from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMoni
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
 from core.util.flask_util import Response
-from core.util.http import HTTP
+from core.util.http import HTTP, RequestNetworkException
+from core.util.problem_detail import ProblemDetail
 from core.util.string_helpers import base64
 from core.util.xmlparser import XMLParser
 
@@ -1653,30 +1655,42 @@ class Axis360AcsFulfillmentInfo(FulfillmentInfo):
     and closed the ticket.
     https://github.com/urllib3/urllib3/issues/1677
 
-    This FulfillmentInfo implementation takes the same approach used in this
-    github issue, where they had a similar problem:
-    https://github.com/streamlink/streamlink/issues/4002
-
-    It monkeypatches the check that is done in urllib3 temporarily, makes
-    the request to the Axis360 API, then unpatches the method. It is a pretty
-    ugly fix in the end, but it allows us to not be stuck on an old version of
-    urllib3 forever.
-
-    TODO: This is absolutely NOT thread safe. Do not taunt Urllib3UtilUrlPercentReOverride.
+    This FulfillmentInfo implementation uses the built in Python urllib
+    implementation instead of requests (and urllib3) to make this request
+    to the Axis 360 API, sidestepping the problem, but taking a different
+    code path then most of our external HTTP requests.
     """
-    class Urllib3UtilUrlPercentReOverride:
-        @classmethod
-        def subn(cls, repl: Callable, string: str) -> Tuple[str, int]:
-            return string, string.count("%")
+    logger = logging.getLogger(__name__)
 
-    MAKE_REQUEST: Callable[..., RequestsResponse] = HTTP.request_with_timeout
+    def problem_detail_document(self, error_details: str) -> ProblemDetail:
+        service_name = urllib.parse.urlparse(self.content_link).netloc
+        self.logger.warning(error_details)
+        return INTEGRATION_ERROR.detailed(
+            _(RequestNetworkException.detail, service=service_name),
+            title=RequestNetworkException.title,
+            debug_message=error_details
+        )
 
     @property
-    def as_response(self) -> Response:
-        original_percent_re = urllib3.util.url.PERCENT_RE
-        urllib3.util.url.PERCENT_RE = self.Urllib3UtilUrlPercentReOverride
+    def as_response(self) -> Union[Response, ProblemDetail]:
+        service_name = urllib.parse.urlparse(self.content_link).netloc
         try:
-            request = self.MAKE_REQUEST('GET', self.content_link)
-        finally:
-            urllib3.util.url.PERCENT_RE = original_percent_re
-        return Response(response=request.content, status=request.status_code, headers=request.headers)
+            req = urllib.request.Request(self.content_link, headers={"User-Agent": "Palace"})
+            with urllib.request.urlopen(req, timeout=20) as response:
+                content = response.read()
+                status = response.status
+                headers = response.headers
+
+        # Mimic the behavior of the HTTP.request_with_timeout class and
+        # wrap the exceptions thrown by urllib and ssl returning a ProblemDetail document.
+        except urllib.error.HTTPError as e:
+            return self.problem_detail_document(
+                "The server received a bad status code ({}) while contacting {}".format(e.code, service_name)
+            )
+        except socket.timeout:
+            return self.problem_detail_document("Error connecting to {}. Timeout occurred.".format(service_name))
+        except (urllib.error.URLError, ssl.SSLError) as e:
+            reason = getattr(e, "reason", e.__class__.__name__)
+            return self.problem_detail_document("Error connecting to {}. {}.".format(service_name, reason))
+
+        return Response(response=content, status=status, headers=headers)
