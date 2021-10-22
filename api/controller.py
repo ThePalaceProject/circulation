@@ -1661,7 +1661,7 @@ class LoanController(CirculationManagerController):
         # A subclass of FulfillmentInfo may want to bypass the whole
         # response creation process.
         response = fulfillment.as_response
-        if response:
+        if response is not None:
             return response
 
         headers = dict()
