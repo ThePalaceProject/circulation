@@ -1,17 +1,21 @@
-import pytest
-
 import flask
+import pytest
 from werkzeug.datastructures import MultiDict
-from api.admin.exceptions import *
-# from api.admin.problem_details import *
-from api.registry import RemoteRegistry
-from core.model import (
-    AdminRole,
-    create,
-    ExternalIntegration,
-    get_one,
+
+from api.admin.exceptions import (
+    INCOMPLETE_CONFIGURATION,
+    INTEGRATION_NAME_ALREADY_IN_USE,
+    INTEGRATION_URL_ALREADY_IN_USE,
+    MISSING_SERVICE,
+    NO_PROTOCOL_FOR_NEW_SERVICE,
+    UNKNOWN_PROTOCOL,
+    AdminNotAuthorized,
 )
+from api.registry import RemoteRegistry
+from core.model import AdminRole, ExternalIntegration, create, get_one
+
 from .test_controller import SettingsControllerTest
+
 
 class TestDiscoveryServices(SettingsControllerTest):
 
