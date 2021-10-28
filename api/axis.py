@@ -5,8 +5,9 @@ import socket
 import ssl
 import urllib
 from datetime import timedelta
-from typing import Union
+from typing import Optional, Union
 
+import certifi
 from flask_babel import lazy_gettext as _
 from lxml import etree
 
@@ -62,7 +63,11 @@ from .selftest import HasCollectionSelfTests, SelfTestResult
 from .web_publication_manifest import FindawayManifest, SpineItem
 
 
-class Axis360API(Authenticator, BaseCirculationAPI, HasCollectionSelfTests):
+class Axis360APIConstants:
+    VERIFY_SSL = "verify_certificate"
+
+
+class Axis360API(Authenticator, BaseCirculationAPI, HasCollectionSelfTests, Axis360APIConstants):
 
     NAME = ExternalIntegration.AXIS_360
 
@@ -87,6 +92,25 @@ class Axis360API(Authenticator, BaseCirculationAPI, HasCollectionSelfTests):
           "required": True,
           "format": "url",
           "allowed": list(SERVER_NICKNAMES.keys()),
+        },
+        {
+          "key": Axis360APIConstants.VERIFY_SSL,
+          "label": _("Verify SSL Certificate"),
+          "description": _(
+            "This should always be True in production, it may need to be set to False to use the"
+            "Axis 360 QA Environment."),
+          "type": "select",
+          "options": [
+            {
+              "label": _("True"),
+              "key": "True"
+            },
+            {
+              "label": _("False"),
+              "key": "False",
+            }
+          ],
+          "default": True,
         },
     ] + BaseCirculationAPI.SETTINGS
 
@@ -156,6 +180,7 @@ class Axis360API(Authenticator, BaseCirculationAPI, HasCollectionSelfTests):
 
         self.token = None
         self.collection_id = collection.id
+        self.verify_certificate: Optional[bool] = collection.external_integration.setting(self.VERIFY_SSL).bool_value
 
     @property
     def collection(self):
@@ -1364,6 +1389,7 @@ class AvailabilityResponseParser(ResponseParser):
                     content_type=DeliveryMechanism.ADOBE_DRM,
                     content=None,
                     content_expires=None,
+                    verify=self.api.verify_certificate,
                     **kwargs
                 )
             elif transaction_id:
@@ -1662,6 +1688,10 @@ class Axis360AcsFulfillmentInfo(FulfillmentInfo):
     """
     logger = logging.getLogger(__name__)
 
+    def __init__(self, verify: Optional[bool], **kwargs):
+        super().__init__(**kwargs)
+        self.verify = verify
+
     def problem_detail_document(self, error_details: str) -> ProblemDetail:
         service_name = urllib.parse.urlparse(self.content_link).netloc
         self.logger.warning(error_details)
@@ -1675,8 +1705,17 @@ class Axis360AcsFulfillmentInfo(FulfillmentInfo):
     def as_response(self) -> Union[Response, ProblemDetail]:
         service_name = urllib.parse.urlparse(self.content_link).netloc
         try:
+            if self.verify is None or self.verify:
+                # Actually verify the ssl certificates
+                ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS)
+                ssl_context.verify_mode = ssl.CERT_REQUIRED
+                ssl_context.check_hostname = True
+                ssl_context.load_verify_locations(cafile=certifi.where())
+            else:
+                # Default context does no ssl verification
+                ssl_context = ssl.SSLContext()
             req = urllib.request.Request(self.content_link, headers={"User-Agent": "Palace"})
-            with urllib.request.urlopen(req, timeout=20) as response:
+            with urllib.request.urlopen(req, timeout=20, context=ssl_context) as response:
                 content = response.read()
                 status = response.status
                 headers = response.headers
