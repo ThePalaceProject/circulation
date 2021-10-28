@@ -2155,7 +2155,15 @@ class TestLoanController(CirculationControllerTest):
             assert expected_path.startswith("/{}/".format(library_short_name))
             assert part_url_path.startswith("/{}/".format(library_short_name))
 
-    def test_fulfill_returns_fulfillment_info_implementing_as_response(self):
+    @pytest.mark.parametrize(
+        "as_response_value",
+        [
+            Response(status=200, response="Here's your response"),
+            Response(status=401, response="Error"),
+            Response(status=500, response="Fault"),
+        ]
+    )
+    def test_fulfill_returns_fulfillment_info_implementing_as_response(self, as_response_value):
         # If CirculationAPI.fulfill returns a FulfillmentInfo that
         # defines as_response, the result of as_response is returned
         # directly and the normal process of converting a FulfillmentInfo
@@ -2163,7 +2171,7 @@ class TestLoanController(CirculationControllerTest):
         class MockFulfillmentInfo(FulfillmentInfo):
             @property
             def as_response(self):
-                return "Here's your response"
+                return as_response_value
 
         class MockCirculationAPI(object):
             def fulfill(slf, *args, **kwargs):
@@ -2189,7 +2197,7 @@ class TestLoanController(CirculationControllerTest):
 
             # The result of MockFulfillmentInfo.as_response was
             # returned directly.
-            assert "Here's your response" == result
+            assert as_response_value == result
 
     def test_fulfill_without_active_loan(self):
 
