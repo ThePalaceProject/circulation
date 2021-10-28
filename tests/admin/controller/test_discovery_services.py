@@ -32,7 +32,7 @@ class TestDiscoveryServices(SettingsControllerTest):
             assert "settings" in protocols[0]
             assert ExternalIntegration.OPDS_REGISTRATION == service.get("protocol")
             assert RemoteRegistry.DEFAULT_LIBRARY_REGISTRY_URL == service.get("settings").get(ExternalIntegration.URL)
-            assert RemoteRegistry.DEFAULT_LIBRARY_REGISTRY_NAME == service.name
+            assert RemoteRegistry.DEFAULT_LIBRARY_REGISTRY_NAME == service.get("settings").get("name")
 
             # Only system admins can see the discovery services.
             self.admin.remove_role(AdminRole.SYSTEM_ADMIN)
