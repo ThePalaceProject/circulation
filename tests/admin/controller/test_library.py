@@ -134,10 +134,10 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
         ConfigurationSetting.for_library(Configuration.FEATURED_LANE_SIZE, l2).value = 5
         ConfigurationSetting.for_library(
             Configuration.DEFAULT_FACET_KEY_PREFIX + FacetConstants.ORDER_FACET_GROUP_NAME, l2
-        ).value = FacetConstants.ORDER_RANDOM
+        ).value = FacetConstants.ORDER_TITLE
         ConfigurationSetting.for_library(
             Configuration.ENABLED_FACETS_KEY_PREFIX + FacetConstants.ORDER_FACET_GROUP_NAME, l2
-        ).value = json.dumps([FacetConstants.ORDER_TITLE, FacetConstants.ORDER_RANDOM])
+        ).value = json.dumps([FacetConstants.ORDER_TITLE, FacetConstants.ORDER_AUTHOR])
         ConfigurationSetting.for_library(
             Configuration.LARGE_COLLECTION_LANGUAGES, l2
         ).value = json.dumps(["French"])
@@ -164,9 +164,9 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
             assert 4 == len(libraries[1].get("settings").keys())
             settings = libraries[1].get("settings")
             assert "5" == settings.get(Configuration.FEATURED_LANE_SIZE)
-            assert (FacetConstants.ORDER_RANDOM ==
+            assert (FacetConstants.ORDER_TITLE ==
                 settings.get(Configuration.DEFAULT_FACET_KEY_PREFIX + FacetConstants.ORDER_FACET_GROUP_NAME))
-            assert ([FacetConstants.ORDER_TITLE, FacetConstants.ORDER_RANDOM] ==
+            assert ([FacetConstants.ORDER_TITLE, FacetConstants.ORDER_AUTHOR] ==
                settings.get(Configuration.ENABLED_FACETS_KEY_PREFIX + FacetConstants.ORDER_FACET_GROUP_NAME))
             assert ["French"] == settings.get(Configuration.LARGE_COLLECTION_LANGUAGES)
 
@@ -322,7 +322,7 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
             ConfigurationSetting.for_library(
                 Configuration.DEFAULT_FACET_KEY_PREFIX + FacetConstants.ORDER_FACET_GROUP_NAME,
                 library).value)
-        assert (json.dumps([FacetConstants.ORDER_TITLE, FacetConstants.ORDER_RANDOM]) ==
+        assert (json.dumps([FacetConstants.ORDER_TITLE]) ==
             ConfigurationSetting.for_library(
                 Configuration.ENABLED_FACETS_KEY_PREFIX + FacetConstants.ORDER_FACET_GROUP_NAME,
                 library).value)
@@ -407,7 +407,7 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
         assert "0.9" == val(Configuration.MINIMUM_FEATURED_QUALITY)
         assert (FacetConstants.ORDER_AUTHOR ==
             val(Configuration.DEFAULT_FACET_KEY_PREFIX + FacetConstants.ORDER_FACET_GROUP_NAME))
-        assert (json.dumps([FacetConstants.ORDER_AUTHOR, FacetConstants.ORDER_RANDOM]) ==
+        assert (json.dumps([FacetConstants.ORDER_AUTHOR]) ==
             val(Configuration.ENABLED_FACETS_KEY_PREFIX + FacetConstants.ORDER_FACET_GROUP_NAME))
 
         # The library-wide logo was not updated and has been left alone.
