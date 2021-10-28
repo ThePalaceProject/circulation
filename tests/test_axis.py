@@ -668,7 +668,7 @@ class TestAxis360API(Axis360Test):
     @pytest.mark.parametrize(
         ("setting", "setting_value", "attribute", "attribute_value"),
         [
-            (Axis360API.VERIFY_SSL, None, "verify_certificate", None),
+            (Axis360API.VERIFY_SSL, None, "verify_certificate", True),
             (Axis360API.VERIFY_SSL, "True", "verify_certificate", True),
             (Axis360API.VERIFY_SSL, "False", "verify_certificate", False),
         ]
@@ -1744,7 +1744,6 @@ class TestAxis360AcsFulfillmentInfo:
         ("verify", "verify_mode", "check_hostname"),
         [
             (True, ssl.CERT_REQUIRED, True),
-            (None, ssl.CERT_REQUIRED, True),
             (False, ssl.CERT_NONE, False)
         ]
     )

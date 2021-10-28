@@ -180,7 +180,8 @@ class Axis360API(Authenticator, BaseCirculationAPI, HasCollectionSelfTests, Axis
 
         self.token = None
         self.collection_id = collection.id
-        self.verify_certificate: Optional[bool] = collection.external_integration.setting(self.VERIFY_SSL).bool_value
+        verify_certificate = collection.external_integration.setting(self.VERIFY_SSL).bool_value
+        self.verify_certificate: bool = verify_certificate if verify_certificate is not None else True
 
     @property
     def collection(self):
@@ -1684,13 +1685,13 @@ class Axis360AcsFulfillmentInfo(FulfillmentInfo):
     This FulfillmentInfo implementation uses the built in Python urllib
     implementation instead of requests (and urllib3) to make this request
     to the Axis 360 API, sidestepping the problem, but taking a different
-    code path then most of our external HTTP requests.
+    code path than most of our external HTTP requests.
     """
     logger = logging.getLogger(__name__)
 
-    def __init__(self, verify: Optional[bool], **kwargs):
+    def __init__(self, verify: bool, **kwargs):
         super().__init__(**kwargs)
-        self.verify = verify
+        self.verify: bool = verify
 
     def problem_detail_document(self, error_details: str) -> ProblemDetail:
         service_name = urllib.parse.urlparse(self.content_link).netloc
@@ -1705,7 +1706,7 @@ class Axis360AcsFulfillmentInfo(FulfillmentInfo):
     def as_response(self) -> Union[Response, ProblemDetail]:
         service_name = urllib.parse.urlparse(self.content_link).netloc
         try:
-            if self.verify is None or self.verify:
+            if self.verify:
                 # Actually verify the ssl certificates
                 ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS)
                 ssl_context.verify_mode = ssl.CERT_REQUIRED
@@ -1714,7 +1715,7 @@ class Axis360AcsFulfillmentInfo(FulfillmentInfo):
             else:
                 # Default context does no ssl verification
                 ssl_context = ssl.SSLContext()
-            req = urllib.request.Request(self.content_link, headers={"User-Agent": "Palace"})
+            req = urllib.request.Request(self.content_link)
             with urllib.request.urlopen(req, timeout=20, context=ssl_context) as response:
                 content = response.read()
                 status = response.status
