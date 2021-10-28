@@ -38,6 +38,7 @@ class RemoteRegistry(object):
     it may be a shared ODL collection (which has LICENSE_GOAL).
     """
     DEFAULT_LIBRARY_REGISTRY_URL = "https://registry.thepalaceproject.org"
+    DEFAULT_LIBRARY_REGISTRY_NAME = "Palace Library Registry"
 
     OPDS_1_PREFIX = "application/atom+xml;profile=opds-catalog"
     OPDS_2_TYPE = "application/opds+json"
