@@ -78,7 +78,7 @@ class Configuration(CoreConfiguration):
     # The name of the per-library setting that sets the default email
     # address to use when notifying patrons of changes.
     DEFAULT_NOTIFICATION_EMAIL_ADDRESS = "default_notification_email_address"
-    STANDARD_NOREPLY_EMAIL_ADDRESS = "noreply@librarysimplified.org"
+    STANDARD_NOREPLY_EMAIL_ADDRESS = "noreply@thepalaceproject.org"
 
     # The name of the per-library setting that sets the email address
     # of the Designated Agent for copyright complaints

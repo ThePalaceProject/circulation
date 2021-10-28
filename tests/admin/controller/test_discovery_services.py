@@ -4,6 +4,7 @@ import flask
 from werkzeug.datastructures import MultiDict
 from api.admin.exceptions import *
 # from api.admin.problem_details import *
+from api.registry import RemoteRegistry
 from core.model import (
     AdminRole,
     create,
@@ -26,7 +27,7 @@ class TestDiscoveryServices(SettingsControllerTest):
             assert ExternalIntegration.OPDS_REGISTRATION in [p.get("name") for p in protocols]
             assert "settings" in protocols[0]
             assert ExternalIntegration.OPDS_REGISTRATION == service.get("protocol")
-            assert "https://libraryregistry.librarysimplified.org/" == service.get("settings").get(ExternalIntegration.URL)
+            assert RemoteRegistry.DEFAULT_LIBRARY_REGISTRY_URL == service.get("settings").get(ExternalIntegration.URL)
 
             # Only system admins can see the discovery services.
             self.admin.remove_role(AdminRole.SYSTEM_ADMIN)
