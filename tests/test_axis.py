@@ -1757,6 +1757,7 @@ class TestAxis360AcsFulfillmentInfo:
         response = fulfillment.as_response
         mock = urllib.request.urlopen
         mock.assert_called()
-        assert 'context' in mock.call_args.kwargs
-        assert mock.call_args.kwargs['context'].verify_mode == verify_mode
-        assert mock.call_args.kwargs['context'].check_hostname == check_hostname
+        assert 'context' in mock.call_args[1]
+        context = mock.call_args[1]['context']
+        assert context.verify_mode == verify_mode
+        assert context.check_hostname == check_hostname
