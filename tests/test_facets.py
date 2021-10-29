@@ -1,9 +1,6 @@
+from ..facets import FacetConfig
+from ..facets import FacetConstants as Facets
 from ..testing import DatabaseTest
-
-from ..facets import (
-    FacetConstants as Facets,
-    FacetConfig,
-)
 
 
 class TestFacetConfig(DatabaseTest):

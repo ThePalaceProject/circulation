@@ -5,7 +5,9 @@
 
 
 import json
+
 from . import LanguageCodes
+
 
 class JSONable(object):
     """An object whose Unicode representation is a JSON dump

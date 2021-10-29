@@ -1,22 +1,17 @@
 # encoding: utf-8
-import pytest
 import datetime
+
+import pytest
 from sqlalchemy.exc import IntegrityError
-from ...testing import DatabaseTest
-from ...model import (
-    create,
-    get_one_or_create
-)
+
+from ...model import create, get_one_or_create
 from ...model.circulationevent import CirculationEvent
 from ...model.datasource import DataSource
 from ...model.identifier import Identifier
 from ...model.licensing import LicensePool
-from ...util.datetime_helpers import (
-    datetime_utc,
-    strptime_utc,
-    to_utc,
-    utc_now,
-)
+from ...testing import DatabaseTest
+from ...util.datetime_helpers import datetime_utc, strptime_utc, to_utc, utc_now
+
 
 class TestCirculationEvent(DatabaseTest):
 

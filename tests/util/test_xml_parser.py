@@ -1,7 +1,9 @@
 # encoding: utf-8
 
-from ...util.xmlparser import XMLParser
 from lxml.etree import XMLSyntaxError
+
+from ...util.xmlparser import XMLParser
+
 
 class MockParser(XMLParser):
     """A mock XMLParser that just returns every tag it hears about."""

@@ -2,51 +2,25 @@
 # Edition
 
 
-from . import (
-    Base,
-    get_one,
-    get_one_or_create,
-    PresentationCalculationPolicy,
-)
-from .coverage import CoverageRecord
-from .constants import (
-    DataSourceConstants,
-    EditionConstants,
-    LinkRelations,
-    MediaTypes,
-)
-from .contributor import (
-    Contributor,
-    Contribution,
-)
-from .datasource import DataSource
-from .identifier import Identifier
-from .licensing import (
-    DeliveryMechanism,
-    LicensePool,
-)
-
-from collections import defaultdict
 import logging
-from sqlalchemy import (
-    Column,
-    Date,
-    Enum,
-    ForeignKey,
-    Index,
-    Integer,
-    String,
-    Unicode,
-)
+from collections import defaultdict
+
+from sqlalchemy import Column, Date, Enum, ForeignKey, Index, Integer, String, Unicode
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
-from ..util import (
-    LanguageCodes,
-    TitleProcessor
-)
+
+from ..util import LanguageCodes, TitleProcessor
 from ..util.permanent_work_id import WorkIDCalculator
+from . import Base, PresentationCalculationPolicy, get_one, get_one_or_create
+from .constants import DataSourceConstants, EditionConstants, LinkRelations, MediaTypes
+from .contributor import Contribution, Contributor
+from .coverage import CoverageRecord
+from .datasource import DataSource
+from .identifier import Identifier
+from .licensing import DeliveryMechanism, LicensePool
+
 
 class Edition(Base, EditionConstants):
 

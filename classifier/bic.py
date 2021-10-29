@@ -1,5 +1,6 @@
 from . import *
 
+
 class BICClassifier(Classifier):
     # These prefixes came from from http://editeur.dyndns.org/bic_categories
 

@@ -2,6 +2,7 @@
 from ...classifier import *
 from ...classifier.overdrive import OverdriveClassifier as Overdrive
 
+
 class TestOverdriveClassifier(object):
 
     def test_lookup(self):

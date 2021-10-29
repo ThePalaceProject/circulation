@@ -1,7 +1,6 @@
 # encoding: utf-8
 import datetime
 
-from ...testing import DatabaseTest
 from ...model.coverage import (
     BaseCoverageRecord,
     CoverageRecord,
@@ -10,7 +9,9 @@ from ...model.coverage import (
 )
 from ...model.datasource import DataSource
 from ...model.identifier import Identifier
+from ...testing import DatabaseTest
 from ...util.datetime_helpers import datetime_utc, utc_now
+
 
 class TestTimestamp(DatabaseTest):
 

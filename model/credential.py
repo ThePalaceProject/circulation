@@ -2,6 +2,7 @@
 # Credential, DRMDeviceIdentifier, DelegatedPatronIdentifier
 import datetime
 import uuid
+
 import sqlalchemy
 from sqlalchemy import (
     Column,
@@ -16,9 +17,9 @@ from sqlalchemy.orm import backref, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_
 
-from . import Base, get_one, get_one_or_create
 from ..util import is_session
 from ..util.datetime_helpers import utc_now
+from . import Base, get_one, get_one_or_create
 
 
 class Credential(Base):

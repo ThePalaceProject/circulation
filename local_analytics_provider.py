@@ -1,11 +1,7 @@
 from flask_babel import lazy_gettext as _
-from .model import (
-    Session,
-    CirculationEvent,
-    ExternalIntegration,
-    get_one,
-    create
-)
+
+from .model import CirculationEvent, ExternalIntegration, Session, create, get_one
+
 
 class LocalAnalyticsProvider(object):
     NAME = _("Local Analytics")

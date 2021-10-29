@@ -1,47 +1,28 @@
-import os
 import datetime
+import os
+import pkgutil
 import random
-from urllib.parse import quote
 from io import StringIO
+from urllib.parse import quote
+
 import feedparser
 import pytest
-
 from lxml import etree
-import pkgutil
 from psycopg2.extras import NumericRange
 
-from ..testing import (
-    DatabaseTest,
-)
-
-from ..config import (
-    CannotLoadConfiguration,
-    IntegrationException,
-)
-from ..opds_import import (
-    AccessNotAuthenticated,
-    MetadataWranglerOPDSLookup,
-    OPDSImporter,
-    OPDSImportMonitor,
-    OPDSXMLParser,
-    SimplifiedOPDSLookup,
-)
-from ..metadata_layer import (
-    LinkData,
-    CirculationData,
-    Metadata,
-    TimestampData,
-)
+from ..config import CannotLoadConfiguration, IntegrationException
+from ..coverage import CoverageFailure
+from ..metadata_layer import CirculationData, LinkData, Metadata, TimestampData
 from ..model import (
     Collection,
     Contributor,
     CoverageRecord,
     DataSource,
     DeliveryMechanism,
+    Edition,
     ExternalIntegration,
     Hyperlink,
     Identifier,
-    Edition,
     Measurement,
     MediaTypes,
     Representation,
@@ -51,24 +32,26 @@ from ..model import (
     WorkCoverageRecord,
 )
 from ..model.configuration import ExternalIntegrationLink
-from ..coverage import CoverageFailure
-from ..s3 import (
-    S3Uploader,
-    MockS3Uploader,
-    S3UploaderConfiguration)
+from ..opds_import import (
+    AccessNotAuthenticated,
+    MetadataWranglerOPDSLookup,
+    OPDSImporter,
+    OPDSImportMonitor,
+    OPDSXMLParser,
+    SimplifiedOPDSLookup,
+)
+from ..s3 import MockS3Uploader, S3Uploader, S3UploaderConfiguration
 from ..selftest import SelfTestResult
 from ..testing import (
+    DatabaseTest,
     DummyHTTPClient,
     MockRequestsRequest,
     MockRequestsResponse,
 )
-from ..util.http import BadResponseException
-from ..util.opds_writer import (
-    AtomFeed,
-    OPDSFeed,
-    OPDSMessage,
-)
 from ..util.datetime_helpers import datetime_utc, utc_now
+from ..util.http import BadResponseException
+from ..util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
+
 
 class DoomedOPDSImporter(OPDSImporter):
     def import_edition_from_metadata(self, metadata, *args):

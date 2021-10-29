@@ -7,7 +7,6 @@ import logging
 
 from flask_babel import LazyString
 
-
 from ..exceptions import BaseError
 
 JSON_MEDIA_TYPE = "application/api-problem+json"

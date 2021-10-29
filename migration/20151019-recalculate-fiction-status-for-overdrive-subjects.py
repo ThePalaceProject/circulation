@@ -8,15 +8,15 @@ bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..", "..")
 sys.path.append(os.path.abspath(package_dir))
 
-from core.monitor import SubjectSweepMonitor    # noqa: E402
-from core.classifier import Classifier          # noqa: E402,F401
-from core.model import (                        # noqa: E402,F401
-    production_session,
+from core.classifier import Classifier  # noqa: E402,F401
+from core.model import (  # noqa: E402,F401
     DataSource,
     Edition,
     Subject,
+    production_session,
 )
-from core.scripts import RunMonitorScript       # noqa: E402
+from core.monitor import SubjectSweepMonitor  # noqa: E402
+from core.scripts import RunMonitorScript  # noqa: E402
 
 
 class RecalculateFictionStatusMonitor(SubjectSweepMonitor):

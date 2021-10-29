@@ -1,8 +1,8 @@
 import pytest
-from ..util.authentication_for_opds import (
-    AuthenticationForOPDSDocument as Doc,
-    OPDSAuthenticationFlow as Flow,
-)
+
+from ..util.authentication_for_opds import AuthenticationForOPDSDocument as Doc
+from ..util.authentication_for_opds import OPDSAuthenticationFlow as Flow
+
 
 class MockFlow(Flow):
     """A mock OPDSAuthenticationFlow that sets `type` in to_dict()"""

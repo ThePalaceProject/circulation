@@ -1,19 +1,19 @@
 # encoding: utf-8
 import functools
+
 from parameterized import parameterized
 
-from ...testing import DatabaseTest
-from ... import lane
-from ... import model
+from ... import lane, model
 from ...config import Configuration
 from ...model import (
     CachedFeed,
     ConfigurationSetting,
-    create,
-    site_configuration_has_changed,
     Timestamp,
     WorkCoverageRecord,
+    create,
+    site_configuration_has_changed,
 )
+from ...testing import DatabaseTest
 from ...util.datetime_helpers import utc_now
 
 

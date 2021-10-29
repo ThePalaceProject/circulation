@@ -8,10 +8,8 @@ bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..")
 sys.path.append(os.path.abspath(package_dir))
 
-from model import (                 # noqa: E402
-    production_session,
-    ExternalIntegration as EI,
-)
+from model import ExternalIntegration as EI  # noqa: E402
+from model import production_session
 
 _db = production_session()
 

@@ -1,7 +1,7 @@
-import pytest
-
-from copy import deepcopy
 import datetime
+from copy import deepcopy
+
+import pytest
 
 from ..metadata_layer import (
     CirculationData,
@@ -14,7 +14,6 @@ from ..metadata_layer import (
     ReplacementPolicy,
     SubjectData,
 )
-
 from ..model import (
     Collection,
     DataSource,
@@ -27,12 +26,10 @@ from ..model import (
     Subject,
 )
 from ..model.configuration import ExternalIntegrationLink
-from ..testing import (
-    DatabaseTest,
-    DummyHTTPClient,
-)
 from ..s3 import MockS3Uploader
+from ..testing import DatabaseTest, DummyHTTPClient
 from ..util.datetime_helpers import utc_now
+
 
 class TestCirculationData(DatabaseTest):
 

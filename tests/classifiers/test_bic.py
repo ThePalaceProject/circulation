@@ -2,6 +2,7 @@ from ... import classifier
 from ...classifier import *
 from ...classifier.bic import BICClassifier as BIC
 
+
 class TestBIC(object):
 
     def test_is_fiction(self):

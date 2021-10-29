@@ -1,30 +1,21 @@
 import datetime
 import json
 import logging
-import pytest
-from mock import (
-    call,
-    MagicMock,
-)
 import random
-from sqlalchemy.sql.elements import Case
-from sqlalchemy import (
-    and_,
-    func,
-    text,
-)
-from elasticsearch.exceptions import ElasticsearchException
 
-from ..testing import (
-    DatabaseTest,
-)
+import pytest
+from elasticsearch.exceptions import ElasticsearchException
+from mock import MagicMock, call
+from sqlalchemy import and_, func, text
+from sqlalchemy.sql.elements import Case
+
 from ..classifier import Classifier
 from ..config import Configuration
 from ..entrypoint import (
     AudiobooksEntryPoint,
     EbooksEntryPoint,
-    EverythingEntryPoint,
     EntryPoint,
+    EverythingEntryPoint,
 )
 from ..external_search import (
     Filter,
@@ -40,16 +31,13 @@ from ..lane import (
     Facets,
     FacetsWithEntryPoint,
     FeaturedFacets,
+    Lane,
     Pagination,
     SearchFacets,
     TopLevelWorkList,
     WorkList,
-    Lane,
 )
 from ..model import (
-    dump_query,
-    get_one_or_create,
-    tuple_to_numericrange,
     CachedFeed,
     CustomListEntry,
     DataSource,
@@ -61,11 +49,15 @@ from ..model import (
     SessionManager,
     Work,
     WorkGenre,
+    dump_query,
+    get_one_or_create,
+    tuple_to_numericrange,
 )
 from ..problem_details import INVALID_INPUT
-from ..testing import EndToEndSearchTest, LogCaptureHandler
-from ..util.opds_writer import OPDSFeed
+from ..testing import DatabaseTest, EndToEndSearchTest, LogCaptureHandler
 from ..util.datetime_helpers import utc_now
+from ..util.opds_writer import OPDSFeed
+
 
 class TestFacetsWithEntryPoint(DatabaseTest):
 

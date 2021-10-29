@@ -1,49 +1,37 @@
 # encoding: utf-8
-import pytest
-import os
 import json
+import os
 import pkgutil
 
-from ..overdrive import (
-    OverdriveAPI,
-    MockOverdriveAPI,
-    OverdriveAdvantageAccount,
-    OverdriveRepresentationExtractor,
-    OverdriveBibliographicCoverageProvider,
-)
-
-from ..coverage import (
-    CoverageFailure,
-)
+import pytest
 
 from ..config import CannotLoadConfiguration
-
+from ..coverage import CoverageFailure
 from ..metadata_layer import LinkData
-
 from ..model import (
     Collection,
     Contributor,
     DeliveryMechanism,
     Edition,
     ExternalIntegration,
+    Hyperlink,
     Identifier,
-    Representation,
-    Subject,
     Measurement,
     MediaTypes,
-    Hyperlink,
+    Representation,
+    Subject,
+)
+from ..overdrive import (
+    MockOverdriveAPI,
+    OverdriveAdvantageAccount,
+    OverdriveAPI,
+    OverdriveBibliographicCoverageProvider,
+    OverdriveRepresentationExtractor,
 )
 from ..scripts import RunCollectionCoverageProviderScript
-
-from ..testing import MockRequestsResponse
-
-from ..util.http import (
-    BadResponseException,
-    HTTP,
-)
+from ..testing import DatabaseTest, MockRequestsResponse
+from ..util.http import HTTP, BadResponseException
 from ..util.string_helpers import base64
-
-from ..testing import DatabaseTest
 
 
 class OverdriveTest(DatabaseTest):

@@ -2,21 +2,16 @@ import csv
 import datetime
 import os
 from copy import deepcopy
+
 import pytest
 from parameterized import parameterized
 
-from ..testing import (
-    DatabaseTest,
-    DummyHTTPClient,
-    DummyMetadataClient,
-)
 from ..analytics import Analytics
-from ..classifier import Classifier
-from ..classifier import NO_VALUE, NO_NUMBER
+from ..classifier import NO_NUMBER, NO_VALUE, Classifier
 from ..metadata_layer import (
-    CSVMetadataImporter,
     CirculationData,
     ContributorData,
+    CSVMetadataImporter,
     IdentifierData,
     LinkData,
     MARCExtractor,
@@ -31,9 +26,9 @@ from ..model import (
     CoverageRecord,
     DataSource,
     Edition,
+    Hyperlink,
     Identifier,
     Measurement,
-    Hyperlink,
     Representation,
     RightsStatus,
     Subject,
@@ -43,13 +38,9 @@ from ..model import (
 )
 from ..model.configuration import ExternalIntegrationLink
 from ..s3 import MockS3Uploader
+from ..testing import DatabaseTest, DummyHTTPClient, DummyMetadataClient
+from ..util.datetime_helpers import datetime_utc, strptime_utc, to_utc, utc_now
 from ..util.http import RemoteIntegrationException
-from ..util.datetime_helpers import (
-    datetime_utc,
-    strptime_utc,
-    to_utc,
-    utc_now,
-)
 
 
 class TestIdentifierData(object):

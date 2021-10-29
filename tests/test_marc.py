@@ -1,11 +1,15 @@
 import datetime
-import pytest
-from pymarc import Record, MARCReader
 from io import StringIO
 from urllib.parse import quote
+
+import pytest
+from pymarc import MARCReader, Record
 from sqlalchemy.orm.session import Session
 
-from ..testing import DatabaseTest
+from ..config import CannotLoadConfiguration
+from ..external_search import Filter, MockExternalSearchIndex
+from ..lane import WorkList
+from ..marc import Annotator, MARCExporter, MARCExporterFacets
 from ..model import (
     CachedMARCFile,
     Contributor,
@@ -21,22 +25,10 @@ from ..model import (
     Work,
     get_one,
 )
-from ..config import CannotLoadConfiguration
-from ..external_search import (
-    MockExternalSearchIndex,
-    Filter,
-)
-from ..marc import (
-  Annotator,
-  MARCExporter,
-  MARCExporterFacets,
-)
-from ..s3 import (
-    MockS3Uploader,
-    S3Uploader,
-)
-from ..lane import WorkList
+from ..s3 import MockS3Uploader, S3Uploader
+from ..testing import DatabaseTest
 from ..util.datetime_helpers import datetime_utc, utc_now
+
 
 class TestAnnotator(DatabaseTest):
 

@@ -3,24 +3,14 @@
 
 import os
 import re
-from sqlalchemy import (
-    Boolean,
-    Column,
-    DateTime,
-    Integer,
-    Unicode,
-)
-from sqlalchemy.orm import (
-    relationship,
-)
 
-from . import (
-    Base,
-    get_one,
-    get_one_or_create,
-)
-from ..util.string_helpers import random_string
+from sqlalchemy import Boolean, Column, DateTime, Integer, Unicode
+from sqlalchemy.orm import relationship
+
 from ..util.datetime_helpers import utc_now
+from ..util.string_helpers import random_string
+from . import Base, get_one, get_one_or_create
+
 
 class IntegrationClient(Base):
     """A client that has authenticated access to this application.

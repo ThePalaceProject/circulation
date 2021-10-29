@@ -1,10 +1,6 @@
-from ...testing import (
-    DatabaseTest,
-)
+from ...model import Work
+from ...testing import DatabaseTest
 
-from ...model import (
-    Work,
-)
 
 class TestAppealAssignment(DatabaseTest):
 

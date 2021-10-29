@@ -1,38 +1,45 @@
-from datetime import timedelta
+import inspect
 import json
 import logging
 import os
 import shutil
-import time
 import tempfile
+import time
 import uuid
-from psycopg2.errors import UndefinedTable
-import pytest
-from sqlalchemy.orm.session import Session
-from sqlalchemy.exc import ProgrammingError
+from datetime import timedelta
 from pdb import set_trace
-import mock
-import inspect
 
+import mock
+import pytest
+from psycopg2.errors import UndefinedTable
+from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.orm.session import Session
+
+from . import external_search
+from .classifier import Classifier
 from .config import Configuration
-from .lane import (
-    Lane,
+from .coverage import (
+    BibliographicCoverageProvider,
+    CollectionCoverageProvider,
+    CoverageFailure,
+    IdentifierCoverageProvider,
+    WorkCoverageProvider,
 )
-from .model.constants import MediaTypes
+from .external_search import (
+    ExternalSearchIndex,
+    MockExternalSearchIndex,
+    SearchIndexCoverageProvider,
+)
+from .lane import Lane
+from .log import LogConfiguration
 from .model import (
     Base,
-    PresentationCalculationPolicy,
-    SessionManager,
-    get_one_or_create,
-    create,
-)
-from .model import (
-    CoverageRecord,
     Classification,
     Collection,
     Complaint,
     ConfigurationSetting,
     Contributor,
+    CoverageRecord,
     Credential,
     CustomList,
     DataSource,
@@ -49,31 +56,21 @@ from .model import (
     LicensePool,
     LicensePoolDeliveryMechanism,
     Patron,
+    PresentationCalculationPolicy,
     Representation,
     Resource,
     RightsStatus,
+    SessionManager,
     Subject,
     Work,
     WorkCoverageRecord,
+    create,
+    get_one_or_create,
 )
 from .model.configuration import ExternalIntegrationLink
-from .classifier import Classifier
-from .coverage import (
-    BibliographicCoverageProvider,
-    CollectionCoverageProvider,
-    IdentifierCoverageProvider,
-    CoverageFailure,
-    WorkCoverageProvider,
-)
-
-from .external_search import (
-    MockExternalSearchIndex,
-    ExternalSearchIndex,
-    SearchIndexCoverageProvider,
-)
-from .log import LogConfiguration
-from . import external_search
+from .model.constants import MediaTypes
 from .util.datetime_helpers import datetime_utc, utc_now
+
 
 class LogCaptureHandler(logging.Handler):
     """A `logging.Handler` context manager that captures the messages

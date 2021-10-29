@@ -3,6 +3,7 @@
 
 import logging
 from collections import Counter
+
 from sqlalchemy import (
     Boolean,
     Column,
@@ -17,52 +18,31 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import INT4RANGE
 from sqlalchemy.ext.associationproxy import association_proxy
-from sqlalchemy.orm import (
-    contains_eager,
-    relationship,
-)
+from sqlalchemy.orm import contains_eager, relationship
 from sqlalchemy.orm.session import Session
-from sqlalchemy.sql.expression import (
-    and_,
-    or_,
-    select,
-    join,
-    literal_column,
-    case,
-)
+from sqlalchemy.sql.expression import and_, case, join, literal_column, or_, select
 from sqlalchemy.sql.functions import func
 
-from .constants import (
-    DataSourceConstants,
-)
-from .contributor import (
-    Contribution,
-    Contributor,
-)
-from .coverage import (
-    CoverageRecord,
-    WorkCoverageRecord,
-)
-from .datasource import DataSource
-from .edition import Edition
-from .identifier import Identifier
-from .measurement import Measurement
+from ..classifier import Classifier, WorkClassifier
+from ..config import CannotLoadConfiguration
+from ..util import LanguageCodes
+from ..util.datetime_helpers import utc_now
 from . import (
     Base,
+    PresentationCalculationPolicy,
     flush,
     get_one_or_create,
     numericrange_to_string,
     numericrange_to_tuple,
-    PresentationCalculationPolicy,
     tuple_to_numericrange,
 )
-from ..classifier import (
-    Classifier,
-    WorkClassifier,
-)
-from ..config import CannotLoadConfiguration
-from ..util import LanguageCodes
-from ..util.datetime_helpers import utc_now
+from .constants import DataSourceConstants
+from .contributor import Contribution, Contributor
+from .coverage import CoverageRecord, WorkCoverageRecord
+from .datasource import DataSource
+from .edition import Edition
+from .identifier import Identifier
+from .measurement import Measurement
 
 
 class WorkGenre(Base):
@@ -347,10 +327,7 @@ class Work(Base):
 
     @classmethod
     def for_unchecked_subjects(cls, _db):
-        from .classification import (
-            Classification,
-            Subject,
-        )
+        from .classification import Classification, Subject
         from .licensing import LicensePool
         """Find all Works whose LicensePools have an Identifier that
         is classified under an unchecked Subject.
@@ -649,10 +626,7 @@ class Work(Base):
                         search_index_client=None):
         """Suppresses the currently visible covers of a number of Works"""
         from .licensing import LicensePool
-        from .resource import (
-            Resource,
-            Hyperlink,
-        )
+        from .resource import Hyperlink, Resource
 
         works = list(set(works_or_identifiers))
         if not isinstance(works[0], cls):
@@ -1142,11 +1116,7 @@ class Work(Base):
         return "\n".join(l)
 
     def calculate_opds_entries(self, verbose=True):
-        from ..opds import (
-            AcquisitionFeed,
-            Annotator,
-            VerboseAnnotator,
-        )
+        from ..opds import AcquisitionFeed, Annotator, VerboseAnnotator
         _db = Session.object_session(self)
         simple = AcquisitionFeed.single_entry(
             _db, self, Annotator, force_create=True
@@ -1160,10 +1130,7 @@ class Work(Base):
         )
 
     def calculate_marc_record(self):
-        from ..marc import (
-            Annotator,
-            MARCExporter
-        )
+        from ..marc import Annotator, MARCExporter
         _db = Session.object_session(self)
         record = MARCExporter.create_record(
             self, annotator=Annotator, force_create=True)
@@ -1515,10 +1482,7 @@ class Work(Base):
 
         # This subquery gets Collection IDs for collections
         # that own more than zero licenses for this book.
-        from .classification import (
-            Genre,
-            Subject,
-        )
+        from .classification import Genre, Subject
         from .customlist import CustomListEntry
         from .licensing import LicensePool
 
@@ -1851,10 +1815,7 @@ class Work(Base):
         return qu
 
     def classifications_with_genre(self):
-        from .classification import (
-            Classification,
-            Subject,
-        )
+        from .classification import Classification, Subject
         _db = Session.object_session(self)
         identifier = self.presentation_edition.primary_identifier
         return _db.query(Classification) \

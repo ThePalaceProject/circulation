@@ -1,14 +1,11 @@
-from ...classifier import (
-    Classifier,
-    AgeOrGradeClassifier,
-    LCSHClassifier as LCSH,
-)
-
+from ...classifier import AgeOrGradeClassifier, Classifier
+from ...classifier import LCSHClassifier as LCSH
 from ...classifier.age import (
+    AgeClassifier,
     GradeLevelClassifier,
     InterestLevelClassifier,
-    AgeClassifier,
 )
+
 
 class TestTargetAge(object):
 

@@ -4,30 +4,17 @@ import shutil
 import stat
 import tempfile
 from io import StringIO
+
 import pytest
 from parameterized import parameterized
 
-from ..testing import (
-    DatabaseTest,
-)
 from ..classifier import Classifier
-from ..config import (
-    CannotLoadConfiguration,
-)
+from ..config import CannotLoadConfiguration
 from ..external_search import MockExternalSearchIndex
-from ..lane import (
-    Lane,
-    WorkList,
-)
-from ..metadata_layer import (
-    LinkData,
-    TimestampData,
-)
+from ..lane import Lane, WorkList
+from ..metadata_layer import LinkData, TimestampData
 from ..mirror import MirrorUploader
 from ..model import (
-    create,
-    dump_query,
-    get_one,
     CachedFeed,
     Collection,
     Complaint,
@@ -43,19 +30,19 @@ from ..model import (
     Timestamp,
     Work,
     WorkCoverageRecord,
+    create,
+    dump_query,
+    get_one,
 )
 from ..model.configuration import ExternalIntegrationLink
-from ..monitor import (
-    Monitor,
-    CollectionMonitor,
-    ReaperMonitor,
-)
-from ..s3 import S3Uploader, MinIOUploader, MinIOUploaderConfiguration
+from ..monitor import CollectionMonitor, Monitor, ReaperMonitor
+from ..s3 import MinIOUploader, MinIOUploaderConfiguration, S3Uploader
 from ..scripts import (
     AddClassificationScript,
     CheckContributorNamesInDB,
     CollectionArgumentsScript,
     CollectionInputScript,
+    CollectionType,
     ConfigureCollectionScript,
     ConfigureIntegrationScript,
     ConfigureLaneScript,
@@ -93,20 +80,15 @@ from ..scripts import (
     WhereAreMyBooksScript,
     WorkClassificationScript,
     WorkProcessingScript,
-    CollectionType)
+)
 from ..testing import (
     AlwaysSuccessfulCollectionCoverageProvider,
     AlwaysSuccessfulWorkCoverageProvider,
+    DatabaseTest,
 )
-from ..util.worker_pools import (
-    DatabasePool,
-)
-from ..util.datetime_helpers import (
-    datetime_utc,
-    strptime_utc,
-    to_utc,
-    utc_now,
-)
+from ..util.datetime_helpers import datetime_utc, strptime_utc, to_utc, utc_now
+from ..util.worker_pools import DatabasePool
+
 
 class TestScript(DatabaseTest):
 

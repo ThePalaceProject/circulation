@@ -2,10 +2,11 @@
 # Identifier, Equivalency
 import logging
 import random
-from urllib.parse import quote, unquote
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from functools import total_ordering
+from urllib.parse import quote, unquote
+
 import isbnlib
 from sqlalchemy import (
     Boolean,
@@ -23,15 +24,15 @@ from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import select
 from sqlalchemy.sql.expression import and_, or_
 
+from ..util.datetime_helpers import utc_now
+from ..util.summary import SummaryEvaluator
+from . import Base, PresentationCalculationPolicy, create, get_one, get_one_or_create
 from .classification import Classification, Subject
 from .constants import IdentifierConstants, LinkRelations
 from .coverage import CoverageRecord
 from .datasource import DataSource
 from .licensing import LicensePoolDeliveryMechanism, RightsStatus
 from .measurement import Measurement
-from . import Base, PresentationCalculationPolicy, create, get_one, get_one_or_create
-from ..util.summary import SummaryEvaluator
-from ..util.datetime_helpers import utc_now
 
 
 class IdentifierParser(metaclass=ABCMeta):

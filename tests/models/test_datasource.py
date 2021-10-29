@@ -1,10 +1,12 @@
 # encoding: utf-8
 import pytest
 from sqlalchemy.orm.exc import NoResultFound
-from ...testing import DatabaseTest
+
 from ...model.datasource import DataSource
 from ...model.hasfulltablecache import HasFullTableCache
 from ...model.identifier import Identifier
+from ...testing import DatabaseTest
+
 
 class TestDataSource(DatabaseTest):
 

@@ -1,11 +1,9 @@
 import datetime
 import logging
+from collections import defaultdict
 from urllib.parse import quote
-from collections import (
-    defaultdict,
-)
-from lxml import etree
 
+from lxml import etree
 from sqlalchemy.orm.session import Session
 
 from .cdn import cdnify
@@ -25,25 +23,18 @@ from .model import (
     CachedFeed,
     Contributor,
     DataSource,
-    Hyperlink,
-    PresentationCalculationPolicy,
-    Identifier,
     Edition,
+    ExternalIntegration,
+    Hyperlink,
+    Identifier,
     Measurement,
+    PresentationCalculationPolicy,
     Subject,
     Work,
-    ExternalIntegration
-)
-from .util.flask_util import (
-    OPDSEntryResponse,
-    OPDSFeedResponse,
-)
-from .util.opds_writer import (
-    AtomFeed,
-    OPDSFeed,
-    OPDSMessage,
 )
 from .util.datetime_helpers import utc_now
+from .util.flask_util import OPDSEntryResponse, OPDSFeedResponse
+from .util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
 
 
 class UnfulfillableWork(Exception):

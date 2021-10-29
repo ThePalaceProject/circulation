@@ -3,58 +3,40 @@
 from abc import ABCMeta, abstractmethod
 
 from sqlalchemy import (
+    Boolean,
     Column,
-    exists,
     ForeignKey,
-    func,
     Integer,
     Table,
     Unicode,
     UniqueConstraint,
-    Boolean
+    exists,
+    func,
 )
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import (
-    backref,
-    contains_eager,
-    joinedload,
-    mapper,
-    relationship,
-)
+from sqlalchemy.orm import backref, contains_eager, joinedload, mapper, relationship
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
-from sqlalchemy.sql.expression import (
-    and_,
-    or_,
-)
+from sqlalchemy.sql.expression import and_, or_
 
+from ..util.string_helpers import base64
+from . import Base, create, get_one, get_one_or_create
 from .configuration import (
+    BaseConfigurationStorage,
     ConfigurationSetting,
     ExternalIntegration,
-    BaseConfigurationStorage)
-from .constants import EditionConstants
-from .coverage import (
-    CoverageRecord,
-    WorkCoverageRecord,
 )
+from .constants import EditionConstants
+from .coverage import CoverageRecord, WorkCoverageRecord
 from .datasource import DataSource
 from .edition import Edition
 from .hasfulltablecache import HasFullTableCache
 from .identifier import Identifier
 from .integrationclient import IntegrationClient
 from .library import Library
-from .licensing import (
-    LicensePool,
-    LicensePoolDeliveryMechanism,
-)
+from .licensing import LicensePool, LicensePoolDeliveryMechanism
 from .work import Work
-from . import (
-    Base,
-    create,
-    get_one,
-    get_one_or_create,
-)
-from ..util.string_helpers import base64
+
 
 class Collection(Base, HasFullTableCache):
 

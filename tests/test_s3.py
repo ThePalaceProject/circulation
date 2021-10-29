@@ -2,39 +2,35 @@
 import functools
 import os
 from urllib.parse import urlsplit
+
 import boto3
 import botocore
 import pytest
-from botocore.exceptions import (
-    BotoCoreError,
-    ClientError,
-)
+from botocore.exceptions import BotoCoreError, ClientError
 from mock import MagicMock
-import pytest
 from parameterized import parameterized
 
-from ..testing import (
-    DatabaseTest
-)
 from ..mirror import MirrorUploader
 from ..model import (
-    Identifier,
     DataSource,
     ExternalIntegration,
     Hyperlink,
+    Identifier,
     Representation,
     create,
 )
 from ..s3 import (
-    S3Uploader,
+    MinIOUploader,
+    MinIOUploaderConfiguration,
     MockS3Client,
     MultipartS3Upload,
     S3AddressingStyle,
-    MinIOUploader,
+    S3Uploader,
     S3UploaderConfiguration,
-    MinIOUploaderConfiguration
 )
+from ..testing import DatabaseTest
 from ..util.datetime_helpers import datetime_utc, utc_now
+
 
 class S3UploaderTest(DatabaseTest):
 

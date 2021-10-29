@@ -1,21 +1,16 @@
 # encoding: utf-8
-from collections import defaultdict
-from dateutil.parser import parse
 import csv
+import logging
 import os
+from collections import defaultdict
+
+from dateutil.parser import parse
 from sqlalchemy import or_
 from sqlalchemy.orm.session import Session
 
-from .opds_import import SimplifiedOPDSLookup
-import logging
 from .config import Configuration
-from .metadata_layer import (
-    CSVMetadataImporter,
-    ReplacementPolicy,
-)
+from .metadata_layer import CSVMetadataImporter, ReplacementPolicy
 from .model import (
-    get_one,
-    get_one_or_create,
     Classification,
     CustomList,
     CustomListEntry,
@@ -24,9 +19,13 @@ from .model import (
     Identifier,
     Subject,
     Work,
+    get_one,
+    get_one_or_create,
 )
+from .opds_import import SimplifiedOPDSLookup
 from .util import LanguageCodes
 from .util.datetime_helpers import utc_now
+
 
 class CustomListFromCSV(CSVMetadataImporter):
     """Create a CustomList, with entries, from a CSV file."""

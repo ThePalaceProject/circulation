@@ -1,12 +1,13 @@
 """Define the interfaces used by ExternalIntegration self-tests.
 """
-from .util.http import IntegrationException
 import json
 import logging
 import traceback
 
-from .util.opds_writer import AtomFeed
 from .util.datetime_helpers import utc_now
+from .util.http import IntegrationException
+from .util.opds_writer import AtomFeed
+
 
 class SelfTestResult(object):
     """The result of running a single self-test.

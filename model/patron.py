@@ -3,6 +3,9 @@
 
 import datetime
 import logging
+import uuid
+
+from psycopg2.extras import NumericRange
 from sqlalchemy import (
     Boolean,
     Column,
@@ -15,21 +18,16 @@ from sqlalchemy import (
     Unicode,
     UniqueConstraint,
 )
-from psycopg2.extras import NumericRange
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
-import uuid
 
-from . import (
-    Base,
-    get_one_or_create,
-    numericrange_to_tuple
-)
-from .credential import Credential
 from ..classifier import Classifier
 from ..user_profile import ProfileStorage
 from ..util.datetime_helpers import utc_now
+from . import Base, get_one_or_create, numericrange_to_tuple
+from .credential import Credential
+
 
 class LoanAndHoldMixin(object):
 

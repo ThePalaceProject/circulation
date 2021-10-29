@@ -1,9 +1,11 @@
 # encoding: utf-8
 import pytest
-from ...testing import DatabaseTest
+
 from ...model.configuration import ConfigurationSetting
 from ...model.hasfulltablecache import HasFullTableCache
 from ...model.library import Library
+from ...testing import DatabaseTest
+
 
 class TestLibrary(DatabaseTest):
 

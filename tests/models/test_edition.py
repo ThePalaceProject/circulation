@@ -1,22 +1,18 @@
 # encoding: utf-8
 import datetime
-from ...testing import DatabaseTest
-from ...model import (
-    get_one_or_create,
-    PresentationCalculationPolicy,
-)
+
+from ...model import PresentationCalculationPolicy, get_one_or_create
 from ...model.constants import MediaTypes
-from ...model.coverage import CoverageRecord
 from ...model.contributor import Contributor
+from ...model.coverage import CoverageRecord
 from ...model.datasource import DataSource
 from ...model.edition import Edition
 from ...model.identifier import Identifier
 from ...model.licensing import DeliveryMechanism
-from ...model.resource import (
-    Hyperlink,
-    Representation,
-)
+from ...model.resource import Hyperlink, Representation
+from ...testing import DatabaseTest
 from ...util.datetime_helpers import utc_now
+
 
 class TestEdition(DatabaseTest):
 

@@ -1,12 +1,11 @@
 import logging
+from urllib.parse import urlparse
 
 import requests
-from urllib.parse import urlparse
 from flask_babel import lazy_gettext as _
-from .problem_detail import (
-    ProblemDetail as pd,
-    JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE,
-)
+
+from .problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
+from .problem_detail import ProblemDetail as pd
 
 INTEGRATION_ERROR = pd(
       "http://librarysimplified.org/terms/problem/remote-integration-failed",

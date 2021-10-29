@@ -1,12 +1,11 @@
-import re
 import datetime
-from parameterized import parameterized
+import re
+
 import pytz
 from lxml import etree
-from ...util.opds_writer import (
-    AtomFeed,
-    OPDSMessage
-)
+from parameterized import parameterized
+
+from ...util.opds_writer import AtomFeed, OPDSMessage
 
 
 class TestOPDSMessage(object):

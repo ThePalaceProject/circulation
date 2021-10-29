@@ -6,22 +6,22 @@ That has now been fixed.
 
 Correct all 304.* and 305.* subjects, and reclassify every work classified under those IDs.
 """
+import logging
 import os
 import sys
-import logging
 
 bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..", "..")
 sys.path.append(os.path.abspath(package_dir))
 
-from core.model import (        # noqa: E402,F401
-    production_session,
+from core.model import (  # noqa: E402,F401
     Edition,
-    Identifier,
-    Work,
     Genre,
-    WorkGenre,
+    Identifier,
     Subject,
+    Work,
+    WorkGenre,
+    production_session,
 )
 
 _db = production_session()

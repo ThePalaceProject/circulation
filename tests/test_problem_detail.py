@@ -1,9 +1,8 @@
 # encoding: utf-8
 import json
 
-from ..util.problem_detail import (
-    ProblemDetail,
-)
+from ..util.problem_detail import ProblemDetail
+
 
 class TestProblemDetail(object):
 

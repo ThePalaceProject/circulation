@@ -1,37 +1,34 @@
 # encoding: utf-8
 # Library
-from expiringdict import ExpiringDict
-
-
-from . import (
-    Base,
-    get_one,
-)
-from ..config import Configuration
-from .circulationevent import CirculationEvent
-from .edition import Edition
-from ..entrypoint import EntryPoint
-from ..facets import FacetConstants
-from .hasfulltablecache import HasFullTableCache
-from .licensing import LicensePool
-from .work import Work
-
-from collections import Counter
 import logging
+from collections import Counter
+
+from expiringdict import ExpiringDict
 from sqlalchemy import (
     Boolean,
     Column,
     ForeignKey,
-    func,
     Integer,
     Table,
     Unicode,
     UniqueConstraint,
+    func,
 )
-from sqlalchemy.orm import relationship
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.sql.functions import func
+from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
+from sqlalchemy.sql.functions import func
+
+from ..config import Configuration
+from ..entrypoint import EntryPoint
+from ..facets import FacetConstants
+from . import Base, get_one
+from .circulationevent import CirculationEvent
+from .edition import Edition
+from .hasfulltablecache import HasFullTableCache
+from .licensing import LicensePool
+from .work import Work
+
 
 class Library(Base, HasFullTableCache):
     """A library that uses this circulation manager to authenticate

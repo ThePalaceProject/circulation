@@ -13,19 +13,11 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm.session import Session
-from sqlalchemy.sql.expression import (
-    and_,
-    or_,
-    literal,
-    literal_column,
-)
+from sqlalchemy.sql.expression import and_, literal, literal_column, or_
 
-from . import (
-    Base,
-    get_one,
-    get_one_or_create,
-)
 from ..util.datetime_helpers import utc_now
+from . import Base, get_one, get_one_or_create
+
 
 class BaseCoverageRecord(object):
     """Contains useful constants used by both CoverageRecord and

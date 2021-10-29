@@ -1,7 +1,8 @@
 # encoding: utf-8
-import pytest
 import datetime
+
 import feedparser
+import pytest
 from lxml import etree
 from mock import PropertyMock, create_autospec
 from parameterized import parameterized
@@ -14,6 +15,7 @@ from ...model.resource import Hyperlink, Representation
 from ...testing import DatabaseTest
 from ...util.datetime_helpers import utc_now
 from ...util.opds_writer import AtomFeed
+
 
 class TestIdentifier(DatabaseTest):
     def test_for_foreign_id(self):

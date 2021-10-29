@@ -1,21 +1,16 @@
 # encoding: utf-8
-import pytest
 import os
-from ...testing import (
-    DatabaseTest,
-    DummyHTTPClient,
-)
+
+import pytest
+
 from ...model import create
 from ...model.datasource import DataSource
 from ...model.edition import Edition
 from ...model.identifier import Identifier
 from ...model.licensing import RightsStatus
-from ...model.resource import (
-    Hyperlink,
-    Representation,
-    Resource,
-)
-from ...testing import MockRequestsResponse
+from ...model.resource import Hyperlink, Representation, Resource
+from ...testing import DatabaseTest, DummyHTTPClient, MockRequestsResponse
+
 
 class TestHyperlink(DatabaseTest):
 

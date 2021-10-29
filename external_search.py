@@ -1,20 +1,16 @@
-from collections import defaultdict
 import contextlib
 import datetime
-
 import json
+import logging
+import os
+import re
+import time
+from collections import defaultdict
+
 from elasticsearch import Elasticsearch
+from elasticsearch.exceptions import ElasticsearchException, RequestError
 from elasticsearch.helpers import bulk as elasticsearch_bulk
-from elasticsearch.exceptions import (
-    RequestError,
-    ElasticsearchException,
-)
-from elasticsearch_dsl import (
-    Index,
-    MultiSearch,
-    Search,
-    SF,
-)
+from elasticsearch_dsl import SF, Index, MultiSearch, Search
 from elasticsearch_dsl.query import (
     Bool,
     DisMax,
@@ -26,31 +22,27 @@ from elasticsearch_dsl.query import (
     MatchPhrase,
     MultiMatch,
     Nested,
-    Query as BaseQuery,
-    SimpleQueryString,
-    Term,
-    Terms,
 )
+from elasticsearch_dsl.query import Query as BaseQuery
+from elasticsearch_dsl.query import SimpleQueryString, Term, Terms
+from flask_babel import lazy_gettext as _
 from spellchecker import SpellChecker
 
-from flask_babel import lazy_gettext as _
-from .config import (
-    Configuration,
-    CannotLoadConfiguration,
-)
 from .classifier import (
-    KeywordBasedClassifier,
-    GradeLevelClassifier,
     AgeClassifier,
     Classifier,
+    GradeLevelClassifier,
+    KeywordBasedClassifier,
 )
+from .config import CannotLoadConfiguration, Configuration
+from .coverage import CoverageFailure, WorkPresentationProvider
 from .facets import FacetConstants
+from .lane import Pagination
 from .metadata_layer import IdentifierData
 from .model import (
-    numericrange_to_tuple,
     Collection,
-    Contributor,
     ConfigurationSetting,
+    Contributor,
     DataSource,
     Edition,
     ExternalIntegration,
@@ -58,27 +50,16 @@ from .model import (
     Library,
     Work,
     WorkCoverageRecord,
+    numericrange_to_tuple,
 )
-from .lane import Pagination
 from .monitor import WorkSweepMonitor
-from .coverage import (
-    CoverageFailure,
-    WorkPresentationProvider,
-)
 from .problem_details import INVALID_INPUT
-from .selftest import (
-    HasSelfTests,
-    SelfTestResult,
-)
+from .selftest import HasSelfTests, SelfTestResult
+from .util.datetime_helpers import from_timestamp
 from .util.personal_names import display_name_to_sort_name
 from .util.problem_detail import ProblemDetail
 from .util.stopwords import ENGLISH_STOPWORDS
-from .util.datetime_helpers import from_timestamp
 
-import os
-import logging
-import re
-import time
 
 @contextlib.contextmanager
 def mock_search_index(mock=None):

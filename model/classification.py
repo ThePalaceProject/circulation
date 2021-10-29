@@ -2,6 +2,26 @@
 # Subject, Classification, Genre
 
 
+import logging
+
+from sqlalchemy import (
+    Boolean,
+    Column,
+    Enum,
+    ForeignKey,
+    Integer,
+    Unicode,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy.dialects.postgresql import INT4RANGE
+from sqlalchemy.ext.associationproxy import association_proxy
+from sqlalchemy.orm import relationship
+from sqlalchemy.orm.session import Session
+from sqlalchemy.sql.functions import func
+
+from .. import classifier
+from ..classifier import COMICS_AND_GRAPHIC_NOVELS, Classifier, Erotica, GenreData
 from . import (
     Base,
     get_one,
@@ -13,31 +33,6 @@ from . import (
 from .constants import DataSourceConstants
 from .hasfulltablecache import HasFullTableCache
 
-from .. import classifier
-from ..classifier import (
-    Classifier,
-    COMICS_AND_GRAPHIC_NOVELS,
-    Erotica,
-    GenreData,
-)
-
-import logging
-
-from sqlalchemy import (
-    Boolean,
-    Column,
-    Enum,
-    ForeignKey,
-    func,
-    Integer,
-    Unicode,
-    UniqueConstraint,
-)
-from sqlalchemy.dialects.postgresql import INT4RANGE
-from sqlalchemy.ext.associationproxy import association_proxy
-from sqlalchemy.orm import relationship
-from sqlalchemy.orm.session import Session
-from sqlalchemy.sql.functions import func
 
 class Subject(Base):
     """A subject under which books might be classified."""

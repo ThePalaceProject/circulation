@@ -2,15 +2,16 @@ import datetime
 import logging
 import traceback
 from io import BytesIO
+from urllib.parse import quote, urljoin, urlparse
 
 import dateutil
 import feedparser
 from flask_babel import lazy_gettext as _
 from lxml import etree
-from urllib.parse import urljoin, urlparse, quote
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.session import Session
 
+from .classifier import Classifier
 from .config import CannotLoadConfiguration, IntegrationException
 from .coverage import CoverageFailure
 from .metadata_layer import (
@@ -44,12 +45,11 @@ from .model import (
 from .model.configuration import ExternalIntegrationLink
 from .monitor import CollectionMonitor
 from .selftest import HasSelfTests, SelfTestResult
-from .classifier import Classifier
+from .util.datetime_helpers import datetime_utc, utc_now
 from .util.http import HTTP, BadResponseException
 from .util.opds_writer import OPDSFeed, OPDSMessage
 from .util.string_helpers import base64
 from .util.xmlparser import XMLParser
-from .util.datetime_helpers import datetime_utc, utc_now
 
 
 def parse_identifier(db, identifier):

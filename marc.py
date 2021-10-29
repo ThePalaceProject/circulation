@@ -1,25 +1,16 @@
 
-from io import BytesIO
-from flask_babel import lazy_gettext as _
 import re
-from pymarc import (
-    Field,
-    Record,
-    MARCWriter
-)
+from io import BytesIO
 
-from .config import (
-    Configuration,
-    CannotLoadConfiguration,
-)
-from .lane import BaseFacets
-from .external_search import (
-    ExternalSearchIndex,
-    SortKeyPagination,
-)
+from flask_babel import lazy_gettext as _
+from pymarc import Field, MARCWriter, Record
+
+from .classifier import Classifier
+from .config import CannotLoadConfiguration, Configuration
+from .external_search import ExternalSearchIndex, SortKeyPagination
+from .lane import BaseFacets, Lane
+from .mirror import MirrorUploader
 from .model import (
-    get_one,
-    get_one_or_create,
     CachedMARCFile,
     Collection,
     ConfigurationSetting,
@@ -30,13 +21,13 @@ from .model import (
     Representation,
     Session,
     Work,
+    get_one,
+    get_one_or_create,
 )
-from .classifier import Classifier
-from .mirror import MirrorUploader
 from .s3 import S3Uploader
-from .lane import Lane
 from .util import LanguageCodes
 from .util.datetime_helpers import utc_now
+
 
 class Annotator(object):
     """The Annotator knows how to add information about a Work to

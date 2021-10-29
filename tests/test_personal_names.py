@@ -1,33 +1,25 @@
 # encoding: utf-8
-from io import StringIO
 import datetime
 import os
-import sys
-import site
 import re
+import site
+import sys
 import tempfile
+from io import StringIO
 
+from ..mock_analytics_provider import MockAnalyticsProvider
 from ..model import (
     Contributor,
     DataSource,
-    Work,
-    Identifier,
     Edition,
+    Identifier,
+    Work,
     create,
     get_one,
     get_one_or_create,
 )
-
-from ..testing import (
-    DatabaseTest,
-    DummyHTTPClient,
-)
-
-from ..util.personal_names import (
-    display_name_to_sort_name,
-)
-from ..mock_analytics_provider import MockAnalyticsProvider
-
+from ..testing import DatabaseTest, DummyHTTPClient
+from ..util.personal_names import display_name_to_sort_name
 
 
 class TestNameConversions(DatabaseTest):

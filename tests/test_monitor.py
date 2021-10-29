@@ -1,7 +1,7 @@
 import datetime
+
 import pytest
 
-from ..testing import DatabaseTest
 from ..config import Configuration
 from ..metadata_layer import TimestampData
 from ..model import (
@@ -55,9 +55,11 @@ from ..monitor import (
 )
 from ..testing import (
     AlwaysSuccessfulCoverageProvider,
+    DatabaseTest,
     NeverSuccessfulCoverageProvider,
 )
 from ..util.datetime_helpers import datetime_utc, utc_now
+
 
 class MockMonitor(Monitor):
 

@@ -9,17 +9,18 @@ bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..")
 sys.path.append(os.path.abspath(package_dir))
 
-from monitor import IdentifierSweepMonitor                              # noqa: E402
-from model import (                                                     # noqa: E402
+from threem import ThreeMAPI  # noqa: E402
+
+from model import (  # noqa: E402
+    DeliveryMechanism,
+    Edition,
     Identifier,
     LicensePool,
-    DeliveryMechanism,
     LicensePoolDeliveryMechanism,
-    Edition,
 )
-from scripts import RunMonitorScript                                    # noqa: E402
-from overdrive import OverdriveAPI, OverdriveRepresentationExtractor    # noqa: E402
-from threem import ThreeMAPI                                            # noqa: E402
+from monitor import IdentifierSweepMonitor  # noqa: E402
+from overdrive import OverdriveAPI, OverdriveRepresentationExtractor  # noqa: E402
+from scripts import RunMonitorScript  # noqa: E402
 
 
 class SetDeliveryMechanismMonitor(IdentifierSweepMonitor):

@@ -2,6 +2,7 @@
 # PolicyException LicensePool, LicensePoolDeliveryMechanism, DeliveryMechanism,
 # RightsStatus
 import logging
+
 from sqlalchemy import (
     Boolean,
     Column,
@@ -18,13 +19,13 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
 
+from ..util.datetime_helpers import utc_now
+from . import Base, create, flush, get_one, get_one_or_create
 from .circulationevent import CirculationEvent
 from .complaint import Complaint
 from .constants import DataSourceConstants, EditionConstants, LinkRelations, MediaTypes
 from .hasfulltablecache import HasFullTableCache
 from .patron import Hold, Loan, Patron
-from . import Base, create, flush, get_one, get_one_or_create
-from ..util.datetime_helpers import utc_now
 
 
 class PolicyException(Exception):

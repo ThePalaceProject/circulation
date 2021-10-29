@@ -1,40 +1,31 @@
 # encoding: utf-8
-import pytest
-from mock import create_autospec, MagicMock
 import datetime
 import json
 
-from ...testing import DatabaseTest
+import pytest
+from mock import MagicMock, create_autospec
+
 from ...config import Configuration
-from ...model import (
-    create,
-    get_one_or_create,
-)
-from ...model.coverage import (
-    CoverageRecord,
-    WorkCoverageRecord,
-)
+from ...model import create, get_one_or_create
 from ...model.circulationevent import CirculationEvent
-from ...model.collection import Collection, HasExternalIntegrationPerCollection, CollectionConfigurationStorage
-from ...model.complaint import Complaint
-from ...model.configuration import (
-    ConfigurationSetting,
-    ExternalIntegration,
+from ...model.collection import (
+    Collection,
+    CollectionConfigurationStorage,
+    HasExternalIntegrationPerCollection,
 )
+from ...model.complaint import Complaint
+from ...model.configuration import ConfigurationSetting, ExternalIntegration
+from ...model.coverage import CoverageRecord, WorkCoverageRecord
 from ...model.customlist import CustomList
 from ...model.datasource import DataSource
 from ...model.edition import Edition
 from ...model.hasfulltablecache import HasFullTableCache
 from ...model.identifier import Identifier
-from ...model.licensing import (
-    Hold,
-    Loan,
-    License,
-    LicensePool,
-)
+from ...model.licensing import Hold, License, LicensePool, Loan
 from ...model.work import Work
-from ...util.string_helpers import base64
+from ...testing import DatabaseTest
 from ...util.datetime_helpers import utc_now
+from ...util.string_helpers import base64
 
 
 class TestCollection(DatabaseTest):

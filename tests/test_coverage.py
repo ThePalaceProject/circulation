@@ -1,20 +1,30 @@
 import datetime
+
 import pytest
-from ..testing import (
-    DatabaseTest
+
+from ..coverage import (
+    BaseCoverageProvider,
+    BibliographicCoverageProvider,
+    CatalogCoverageProvider,
+    CollectionCoverageProvider,
+    CoverageFailure,
+    CoverageProviderProgress,
+    IdentifierCoverageProvider,
+    MARCRecordWorkCoverageProvider,
+    OPDSEntryWorkCoverageProvider,
+    PresentationReadyWorkCoverageProvider,
+    WorkClassificationCoverageProvider,
+    WorkPresentationEditionCoverageProvider,
 )
-from ..testing import (
-    AlwaysSuccessfulBibliographicCoverageProvider,
-    AlwaysSuccessfulCollectionCoverageProvider,
-    AlwaysSuccessfulCoverageProvider,
-    AlwaysSuccessfulWorkCoverageProvider,
-    DummyHTTPClient,
-    TaskIgnoringCoverageProvider,
-    NeverSuccessfulBibliographicCoverageProvider,
-    NeverSuccessfulWorkCoverageProvider,
-    NeverSuccessfulCoverageProvider,
-    TransientFailureCoverageProvider,
-    TransientFailureWorkCoverageProvider,
+from ..metadata_layer import (
+    CirculationData,
+    ContributorData,
+    FormatData,
+    IdentifierData,
+    LinkData,
+    Metadata,
+    ReplacementPolicy,
+    SubjectData,
 )
 from ..model import (
     Collection,
@@ -36,32 +46,23 @@ from ..model import (
     WorkCoverageRecord,
 )
 from ..model.configuration import ExternalIntegrationLink
-from ..metadata_layer import (
-    Metadata,
-    CirculationData,
-    FormatData,
-    IdentifierData,
-    ContributorData,
-    LinkData,
-    ReplacementPolicy,
-    SubjectData,
-)
 from ..s3 import MockS3Uploader
-from ..coverage import (
-    BaseCoverageProvider,
-    BibliographicCoverageProvider,
-    CatalogCoverageProvider,
-    CollectionCoverageProvider,
-    CoverageFailure,
-    CoverageProviderProgress,
-    IdentifierCoverageProvider,
-    OPDSEntryWorkCoverageProvider,
-    MARCRecordWorkCoverageProvider,
-    PresentationReadyWorkCoverageProvider,
-    WorkClassificationCoverageProvider,
-    WorkPresentationEditionCoverageProvider,
+from ..testing import (
+    AlwaysSuccessfulBibliographicCoverageProvider,
+    AlwaysSuccessfulCollectionCoverageProvider,
+    AlwaysSuccessfulCoverageProvider,
+    AlwaysSuccessfulWorkCoverageProvider,
+    DatabaseTest,
+    DummyHTTPClient,
+    NeverSuccessfulBibliographicCoverageProvider,
+    NeverSuccessfulCoverageProvider,
+    NeverSuccessfulWorkCoverageProvider,
+    TaskIgnoringCoverageProvider,
+    TransientFailureCoverageProvider,
+    TransientFailureWorkCoverageProvider,
 )
 from ..util.datetime_helpers import datetime_utc, utc_now
+
 
 class TestCoverageFailure(DatabaseTest):
     """Test the CoverageFailure class."""

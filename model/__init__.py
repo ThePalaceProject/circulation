@@ -3,40 +3,21 @@
 import logging
 import os
 import warnings
+
 from psycopg2.extensions import adapt as sqlescape
 from psycopg2.extras import NumericRange
-from sqlalchemy import (
-    Column,
-    create_engine,
-    ForeignKey,
-    Integer,
-    Table,
-    text,
-)
-from sqlalchemy.exc import (
-    IntegrityError,
-    SAWarning,
-)
+from sqlalchemy import Column, ForeignKey, Integer, Table, create_engine, text
+from sqlalchemy.exc import IntegrityError, SAWarning
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import (
-    relationship,
-    sessionmaker,
-)
-from sqlalchemy.orm.exc import (
-    NoResultFound,
-    MultipleResultsFound,
-)
-from sqlalchemy.sql import (
-    compiler,
-    select,
-)
-from sqlalchemy.sql.expression import (
-    literal_column,
-    table,
-)
+from sqlalchemy.orm import relationship, sessionmaker
+from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
+from sqlalchemy.sql import compiler, select
+from sqlalchemy.sql.expression import literal_column, table
 
 Base = declarative_base()
 
+from .. import classifier
+from ..util.datetime_helpers import utc_now
 from .constants import (
     DataSourceConstants,
     EditionConstants,
@@ -44,8 +25,7 @@ from .constants import (
     LinkRelations,
     MediaTypes,
 )
-from .. import classifier
-from ..util.datetime_helpers import utc_now
+
 
 def flush(db):
     """Flush the database connection unless it's known to already be flushing."""
@@ -418,8 +398,8 @@ class SessionManager(object):
     @classmethod
     def initialize_data(cls, session, set_site_configuration=True):
         # Create initial content.
-        from .datasource import DataSource
         from .classification import Genre
+        from .datasource import DataSource
         from .licensing import DeliveryMechanism
         list(DataSource.well_known_sources(session))
 
@@ -476,59 +456,30 @@ def production_session(initialize_data=True):
     LogConfiguration.initialize(_db)
     return _db
 
-from .admin import (
-    Admin,
-    AdminRole,
-)
-from .coverage import (
-    BaseCoverageRecord,
-    CoverageRecord,
-    Timestamp,
-    WorkCoverageRecord,
-)
-from .cachedfeed import (
-    CachedFeed,
-    WillNotGenerateExpensiveFeed,
-    CachedMARCFile,
-)
+from .admin import Admin, AdminRole
+from .cachedfeed import CachedFeed, CachedMARCFile, WillNotGenerateExpensiveFeed
 from .circulationevent import CirculationEvent
-from .classification import (
-    Classification,
-    Genre,
-    Subject,
-)
+from .classification import Classification, Genre, Subject
 from .collection import (
     Collection,
     CollectionIdentifier,
     CollectionMissing,
     collections_identifiers,
 )
+from .complaint import Complaint
 from .configuration import (
     ConfigurationSetting,
     ExternalIntegration,
     ExternalIntegrationLink,
 )
-from .complaint import Complaint
-from .contributor import (
-    Contribution,
-    Contributor,
-)
-from .credential import (
-    Credential,
-    DelegatedPatronIdentifier,
-    DRMDeviceIdentifier,
-)
-from .customlist import (
-    CustomList,
-    CustomListEntry,
-)
+from .contributor import Contribution, Contributor
+from .coverage import BaseCoverageRecord, CoverageRecord, Timestamp, WorkCoverageRecord
+from .credential import Credential, DelegatedPatronIdentifier, DRMDeviceIdentifier
+from .customlist import CustomList, CustomListEntry
 from .datasource import DataSource
 from .edition import Edition
 from .hasfulltablecache import HasFullTableCache
-from .identifier import (
-    Equivalency,
-    Identifier,
-)
+from .identifier import Equivalency, Identifier
 from .integrationclient import IntegrationClient
 from .library import Library
 from .licensing import (
@@ -539,6 +490,7 @@ from .licensing import (
     PolicyException,
     RightsStatus,
 )
+from .listeners import *
 from .measurement import Measurement
 from .patron import (
     Annotation,
@@ -548,14 +500,5 @@ from .patron import (
     Patron,
     PatronProfileStorage,
 )
-from .listeners import *
-from .resource import (
-    Hyperlink,
-    Representation,
-    Resource,
-    ResourceTransformation,
-)
-from .work import (
-    Work,
-    WorkGenre,
-)
+from .resource import Hyperlink, Representation, Resource, ResourceTransformation
+from .work import Work, WorkGenre

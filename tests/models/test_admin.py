@@ -1,11 +1,10 @@
 # encoding: utf-8
 import pytest
-from ...testing import DatabaseTest
+
 from ...model import create
-from ...model.admin import (
-    Admin,
-    AdminRole,
-)
+from ...model.admin import Admin, AdminRole
+from ...testing import DatabaseTest
+
 
 class TestAdmin(DatabaseTest):
     def setup_method(self):

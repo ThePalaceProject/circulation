@@ -1,8 +1,9 @@
 from ...classifier import (
+    Classifier,
     RBDigitalAudienceClassifier,
     RBDigitalSubjectClassifier,
-    Classifier,
 )
+
 
 class MockSubject(object):
     def __init__(self, identifier, name):

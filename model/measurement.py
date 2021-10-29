@@ -2,20 +2,14 @@
 # Measurement
 
 
+import bisect
+import logging
+
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, Unicode
+
 from . import Base
 from .constants import DataSourceConstants
 
-import bisect
-import logging
-from sqlalchemy import (
-    Boolean,
-    Column,
-    DateTime,
-    Float,
-    ForeignKey,
-    Integer,
-    Unicode,
-)
 
 class Measurement(Base):
     """A  measurement of some numeric quantity associated with a

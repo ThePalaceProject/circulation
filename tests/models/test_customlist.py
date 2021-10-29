@@ -1,16 +1,15 @@
 # encoding: utf-8
-import pytest
 from pdb import set_trace
 
-from ...testing import DatabaseTest
+import pytest
+
 from ...model import get_one_or_create
 from ...model.coverage import WorkCoverageRecord
-from ...model.customlist import (
-    CustomList,
-    CustomListEntry,
-)
+from ...model.customlist import CustomList, CustomListEntry
 from ...model.datasource import DataSource
+from ...testing import DatabaseTest
 from ...util.datetime_helpers import utc_now
+
 
 class TestCustomList(DatabaseTest):
 

@@ -1,63 +1,32 @@
 import gzip
-from io import BytesIO
-import os
 import json
+import os
+from io import BytesIO
 
 import flask
 from flask import Flask
-from flask_babel import (
-    Babel,
-    lazy_gettext as _
-)
-
-from ..testing import (
-    DatabaseTest,
-)
-
-from ..opds import TestAnnotator
-
-from ..model import (
-    Identifier,
-    ConfigurationSetting,
-)
-
-from ..lane import (
-    Facets,
-    Pagination,
-    SearchFacets,
-    WorkList,
-)
+from flask_babel import Babel
+from flask_babel import lazy_gettext as _
 
 from ..app_server import (
+    ComplaintController,
+    ErrorHandler,
     HeartbeatController,
     URNLookupController,
     URNLookupHandler,
-    ErrorHandler,
-    ComplaintController,
     compressible,
     load_facets_from_request,
     load_pagination_from_request,
 )
-
 from ..config import Configuration
-
+from ..entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EntryPoint
+from ..lane import Facets, Pagination, SearchFacets, WorkList
 from ..log import LogConfiguration
-
-from ..entrypoint import (
-    AudiobooksEntryPoint,
-    EbooksEntryPoint,
-    EntryPoint,
-)
-
-from ..problem_details import (
-    INVALID_INPUT,
-    INVALID_URN,
-)
-
-from ..util.opds_writer import (
-    OPDSFeed,
-    OPDSMessage,
-)
+from ..model import ConfigurationSetting, Identifier
+from ..opds import TestAnnotator
+from ..problem_details import INVALID_INPUT, INVALID_URN
+from ..testing import DatabaseTest
+from ..util.opds_writer import OPDSFeed, OPDSMessage
 
 
 class TestHeartbeatController(object):

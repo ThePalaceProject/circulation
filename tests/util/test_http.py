@@ -1,17 +1,20 @@
+import json
+
 import pytest
 import requests
-import json
+
+from ...problem_details import INVALID_INPUT
+from ...testing import MockRequestsResponse
 from ...util.http import (
     HTTP,
+    INTEGRATION_ERROR,
     BadResponseException,
     RemoteIntegrationException,
     RequestNetworkException,
     RequestTimedOut,
-    INTEGRATION_ERROR,
 )
-from ...testing import MockRequestsResponse
 from ...util.problem_detail import ProblemDetail
-from ...problem_details import INVALID_INPUT
+
 
 class TestHTTP(object):
 

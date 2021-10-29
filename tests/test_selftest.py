@@ -6,15 +6,12 @@ configured, not that the code is correct.
 """
 
 import datetime
+
+from ..selftest import HasSelfTests, SelfTestResult
 from ..testing import DatabaseTest
-
-from ..selftest import (
-    SelfTestResult,
-    HasSelfTests,
-)
-
-from ..util.http import IntegrationException
 from ..util.datetime_helpers import utc_now
+from ..util.http import IntegrationException
+
 
 class TestSelfTestResult(DatabaseTest):
 

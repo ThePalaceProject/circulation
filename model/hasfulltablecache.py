@@ -1,9 +1,10 @@
 # encoding: utf-8
 # HasFullTableCache
 
+import logging
+
 from . import get_one
 
-import logging
 
 class HasFullTableCache(object):
     """A mixin class for ORM classes that maintain an in-memory cache of

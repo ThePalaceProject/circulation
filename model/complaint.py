@@ -1,21 +1,12 @@
 # encoding: utf-8
 # Complaint
 
-from sqlalchemy import (
-    Column,
-    DateTime,
-    ForeignKey,
-    Integer,
-    String,
-)
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm.session import Session
 
-from . import (
-    Base,
-    create,
-    get_one_or_create,
-)
 from ..util.datetime_helpers import utc_now
+from . import Base, create, get_one_or_create
+
 
 class Complaint(Base):
     """A complaint about a LicensePool (or, potentially, something else)."""

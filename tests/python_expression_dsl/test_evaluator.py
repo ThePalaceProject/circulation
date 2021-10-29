@@ -8,6 +8,7 @@ from ...python_expression_dsl.evaluator import (
 )
 from ...python_expression_dsl.parser import DSLParseError, DSLParser
 
+
 class Subject(object):
     """Dummy object designed for testing DSLEvaluator."""
 

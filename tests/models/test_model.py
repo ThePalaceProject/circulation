@@ -1,24 +1,25 @@
 # encoding: utf-8
-import pytest
 import datetime
+
+import pytest
 from psycopg2.extras import NumericRange
 from sqlalchemy import not_
 from sqlalchemy.orm.exc import MultipleResultsFound
 
-from ...testing import DatabaseTest
 from ... import classifier
-from ...external_search import mock_search_index
 from ...config import Configuration
+from ...external_search import mock_search_index
 from ...model import (
     DataSource,
     Edition,
     Genre,
-    get_one,
     SessionManager,
     Timestamp,
+    get_one,
     numericrange_to_tuple,
     tuple_to_numericrange,
 )
+from ...testing import DatabaseTest
 
 
 class TestDatabaseInterface(DatabaseTest):

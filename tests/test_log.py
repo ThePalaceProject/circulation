@@ -5,24 +5,22 @@ import sys
 
 import pytest
 
-from ..testing import DatabaseTest
-from ..log import (
-    StringFormatter,
-    JSONFormatter,
-    LogglyHandler,
-    CloudWatchLogHandler,
-    LogConfiguration,
-    SysLogger,
-    Loggly,
-    CloudwatchLogs,
-    Logger,
-    CannotLoadConfiguration,
-)
-from ..model import (
-    ExternalIntegration,
-    ConfigurationSetting
-)
 from ..config import Configuration
+from ..log import (
+    CannotLoadConfiguration,
+    CloudWatchLogHandler,
+    CloudwatchLogs,
+    JSONFormatter,
+    LogConfiguration,
+    Logger,
+    Loggly,
+    LogglyHandler,
+    StringFormatter,
+    SysLogger,
+)
+from ..model import ConfigurationSetting, ExternalIntegration
+from ..testing import DatabaseTest
+
 
 class TestJSONFormatter(object):
 

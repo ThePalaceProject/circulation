@@ -1,25 +1,28 @@
 import datetime
-import isbnlib
-import os
 import json
 import logging
-from urllib.parse import urlsplit, quote, urlunsplit
+import os
 import sys
-from sqlalchemy.orm.exc import (
-    NoResultFound,
-)
+from urllib.parse import quote, urlsplit, urlunsplit
+
+import isbnlib
+from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 
 from .classifier import Classifier
-from .config import (
-    temp_config,
-    CannotLoadConfiguration,
-    Configuration,
+from .config import CannotLoadConfiguration, Configuration, temp_config
+from .coverage import BibliographicCoverageProvider
+from .metadata_layer import (
+    CirculationData,
+    ContributorData,
+    FormatData,
+    IdentifierData,
+    LinkData,
+    MeasurementData,
+    Metadata,
+    SubjectData,
 )
-
 from .model import (
-    get_one,
-    get_one_or_create,
     Classification,
     Collection,
     ConfigurationSetting,
@@ -36,33 +39,15 @@ from .model import (
     MediaTypes,
     Representation,
     Subject,
+    get_one,
+    get_one_or_create,
 )
-
-from .metadata_layer import (
-    CirculationData,
-    ContributorData,
-    FormatData,
-    IdentifierData,
-    Metadata,
-    MeasurementData,
-    LinkData,
-    SubjectData,
-)
-
-from .coverage import (
-    BibliographicCoverageProvider,
-)
-
-from .testing import DatabaseTest
-
-from .util.http import (
-    HTTP,
-    BadResponseException,
-)
+from .testing import DatabaseTest, MockRequestsResponse
+from .util.datetime_helpers import strptime_utc, to_utc, utc_now
+from .util.http import HTTP, BadResponseException
 from .util.string_helpers import base64
 from .util.worker_pools import RLock
-from .util.datetime_helpers import strptime_utc, to_utc, utc_now
-from .testing import MockRequestsResponse
+
 
 class OverdriveAPI(object):
 

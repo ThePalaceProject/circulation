@@ -1,51 +1,36 @@
 """Implement logic common to more than one of the Simplified applications."""
 
-from psycopg2 import DatabaseError
-import flask
 import gzip
 import json
-import os
-import sys
-import subprocess
-from lxml import etree
-from functools import wraps
-from flask import url_for, make_response
-from flask_babel import lazy_gettext as _
-from io import BytesIO
-from .util.flask_util import problem
-from .util.problem_detail import ProblemDetail
-import traceback
 import logging
-from .entrypoint import EntryPoint
-from .opds import (
-    AcquisitionFeed,
-    LookupAcquisitionFeed,
-)
-from .util.flask_util import OPDSFeedResponse
-from .util.opds_writer import (
-    OPDSFeed,
-    OPDSMessage,
-)
+import os
+import subprocess
+import sys
+import traceback
+from functools import wraps
+from io import BytesIO
+
+import flask
+from flask import make_response, url_for
+from flask_babel import lazy_gettext as _
+from lxml import etree
+from psycopg2 import DatabaseError
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
-from sqlalchemy.orm.exc import (
-    NoResultFound,
-)
-from .log import LogConfiguration
-from .model import (
-    get_one,
-    Complaint,
-    Identifier,
-    Patron,
-)
+
 from .cdn import cdnify
 from .classifier import Classifier
 from .config import Configuration
-from .lane import (
-    Facets,
-    Pagination,
-)
+from .entrypoint import EntryPoint
+from .lane import Facets, Pagination
+from .log import LogConfiguration
+from .model import Complaint, Identifier, Patron, get_one
+from .opds import AcquisitionFeed, LookupAcquisitionFeed
 from .problem_details import *
+from .util.flask_util import OPDSFeedResponse, problem
+from .util.opds_writer import OPDSFeed, OPDSMessage
+from .util.problem_detail import ProblemDetail
 
 
 def cdn_url_for(*args, **kwargs):

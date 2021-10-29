@@ -3,21 +3,12 @@
 
 
 import logging
-from sqlalchemy import (
-    Column,
-    DateTime,
-    ForeignKey,
-    Index,
-    Integer,
-    String,
-    Unicode,
-)
 
-from . import (
-    Base,
-    get_one_or_create,
-)
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Unicode
+
 from ..util.datetime_helpers import utc_now
+from . import Base, get_one_or_create
+
 
 class CirculationEvent(Base):
 

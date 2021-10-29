@@ -2,15 +2,19 @@
 # Resource, ResourceTransformation, Hyperlink, Representation
 
 
-from io import BytesIO
 import datetime
 import json
 import logging
-from hashlib import md5
 import os
-from PIL import Image
 import re
+import time
+import traceback
+from hashlib import md5
+from io import BytesIO
+from urllib.parse import quote, urlparse, urlsplit
+
 import requests
+from PIL import Image
 from sqlalchemy import (
     Binary,
     Column,
@@ -23,22 +27,14 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.mutable import MutableDict
-from sqlalchemy.orm import (
-    backref,
-    relationship,
-)
+from sqlalchemy.orm import backref, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import or_
-import time
-import traceback
-from urllib.parse import urlparse, urlsplit, quote
 
-from . import (
-    Base,
-    get_one,
-    get_one_or_create,
-)
 from ..config import Configuration
+from ..util.datetime_helpers import utc_now
+from ..util.http import HTTP
+from . import Base, get_one, get_one_or_create
 from .constants import (
     DataSourceConstants,
     IdentifierConstants,
@@ -46,12 +42,8 @@ from .constants import (
     MediaTypes,
 )
 from .edition import Edition
-from .licensing import (
-    LicensePool,
-    LicensePoolDeliveryMechanism,
-)
-from ..util.http import HTTP
-from ..util.datetime_helpers import utc_now
+from .licensing import LicensePool, LicensePoolDeliveryMechanism
+
 
 class Resource(Base):
     """An external resource that may be mirrored locally.

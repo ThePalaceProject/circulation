@@ -1,25 +1,22 @@
 # encoding: utf-8
 """Test functionality of util/ that doesn't have its own module."""
 from collections import defaultdict
+
 from money import Money
 
-from ...model import (
-    Identifier,
-    Edition
-)
-
+from ...model import Edition, Identifier
 from ...testing import DatabaseTest
-
 from ...util import (
     Bigrams,
-    english_bigrams,
     MetadataSimilarity,
     MoneyUtility,
     TitleProcessor,
+    english_bigrams,
     fast_query_count,
-    slugify
+    slugify,
 )
 from ...util.median import median
+
 
 class DummyAuthor(object):
 

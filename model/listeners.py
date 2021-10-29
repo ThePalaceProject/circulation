@@ -1,38 +1,24 @@
 # encoding: utf-8
 
 import datetime
-from sqlalchemy import (
-    event,
-    text,
-)
 from pdb import set_trace
+from threading import RLock
+
+from sqlalchemy import event, text
 from sqlalchemy.orm.base import NO_VALUE
 from sqlalchemy.orm.session import Session
-from threading import RLock
-from pdb import set_trace
-from . import (
-    Base,
-)
-from .admin import (
-    Admin,
-    AdminRole,
-)
-from .datasource import DataSource
+
+from ..config import Configuration
+from ..util.datetime_helpers import to_utc, utc_now
+from . import Base
+from .admin import Admin, AdminRole
 from .classification import Genre
 from .collection import Collection
-from ..config import Configuration
-from .configuration import (
-    ConfigurationSetting,
-    ExternalIntegration,
-)
+from .configuration import ConfigurationSetting, ExternalIntegration
+from .datasource import DataSource
 from .library import Library
-from .licensing import (
-    DeliveryMechanism,
-    LicensePool,
-)
+from .licensing import DeliveryMechanism, LicensePool
 from .work import Work
-from ..util.datetime_helpers import to_utc, utc_now
-
 
 site_configuration_has_changed_lock = RLock()
 def site_configuration_has_changed(_db, cooldown=1):

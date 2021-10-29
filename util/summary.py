@@ -1,13 +1,12 @@
 import logging
-from textblob import TextBlob
-from textblob.exceptions import MissingCorpusError
+import re
 from collections import Counter
 
-from . import (
-    Bigrams,
-    english_bigrams,
-)
-import re
+from textblob import TextBlob
+from textblob.exceptions import MissingCorpusError
+
+from . import Bigrams, english_bigrams
+
 
 class SummaryEvaluator(object):
 

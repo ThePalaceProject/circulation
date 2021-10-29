@@ -1,10 +1,12 @@
 import datetime
 import logging
+
+import pytz
 from flask import Response
 from lxml import builder, etree
-import pytz
 
 from .datetime_helpers import utc_now
+
 
 class ElementMaker(builder.ElementMaker):
     """A helper object for creating etree elements."""

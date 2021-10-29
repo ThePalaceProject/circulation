@@ -1,12 +1,11 @@
-from fuzzywuzzy import fuzz
-from nameparser import HumanName
-
 import re
 import unicodedata
 from builtins import str
 
-from .permanent_work_id import WorkIDCalculator;
+from fuzzywuzzy import fuzz
+from nameparser import HumanName
 
+from .permanent_work_id import WorkIDCalculator
 
 """Fallback algorithms for dealing with personal names when VIAF fails us."""
 

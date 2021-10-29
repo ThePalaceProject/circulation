@@ -1,25 +1,24 @@
 import functools
 import logging
 from contextlib import contextmanager
-from urllib.parse import quote, urlsplit, unquote_plus
+from enum import Enum
+from urllib.parse import quote, unquote_plus, urlsplit
 
 import boto3
 import botocore
 from botocore.config import Config
-from botocore.exceptions import (
-    BotoCoreError,
-    ClientError,
-)
-from enum import Enum
+from botocore.exceptions import BotoCoreError, ClientError
 from flask_babel import lazy_gettext as _
+
 from .mirror import MirrorUploader
 from .model import ExternalIntegration
 from .model.configuration import (
-    ConfigurationOption,
+    ConfigurationAttributeType,
     ConfigurationGrouping,
     ConfigurationMetadata,
-    ConfigurationAttributeType
+    ConfigurationOption,
 )
+
 
 class MultipartS3Upload():
     def __init__(self, uploader, representation, mirror_to):

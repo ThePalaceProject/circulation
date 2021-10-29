@@ -1,9 +1,8 @@
 import logging
-
 from enum import Enum
 
-from .exceptions import LCPError
 from ..model import Credential, DataSource
+from .exceptions import LCPError
 
 
 class LCPCredentialType(Enum):

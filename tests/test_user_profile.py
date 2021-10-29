@@ -1,8 +1,7 @@
 import json
-from ..user_profile import (
-    ProfileController,
-    MockProfileStorage,
-)
+
+from ..user_profile import MockProfileStorage, ProfileController
+
 
 class TestProfileController(object):
 

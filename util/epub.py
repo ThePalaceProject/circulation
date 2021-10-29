@@ -1,10 +1,11 @@
 import contextlib
 import logging
-import os, sys
-from lxml import etree
-
+import os
+import sys
 from io import BytesIO
 from zipfile import ZipFile
+
+from lxml import etree
 
 from .http import HTTP
 

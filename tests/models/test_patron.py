@@ -1,29 +1,19 @@
 # encoding: utf-8
-import pytest
 import datetime
-from mock import (
-    call,
-    MagicMock,
-)
 
-from ...testing import DatabaseTest
+import pytest
+from mock import MagicMock, call
+
 from ...classifier import Classifier
-from ...model import (
-    create,
-    tuple_to_numericrange,
-)
+from ...model import create, tuple_to_numericrange
 from ...model.credential import Credential
 from ...model.datasource import DataSource
 from ...model.library import Library
 from ...model.licensing import PolicyException
-from ...model.patron import (
-    Annotation,
-    Hold,
-    Loan,
-    Patron,
-    PatronProfileStorage,
-)
+from ...model.patron import Annotation, Hold, Loan, Patron, PatronProfileStorage
+from ...testing import DatabaseTest
 from ...util.datetime_helpers import datetime_utc, utc_now
+
 
 class TestAnnotation(DatabaseTest):
     def test_set_inactive(self):

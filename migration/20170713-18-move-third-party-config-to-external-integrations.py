@@ -3,22 +3,19 @@
 Move integration details from the Configuration file into the
 database as ExternalIntegrations
 """
+import logging
 import os
 import sys
-import logging
 
 bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..")
 sys.path.append(os.path.abspath(package_dir))
 
-from config import Configuration                    # noqa: E402
-from external_search import ExternalSearchIndex     # noqa: E402
-from model import (                                 # noqa: E402
-    ExternalIntegration as EI,
-    production_session,
-)
-
-from s3 import S3Uploader                           # noqa: E402
+from config import Configuration  # noqa: E402
+from external_search import ExternalSearchIndex  # noqa: E402
+from model import ExternalIntegration as EI  # noqa: E402
+from model import production_session
+from s3 import S3Uploader  # noqa: E402
 
 log = logging.getLogger(name="Core configuration import")
 

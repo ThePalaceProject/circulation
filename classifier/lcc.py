@@ -1,5 +1,6 @@
 from . import *
 
+
 class LCCClassifier(Classifier):
 
     TOP_LEVEL = re.compile("^([A-Z]{1,2})")

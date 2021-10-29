@@ -1,7 +1,10 @@
 
 import json
-from .problem_details import *
+
 from flask_babel import lazy_gettext as _
+
+from .problem_details import *
+
 
 class ProfileController(object):
     """Implement the User Profile Management Protocol.

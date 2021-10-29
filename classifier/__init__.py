@@ -12,16 +12,13 @@
 # SQL to find commonly used classifications not assigned to a genre
 # select count(identifiers.id) as c, subjects.type, substr(subjects.identifier, 0, 20) as i, substr(subjects.name, 0, 20) as n from workidentifiers join classifications on workidentifiers.id=classifications.work_identifier_id join subjects on classifications.subject_id=subjects.id where subjects.genre_id is null and subjects.fiction is null group by subjects.type, i, n order by c desc;
 
-import logging
 import json
+import logging
 import os
 import pkgutil
 import re
+from collections import Counter, defaultdict
 from urllib.parse import urlparse
-from collections import (
-    Counter,
-    defaultdict,
-)
 
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_
@@ -1524,29 +1521,19 @@ Classifier.classifiers[Classifier.FREEFORM_AUDIENCE] = FreeformAudienceClassifie
 Classifier.classifiers[Classifier.AXIS_360_AUDIENCE] = AgeOrGradeClassifier
 
 # Finally, import classifiers described in submodules.
-from .age import (
-    GradeLevelClassifier,
-    InterestLevelClassifier,
-    AgeClassifier,
-)
-from .bisac import BISACClassifier
-from .rbdigital import (
-    RBDigitalAudienceClassifier,
-    RBDigitalSubjectClassifier,
-)
-from .ddc import DeweyDecimalClassifier
-from .lcc import LCCClassifier
-from .gutenberg import GutenbergBookshelfClassifier
+from .age import AgeClassifier, GradeLevelClassifier, InterestLevelClassifier
 from .bic import BICClassifier
-from .simplified import (
-    SimplifiedFictionClassifier,
-    SimplifiedGenreClassifier,
-)
-from .overdrive import OverdriveClassifier
+from .bisac import BISACClassifier
+from .ddc import DeweyDecimalClassifier
+from .gutenberg import GutenbergBookshelfClassifier
 from .keyword import (
+    Eg,
+    FASTClassifier,
     KeywordBasedClassifier,
     LCSHClassifier,
-    FASTClassifier,
     TAGClassifier,
-    Eg,
 )
+from .lcc import LCCClassifier
+from .overdrive import OverdriveClassifier
+from .rbdigital import RBDigitalAudienceClassifier, RBDigitalSubjectClassifier
+from .simplified import SimplifiedFictionClassifier, SimplifiedGenreClassifier

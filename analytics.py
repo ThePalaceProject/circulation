@@ -1,13 +1,15 @@
 
-import importlib
 import contextlib
+import importlib
 import os
 from collections import defaultdict
+
 from sqlalchemy.orm.session import Session
 
-from .model import ExternalIntegration
 from .config import CannotLoadConfiguration
+from .model import ExternalIntegration
 from .util.datetime_helpers import utc_now
+
 
 class Analytics(object):
 

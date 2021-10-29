@@ -1,8 +1,9 @@
 import re
 import sys
+from io import BytesIO
 
 from lxml import etree
-from io import BytesIO
+
 
 class XMLParser(object):
 

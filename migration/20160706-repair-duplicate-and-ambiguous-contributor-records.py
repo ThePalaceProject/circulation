@@ -12,15 +12,16 @@ bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..", "..")
 sys.path.append(os.path.abspath(package_dir))
 
-import time                                         # noqa: E402
+import time  # noqa: E402
 
-from sqlalchemy.orm import aliased                  # noqa: E402
-from sqlalchemy.sql.expression import (and_, or_)   # noqa: E402
-from core.model import (                            # noqa: E402
+from sqlalchemy.orm import aliased  # noqa: E402
+from sqlalchemy.sql.expression import and_, or_  # noqa: E402
+
+from core.model import (  # noqa: E402
     Contribution,
     Contributor,
     Edition,
-    production_session
+    production_session,
 )
 
 

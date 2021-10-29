@@ -1,65 +1,30 @@
 # encoding: utf-8
-import pytest
-from collections import defaultdict
 import json
 import logging
 import re
 import time
-from psycopg2.extras import NumericRange
+from collections import defaultdict
 
-from ..testing import (
-    DatabaseTest,
-)
-
+import pytest
+from elasticsearch.exceptions import ElasticsearchException
 from elasticsearch_dsl import Q
-from elasticsearch_dsl.function import (
-    ScriptScore,
-    RandomScore,
-)
+from elasticsearch_dsl.function import RandomScore, ScriptScore
 from elasticsearch_dsl.query import (
     Bool,
     DisMax,
-    Query as elasticsearch_dsl_query,
-    MatchAll,
     Match,
+    MatchAll,
     MatchNone,
     MatchPhrase,
     MultiMatch,
     Nested,
-    Range,
-    Term,
-    Terms,
 )
-from elasticsearch.exceptions import ElasticsearchException
+from elasticsearch_dsl.query import Query as elasticsearch_dsl_query
+from elasticsearch_dsl.query import Range, Term, Terms
+from psycopg2.extras import NumericRange
 
-from ..config import (
-    Configuration,
-    CannotLoadConfiguration,
-)
-from ..lane import (
-    Facets,
-    FeaturedFacets,
-    Lane,
-    Pagination,
-    SearchFacets,
-    WorkList,
-)
-from ..metadata_layer import (
-    ContributorData,
-    IdentifierData,
-)
-from ..model import (
-    ConfigurationSetting,
-    Contribution,
-    Contributor,
-    DataSource,
-    Edition,
-    ExternalIntegration,
-    Genre,
-    Work,
-    WorkCoverageRecord,
-    get_one_or_create,
-)
+from ..classifier import Classifier
+from ..config import CannotLoadConfiguration, Configuration
 from ..external_search import (
     CurrentMapping,
     ExternalSearchIndex,
@@ -75,17 +40,23 @@ from ..external_search import (
     WorkSearchResult,
     mock_search_index,
 )
-
-from ..classifier import Classifier
-
-from ..problem_details import INVALID_INPUT
-
-from ..testing import (
-    ExternalSearchTest,
-    EndToEndSearchTest,
+from ..lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
+from ..metadata_layer import ContributorData, IdentifierData
+from ..model import (
+    ConfigurationSetting,
+    Contribution,
+    Contributor,
+    DataSource,
+    Edition,
+    ExternalIntegration,
+    Genre,
+    Work,
+    WorkCoverageRecord,
+    get_one_or_create,
 )
+from ..problem_details import INVALID_INPUT
+from ..testing import DatabaseTest, EndToEndSearchTest, ExternalSearchTest
 from ..util.datetime_helpers import datetime_utc, from_timestamp
-
 
 RESEARCH = Term(audience=Classifier.AUDIENCE_RESEARCH.lower())
 

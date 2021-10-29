@@ -1,9 +1,10 @@
 # encoding: utf-8
 # CustomList, CustomListEntry
 
-from pdb import set_trace
-from functools import total_ordering
 import logging
+from functools import total_ordering
+from pdb import set_trace
+
 from sqlalchemy import (
     Boolean,
     Column,
@@ -15,18 +16,16 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql.expression import or_
 from sqlalchemy.orm.session import Session
+from sqlalchemy.sql.expression import or_
 
-from . import (
-    Base,
-    get_one_or_create,
-)
+from ..util.datetime_helpers import utc_now
+from . import Base, get_one_or_create
 from .datasource import DataSource
 from .identifier import Identifier
 from .licensing import LicensePool
 from .work import Work
-from ..util.datetime_helpers import utc_now
+
 
 @total_ordering
 class CustomList(Base):

@@ -1,13 +1,11 @@
 import re
 
 import pytest
-from ...classifier import (
-    BISACClassifier,
-    Classifier,
-)
+
+from ...classifier import BISACClassifier, Classifier
 from ...classifier.bisac import (
-    MatchingRule,
     RE,
+    MatchingRule,
     anything,
     fiction,
     juvenile,
@@ -16,6 +14,7 @@ from ...classifier.bisac import (
     something,
     ya,
 )
+
 
 class TestMatchingRule(object):
 

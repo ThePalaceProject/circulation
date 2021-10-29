@@ -1,13 +1,19 @@
 import pytest
 from parameterized import parameterized
 
-from ..testing import DatabaseTest
 from ..config import CannotLoadConfiguration
 from ..mirror import MirrorUploader
 from ..model import ExternalIntegration
 from ..model.configuration import ExternalIntegrationLink
-from ..s3 import S3Uploader, MinIOUploader, MinIOUploaderConfiguration, S3UploaderConfiguration
+from ..s3 import (
+    MinIOUploader,
+    MinIOUploaderConfiguration,
+    S3Uploader,
+    S3UploaderConfiguration,
+)
+from ..testing import DatabaseTest
 from ..util.datetime_helpers import utc_now
+
 
 class DummySuccessUploader(MirrorUploader):
     def __init__(self, integration=None):

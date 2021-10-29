@@ -8,44 +8,27 @@ import sys
 import traceback
 import unicodedata
 import uuid
-from pdb import set_trace
 from collections import defaultdict
 from enum import Enum
-from sqlalchemy import (
-    exists,
-    and_,
-    text,
-)
+from pdb import set_trace
+
+from sqlalchemy import and_, exists, text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
-from sqlalchemy.orm.exc import (
-    NoResultFound,
-    MultipleResultsFound,
-)
+from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 
-from .config import Configuration, CannotLoadConfiguration
-from .coverage import (
-    CollectionCoverageProviderJob,
-    CoverageProviderProgress,
-)
-from .external_search import (
-    ExternalSearchIndex,
-    Filter,
-    SearchIndexCoverageProvider,
-)
+from .config import CannotLoadConfiguration, Configuration
+from .coverage import CollectionCoverageProviderJob, CoverageProviderProgress
+from .external_search import ExternalSearchIndex, Filter, SearchIndexCoverageProvider
 from .lane import Lane
 from .metadata_layer import (
     LinkData,
-    ReplacementPolicy,
     MetaToModelUtility,
+    ReplacementPolicy,
     TimestampData,
 )
 from .mirror import MirrorUploader
 from .model import (
-    create,
-    get_one,
-    get_one_or_create,
-    production_session,
     BaseCoverageRecord,
     CachedFeed,
     Collection,
@@ -69,26 +52,19 @@ from .model import (
     Timestamp,
     Work,
     WorkCoverageRecord,
+    create,
+    get_one,
+    get_one_or_create,
+    production_session,
     site_configuration_has_changed,
 )
 from .model.configuration import ExternalIntegrationLink
-from .monitor import (
-    CollectionMonitor,
-    ReaperMonitor,
-)
-from .opds_import import (
-    OPDSImportMonitor,
-    OPDSImporter,
-)
+from .monitor import CollectionMonitor, ReaperMonitor
+from .opds_import import OPDSImporter, OPDSImportMonitor
 from .util import fast_query_count
-from .util.personal_names import (
-    contributor_name_match_ratio,
-    display_name_to_sort_name
-)
-from .util.worker_pools import (
-    DatabasePool,
-)
 from .util.datetime_helpers import strptime_utc, to_utc, utc_now
+from .util.personal_names import contributor_name_match_ratio, display_name_to_sort_name
+from .util.worker_pools import DatabasePool
 
 
 class Script(object):

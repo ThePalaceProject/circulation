@@ -1,16 +1,18 @@
 # encoding: utf-8
-import pytest
 import datetime
+
+import pytest
 from sqlalchemy.exc import IntegrityError
 
-from ...testing import DatabaseTest
 from ...model.credential import (
     Credential,
     DelegatedPatronIdentifier,
     DRMDeviceIdentifier,
 )
 from ...model.datasource import DataSource
+from ...testing import DatabaseTest
 from ...util.datetime_helpers import utc_now
+
 
 class TestCredentials(DatabaseTest):
 

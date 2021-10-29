@@ -2,35 +2,19 @@
 # DataSource
 
 
-from . import (
-    Base,
-    get_one,
-    get_one_or_create,
-)
-from .constants import (
-    DataSourceConstants,
-    IdentifierConstants,
-)
+from collections import defaultdict
+from urllib.parse import quote, unquote
+
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String
+from sqlalchemy.dialects.postgresql import JSON
+from sqlalchemy.ext.mutable import MutableDict
+from sqlalchemy.orm import backref, relationship
+
+from . import Base, get_one, get_one_or_create
+from .constants import DataSourceConstants, IdentifierConstants
 from .hasfulltablecache import HasFullTableCache
 from .licensing import LicensePoolDeliveryMechanism
 
-from collections import defaultdict
-from sqlalchemy import (
-    Boolean,
-    Column,
-    ForeignKey,
-    Integer,
-    String,
-)
-from sqlalchemy.dialects.postgresql import JSON
-from sqlalchemy.ext.mutable import (
-    MutableDict,
-)
-from sqlalchemy.orm import (
-    backref,
-    relationship,
-)
-from urllib.parse import quote, unquote
 
 class DataSource(Base, HasFullTableCache, DataSourceConstants):
 

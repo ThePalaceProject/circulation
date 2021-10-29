@@ -1,19 +1,17 @@
+import json
+
 import pytest
 
-from ..testing import DatabaseTest
-import json
-from ..model import (
-    Edition,
-    Work,
-)
 from ..entrypoint import (
-    EntryPoint,
-    EbooksEntryPoint,
-    EverythingEntryPoint,
     AudiobooksEntryPoint,
+    EbooksEntryPoint,
+    EntryPoint,
+    EverythingEntryPoint,
     MediumEntryPoint,
 )
 from ..external_search import Filter
+from ..model import Edition, Work
+from ..testing import DatabaseTest
 
 
 class TestEntryPoint(DatabaseTest):

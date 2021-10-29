@@ -1,8 +1,9 @@
 import datetime
+from pdb import set_trace
+
 import pytest
 import pytz
 from parameterized import parameterized
-from pdb import set_trace
 
 from ...util.datetime_helpers import (
     datetime_utc,
@@ -11,6 +12,7 @@ from ...util.datetime_helpers import (
     to_utc,
     utc_now,
 )
+
 
 class TestDatetimeUTC(object):
     @parameterized.expand([

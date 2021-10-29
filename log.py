@@ -1,18 +1,19 @@
 
-import logging
 import json
+import logging
 import os
 import socket
-from flask_babel import lazy_gettext as _
 from io import StringIO
+
+from boto3.session import Session as AwsSession
+from flask_babel import lazy_gettext as _
 from loggly.handlers import HTTPSHandler as LogglyHandler
 from watchtower import CloudWatchLogHandler
-from boto3.session import Session as AwsSession
 
-from .config import Configuration
-from .config import CannotLoadConfiguration
-from .model import ExternalIntegration, ConfigurationSetting
+from .config import CannotLoadConfiguration, Configuration
+from .model import ConfigurationSetting, ExternalIntegration
 from .util.datetime_helpers import utc_now
+
 
 class JSONFormatter(logging.Formatter):
     hostname = socket.gethostname()
@@ -184,7 +185,7 @@ class Loggly(Logger):
     @classmethod
     def from_configuration(cls, _db, testing=False):
         loggly = None
-        from .model import (ExternalIntegration, ConfigurationSetting)
+        from .model import ConfigurationSetting, ExternalIntegration
 
         app_name = cls.DEFAULT_APP_NAME
         if _db and not testing:

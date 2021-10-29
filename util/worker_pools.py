@@ -1,12 +1,7 @@
 import logging
 from contextlib import contextmanager
-
-from threading import (
-    RLock,
-    Thread,
-    settrace,
-)
 from queue import Queue
+from threading import RLock, Thread, settrace
 
 # Much of the work in this file is based on
 # https://github.com/shazow/workerpool, with

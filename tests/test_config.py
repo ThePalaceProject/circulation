@@ -1,13 +1,11 @@
 import os
+
 from sqlalchemy.orm.session import Session
 
+from ..config import Configuration as BaseConfiguration
+from ..model import ConfigurationSetting, ExternalIntegration
 from ..testing import DatabaseTest
 
-from ..config import Configuration as BaseConfiguration
-from ..model import (
-    ConfigurationSetting,
-    ExternalIntegration,
-)
 
 # Create a configuration object that the tests can run against without
 # impacting the real configuration object.

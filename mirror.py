@@ -1,8 +1,9 @@
-from abc import abstractmethod, ABCMeta
+from abc import ABCMeta, abstractmethod
 from urllib.parse import urlsplit
 
 from .config import CannotLoadConfiguration
 from .util.datetime_helpers import utc_now
+
 
 class MirrorUploader(metaclass=ABCMeta):
     """Handles the job of uploading a representation's content to

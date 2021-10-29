@@ -1,5 +1,6 @@
 from flask_babel import lazy_gettext as _
 
+
 class FacetConstants(object):
 
     # A special constant, basically an additional rel, indicating that

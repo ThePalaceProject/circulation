@@ -2,33 +2,19 @@
 # Contributor, Contribution
 
 
-from . import (
-    Base,
-    flush,
-    get_one_or_create,
-)
-
 import logging
 import re
-from sqlalchemy import (
-    Column,
-    ForeignKey,
-    Integer,
-    Unicode,
-    UniqueConstraint,
-)
-from sqlalchemy.dialects.postgresql import (
-    ARRAY,
-    JSON,
-)
+
+from sqlalchemy import Column, ForeignKey, Integer, Unicode, UniqueConstraint
+from sqlalchemy.dialects.postgresql import ARRAY, JSON
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.mutable import MutableDict
-from sqlalchemy.orm import (
-    relationship,
-    synonym,
-)
+from sqlalchemy.orm import relationship, synonym
 from sqlalchemy.orm.session import Session
+
 from ..util.personal_names import display_name_to_sort_name
+from . import Base, flush, get_one_or_create
+
 
 class Contributor(Base):
     """Someone (usually human) who contributes to books."""

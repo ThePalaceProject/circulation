@@ -14,13 +14,14 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_
 
-from .constants import DataSourceConstants
-from .hasfulltablecache import HasFullTableCache
-from .library import Library
 from ..config import CannotLoadConfiguration, Configuration
 from ..mirror import MirrorUploader
 from ..util.string_helpers import random_string
 from . import Base, get_one, get_one_or_create
+from .constants import DataSourceConstants
+from .hasfulltablecache import HasFullTableCache
+from .library import Library
+
 
 class ExternalIntegrationLink(Base, HasFullTableCache):
 

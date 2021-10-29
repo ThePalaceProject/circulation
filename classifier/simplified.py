@@ -1,5 +1,7 @@
-from . import *
 from urllib.parse import unquote
+
+from . import *
+
 
 class SimplifiedGenreClassifier(Classifier):
 

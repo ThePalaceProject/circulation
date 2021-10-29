@@ -1,29 +1,17 @@
 # encoding: utf-8
 # CachedFeed, WillNotGenerateExpensiveFeed
 
-from . import (
-    Base,
-    flush,
-    get_one,
-    get_one_or_create,
-)
-from collections import namedtuple
 import datetime
 import logging
-from sqlalchemy import (
-    Column,
-    DateTime,
-    ForeignKey,
-    Index,
-    Integer,
-    Unicode,
-)
-from sqlalchemy.sql.expression import (
-    and_,
-)
+from collections import namedtuple
 
-from ..util.flask_util import OPDSFeedResponse
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, Unicode
+from sqlalchemy.sql.expression import and_
+
 from ..util.datetime_helpers import utc_now
+from ..util.flask_util import OPDSFeedResponse
+from . import Base, flush, get_one, get_one_or_create
+
 
 class CachedFeed(Base):
 

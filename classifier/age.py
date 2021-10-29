@@ -2,6 +2,7 @@ import re
 
 from . import Classifier
 
+
 class GradeLevelClassifier(Classifier):
     # How old a kid is when they start grade N in the US.
     american_grade_to_age = {

@@ -2,7 +2,9 @@
 
 from textblob import TextBlob
 from textblob.exceptions import MissingCorpusError
+
 from ..util.summary import SummaryEvaluator
+
 
 class TestSummaryEvaluator(object):
 

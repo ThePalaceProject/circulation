@@ -6,28 +6,22 @@ This acts as an intermediary between the third-party integrations
 model. Doing a third-party integration should be as simple as putting
 the information into this format.
 """
-from collections import defaultdict
-from sqlalchemy.orm.session import Session
-from dateutil.parser import parse
-from sqlalchemy.sql.expression import and_, or_
-from sqlalchemy.orm.exc import (
-    NoResultFound,
-)
-from sqlalchemy.orm import aliased
 import csv
 import datetime
 import logging
 import re
-from pymarc import MARCReader
+from collections import defaultdict
 
-from .classifier import Classifier
-from .util import LanguageCodes
-from .util.http import RemoteIntegrationException
-from .util.personal_names import name_tidy
-from .util.median import median
+from dateutil.parser import parse
+from pymarc import MARCReader
+from sqlalchemy.orm import aliased
+from sqlalchemy.orm.exc import NoResultFound
+from sqlalchemy.orm.session import Session
+from sqlalchemy.sql.expression import and_, or_
+
+from .analytics import Analytics
+from .classifier import NO_NUMBER, NO_VALUE, Classifier
 from .model import (
-    get_one,
-    get_one_or_create,
     CirculationEvent,
     Classification,
     Collection,
@@ -43,20 +37,23 @@ from .model import (
     LicensePool,
     LicensePoolDeliveryMechanism,
     LinkRelations,
-    Subject,
-    Hyperlink,
     PresentationCalculationPolicy,
-    RightsStatus,
     Representation,
     Resource,
+    RightsStatus,
+    Subject,
     Timestamp,
     Work,
+    get_one,
+    get_one_or_create,
 )
 from .model.configuration import ExternalIntegrationLink
-from .classifier import NO_VALUE, NO_NUMBER
-from .analytics import Analytics
-from .util.personal_names import display_name_to_sort_name
+from .util import LanguageCodes
 from .util.datetime_helpers import strptime_utc, to_utc, utc_now
+from .util.http import RemoteIntegrationException
+from .util.median import median
+from .util.personal_names import display_name_to_sort_name, name_tidy
+
 
 class ReplacementPolicy(object):
     """How serious should we be about overwriting old metadata with

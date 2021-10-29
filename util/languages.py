@@ -2,8 +2,9 @@
 """Data and functions for dealing with language names and codes."""
 
 
-from collections import defaultdict
 import re
+from collections import defaultdict
+
 
 class LookupTable(dict):
     """Return None on x[key] when 'key' isn't in the dictionary,

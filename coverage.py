@@ -4,9 +4,9 @@ import traceback
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
 
+from . import log  # This sets the appropriate log format.
+from .metadata_layer import ReplacementPolicy, TimestampData
 from .model import (
-    get_one,
-    get_one_or_create,
     BaseCoverageRecord,
     Collection,
     CollectionMissing,
@@ -20,14 +20,12 @@ from .model import (
     Timestamp,
     Work,
     WorkCoverageRecord,
+    get_one,
+    get_one_or_create,
 )
-from .metadata_layer import (
-    ReplacementPolicy,
-    TimestampData,
-)
-from .util.worker_pools import DatabaseJob
 from .util.datetime_helpers import utc_now
-from . import log # This sets the appropriate log format.
+from .util.worker_pools import DatabaseJob
+
 
 class CoverageFailure(object):
     """Object representing the failure to provide coverage."""

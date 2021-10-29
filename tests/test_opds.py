@@ -9,9 +9,6 @@ from flask_babel import lazy_gettext as _
 from lxml import etree
 from psycopg2.extras import NumericRange
 
-from ..testing import (
-    DatabaseTest,
-)
 from ..classifier import (
     Classifier,
     Contemporary_Romance,
@@ -19,10 +16,7 @@ from ..classifier import (
     Fantasy,
     History,
 )
-from ..config import (
-    Configuration,
-    temp_config,
-)
+from ..config import Configuration, temp_config
 from ..entrypoint import (
     AudiobooksEntryPoint,
     EbooksEntryPoint,
@@ -31,13 +25,7 @@ from ..entrypoint import (
 )
 from ..external_search import MockExternalSearchIndex
 from ..facets import FacetConstants
-from ..lane import (
-    Facets,
-    FeaturedFacets,
-    Pagination,
-    SearchFacets,
-    WorkList,
-)
+from ..lane import Facets, FeaturedFacets, Pagination, SearchFacets, WorkList
 from ..lcp.credential import LCPCredentialFactory
 from ..model import (
     CachedFeed,
@@ -52,8 +40,8 @@ from ..model import (
     Representation,
     Subject,
     Work,
-    get_one,
     create,
+    get_one,
 )
 from ..opds import (
     AcquisitionFeed,
@@ -61,23 +49,16 @@ from ..opds import (
     LookupAcquisitionFeed,
     NavigationFacets,
     NavigationFeed,
-    VerboseAnnotator,
     TestAnnotator,
     TestAnnotatorWithGroup,
-    TestUnfulfillableAnnotator
+    TestUnfulfillableAnnotator,
+    VerboseAnnotator,
 )
 from ..opds_import import OPDSXMLParser
-from ..util.flask_util import (
-    OPDSEntryResponse,
-    OPDSFeedResponse,
-    Response,
-)
-from ..util.opds_writer import (
-    AtomFeed,
-    OPDSFeed,
-    OPDSMessage,
-)
+from ..testing import DatabaseTest
 from ..util.datetime_helpers import datetime_utc, utc_now
+from ..util.flask_util import OPDSEntryResponse, OPDSFeedResponse, Response
+from ..util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
 
 
 class TestBaseAnnotator(DatabaseTest):

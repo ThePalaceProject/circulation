@@ -1,20 +1,18 @@
 # encoding: utf-8
-import pytest
 import datetime
-from ...testing import DatabaseTest
+
+import pytest
+
 from ...classifier import Classifier
-from ...lane import (
-    Facets,
-    Pagination,
-    Lane,
-    WorkList,
-)
+from ...lane import Facets, Lane, Pagination, WorkList
 from ...model.cachedfeed import CachedFeed
 from ...model.configuration import ConfigurationSetting
 from ...opds import AcquisitionFeed
+from ...testing import DatabaseTest
+from ...util.datetime_helpers import utc_now
 from ...util.flask_util import OPDSFeedResponse
 from ...util.opds_writer import OPDSFeed
-from ...util.datetime_helpers import utc_now
+
 
 class MockFeedGenerator(object):
 
@@ -393,6 +391,7 @@ class TestCachedFeed(DatabaseTest):
         # has root lanes, `private` is always set to True, even if we
         # asked for the opposite.
         from unittest.mock import PropertyMock, patch
+
         from ...model import Library
         Library._has_root_lane_cache[self._default_library.id] = True
         r = CachedFeed.fetch(

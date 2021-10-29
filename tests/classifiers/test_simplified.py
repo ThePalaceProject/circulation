@@ -1,6 +1,7 @@
 from ... import classifier
 from ...classifier import *
 
+
 class TestSimplifiedGenreClassifier(object):
 
     def test_scrub_identifier(self):

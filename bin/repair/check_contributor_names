@@ -17,7 +17,7 @@ which generates a report file that lists the contributors affected, and whether 
 were fixed or complained about.
 """
 
-import startup      # noqa: F401
+import startup  # noqa: F401
 
 from core.scripts import CheckContributorNamesInDB
 

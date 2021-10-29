@@ -1,10 +1,9 @@
 from ... import classifier
 from ...classifier import *
-from ...classifier.keyword import (
-    KeywordBasedClassifier as Keyword,
-    LCSHClassifier as LCSH,
-    FASTClassifier as FAST,
-)
+from ...classifier.keyword import FASTClassifier as FAST
+from ...classifier.keyword import KeywordBasedClassifier as Keyword
+from ...classifier.keyword import LCSHClassifier as LCSH
+
 
 class TestLCSH(object):
 

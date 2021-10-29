@@ -1,17 +1,15 @@
 from ..model import (
     CirculationEvent,
     DataSource,
-    get_one_or_create,
-    Work,
-    LicensePool,
-    Identifier,
     Edition,
+    Identifier,
+    LicensePool,
     PresentationCalculationPolicy,
+    Work,
+    get_one_or_create,
 )
+from ..testing import DatabaseTest
 
-from ..testing import (
-    DatabaseTest,
-)
 
 class TestEquivalency(DatabaseTest):
 

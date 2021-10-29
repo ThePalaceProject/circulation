@@ -1,8 +1,9 @@
 
-from hashlib import md5
 import re
 import struct
 import unicodedata
+from hashlib import md5
+
 
 class WorkIDCalculator(object):
 

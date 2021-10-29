@@ -2,6 +2,7 @@ from ... import classifier
 from ...classifier import *
 from ...classifier.lcc import LCCClassifier as LCC
 
+
 class TestLCC(object):
 
     def test_name_for(self):

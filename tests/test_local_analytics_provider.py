@@ -1,13 +1,10 @@
 import pytest
 
-from ..testing import DatabaseTest
 from ..local_analytics_provider import LocalAnalyticsProvider
-from ..model import (
-    CirculationEvent,
-    ExternalIntegration,
-    create,
-)
+from ..model import CirculationEvent, ExternalIntegration, create
+from ..testing import DatabaseTest
 from ..util.datetime_helpers import to_utc, utc_now
+
 
 class TestLocalAnalyticsProvider(DatabaseTest):
 

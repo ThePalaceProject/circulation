@@ -1,16 +1,16 @@
 """Utilities for Flask applications."""
 import datetime
-import flask
-from lxml import etree
-from flask import Response as FlaskResponse
-from wsgiref.handlers import format_date_time
 import time
+from wsgiref.handlers import format_date_time
 
-from . import (
-    problem_detail,
-)
-from .opds_writer import OPDSFeed
+import flask
+from flask import Response as FlaskResponse
+from lxml import etree
+
+from . import problem_detail
 from .datetime_helpers import utc_now
+from .opds_writer import OPDSFeed
+
 
 def problem_raw(type, status, title, detail=None, instance=None, headers={}):
     data = problem_detail.json(type, status, title, detail, instance)

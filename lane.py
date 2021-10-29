@@ -1,30 +1,31 @@
 # encoding: utf-8
-from collections import defaultdict
 import datetime
 import logging
 import time
+from collections import defaultdict
 from urllib.parse import quote_plus
-from psycopg2.extras import NumericRange
-from sqlalchemy.sql import select
-from sqlalchemy.sql.expression import Select
-from sqlalchemy.dialects.postgresql import JSON
+
+import elasticsearch
 from flask_babel import lazy_gettext as _
+from psycopg2.extras import NumericRange
 from sqlalchemy import (
-    and_,
-    case,
-    or_,
-    not_,
+    Boolean,
+    Column,
+    ForeignKey,
     Integer,
     Table,
     Unicode,
+    UniqueConstraint,
+    and_,
+    case,
+    event,
+    not_,
+    or_,
     text,
 )
-from sqlalchemy.ext.associationproxy import (
-    association_proxy,
-)
-from sqlalchemy.ext.hybrid import (
-    hybrid_property,
-)
+from sqlalchemy.dialects.postgresql import ARRAY, INT4RANGE, JSON
+from sqlalchemy.ext.associationproxy import association_proxy
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import (
     aliased,
     backref,
@@ -34,37 +35,15 @@ from sqlalchemy.orm import (
     lazyload,
     relationship,
 )
-from sqlalchemy.sql.expression import literal
-import elasticsearch
-from sqlalchemy import (
-    event,
-    Boolean,
-    Column,
-    ForeignKey,
-    Integer,
-    UniqueConstraint,
-)
-from sqlalchemy.dialects.postgresql import (
-    ARRAY,
-    INT4RANGE,
-)
+from sqlalchemy.sql import select
+from sqlalchemy.sql.expression import Select, literal
 
 from . import classifier
+from .classifier import Classifier, GenreData
 from .config import Configuration
-from .classifier import (
-    Classifier,
-    GenreData,
-)
-from .entrypoint import (
-    EntryPoint,
-    EverythingEntryPoint,
-)
+from .entrypoint import EntryPoint, EverythingEntryPoint
+from .facets import FacetConstants
 from .model import (
-    directly_modified,
-    get_one_or_create,
-    numericrange_to_tuple,
-    site_configuration_has_changed,
-    tuple_to_numericrange,
     Base,
     CachedFeed,
     Collection,
@@ -74,25 +53,26 @@ from .model import (
     DeliveryMechanism,
     Edition,
     Genre,
-    get_one,
     Library,
     LicensePool,
     LicensePoolDeliveryMechanism,
     Session,
     Work,
     WorkGenre,
+    directly_modified,
+    get_one,
+    get_one_or_create,
+    numericrange_to_tuple,
+    site_configuration_has_changed,
+    tuple_to_numericrange,
 )
 from .model.constants import EditionConstants
-from .facets import FacetConstants
 from .problem_details import *
-from .util import (
-    fast_query_count,
-    LanguageCodes,
-)
-from .util.problem_detail import ProblemDetail
+from .util import LanguageCodes, fast_query_count
 from .util.accept_language import parse_accept_language
-from .util.opds_writer import OPDSFeed
 from .util.datetime_helpers import utc_now
+from .util.opds_writer import OPDSFeed
+from .util.problem_detail import ProblemDetail
 
 
 class BaseFacets(FacetConstants):
@@ -1740,10 +1720,7 @@ class WorkList(object):
             that generates such a list when executed.
 
         """
-        from .external_search import (
-            Filter,
-            ExternalSearchIndex,
-        )
+        from .external_search import ExternalSearchIndex, Filter
         search_engine = search_engine or ExternalSearchIndex.load(_db)
         filter = self.filter(_db, facets)
         hits = search_engine.query_works(
@@ -1794,10 +1771,7 @@ class WorkList(object):
         """Convert a list of lists of Hit objects into a list
         of lists of Work objects.
         """
-        from .external_search import (
-            Filter,
-            WorkSearchResult,
-        )
+        from .external_search import Filter, WorkSearchResult
 
         has_script_fields = None
         work_ids = set()
