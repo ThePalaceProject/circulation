@@ -247,7 +247,7 @@ class Identifier(Base, IdentifierConstants):
             type, identifier_string = list(
                 map(unquote, identifier_string.split("/", 1))
             )
-        elif identifier_string.startswith(Identifier.ISBN_URN_SCHEME_PREFIX):
+        elif identifier_string.lower().startswith(Identifier.ISBN_URN_SCHEME_PREFIX):
             type = Identifier.ISBN
             identifier_string = identifier_string[
                 len(Identifier.ISBN_URN_SCHEME_PREFIX) :

@@ -33,7 +33,6 @@ class DataSourceConstants(object):
     LIBRARY_STAFF = "Library staff"
     ADOBE = "Adobe DRM"
     PLYMPTON = "Plympton"
-    RB_DIGITAL = "RBdigital"
     ELIB = "eLiburutegia"
     OA_CONTENT_SERVER = "Library Simplified Open Access Content Server"
     PRESENTATION_EDITION = "Presentation edition generator"
@@ -44,12 +43,8 @@ class DataSourceConstants(object):
     LCP = "LCP"
     PROQUEST = "ProQuest"
 
-    DEPRECATED_NAMES = {
-        "3M": BIBLIOTHECA,
-        "OneClick": RB_DIGITAL,
-    }
+    DEPRECATED_NAMES = {"3M": BIBLIOTHECA}
     THREEM = BIBLIOTHECA
-    ONECLICK = RB_DIGITAL
 
     # Some sources of open-access ebooks are better than others. This
     # list shows which sources we prefer, in ascending order of
@@ -164,8 +159,6 @@ class IdentifierConstants(object):
     NOVELIST_ID = "NoveList ID"
     OCLC_WORK = "OCLC Work ID"
     OCLC_NUMBER = "OCLC Number"
-    # RBdigital uses ISBNs for ebooks and eaudio, and its own ids for magazines
-    RB_DIGITAL_ID = "RBdigital ID"
     OPEN_LIBRARY_ID = "OLID"
     BIBLIOCOMMONS_ID = "Bibliocommons ID"
     URI = "URI"
@@ -178,10 +171,8 @@ class IdentifierConstants(object):
 
     DEPRECATED_NAMES = {
         "3M ID": BIBLIOTHECA_ID,
-        "OneClick ID": RB_DIGITAL_ID,
     }
     THREEM_ID = BIBLIOTHECA_ID
-    ONECLICK_ID = RB_DIGITAL_ID
 
     LICENSE_PROVIDING_IDENTIFIER_TYPES = [
         BIBLIOTHECA_ID,

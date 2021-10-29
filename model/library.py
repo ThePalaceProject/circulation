@@ -291,6 +291,8 @@ class Library(Base, HasFullTableCache):
     def enabled_facets(self, group_name):
         """Look up the enabled facets for a given facet group."""
         setting = self.enabled_facets_setting(group_name)
+        value = None
+
         try:
             value = setting.json_value
         except ValueError as e:

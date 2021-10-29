@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
-"""
-Move log details from the Configuration file into the database as ExternalIntegrations
+#!/usr/bin/env python
+"""Move log details from the Configuration file into the
+database as ExternalIntegrations
 """
 
 import logging
@@ -11,8 +11,8 @@ bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..")
 sys.path.append(os.path.abspath(package_dir))
 
-from config import Configuration  # noqa: E402
-from model import ExternalIntegration as EI  # noqa: E402
+from config import Configuration
+from model import ExternalIntegration as EI
 from model import production_session
 
 _db = production_session()

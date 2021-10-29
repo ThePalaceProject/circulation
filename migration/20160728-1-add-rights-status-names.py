@@ -1,6 +1,7 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Add names to rightsstatus table."""
 
+import logging
 import os
 import sys
 
@@ -8,7 +9,8 @@ bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..", "..", "..")
 sys.path.append(os.path.abspath(package_dir))
 
-from core.model import RightsStatus, production_session  # noqa: E402
+
+from core.model import RightsStatus, production_session
 
 _db = production_session()
 

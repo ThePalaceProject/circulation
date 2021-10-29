@@ -132,7 +132,6 @@ class Configuration(ConfigurationConstants):
     CONTENT_SERVER_INTEGRATION = "Content Server"
 
     AXIS_INTEGRATION = "Axis 360"
-    RBDIGITAL_INTEGRATION = "RBDigital"
     OVERDRIVE_INTEGRATION = "Overdrive"
     THREEM_INTEGRATION = "3M"
 

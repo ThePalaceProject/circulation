@@ -262,6 +262,16 @@ class TestConfigurationSetting(DatabaseTest):
         setting.value = set_to
         assert setting.value == expect
 
+    def test_stored_bytes_value(self):
+        bytes_setting = ConfigurationSetting.sitewide(self._db, "bytes_setting")
+        assert bytes_setting.value is None
+
+        bytes_setting.value = "1234 ☃".encode("utf8")
+        assert "1234 ☃" == bytes_setting.value
+
+        with pytest.raises(UnicodeDecodeError):
+            bytes_setting.value = b"\x80"
+
     def test_int_value(self):
         number = ConfigurationSetting.sitewide(self._db, "number")
         assert None == number.int_value
@@ -689,6 +699,46 @@ username='someuser'"""
         # Must be the same value if set
         integration.custom_accept_header = "custom header"
         assert integration.custom_accept_header == "custom header"
+
+    def test_delete(self):
+        """Ensure that ExternalIntegration.delete clears all orphan ExternalIntegrationLinks."""
+        integration1 = self._external_integration(
+            ExternalIntegration.MANUAL,
+            ExternalIntegration.LICENSE_GOAL,
+            libraries=[self._default_library],
+        )
+        integration2 = self._external_integration(
+            ExternalIntegration.S3,
+            ExternalIntegration.STORAGE_GOAL,
+            libraries=[self._default_library],
+        )
+
+        # Set up a a link associating integration2 with integration1.
+        link1 = self._external_integration_link(
+            integration1,
+            self._default_library,
+            integration2,
+            ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS,
+        )
+        link2 = self._external_integration_link(
+            integration1,
+            self._default_library,
+            integration2,
+            ExternalIntegrationLink.COVERS,
+        )
+
+        # Delete integration1.
+        self._db.delete(integration1)
+
+        # Ensure that there are no orphan links.
+        links = self._db.query(ExternalIntegrationLink).all()
+        for link in (link1, link2):
+            assert link not in links
+
+        # Ensure that the first integration was successfully removed.
+        external_integrations = self._db.query(ExternalIntegration).all()
+        assert integration1 not in external_integrations
+        assert integration2 in external_integrations
 
 
 SETTING1_KEY = "setting1"

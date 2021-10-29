@@ -201,7 +201,6 @@ class DataSource(Base, HasFullTableCache, DataSourceConstants):
             refresh_rate,
         ) in (
             (cls.GUTENBERG, True, False, IdentifierConstants.GUTENBERG_ID, None),
-            (cls.RB_DIGITAL, True, True, IdentifierConstants.RB_DIGITAL_ID, None),
             (cls.OVERDRIVE, True, False, IdentifierConstants.OVERDRIVE_ID, 0),
             (
                 cls.BIBLIOTHECA,

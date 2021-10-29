@@ -169,11 +169,11 @@ class ExternalIntegration(Base, HasFullTableCache):
     ODILO = DataSourceConstants.ODILO
     BIBLIOTHECA = DataSourceConstants.BIBLIOTHECA
     AXIS_360 = DataSourceConstants.AXIS_360
-    RB_DIGITAL = DataSourceConstants.RB_DIGITAL
-    ONE_CLICK = RB_DIGITAL
     OPDS_FOR_DISTRIBUTORS = "OPDS for Distributors"
     ENKI = DataSourceConstants.ENKI
     FEEDBOOKS = DataSourceConstants.FEEDBOOKS
+    ODL = "ODL"
+    ODL2 = "ODL 2.0"
     LCP = DataSourceConstants.LCP
     MANUAL = DataSourceConstants.MANUAL
     PROQUEST = DataSourceConstants.PROQUEST
@@ -192,7 +192,6 @@ class ExternalIntegration(Base, HasFullTableCache):
         ODILO,
         BIBLIOTHECA,
         AXIS_360,
-        RB_DIGITAL,
         GUTENBERG,
         ENKI,
         MANUAL,
@@ -205,7 +204,6 @@ class ExternalIntegration(Base, HasFullTableCache):
         ODILO: DataSourceConstants.ODILO,
         BIBLIOTHECA: DataSourceConstants.BIBLIOTHECA,
         AXIS_360: DataSourceConstants.AXIS_360,
-        RB_DIGITAL: DataSourceConstants.RB_DIGITAL,
         ENKI: DataSourceConstants.ENKI,
         FEEDBOOKS: DataSourceConstants.FEEDBOOKS,
     }
@@ -309,6 +307,13 @@ class ExternalIntegration(Base, HasFullTableCache):
     )
 
     links = relationship(
+        "ExternalIntegrationLink",
+        backref="integration",
+        foreign_keys="ExternalIntegrationLink.external_integration_id",
+        cascade="all, delete-orphan",
+    )
+
+    other_links = relationship(
         "ExternalIntegrationLink",
         backref="other_integration",
         foreign_keys="ExternalIntegrationLink.other_integration_id",
@@ -955,13 +960,13 @@ class ConfigurationAttributeType(Enum):
     MENU = "menu"
 
     def to_control_type(self):
-        """Converts the value to a attribute type understandable by circulation-web
+        """Converts the value to a attribute type understandable by circulation-admin
 
         :return: String representation of attribute's type
         :rtype: string
         """
-        # NOTE: For some reason, circulation-web converts "text" into <text> so we have to turn it into None
-        # In this case circulation-web will use <input>
+        # NOTE: For some reason, circulation-admin converts "text" into <text> so we have to turn it into None
+        # In this case circulation-admin will use <input>
         # TODO: To be fixed in https://jira.nypl.org/browse/SIMPLY-3008
         if self.value == self.TEXT.value:
             return None
@@ -1371,9 +1376,9 @@ class ConfigurationGrouping(HasConfigurationSettings):
 
     @classmethod
     def to_settings_generator(cls):
-        """Return a generator object returning settings in a format understandable by circulation-web.
+        """Return a generator object returning settings in a format understandable by circulation-admin.
 
-        :return: list of settings in a format understandable by circulation-web.
+        :return: list of settings in a format understandable by circulation-admin.
         :rtype: List[Dict]
         """
         for name, member in ConfigurationMetadata.get_configuration_metadata(cls):
@@ -1413,9 +1418,9 @@ class ConfigurationGrouping(HasConfigurationSettings):
 
     @classmethod
     def to_settings(cls):
-        """Return a list of settings in a format understandable by circulation-web.
+        """Return a list of settings in a format understandable by circulation-admin.
 
-        :return: list of settings in a format understandable by circulation-web.
+        :return: list of settings in a format understandable by circulation-admin.
         :rtype: List[Dict]
         """
         return list(cls.to_settings_generator())

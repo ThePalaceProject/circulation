@@ -1,22 +1,15 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Recalculate the age range for all subjects whose audience is Children or Young Adult."""
-
 import os
 import sys
 
 bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..", "..")
 sys.path.append(os.path.abspath(package_dir))
-
-from core.classifier import Classifier  # noqa: E402,F401
-from core.model import (  # noqa: E402,F401
-    DataSource,
-    Edition,
-    Subject,
-    production_session,
-)
-from core.monitor import SubjectSweepMonitor  # noqa: E402
-from core.scripts import RunMonitorScript  # noqa: E402
+from core.classifier import Classifier
+from core.model import DataSource, Edition, Subject, production_session
+from core.monitor import SubjectSweepMonitor
+from core.scripts import RunMonitorScript
 
 
 class RecalculateFictionStatusMonitor(SubjectSweepMonitor):
@@ -31,13 +24,11 @@ class RecalculateFictionStatusMonitor(SubjectSweepMonitor):
         )
 
     def subject_query(self):
-        return self._db.query(Subject).filter(
-            Subject.type == Subject.OVERDRIVE
-        )  # noqa: E225
+        return self._db.query(Subject).filter(Subject.type == Subject.OVERDRIVE)
 
     def process_identifier(self, subject):
-        old_fiction = subject.fiction  # noqa: F841
-        old_audience = subject.audience  # noqa: F841
+        old_fiction = subject.fiction
+        old_audience = subject.audience
         subject.assign_to_genre()
         print("%s %s %s" % (subject.identifier, subject.fiction, subject.audience))
 

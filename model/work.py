@@ -94,7 +94,6 @@ class Work(Base):
     # necessary to show up in featured feeds.
     default_quality_by_data_source = {
         DataSourceConstants.GUTENBERG: 0,
-        DataSourceConstants.RB_DIGITAL: 0.4,
         DataSourceConstants.OVERDRIVE: 0.4,
         DataSourceConstants.BIBLIOTHECA: 0.65,
         DataSourceConstants.AXIS_360: 0.65,
@@ -332,7 +331,7 @@ class Work(Base):
             Work.id == WorkCoverageRecord.work_id,
             WorkCoverageRecord.operation == operation,
         )
-        q = _db.query(Work).outerjoin(WorkCoverageRecord, clause)
+        q = _db.query(Work).outerjoin(WorkCoverageRecord, clause).order_by(Work.id)
 
         missing = WorkCoverageRecord.not_covered(
             count_as_covered, count_as_missing_before

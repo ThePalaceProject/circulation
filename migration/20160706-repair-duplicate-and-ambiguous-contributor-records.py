@@ -1,28 +1,22 @@
-#!/usr/bin/env python3
-"""
-Fix Editions that list the same contributor as both 'Primary Author'
+#!/usr/bin/env python
+"""Fix Editions that list the same contributor as both 'Primary Author'
 and 'Author', and Editions that list the same contributor in an
 'Unknown' role plus some more specific role.
 """
-
+import logging
 import os
 import sys
+from pdb import set_trace
 
 bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..", "..")
 sys.path.append(os.path.abspath(package_dir))
 
-import time  # noqa: E402
+import time
 
-from sqlalchemy.orm import aliased  # noqa: E402
-from sqlalchemy.sql.expression import and_, or_  # noqa: E402
-
-from core.model import (  # noqa: E402
-    Contribution,
-    Contributor,
-    Edition,
-    production_session,
-)
+from core.model import Contribution, Contributor, Edition, production_session
+from sqlalchemy.orm import aliased
+from sqlalchemy.sql.expression import and_, or_
 
 
 def dedupe(edition):
@@ -83,7 +77,7 @@ contribution2 = aliased(Contribution)
 # twice in author roles.
 unknown_role_or_duplicate_author_role = or_(
     and_(
-        Contribution.role == Contributor.UNKNOWN_ROLE,  # noqa: E225
+        Contribution.role == Contributor.UNKNOWN_ROLE,
         contribution2.role != Contributor.UNKNOWN_ROLE,
     ),
     and_(
@@ -96,8 +90,8 @@ qu = (
     _db.query(Edition)
     .join(Edition.contributions)
     .join(contribution2, contribution2.edition_id == Edition.id)
-    .filter(contribution2.id != Contribution.id)  # noqa: E225
-    .filter(contribution2.contributor_id == Contribution.contributor_id)  # noqa: E225
+    .filter(contribution2.id != Contribution.id)
+    .filter(contribution2.contributor_id == Contribution.contributor_id)
     .filter(unknown_role_or_duplicate_author_role)
 )
 
@@ -109,7 +103,7 @@ while results:
     results = qu.all()
     for ed in qu:
         # for contribution in ed.contributions:
-        #     print contribution.contributor, contribution.role
+        #    print contribution.contributor, contribution.role
         dedupe(ed)
     _db.commit()
     b = time.time()

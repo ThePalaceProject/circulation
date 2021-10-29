@@ -1,22 +1,15 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Recalculate the age range for all subjects whose audience is Children or Young Adult."""
-
 import os
 import sys
 
 bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..", "..")
 sys.path.append(os.path.abspath(package_dir))
-
-from core.classifier import Classifier  # noqa: E402
-from core.model import (  # noqa: E402,F401
-    DataSource,
-    Edition,
-    Subject,
-    production_session,
-)
-from core.monitor import SubjectSweepMonitor  # noqa: E402
-from core.scripts import RunMonitorScript  # noqa: E402
+from core.classifier import Classifier
+from core.model import DataSource, Edition, Subject, production_session
+from core.monitor import SubjectSweepMonitor
+from core.scripts import RunMonitorScript
 
 
 class RecalculateAgeRangeMonitor(SubjectSweepMonitor):
@@ -37,10 +30,7 @@ class RecalculateAgeRangeMonitor(SubjectSweepMonitor):
     def process_identifier(self, subject):
         old_target_age = subject.target_age
         subject.assign_to_genre()
-        if (
-            subject.target_age != old_target_age
-            and subject.target_age.lower is not None
-        ):
+        if subject.target_age != old_target_age and subject.target_age.lower != None:
             print(("%r: %r->%r" % (subject, old_target_age, subject.target_age)))
 
 

@@ -1,6 +1,9 @@
 import datetime
 import os
 
+from parameterized import parameterized
+from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
+
 from ..model import (
     Contribution,
     Contributor,
@@ -12,11 +15,11 @@ from ..model import (
     MediaTypes,
     Work,
 )
-from ..opds2_import import OPDS2Importer
+from ..opds2_import import OPDS2Importer, RWPMManifestParser
 from .test_opds_import import OPDSTest
 
 
-class TestOPDS2Importer(OPDSTest):
+class OPDS2Test(OPDSTest):
     @staticmethod
     def _get_edition_by_identifier(editions, identifier):
         """Find an edition in the list by its identifier.
@@ -65,12 +68,20 @@ class TestOPDS2Importer(OPDSTest):
 
         return None
 
-    def sample_opds(self, filename):
+
+class TestOPDS2Importer(OPDS2Test):
+    def sample_opds(self, filename, file_type="r"):
         base_path = os.path.split(__file__)[0]
         resource_path = os.path.join(base_path, "files", "opds2")
         return open(os.path.join(resource_path, filename)).read()
 
-    def test(self):
+    @parameterized.expand(
+        [
+            ("manifest encoded as a string", "string"),
+            ("manifest encoded as a byte-string", "bytes"),
+        ]
+    )
+    def test(self, _, manifest_type):
         # Arrange
         collection = self._default_collection
         data_source = DataSource.lookup(
@@ -79,8 +90,13 @@ class TestOPDS2Importer(OPDSTest):
 
         collection.data_source = data_source
 
-        importer = OPDS2Importer(self._db, collection)
+        importer = OPDS2Importer(
+            self._db, collection, RWPMManifestParser(OPDS2FeedParserFactory())
+        )
         content_server_feed = self.sample_opds("feed.json")
+
+        if manifest_type == "bytes":
+            content_server_feed = content_server_feed.encode()
 
         # Act
         imported_editions, pools, works, failures = importer.import_from_feed(
@@ -90,14 +106,14 @@ class TestOPDS2Importer(OPDSTest):
         # Assert
 
         # 1. Make sure that editions contain all required metadata
-        assert True == isinstance(imported_editions, list)
+        assert isinstance(imported_editions, list)
         assert 2 == len(imported_editions)
 
         # 1.1. Edition with open-access links (Moby-Dick)
         moby_dick_edition = self._get_edition_by_identifier(
             imported_editions, "urn:isbn:978-3-16-148410-0"
         )
-        assert True == isinstance(moby_dick_edition, Edition)
+        assert isinstance(moby_dick_edition, Edition)
 
         assert "Moby-Dick" == moby_dick_edition.title
         assert "eng" == moby_dick_edition.language
@@ -107,16 +123,16 @@ class TestOPDS2Importer(OPDSTest):
 
         assert 1 == len(moby_dick_edition.author_contributors)
         [moby_dick_author] = moby_dick_edition.author_contributors
-        assert True == isinstance(moby_dick_author, Contributor)
+        assert isinstance(moby_dick_author, Contributor)
         assert "Herman Melville" == moby_dick_author.display_name
         assert "Melville, Herman" == moby_dick_author.sort_name
 
         assert 1 == len(moby_dick_author.contributions)
-        [huckleberry_finn_author_contribution] = moby_dick_author.contributions
-        assert True == isinstance(huckleberry_finn_author_contribution, Contribution)
-        assert moby_dick_author == huckleberry_finn_author_contribution.contributor
-        assert moby_dick_edition == huckleberry_finn_author_contribution.edition
-        assert Contributor.AUTHOR_ROLE == huckleberry_finn_author_contribution.role
+        [moby_dick_author_contribution] = moby_dick_author.contributions
+        assert isinstance(moby_dick_author_contribution, Contribution)
+        assert moby_dick_author == moby_dick_author_contribution.contributor
+        assert moby_dick_edition == moby_dick_author_contribution.edition
+        assert Contributor.AUTHOR_ROLE == moby_dick_author_contribution.role
 
         assert data_source == moby_dick_edition.data_source
 
@@ -133,7 +149,7 @@ class TestOPDS2Importer(OPDSTest):
         huckleberry_finn_edition = self._get_edition_by_identifier(
             imported_editions, "urn:isbn:9781234567897"
         )
-        assert True == isinstance(huckleberry_finn_edition, Edition)
+        assert isinstance(huckleberry_finn_edition, Edition)
 
         assert "Adventures of Huckleberry Finn" == huckleberry_finn_edition.title
         assert "eng" == huckleberry_finn_edition.language
@@ -143,7 +159,7 @@ class TestOPDS2Importer(OPDSTest):
         assert 2 == len(huckleberry_finn_edition.author_contributors)
         huckleberry_finn_authors = huckleberry_finn_edition.author_contributors
 
-        assert True == isinstance(huckleberry_finn_authors[0], Contributor)
+        assert isinstance(huckleberry_finn_authors[0], Contributor)
         assert "Mark Twain" == huckleberry_finn_authors[0].display_name
         assert "Twain, Mark" == huckleberry_finn_authors[0].sort_name
 
@@ -151,7 +167,7 @@ class TestOPDS2Importer(OPDSTest):
         [huckleberry_finn_author_contribution] = huckleberry_finn_authors[
             0
         ].contributions
-        assert True == isinstance(huckleberry_finn_author_contribution, Contribution)
+        assert isinstance(huckleberry_finn_author_contribution, Contribution)
         assert (
             huckleberry_finn_authors[0]
             == huckleberry_finn_author_contribution.contributor
@@ -159,7 +175,7 @@ class TestOPDS2Importer(OPDSTest):
         assert huckleberry_finn_edition == huckleberry_finn_author_contribution.edition
         assert Contributor.AUTHOR_ROLE == huckleberry_finn_author_contribution.role
 
-        assert True == isinstance(huckleberry_finn_authors[1], Contributor)
+        assert isinstance(huckleberry_finn_authors[1], Contributor)
         assert "Samuel Langhorne Clemens" == huckleberry_finn_authors[1].display_name
         assert "Clemens, Samuel Langhorne" == huckleberry_finn_authors[1].sort_name
 
@@ -167,7 +183,7 @@ class TestOPDS2Importer(OPDSTest):
         [huckleberry_finn_author_contribution] = huckleberry_finn_authors[
             1
         ].contributions
-        assert True == isinstance(huckleberry_finn_author_contribution, Contribution)
+        assert isinstance(huckleberry_finn_author_contribution, Contribution)
         assert (
             huckleberry_finn_authors[1]
             == huckleberry_finn_author_contribution.contributor
@@ -183,15 +199,15 @@ class TestOPDS2Importer(OPDSTest):
         assert "http://example.org/cover.jpg" == moby_dick_edition.cover_full_url
 
         # 2. Make sure that license pools have correct configuration
-        assert True == isinstance(pools, list)
+        assert isinstance(pools, list)
         assert 2 == len(pools)
 
         # 2.1. Edition with open-access links (Moby-Dick)
         moby_dick_license_pool = self._get_license_pool_by_identifier(
             pools, "urn:isbn:978-3-16-148410-0"
         )
-        assert True == isinstance(moby_dick_license_pool, LicensePool)
-        assert True == moby_dick_license_pool.open_access
+        assert isinstance(moby_dick_license_pool, LicensePool)
+        assert moby_dick_license_pool.open_access
         assert LicensePool.UNLIMITED_ACCESS == moby_dick_license_pool.licenses_owned
         assert LicensePool.UNLIMITED_ACCESS == moby_dick_license_pool.licenses_available
 
@@ -244,14 +260,14 @@ class TestOPDS2Importer(OPDSTest):
         )
 
         # 3. Make sure that work objects contain all the required metadata
-        assert True == isinstance(works, list)
+        assert isinstance(works, list)
         assert 2 == len(works)
 
         # 3.1. Edition with open-access links (Moby-Dick)
         moby_dick_work = self._get_work_by_identifier(
             works, "urn:isbn:978-3-16-148410-0"
         )
-        assert True == isinstance(moby_dick_work, Work)
+        assert isinstance(moby_dick_work, Work)
         assert moby_dick_edition == moby_dick_work.presentation_edition
         assert 1 == len(moby_dick_work.license_pools)
         assert moby_dick_license_pool == moby_dick_work.license_pools[0]
@@ -260,7 +276,7 @@ class TestOPDS2Importer(OPDSTest):
         huckleberry_finn_work = self._get_work_by_identifier(
             works, "urn:isbn:9781234567897"
         )
-        assert True == isinstance(huckleberry_finn_work, Work)
+        assert isinstance(huckleberry_finn_work, Work)
         assert huckleberry_finn_edition == huckleberry_finn_work.presentation_edition
         assert 1 == len(huckleberry_finn_work.license_pools)
         assert huckleberry_finn_license_pool == huckleberry_finn_work.license_pools[0]

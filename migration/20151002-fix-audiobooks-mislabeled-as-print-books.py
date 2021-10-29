@@ -1,26 +1,24 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Fix audiobooks mislabeled as print books."""
 
 import os
 import sys
-from pdb import set_trace
 
 bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..")
 sys.path.append(os.path.abspath(package_dir))
+from threem import ThreeMAPI
 
-from threem import ThreeMAPI  # noqa: E402
-
-from model import (  # noqa: E402
+from model import (
     DeliveryMechanism,
     Edition,
     Identifier,
     LicensePool,
     LicensePoolDeliveryMechanism,
 )
-from monitor import IdentifierSweepMonitor  # noqa: E402
-from overdrive import OverdriveAPI, OverdriveRepresentationExtractor  # noqa: E402
-from scripts import RunMonitorScript  # noqa: E402
+from monitor import IdentifierSweepMonitor
+from overdrive import OverdriveAPI, OverdriveRepresentationExtractor
+from scripts import RunMonitorScript
 
 
 class SetDeliveryMechanismMonitor(IdentifierSweepMonitor):

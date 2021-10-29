@@ -14,7 +14,11 @@ from ...model.collection import (
     HasExternalIntegrationPerCollection,
 )
 from ...model.complaint import Complaint
-from ...model.configuration import ConfigurationSetting, ExternalIntegration
+from ...model.configuration import (
+    ConfigurationSetting,
+    ExternalIntegration,
+    ExternalIntegrationLink,
+)
 from ...model.coverage import CoverageRecord, WorkCoverageRecord
 from ...model.customlist import CustomList
 from ...model.datasource import DataSource
@@ -763,12 +767,12 @@ class TestCollection(DatabaseTest):
             with_license_pool=True,
             title="Overdrive Ebook",
         )
-        rbdigital_audiobook = self._work(
-            data_source_name=DataSource.RB_DIGITAL,
+        feedbooks_audiobook = self._work(
+            data_source_name=DataSource.FEEDBOOKS,
             with_license_pool=True,
-            title="RBDigital Audiobook",
+            title="Feedbooks Audiobook",
         )
-        rbdigital_audiobook.presentation_edition.medium = Edition.AUDIO_MEDIUM
+        feedbooks_audiobook.presentation_edition.medium = Edition.AUDIO_MEDIUM
 
         DataSource.lookup(self._db, DataSource.LCP, autocreate=True)
         self_hosted_lcp_book = self._work(
@@ -812,7 +816,7 @@ class TestCollection(DatabaseTest):
             [
                 overdrive_ebook,
                 overdrive_audiobook,
-                rbdigital_audiobook,
+                feedbooks_audiobook,
                 self_hosted_lcp_book,
                 unlimited_access_book,
             ],
@@ -824,12 +828,12 @@ class TestCollection(DatabaseTest):
             qu,
             [
                 overdrive_ebook,
-                rbdigital_audiobook,
+                feedbooks_audiobook,
                 self_hosted_lcp_book,
                 unlimited_access_book,
             ],
         )
-        setting.value = json.dumps([DataSource.OVERDRIVE, DataSource.RB_DIGITAL])
+        setting.value = json.dumps([DataSource.OVERDRIVE, DataSource.FEEDBOOKS])
         expect(qu, [overdrive_ebook, self_hosted_lcp_book, unlimited_access_book])
 
     def test_delete(self):
@@ -854,6 +858,28 @@ class TestCollection(DatabaseTest):
             integration,
         )
         setting2.value = "value2"
+
+        # Also it has links to another independent ExternalIntegration (S3 storage in this case).
+        s3_storage = self._external_integration(
+            ExternalIntegration.S3,
+            ExternalIntegration.STORAGE_GOAL,
+            libraries=[self._default_library],
+        )
+        link1 = self._external_integration_link(
+            integration,
+            self._default_library,
+            s3_storage,
+            ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS,
+        )
+        link2 = self._external_integration_link(
+            integration,
+            self._default_library,
+            s3_storage,
+            ExternalIntegrationLink.COVERS,
+        )
+
+        integration.links.append(link1)
+        integration.links.append(link2)
 
         # It's got a Work that has a LicensePool, which has a License,
         # which has a loan.
@@ -938,11 +964,19 @@ class TestCollection(DatabaseTest):
         # has any LicensePools), but not the second.
         assert [work] == index.removed
 
-        # The ExternalIntegration and its settings have been deleted.
-        assert integration not in self._db.query(ExternalIntegration).all()
+        # The collection ExternalIntegration, its settings, and links to other integrations have been deleted.
+        # The storage ExternalIntegration remains.
+        external_integrations = self._db.query(ExternalIntegration).all()
+        assert integration not in external_integrations
+        assert s3_storage in external_integrations
+
         settings = self._db.query(ConfigurationSetting).all()
-        for s in (setting1, setting2):
-            assert s not in settings
+        for setting in (setting1, setting2):
+            assert setting not in settings
+
+        links = self._db.query(ExternalIntegrationLink).all()
+        for link in (link1, link2):
+            assert link not in links
 
         # If no search_index is passed into delete() (the default behavior),
         # we try to instantiate the normal ExternalSearchIndex object. Since

@@ -36,7 +36,6 @@ class ClassifierConstants(object):
     LCSH = "LCSH"
     FAST = "FAST"
     OVERDRIVE = "Overdrive"
-    RBDIGITAL = "RBdigital"
     BISAC = "BISAC"
     BIC = "BIC"
     TAG = "tag"  # Folksonomic tags.
@@ -47,7 +46,6 @@ class ClassifierConstants(object):
     GRADE_LEVEL = "Grade level"  # "1-2", "Grade 4", "Kindergarten", etc.
     AGE_RANGE = "schema:typicalAgeRange"  # "0-2", etc.
     AXIS_360_AUDIENCE = "Axis 360 Audience"
-    RBDIGITAL_AUDIENCE = "RBdigital Audience"
 
     # We know this says something about the audience but we're not sure what.
     # Could be any of the values from GRADE_LEVEL or AGE_RANGE, plus
@@ -1639,5 +1637,4 @@ from .keyword import (
 )
 from .lcc import LCCClassifier
 from .overdrive import OverdriveClassifier
-from .rbdigital import RBDigitalAudienceClassifier, RBDigitalSubjectClassifier
 from .simplified import SimplifiedFictionClassifier, SimplifiedGenreClassifier

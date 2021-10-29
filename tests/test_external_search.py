@@ -2384,17 +2384,17 @@ class TestQuery(DatabaseTest):
         # used to convert it to appropriate Elasticsearch syntax, and
         # the MockSearch object is modified appropriately.
         built = from_facets(
-            None, None, order=Facets.ORDER_RANDOM, order_ascending=False
+            None, None, order=Facets.ORDER_AUTHOR, order_ascending=False
         )
 
-        # We asked for a random sort order, and that's the primary
+        # We asked for sorting by author, and that's the primary
         # sort field.
         order = list(built.order)
-        assert dict(random="desc") == order.pop(0)
+        assert dict(sort_author="desc") == order.pop(0)
 
         # But a number of other sort fields are also employed to act
         # as tiebreakers.
-        for tiebreaker_field in ("sort_author", "sort_title", "work_id"):
+        for tiebreaker_field in ("sort_title", "work_id"):
             assert {tiebreaker_field: "asc"} == order.pop(0)
         assert [] == order
 

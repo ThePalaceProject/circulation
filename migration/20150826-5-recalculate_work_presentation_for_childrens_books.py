@@ -1,17 +1,13 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Recalculate the age range for all subjects whose audience is Children or Young Adult."""
-
 import os
 import sys
 
 bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..", "..")
 sys.path.append(os.path.abspath(package_dir))
-
-from psycopg2.extras import NumericRange  # noqa: E402
-
-from core.classifier import Classifier  # noqa: E402
-from core.model import (  # noqa: E402,F401
+from core.classifier import Classifier
+from core.model import (
     DataSource,
     Edition,
     Identifier,
@@ -19,8 +15,9 @@ from core.model import (  # noqa: E402,F401
     Work,
     production_session,
 )
-from core.monitor import WorkSweepMonitor  # noqa: E402
-from core.scripts import RunMonitorScript  # noqa: E402
+from core.monitor import WorkSweepMonitor
+from core.scripts import RunMonitorScript
+from psycopg2.extras import NumericRange
 
 
 class RecalculateAgeRangeMonitor(WorkSweepMonitor):
@@ -49,7 +46,7 @@ class RecalculateAgeRangeMonitor(WorkSweepMonitor):
         )
         old_target_age = work.target_age
         work.target_age = NumericRange(*target_age)
-        if work.target_age != old_target_age and work.target_age.lower is not None:
+        if work.target_age != old_target_age and work.target_age.lower != None:
             print("%r: %r->%r" % (work.title, old_target_age, work.target_age))
 
 

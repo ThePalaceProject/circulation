@@ -973,6 +973,23 @@ class TestWork(DatabaseTest):
             self._db, operation, count_as_missing_before=cutoff
         ).all()
 
+    def test_missing_coverage_from_sorts_results(self):
+        """Ensure that Work objects returned by Work.missing_coverage_from are sorted by their identifier."""
+        operation = "the_operation"
+
+        # Create two Work objects.
+        work1 = self._work(with_license_pool=True)
+        work2 = self._work(with_license_pool=True)
+        works = [work1, work2]
+
+        self._db.commit()
+
+        # Sort the objects by their id.
+        works.sort(key=lambda work: work.id)
+
+        # Ensure that the Work objects returned by Work.missing_coverage_from are sorted.
+        assert works == Work.missing_coverage_from(self._db, operation).all()
+
     def test_top_genre(self):
         work = self._work()
         identifier = work.presentation_edition.primary_identifier

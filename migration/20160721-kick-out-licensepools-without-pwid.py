@@ -1,10 +1,11 @@
-#!/usr/bin/env python3
-"""
-Find LicensePools that have a work but no permanent work ID and
+#!/usr/bin/env python
+"""Find LicensePools that have a work but no permanent work ID and
 call calculate_work() on them. This will fix the problem, either by
 calculating the appropriate permanent work ID or kicking them out of
 their Works.
 """
+
+import logging
 import os
 import sys
 
@@ -12,7 +13,8 @@ bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..", "..")
 sys.path.append(os.path.abspath(package_dir))
 
-from core.model import Edition, LicensePool, Work, production_session  # noqa: E402
+
+from core.model import Edition, LicensePool, Work, production_session
 
 _db = production_session()
 
@@ -32,26 +34,26 @@ no_presentation_edition = (
     _db.query(LicensePool)
     .outerjoin(LicensePool.presentation_edition)
     .filter(Edition.id == None)
-    .filter(LicensePool.work_id != None)  # noqa: E711,E225
+    .filter(LicensePool.work_id != None)
 )
 
 no_permanent_work_id = (
     _db.query(LicensePool)
     .join(LicensePool.presentation_edition)
-    .filter(Edition.permanent_work_id == None)  # noqa: E711,E225
+    .filter(Edition.permanent_work_id == None)
     .filter(LicensePool.work_id != None)
 )
 
 no_title = (
     _db.query(LicensePool)
     .join(LicensePool.presentation_edition)
-    .filter(Edition.title == None)  # noqa: E711,E225
+    .filter(Edition.title == None)
     .filter(LicensePool.work_id != None)
 )
 
 licensepools_in_same_work_as_another_licensepool_with_different_pwid = _db.execute(
     "select lp1.id from licensepools lp1 join works w on lp1.work_id=w.id join editions e1 on lp1.presentation_edition_id=e1.id join licensepools lp2 on lp2.work_id=w.id join editions e2 on e2.id=lp2.presentation_edition_id and e2.permanent_work_id != e1.permanent_work_id;"
-)  # noqa: E501
+)
 ids = [
     x[0] for x in licensepools_in_same_work_as_another_licensepool_with_different_pwid
 ]

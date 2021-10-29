@@ -45,7 +45,7 @@ from .model import (
 from .model.configuration import ExternalIntegrationLink
 from .monitor import CollectionMonitor
 from .selftest import HasSelfTests, SelfTestResult
-from .util.datetime_helpers import datetime_utc, utc_now
+from .util.datetime_helpers import datetime_utc, to_utc, utc_now
 from .util.http import HTTP, BadResponseException
 from .util.opds_writer import OPDSFeed, OPDSMessage
 from .util.string_helpers import base64
@@ -62,11 +62,15 @@ def parse_identifier(db, identifier):
     :type identifier: str
 
     :return: Identifier object
-    :rtype: core.model.identifier.Identifier
+    :rtype: Optional[core.model.identifier.Identifier]
     """
-    identifier, _ = Identifier.parse_urn(db, identifier)
+    parsed_identifier = None
+    result = Identifier.parse_urn(db, identifier)
 
-    return identifier
+    if result is not None:
+        parsed_identifier, _ = result
+
+    return parsed_identifier
 
 
 class AccessNotAuthenticated(Exception):
@@ -2073,7 +2077,7 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests):
                 )
                 return True
 
-            if last_updated_remote >= record.timestamp:
+            if to_utc(last_updated_remote) >= to_utc(record.timestamp):
                 # This book has been updated.
                 self.log.info(
                     "Counting %s as new because its coverage date is %s and remote has %s.",
@@ -2142,7 +2146,16 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests):
 
         # Create CoverageRecords for the failures.
         for urn, failure in list(failures.items()):
-            failure.to_coverage_record(operation=CoverageRecord.IMPORT_OPERATION)
+            if isinstance(failure, list):
+                failure_items = failure
+            else:
+                failure_items = [failure]
+
+            for failure_item in failure_items:
+                failure_item.to_coverage_record(
+                    operation=CoverageRecord.IMPORT_OPERATION
+                )
+
         return imported_editions, failures
 
     def _get_feeds(self):
