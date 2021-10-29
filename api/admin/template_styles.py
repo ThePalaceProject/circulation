@@ -1,6 +1,6 @@
 body_style = """
     margin: 10vh auto;
-    font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    font-family: 'Open Sans',Helvetica,Arial,sans-serif;
     padding: 25px 15px;
     width: 40vw;
     color: #403d37;
@@ -37,7 +37,7 @@ section_style = """
     align-items: center;
 """
 button_style = """
-    background: #1B7FA7;
+    background: #7177C8;
     border-color: transparent;
     border-radius: .25em;
     color: #fff;
@@ -50,10 +50,10 @@ button_style = """
 """
 
 link_style = """
-    background: #1B7FA7;
+    background: #7177C8;
     text-align: center;
     text-decoration: none;
-    border-color: #1B7FA7;
+    border-color: #7177C8;
     border-radius: .25em;
     color: #fff;
     padding: 10px;
@@ -74,4 +74,9 @@ hr_style = """
     margin: 3px 0 0 0;
     border: none;
     border-bottom: 1px solid #403d37;
+"""
+
+logo_style = """
+    width: 200px;
+    margin: 20px;
 """

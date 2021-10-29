@@ -2,7 +2,7 @@ admin = """
 <!doctype html>
 <html>
 <head>
-<title>Circulation Manager</title>
+<title>{{ app_name }}</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link href="{{ admin_css }}" rel="stylesheet" />
 </head>
@@ -26,7 +26,7 @@ admin = """
 admin_sign_in_again = """
 <!doctype html>
 <html>
-<head><title>Circulation Manager</title></head>
+<head><title>{{ app_name }}</title></head>
 <body>
   <p>You are now logged in. You may close this window and try your request again.
 </body>

@@ -10,12 +10,14 @@ class OperationalMode(str, Enum):
 
 class Configuration:
 
+    APP_NAME = 'Palace Collection Manager'
     PACKAGE_NAME = '@thepalaceproject/circulation-admin'
-    PACKAGE_VERSION = '0.0.5'
+    PACKAGE_VERSION = '0.0.6'
 
     STATIC_ASSETS = {
         'admin_js': 'circulation-admin.js',
         'admin_css': 'circulation-admin.css',
+        'admin_logo': 'PalaceCollectionManagerLogo.svg',
     }
 
     # For proper operation, `package_url` MUST end with a slash ('/') and

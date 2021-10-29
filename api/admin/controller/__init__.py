@@ -364,6 +364,7 @@ class ViewController(AdminController):
 
         response = Response(flask.render_template_string(
             admin_template,
+            app_name=AdminClientConfig.APP_NAME,
             csrf_token=csrf_token,
             sitewide_tos_href=sitewide_tos_href,
             sitewide_tos_text=sitewide_tos_text,
@@ -450,25 +451,33 @@ class TimestampsController(AdminCirculationManagerController):
         )
 
 class SignInController(AdminController):
+    HEAD_TEMPLATE = """<head>
+<meta charset="utf8">
+<title>{app_name}</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans&display=swap');
+</style>
+</head>
+""".format(app_name=AdminClientConfig.APP_NAME)
 
     ERROR_RESPONSE_TEMPLATE = """<!DOCTYPE HTML>
 <html lang="en">
-<head><meta charset="utf8"></head>
+{head_html}
 <body style="{error}">
 <p><strong>%(status_code)d ERROR:</strong> %(message)s</p>
 <hr style="{hr}">
 <a href="/admin/sign_in" style="{link}">Try again</a>
 </body>
-</html>""".format(error=error_style, hr=hr_style, link=small_link_style)
+</html>""".format(head_html=HEAD_TEMPLATE, error=error_style, hr=hr_style, link=small_link_style)
 
     SIGN_IN_TEMPLATE = """<!DOCTYPE HTML>
 <html lang="en">
-<head><meta charset="utf8"></head>
-<body style="{}">
-<h1>Library Simplified</h1>
+{head_html}
+<body style="{body}">
+<img src="%(logo_url)s" alt="{app_name}" style="{logo}">
 %(auth_provider_html)s
 </body>
-</html>""".format(body_style)
+</html>""".format(head_html=HEAD_TEMPLATE, body=body_style, app_name=AdminClientConfig.APP_NAME, logo=logo_style)
 
     def sign_in(self):
         """Redirects admin if they're signed in, or shows the sign in page."""
@@ -487,7 +496,8 @@ class SignInController(AdminController):
             """.format(section=section_style, hr=hr_style).join(auth_provider_html)
 
             html = self.SIGN_IN_TEMPLATE % dict(
-                auth_provider_html=auth_provider_html
+                auth_provider_html=auth_provider_html,
+                logo_url= AdminClientConfig.lookup_asset_url(key='admin_logo')
             )
             headers = dict()
             headers['Content-Type'] = "text/html"
