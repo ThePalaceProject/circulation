@@ -497,7 +497,7 @@ class SignInController(AdminController):
 
             html = self.SIGN_IN_TEMPLATE % dict(
                 auth_provider_html=auth_provider_html,
-                logo_url= AdminClientConfig.lookup_asset_url(key='admin_logo')
+                logo_url=AdminClientConfig.lookup_asset_url(key='admin_logo')
             )
             headers = dict()
             headers['Content-Type'] = "text/html"
