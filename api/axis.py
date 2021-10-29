@@ -1,28 +1,19 @@
 import json
 import logging
-import os
 import re
+import socket
+import ssl
+import urllib
+from datetime import timedelta
+from typing import Optional, Union
 
-from collections import defaultdict
-from datetime import datetime, timedelta
+import certifi
 from flask_babel import lazy_gettext as _
 from lxml import etree
-from sqlalchemy.orm import contains_eager
-from sqlalchemy.orm.session import Session
 
 from core.analytics import Analytics
-
-from core.config import (
-    CannotLoadConfiguration,
-    Configuration,
-    temp_config,
-)
-
-from core.coverage import (
-    BibliographicCoverageProvider,
-    CoverageFailure,
-)
-
+from core.config import CannotLoadConfiguration
+from core.coverage import BibliographicCoverageProvider, CoverageFailure
 from core.metadata_layer import (
     CirculationData,
     ContributorData,
@@ -33,9 +24,7 @@ from core.metadata_layer import (
     ReplacementPolicy,
     SubjectData,
 )
-
 from core.model import (
-    CirculationEvent,
     Classification,
     Collection,
     Contributor,
@@ -43,67 +32,42 @@ from core.model import (
     DeliveryMechanism,
     Edition,
     ExternalIntegration,
-    get_one,
-    get_one_or_create,
     Hyperlink,
     Identifier,
-    Library,
-    LicensePool,
     LinkRelations,
     MediaTypes,
     Representation,
     Session,
     Subject,
+    get_one_or_create,
 )
-
-from core.monitor import (
-    CollectionMonitor,
-    IdentifierSweepMonitor,
-    TimelineMonitor,
-)
-
-from core.opds_import import (
-    MetadataWranglerOPDSLookup
-)
-
+from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
 from core.testing import DatabaseTest
-
-from core.util import LanguageCodes
-from core.util.datetime_helpers import (
-    datetime_utc,
-    strptime_utc,
-    utc_now,
-)
-from core.util.xmlparser import XMLParser
-from core.util.http import (
-    HTTP,
-    RemoteIntegrationException,
-)
+from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
+from core.util.flask_util import Response
+from core.util.http import HTTP, RequestNetworkException
+from core.util.problem_detail import ProblemDetail
 from core.util.string_helpers import base64
+from core.util.xmlparser import XMLParser
 
 from .authenticator import Authenticator
-
 from .circulation import (
     APIAwareFulfillmentInfo,
-    LoanInfo,
+    BaseCirculationAPI,
     FulfillmentInfo,
     HoldInfo,
-    BaseCirculationAPI
+    LoanInfo,
 )
 from .circulation_exceptions import *
-
-from .selftest import (
-    HasCollectionSelfTests,
-    SelfTestResult,
-)
-
-from .web_publication_manifest import (
-    FindawayManifest,
-    SpineItem,
-)
+from .selftest import HasCollectionSelfTests, SelfTestResult
+from .web_publication_manifest import FindawayManifest, SpineItem
 
 
-class Axis360API(Authenticator, BaseCirculationAPI, HasCollectionSelfTests):
+class Axis360APIConstants:
+    VERIFY_SSL = "verify_certificate"
+
+
+class Axis360API(Authenticator, BaseCirculationAPI, HasCollectionSelfTests, Axis360APIConstants):
 
     NAME = ExternalIntegration.AXIS_360
 
@@ -128,6 +92,25 @@ class Axis360API(Authenticator, BaseCirculationAPI, HasCollectionSelfTests):
           "required": True,
           "format": "url",
           "allowed": list(SERVER_NICKNAMES.keys()),
+        },
+        {
+          "key": Axis360APIConstants.VERIFY_SSL,
+          "label": _("Verify SSL Certificate"),
+          "description": _(
+            "This should always be True in production, it may need to be set to False to use the"
+            "Axis 360 QA Environment."),
+          "type": "select",
+          "options": [
+            {
+              "label": _("True"),
+              "key": "True"
+            },
+            {
+              "label": _("False"),
+              "key": "False",
+            }
+          ],
+          "default": True,
         },
     ] + BaseCirculationAPI.SETTINGS
 
@@ -197,6 +180,8 @@ class Axis360API(Authenticator, BaseCirculationAPI, HasCollectionSelfTests):
 
         self.token = None
         self.collection_id = collection.id
+        verify_certificate = collection.external_integration.setting(self.VERIFY_SSL).bool_value
+        self.verify_certificate: bool = verify_certificate if verify_certificate is not None else True
 
     @property
     def collection(self):
@@ -1399,12 +1384,13 @@ class AvailabilityResponseParser(ResponseParser):
             if download_url and self.internal_format != self.api.AXISNOW:
                 # The patron wants a direct link to the book, which we can deliver
                 # immediately, without making any more API requests.
-                fulfillment = FulfillmentInfo(
+                fulfillment = Axis360AcsFulfillmentInfo(
                     collection=self.collection,
                     content_link=download_url,
                     content_type=DeliveryMechanism.ADOBE_DRM,
                     content=None,
                     content_expires=None,
+                    verify=self.api.verify_certificate,
                     **kwargs
                 )
             elif transaction_id:
@@ -1668,3 +1654,83 @@ class Axis360FulfillmentInfo(APIAwareFulfillmentInfo):
         self._content = str(manifest)
         self._content_type = manifest.MEDIA_TYPE
         self._content_expires = expires
+
+
+class Axis360AcsFulfillmentInfo(FulfillmentInfo):
+    """This implements a Axis 360 specific FulfillmentInfo for ACS content
+    served through AxisNow. The AxisNow API gives us a link that we can use
+    to get the ACSM file that we serve to the mobile apps.
+
+    This link resolves to a redirect, which resolves to the actual ACSM file.
+    The URL we are given in the redirect has a percent encoded query string
+    in it. The encoding used in this string has lower case characters in it
+    like "%3a" for :.
+
+    In versions of urllib3 > 1.24.3 the library normalizes the query string
+    before doing the actual request. In doing the normalization it follows the
+    recommendation of RFC 3986 and uppercases the percent encoded bytes.
+
+    This causes the Axis360 API to return an error from Adobe ACS:
+    ```
+    <error xmlns="http://ns.adobe.com/adept" data="E_URLLINK_AUTH
+    https://acsqa.digitalcontentcafe.com/fulfillment/URLLink.acsm"/>
+    ```
+    instead of the correct ACSM file.
+
+    Others have noted that this is a problem in the urllib3 github but they
+    do not seem interested in providing an option to override this behavior
+    and closed the ticket.
+    https://github.com/urllib3/urllib3/issues/1677
+
+    This FulfillmentInfo implementation uses the built in Python urllib
+    implementation instead of requests (and urllib3) to make this request
+    to the Axis 360 API, sidestepping the problem, but taking a different
+    code path than most of our external HTTP requests.
+    """
+    logger = logging.getLogger(__name__)
+
+    def __init__(self, verify: bool, **kwargs):
+        super().__init__(**kwargs)
+        self.verify: bool = verify
+
+    def problem_detail_document(self, error_details: str) -> ProblemDetail:
+        service_name = urllib.parse.urlparse(self.content_link).netloc
+        self.logger.warning(error_details)
+        return INTEGRATION_ERROR.detailed(
+            _(RequestNetworkException.detail, service=service_name),
+            title=RequestNetworkException.title,
+            debug_message=error_details
+        )
+
+    @property
+    def as_response(self) -> Union[Response, ProblemDetail]:
+        service_name = urllib.parse.urlparse(self.content_link).netloc
+        try:
+            if self.verify:
+                # Actually verify the ssl certificates
+                ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS)
+                ssl_context.verify_mode = ssl.CERT_REQUIRED
+                ssl_context.check_hostname = True
+                ssl_context.load_verify_locations(cafile=certifi.where())
+            else:
+                # Default context does no ssl verification
+                ssl_context = ssl.SSLContext()
+            req = urllib.request.Request(self.content_link)
+            with urllib.request.urlopen(req, timeout=20, context=ssl_context) as response:
+                content = response.read()
+                status = response.status
+                headers = response.headers
+
+        # Mimic the behavior of the HTTP.request_with_timeout class and
+        # wrap the exceptions thrown by urllib and ssl returning a ProblemDetail document.
+        except urllib.error.HTTPError as e:
+            return self.problem_detail_document(
+                "The server received a bad status code ({}) while contacting {}".format(e.code, service_name)
+            )
+        except socket.timeout:
+            return self.problem_detail_document("Error connecting to {}. Timeout occurred.".format(service_name))
+        except (urllib.error.URLError, ssl.SSLError) as e:
+            reason = getattr(e, "reason", e.__class__.__name__)
+            return self.problem_detail_document("Error connecting to {}. {}.".format(service_name, reason))
+
+        return Response(response=content, status=status, headers=headers)
