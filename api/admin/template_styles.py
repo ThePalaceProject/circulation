@@ -42,6 +42,7 @@ button_style = """
     border-radius: .25em;
     color: #fff;
     padding: 10px;
+    font-family: 'Open Sans',Helvetica,Arial,sans-serif;
     font-size: 1rem;
     cursor: pointer;
     display: block;
