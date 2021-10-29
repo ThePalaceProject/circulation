@@ -61,9 +61,8 @@ class DiscoveryServicesController(SettingsController):
             goal=self.goal
         )
         if is_new:
-            service.url = (
-                RemoteRegistry.DEFAULT_LIBRARY_REGISTRY_URL
-            )
+            service.url = RemoteRegistry.DEFAULT_LIBRARY_REGISTRY_URL
+            service.name = RemoteRegistry.DEFAULT_LIBRARY_REGISTRY_NAME
 
     def process_post(self):
         name = flask.request.form.get("name")
