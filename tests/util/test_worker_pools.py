@@ -15,7 +15,6 @@ from ...util.worker_pools import (
 
 
 class TestPool(object):
-
     def test_initializes_with_active_workers(self):
         original_thread_count = threading.active_count()
         with Pool(3) as pool:
@@ -73,14 +72,13 @@ class TestPool(object):
             pool.put(broken_task)
         finally:
             pool.join()
-        assert 1/3.0 == pool.success_rate
+        assert 1 / 3.0 == pool.success_rate
 
 
 class TestDatabasePool(DatabaseTest):
-
     def test_workers_are_created_with_sessions(self):
         session_factory = SessionManager.sessionmaker(session=self._db)
-        bind = session_factory.kw['bind']
+        bind = session_factory.kw["bind"]
         pool = DatabasePool(2, session_factory)
         try:
             for worker in pool.workers:
@@ -98,7 +96,6 @@ class MockQueue(Queue):
 
 
 class TestWorker(object):
-
     def test_factory(self):
         mock_queue = object()
         result = Worker.factory(mock_queue)
@@ -110,7 +107,7 @@ class TestWorker(object):
         results = list()
 
         def task():
-            results.append('werk')
+            results.append("werk")
 
         try:
             q = MockQueue()
@@ -121,12 +118,13 @@ class TestWorker(object):
         finally:
             q.join()
 
-        assert ['werk', 'werk', 'werk', 'werk', 'werk', 'werk'] == results
+        assert ["werk", "werk", "werk", "werk", "werk", "werk"] == results
 
     def test_works_on_job_object(self):
         results = list()
 
-        original = ['Who Can I * To', '* To You', 'Water *s Dry', '* The World']
+        original = ["Who Can I * To", "* To You", "Water *s Dry", "* The World"]
+
         class MockJob(object):
             def __init__(self, idx):
                 self.idx = idx
@@ -147,15 +145,14 @@ class TestWorker(object):
 
 
 class TestDatabaseJob(DatabaseTest):
-
     class WorkingJob(DatabaseJob):
         def do_run(self, _db):
-            identifier = Identifier(type='Keep It', identifier='100')
+            identifier = Identifier(type="Keep It", identifier="100")
             _db.add(identifier)
 
     class BrokenJob(DatabaseJob):
         def do_run(self, _db):
-            identifier = Identifier(type='You Can', identifier='Keep It')
+            identifier = Identifier(type="You Can", identifier="Keep It")
             _db.add(identifier)
             raise RuntimeError
 
@@ -167,5 +164,5 @@ class TestDatabaseJob(DatabaseTest):
             pass
 
         [identifier] = self._db.query(Identifier).all()
-        assert 'Keep It' == identifier.type
-        assert '100' == identifier.identifier
+        assert "Keep It" == identifier.type
+        assert "100" == identifier.identifier

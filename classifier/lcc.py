@@ -8,7 +8,6 @@ class LCCClassifier(Classifier):
     JUVENILE = set(["PZ"])
 
     GENRES = {
-
         # Unclassified/complicated stuff.
         # "America": E11-E143
         # Ancient_History: D51-D90
@@ -24,40 +23,79 @@ class LCCClassifier(Classifier):
         # Sports: GV557-1198.995
         # TODO: E and F are actually "the Americas".
         # United_States_History is E151-E909, F1-F975 but not E456-E655
-        African_History : ["DT"],
-        Ancient_History : ["DE"],
-        Architecture : ["NA"],
-        Art_Criticism_Theory : ["BH"],
-        Asian_History : ["DS", "DU"],
-        Biography_Memoir : ["CT"],
-        Business : ["HC", "HF", "HJ"],
-        Christianity : ["BR", "BS", "BT", "BV", "BX"],
-        Cooking : ["TX"],
-        Crafts_Hobbies : ["TT"],
-        Economics : ["HB"],
-        Education : ["L"],
-        European_History : ["DA", "DAW", "DB", "DD", "DF", "DG", "DH", "DJ", "DK", "DL", "DP", "DQ", "DR"],
-        Folklore : ["GR"],
-        Games : ["GV"],
-        Islam : ["BP"],
-        Judaism : ["BM"],
-        Literary_Criticism : ["Z"],
-        Mathematics : ["QA", "HA", "GA"],
+        African_History: ["DT"],
+        Ancient_History: ["DE"],
+        Architecture: ["NA"],
+        Art_Criticism_Theory: ["BH"],
+        Asian_History: ["DS", "DU"],
+        Biography_Memoir: ["CT"],
+        Business: ["HC", "HF", "HJ"],
+        Christianity: ["BR", "BS", "BT", "BV", "BX"],
+        Cooking: ["TX"],
+        Crafts_Hobbies: ["TT"],
+        Economics: ["HB"],
+        Education: ["L"],
+        European_History: [
+            "DA",
+            "DAW",
+            "DB",
+            "DD",
+            "DF",
+            "DG",
+            "DH",
+            "DJ",
+            "DK",
+            "DL",
+            "DP",
+            "DQ",
+            "DR",
+        ],
+        Folklore: ["GR"],
+        Games: ["GV"],
+        Islam: ["BP"],
+        Judaism: ["BM"],
+        Literary_Criticism: ["Z"],
+        Mathematics: ["QA", "HA", "GA"],
         Medical: ["QM", "R"],
         Military_History: ["U", "V"],
         Music: ["M"],
-        Parenting_Family : ["HQ"],
-        Periodicals : ["AP", "AN"],
-        Philosophy : ["BC", "BD", "BJ"],
+        Parenting_Family: ["HQ"],
+        Periodicals: ["AP", "AN"],
+        Philosophy: ["BC", "BD", "BJ"],
         Photography: ["TR"],
-        Political_Science : ["J", "HX"],
-        Psychology : ["BF"],
-        Reference_Study_Aids : ["AE", "AG", "AI"],
-        Religion_Spirituality : ["BL", "BQ"],
-        Science : ["QB", "QC", "QD", "QE", "QH", "QK", "QL", "QR", "CC", "GB", "GC", "QP"],
-        Social_Sciences : ["HD", "HE", "HF", "HM", "HN", "HS", "HT", "HV", "GN", "GF", "GT"],
+        Political_Science: ["J", "HX"],
+        Psychology: ["BF"],
+        Reference_Study_Aids: ["AE", "AG", "AI"],
+        Religion_Spirituality: ["BL", "BQ"],
+        Science: [
+            "QB",
+            "QC",
+            "QD",
+            "QE",
+            "QH",
+            "QK",
+            "QL",
+            "QR",
+            "CC",
+            "GB",
+            "GC",
+            "QP",
+        ],
+        Social_Sciences: [
+            "HD",
+            "HE",
+            "HF",
+            "HM",
+            "HN",
+            "HS",
+            "HT",
+            "HV",
+            "GN",
+            "GF",
+            "GT",
+        ],
         Sports: ["SK"],
-        World_History : ["CB"],
+        World_History: ["CB"],
     }
 
     LEFTOVERS = dict(
@@ -88,9 +126,9 @@ class LCCClassifier(Classifier):
 
     @classmethod
     def is_fiction(cls, identifier, name):
-        if identifier == 'P':
+        if identifier == "P":
             return True
-        if not identifier.startswith('P'):
+        if not identifier.startswith("P"):
             return False
         for i in cls.FICTION:
             if identifier.startswith(i):
@@ -116,5 +154,6 @@ class LCCClassifier(Classifier):
         # Everything else is _supposedly_ for adults, but we don't
         # trust that assumption.
         return None
+
 
 Classifier.classifiers[Classifier.LCC] = LCCClassifier

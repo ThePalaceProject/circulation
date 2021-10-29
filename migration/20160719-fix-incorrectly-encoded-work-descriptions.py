@@ -16,7 +16,7 @@ from core.model import Work, production_session  # noqa: E402
 
 _db = production_session()
 client = ExternalSearchIndex()
-base = _db.query(Work).filter(Work.summary_text != None).order_by(Work.id)      # noqa: E711
+base = _db.query(Work).filter(Work.summary_text != None).order_by(Work.id)  # noqa: E711
 results = True
 offset = 0
 

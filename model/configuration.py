@@ -25,75 +25,81 @@ from .library import Library
 
 class ExternalIntegrationLink(Base, HasFullTableCache):
 
-    __tablename__ = 'externalintegrationslinks'
+    __tablename__ = "externalintegrationslinks"
 
     NO_MIRROR_INTEGRATION = "NO_MIRROR"
     # Possible purposes that a storage external integration can be used for.
     # These string literals may be stored in the database, so changes to them
     # may need to be accompanied by a DB migration.
-    COVERS = 'covers_mirror'
-    COVERS_KEY = '{0}_integration_id'.format(COVERS)
+    COVERS = "covers_mirror"
+    COVERS_KEY = "{0}_integration_id".format(COVERS)
 
-    OPEN_ACCESS_BOOKS = 'books_mirror'
-    OPEN_ACCESS_BOOKS_KEY = '{0}_integration_id'.format(OPEN_ACCESS_BOOKS)
+    OPEN_ACCESS_BOOKS = "books_mirror"
+    OPEN_ACCESS_BOOKS_KEY = "{0}_integration_id".format(OPEN_ACCESS_BOOKS)
 
-    PROTECTED_ACCESS_BOOKS = 'protected_access_books_mirror'
-    PROTECTED_ACCESS_BOOKS_KEY = '{0}_integration_id'.format(PROTECTED_ACCESS_BOOKS)
+    PROTECTED_ACCESS_BOOKS = "protected_access_books_mirror"
+    PROTECTED_ACCESS_BOOKS_KEY = "{0}_integration_id".format(PROTECTED_ACCESS_BOOKS)
 
     MARC = "MARC_mirror"
 
     id = Column(Integer, primary_key=True)
     external_integration_id = Column(
-        Integer, ForeignKey('externalintegrations.id'), index=True
+        Integer, ForeignKey("externalintegrations.id"), index=True
     )
-    library_id = Column(
-        Integer, ForeignKey('libraries.id'), index=True
-    )
+    library_id = Column(Integer, ForeignKey("libraries.id"), index=True)
     other_integration_id = Column(
-        Integer, ForeignKey('externalintegrations.id'), index=True
+        Integer, ForeignKey("externalintegrations.id"), index=True
     )
     purpose = Column(Unicode, index=True)
 
     mirror_settings = [
         {
-            'key': COVERS_KEY,
-            'type': COVERS,
-            'description_type': 'cover images',
-            'label': 'Covers Mirror'
+            "key": COVERS_KEY,
+            "type": COVERS,
+            "description_type": "cover images",
+            "label": "Covers Mirror",
         },
         {
-            'key': OPEN_ACCESS_BOOKS_KEY,
-            'type': OPEN_ACCESS_BOOKS,
-            'description_type': 'free books',
-            'label': 'Open Access Books Mirror'
+            "key": OPEN_ACCESS_BOOKS_KEY,
+            "type": OPEN_ACCESS_BOOKS,
+            "description_type": "free books",
+            "label": "Open Access Books Mirror",
         },
         {
-            'key': PROTECTED_ACCESS_BOOKS_KEY,
-            'type': PROTECTED_ACCESS_BOOKS,
-            'description_type': 'self-hosted, commercially licensed books',
-            'label': 'Protected Access Books Mirror'
-        }
+            "key": PROTECTED_ACCESS_BOOKS_KEY,
+            "type": PROTECTED_ACCESS_BOOKS,
+            "description_type": "self-hosted, commercially licensed books",
+            "label": "Protected Access Books Mirror",
+        },
     ]
     settings = []
 
     for mirror_setting in mirror_settings:
-        mirror_type = mirror_setting['type']
-        mirror_description_type = mirror_setting['description_type']
-        mirror_label = mirror_setting['label']
+        mirror_type = mirror_setting["type"]
+        mirror_description_type = mirror_setting["description_type"]
+        mirror_label = mirror_setting["label"]
 
-        settings.append({
-            'key': '{0}_integration_id'.format(mirror_type.lower()),
-            'label': _(mirror_label),
-            "description": _('Any {0} encountered while importing content from this collection '
-                             'can be mirrored to a server you control.'.format(mirror_description_type)),
-            'type': 'select',
-            'options': [
-                {
-                    'key': NO_MIRROR_INTEGRATION,
-                    'label': _('None - Do not mirror {0}'.format(mirror_description_type))
-                }
-            ]
-        })
+        settings.append(
+            {
+                "key": "{0}_integration_id".format(mirror_type.lower()),
+                "label": _(mirror_label),
+                "description": _(
+                    "Any {0} encountered while importing content from this collection "
+                    "can be mirrored to a server you control.".format(
+                        mirror_description_type
+                    )
+                ),
+                "type": "select",
+                "options": [
+                    {
+                        "key": NO_MIRROR_INTEGRATION,
+                        "label": _(
+                            "None - Do not mirror {0}".format(mirror_description_type)
+                        ),
+                    }
+                ],
+            }
+        )
 
     COLLECTION_MIRROR_SETTINGS = settings
 
@@ -108,21 +114,21 @@ class ExternalIntegration(Base, HasFullTableCache):
     #
     # These integrations are associated with external services such as
     # Google Enterprise which authenticate library administrators.
-    ADMIN_AUTH_GOAL = 'admin_auth'
+    ADMIN_AUTH_GOAL = "admin_auth"
 
     # These integrations are associated with external services such as
     # SIP2 which authenticate library patrons. Other constants related
     # to this are defined in the circulation manager.
-    PATRON_AUTH_GOAL = 'patron_auth'
+    PATRON_AUTH_GOAL = "patron_auth"
 
     # These integrations are associated with external services such
     # as Overdrive which provide access to books.
-    LICENSE_GOAL = 'licenses'
+    LICENSE_GOAL = "licenses"
 
     # These integrations are associated with external services such as
     # the metadata wrangler, which provide information about books,
     # but not the books themselves.
-    METADATA_GOAL = 'metadata'
+    METADATA_GOAL = "metadata"
 
     # These integrations are associated with external services such as
     # S3 that provide access to book covers.
@@ -130,42 +136,42 @@ class ExternalIntegration(Base, HasFullTableCache):
 
     # These integrations are associated with external services like
     # Cloudfront or other CDNs that mirror and/or cache certain domains.
-    CDN_GOAL = 'CDN'
+    CDN_GOAL = "CDN"
 
     # These integrations are associated with external services such as
     # Elasticsearch that provide indexed search.
-    SEARCH_GOAL = 'search'
+    SEARCH_GOAL = "search"
 
     # These integrations are associated with external services such as
     # Google Analytics, which receive analytics events.
-    ANALYTICS_GOAL = 'analytics'
+    ANALYTICS_GOAL = "analytics"
 
     # These integrations are associated with external services such as
     # Adobe Vendor ID, which manage access to DRM-dependent content.
-    DRM_GOAL = 'drm'
+    DRM_GOAL = "drm"
 
     # These integrations are associated with external services that
     # help patrons find libraries.
-    DISCOVERY_GOAL = 'discovery'
+    DISCOVERY_GOAL = "discovery"
 
     # These integrations are associated with external services that
     # collect logs of server-side events.
-    LOGGING_GOAL = 'logging'
+    LOGGING_GOAL = "logging"
 
     # These integrations are associated with external services that
     # a library uses to manage its catalog.
-    CATALOG_GOAL = 'ils_catalog'
+    CATALOG_GOAL = "ils_catalog"
 
     # Supported protocols for ExternalIntegrations with LICENSE_GOAL.
-    OPDS_IMPORT = 'OPDS Import'
-    OPDS2_IMPORT = 'OPDS 2.0 Import'
+    OPDS_IMPORT = "OPDS Import"
+    OPDS2_IMPORT = "OPDS 2.0 Import"
     OVERDRIVE = DataSourceConstants.OVERDRIVE
     ODILO = DataSourceConstants.ODILO
     BIBLIOTHECA = DataSourceConstants.BIBLIOTHECA
     AXIS_360 = DataSourceConstants.AXIS_360
     RB_DIGITAL = DataSourceConstants.RB_DIGITAL
     ONE_CLICK = RB_DIGITAL
-    OPDS_FOR_DISTRIBUTORS = 'OPDS for Distributors'
+    OPDS_FOR_DISTRIBUTORS = "OPDS for Distributors"
     ENKI = DataSourceConstants.ENKI
     FEEDBOOKS = DataSourceConstants.FEEDBOOKS
     LCP = DataSourceConstants.LCP
@@ -181,59 +187,66 @@ class ExternalIntegration(Base, HasFullTableCache):
     GUTENBERG = DataSourceConstants.GUTENBERG
 
     LICENSE_PROTOCOLS = [
-        OPDS_IMPORT, OVERDRIVE, ODILO, BIBLIOTHECA, AXIS_360, RB_DIGITAL,
-        GUTENBERG, ENKI, MANUAL
+        OPDS_IMPORT,
+        OVERDRIVE,
+        ODILO,
+        BIBLIOTHECA,
+        AXIS_360,
+        RB_DIGITAL,
+        GUTENBERG,
+        ENKI,
+        MANUAL,
     ]
 
     # Some integrations with LICENSE_GOAL imply that the data and
     # licenses come from a specific data source.
     DATA_SOURCE_FOR_LICENSE_PROTOCOL = {
-        OVERDRIVE : DataSourceConstants.OVERDRIVE,
-        ODILO : DataSourceConstants.ODILO,
-        BIBLIOTHECA : DataSourceConstants.BIBLIOTHECA,
-        AXIS_360 : DataSourceConstants.AXIS_360,
-        RB_DIGITAL : DataSourceConstants.RB_DIGITAL,
-        ENKI : DataSourceConstants.ENKI,
-        FEEDBOOKS : DataSourceConstants.FEEDBOOKS,
+        OVERDRIVE: DataSourceConstants.OVERDRIVE,
+        ODILO: DataSourceConstants.ODILO,
+        BIBLIOTHECA: DataSourceConstants.BIBLIOTHECA,
+        AXIS_360: DataSourceConstants.AXIS_360,
+        RB_DIGITAL: DataSourceConstants.RB_DIGITAL,
+        ENKI: DataSourceConstants.ENKI,
+        FEEDBOOKS: DataSourceConstants.FEEDBOOKS,
     }
 
     # Integrations with METADATA_GOAL
-    BIBBLIO = 'Bibblio'
-    CONTENT_CAFE = 'Content Cafe'
-    NOVELIST = 'NoveList Select'
-    NYPL_SHADOWCAT = 'Shadowcat'
-    NYT = 'New York Times'
-    METADATA_WRANGLER = 'Metadata Wrangler'
-    CONTENT_SERVER = 'Content Server'
+    BIBBLIO = "Bibblio"
+    CONTENT_CAFE = "Content Cafe"
+    NOVELIST = "NoveList Select"
+    NYPL_SHADOWCAT = "Shadowcat"
+    NYT = "New York Times"
+    METADATA_WRANGLER = "Metadata Wrangler"
+    CONTENT_SERVER = "Content Server"
 
     # Integrations with STORAGE_GOAL
-    S3 = 'Amazon S3'
-    MINIO = 'MinIO'
-    LCP = 'LCP'
+    S3 = "Amazon S3"
+    MINIO = "MinIO"
+    LCP = "LCP"
 
     # Integrations with CDN_GOAL
-    CDN = 'CDN'
+    CDN = "CDN"
 
     # Integrations with SEARCH_GOAL
-    ELASTICSEARCH = 'Elasticsearch'
+    ELASTICSEARCH = "Elasticsearch"
 
     # Integrations with DRM_GOAL
-    ADOBE_VENDOR_ID = 'Adobe Vendor ID'
+    ADOBE_VENDOR_ID = "Adobe Vendor ID"
 
     # Integrations with DISCOVERY_GOAL
-    OPDS_REGISTRATION = 'OPDS Registration'
+    OPDS_REGISTRATION = "OPDS Registration"
 
     # Integrations with ANALYTICS_GOAL
-    GOOGLE_ANALYTICS = 'Google Analytics'
+    GOOGLE_ANALYTICS = "Google Analytics"
 
     # Integrations with ADMIN_AUTH_GOAL
-    GOOGLE_OAUTH = 'Google OAuth'
+    GOOGLE_OAUTH = "Google OAuth"
 
     # List of such ADMIN_AUTH_GOAL integrations
     ADMIN_AUTH_PROTOCOLS = [GOOGLE_OAUTH]
 
     # Integrations with LOGGING_GOAL
-    INTERNAL_LOGGING = 'Internal logging'
+    INTERNAL_LOGGING = "Internal logging"
     LOGGLY = "Loggly"
     CLOUDWATCH = "AWS Cloudwatch Logs"
 
@@ -263,7 +276,7 @@ class ExternalIntegration(Base, HasFullTableCache):
     _cache = HasFullTableCache.RESET
     _id_cache = HasFullTableCache.RESET
 
-    __tablename__ = 'externalintegrations'
+    __tablename__ = "externalintegrations"
     id = Column(Integer, primary_key=True)
 
     # Each integration should have a protocol (explaining what type of
@@ -281,27 +294,34 @@ class ExternalIntegration(Base, HasFullTableCache):
     # Any additional configuration information goes into
     # ConfigurationSettings.
     settings = relationship(
-        "ConfigurationSetting", backref="external_integration",
-        lazy="joined", cascade="all, delete",
+        "ConfigurationSetting",
+        backref="external_integration",
+        lazy="joined",
+        cascade="all, delete",
     )
 
     # Any number of Collections may designate an ExternalIntegration
     # as the source of their configuration
     collections = relationship(
-        "Collection", backref="_external_integration",
-        foreign_keys='Collection.external_integration_id',
+        "Collection",
+        backref="_external_integration",
+        foreign_keys="Collection.external_integration_id",
     )
 
     links = relationship(
         "ExternalIntegrationLink",
         backref="other_integration",
         foreign_keys="ExternalIntegrationLink.other_integration_id",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
     )
 
     def __repr__(self):
         return "<ExternalIntegration: protocol=%s goal='%s' settings=%d ID=%d>" % (
-            self.protocol, self.goal, len(self.settings), self.id)
+            self.protocol,
+            self.goal,
+            len(self.settings),
+            self.id,
+        )
 
     def cache_key(self):
         # TODO: This is not ideal, but the lookup method isn't like
@@ -315,13 +335,8 @@ class ExternalIntegration(Base, HasFullTableCache):
 
     @classmethod
     def for_goal(cls, _db, goal):
-        """Return all external integrations by goal type.
-        """
-        integrations = _db.query(cls).filter(
-            cls.goal==goal
-        ).order_by(
-            cls.name
-        )
+        """Return all external integrations by goal type."""
+        integrations = _db.query(cls).filter(cls.goal == goal).order_by(cls.name)
 
         return integrations
 
@@ -332,22 +347,28 @@ class ExternalIntegration(Base, HasFullTableCache):
         :param collection: Use the mirror configuration for this Collection.
         :param purpose: Use the purpose of the mirror configuration.
         """
-        qu = _db.query(cls).join(
-            ExternalIntegrationLink,
-            ExternalIntegrationLink.other_integration_id==cls.id
-        ).filter(
-            ExternalIntegrationLink.external_integration_id==collection.external_integration_id,
-            ExternalIntegrationLink.purpose==purpose
+        qu = (
+            _db.query(cls)
+            .join(
+                ExternalIntegrationLink,
+                ExternalIntegrationLink.other_integration_id == cls.id,
+            )
+            .filter(
+                ExternalIntegrationLink.external_integration_id
+                == collection.external_integration_id,
+                ExternalIntegrationLink.purpose == purpose,
+            )
         )
         integrations = qu.all()
         if not integrations:
             raise CannotLoadConfiguration(
-                "No storage integration for collection '%s' and purpose '%s' is configured." %
-                (collection.name, purpose)
+                "No storage integration for collection '%s' and purpose '%s' is configured."
+                % (collection.name, purpose)
             )
         if len(integrations) > 1:
             raise CannotLoadConfiguration(
-                "Multiple integrations found for collection '%s' and purpose '%s'" % (collection.name, purpose)
+                "Multiple integrations found for collection '%s' and purpose '%s'"
+                % (collection.name, purpose)
             )
 
         [integration] = integrations
@@ -356,12 +377,14 @@ class ExternalIntegration(Base, HasFullTableCache):
     @classmethod
     def lookup(cls, _db, protocol, goal, library=None):
 
-        integrations = _db.query(cls).outerjoin(cls.libraries).filter(
-            cls.protocol==protocol, cls.goal==goal
+        integrations = (
+            _db.query(cls)
+            .outerjoin(cls.libraries)
+            .filter(cls.protocol == protocol, cls.goal == goal)
         )
 
         if library:
-            integrations = integrations.filter(Library.id==library.id)
+            integrations = integrations.filter(Library.id == library.id)
 
         integrations = integrations.all()
         if len(integrations) > 1:
@@ -369,7 +392,7 @@ class ExternalIntegration(Base, HasFullTableCache):
 
         if [i for i in integrations if i.libraries] and not library:
             raise ValueError(
-                'This ExternalIntegration requires a library and none was provided.'
+                "This ExternalIntegration requires a library and none was provided."
             )
 
         if not integrations:
@@ -393,18 +416,13 @@ class ExternalIntegration(Base, HasFullTableCache):
             has this value.
         :return: A Query object.
         """
-        return _db.query(
-            ExternalIntegration
-        ).join(
-            ExternalIntegration.settings
-        ).filter(
-            ExternalIntegration.goal==goal
-        ).filter(
-            ExternalIntegration.protocol==protocol
-        ).filter(
-            ConfigurationSetting.key==key
-        ).filter(
-            ConfigurationSetting.value==value
+        return (
+            _db.query(ExternalIntegration)
+            .join(ExternalIntegration.settings)
+            .filter(ExternalIntegration.goal == goal)
+            .filter(ExternalIntegration.protocol == protocol)
+            .filter(ConfigurationSetting.key == key)
+            .filter(ConfigurationSetting.value == value)
         )
 
     @classmethod
@@ -418,12 +436,11 @@ class ExternalIntegration(Base, HasFullTableCache):
         Library and the given goal.
         :return: A Query.
         """
-        return _db.query(ExternalIntegration).join(
-            ExternalIntegration.libraries
-        ).filter(
-            ExternalIntegration.goal==goal
-        ).filter(
-            Library.id==library.id
+        return (
+            _db.query(ExternalIntegration)
+            .join(ExternalIntegration.libraries)
+            .filter(ExternalIntegration.goal == goal)
+            .filter(Library.id == library.id)
         )
 
     @classmethod
@@ -438,9 +455,8 @@ class ExternalIntegration(Base, HasFullTableCache):
             return None
         if len(integrations) > 1:
             raise CannotLoadConfiguration(
-                "Library %s defines multiple integrations with goal %s!" % (
-                    library.name, goal
-                )
+                "Library %s defines multiple integrations with goal %s!"
+                % (library.name, goal)
             )
         return integrations[0]
 
@@ -455,9 +471,7 @@ class ExternalIntegration(Base, HasFullTableCache):
         :param key: Name of the setting.
         :return: A ConfigurationSetting
         """
-        return ConfigurationSetting.for_externalintegration(
-            key, self
-        )
+        return ConfigurationSetting.for_externalintegration(key, self)
 
     @hybrid_property
     def url(self):
@@ -497,8 +511,9 @@ class ExternalIntegration(Base, HasFullTableCache):
 
     @primary_identifier_source.setter
     def primary_identifier_source(self, new_primary_identifier_source):
-        return self.set_setting(self.PRIMARY_IDENTIFIER_SOURCE,
-                                new_primary_identifier_source)
+        return self.set_setting(
+            self.PRIMARY_IDENTIFIER_SOURCE, new_primary_identifier_source
+        )
 
     def explain(self, library=None, include_secrets=False):
         """Create a series of human-readable strings to explain an
@@ -520,6 +535,7 @@ class ExternalIntegration(Base, HasFullTableCache):
             if setting.library:
                 return setting.key, setting.library.name
             return (setting.key, None)
+
         for setting in sorted(self.settings, key=key):
             if library and setting.library and setting.library != library:
                 # This is a different library's specialization of
@@ -531,7 +547,8 @@ class ExternalIntegration(Base, HasFullTableCache):
             explanation = "%s='%s'" % (setting.key, setting.value)
             if setting.library:
                 explanation = "%s (applies only to %s)" % (
-                    explanation, setting.library.name
+                    explanation,
+                    setting.library.name,
                 )
             if include_secrets or not setting.is_secret:
                 lines.append(explanation)
@@ -555,56 +572,53 @@ class ConfigurationSetting(Base, HasFullTableCache):
     is a patron of, is associated with both a Library and an
     ExternalIntegration.
     """
-    __tablename__ = 'configurationsettings'
+
+    __tablename__ = "configurationsettings"
     id = Column(Integer, primary_key=True)
     external_integration_id = Column(
-        Integer, ForeignKey('externalintegrations.id'), index=True
+        Integer, ForeignKey("externalintegrations.id"), index=True
     )
-    library_id = Column(
-        Integer, ForeignKey('libraries.id'), index=True
-    )
+    library_id = Column(Integer, ForeignKey("libraries.id"), index=True)
     key = Column(Unicode)
     _value = Column(Unicode, name="value")
 
     __table_args__ = (
         # Unique indexes to prevent the creation of redundant
         # configuration settings.
-
         # If both external_integration_id and library_id are null,
         # then the key--the name of a sitewide setting--must be unique.
         Index(
             "ix_configurationsettings_key",
             key,
             unique=True,
-            postgresql_where=and_(
-                external_integration_id==None, library_id==None
-            )
+            postgresql_where=and_(external_integration_id == None, library_id == None),
         ),
-
         # If external_integration_id is null but library_id is not,
         # then (library_id, key) must be unique.
         Index(
             "ix_configurationsettings_library_id_key",
-            library_id, key,
+            library_id,
+            key,
             unique=True,
-            postgresql_where=(external_integration_id==None)
+            postgresql_where=(external_integration_id == None),
         ),
-
         # If library_id is null but external_integration_id is not,
         # then (external_integration_id, key) must be unique.
         Index(
             "ix_configurationsettings_external_integration_id_key",
-            external_integration_id, key,
+            external_integration_id,
+            key,
             unique=True,
-            postgresql_where=library_id==None
+            postgresql_where=library_id == None,
         ),
-
         # If both external_integration_id and library_id have values,
         # then (external_integration_id, library_id, key) must be
         # unique.
         Index(
             "ix_configurationsettings_external_integration_id_library_id_key",
-            external_integration_id, library_id, key,
+            external_integration_id,
+            library_id,
+            key,
             unique=True,
         ),
     )
@@ -613,8 +627,7 @@ class ConfigurationSetting(Base, HasFullTableCache):
     _id_cache = HasFullTableCache.RESET
 
     def __repr__(self):
-        return '<ConfigurationSetting: key=%s, ID=%d>' % (
-            self.key, self.id)
+        return "<ConfigurationSetting: key=%s, ID=%d>" % (self.key, self.id)
 
     @classmethod
     def sitewide_secret(cls, _db, key):
@@ -635,9 +648,11 @@ class ConfigurationSetting(Base, HasFullTableCache):
         lines = []
         site_wide_settings = []
 
-        for setting in _db.query(ConfigurationSetting).filter(
-                ConfigurationSetting.library==None).filter(
-                    ConfigurationSetting.external_integration==None):
+        for setting in (
+            _db.query(ConfigurationSetting)
+            .filter(ConfigurationSetting.library == None)
+            .filter(ConfigurationSetting.external_integration == None)
+        ):
             if not include_secrets and setting.key.endswith("_secret"):
                 continue
             site_wide_settings.append(setting)
@@ -688,19 +703,22 @@ class ConfigurationSetting(Base, HasFullTableCache):
 
     @classmethod
     def for_library_and_externalintegration(
-            cls, _db, key, library, external_integration
+        cls, _db, key, library, external_integration
     ):
         """Find or create a ConfigurationSetting associated with a Library
         and an ExternalIntegration.
         """
+
         def create():
             """Function called when a ConfigurationSetting is not found in cache
             and must be created.
             """
             return get_one_or_create(
-                _db, ConfigurationSetting,
-                library=library, external_integration=external_integration,
-                key=key
+                _db,
+                ConfigurationSetting,
+                library=library,
+                external_integration=external_integration,
+                key=key,
             )
 
         # ConfigurationSettings are stored in cache based on their library,
@@ -724,7 +742,8 @@ class ConfigurationSetting(Base, HasFullTableCache):
             # ExternalIntegration. Treat the value set on the
             # ExternalIntegration as a default.
             return self.for_externalintegration(
-                self.key, self.external_integration).value
+                self.key, self.external_integration
+            ).value
         elif self.library:
             # This is a library-specific setting. Treat the site-wide
             # value as a default.
@@ -747,11 +766,11 @@ class ConfigurationSetting(Base, HasFullTableCache):
         saying that a specific setting should be treated as secret.
         """
         return any(
-            key == x or
-            key.startswith('%s_' % x) or
-            key.endswith('_%s' % x) or
-            ("_%s_" %x) in key
-            for x in ('secret', 'password')
+            key == x
+            or key.startswith("%s_" % x)
+            or key.endswith("_%s" % x)
+            or ("_%s_" % x) in key
+            for x in ("secret", "password")
         )
 
     @property
@@ -767,7 +786,8 @@ class ConfigurationSetting(Base, HasFullTableCache):
             self.value = default
         return self.value
 
-    MEANS_YES = set(['true', 't', 'yes', 'y'])
+    MEANS_YES = set(["true", "t", "yes", "y"])
+
     @property
     def bool_value(self):
         """Turn the value into a boolean if possible.
@@ -822,9 +842,7 @@ class ConfigurationSetting(Base, HasFullTableCache):
         Most methods like this go into Configuration, but this one needs
         to reference data model objects for its default value.
         """
-        value = cls.sitewide(
-            _db, Configuration.EXCLUDED_AUDIO_DATA_SOURCES
-        ).json_value
+        value = cls.sitewide(_db, Configuration.EXCLUDED_AUDIO_DATA_SOURCES).json_value
         if value is None:
             value = cls.EXCLUDED_AUDIO_DATA_SOURCES_DEFAULT
         return value
@@ -904,8 +922,8 @@ class ConfigurationStorage(BaseConfigurationStorage):
         """
         integration = self._integration_association.external_integration(db)
         ConfigurationSetting.for_externalintegration(
-            setting_name,
-            integration).value = value
+            setting_name, integration
+        ).value = value
 
     def load(self, db, setting_name):
         """Loads and returns the library's configuration setting
@@ -920,8 +938,8 @@ class ConfigurationStorage(BaseConfigurationStorage):
         """
         integration = self._integration_association.external_integration(db)
         value = ConfigurationSetting.for_externalintegration(
-            setting_name,
-            integration).value
+            setting_name, integration
+        ).value
 
         return value
 
@@ -929,12 +947,12 @@ class ConfigurationStorage(BaseConfigurationStorage):
 class ConfigurationAttributeType(Enum):
     """Enumeration of configuration setting types"""
 
-    TEXT = 'text'
-    TEXTAREA = 'textarea'
-    SELECT = 'select'
-    NUMBER = 'number'
-    LIST = 'list'
-    MENU = 'menu'
+    TEXT = "text"
+    TEXTAREA = "textarea"
+    SELECT = "select"
+    NUMBER = "number"
+    LIST = "list"
+    MENU = "menu"
 
     def to_control_type(self):
         """Converts the value to a attribute type understandable by circulation-web
@@ -954,15 +972,15 @@ class ConfigurationAttributeType(Enum):
 class ConfigurationAttribute(Enum):
     """Enumeration of configuration setting attributes"""
 
-    KEY = 'key'
-    LABEL = 'label'
-    DESCRIPTION = 'description'
-    TYPE = 'type'
-    REQUIRED = 'required'
-    DEFAULT = 'default'
-    OPTIONS = 'options'
-    CATEGORY = 'category'
-    FORMAT = 'format'
+    KEY = "key"
+    LABEL = "label"
+    DESCRIPTION = "description"
+    TYPE = "type"
+    REQUIRED = "required"
+    DEFAULT = "default"
+    OPTIONS = "options"
+    CATEGORY = "category"
+    FORMAT = "format"
 
 
 class ConfigurationOption(object):
@@ -992,9 +1010,7 @@ class ConfigurationOption(object):
         if not isinstance(other, ConfigurationOption):
             return False
 
-        return \
-            self.key == other.key and \
-            self.label == other.label
+        return self.key == other.key and self.label == other.label
 
     @property
     def key(self):
@@ -1020,10 +1036,7 @@ class ConfigurationOption(object):
         :return: Dictionary containing option metadata in the SETTINGS format
         :rtype: Dict
         """
-        return {
-            'key': self.key,
-            'label': self.label
-        }
+        return {"key": self.key, "label": self.label}
 
     @staticmethod
     def from_enum(cls):
@@ -1036,12 +1049,9 @@ class ConfigurationOption(object):
         :rtype: List[Dict]
         """
         if not issubclass(cls, Enum):
-            raise ValueError('Class should be descendant of Enum')
+            raise ValueError("Class should be descendant of Enum")
 
-        return [
-            ConfigurationOption(element.value, element.name)
-            for element in cls
-        ]
+        return [ConfigurationOption(element.value, element.name) for element in cls]
 
 
 class HasConfigurationSettings(metaclass=ABCMeta):
@@ -1078,17 +1088,17 @@ class ConfigurationMetadata(object):
     _counter = 0
 
     def __init__(
-            self,
-            key,
-            label,
-            description,
-            type,
-            required=False,
-            default=None,
-            options=None,
-            category=None,
-            format=None,
-            index=None
+        self,
+        key,
+        label,
+        description,
+        type,
+        required=False,
+        default=None,
+        options=None,
+        category=None,
+        format=None,
+        index=None,
     ):
         """Initializes a new instance of ConfigurationMetadata class
 
@@ -1152,7 +1162,9 @@ class ConfigurationMetadata(object):
             return self
 
         if not isinstance(owner_instance, HasConfigurationSettings):
-            raise Exception('owner must be an instance of ConfigurationSettingsMetadataOwner type')
+            raise Exception(
+                "owner must be an instance of ConfigurationSettingsMetadataOwner type"
+            )
 
         return owner_instance.get_setting_value(self._key)
 
@@ -1166,7 +1178,9 @@ class ConfigurationMetadata(object):
         :type value: Any
         """
         if not isinstance(owner_instance, HasConfigurationSettings):
-            raise Exception('owner must be an instance ConfigurationSettingsMetadataOwner type')
+            raise Exception(
+                "owner must be an instance ConfigurationSettingsMetadataOwner type"
+            )
 
         return owner_instance.set_setting_value(self._key, value)
 
@@ -1284,12 +1298,13 @@ class ConfigurationMetadata(object):
             ConfigurationAttribute.TYPE.value: self.type.to_control_type(),
             ConfigurationAttribute.REQUIRED.value: self.required,
             ConfigurationAttribute.DEFAULT.value: self.default,
-            ConfigurationAttribute.OPTIONS.value:
-                [option.to_settings() for option in self.options]
-                if self.options
-                else None,
+            ConfigurationAttribute.OPTIONS.value: [
+                option.to_settings() for option in self.options
+            ]
+            if self.options
+            else None,
             ConfigurationAttribute.CATEGORY.value: self.category,
-            ConfigurationAttribute.FORMAT.value: self.format
+            ConfigurationAttribute.FORMAT.value: self.format,
         }
 
     @staticmethod
@@ -1364,12 +1379,22 @@ class ConfigurationGrouping(HasConfigurationSettings):
         for name, member in ConfigurationMetadata.get_configuration_metadata(cls):
             key_attribute = getattr(member, ConfigurationAttribute.KEY.value, None)
             label_attribute = getattr(member, ConfigurationAttribute.LABEL.value, None)
-            description_attribute = getattr(member, ConfigurationAttribute.DESCRIPTION.value, None)
+            description_attribute = getattr(
+                member, ConfigurationAttribute.DESCRIPTION.value, None
+            )
             type_attribute = getattr(member, ConfigurationAttribute.TYPE.value, None)
-            required_attribute = getattr(member, ConfigurationAttribute.REQUIRED.value, None)
-            default_attribute = getattr(member, ConfigurationAttribute.DEFAULT.value, None)
-            options_attribute = getattr(member, ConfigurationAttribute.OPTIONS.value, None)
-            category_attribute = getattr(member, ConfigurationAttribute.CATEGORY.value, None)
+            required_attribute = getattr(
+                member, ConfigurationAttribute.REQUIRED.value, None
+            )
+            default_attribute = getattr(
+                member, ConfigurationAttribute.DEFAULT.value, None
+            )
+            options_attribute = getattr(
+                member, ConfigurationAttribute.OPTIONS.value, None
+            )
+            category_attribute = getattr(
+                member, ConfigurationAttribute.CATEGORY.value, None
+            )
 
             yield {
                 ConfigurationAttribute.KEY.value: key_attribute,
@@ -1378,11 +1403,12 @@ class ConfigurationGrouping(HasConfigurationSettings):
                 ConfigurationAttribute.TYPE.value: type_attribute.to_control_type(),
                 ConfigurationAttribute.REQUIRED.value: required_attribute,
                 ConfigurationAttribute.DEFAULT.value: default_attribute,
-                ConfigurationAttribute.OPTIONS.value:
-                    [option.to_settings() for option in options_attribute]
-                    if options_attribute
-                    else None,
-                ConfigurationAttribute.CATEGORY.value: category_attribute
+                ConfigurationAttribute.OPTIONS.value: [
+                    option.to_settings() for option in options_attribute
+                ]
+                if options_attribute
+                else None,
+                ConfigurationAttribute.CATEGORY.value: category_attribute,
             }
 
     @classmethod
@@ -1414,5 +1440,7 @@ class ConfigurationFactory(object):
         :return: ConfigurationGrouping instance
         :rtype: ConfigurationGrouping
         """
-        with configuration_grouping_class(configuration_storage, db) as configuration_bucket:
+        with configuration_grouping_class(
+            configuration_storage, db
+        ) as configuration_bucket:
             yield configuration_bucket

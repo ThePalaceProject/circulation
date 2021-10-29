@@ -1,4 +1,3 @@
-
 import re
 import struct
 import unicodedata
@@ -6,19 +5,23 @@ from hashlib import md5
 
 
 class WorkIDCalculator(object):
-
     @classmethod
-    def permanent_id(self, normalized_title, normalized_author,
-                     grouping_category):
+    def permanent_id(self, normalized_title, normalized_author, grouping_category):
         digest = md5()
         for i in (normalized_title, normalized_author, grouping_category):
-            if i == '' or i is None:
-                i = '--null--'
+            if i == "" or i is None:
+                i = "--null--"
             digest.update(i.encode("utf-8"))
         permanent_id = digest.hexdigest().zfill(32)
-        permanent_id = "-".join([
-            permanent_id[:8], permanent_id[8:12], permanent_id[12:16],
-            permanent_id[16:20], permanent_id[20:]])
+        permanent_id = "-".join(
+            [
+                permanent_id[:8],
+                permanent_id[8:12],
+                permanent_id[12:16],
+                permanent_id[16:20],
+                permanent_id[20:],
+            ]
+        )
         return permanent_id
 
     # Strings to be removed from author names.
@@ -30,8 +33,12 @@ class WorkIDCalculator(object):
     specialCharacterStrip = re.compile("[^\\w\\d\\s]", re.U)
     consecutiveCharacterStrip = re.compile("\\s{2,}")
     bracketedCharacterStrip = re.compile("\\[(.*?)\\]")
-    commonAuthorSuffixPattern = re.compile("^(.+?)\\s(?:general editor|editor|editor in chief|etc|inc|inc\\setc|co|corporation|llc|partners|company|home entertainment)$")
-    commonAuthorPrefixPattern = re.compile("^(?:edited by|by the editors of|by|chosen by|translated by|prepared by|translated and edited by|completely rev by|pictures by|selected and adapted by|with a foreword by|with a new foreword by|introd by|introduction by|intro by|retold by)\\s(.+)$")
+    commonAuthorSuffixPattern = re.compile(
+        "^(.+?)\\s(?:general editor|editor|editor in chief|etc|inc|inc\\setc|co|corporation|llc|partners|company|home entertainment)$"
+    )
+    commonAuthorPrefixPattern = re.compile(
+        "^(?:edited by|by the editors of|by|chosen by|translated by|prepared by|translated and edited by|completely rev by|pictures by|selected and adapted by|with a foreword by|with a new foreword by|introd by|introduction by|intro by|retold by)\\s(.+)$"
+    )
 
     format_to_grouping_category = {
         "Atlas": "other",
@@ -138,22 +145,24 @@ class WorkIDCalculator(object):
         Returns de-linted author's name.
         """
         if author is None or len(author) == 0:
-            author = ''
+            author = ""
         author = unicodedata.normalize("NFKD", str(author))
         author = cls.bracketedCharacterStrip.sub("", author)
         author = cls.specialCharacterStrip.sub("", author)
 
         groupingAuthor = cls.initialsFix.sub(" ", author)
-        groupingAuthor = groupingAuthor.strip().lower();
+        groupingAuthor = groupingAuthor.strip().lower()
         groupingAuthor = cls.consecutiveCharacterStrip.sub(" ", groupingAuthor)
 
         # extract common additional info (especially for movie studios)
         # Remove home entertainment
         for regexp in [
-                cls.authorExtract1, cls.authorExtract2,
-                cls.commonAuthorSuffixPattern,
-                cls.commonAuthorPrefixPattern, cls.distributedByRemoval
-                ]:
+            cls.authorExtract1,
+            cls.authorExtract2,
+            cls.commonAuthorSuffixPattern,
+            cls.commonAuthorPrefixPattern,
+            cls.distributedByRemoval,
+        ]:
             match = regexp.search(groupingAuthor)
             if match:
                 groupingAuthor = match.groups()[0]
@@ -170,20 +179,29 @@ class WorkIDCalculator(object):
         # groupingAuthor = RecordGroupingProcessor.mapAuthorAuthority(groupingAuthor);
         return groupingAuthor
 
-    commonSubtitlesPattern = re.compile("^(.*?)((a|una)\\s(.*)novel(a|la)?|a(.*)memoir|a(.*)mystery|a(.*)thriller|by\\s(.+)|a novel of .*|stories|an autobiography|a biography|a memoir in books|\\d+\S*\s*ed(ition)?|\\d+\S*\s*update|1st\\s+ed.*|an? .* story|a .*\\s?book|poems|the movie|[\\w\\s]+series book \\d+|[\\w\\s]+trilogy book \\d+|large print|graphic novel|magazine|audio cd)$", re.U)
+    commonSubtitlesPattern = re.compile(
+        "^(.*?)((a|una)\\s(.*)novel(a|la)?|a(.*)memoir|a(.*)mystery|a(.*)thriller|by\\s(.+)|a novel of .*|stories|an autobiography|a biography|a memoir in books|\\d+\S*\s*ed(ition)?|\\d+\S*\s*update|1st\\s+ed.*|an? .* story|a .*\\s?book|poems|the movie|[\\w\\s]+series book \\d+|[\\w\\s]+trilogy book \\d+|large print|graphic novel|magazine|audio cd)$",
+        re.U,
+    )
 
     numerics = []
     for find, replace in (
-            ("1st", "first"), ("2nd", "second"), ("3rd", "third"),
-            ("4th", "fourth"), ("5th", "fifth"), ("6th", "sixth"),
-            ("7th", "seventh"), ("8th", "eighth"), ("9th", "ninth"),
-            ("10th", "tenth")):
+        ("1st", "first"),
+        ("2nd", "second"),
+        ("3rd", "third"),
+        ("4th", "fourth"),
+        ("5th", "fifth"),
+        ("6th", "sixth"),
+        ("7th", "seventh"),
+        ("8th", "eighth"),
+        ("9th", "ninth"),
+        ("10th", "tenth"),
+    ):
         numerics.append((re.compile(find), replace))
-
 
     @classmethod
     def normalize_subtitle(cls, original_title):
-        if original_title == '':
+        if original_title == "":
             return original_title
 
         subtitle = original_title.replace("&#8211;", "-")
@@ -210,7 +228,6 @@ class WorkIDCalculator(object):
 
     subtitleIndicator = re.compile("[:;/=]")
 
-
     @classmethod
     def normalize_title(cls, full_title, num_non_filing_characters=0):
         """
@@ -220,15 +237,15 @@ class WorkIDCalculator(object):
         Lowercases.
         """
         if full_title is None:
-            full_title = ''
+            full_title = ""
         full_title = unicodedata.normalize("NFKD", full_title)
         # Remove any bracketed parts of the title
         tmp_title = cls.bracketedCharacterStrip.sub("", full_title)
-        tmp_title = cls.specialCharacterStrip.sub(
-            "", full_title)
+        tmp_title = cls.specialCharacterStrip.sub("", full_title)
 
-        if (num_non_filing_characters > 0
-            and num_non_filing_characters < len(full_title)):
+        if num_non_filing_characters > 0 and num_non_filing_characters < len(
+            full_title
+        ):
             tmp_title = full_title[:num_non_filing_characters]
         else:
             tmp_title = full_title
@@ -246,12 +263,11 @@ class WorkIDCalculator(object):
             # print("Just saved us from trimming %s to nothing" % full_title)
             title = cls.specialCharacterStrip.sub("", full_title)
 
-
         # If the title includes a : in it, take the first part as the title and the second as the subtitle
         match = cls.subtitleIndicator.search(title)
         if match:
             start = match.start()
-            subtitle = cls.normalize_subtitle(title[start+1])
+            subtitle = cls.normalize_subtitle(title[start + 1])
             title = title[:start]
 
             # Add the subtitle back
@@ -283,8 +299,8 @@ class WorkIDCalculator(object):
             title = full_title
         return title
 
-
     sortTrimmingPattern = re.compile("(?i)^(?:(?:a|an|the|el|la|\"|')\\s)(.*)$")
+
     @classmethod
     def make_value_sortable(cls, curtitle):
         if not curtitle:

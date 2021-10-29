@@ -11,7 +11,7 @@ from money import Money
 from sqlalchemy import distinct
 from sqlalchemy.sql.functions import func
 
-# For backwards compatibility, import items that were moved to 
+# For backwards compatibility, import items that were moved to
 # languages.py
 from .languages import LanguageCodes, LookupTable
 
@@ -21,7 +21,8 @@ def batch(iterable, size=1):
 
     l = len(iterable)
     for start in range(0, l, size):
-        yield iterable[start:min(start+size, l)]
+        yield iterable[start : min(start + size, l)]
+
 
 def fast_query_count(query):
     """Counts the results of a query without using super-slow subquery"""
@@ -45,6 +46,7 @@ def fast_query_count(query):
 
     return count
 
+
 def slugify(text, length_limit=None):
     """Takes a string and turns it into a slug.
 
@@ -57,13 +59,13 @@ def slugify(text, length_limit=None):
     >>> slugify('Happy birthday!', length_limit=4)
     happ
     """
-    slug = re.sub('[.!@#\'$,?\(\)]', '', text.lower())
-    slug = re.sub('&', ' and ', slug)
-    slug = re.sub(' {2,}', ' ', slug)
+    slug = re.sub("[.!@#'$,?\(\)]", "", text.lower())
+    slug = re.sub("&", " and ", slug)
+    slug = re.sub(" {2,}", " ", slug)
 
-    slug = '-'.join(slug.split(' '))
-    while '--' in slug:
-        slug = re.sub('--', '-', slug)
+    slug = "-".join(slug.split(" "))
+    while "--" in slug:
+        slug = re.sub("--", "-", slug)
 
     if length_limit:
         slug = slug[:length_limit]
@@ -104,7 +106,7 @@ class MetadataSimilarity(object):
             total = sum(histogram.values())
         total = float(total)
         for k, v in list(histogram.items()):
-            histogram[k] = v/total
+            histogram[k] = v / total
         return histogram
 
     @classmethod
@@ -149,7 +151,6 @@ class MetadataSimilarity(object):
 
         return sum(differences) / 2
 
-
     @classmethod
     def most_common(cls, maximum_size, *items):
         """Return the most common item that's not longer than the max."""
@@ -193,7 +194,7 @@ class MetadataSimilarity(object):
         shared = len(s1.intersection(s2))
         if not total:
             return 0
-        return shared/float(total)
+        return shared / float(total)
 
     @classmethod
     def title_similarity(cls, title1, title2):
@@ -202,7 +203,8 @@ class MetadataSimilarity(object):
         if title1 == None or title2 == None:
             return 0
         b1, b2, proportion = cls._word_match_proportion(
-            title1, title2, set(['a', 'the', 'an']))
+            title1, title2, set(["a", "the", "an"])
+        )
         if not b1.union(b2) in (b1, b2):
             # Penalize titles where one title is not a subset of the
             # other. "Tom Sawyer Abroad" will not face an extra
@@ -224,11 +226,13 @@ class MetadataSimilarity(object):
         are present in both sets?
         """
         return cls._proportion(
-            set([x.sort_name for x in authors1]), set([x.sort_name for x in authors2]))
+            set([x.sort_name for x in authors1]), set([x.sort_name for x in authors2])
+        )
+
 
 class TitleProcessor(object):
 
-    title_stopwords = ['The ', 'A ', 'An ']
+    title_stopwords = ["The ", "A ", "An "]
 
     @classmethod
     def sort_title_for(cls, title):
@@ -236,7 +240,7 @@ class TitleProcessor(object):
             return title
         for stopword in cls.title_stopwords:
             if title.startswith(stopword):
-                title = title[len(stopword):] + ", " + stopword.strip()
+                title = title[len(stopword) :] + ", " + stopword.strip()
                 break
         return title
 
@@ -248,9 +252,8 @@ class TitleProcessor(object):
         """
         if not subtitled_title:
             return None
-        subtitle = subtitled_title.replace(main_title, '')
-        while (subtitle and
-                (subtitle[0] in string.whitespace+':.')):
+        subtitle = subtitled_title.replace(main_title, "")
+        while subtitle and (subtitle[0] in string.whitespace + ":."):
             # Trim any leading whitespace or colons
             subtitle = subtitle[1:]
         if not subtitle:
@@ -268,7 +271,7 @@ class Bigrams(object):
         self.proportional = Counter()
         total = float(sum(bigrams.values()))
         for bigram, quantity in self.bigrams.most_common():
-            proportion = quantity/total
+            proportion = quantity / total
             if proportion < 0.001:
                 break
             self.proportional[bigram] = proportion
@@ -301,10 +304,11 @@ class Bigrams(object):
 
     @classmethod
     def process_data(cls, data, bigrams):
-        for i in range(0, len(data)-1):
-            bigram = data[i:i+2].strip()
+        for i in range(0, len(data) - 1):
+            bigram = data[i : i + 2].strip()
             if len(bigram) == 2 and cls.all_letters.match(bigram):
                 bigrams[bigram.lower()] += 1
+
 
 english_bigram_frequencies = {
     "ab": 0.0021712725750437792,
@@ -511,7 +515,7 @@ english_bigram_frequencies = {
     "wo": 0.0029937913101927465,
     "ye": 0.0010288854428924358,
     "yo": 0.002843438423122505,
-    "ys": 0.0013649683669317988
+    "ys": 0.0013649683669317988,
 }
 english_bigrams = Bigrams(Counter())
 english_bigrams.proportional = Counter(english_bigram_frequencies)
@@ -519,17 +523,17 @@ english_bigrams.proportional = Counter(english_bigram_frequencies)
 
 class MoneyUtility(object):
 
-    DEFAULT_CURRENCY = 'USD'
+    DEFAULT_CURRENCY = "USD"
 
     @classmethod
     def parse(cls, amount):
         """Attempt to turn a string into a Money object."""
         currency = cls.DEFAULT_CURRENCY
         if not amount:
-            amount = '0'
+            amount = "0"
         amount = str(amount)
-        if amount[0] == '$':
-            currency = 'USD'
+        if amount[0] == "$":
+            currency = "USD"
             amount = amount[1:]
         return Money(amount, currency)
 
@@ -543,7 +547,10 @@ def is_session(value):
     :return: Boolean value indicating whether the value is a valid SQLAlchemy session or not
     :rtype: bool
     """
-    return isinstance(value, (sqlalchemy.orm.session.Session, flask_sqlalchemy_session.flask_scoped_session))
+    return isinstance(
+        value,
+        (sqlalchemy.orm.session.Session, flask_sqlalchemy_session.flask_scoped_session),
+    )
 
 
 def first_or_default(collection, default=None):
@@ -568,4 +575,4 @@ def chunks(lst, chunk_size, start_index=0):
     length = len(lst)
 
     for i in range(start_index, length, chunk_size):
-        yield lst[i:i + chunk_size]
+        yield lst[i : i + chunk_size]

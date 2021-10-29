@@ -45,8 +45,8 @@ class DataSourceConstants(object):
     PROQUEST = "ProQuest"
 
     DEPRECATED_NAMES = {
-        "3M" : BIBLIOTHECA,
-        "OneClick" : RB_DIGITAL,
+        "3M": BIBLIOTHECA,
+        "OneClick": RB_DIGITAL,
     }
     THREEM = BIBLIOTHECA
     ONECLICK = RB_DIGITAL
@@ -93,6 +93,7 @@ class DataSourceConstants(object):
     # higher priority than the source of the license pool.
     COVER_IMAGE_PRIORITY = [METADATA_WRANGLER] + PRESENTATION_EDITION_PRIORITY
 
+
 class EditionConstants(object):
     ALL_MEDIUM = object()
     BOOK_MEDIUM = "Book"
@@ -107,21 +108,28 @@ class EditionConstants(object):
     CODEX_FORMAT = "Codex"
 
     # These are all media known to the system.
-    KNOWN_MEDIA = (BOOK_MEDIUM, PERIODICAL_MEDIUM, AUDIO_MEDIUM, MUSIC_MEDIUM,
-                   VIDEO_MEDIUM, IMAGE_MEDIUM, COURSEWARE_MEDIUM)
+    KNOWN_MEDIA = (
+        BOOK_MEDIUM,
+        PERIODICAL_MEDIUM,
+        AUDIO_MEDIUM,
+        MUSIC_MEDIUM,
+        VIDEO_MEDIUM,
+        IMAGE_MEDIUM,
+        COURSEWARE_MEDIUM,
+    )
 
     # These are the media types currently fulfillable by the default
     # client.
     FULFILLABLE_MEDIA = [BOOK_MEDIUM, AUDIO_MEDIUM]
 
     medium_to_additional_type = {
-        BOOK_MEDIUM : "http://schema.org/EBook",
-        AUDIO_MEDIUM : "http://bib.schema.org/Audiobook",
-        PERIODICAL_MEDIUM : "http://schema.org/PublicationIssue",
-        MUSIC_MEDIUM :  "http://schema.org/MusicRecording",
-        VIDEO_MEDIUM :  "http://schema.org/VideoObject",
+        BOOK_MEDIUM: "http://schema.org/EBook",
+        AUDIO_MEDIUM: "http://bib.schema.org/Audiobook",
+        PERIODICAL_MEDIUM: "http://schema.org/PublicationIssue",
+        MUSIC_MEDIUM: "http://schema.org/MusicRecording",
+        VIDEO_MEDIUM: "http://schema.org/VideoObject",
         IMAGE_MEDIUM: "http://schema.org/ImageObject",
-        COURSEWARE_MEDIUM: "http://schema.org/Course"
+        COURSEWARE_MEDIUM: "http://schema.org/Course",
     }
 
     additional_type_to_medium = {}
@@ -133,13 +141,13 @@ class EditionConstants(object):
     # Map the medium constants to the strings used when generating
     # permanent work IDs.
     medium_for_permanent_work_id = {
-        BOOK_MEDIUM : "book",
-        AUDIO_MEDIUM : "book",
-        MUSIC_MEDIUM : "music",
-        PERIODICAL_MEDIUM : "book",
+        BOOK_MEDIUM: "book",
+        AUDIO_MEDIUM: "book",
+        MUSIC_MEDIUM: "music",
+        PERIODICAL_MEDIUM: "book",
         VIDEO_MEDIUM: "movie",
         IMAGE_MEDIUM: "image",
-        COURSEWARE_MEDIUM: "courseware"
+        COURSEWARE_MEDIUM: "courseware",
     }
 
 
@@ -169,25 +177,29 @@ class IdentifierConstants(object):
     PROQUEST_ID = "ProQuest Doc ID"
 
     DEPRECATED_NAMES = {
-        "3M ID" : BIBLIOTHECA_ID,
-        "OneClick ID" : RB_DIGITAL_ID,
+        "3M ID": BIBLIOTHECA_ID,
+        "OneClick ID": RB_DIGITAL_ID,
     }
     THREEM_ID = BIBLIOTHECA_ID
     ONECLICK_ID = RB_DIGITAL_ID
 
     LICENSE_PROVIDING_IDENTIFIER_TYPES = [
-        BIBLIOTHECA_ID, OVERDRIVE_ID, ODILO_ID, AXIS_360_ID,
-        GUTENBERG_ID, ELIB_ID, SUDOC_CALL_NUMBER,
+        BIBLIOTHECA_ID,
+        OVERDRIVE_ID,
+        ODILO_ID,
+        AXIS_360_ID,
+        GUTENBERG_ID,
+        ELIB_ID,
+        SUDOC_CALL_NUMBER,
     ]
 
     URN_SCHEME_PREFIX = "urn:librarysimplified.org/terms/id/"
     ISBN_URN_SCHEME_PREFIX = "urn:isbn:"
     GUTENBERG_URN_SCHEME_PREFIX = "http://www.gutenberg.org/ebooks/"
-    GUTENBERG_URN_SCHEME_RE = re.compile(
-        GUTENBERG_URN_SCHEME_PREFIX + "([0-9]+)")
+    GUTENBERG_URN_SCHEME_RE = re.compile(GUTENBERG_URN_SCHEME_PREFIX + "([0-9]+)")
     OTHER_URN_SCHEME_PREFIX = "urn:"
 
-    IDEAL_COVER_ASPECT_RATIO = 2.0/3
+    IDEAL_COVER_ASPECT_RATIO = 2.0 / 3
     IDEAL_IMAGE_HEIGHT = 240
     IDEAL_IMAGE_WIDTH = 160
 
@@ -211,9 +223,24 @@ class LinkRelations(object):
     DRM_ENCRYPTED_DOWNLOAD = "http://opds-spec.org/acquisition/"
     BORROW = "http://opds-spec.org/acquisition/borrow"
 
-    CIRCULATION_ALLOWED = [OPEN_ACCESS_DOWNLOAD, DRM_ENCRYPTED_DOWNLOAD, BORROW, GENERIC_OPDS_ACQUISITION]
-    METADATA_ALLOWED = [CANONICAL, IMAGE, THUMBNAIL_IMAGE, ILLUSTRATION, REVIEW,
-        DESCRIPTION, SHORT_DESCRIPTION, AUTHOR, ALTERNATE, SAMPLE]
+    CIRCULATION_ALLOWED = [
+        OPEN_ACCESS_DOWNLOAD,
+        DRM_ENCRYPTED_DOWNLOAD,
+        BORROW,
+        GENERIC_OPDS_ACQUISITION,
+    ]
+    METADATA_ALLOWED = [
+        CANONICAL,
+        IMAGE,
+        THUMBNAIL_IMAGE,
+        ILLUSTRATION,
+        REVIEW,
+        DESCRIPTION,
+        SHORT_DESCRIPTION,
+        AUTHOR,
+        ALTERNATE,
+        SAMPLE,
+    ]
     MIRRORED = [OPEN_ACCESS_DOWNLOAD, GENERIC_OPDS_ACQUISITION, IMAGE, THUMBNAIL_IMAGE]
     SELF_HOSTED_BOOKS = list(set(CIRCULATION_ALLOWED) & set(MIRRORED))
 
@@ -245,13 +272,17 @@ class MediaTypes(object):
     # (hopefully future) ebook manifests, we invent values for the
     # 'profile' parameter.
     OVERDRIVE_MANIFEST_MEDIA_TYPE = "application/vnd.overdrive.circulation.api+json"
-    OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE = OVERDRIVE_MANIFEST_MEDIA_TYPE + ";profile=audiobook"
-    OVERDRIVE_EBOOK_MANIFEST_MEDIA_TYPE = OVERDRIVE_MANIFEST_MEDIA_TYPE + ";profile=ebook"
+    OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE = (
+        OVERDRIVE_MANIFEST_MEDIA_TYPE + ";profile=audiobook"
+    )
+    OVERDRIVE_EBOOK_MANIFEST_MEDIA_TYPE = (
+        OVERDRIVE_MANIFEST_MEDIA_TYPE + ";profile=ebook"
+    )
 
     AUDIOBOOK_MEDIA_TYPES = [
         OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE,
         AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-        AUDIOBOOK_PACKAGE_MEDIA_TYPE
+        AUDIOBOOK_PACKAGE_MEDIA_TYPE,
     ]
 
     BOOK_MEDIA_TYPES = [
@@ -276,7 +307,7 @@ class MediaTypes(object):
     SUPPORTED_BOOK_MEDIA_TYPES = [
         EPUB_MEDIA_TYPE,
         PDF_MEDIA_TYPE,
-        AUDIOBOOK_MANIFEST_MEDIA_TYPE
+        AUDIOBOOK_MANIFEST_MEDIA_TYPE,
     ]
 
     # Most of the time, if you believe a resource to be media type A,
@@ -305,21 +336,21 @@ class MediaTypes(object):
             (APPLICATION_XML_MEDIA_TYPE, "xml"),
             (AUDIOBOOK_MANIFEST_MEDIA_TYPE, "audiobook-manifest"),
             (AUDIOBOOK_PACKAGE_MEDIA_TYPE, "audiobook"),
-            (SCORM_MEDIA_TYPE, "zip")
+            (SCORM_MEDIA_TYPE, "zip"),
         ]
     )
 
-    COMMON_EBOOK_EXTENSIONS = ['.epub', '.pdf', '.audiobook']
-    COMMON_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif']
+    COMMON_EBOOK_EXTENSIONS = [".epub", ".pdf", ".audiobook"]
+    COMMON_IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif"]
 
     # Invert FILE_EXTENSIONS and add some extra guesses.
     MEDIA_TYPE_FOR_EXTENSION = {
-        ".htm" : TEXT_HTML_MEDIA_TYPE,
-        ".jpeg" : JPEG_MEDIA_TYPE,
+        ".htm": TEXT_HTML_MEDIA_TYPE,
+        ".jpeg": JPEG_MEDIA_TYPE,
     }
 
     for media_type, extension in list(FILE_EXTENSIONS.items()):
-        extension = '.' + extension
+        extension = "." + extension
         if extension not in MEDIA_TYPE_FOR_EXTENSION:
             # FILE_EXTENSIONS lists more common extensions first.  If
             # multiple media types have the same extension, the most

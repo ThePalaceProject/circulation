@@ -30,7 +30,6 @@ from .credential import Credential
 
 
 class LoanAndHoldMixin(object):
-
     @property
     def work(self):
         """Try to find the corresponding work for this Loan/Hold."""
@@ -51,18 +50,16 @@ class LoanAndHoldMixin(object):
         # If this Loan/Hold belongs to a external patron, there may be no library.
         return None
 
+
 class Patron(Base):
 
-    __tablename__ = 'patrons'
+    __tablename__ = "patrons"
     id = Column(Integer, primary_key=True)
 
     # Each patron is the patron _of_ one particular library.  An
     # individual human being may patronize multiple libraries, but
     # they will have a different patron account at each one.
-    library_id = Column(
-        Integer, ForeignKey('libraries.id'), index=True,
-        nullable=False
-    )
+    library_id = Column(Integer, ForeignKey("libraries.id"), index=True, nullable=False)
 
     # The patron's permanent unique identifier in an external library
     # system, probably never seen by the patron.
@@ -126,8 +123,9 @@ class Patron(Base):
     # Whether or not the patron wants their annotations synchronized
     # across devices (which requires storing those annotations on a
     # library server).
-    _synchronize_annotations = Column(Boolean, default=None,
-                                      name="synchronize_annotations")
+    _synchronize_annotations = Column(
+        Boolean, default=None, name="synchronize_annotations"
+    )
 
     # If the circulation manager is set up to associate a patron's
     # neighborhood with circulation events, and it would be
@@ -150,18 +148,23 @@ class Patron(Base):
     # be an explicit decision of the ILS integration code.
     cached_neighborhood = Column(Unicode, default=None, index=True)
 
-    loans = relationship('Loan', backref='patron', cascade='delete')
-    holds = relationship('Hold', backref='patron', cascade='delete')
+    loans = relationship("Loan", backref="patron", cascade="delete")
+    holds = relationship("Hold", backref="patron", cascade="delete")
 
-    annotations = relationship('Annotation', backref='patron', order_by="desc(Annotation.timestamp)", cascade='delete')
+    annotations = relationship(
+        "Annotation",
+        backref="patron",
+        order_by="desc(Annotation.timestamp)",
+        cascade="delete",
+    )
 
     # One Patron can have many associated Credentials.
     credentials = relationship("Credential", backref="patron", cascade="delete")
 
     __table_args__ = (
-        UniqueConstraint('library_id', 'username'),
-        UniqueConstraint('library_id', 'authorization_identifier'),
-        UniqueConstraint('library_id', 'external_identifier'),
+        UniqueConstraint("library_id", "username"),
+        UniqueConstraint("library_id", "authorization_identifier"),
+        UniqueConstraint("library_id", "external_identifier"),
     )
 
     # A patron with borrowing privileges should have their local
@@ -180,9 +183,11 @@ class Patron(Base):
             if isinstance(d, datetime.datetime):
                 return d.date()
             return d
-        return '<Patron authentication_identifier=%s expires=%s sync=%s>' % (
-            self.authorization_identifier, date(self.authorization_expires),
-            date(self.last_external_sync)
+
+        return "<Patron authentication_identifier=%s expires=%s sync=%s>" % (
+            self.authorization_identifier,
+            date(self.authorization_expires),
+            date(self.last_external_sync),
         )
 
     def identifier_to_remote_service(self, remote_data_source, generator=None):
@@ -192,21 +197,27 @@ class Patron(Base):
         DataSource) corresponding to the remote service.
         """
         _db = Session.object_session(self)
+
         def refresh(credential):
             if generator and callable(generator):
                 identifier = generator()
             else:
                 identifier = str(uuid.uuid1())
             credential.credential = identifier
+
         credential = Credential.lookup(
-            _db, remote_data_source, Credential.IDENTIFIER_TO_REMOTE_SERVICE,
-            self, refresh, allow_persistent_token=True
+            _db,
+            remote_data_source,
+            Credential.IDENTIFIER_TO_REMOTE_SERVICE,
+            self,
+            refresh,
+            allow_persistent_token=True,
         )
         return credential.credential
 
     def works_on_loan(self):
         db = Session.object_session(self)
-        loans = db.query(Loan).filter(Loan.patron==self)
+        loans = db.query(Loan).filter(Loan.patron == self)
         return [loan.work for loan in self.loans if loan.work]
 
     def works_on_loan_or_on_hold(self):
@@ -246,9 +257,7 @@ class Patron(Base):
         # We have an answer, but it may be so old that we should clear
         # it out.
         now = utc_now()
-        expires = value + datetime.timedelta(
-            seconds=self.loan_activity_max_age
-        )
+        expires = value + datetime.timedelta(seconds=self.loan_activity_max_age)
         if now > expires:
             # The value has expired. Clear it out.
             value = None
@@ -271,12 +280,10 @@ class Patron(Base):
         if value is None:
             # A patron cannot decide to go back to the state where
             # they hadn't made a decision.
-            raise ValueError(
-                "synchronize_annotations cannot be unset once set."
-            )
+            raise ValueError("synchronize_annotations cannot be unset once set.")
         if value is False:
             _db = Session.object_session(self)
-            qu = _db.query(Annotation).filter(Annotation.patron==self)
+            qu = _db.query(Annotation).filter(Annotation.patron == self)
             for annotation in qu:
                 _db.delete(annotation)
         self._synchronize_annotations = value
@@ -300,11 +307,13 @@ class Patron(Base):
 
         _db = Session.object_session(self)
         from ..lane import Lane
-        qu = _db.query(Lane).filter(
-            Lane.library==self.library
-        ).filter(
-            Lane.root_for_patron_type.any(self.external_type)
-        ).order_by(Lane.id)
+
+        qu = (
+            _db.query(Lane)
+            .filter(Lane.library == self.library)
+            .filter(Lane.root_for_patron_type.any(self.external_type))
+            .order_by(Lane.id)
+        )
         lanes = qu.all()
         if len(lanes) < 1:
             # The most common situation -- this patron has no special
@@ -315,8 +324,7 @@ class Patron(Base):
             # configuration problem, but we shouldn't make the patron
             # pay the price -- just pick the first one.
             logging.error(
-                "Multiple root lanes found for patron type %s.",
-                self.external_type
+                "Multiple root lanes found for patron type %s.", self.external_type
             )
         return lanes[0]
 
@@ -353,16 +361,14 @@ class Patron(Base):
         # are a match for the title's audience and target age.
         return any(
             self.age_appropriate_match(
-                work_audience, work_target_age,
-                audience, root.target_age
+                work_audience, work_target_age, audience, root.target_age
             )
             for audience in root.audiences
         )
 
     @classmethod
     def age_appropriate_match(
-        cls, work_audience, work_target_age,
-        reader_audience, reader_age
+        cls, work_audience, work_target_age, reader_audience, reader_age
     ):
         """Match the audience and target age of a work with that of a reader,
         and see whether they are an age-appropriate match.
@@ -391,10 +397,8 @@ class Patron(Base):
 
         log = logging.getLogger("Age-appropriate match calculator")
         log.debug(
-            "Matching work %s/%s to reader %s/%s" % (
-                work_audience, work_target_age,
-                reader_audience, reader_age
-            )
+            "Matching work %s/%s to reader %s/%s"
+            % (work_audience, work_target_age, reader_audience, reader_age)
         )
 
         if reader_audience not in Classifier.AUDIENCES_JUVENILE:
@@ -428,9 +432,13 @@ class Patron(Base):
         # A YA reader is treated as an adult (with no reading
         # restrictions) if they have no associated age range, or their
         # age range includes ADULT_AGE_CUTOFF.
-        if (reader_audience == Classifier.AUDIENCE_YOUNG_ADULT
-            and (reader_age is None
-                 or (isinstance(reader_age, int) and reader_age >= Classifier.ADULT_AGE_CUTOFF))):
+        if reader_audience == Classifier.AUDIENCE_YOUNG_ADULT and (
+            reader_age is None
+            or (
+                isinstance(reader_age, int)
+                and reader_age >= Classifier.ADULT_AGE_CUTOFF
+            )
+        ):
             log.debug("YA reader to be treated as an adult.")
             return True
 
@@ -443,13 +451,16 @@ class Patron(Base):
         # At this point we know we have a juvenile reader and a
         # juvenile book.
 
-        if (reader_audience == Classifier.AUDIENCE_YOUNG_ADULT
-            and work_audience in (Classifier.AUDIENCES_YOUNG_CHILDREN)):
+        if reader_audience == Classifier.AUDIENCE_YOUNG_ADULT and work_audience in (
+            Classifier.AUDIENCES_YOUNG_CHILDREN
+        ):
             log.debug("YA reader can access any children's title.")
             return True
 
-        if (reader_audience in (Classifier.AUDIENCES_YOUNG_CHILDREN)
-            and work_audience == Classifier.AUDIENCE_YOUNG_ADULT):
+        if (
+            reader_audience in (Classifier.AUDIENCES_YOUNG_CHILDREN)
+            and work_audience == Classifier.AUDIENCE_YOUNG_ADULT
+        ):
             log.debug("Child reader cannot access any YA title.")
             return False
 
@@ -460,9 +471,7 @@ class Patron(Base):
         if work_target_age is None:
             # This is a generic children's or YA book with no
             # particular target age. Assume it's age appropriate.
-            log.debug(
-                "Juvenile book with no target age is presumed age-appropriate."
-            )
+            log.debug("Juvenile book with no target age is presumed age-appropriate.")
             return True
 
         if reader_age is None:
@@ -477,43 +486,50 @@ class Patron(Base):
             # The audience for this book matches the patron's
             # audience, but the book has a target age that is too high
             # for the reader.
-            log.debug(
-                "Audience matches, but work's target age is too high for reader."
-            )
+            log.debug("Audience matches, but work's target age is too high for reader.")
             return False
 
         log.debug("Both audience and target age match; it's age-appropriate.")
         return True
 
 
-Index("ix_patron_library_id_external_identifier", Patron.library_id, Patron.external_identifier)
-Index("ix_patron_library_id_authorization_identifier", Patron.library_id, Patron.authorization_identifier)
+Index(
+    "ix_patron_library_id_external_identifier",
+    Patron.library_id,
+    Patron.external_identifier,
+)
+Index(
+    "ix_patron_library_id_authorization_identifier",
+    Patron.library_id,
+    Patron.authorization_identifier,
+)
 Index("ix_patron_library_id_username", Patron.library_id, Patron.username)
 
+
 class Loan(Base, LoanAndHoldMixin):
-    __tablename__ = 'loans'
+    __tablename__ = "loans"
     id = Column(Integer, primary_key=True)
-    patron_id = Column(Integer, ForeignKey('patrons.id'), index=True)
-    integration_client_id = Column(Integer, ForeignKey('integrationclients.id'), index=True)
+    patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
+    integration_client_id = Column(
+        Integer, ForeignKey("integrationclients.id"), index=True
+    )
 
     # A Loan is always associated with a LicensePool.
-    license_pool_id = Column(Integer, ForeignKey('licensepools.id'), index=True)
+    license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
 
     # It may also be associated with an individual License if the source
     # provides information about individual licenses.
-    license_id = Column(Integer, ForeignKey('licenses.id'), index=True, nullable=True)
+    license_id = Column(Integer, ForeignKey("licenses.id"), index=True, nullable=True)
 
-    fulfillment_id = Column(Integer, ForeignKey('licensepooldeliveries.id'))
+    fulfillment_id = Column(Integer, ForeignKey("licensepooldeliveries.id"))
     start = Column(DateTime(timezone=True), index=True)
     end = Column(DateTime(timezone=True), index=True)
     # Some distributors (e.g. Feedbooks) may have an identifier that can
     # be used to check the status of a specific Loan.
     external_identifier = Column(Unicode, unique=True, nullable=True)
 
-    __table_args__ = (
-        UniqueConstraint('patron_id', 'license_pool_id'),
-    )
-    
+    __table_args__ = (UniqueConstraint("patron_id", "license_pool_id"),)
+
     def __lt__(self, other):
         return self.id < other.id
 
@@ -527,26 +543,34 @@ class Loan(Base, LoanAndHoldMixin):
         start = self.start or utc_now()
         return start + default_loan_period
 
+
 class Hold(Base, LoanAndHoldMixin):
-    """A patron is in line to check out a book.
-    """
-    __tablename__ = 'holds'
+    """A patron is in line to check out a book."""
+
+    __tablename__ = "holds"
     id = Column(Integer, primary_key=True)
-    patron_id = Column(Integer, ForeignKey('patrons.id'), index=True)
-    integration_client_id = Column(Integer, ForeignKey('integrationclients.id'), index=True)
-    license_pool_id = Column(Integer, ForeignKey('licensepools.id'), index=True)
+    patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
+    integration_client_id = Column(
+        Integer, ForeignKey("integrationclients.id"), index=True
+    )
+    license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
     start = Column(DateTime(timezone=True), index=True)
     end = Column(DateTime(timezone=True), index=True)
     position = Column(Integer, index=True)
     external_identifier = Column(Unicode, unique=True, nullable=True)
-    
+
     def __lt__(self, other):
         return self.id < other.id
 
     @classmethod
     def _calculate_until(
-            self, start, queue_position, total_licenses, default_loan_period,
-            default_reservation_period):
+        self,
+        start,
+        queue_position,
+        total_licenses,
+        default_loan_period,
+        default_reservation_period,
+    ):
         """Helper method for `Hold.until` that can be tested independently.
         We have to wait for the available licenses to cycle a
         certain number of times before we get a turn.
@@ -574,7 +598,7 @@ class Hold(Base, LoanAndHoldMixin):
         # in front of you to get a reservation notification, borrow
         # the book at the last minute, and keep the book for the
         # maximum allowable time.
-        cycle_period = (default_reservation_period + default_loan_period)
+        cycle_period = default_reservation_period + default_loan_period
 
         # This will happen at least once.
         cycles = 1
@@ -588,10 +612,9 @@ class Hold(Base, LoanAndHoldMixin):
             # they'll wait a while, get a reservation, and then keep
             # the book for a while, and so on.
             cycles += queue_position // total_licenses
-            if (total_licenses > 1 and queue_position % total_licenses == 0):
+            if total_licenses > 1 and queue_position % total_licenses == 0:
                 cycles -= 1
         return start + (cycle_period * cycles)
-
 
     def until(self, default_loan_period, default_reservation_period):
         """Give or estimate the time at which the book will be available
@@ -620,8 +643,12 @@ class Hold(Base, LoanAndHoldMixin):
             # end.
             position = self.license_pool.patrons_in_hold_queue
         return self._calculate_until(
-            start, position, licenses_available,
-            default_loan_period, default_reservation_period)
+            start,
+            position,
+            licenses_available,
+            default_loan_period,
+            default_reservation_period,
+        )
 
     def update(self, start, end, position):
         """When the book becomes available, position will be 0 and end will be
@@ -636,9 +663,8 @@ class Hold(Base, LoanAndHoldMixin):
         if position is not None:
             self.position = position
 
-    __table_args__ = (
-        UniqueConstraint('patron_id', 'license_pool_id'),
-    )
+    __table_args__ = (UniqueConstraint("patron_id", "license_pool_id"),)
+
 
 class Annotation(Base):
     # The Web Annotation Data Model defines a basic set of motivations.
@@ -648,18 +674,18 @@ class Annotation(Base):
     # We need to define some terms of our own.
     LS_NAMESPACE = "http://librarysimplified.org/terms/annotation/"
 
-    IDLING = LS_NAMESPACE + 'idling'
-    BOOKMARKING = OA_NAMESPACE + 'bookmarking'
+    IDLING = LS_NAMESPACE + "idling"
+    BOOKMARKING = OA_NAMESPACE + "bookmarking"
 
     MOTIVATIONS = [
         IDLING,
         BOOKMARKING,
     ]
 
-    __tablename__ = 'annotations'
+    __tablename__ = "annotations"
     id = Column(Integer, primary_key=True)
-    patron_id = Column(Integer, ForeignKey('patrons.id'), index=True)
-    identifier_id = Column(Integer, ForeignKey('identifiers.id'), index=True)
+    patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
+    identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
     motivation = Column(Unicode, index=True)
     timestamp = Column(DateTime(timezone=True), index=True)
     active = Column(Boolean, default=True)
@@ -672,18 +698,15 @@ class Annotation(Base):
         annotation sync turned on.
         """
         if not patron.synchronize_annotations:
-            raise ValueError(
-                "Patron has opted out of synchronizing annotations."
-            )
+            raise ValueError("Patron has opted out of synchronizing annotations.")
 
-        return get_one_or_create(
-            _db, Annotation, patron=patron, *args, **kwargs
-        )
+        return get_one_or_create(_db, Annotation, patron=patron, *args, **kwargs)
 
     def set_inactive(self):
         self.active = False
         self.content = None
         self.timestamp = utc_now()
+
 
 class PatronProfileStorage(ProfileStorage):
     """Interface between a Patron object and the User Profile Management
@@ -711,13 +734,10 @@ class PatronProfileStorage(ProfileStorage):
         patron = self.patron
         doc[self.AUTHORIZATION_IDENTIFIER] = patron.authorization_identifier
         if patron.authorization_expires:
-            doc[self.AUTHORIZATION_EXPIRES] = (
-                patron.authorization_expires.strftime("%Y-%m-%dT%H:%M:%SZ")
+            doc[self.AUTHORIZATION_EXPIRES] = patron.authorization_expires.strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
             )
-        settings = {
-            self.SYNCHRONIZE_ANNOTATIONS :
-            patron.synchronize_annotations
-        }
+        settings = {self.SYNCHRONIZE_ANNOTATIONS: patron.synchronize_annotations}
         doc[self.SETTINGS_KEY] = settings
         return doc
 

@@ -18,10 +18,10 @@ try:
 
     if integration:
         for setting in integration.settings:
-            if setting.key == 'username':
+            if setting.key == "username":
                 # A username (or client_id) is no longer required.
                 _db.delete(setting)
-            if setting.key == 'password':
+            if setting.key == "password":
                 # The password (previously client_secret) must be reset to
                 # register for a shared_secret.
                 setting.value = None

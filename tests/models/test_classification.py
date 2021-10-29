@@ -10,7 +10,6 @@ from ...testing import DatabaseTest
 
 
 class TestSubject(DatabaseTest):
-
     def test_lookup_errors(self):
         """Subject.lookup will complain if you don't give it
         enough information to find a Subject.
@@ -20,15 +19,16 @@ class TestSubject(DatabaseTest):
         assert "Cannot look up Subject with no type." in str(excinfo.value)
         with pytest.raises(ValueError) as excinfo:
             Subject.lookup(self._db, Subject.TAG, None, None)
-        assert "Cannot look up Subject when neither identifier nor name is provided." in str(excinfo.value)
+        assert (
+            "Cannot look up Subject when neither identifier nor name is provided."
+            in str(excinfo.value)
+        )
 
     def test_lookup_autocreate(self):
         # By default, Subject.lookup creates a Subject that doesn't exist.
         identifier = self._str
         name = self._str
-        subject, was_new = Subject.lookup(
-            self._db, Subject.TAG, identifier, name
-        )
+        subject, was_new = Subject.lookup(self._db, Subject.TAG, identifier, name)
         assert True == was_new
         assert identifier == subject.identifier
         assert name == subject.name
@@ -59,11 +59,13 @@ class TestSubject(DatabaseTest):
 
     def test_assign_to_genre_can_remove_genre(self):
         # Here's a Subject that identifies children's books.
-        subject, was_new = Subject.lookup(self._db, Subject.TAG, "Children's books", None)
+        subject, was_new = Subject.lookup(
+            self._db, Subject.TAG, "Children's books", None
+        )
 
         # The genre and audience data for this Subject is totally wrong.
         subject.audience = Classifier.AUDIENCE_ADULT
-        subject.target_age = NumericRange(1,10)
+        subject.target_age = NumericRange(1, 10)
         subject.fiction = False
         sf, ignore = Genre.lookup(self._db, "Science Fiction")
         subject.genre = sf
@@ -71,12 +73,12 @@ class TestSubject(DatabaseTest):
         # But calling assign_to_genre() will fix it.
         subject.assign_to_genre()
         assert Classifier.AUDIENCE_CHILDREN == subject.audience
-        assert NumericRange(None, None, '[]') == subject.target_age
+        assert NumericRange(None, None, "[]") == subject.target_age
         assert None == subject.genre
         assert None == subject.fiction
 
-class TestGenre(DatabaseTest):
 
+class TestGenre(DatabaseTest):
     def test_full_table_cache(self):
         """We use Genre as a convenient way of testing
         HasFullTableCache.populate_cache, which requires a real
@@ -119,8 +121,8 @@ class TestGenre(DatabaseTest):
 
     def test_by_cache_key_miss_triggers_create_function(self):
         _db = self._db
-        class Factory(object):
 
+        class Factory(object):
             def __init__(self):
                 self.called = False
 
@@ -150,8 +152,7 @@ class TestGenre(DatabaseTest):
 
         # Call Genreby_cache_key...
         drama, is_new = Genre.by_cache_key(
-            self._db, "Drama",
-            lambda: get_one_or_create(self._db, Genre, name="Drama")
+            self._db, "Drama", lambda: get_one_or_create(self._db, Genre, name="Drama")
         )
         assert "Drama" == drama.name
         assert False == is_new
@@ -166,11 +167,10 @@ class TestGenre(DatabaseTest):
         # function will be called and raise an exception.
         def exploding_create_hook():
             raise Exception("Kaboom")
+
         drama, ignore = get_one_or_create(self._db, Genre, name="Drama")
-        Genre._cache = { "Drama": drama }
-        drama2, is_new = Genre.by_cache_key(
-            self._db, "Drama", exploding_create_hook
-        )
+        Genre._cache = {"Drama": drama}
+        drama2, is_new = Genre.by_cache_key(self._db, "Drama", exploding_create_hook)
 
         # The object was already in the cache, so we just looked it up.
         # No exception.
@@ -191,9 +191,7 @@ class TestGenre(DatabaseTest):
         assert False == nonfiction.default_fiction
 
         # Create a previously unknown genre.
-        genre, ignore = Genre.lookup(
-            self._db, "Some Weird Genre", autocreate=True
-        )
+        genre, ignore = Genre.lookup(self._db, "Some Weird Genre", autocreate=True)
 
         # We don't know its default fiction status.
         assert None == genre.default_fiction

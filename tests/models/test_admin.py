@@ -14,7 +14,7 @@ class TestAdmin(DatabaseTest):
 
     def test_password_hashed(self):
         pytest.raises(NotImplementedError, lambda: self.admin.password)
-        assert self.admin.password_hashed.startswith('$2a$')
+        assert self.admin.password_hashed.startswith("$2a$")
 
     def test_with_password(self):
         self._db.delete(self.admin)
@@ -123,8 +123,8 @@ class TestAdmin(DatabaseTest):
         c2.libraries += [self._default_library]
 
         # The admin has no roles yet.
-        assert False == self.admin.can_see_collection(c1);
-        assert False == self.admin.can_see_collection(c2);
+        assert False == self.admin.can_see_collection(c1)
+        assert False == self.admin.can_see_collection(c2)
 
         self.admin.add_role(AdminRole.SYSTEM_ADMIN)
         assert True == self.admin.can_see_collection(c1)
@@ -132,24 +132,24 @@ class TestAdmin(DatabaseTest):
 
         self.admin.remove_role(AdminRole.SYSTEM_ADMIN)
         self.admin.add_role(AdminRole.SITEWIDE_LIBRARY_MANAGER)
-        assert False == self.admin.can_see_collection(c1);
-        assert True == self.admin.can_see_collection(c2);
+        assert False == self.admin.can_see_collection(c1)
+        assert True == self.admin.can_see_collection(c2)
 
         self.admin.remove_role(AdminRole.SITEWIDE_LIBRARY_MANAGER)
         self.admin.add_role(AdminRole.SITEWIDE_LIBRARIAN)
-        assert False == self.admin.can_see_collection(c1);
-        assert True == self.admin.can_see_collection(c2);
+        assert False == self.admin.can_see_collection(c1)
+        assert True == self.admin.can_see_collection(c2)
 
         self.admin.remove_role(AdminRole.SITEWIDE_LIBRARIAN)
         self.admin.add_role(AdminRole.LIBRARY_MANAGER, self._default_library)
-        assert False == self.admin.can_see_collection(c1);
-        assert True == self.admin.can_see_collection(c2);
+        assert False == self.admin.can_see_collection(c1)
+        assert True == self.admin.can_see_collection(c2)
 
         self.admin.remove_role(AdminRole.LIBRARY_MANAGER, self._default_library)
         self.admin.add_role(AdminRole.LIBRARIAN, self._default_library)
-        assert False == self.admin.can_see_collection(c1);
-        assert True == self.admin.can_see_collection(c2);
+        assert False == self.admin.can_see_collection(c1)
+        assert True == self.admin.can_see_collection(c2)
 
         self.admin.remove_role(AdminRole.LIBRARIAN, self._default_library)
-        assert False == self.admin.can_see_collection(c1);
-        assert False == self.admin.can_see_collection(c2);
+        assert False == self.admin.can_see_collection(c1)
+        assert False == self.admin.can_see_collection(c2)

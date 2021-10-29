@@ -4,7 +4,6 @@ from ..testing import DatabaseTest
 
 
 class TestFacetConfig(DatabaseTest):
-
     def test_from_library(self):
         library = self._default_library
         order_by = Facets.ORDER_FACET_GROUP_NAME
@@ -15,10 +14,8 @@ class TestFacetConfig(DatabaseTest):
         config = FacetConfig.from_library(library)
         assert Facets.ORDER_RANDOM not in config.enabled_facets(order_by)
         for group in list(Facets.DEFAULT_FACET.keys()):
-            assert (config.enabled_facets(group) ==
-                library.enabled_facets(group))
-            assert (config.default_facet(group) ==
-                library.default_facet(group))
+            assert config.enabled_facets(group) == library.enabled_facets(group)
+            assert config.default_facet(group) == library.default_facet(group)
 
         # If you then modify the FacetConfig, it deviates from what
         # the Library would do.

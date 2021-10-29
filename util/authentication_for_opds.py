@@ -1,5 +1,3 @@
-
-
 class OPDSAuthenticationFlow(object):
     """An object that can be represented as an Authentication Flow
     in an Authentication For OPDS document.
@@ -12,11 +10,12 @@ class OPDSAuthenticationFlow(object):
         `authentication` list of an Authentication For OPDS document.
         """
         data = self._authentication_flow_document(_db)
-        if not data.get('type'):
-            data['type'] = self.FLOW_TYPE
-        if not data.get('type'):
+        if not data.get("type"):
+            data["type"] = self.FLOW_TYPE
+        if not data.get("type"):
             raise ValueError(
-                "Authentication flow document for %r does not include required field 'type'" % self
+                "Authentication flow document for %r does not include required field 'type'"
+                % self
             )
         return data
 
@@ -56,36 +55,33 @@ class AuthenticationForOPDSDocument(object):
         :param _db: Database connection or other argument to pass into
             OPDSAuthenticationFlow.to_dict().
         """
-        for key, value in (('id', self.id), ('title', self.title)):
+        for key, value in (("id", self.id), ("title", self.title)):
             if not value:
                 raise ValueError(
                     "'%s' is required in an Authentication For OPDS document." % key
                 )
 
         for key, value in [
-            ('authentication_flows', self.authentication_flows),
-            ('links', self.links)
+            ("authentication_flows", self.authentication_flows),
+            ("links", self.links),
         ]:
             if not isinstance(value, list):
                 raise ValueError("'%s' must be a list." % key)
 
         document = dict(id=self.id, title=self.title)
-        flow_documents = document.setdefault('authentication', [])
+        flow_documents = document.setdefault("authentication", [])
         for flow in self.authentication_flows:
             flow_documents.append(flow.authentication_flow_document(_db))
         if self.links:
-            doc_links = document.setdefault('links', [])
+            doc_links = document.setdefault("links", [])
             for link in self.links:
                 if not isinstance(link, dict):
-                    raise ValueError(
-                        "Link %r is not a dictionary" % link
-                    )
-                for required_field in 'rel', 'href':
+                    raise ValueError("Link %r is not a dictionary" % link)
+                for required_field in "rel", "href":
                     if not link.get(required_field):
                         raise ValueError(
-                            "Link %r does not define required field '%s'" % (
-                                link, required_field
-                            )
+                            "Link %r does not define required field '%s'"
+                            % (link, required_field)
                         )
                 doc_links.append(link)
         return document

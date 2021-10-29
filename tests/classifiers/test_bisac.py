@@ -17,7 +17,6 @@ from ...classifier.bisac import (
 
 
 class TestMatchingRule(object):
-
     def test_registered_object_returned_on_match(self):
         o = object()
         rule = MatchingRule(o, "Fiction")
@@ -26,18 +25,16 @@ class TestMatchingRule(object):
 
         # You can't create a MatchingRule that returns None on
         # match, since that's the value returned on non-match.
-        pytest.raises(
-            ValueError, MatchingRule, None, "Fiction"
-        )
+        pytest.raises(ValueError, MatchingRule, None, "Fiction")
 
     def test_string_match(self):
-        rule = MatchingRule(True, 'Fiction')
+        rule = MatchingRule(True, "Fiction")
         assert True == rule.match("fiction", "westerns")
         assert None == rule.match("nonfiction", "westerns")
         assert None == rule.match("all books", "fiction")
 
     def test_regular_expression_match(self):
-        rule = MatchingRule(True, RE('F.*O'))
+        rule = MatchingRule(True, RE("F.*O"))
         assert True == rule.match("food")
         assert True == rule.match("flapjacks and oatmeal")
         assert None == rule.match("good", "food")
@@ -83,8 +80,10 @@ class TestMatchingRule(object):
 
     def test_anything_match(self):
         # 'anything' can go up front.
-        rule = MatchingRule(True, anything, 'Penguins')
-        assert True == rule.match("juvenile fiction", "science fiction", "antarctica", "animals", "penguins")
+        rule = MatchingRule(True, anything, "Penguins")
+        assert True == rule.match(
+            "juvenile fiction", "science fiction", "antarctica", "animals", "penguins"
+        )
         assert True == rule.match("fiction", "penguins")
         assert True == rule.match("nonfiction", "penguins")
         assert True == rule.match("penguins")
@@ -92,21 +91,25 @@ class TestMatchingRule(object):
 
         # 'anything' can go in the middle, even after another special
         # match rule.
-        rule = MatchingRule(True, fiction, anything, 'Penguins')
-        assert True == rule.match("juvenile fiction", "science fiction", "antarctica", "animals", "penguins")
+        rule = MatchingRule(True, fiction, anything, "Penguins")
+        assert True == rule.match(
+            "juvenile fiction", "science fiction", "antarctica", "animals", "penguins"
+        )
         assert True == rule.match("fiction", "penguins")
         assert None == rule.match("fiction", "geese")
 
         # It's redundant, but 'anything' can go last.
-        rule = MatchingRule(True, anything, 'Penguins', anything)
-        assert True == rule.match("juvenile fiction", "science fiction", "antarctica", "animals", "penguins")
+        rule = MatchingRule(True, anything, "Penguins", anything)
+        assert True == rule.match(
+            "juvenile fiction", "science fiction", "antarctica", "animals", "penguins"
+        )
         assert True == rule.match("fiction", "penguins", "more penguins")
         assert True == rule.match("penguins")
         assert None == rule.match("geese")
 
     def test_something_match(self):
         # 'something' can go anywhere.
-        rule = MatchingRule(True, something, 'Penguins', something, something)
+        rule = MatchingRule(True, something, "Penguins", something, something)
 
         assert True == rule.match("juvenile fiction", "penguins", "are", "great")
         assert True == rule.match("penguins", "penguins", "i said", "penguins")
@@ -124,10 +127,14 @@ class MockSubject(object):
 
 
 class TestBISACClassifier(object):
-
     def _subject(self, identifier, name):
         subject = MockSubject(identifier, name)
-        subject.genre, subject.audience, subject.target_age, subject.fiction = BISACClassifier.classify(subject)
+        (
+            subject.genre,
+            subject.audience,
+            subject.target_age,
+            subject.fiction,
+        ) = BISACClassifier.classify(subject)
         return subject
 
     def genre_is(self, name, expect):
@@ -148,15 +155,11 @@ class TestBISACClassifier(object):
             subjects.append(self._subject(identifier, name))
         for i in BISACClassifier.FICTION:
             if i.caught == []:
-                raise Exception(
-                    "Fiction rule %s didn't catch anything!" % i.ruleset
-                )
+                raise Exception("Fiction rule %s didn't catch anything!" % i.ruleset)
 
         for i in BISACClassifier.GENRE:
             if i.caught == []:
-                raise Exception(
-                    "Genre rule %s didn't catch anything!" % i.ruleset
-                )
+                raise Exception("Genre rule %s didn't catch anything!" % i.ruleset)
 
         need_fiction = []
         need_audience = []
@@ -169,8 +172,9 @@ class TestBISACClassifier(object):
         # We determined fiction/nonfiction status for every BISAC
         # subject except for humor, drama, and poetry.
         for subject in need_fiction:
-            assert any(subject.name.lower().startswith(x)
-                       for x in ['humor', 'drama', 'poetry'])
+            assert any(
+                subject.name.lower().startswith(x) for x in ["humor", "drama", "poetry"]
+            )
 
         # We determined the target audience for every BISAC subject.
         assert [] == need_audience
@@ -201,16 +205,24 @@ class TestBISACClassifier(object):
         genre_is("Fiction / African American / Urban", "Urban Fiction")
         genre_is("Fiction / Urban", None)
         genre_is("History / Native American", "United States History")
-        genre_is("History / Modern / 17th Century", "Renaissance & Early Modern History")
+        genre_is(
+            "History / Modern / 17th Century", "Renaissance & Early Modern History"
+        )
         genre_is("Biography & Autobiography / Composers & Musicians", "Music"),
-        genre_is("Biography & Autobiography / Entertainment & Performing Arts", "Entertainment"),
+        genre_is(
+            "Biography & Autobiography / Entertainment & Performing Arts",
+            "Entertainment",
+        ),
         genre_is("Fiction / Christian", "Religious Fiction"),
         genre_is("Juvenile Nonfiction / Science & Nature / Fossils", "Nature")
         genre_is("Juvenile Nonfiction / Science & Nature / Physics", "Science")
         genre_is("Juvenile Nonfiction / Science & Nature / General", "Science")
         genre_is("Juvenile Fiction / Social Issues / General", "Life Strategies")
         genre_is("Juvenile Nonfiction / Social Issues / Pregnancy", "Life Strategies")
-        genre_is("Juvenile Nonfiction / Religious / Christian / Social Issues", "Christianity")
+        genre_is(
+            "Juvenile Nonfiction / Religious / Christian / Social Issues",
+            "Christianity",
+        )
 
         genre_is("Young Adult Fiction / Zombies", "Horror")
         genre_is("Young Adult Fiction / Superheroes", "Suspense/Thriller")
@@ -223,9 +235,7 @@ class TestBISACClassifier(object):
         # Grandfathered in from an older test to validate that the new
         # BISAC algorithm gives the same results as the old one.
         genre_is("JUVENILE FICTION / Dystopian", "Dystopian SF")
-        genre_is("JUVENILE FICTION / Stories in Verse (see also Poetry)",
-                 "Poetry")
-
+        genre_is("JUVENILE FICTION / Stories in Verse (see also Poetry)", "Poetry")
 
     def test_deprecated_bisac_terms(self):
         """These BISAC terms have been deprecated. We classify them
@@ -236,7 +246,7 @@ class TestBISACClassifier(object):
         self.genre_is("Technology / Fire", "Technology")
         self.genre_is(
             "Young Adult Nonfiction / Social Situations / Junior Prom",
-            "Life Strategies"
+            "Life Strategies",
         )
 
     def test_non_bisac_classified_as_keywords(self):
@@ -280,9 +290,7 @@ class TestBISACClassifier(object):
         fiction_is("YOUNG ADULT FICTION / Lifestyles / Country Life", True)
         fiction_is("HISTORY / General", False)
 
-
     def test_audience_spot_checks(self):
-
         def audience_is(name, expect):
             subject = self._subject("", name)
             assert expect == subject.audience
@@ -304,23 +312,18 @@ class TestBISACClassifier(object):
         audience_is("YOUNG ADULT FICTION / Action & Adventure / General", ya)
 
     def test_target_age_spot_checks(self):
-
         def target_age_is(name, expect):
             subject = self._subject("", name)
             assert expect == subject.target_age
 
         # These are the only BISAC classifications with implied target
         # ages.
-        for check in ('Fiction', 'Nonfiction'):
-            target_age_is("Juvenile %s / Readers / Beginner" % check,
-                          (0,4))
-            target_age_is("Juvenile %s / Readers / Intermediate" % check,
-                          (5,7))
-            target_age_is("Juvenile %s / Readers / Chapter Books" % check,
-                          (8,13))
+        for check in ("Fiction", "Nonfiction"):
+            target_age_is("Juvenile %s / Readers / Beginner" % check, (0, 4))
+            target_age_is("Juvenile %s / Readers / Intermediate" % check, (5, 7))
+            target_age_is("Juvenile %s / Readers / Chapter Books" % check, (8, 13))
             target_age_is(
-                "Juvenile %s / Religious / Christian / Early Readers" % check,
-                (5,7)
+                "Juvenile %s / Religious / Christian / Early Readers" % check, (5, 7)
             )
 
         # In all other cases, the classifier will fall back to the
@@ -328,8 +331,7 @@ class TestBISACClassifier(object):
         target_age_is("Fiction / Science Fiction / Erotica", (18, None))
         target_age_is("Fiction / Science Fiction", (18, None))
         target_age_is("Juvenile Fiction / Science Fiction", (None, None))
-        target_age_is("Young Adult Fiction / Science Fiction / General",
-                      (14, 17))
+        target_age_is("Young Adult Fiction / Science Fiction / General", (14, 17))
 
     def test_feedbooks_bisac(self):
         """Feedbooks uses a system based on BISAC but with different
@@ -355,25 +357,36 @@ class TestBISACClassifier(object):
         # the canonical name is also returned. This will override
         # any other name associated with the subject for classification
         # purposes.
-        assert (("FIC015000", "Fiction / Horror") ==
-            BISACClassifier.scrub_identifier("FBFIC015000"))
+        assert ("FIC015000", "Fiction / Horror") == BISACClassifier.scrub_identifier(
+            "FBFIC015000"
+        )
 
     def test_scrub_name(self):
         """Sometimes a data provider sends BISAC names that contain extra or
         nonstandard characters. We store the data as it was provided to us,
         but when it's time to classify things, we normalize it.
         """
+
         def scrubbed(before, after):
             assert after == BISACClassifier.scrub_name(before)
 
-        scrubbed("ART/Collections  Catalogs  Exhibitions/",
-                 ["art", "collections, catalogs, exhibitions"])
-        scrubbed("ARCHITECTURE|History|Contemporary|",
-                 ["architecture", "history", "contemporary"])
-        scrubbed("BIOGRAPHY & AUTOBIOGRAPHY / Editors, Journalists, Publishers",
-                 ["biography & autobiography", "editors, journalists, publishers"])
-        scrubbed("EDUCATION/Teaching Methods & Materials/Arts & Humanities */",
-                 ["education", "teaching methods & materials",
-                  "arts & humanities"])
-        scrubbed("JUVENILE FICTION / Family / General (see also headings under Social Issues)",
-                 ["juvenile fiction", "family", "general"])
+        scrubbed(
+            "ART/Collections  Catalogs  Exhibitions/",
+            ["art", "collections, catalogs, exhibitions"],
+        )
+        scrubbed(
+            "ARCHITECTURE|History|Contemporary|",
+            ["architecture", "history", "contemporary"],
+        )
+        scrubbed(
+            "BIOGRAPHY & AUTOBIOGRAPHY / Editors, Journalists, Publishers",
+            ["biography & autobiography", "editors, journalists, publishers"],
+        )
+        scrubbed(
+            "EDUCATION/Teaching Methods & Materials/Arts & Humanities */",
+            ["education", "teaching methods & materials", "arts & humanities"],
+        )
+        scrubbed(
+            "JUVENILE FICTION / Family / General (see also headings under Social Issues)",
+            ["juvenile fiction", "family", "general"],
+        )

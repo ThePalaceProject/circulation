@@ -4,27 +4,127 @@ from ...util.datetime_helpers import datetime_utc
 
 
 class TestMeasurement(DatabaseTest):
-
     def setup_method(self):
         super(TestMeasurement, self).setup_method()
         self.SOURCE_NAME = "Test Data Source"
 
         # Create a test DataSource
         obj, new = get_one_or_create(
-                self._db, DataSource,
-                name=self.SOURCE_NAME,
+            self._db,
+            DataSource,
+            name=self.SOURCE_NAME,
         )
         self.source = obj
 
         Measurement.PERCENTILE_SCALES[Measurement.POPULARITY][self.SOURCE_NAME] = [
-            1, 1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 15, 16, 18, 19, 20, 21, 22, 24, 25, 26, 28, 30, 31, 33, 35, 37, 39, 41, 43, 46, 48, 51, 53, 56, 59, 63, 66, 70, 74, 78, 82, 87, 92, 97, 102, 108, 115, 121, 128, 135, 142, 150, 159, 168, 179, 190, 202, 216, 230, 245, 260, 277, 297, 319, 346, 372, 402, 436, 478, 521, 575, 632, 702, 777, 861, 965, 1100, 1248, 1428, 1665, 2020, 2560, 3535, 5805]
+            1,
+            1,
+            1,
+            2,
+            2,
+            2,
+            3,
+            3,
+            4,
+            4,
+            5,
+            5,
+            6,
+            6,
+            7,
+            7,
+            8,
+            9,
+            9,
+            10,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            15,
+            16,
+            18,
+            19,
+            20,
+            21,
+            22,
+            24,
+            25,
+            26,
+            28,
+            30,
+            31,
+            33,
+            35,
+            37,
+            39,
+            41,
+            43,
+            46,
+            48,
+            51,
+            53,
+            56,
+            59,
+            63,
+            66,
+            70,
+            74,
+            78,
+            82,
+            87,
+            92,
+            97,
+            102,
+            108,
+            115,
+            121,
+            128,
+            135,
+            142,
+            150,
+            159,
+            168,
+            179,
+            190,
+            202,
+            216,
+            230,
+            245,
+            260,
+            277,
+            297,
+            319,
+            346,
+            372,
+            402,
+            436,
+            478,
+            521,
+            575,
+            632,
+            702,
+            777,
+            861,
+            965,
+            1100,
+            1248,
+            1428,
+            1665,
+            2020,
+            2560,
+            3535,
+            5805,
+        ]
         Measurement.RATING_SCALES[self.SOURCE_NAME] = [1, 10]
 
     def _measurement(self, quantity, value, source, weight):
         source = source or self.source
         return Measurement(
-            data_source=source, quantity_measured=quantity,
-            value=value, weight=weight)
+            data_source=source, quantity_measured=quantity, value=value, weight=weight
+        )
 
     def _popularity(self, value, source=None, weight=1):
         return self._measurement(Measurement.POPULARITY, value, source, weight)
@@ -51,19 +151,16 @@ class TestMeasurement(DatabaseTest):
         assert True == m2.is_most_recent
         assert True == m3.is_most_recent
 
-
     def test_can_insert_measurement_after_the_fact(self):
 
         old = datetime_utc(2011, 1, 1)
         new = datetime_utc(2012, 1, 1)
 
         wi = self._identifier()
-        m1 = wi.add_measurement(self.source, Measurement.DOWNLOADS, 10,
-                                taken_at=new)
+        m1 = wi.add_measurement(self.source, Measurement.DOWNLOADS, 10, taken_at=new)
         assert True == m1.is_most_recent
 
-        m2 = wi.add_measurement(self.source, Measurement.DOWNLOADS, 5,
-                                taken_at=old)
+        m2 = wi.add_measurement(self.source, Measurement.DOWNLOADS, 5, taken_at=old)
         assert True == m1.is_most_recent
 
     def test_normalized_popularity(self):
@@ -114,17 +211,14 @@ class TestMeasurement(DatabaseTest):
 
         # Here's a slightly less good book.
         p = self._rating(9)
-        assert 8.0/9 == p.normalized_value
+        assert 8.0 / 9 == p.normalized_value
 
         # Here's a very bad book
         p = self._rating(1)
         assert 0 == p.normalized_value
 
     def test_neglected_source_cannot_be_normalized(self):
-        obj, new = get_one_or_create(
-                self._db, DataSource,
-                name="Neglected source"
-        )
+        obj, new = get_one_or_create(self._db, DataSource, name="Neglected source")
         neglected_source = obj
         p = self._popularity(100, neglected_source)
         assert None == p.normalized_value
@@ -139,22 +233,20 @@ class TestMeasurement(DatabaseTest):
         pop = popularity.normalized_value
         rat = rating.normalized_value
         assert 0.5 == pop
-        assert 1.0/3 == rat
+        assert 1.0 / 3 == rat
         l = [popularity, rating, irrelevant]
         quality = Measurement.overall_quality(l)
-        assert (0.7*rat)+(0.3*pop) == quality
+        assert (0.7 * rat) + (0.3 * pop) == quality
 
         # Mess with the weights.
-        assert (0.5*rat)+(0.5*pop) == Measurement.overall_quality(l, 0.5, 0.5)
+        assert (0.5 * rat) + (0.5 * pop) == Measurement.overall_quality(l, 0.5, 0.5)
 
         # Adding a non-popularity measurement that is _equated_ to
         # popularity via a percentile scale modifies the
         # normalized value -- we don't care exactly how, only that
         # it's taken into account.
         oclc = DataSource.lookup(self._db, DataSource.OCLC)
-        popularityish = self._measurement(
-            Measurement.HOLDINGS, 400, oclc, 10
-        )
+        popularityish = self._measurement(Measurement.HOLDINGS, 400, oclc, 10)
         new_quality = Measurement.overall_quality(l + [popularityish])
         assert quality != new_quality
 
@@ -179,7 +271,7 @@ class TestMeasurement(DatabaseTest):
         # We would expect the final quality score to be 1/2 of the quality
         # score we got from the metadata wrangler, and 1/2 of the normalized
         # value of the 4-star rating.
-        expect = (pop.normalized_value / 2) + (0.5/2)
+        expect = (pop.normalized_value / 2) + (0.5 / 2)
         assert expect == Measurement.overall_quality([pop, qual], 0.5, 0.5)
 
     def test_overall_quality_with_popularity_quality_and_rating(self):
@@ -190,17 +282,17 @@ class TestMeasurement(DatabaseTest):
 
         # The popularity and rating are scaled appropriately and
         # added together.
-        expect_1 = (pop.normalized_value * 0.75) + (rat.normalized_value*0.25)
+        expect_1 = (pop.normalized_value * 0.75) + (rat.normalized_value * 0.25)
 
         # Then the whole thing is divided in half and added to half of the
         # quality score
-        expect_total = (expect_1/2 + (quality_score/2))
+        expect_total = expect_1 / 2 + (quality_score / 2)
         assert expect_total == Measurement.overall_quality([pop, rat, qual], 0.75, 0.25)
 
     def test_overall_quality_takes_weights_into_account(self):
         rating1 = self._rating(10, weight=10)
         rating2 = self._rating(1, weight=1)
-        assert 0.91 == round(Measurement.overall_quality([rating1, rating2]),2)
+        assert 0.91 == round(Measurement.overall_quality([rating1, rating2]), 2)
 
     def test_overall_quality_is_zero_if_no_relevant_measurements(self):
         irrelevant = self._measurement("Some other quantity", 42, self.source, 1)
@@ -212,17 +304,18 @@ class TestMeasurement(DatabaseTest):
         # This book used to be incredibly popular.
         identifier = w.presentation_edition.primary_identifier
         old_popularity = identifier.add_measurement(
-            self.source, Measurement.POPULARITY, 6000)
+            self.source, Measurement.POPULARITY, 6000
+        )
 
         # Now it's just so-so.
-        popularity = identifier.add_measurement(
-            self.source, Measurement.POPULARITY, 59)
+        popularity = identifier.add_measurement(self.source, Measurement.POPULARITY, 59)
 
         # This measurement is irrelevant because "Test Data Source"
         # doesn't have a mapping from number of editions to a
         # percentile range.
         irrelevant = identifier.add_measurement(
-            self.source, Measurement.PUBLISHED_EDITIONS, 42)
+            self.source, Measurement.PUBLISHED_EDITIONS, 42
+        )
 
         # If we calculate the quality based solely on the primary
         # identifier, only the most recent popularity is considered,

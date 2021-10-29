@@ -14,7 +14,7 @@ class SimplifiedGenreClassifier(Classifier):
         if not identifier:
             return identifier
         if identifier.startswith(cls.SIMPLIFIED_GENRE):
-            identifier = identifier[len(cls.SIMPLIFIED_GENRE):]
+            identifier = identifier[len(cls.SIMPLIFIED_GENRE) :]
             identifier = unquote(identifier)
         return Lowercased(identifier)
 
@@ -46,7 +46,6 @@ class SimplifiedGenreClassifier(Classifier):
 
 
 class SimplifiedFictionClassifier(Classifier):
-
     @classmethod
     def scrub_identifier(cls, identifier):
         # If the identifier is a URI identifying a Simplified genre,
@@ -54,7 +53,7 @@ class SimplifiedFictionClassifier(Classifier):
         if not identifier:
             return identifier
         if identifier.startswith(cls.SIMPLIFIED_FICTION_STATUS):
-            identifier = identifier[len(cls.SIMPLIFIED_FICTION_STATUS):]
+            identifier = identifier[len(cls.SIMPLIFIED_FICTION_STATUS) :]
             identifier = unquote(identifier)
         return Lowercased(identifier)
 
@@ -67,5 +66,8 @@ class SimplifiedFictionClassifier(Classifier):
         else:
             return None
 
+
 Classifier.classifiers[Classifier.SIMPLIFIED_GENRE] = SimplifiedGenreClassifier
-Classifier.classifiers[Classifier.SIMPLIFIED_FICTION_STATUS] = SimplifiedFictionClassifier
+Classifier.classifiers[
+    Classifier.SIMPLIFIED_FICTION_STATUS
+] = SimplifiedFictionClassifier

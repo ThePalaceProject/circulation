@@ -20,7 +20,7 @@ class DataSource(Base, HasFullTableCache, DataSourceConstants):
 
     """A source for information about books, and possibly the books themselves."""
 
-    __tablename__ = 'datasources'
+    __tablename__ = "datasources"
     id = Column(Integer, primary_key=True)
     name = Column(String, unique=True, index=True)
     offers_licenses = Column(Boolean, default=False)
@@ -29,9 +29,15 @@ class DataSource(Base, HasFullTableCache, DataSourceConstants):
 
     # One DataSource can have one IntegrationClient.
     integration_client_id = Column(
-        Integer, ForeignKey('integrationclients.id'),
-        unique=True, index=True, nullable=True)
-    integration_client = relationship("IntegrationClient", backref=backref("data_source", uselist=False))
+        Integer,
+        ForeignKey("integrationclients.id"),
+        unique=True,
+        index=True,
+        nullable=True,
+    )
+    integration_client = relationship(
+        "IntegrationClient", backref=backref("data_source", uselist=False)
+    )
 
     # One DataSource can generate many Editions.
     editions = relationship("Edition", backref="data_source")
@@ -44,7 +50,8 @@ class DataSource(Base, HasFullTableCache, DataSourceConstants):
 
     # One DataSource can grant access to many LicensePools.
     license_pools = relationship(
-        "LicensePool", backref=backref("data_source", lazy='joined'))
+        "LicensePool", backref=backref("data_source", lazy="joined")
+    )
 
     # One DataSource can provide many Hyperlinks.
     links = relationship("Hyperlink", backref="data_source")
@@ -66,8 +73,9 @@ class DataSource(Base, HasFullTableCache, DataSourceConstants):
 
     # One DataSource can have provide many LicensePoolDeliveryMechanisms.
     delivery_mechanisms = relationship(
-        "LicensePoolDeliveryMechanism", backref="data_source",
-        foreign_keys=lambda: [LicensePoolDeliveryMechanism.data_source_id]
+        "LicensePoolDeliveryMechanism",
+        backref="data_source",
+        foreign_keys=lambda: [LicensePoolDeliveryMechanism.data_source_id],
     )
 
     _cache = HasFullTableCache.RESET
@@ -80,8 +88,14 @@ class DataSource(Base, HasFullTableCache, DataSourceConstants):
         return self.name
 
     @classmethod
-    def lookup(cls, _db, name, autocreate=False, offers_licenses=False,
-               primary_identifier_type=None):
+    def lookup(
+        cls,
+        _db,
+        name,
+        autocreate=False,
+        offers_licenses=False,
+        primary_identifier_type=None,
+    ):
         # Turn a deprecated name (e.g. "3M" into the current name
         # (e.g. "Bibliotheca").
         name = cls.DEPRECATED_NAMES.get(name, name)
@@ -92,11 +106,13 @@ class DataSource(Base, HasFullTableCache, DataSourceConstants):
             """
             if autocreate:
                 data_source, is_new = get_one_or_create(
-                    _db, DataSource, name=name,
+                    _db,
+                    DataSource,
+                    name=name,
                     create_method_kwargs=dict(
                         offers_licenses=offers_licenses,
-                        primary_identifier_type=primary_identifier_type
-                    )
+                        primary_identifier_type=primary_identifier_type,
+                    ),
                 )
             else:
                 data_source = get_one(_db, DataSource, name=name)
@@ -117,7 +133,7 @@ class DataSource(Base, HasFullTableCache, DataSourceConstants):
         """
         if not uri.startswith(cls.URI_PREFIX):
             return None
-        name = uri[len(cls.URI_PREFIX):]
+        name = uri[len(cls.URI_PREFIX) :]
         return unquote(name)
 
     @classmethod
@@ -147,8 +163,11 @@ class DataSource(Base, HasFullTableCache, DataSourceConstants):
             type = identifier
         else:
             type = identifier.type
-        q =_db.query(DataSource).filter(DataSource.offers_licenses==True).filter(
-            DataSource.primary_identifier_type==type)
+        q = (
+            _db.query(DataSource)
+            .filter(DataSource.offers_licenses == True)
+            .filter(DataSource.primary_identifier_type == type)
+        )
         return q
 
     @classmethod
@@ -161,7 +180,7 @@ class DataSource(Base, HasFullTableCache, DataSourceConstants):
         else:
             type = identifier.type
 
-        if not hasattr(cls, 'metadata_lookups_by_identifier_type'):
+        if not hasattr(cls, "metadata_lookups_by_identifier_type"):
             # This should only happen during testing.
             list(DataSource.well_known_sources(_db))
 
@@ -170,51 +189,88 @@ class DataSource(Base, HasFullTableCache, DataSourceConstants):
 
     @classmethod
     def well_known_sources(cls, _db):
-        """Make sure all the well-known sources exist in the database.
-        """
+        """Make sure all the well-known sources exist in the database."""
 
         cls.metadata_lookups_by_identifier_type = defaultdict(list)
 
-        for (name, offers_licenses, offers_metadata_lookup, primary_identifier_type, refresh_rate) in (
-                (cls.GUTENBERG, True, False, IdentifierConstants.GUTENBERG_ID, None),
-                (cls.RB_DIGITAL, True, True, IdentifierConstants.RB_DIGITAL_ID, None),
-                (cls.OVERDRIVE, True, False, IdentifierConstants.OVERDRIVE_ID, 0),
-                (cls.BIBLIOTHECA, True, False, IdentifierConstants.BIBLIOTHECA_ID, 60*60*6),
-                (cls.ODILO, True, False, IdentifierConstants.ODILO_ID, 0),
-                (cls.AXIS_360, True, False, IdentifierConstants.AXIS_360_ID, 0),
-                (cls.OCLC, False, False, None, None),
-                (cls.OCLC_LINKED_DATA, False, False, None, None),
-                (cls.AMAZON, False, False, None, None),
-                (cls.OPEN_LIBRARY, False, False, IdentifierConstants.OPEN_LIBRARY_ID, None),
-                (cls.GUTENBERG_COVER_GENERATOR, False, False, IdentifierConstants.GUTENBERG_ID, None),
-                (cls.GUTENBERG_EPUB_GENERATOR, False, False, IdentifierConstants.GUTENBERG_ID, None),
-                (cls.WEB, True, False, IdentifierConstants.URI, None),
-                (cls.VIAF, False, False, None, None),
-                (cls.CONTENT_CAFE, True, True, IdentifierConstants.ISBN, None),
-                (cls.MANUAL, False, False, None, None),
-                (cls.NYT, False, False, IdentifierConstants.ISBN, None),
-                (cls.LIBRARY_STAFF, False, False, None, None),
-                (cls.METADATA_WRANGLER, False, False, None, None),
-                (cls.PROJECT_GITENBERG, True, False, IdentifierConstants.GUTENBERG_ID, None),
-                (cls.STANDARD_EBOOKS, True, False, IdentifierConstants.URI, None),
-                (cls.UNGLUE_IT, True, False, IdentifierConstants.URI, None),
-                (cls.ADOBE, False, False, None, None),
-                (cls.PLYMPTON, True, False, IdentifierConstants.ISBN, None),
-                (cls.ELIB, True, False, IdentifierConstants.ELIB_ID, None),
-                (cls.OA_CONTENT_SERVER, True, False, None, None),
-                (cls.NOVELIST, False, True, IdentifierConstants.NOVELIST_ID, None),
-                (cls.PRESENTATION_EDITION, False, False, None, None),
-                (cls.INTERNAL_PROCESSING, False, False, None, None),
-                (cls.FEEDBOOKS, True, False, IdentifierConstants.URI, None),
-                (cls.BIBBLIO, False, True, IdentifierConstants.BIBBLIO_CONTENT_ITEM_ID, None),
-                (cls.ENKI, True, False, IdentifierConstants.ENKI_ID, None),
-                (cls.PROQUEST, True, False, IdentifierConstants.PROQUEST_ID, None)
+        for (
+            name,
+            offers_licenses,
+            offers_metadata_lookup,
+            primary_identifier_type,
+            refresh_rate,
+        ) in (
+            (cls.GUTENBERG, True, False, IdentifierConstants.GUTENBERG_ID, None),
+            (cls.RB_DIGITAL, True, True, IdentifierConstants.RB_DIGITAL_ID, None),
+            (cls.OVERDRIVE, True, False, IdentifierConstants.OVERDRIVE_ID, 0),
+            (
+                cls.BIBLIOTHECA,
+                True,
+                False,
+                IdentifierConstants.BIBLIOTHECA_ID,
+                60 * 60 * 6,
+            ),
+            (cls.ODILO, True, False, IdentifierConstants.ODILO_ID, 0),
+            (cls.AXIS_360, True, False, IdentifierConstants.AXIS_360_ID, 0),
+            (cls.OCLC, False, False, None, None),
+            (cls.OCLC_LINKED_DATA, False, False, None, None),
+            (cls.AMAZON, False, False, None, None),
+            (cls.OPEN_LIBRARY, False, False, IdentifierConstants.OPEN_LIBRARY_ID, None),
+            (
+                cls.GUTENBERG_COVER_GENERATOR,
+                False,
+                False,
+                IdentifierConstants.GUTENBERG_ID,
+                None,
+            ),
+            (
+                cls.GUTENBERG_EPUB_GENERATOR,
+                False,
+                False,
+                IdentifierConstants.GUTENBERG_ID,
+                None,
+            ),
+            (cls.WEB, True, False, IdentifierConstants.URI, None),
+            (cls.VIAF, False, False, None, None),
+            (cls.CONTENT_CAFE, True, True, IdentifierConstants.ISBN, None),
+            (cls.MANUAL, False, False, None, None),
+            (cls.NYT, False, False, IdentifierConstants.ISBN, None),
+            (cls.LIBRARY_STAFF, False, False, None, None),
+            (cls.METADATA_WRANGLER, False, False, None, None),
+            (
+                cls.PROJECT_GITENBERG,
+                True,
+                False,
+                IdentifierConstants.GUTENBERG_ID,
+                None,
+            ),
+            (cls.STANDARD_EBOOKS, True, False, IdentifierConstants.URI, None),
+            (cls.UNGLUE_IT, True, False, IdentifierConstants.URI, None),
+            (cls.ADOBE, False, False, None, None),
+            (cls.PLYMPTON, True, False, IdentifierConstants.ISBN, None),
+            (cls.ELIB, True, False, IdentifierConstants.ELIB_ID, None),
+            (cls.OA_CONTENT_SERVER, True, False, None, None),
+            (cls.NOVELIST, False, True, IdentifierConstants.NOVELIST_ID, None),
+            (cls.PRESENTATION_EDITION, False, False, None, None),
+            (cls.INTERNAL_PROCESSING, False, False, None, None),
+            (cls.FEEDBOOKS, True, False, IdentifierConstants.URI, None),
+            (
+                cls.BIBBLIO,
+                False,
+                True,
+                IdentifierConstants.BIBBLIO_CONTENT_ITEM_ID,
+                None,
+            ),
+            (cls.ENKI, True, False, IdentifierConstants.ENKI_ID, None),
+            (cls.PROQUEST, True, False, IdentifierConstants.PROQUEST_ID, None),
         ):
 
             obj = DataSource.lookup(
-                _db, name, autocreate=True,
+                _db,
+                name,
+                autocreate=True,
                 offers_licenses=offers_licenses,
-                primary_identifier_type = primary_identifier_type
+                primary_identifier_type=primary_identifier_type,
             )
 
             if offers_metadata_lookup:

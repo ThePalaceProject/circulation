@@ -8,14 +8,13 @@ from ...testing import DatabaseTest
 
 
 class TestContributor(DatabaseTest):
-
     def test_marc_code_for_every_role_constant(self):
         """We have determined the MARC Role Code for every role
         that's important enough we gave it a constant in the Contributor
         class.
         """
         for constant, value in list(Contributor.__dict__.items()):
-            if not constant.endswith('_ROLE'):
+            if not constant.endswith("_ROLE"):
                 # Not a constant.
                 continue
             assert value in Contributor.MARC_ROLE_CODES
@@ -50,9 +49,7 @@ class TestContributor(DatabaseTest):
         bob2.lc = "foo"
         self._db.commit()
         assert bob1 != bob2
-        [some_bob], new = Contributor.lookup(
-            self._db, sort_name="Bob", lc="foo"
-        )
+        [some_bob], new = Contributor.lookup(self._db, sort_name="Bob", lc="foo")
         assert False == new
         assert some_bob in (bob1, bob2)
 
@@ -83,10 +80,10 @@ class TestContributor(DatabaseTest):
 
         # Here's Bob.
         [bob], ignore = Contributor.lookup(self._db, sort_name="Jones, Bob")
-        bob.extra['foo'] = 'bar'
-        bob.aliases = ['Bobby']
-        bob.viaf = 'viaf'
-        bob.lc = 'lc'
+        bob.extra["foo"] = "bar"
+        bob.aliases = ["Bobby"]
+        bob.viaf = "viaf"
+        bob.lc = "lc"
         bob.display_name = "Bob Jones"
         bob.family_name = "Bobb"
         bob.wikipedia_name = "Bob_(Person)"
@@ -95,11 +92,13 @@ class TestContributor(DatabaseTest):
         data_source = DataSource.lookup(self._db, DataSource.GUTENBERG)
 
         roberts_book, ignore = Edition.for_foreign_id(
-            self._db, data_source, Identifier.GUTENBERG_ID, "1")
+            self._db, data_source, Identifier.GUTENBERG_ID, "1"
+        )
         roberts_book.add_contributor(robert, Contributor.AUTHOR_ROLE)
 
         bobs_book, ignore = Edition.for_foreign_id(
-            self._db, data_source, Identifier.GUTENBERG_ID, "10")
+            self._db, data_source, Identifier.GUTENBERG_ID, "10"
+        )
         bobs_book.add_contributor(bob, Contributor.AUTHOR_ROLE)
 
         # In a shocking turn of events, it transpires that "Bob" and
@@ -109,11 +108,11 @@ class TestContributor(DatabaseTest):
 
         # 'Bob' is now listed as an alias for Robert, as is Bob's
         # alias.
-        assert ['Jones, Bob', 'Bobby'] == robert.aliases
+        assert ["Jones, Bob", "Bobby"] == robert.aliases
 
         # The extra information associated with Bob is now associated
         # with Robert.
-        assert 'bar' == robert.extra['foo']
+        assert "bar" == robert.extra["foo"]
 
         assert "viaf" == robert.viaf
         assert "lc" == robert.lc
@@ -124,8 +123,9 @@ class TestContributor(DatabaseTest):
 
         # The standalone 'Bob' record has been removed from the database.
         assert (
-            [] ==
-            self._db.query(Contributor).filter(Contributor.sort_name=="Bob").all())
+            []
+            == self._db.query(Contributor).filter(Contributor.sort_name == "Bob").all()
+        )
 
         # Bob's book is now associated with 'Robert', not the standalone
         # 'Bob' record.
@@ -137,10 +137,7 @@ class TestContributor(DatabaseTest):
         bob.merge_into(robert)
         assert "Jones, Bob" == robert.sort_name
 
-
-
-    def _names(self, in_name, out_family, out_display,
-               default_display_name=None):
+    def _names(self, in_name, out_family, out_display, default_display_name=None):
         f, d = Contributor._default_names(in_name, default_display_name)
         assert f == out_family
         assert d == out_display
@@ -148,30 +145,35 @@ class TestContributor(DatabaseTest):
     def test_default_names(self):
 
         # Pass in a default display name and it will always be used.
-        self._names("Jones, Bob", "Jones", "Sally Smith",
-                    default_display_name="Sally Smith")
+        self._names(
+            "Jones, Bob", "Jones", "Sally Smith", default_display_name="Sally Smith"
+        )
 
         # Corporate names are untouched and get no family name.
         self._names("Bob's Books.", None, "Bob's Books.")
         self._names("Bob's Books, Inc.", None, "Bob's Books, Inc.")
         self._names("Little, Brown &amp; Co.", None, "Little, Brown & Co.")
-        self._names("Philadelphia Broad Street Church (Philadelphia, Pa.)",
-                    None, "Philadelphia Broad Street Church")
+        self._names(
+            "Philadelphia Broad Street Church (Philadelphia, Pa.)",
+            None,
+            "Philadelphia Broad Street Church",
+        )
 
         # Dates and other gibberish after a name is removed.
         self._names("Twain, Mark, 1855-1910", "Twain", "Mark Twain")
         self._names("Twain, Mark, ???-1910", "Twain", "Mark Twain")
         self._names("Twain, Mark, circ. 1900", "Twain", "Mark Twain")
         self._names("Twain, Mark, !@#!@", "Twain", "Mark Twain")
-        self._names(
-            "Coolbrith, Ina D. 1842?-1928", "Coolbrith", "Ina D. Coolbrith")
+        self._names("Coolbrith, Ina D. 1842?-1928", "Coolbrith", "Ina D. Coolbrith")
         self._names("Caesar, Julius, 1st cent.", "Caesar", "Julius Caesar")
         self._names("Arrian, 2nd cent.", "Arrian", "Arrian")
         self._names("Hafiz, 14th cent.", "Hafiz", "Hafiz")
         self._names("Hormel, Bob 1950?-", "Hormel", "Bob Hormel")
-        self._names("Holland, Henry 1583-1650? Monumenta sepulchraria Sancti Pauli",
-                    "Holland", "Henry Holland")
-
+        self._names(
+            "Holland, Henry 1583-1650? Monumenta sepulchraria Sancti Pauli",
+            "Holland",
+            "Henry Holland",
+        )
 
         # Suffixes stay on the end, except for "Mrs.", which goes
         # to the front.
@@ -183,7 +185,6 @@ class TestContributor(DatabaseTest):
         # The easy case.
         self._names("Twain, Mark", "Twain", "Mark Twain")
         self._names("Geering, R. G.", "Geering", "R. G. Geering")
-
 
     def test_sort_name(self):
         bob, new = get_one_or_create(self._db, Contributor, sort_name=None)

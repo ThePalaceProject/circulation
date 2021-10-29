@@ -16,7 +16,8 @@ class CirculationEvent(Base):
     We log these so we can measure things like the velocity of
     individual books.
     """
-    __tablename__ = 'circulationevents'
+
+    __tablename__ = "circulationevents"
 
     # Used to explicitly tag an event as happening at an unknown time.
     NO_DATE = object()
@@ -24,8 +25,7 @@ class CirculationEvent(Base):
     id = Column(Integer, primary_key=True)
 
     # One LicensePool can have many circulation events.
-    license_pool_id = Column(
-        Integer, ForeignKey('licensepools.id'), index=True)
+    license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
 
     type = Column(String(32), index=True)
     start = Column(DateTime(timezone=True), index=True)
@@ -36,10 +36,7 @@ class CirculationEvent(Base):
 
     # The Library associated with the event, if it happened in the
     # context of a particular Library and we know which one.
-    library_id = Column(
-        Integer, ForeignKey('libraries.id'),
-        index=True, nullable=True
-    )
+    library_id = Column(Integer, ForeignKey("libraries.id"), index=True, nullable=True)
 
     # The geographic location associated with the event. This string
     # may mean different things for different libraries. It might be a
@@ -55,11 +52,7 @@ class CirculationEvent(Base):
         #
         # TODO: Maybe there should also be an index that takes
         # library_id into account, for per-library event lists.
-        Index(
-            "ix_circulationevents_start_desc_nullslast",
-            start.desc().nullslast()
-        ),
-
+        Index("ix_circulationevents_start_desc_nullslast", start.desc().nullslast()),
         # License pool ID + library ID + type + start must be unique.
         Index(
             "ix_circulationevents_license_pool_library_type_start",
@@ -67,9 +60,8 @@ class CirculationEvent(Base):
             library_id,
             type,
             start,
-            unique=True
+            unique=True,
         ),
-
         # However, library_id may be null. If this is so, then license pool ID
         # + type + start must be unique.
         Index(
@@ -78,7 +70,7 @@ class CirculationEvent(Base):
             type,
             start,
             unique=True,
-            postgresql_where=(library_id==None)
+            postgresql_where=(library_id == None),
         ),
     )
 
@@ -116,13 +108,22 @@ class CirculationEvent(Base):
         OPEN_BOOK,
     ]
 
-
     # The time format used when exporting to JSON.
     TIME_FORMAT = "%Y-%m-%dT%H:%M:%S+00:00"
 
     @classmethod
-    def log(cls, _db, license_pool, event_name, old_value, new_value,
-            start=None, end=None, library=None, location=None):
+    def log(
+        cls,
+        _db,
+        license_pool,
+        event_name,
+        old_value,
+        new_value,
+        start=None,
+        end=None,
+        library=None,
+        location=None,
+    ):
         """Log a CirculationEvent to the database, assuming it
         hasn't already been recorded.
         """
@@ -135,15 +136,19 @@ class CirculationEvent(Base):
         if not end:
             end = start
         event, was_new = get_one_or_create(
-            _db, CirculationEvent, license_pool=license_pool,
-            type=event_name, start=start, library=library,
+            _db,
+            CirculationEvent,
+            license_pool=license_pool,
+            type=event_name,
+            start=start,
+            library=library,
             create_method_kwargs=dict(
                 old_value=old_value,
                 new_value=new_value,
                 delta=delta,
                 end=end,
-                location=location
-            )
+                location=location,
+            ),
         )
         if was_new:
             logging.info("EVENT %s %s=>%s", event_name, old_value, new_value)

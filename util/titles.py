@@ -1,4 +1,3 @@
-
 import re
 
 from fuzzywuzzy import fuzz
@@ -14,7 +13,7 @@ def normalize_title_for_matching(title):
     Run WorkIDCalculator.normalize_title on the name, which will convert to NFKD unicode,
     de-lint special characters, and lowercase.
     """
-    title = WorkIDCalculator.normalize_title(''.join(title))
+    title = WorkIDCalculator.normalize_title("".join(title))
     return title
 
 
@@ -42,22 +41,19 @@ def unfluff_title(title):
     we want to return "Hello World".
     """
     linted_title = title
-    title_fluff = re.compile(r'(.*) (edited by|compiled by|published by|:|;|\(|\[).*', re.UNICODE)
+    title_fluff = re.compile(
+        r"(.*) (edited by|compiled by|published by|:|;|\(|\[).*", re.UNICODE
+    )
     matched_pattern = title_fluff.match(title)
 
     if matched_pattern is not None:
         linted_title = matched_pattern.group(1)
 
     # now strip non-word characters
-    title_fluff = re.compile('[\W_]+')
-    linted_title = title_fluff.sub(' ', linted_title)
+    title_fluff = re.compile("[\W_]+")
+    linted_title = title_fluff.sub(" ", linted_title)
     # and remove double spacing that may result
-    title_fluff = re.compile('[  ]+')
-    linted_title = title_fluff.sub(' ', linted_title).lower().strip()
+    title_fluff = re.compile("[  ]+")
+    linted_title = title_fluff.sub(" ", linted_title).lower().strip()
 
     return linted_title
-
-
-
-
-

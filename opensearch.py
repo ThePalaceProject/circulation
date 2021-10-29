@@ -20,23 +20,23 @@ class OpenSearchDocument(object):
             description = "Search %s" % lane.search_target.display_name
         else:
             description = "Search"
-        d['description'] = description
-        d['tags'] = " ".join(tags)
+        d["description"] = description
+        d["tags"] = " ".join(tags)
         return d
 
     @classmethod
     def url_template(self, base_url):
         """Turn a base URL into an OpenSearch URL template."""
-        if '?' in base_url:
-            query = '&'
+        if "?" in base_url:
+            query = "&"
         else:
-            query = '?'
+            query = "?"
         return base_url + query + "q={searchTerms}"
 
     @classmethod
     def for_lane(cls, lane, base_url):
         info = cls.search_info(lane)
-        info['url_template'] = cls.url_template(base_url)
+        info["url_template"] = cls.url_template(base_url)
         info = cls.escape_entities(info)
         return cls.TEMPLATE % info
 

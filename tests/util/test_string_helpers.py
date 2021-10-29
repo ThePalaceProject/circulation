@@ -22,11 +22,7 @@ class TestUnicodeAwareBase64(object):
         # If UnicodeAwareBase64 is given a string it can't encode in
         # its chosen encoding, an exception is the result.
         shift_jis = UnicodeAwareBase64("shift-jis")
-        pytest.raises(
-            UnicodeEncodeError,
-            shift_jis.b64encode,
-            string
-        )
+        pytest.raises(UnicodeEncodeError, shift_jis.b64encode, string)
 
     def _test_encoder(self, string, base64):
         # Create a binary version of the string in the encoder's
@@ -35,10 +31,10 @@ class TestUnicodeAwareBase64(object):
 
         # Test all supported methods of the base64 API.
         for encode, decode in [
-            ('b64encode', 'b64decode'),
-            ('standard_b64encode', 'standard_b64decode'),
-            ('urlsafe_b64encode', 'urlsafe_b64decode'),
-            ('encodebytes', 'decodebytes')
+            ("b64encode", "b64decode"),
+            ("standard_b64encode", "standard_b64decode"),
+            ("urlsafe_b64encode", "urlsafe_b64decode"),
+            ("encodebytes", "decodebytes"),
         ]:
             encode_method = getattr(base64, encode)
             decode_method = getattr(base64, decode)

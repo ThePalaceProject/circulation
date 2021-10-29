@@ -48,10 +48,10 @@ from .measurement import Measurement
 class WorkGenre(Base):
     """An assignment of a genre to a work."""
 
-    __tablename__ = 'workgenres'
+    __tablename__ = "workgenres"
     id = Column(Integer, primary_key=True)
-    genre_id = Column(Integer, ForeignKey('genres.id'), index=True)
-    work_id = Column(Integer, ForeignKey('works.id'), index=True)
+    genre_id = Column(Integer, ForeignKey("genres.id"), index=True)
+    work_id = Column(Integer, ForeignKey("works.id"), index=True)
     affinity = Column(Float, index=True, default=0)
 
     @classmethod
@@ -61,7 +61,7 @@ class WorkGenre(Base):
         return wg
 
     def __repr__(self):
-        return "%s (%d%%)" % (self.genre.name, self.affinity*100)
+        return "%s (%d%%)" % (self.genre.name, self.affinity * 100)
 
 
 class Work(Base):
@@ -96,53 +96,53 @@ class Work(Base):
         DataSourceConstants.GUTENBERG: 0,
         DataSourceConstants.RB_DIGITAL: 0.4,
         DataSourceConstants.OVERDRIVE: 0.4,
-        DataSourceConstants.BIBLIOTHECA : 0.65,
+        DataSourceConstants.BIBLIOTHECA: 0.65,
         DataSourceConstants.AXIS_360: 0.65,
         DataSourceConstants.STANDARD_EBOOKS: 0.8,
         DataSourceConstants.UNGLUE_IT: 0.4,
         DataSourceConstants.PLYMPTON: 0.5,
     }
 
-    __tablename__ = 'works'
+    __tablename__ = "works"
     id = Column(Integer, primary_key=True)
 
     # One Work may have copies scattered across many LicensePools.
-    license_pools = relationship("LicensePool", backref="work", lazy='joined')
+    license_pools = relationship("LicensePool", backref="work", lazy="joined")
 
     # A Work takes its presentation metadata from a single Edition.
     # But this Edition is a composite of provider, metadata wrangler, admin interface, etc.-derived Editions.
-    presentation_edition_id = Column(Integer, ForeignKey('editions.id'), index=True)
+    presentation_edition_id = Column(Integer, ForeignKey("editions.id"), index=True)
 
     # One Work may have many associated WorkCoverageRecords.
     coverage_records = relationship(
-        "WorkCoverageRecord", backref="work",
-        cascade="all, delete-orphan"
+        "WorkCoverageRecord", backref="work", cascade="all, delete-orphan"
     )
 
     # One Work may be associated with many CustomListEntries.
     # However, a CustomListEntry may lose its Work without
     # ceasing to exist.
-    custom_list_entries = relationship('CustomListEntry', backref='work')
+    custom_list_entries = relationship("CustomListEntry", backref="work")
 
     # One Work may have multiple CachedFeeds, and if a CachedFeed
     # loses its Work, it ceases to exist.
     cached_feeds = relationship(
-        'CachedFeed', backref='work', cascade="all, delete-orphan"
+        "CachedFeed", backref="work", cascade="all, delete-orphan"
     )
 
     # One Work may participate in many WorkGenre assignments.
-    genres = association_proxy('work_genres', 'genre',
-                               creator=WorkGenre.from_genre)
-    work_genres = relationship("WorkGenre", backref="work",
-                               cascade="all, delete-orphan")
+    genres = association_proxy("work_genres", "genre", creator=WorkGenre.from_genre)
+    work_genres = relationship(
+        "WorkGenre", backref="work", cascade="all, delete-orphan"
+    )
     audience = Column(Unicode, index=True)
     target_age = Column(INT4RANGE, index=True)
     fiction = Column(Boolean, index=True)
 
     summary_id = Column(
-        Integer, ForeignKey(
-            'resources.id', use_alter=True, name='fk_works_summary_id'),
-        index=True)
+        Integer,
+        ForeignKey("resources.id", use_alter=True, name="fk_works_summary_id"),
+        index=True,
+    )
     # This gives us a convenient place to store a cleaned-up version of
     # the content of the summary Resource.
     summary_text = Column(Unicode)
@@ -150,7 +150,7 @@ class Work(Base):
     # The overall suitability of this work for unsolicited
     # presentation to a patron. This is a calculated value taking both
     # rating and popularity into account.
-    quality = Column(Numeric(4,3), index=True)
+    quality = Column(Numeric(4, 3), index=True)
 
     # The overall rating given to this work.
     rating = Column(Float, index=True)
@@ -158,9 +158,16 @@ class Work(Base):
     # The overall current popularity of this work.
     popularity = Column(Float, index=True)
 
-    appeal_type = Enum(CHARACTER_APPEAL, LANGUAGE_APPEAL, SETTING_APPEAL,
-                       STORY_APPEAL, NOT_APPLICABLE_APPEAL, NO_APPEAL,
-                       UNKNOWN_APPEAL, name="appeal")
+    appeal_type = Enum(
+        CHARACTER_APPEAL,
+        LANGUAGE_APPEAL,
+        SETTING_APPEAL,
+        STORY_APPEAL,
+        NOT_APPLICABLE_APPEAL,
+        NO_APPEAL,
+        UNKNOWN_APPEAL,
+        name="appeal",
+    )
 
     primary_appeal = Column(appeal_type, default=None, index=True)
     secondary_appeal = Column(appeal_type, default=None, index=True)
@@ -179,7 +186,9 @@ class Work(Base):
     presentation_ready = Column(Boolean, default=False, index=True)
 
     # This is the last time we tried to make this work presentation ready.
-    presentation_ready_attempt = Column(DateTime(timezone=True), default=None, index=True)
+    presentation_ready_attempt = Column(
+        DateTime(timezone=True), default=None, index=True
+    )
 
     # This is the error that occured while trying to make this Work
     # presentation ready. Until this is cleared, no further attempt
@@ -203,8 +212,10 @@ class Work(Base):
     # These fields are potentially large and can be deferred if you
     # don't need all the data in a Work.
     LARGE_FIELDS = [
-        'simple_opds_entry', 'verbose_opds_entry', 'marc_record',
-        'summary_text',
+        "simple_opds_entry",
+        "verbose_opds_entry",
+        "marc_record",
+        "summary_text",
     ]
 
     @property
@@ -301,22 +312,26 @@ class Work(Base):
 
     def __repr__(self):
         return '<Work #%s "%s" (by %s) %s lang=%s (%s lp)>' % (
-            self.id, self.title, self.author,
-            ", ".join([g.name for g in self.genres]), self.language,
-            len(self.license_pools)
+            self.id,
+            self.title,
+            self.author,
+            ", ".join([g.name for g in self.genres]),
+            self.language,
+            len(self.license_pools),
         )
 
     @classmethod
     def missing_coverage_from(
-            cls, _db, operation=None, count_as_covered=None,
-            count_as_missing_before=None
+        cls, _db, operation=None, count_as_covered=None, count_as_missing_before=None
     ):
         """Find Works which have no WorkCoverageRecord for the given
         `operation`.
         """
 
-        clause = and_(Work.id==WorkCoverageRecord.work_id,
-                      WorkCoverageRecord.operation==operation)
+        clause = and_(
+            Work.id == WorkCoverageRecord.work_id,
+            WorkCoverageRecord.operation == operation,
+        )
         q = _db.query(Work).outerjoin(WorkCoverageRecord, clause)
 
         missing = WorkCoverageRecord.not_covered(
@@ -329,20 +344,24 @@ class Work(Base):
     def for_unchecked_subjects(cls, _db):
         from .classification import Classification, Subject
         from .licensing import LicensePool
+
         """Find all Works whose LicensePools have an Identifier that
         is classified under an unchecked Subject.
         This is a good indicator that the Work needs to be
         reclassified.
         """
-        qu = _db.query(Work).join(Work.license_pools).join(
-            LicensePool.identifier).join(
-                Identifier.classifications).join(
-                    Classification.subject)
-        return qu.filter(Subject.checked==False).order_by(Subject.id)
+        qu = (
+            _db.query(Work)
+            .join(Work.license_pools)
+            .join(LicensePool.identifier)
+            .join(Identifier.classifications)
+            .join(Classification.subject)
+        )
+        return qu.filter(Subject.checked == False).order_by(Subject.id)
 
     @classmethod
     def _potential_open_access_works_for_permanent_work_id(
-            cls, _db, pwid, medium, language
+        cls, _db, pwid, medium, language
     ):
         """Find all Works that might be suitable for use as the
         canonical open-access Work for the given `pwid`, `medium`,
@@ -353,16 +372,15 @@ class Work(Base):
         associated with a given work.
         """
         from .licensing import LicensePool
-        qu = _db.query(LicensePool).join(
-            LicensePool.presentation_edition).filter(
-                LicensePool.open_access==True
-            ).filter(
-                Edition.permanent_work_id==pwid
-            ).filter(
-                Edition.medium==medium
-            ).filter(
-                Edition.language==language
-            )
+
+        qu = (
+            _db.query(LicensePool)
+            .join(LicensePool.presentation_edition)
+            .filter(LicensePool.open_access == True)
+            .filter(Edition.permanent_work_id == pwid)
+            .filter(Edition.medium == medium)
+            .filter(Edition.language == language)
+        )
         pools = set(qu.all())
 
         # Build the Counter of Works that are eligible to represent
@@ -377,8 +395,9 @@ class Work(Base):
                 continue
             pe = work.presentation_edition
             if pe and (
-                    pe.language != language or pe.medium != medium
-                    or pe.permanent_work_id != pwid
+                pe.language != language
+                or pe.medium != medium
+                or pe.permanent_work_id != pwid
             ):
                 # This Work's presentation edition doesn't match
                 # this LicensePool's presentation edition.
@@ -402,7 +421,10 @@ class Work(Base):
         """
         is_new = False
 
-        licensepools, licensepools_for_work = cls._potential_open_access_works_for_permanent_work_id(
+        (
+            licensepools,
+            licensepools_for_work,
+        ) = cls._potential_open_access_works_for_permanent_work_id(
             _db, pwid, medium, language
         )
         if not licensepools:
@@ -441,7 +463,9 @@ class Work(Base):
                         # nothing but LicensePools whose permanent
                         # work ID matches the permanent work ID of the
                         # Work we're about to merge into.
-                        needs_merge.make_exclusive_open_access_for_permanent_work_id(pwid, medium, language)
+                        needs_merge.make_exclusive_open_access_for_permanent_work_id(
+                            pwid, medium, language
+                        )
                         needs_merge.merge_into(work)
 
         # At this point we have one, and only one, Work for this
@@ -479,7 +503,7 @@ class Work(Base):
                 # cannot have an associated Work.
                 logging.warning(
                     "LicensePool %r has no presentation edition, setting .work to None.",
-                    pool
+                    pool,
                 )
                 pool.work = None
             else:
@@ -490,7 +514,7 @@ class Work(Base):
                     # cannot have an associated Work.
                     logging.warning(
                         "Presentation edition for LicensePool %r has no PWID, setting .work to None.",
-                        pool
+                        pool,
                     )
                     e.work = None
                     pool.work = None
@@ -516,7 +540,10 @@ class Work(Base):
         """
         pwids = set()
         for pool in self.license_pools:
-            if pool.presentation_edition and pool.presentation_edition.permanent_work_id:
+            if (
+                pool.presentation_edition
+                and pool.presentation_edition.permanent_work_id
+            ):
                 pwids.add(pool.presentation_edition.permanent_work_id)
         return pwids
 
@@ -529,18 +556,20 @@ class Work(Base):
             for pool in w.license_pools:
                 if not pool.open_access:
                     raise ValueError(
-
-                        "Refusing to merge %r into %r because it would put an open-access LicensePool into the same work as a non-open-access LicensePool." %
-                        (self, other_work)
-                        )
+                        "Refusing to merge %r into %r because it would put an open-access LicensePool into the same work as a non-open-access LicensePool."
+                        % (self, other_work)
+                    )
 
         my_pwids = self.pwids
         other_pwids = other_work.pwids
         if not my_pwids == other_pwids:
             raise ValueError(
-                "Refusing to merge %r into %r because permanent work IDs don't match: %s vs. %s" % (
-                    self, other_work, ",".join(sorted(my_pwids)),
-                    ",".join(sorted(other_pwids))
+                "Refusing to merge %r into %r because permanent work IDs don't match: %s vs. %s"
+                % (
+                    self,
+                    other_work,
+                    ",".join(sorted(my_pwids)),
+                    ",".join(sorted(other_pwids)),
                 )
             )
 
@@ -565,17 +594,16 @@ class Work(Base):
             self.summary_text = resource.representation.unicode_content
         else:
             self.summary_text = ""
-        WorkCoverageRecord.add_for(
-            self, operation=WorkCoverageRecord.SUMMARY_OPERATION
-        )
+        WorkCoverageRecord.add_for(self, operation=WorkCoverageRecord.SUMMARY_OPERATION)
 
     @classmethod
     def with_genre(cls, _db, genre):
         """Find all Works classified under the given genre."""
         from .classification import Genre
+
         if isinstance(genre, (bytes, str)):
             genre, ignore = Genre.lookup(_db, genre)
-        return _db.query(Work).join(WorkGenre).filter(WorkGenre.genre==genre)
+        return _db.query(Work).join(WorkGenre).filter(WorkGenre.genre == genre)
 
     @classmethod
     def with_no_genres(self, q):
@@ -583,7 +611,7 @@ class Work(Base):
         any genre."""
         q = q.outerjoin(Work.work_genres)
         q = q.options(contains_eager(Work.work_genres))
-        q = q.filter(WorkGenre.genre==None)
+        q = q.filter(WorkGenre.genre == None)
         return q
 
     @classmethod
@@ -598,6 +626,7 @@ class Work(Base):
            about equivalencies.
         """
         from .licensing import LicensePool
+
         identifier_ids = [identifier.id for identifier in identifiers]
         if not identifier_ids:
             return None
@@ -605,25 +634,29 @@ class Work(Base):
         if not base_query:
             # A raw base query that makes no accommodations for works that are
             # suppressed or otherwise undeliverable.
-            base_query = _db.query(Work).join(Work.license_pools).\
-                join(LicensePool.identifier)
+            base_query = (
+                _db.query(Work).join(Work.license_pools).join(LicensePool.identifier)
+            )
 
         if policy is None:
             policy = PresentationCalculationPolicy(
-                equivalent_identifier_levels=1,
-                equivalent_identifier_threshold=0.999
+                equivalent_identifier_levels=1, equivalent_identifier_threshold=0.999
             )
 
-        identifier_ids_subquery = Identifier.recursively_equivalent_identifier_ids_query(
-            Identifier.id, policy=policy)
-        identifier_ids_subquery = identifier_ids_subquery.where(Identifier.id.in_(identifier_ids))
+        identifier_ids_subquery = (
+            Identifier.recursively_equivalent_identifier_ids_query(
+                Identifier.id, policy=policy
+            )
+        )
+        identifier_ids_subquery = identifier_ids_subquery.where(
+            Identifier.id.in_(identifier_ids)
+        )
 
         query = base_query.filter(Identifier.id.in_(identifier_ids_subquery))
         return query
 
     @classmethod
-    def reject_covers(cls, _db, works_or_identifiers,
-                        search_index_client=None):
+    def reject_covers(cls, _db, works_or_identifiers, search_index_client=None):
         """Suppresses the currently visible covers of a number of Works"""
         from .licensing import LicensePool
         from .resource import Hyperlink, Resource
@@ -655,11 +688,12 @@ class Work(Base):
             # covers suppressed. Nothing to see here.
             return
 
-        covers = _db.query(Resource).join(Hyperlink.identifier).\
-            join(Identifier.licensed_through).filter(
-                Resource.url.in_(cover_urls),
-                LicensePool.work_id.in_(work_ids)
-            )
+        covers = (
+            _db.query(Resource)
+            .join(Hyperlink.identifier)
+            .join(Identifier.licensed_through)
+            .filter(Resource.url.in_(cover_urls), LicensePool.work_id.in_(work_ids))
+        )
 
         editions = list()
         for cover in covers:
@@ -690,9 +724,7 @@ class Work(Base):
     def reject_cover(self, search_index_client=None):
         """Suppresses the current cover of the Work"""
         _db = Session.object_session(self)
-        self.suppress_covers(
-            _db, [self], search_index_client=search_index_client
-        )
+        self.suppress_covers(_db, [self], search_index_client=search_index_client)
 
     def all_editions(self, policy=None):
         """All Editions identified by an Identifier equivalent to
@@ -703,11 +735,16 @@ class Work(Base):
            Identifiers.
         """
         from .licensing import LicensePool
+
         _db = Session.object_session(self)
-        identifier_ids_subquery = Identifier.recursively_equivalent_identifier_ids_query(
-            LicensePool.identifier_id, policy=policy
+        identifier_ids_subquery = (
+            Identifier.recursively_equivalent_identifier_ids_query(
+                LicensePool.identifier_id, policy=policy
+            )
         )
-        identifier_ids_subquery = identifier_ids_subquery.where(LicensePool.work_id==self.id)
+        identifier_ids_subquery = identifier_ids_subquery.where(
+            LicensePool.work_id == self.id
+        )
 
         q = _db.query(Edition).filter(
             Edition.primary_identifier_id.in_(identifier_ids_subquery)
@@ -719,10 +756,7 @@ class Work(Base):
         """Return all Identifier IDs associated with one of this
         Work's LicensePools.
         """
-        return [
-            lp.identifier.id for lp in self.license_pools
-            if lp.identifier
-        ]
+        return [lp.identifier.id for lp in self.license_pools if lp.identifier]
 
     def all_identifier_ids(self, policy=None):
         """Return all Identifier IDs associated with this Work.
@@ -763,13 +797,15 @@ class Work(Base):
         return patron.work_is_age_appropriate(self.audience, self.target_age)
 
     def set_presentation_edition(self, new_presentation_edition):
-        """ Sets presentation edition and lets owned pools and editions know.
-            Raises exception if edition to set to is None.
+        """Sets presentation edition and lets owned pools and editions know.
+        Raises exception if edition to set to is None.
         """
         # only bother if something changed, or if were explicitly told to
         # set (useful for setting to None)
         if not new_presentation_edition:
-            error_message = "Trying to set presentation_edition to None on Work [%s]" % self.id
+            error_message = (
+                "Trying to set presentation_edition to None on Work [%s]" % self.id
+            )
             raise ValueError(error_message)
 
         self.presentation_edition = new_presentation_edition
@@ -780,7 +816,7 @@ class Work(Base):
             pool.work = self
 
     def calculate_presentation_edition(self, policy=None):
-        """ Which of this Work's Editions should be used as the default?
+        """Which of this Work's Editions should be used as the default?
         First, every LicensePool associated with this work must have
         its presentation edition set.
         Then, we go through the pools, see which has the best presentation edition,
@@ -810,10 +846,7 @@ class Work(Base):
             # make sure the pool has most up-to-date idea of its presentation edition,
             # and then ask what it is.
             pool_edition_changed = pool.set_presentation_edition()
-            edition_metadata_changed = (
-                edition_metadata_changed or
-                pool_edition_changed
-            )
+            edition_metadata_changed = edition_metadata_changed or pool_edition_changed
             potential_presentation_edition = pool.presentation_edition
 
             # We currently have no real way to choose between
@@ -823,14 +856,18 @@ class Work(Base):
             #
             # So basically we pick the first available edition and
             # make it the presentation edition.
-            if (not new_presentation_edition
-                or (potential_presentation_edition is old_presentation_edition and old_presentation_edition)):
+            if not new_presentation_edition or (
+                potential_presentation_edition is old_presentation_edition
+                and old_presentation_edition
+            ):
                 # We would prefer not to change the Work's presentation
                 # edition unnecessarily, so if the current presentation
                 # edition is still an option, choose it.
                 new_presentation_edition = potential_presentation_edition
 
-        if ((self.presentation_edition != new_presentation_edition) and new_presentation_edition != None):
+        if (
+            self.presentation_edition != new_presentation_edition
+        ) and new_presentation_edition != None:
             # did we find a pool whose presentation edition was better than the work's?
             self.set_presentation_edition(new_presentation_edition)
 
@@ -840,8 +877,8 @@ class Work(Base):
         )
 
         changed = (
-            edition_metadata_changed or
-            old_presentation_edition != self.presentation_edition
+            edition_metadata_changed
+            or old_presentation_edition != self.presentation_edition
         )
         return changed
 
@@ -858,8 +895,12 @@ class Work(Base):
         return None
 
     def calculate_presentation(
-        self, policy=None, search_index_client=None, exclude_search=False,
-        default_fiction=None, default_audience=None
+        self,
+        policy=None,
+        search_index_client=None,
+        exclude_search=False,
+        default_fiction=None,
+        default_audience=None,
     ):
         """Make a Work ready to show to patrons.
         Call calculate_presentation_edition() to find the best-quality presentation edition
@@ -923,7 +964,7 @@ class Work(Base):
             classification_changed = self.assign_genres(
                 all_identifier_ids,
                 default_fiction=default_fiction,
-                default_audience=default_audience
+                default_audience=default_audience,
             )
             WorkCoverageRecord.add_for(
                 self, operation=WorkCoverageRecord.CLASSIFY_OPERATION
@@ -931,8 +972,7 @@ class Work(Base):
 
         if policy.choose_summary:
             self._choose_summary(
-                direct_identifier_ids, all_identifier_ids,
-                licensed_data_sources
+                direct_identifier_ids, all_identifier_ids, licensed_data_sources
             )
 
         if policy.calculate_quality:
@@ -943,9 +983,7 @@ class Work(Base):
             # put some work into deciding which books to buy.
             default_quality = None
             for source in licensed_data_sources:
-                q = self.default_quality_by_data_source.get(
-                    source.name, None
-                )
+                q = self.default_quality_by_data_source.get(source.name, None)
                 if q is None:
                     continue
                 if default_quality is None or q > default_quality:
@@ -955,9 +993,7 @@ class Work(Base):
                 # if we still haven't found anything of a quality measurement,
                 # then at least make it an integer zero, not none.
                 default_quality = 0
-            self.calculate_quality(
-                all_identifier_ids, default_quality
-            )
+            self.calculate_quality(all_identifier_ids, default_quality)
 
         if self.summary_text:
             if isinstance(self.summary_text, str):
@@ -968,11 +1004,11 @@ class Work(Base):
             new_summary_text = self.summary_text
 
         changed = (
-            edition_changed or
-            classification_changed or
-            summary != self.summary or
-            summary_text != new_summary_text or
-            float(quality) != float(self.quality)
+            edition_changed
+            or classification_changed
+            or summary != self.summary
+            or summary_text != new_summary_text
+            or float(quality) != float(self.quality)
         )
 
         if changed:
@@ -1007,8 +1043,7 @@ class Work(Base):
         self.set_presentation_ready_based_on_content()
 
     def _choose_summary(
-        self, direct_identifier_ids, all_identifier_ids,
-        licensed_data_sources
+        self, direct_identifier_ids, all_identifier_ids, licensed_data_sources
     ):
         """Helper method for choosing a summary as part of presentation
         calculation.
@@ -1031,9 +1066,7 @@ class Work(Base):
             they are trusted sources such as library staff.
         """
         _db = Session.object_session(self)
-        staff_data_source = DataSource.lookup(
-            _db, DataSourceConstants.LIBRARY_STAFF
-        )
+        staff_data_source = DataSource.lookup(_db, DataSourceConstants.LIBRARY_STAFF)
         data_sources = [staff_data_source, licensed_data_sources]
         summary = None
         for id_set in (direct_identifier_ids, all_identifier_ids):
@@ -1055,7 +1088,7 @@ class Work(Base):
         if self.presentation_edition and self.presentation_edition.primary_identifier:
             primary_identifier = self.presentation_edition.primary_identifier
         else:
-            primary_identifier=None
+            primary_identifier = None
         l.append(" primary id=%s" % primary_identifier)
         if self.fiction:
             fiction = "Fiction"
@@ -1067,9 +1100,10 @@ class Work(Base):
             target_age = " age=" + self.target_age_string
         else:
             target_age = ""
-        l.append(" %(fiction)s a=%(audience)s%(target_age)r" % (
-                dict(fiction=fiction,
-                     audience=self.audience, target_age=target_age)))
+        l.append(
+            " %(fiction)s a=%(audience)s%(target_age)r"
+            % (dict(fiction=fiction, audience=self.audience, target_age=target_age))
+        )
         l.append(" " + ", ".join(repr(wg) for wg in self.work_genres))
 
         if self.cover_full_url:
@@ -1099,6 +1133,7 @@ class Work(Base):
                 l.append("  " + r.final_url)
         elif expect_downloads:
             l.append(" Expected open-access downloads but found none.")
+
         def _ensure(s):
             if not s:
                 return ""
@@ -1117,10 +1152,9 @@ class Work(Base):
 
     def calculate_opds_entries(self, verbose=True):
         from ..opds import AcquisitionFeed, Annotator, VerboseAnnotator
+
         _db = Session.object_session(self)
-        simple = AcquisitionFeed.single_entry(
-            _db, self, Annotator, force_create=True
-        )
+        simple = AcquisitionFeed.single_entry(_db, self, Annotator, force_create=True)
         if verbose is True:
             verbose = AcquisitionFeed.single_entry(
                 _db, self, VerboseAnnotator, force_create=True
@@ -1131,9 +1165,11 @@ class Work(Base):
 
     def calculate_marc_record(self):
         from ..marc import Annotator, MARCExporter
+
         _db = Session.object_session(self)
         record = MARCExporter.create_record(
-            self, annotator=Annotator, force_create=True)
+            self, annotator=Annotator, force_create=True
+        )
         WorkCoverageRecord.add_for(
             self, operation=WorkCoverageRecord.GENERATE_MARC_OPERATION
         )
@@ -1180,9 +1216,7 @@ class Work(Base):
         This is a more efficient alternative to reindexing immediately,
         since these WorkCoverageRecords are handled in large batches.
         """
-        return self._reset_coverage(
-            WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION
-        )
+        return self._reset_coverage(WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION)
 
     def update_external_index(self, client, add_coverage_record=True):
         """Create a WorkCoverageRecord so that this work's
@@ -1245,7 +1279,8 @@ class Work(Base):
 
         TODO: search_index_client is redundant here.
         """
-        if (not self.presentation_edition
+        if (
+            not self.presentation_edition
             or not self.license_pools
             or not self.title
             or not self.language
@@ -1266,22 +1301,29 @@ class Work(Base):
         # and quality, plus any quantity that might be mapppable to the 0..1
         # range -- ratings, and measurements with an associated percentile
         # score.
-        quantities = set([
-            Measurement.POPULARITY, Measurement.QUALITY, Measurement.RATING
-        ])
+        quantities = set(
+            [Measurement.POPULARITY, Measurement.QUALITY, Measurement.RATING]
+        )
         quantities = quantities.union(list(Measurement.PERCENTILE_SCALES.keys()))
-        measurements = _db.query(Measurement).filter(
-            Measurement.identifier_id.in_(identifier_ids)).filter(
-                Measurement.is_most_recent==True).filter(
-                    Measurement.quantity_measured.in_(quantities)).all()
-
-        self.quality = Measurement.overall_quality(
-            measurements, default_value=default_quality)
-        WorkCoverageRecord.add_for(
-            self, operation=WorkCoverageRecord.QUALITY_OPERATION
+        measurements = (
+            _db.query(Measurement)
+            .filter(Measurement.identifier_id.in_(identifier_ids))
+            .filter(Measurement.is_most_recent == True)
+            .filter(Measurement.quantity_measured.in_(quantities))
+            .all()
         )
 
-    def assign_genres(self, identifier_ids, default_fiction=False, default_audience=Classifier.AUDIENCE_ADULT):
+        self.quality = Measurement.overall_quality(
+            measurements, default_value=default_quality
+        )
+        WorkCoverageRecord.add_for(self, operation=WorkCoverageRecord.QUALITY_OPERATION)
+
+    def assign_genres(
+        self,
+        identifier_ids,
+        default_fiction=False,
+        default_audience=Classifier.AUDIENCE_ADULT,
+    ):
         """Set classification information for this work based on the
         subquery to get equivalent identifiers.
         :return: A boolean explaining whether or not any data actually
@@ -1300,20 +1342,18 @@ class Work(Base):
         for classification in classifications:
             classifier.add(classification)
 
-        (genre_weights, self.fiction, self.audience,
-         target_age) = classifier.classify(default_fiction=default_fiction,
-                                           default_audience=default_audience)
+        (genre_weights, self.fiction, self.audience, target_age) = classifier.classify(
+            default_fiction=default_fiction, default_audience=default_audience
+        )
         self.target_age = tuple_to_numericrange(target_age)
 
-        workgenres, workgenres_changed = self.assign_genres_from_weights(
-            genre_weights
-        )
+        workgenres, workgenres_changed = self.assign_genres_from_weights(genre_weights)
 
         classification_changed = (
-            workgenres_changed or
-            old_fiction != self.fiction or
-            old_audience != self.audience or
-            numericrange_to_tuple(old_target_age) != target_age
+            workgenres_changed
+            or old_fiction != self.fiction
+            or old_audience != self.audience
+            or numericrange_to_tuple(old_target_age) != target_age
         )
 
         return classification_changed
@@ -1321,11 +1361,12 @@ class Work(Base):
     def assign_genres_from_weights(self, genre_weights):
         # Assign WorkGenre objects to the remainder.
         from .classification import Genre
+
         changed = False
         _db = Session.object_session(self)
         total_genre_weight = float(sum(genre_weights.values()))
         workgenres = []
-        current_workgenres = _db.query(WorkGenre).filter(WorkGenre.work==self)
+        current_workgenres = _db.query(WorkGenre).filter(WorkGenre.work == self)
         by_genre = dict()
         for wg in current_workgenres:
             by_genre[wg.genre] = wg
@@ -1338,9 +1379,8 @@ class Work(Base):
                 is_new = False
                 del by_genre[g]
             else:
-                wg, is_new = get_one_or_create(
-                    _db, WorkGenre, work=self, genre=g)
-            if is_new or round(wg.affinity,2) != round(affinity, 2):
+                wg, is_new = get_one_or_create(_db, WorkGenre, work=self, genre=g)
+            if is_new or round(wg.affinity, 2) != round(affinity, 2):
                 changed = True
             wg.affinity = affinity
             workgenres.append(wg)
@@ -1356,9 +1396,7 @@ class Work(Base):
 
         return workgenres, changed
 
-
-    def assign_appeals(self, character, language, setting, story,
-                       cutoff=0.20):
+    def assign_appeals(self, character, language, setting, story, cutoff=0.20):
         """Assign the given appeals to the corresponding database fields,
         as well as calculating the primary and secondary appeal.
         """
@@ -1415,69 +1453,71 @@ class Work(Base):
         # interested in. The work_id, edition_id, and identifier_id columns are used
         # by other subqueries to filter, and the remaining columns are used directly
         # to create the json document.
-        works_alias = select(
-            [Work.id.label('work_id'),
-             Edition.id.label('edition_id'),
-             Edition.primary_identifier_id.label('identifier_id'),
-             Edition.title,
-             Edition.subtitle,
-             Edition.series,
-             Edition.series_position,
-             Edition.language,
-             Edition.sort_title,
-             Edition.author,
-             Edition.sort_author,
-             Edition.medium,
-             Edition.publisher,
-             Edition.imprint,
-             Edition.permanent_work_id,
-             Work.fiction,
-             Work.audience,
-             Work.summary_text,
-             Work.quality,
-             Work.rating,
-             Work.popularity,
-             Work.presentation_ready,
-             Work.presentation_edition_id,
-             func.extract(
-                 "EPOCH",
-                 Work.last_update_time,
-             ).label('last_update_time')
-            ],
-            Work.id.in_((w.id for w in works))
-        ).select_from(
-            join(
-                Work, Edition,
-                Work.presentation_edition_id==Edition.id
+        works_alias = (
+            select(
+                [
+                    Work.id.label("work_id"),
+                    Edition.id.label("edition_id"),
+                    Edition.primary_identifier_id.label("identifier_id"),
+                    Edition.title,
+                    Edition.subtitle,
+                    Edition.series,
+                    Edition.series_position,
+                    Edition.language,
+                    Edition.sort_title,
+                    Edition.author,
+                    Edition.sort_author,
+                    Edition.medium,
+                    Edition.publisher,
+                    Edition.imprint,
+                    Edition.permanent_work_id,
+                    Work.fiction,
+                    Work.audience,
+                    Work.summary_text,
+                    Work.quality,
+                    Work.rating,
+                    Work.popularity,
+                    Work.presentation_ready,
+                    Work.presentation_edition_id,
+                    func.extract(
+                        "EPOCH",
+                        Work.last_update_time,
+                    ).label("last_update_time"),
+                ],
+                Work.id.in_((w.id for w in works)),
             )
-        ).alias('works_alias')
+            .select_from(
+                join(Work, Edition, Work.presentation_edition_id == Edition.id)
+            )
+            .alias("works_alias")
+        )
 
         work_id_column = literal_column(
-            works_alias.name + '.' + works_alias.c.work_id.name
+            works_alias.name + "." + works_alias.c.work_id.name
         )
 
         work_presentation_edition_id_column = literal_column(
-            works_alias.name + '.' + works_alias.c.presentation_edition_id.name
+            works_alias.name + "." + works_alias.c.presentation_edition_id.name
         )
 
         work_quality_column = literal_column(
-            works_alias.name + '.' + works_alias.c.quality.name
+            works_alias.name + "." + works_alias.c.quality.name
         )
 
         def query_to_json(query):
             """Convert the results of a query to a JSON object."""
-            return select(
-                [func.row_to_json(literal_column(query.name))]
-            ).select_from(query)
+            return select([func.row_to_json(literal_column(query.name))]).select_from(
+                query
+            )
 
         def query_to_json_array(query):
             """Convert the results of a query into a JSON array."""
             return select(
-                [func.array_to_json(
-                    func.array_agg(
-                        func.row_to_json(
-                            literal_column(query.name)
-                        )))]
+                [
+                    func.array_to_json(
+                        func.array_agg(func.row_to_json(literal_column(query.name)))
+                    )
+                ]
             ).select_from(query)
 
         # This subquery gets Collection IDs for collections
@@ -1511,49 +1551,52 @@ class Work(Base):
             # True/None. Elasticsearch can't filter on null values.
             return case([(t, True)], else_=False).label(label)
 
-        licensepools = select(
-            [
-                LicensePool.id.label('licensepool_id'),
-                LicensePool.data_source_id.label('data_source_id'),
-                LicensePool.collection_id.label('collection_id'),
-                LicensePool.open_access.label('open_access'),
-                LicensePool.suppressed,
-
-                explicit_bool(
-                    'available',
-                    or_(
-                        LicensePool.unlimited_access,
-                        LicensePool.self_hosted,
-                        LicensePool.licenses_available > 0,
-                    )
-                ),
-                explicit_bool(
-                    'licensed',
-                    or_(
-                        LicensePool.unlimited_access,
-                        LicensePool.self_hosted,
-                        LicensePool.licenses_owned > 0
-                    )
-                ),
-                work_quality_column,
-                Edition.medium,
-                func.extract(
-                    "EPOCH",
-                    LicensePool.availability_time,
-                ).label('availability_time')
-            ]
-        ).where(
-            and_(
-                LicensePool.work_id==work_id_column,
-                work_presentation_edition_id_column==Edition.id,
-                or_(
-                    LicensePool.open_access,
-                    LicensePool.unlimited_access,
-                    LicensePool.self_hosted,
-                    LicensePool.licenses_owned>0,
-                ),
+        licensepools = (
+            select(
+                [
+                    LicensePool.id.label("licensepool_id"),
+                    LicensePool.data_source_id.label("data_source_id"),
+                    LicensePool.collection_id.label("collection_id"),
+                    LicensePool.open_access.label("open_access"),
+                    LicensePool.suppressed,
+                    explicit_bool(
+                        "available",
+                        or_(
+                            LicensePool.unlimited_access,
+                            LicensePool.self_hosted,
+                            LicensePool.licenses_available > 0,
+                        ),
+                    ),
+                    explicit_bool(
+                        "licensed",
+                        or_(
+                            LicensePool.unlimited_access,
+                            LicensePool.self_hosted,
+                            LicensePool.licenses_owned > 0,
+                        ),
+                    ),
+                    work_quality_column,
+                    Edition.medium,
+                    func.extract(
+                        "EPOCH",
+                        LicensePool.availability_time,
+                    ).label("availability_time"),
+                ]
             )
-        ).alias("licensepools_subquery")
+            .where(
+                and_(
+                    LicensePool.work_id == work_id_column,
+                    work_presentation_edition_id_column == Edition.id,
+                    or_(
+                        LicensePool.open_access,
+                        LicensePool.unlimited_access,
+                        LicensePool.self_hosted,
+                        LicensePool.licenses_owned > 0,
+                    ),
+                )
+            )
+            .alias("licensepools_subquery")
+        )
         licensepools_json = query_to_json_array(licensepools)
 
         # This subquery gets CustomList IDs for all lists
@@ -1566,37 +1609,49 @@ class Work(Base):
         # And we keep track of the first time the work appears on the list.
         # This is used when generating a crawlable feed for the customlist,
         # which is ordered by a work's first appearance on the list.
-        customlists = select(
-            [
-                CustomListEntry.list_id.label('list_id'),
-                CustomListEntry.featured.label('featured'),
-                func.extract(
-                    "EPOCH",
-                    CustomListEntry.first_appearance,
-                ).label('first_appearance')
-            ]
-        ).where(
-            CustomListEntry.work_id==work_id_column
-        ).alias("listentries_subquery")
+        customlists = (
+            select(
+                [
+                    CustomListEntry.list_id.label("list_id"),
+                    CustomListEntry.featured.label("featured"),
+                    func.extract(
+                        "EPOCH",
+                        CustomListEntry.first_appearance,
+                    ).label("first_appearance"),
+                ]
+            )
+            .where(CustomListEntry.work_id == work_id_column)
+            .alias("listentries_subquery")
+        )
         customlists_json = query_to_json_array(customlists)
 
         # This subquery gets Contributors, filtered on edition_id.
-        contributors = select(
-            [Contributor.sort_name,
-             Contributor.display_name,
-             Contributor.family_name,
-             Contributor.lc,
-             Contributor.viaf,
-             Contribution.role,
-            ]
-        ).where(
-            Contribution.edition_id==literal_column(works_alias.name + "." + works_alias.c.edition_id.name)
-        ).select_from(
-            join(
-                Contributor, Contribution,
-                Contributor.id==Contribution.contributor_id
+        contributors = (
+            select(
+                [
+                    Contributor.sort_name,
+                    Contributor.display_name,
+                    Contributor.family_name,
+                    Contributor.lc,
+                    Contributor.viaf,
+                    Contribution.role,
+                ]
             )
-        ).alias("contributors_subquery")
+            .where(
+                Contribution.edition_id
+                == literal_column(
+                    works_alias.name + "." + works_alias.c.edition_id.name
+                )
+            )
+            .select_from(
+                join(
+                    Contributor,
+                    Contribution,
+                    Contributor.id == Contribution.contributor_id,
+                )
+            )
+            .alias("contributors_subquery")
+        )
         contributors_json = query_to_json_array(contributors)
 
         # Use a subquery to get recursively equivalent Identifiers
@@ -1608,121 +1663,137 @@ class Work(Base):
         # and recommendations. The index is completely rebuilt once a
         # day, and that's good enough.
         equivalent_identifiers = Identifier.recursively_equivalent_identifier_ids_query(
-            literal_column(
-                works_alias.name + "." + works_alias.c.identifier_id.name
-            ),
-            policy=policy
+            literal_column(works_alias.name + "." + works_alias.c.identifier_id.name),
+            policy=policy,
         ).alias("equivalent_identifiers_subquery")
 
-        identifiers = select(
-            [
-                Identifier.identifier.label('identifier'),
-                Identifier.type.label('type'),
-            ]
-        ).where(
-            Identifier.id.in_(equivalent_identifiers)
-        ).alias("identifier_subquery")
+        identifiers = (
+            select(
+                [
+                    Identifier.identifier.label("identifier"),
+                    Identifier.type.label("type"),
+                ]
+            )
+            .where(Identifier.id.in_(equivalent_identifiers))
+            .alias("identifier_subquery")
+        )
         identifiers_json = query_to_json_array(identifiers)
 
         # Map our constants for Subject type to their URIs.
         scheme_column = case(
-            [(Subject.type==key, literal_column("'%s'" % val)) for key, val in list(Subject.uri_lookup.items())]
+            [
+                (Subject.type == key, literal_column("'%s'" % val))
+                for key, val in list(Subject.uri_lookup.items())
+            ]
         )
 
         # If the Subject has a name, use that, otherwise use the Subject's identifier.
         # Also, 3M's classifications have slashes, e.g. "FICTION/Adventure". Make sure
         # we get separated words for search.
-        term_column = func.replace(case([(Subject.name != None, Subject.name)], else_=Subject.identifier), "/", " ")
+        term_column = func.replace(
+            case([(Subject.name != None, Subject.name)], else_=Subject.identifier),
+            "/",
+            " ",
+        )
 
         # Normalize by dividing each weight by the sum of the weights for that Identifier's Classifications.
         from .classification import Classification
-        weight_column = func.sum(Classification.weight) / func.sum(func.sum(Classification.weight)).over()
+
+        weight_column = (
+            func.sum(Classification.weight)
+            / func.sum(func.sum(Classification.weight)).over()
+        )
 
         # The subquery for Subjects, with those three columns. The labels will become keys in json objects.
-        subjects = select(
-            [scheme_column.label('scheme'),
-             term_column.label('term'),
-             weight_column.label('weight'),
-            ],
-            # Only include Subjects with terms that are useful for search.
-            and_(Subject.type.in_(Subject.TYPES_FOR_SEARCH),
-                 term_column != None)
-        ).group_by(
-            scheme_column, term_column
-        ).where(
-            Classification.identifier_id.in_(equivalent_identifiers)
-        ).select_from(
-            join(Classification, Subject, Classification.subject_id==Subject.id)
-        ).alias("subjects_subquery")
+        subjects = (
+            select(
+                [
+                    scheme_column.label("scheme"),
+                    term_column.label("term"),
+                    weight_column.label("weight"),
+                ],
+                # Only include Subjects with terms that are useful for search.
+                and_(Subject.type.in_(Subject.TYPES_FOR_SEARCH), term_column != None),
+            )
+            .group_by(scheme_column, term_column)
+            .where(Classification.identifier_id.in_(equivalent_identifiers))
+            .select_from(
+                join(Classification, Subject, Classification.subject_id == Subject.id)
+            )
+            .alias("subjects_subquery")
+        )
         subjects_json = query_to_json_array(subjects)
 
-
         # Subquery for genres.
-        genres = select(
-            # All Genres have the same scheme - the simplified genre URI.
-            [literal_column("'%s'" % Subject.SIMPLIFIED_GENRE).label('scheme'),
-             Genre.name,
-             Genre.id.label('term'),
-             WorkGenre.affinity.label('weight'),
-            ]
-        ).where(
-            WorkGenre.work_id==literal_column(works_alias.name + "." + works_alias.c.work_id.name)
-        ).select_from(
-            join(WorkGenre, Genre, WorkGenre.genre_id==Genre.id)
-        ).alias("genres_subquery")
+        genres = (
+            select(
+                # All Genres have the same scheme - the simplified genre URI.
+                [
+                    literal_column("'%s'" % Subject.SIMPLIFIED_GENRE).label("scheme"),
+                    Genre.name,
+                    Genre.id.label("term"),
+                    WorkGenre.affinity.label("weight"),
+                ]
+            )
+            .where(
+                WorkGenre.work_id
+                == literal_column(works_alias.name + "." + works_alias.c.work_id.name)
+            )
+            .select_from(join(WorkGenre, Genre, WorkGenre.genre_id == Genre.id))
+            .alias("genres_subquery")
+        )
         genres_json = query_to_json_array(genres)
 
         target_age = cls.target_age_query(
             literal_column(works_alias.name + "." + works_alias.c.work_id.name)
-        ).alias('target_age_subquery')
+        ).alias("target_age_subquery")
         target_age_json = query_to_json(target_age)
 
         # Now, create a query that brings together everything we need for the final
         # search document.
-        search_data = select(
-            [works_alias.c.work_id.label("_id"),
-             works_alias.c.work_id.label("work_id"),
-             works_alias.c.title,
-             works_alias.c.sort_title,
-             works_alias.c.subtitle,
-             works_alias.c.series,
-             works_alias.c.series_position,
-             works_alias.c.language,
-             works_alias.c.author,
-             works_alias.c.sort_author,
-             works_alias.c.medium,
-             works_alias.c.publisher,
-             works_alias.c.imprint,
-             works_alias.c.permanent_work_id,
-             works_alias.c.presentation_ready,
-             works_alias.c.last_update_time,
-
-             # Convert true/false to "Fiction"/"Nonfiction".
-             case(
-                    [(works_alias.c.fiction==True, literal_column("'Fiction'"))],
-                    else_=literal_column("'Nonfiction'")
+        search_data = (
+            select(
+                [
+                    works_alias.c.work_id.label("_id"),
+                    works_alias.c.work_id.label("work_id"),
+                    works_alias.c.title,
+                    works_alias.c.sort_title,
+                    works_alias.c.subtitle,
+                    works_alias.c.series,
+                    works_alias.c.series_position,
+                    works_alias.c.language,
+                    works_alias.c.author,
+                    works_alias.c.sort_author,
+                    works_alias.c.medium,
+                    works_alias.c.publisher,
+                    works_alias.c.imprint,
+                    works_alias.c.permanent_work_id,
+                    works_alias.c.presentation_ready,
+                    works_alias.c.last_update_time,
+                    # Convert true/false to "Fiction"/"Nonfiction".
+                    case(
+                        [(works_alias.c.fiction == True, literal_column("'Fiction'"))],
+                        else_=literal_column("'Nonfiction'"),
                     ).label("fiction"),
-
-             # Replace "Young Adult" with "YoungAdult" and "Adults Only" with "AdultsOnly".
-             func.replace(works_alias.c.audience, " ", "").label('audience'),
-
-             works_alias.c.summary_text.label('summary'),
-             works_alias.c.quality,
-             works_alias.c.rating,
-             works_alias.c.popularity,
-
-             # Here are all the subqueries.
-             licensepools_json.label("licensepools"),
-             customlists_json.label("customlists"),
-             contributors_json.label("contributors"),
-             identifiers_json.label("identifiers"),
-             subjects_json.label("classifications"),
-             genres_json.label('genres'),
-             target_age_json.label('target_age'),
-            ]
-        ).select_from(
-            works_alias
-        ).alias("search_data_subquery")
+                    # Replace "Young Adult" with "YoungAdult" and "Adults Only" with "AdultsOnly".
+                    func.replace(works_alias.c.audience, " ", "").label("audience"),
+                    works_alias.c.summary_text.label("summary"),
+                    works_alias.c.quality,
+                    works_alias.c.rating,
+                    works_alias.c.popularity,
+                    # Here are all the subqueries.
+                    licensepools_json.label("licensepools"),
+                    customlists_json.label("customlists"),
+                    contributors_json.label("contributors"),
+                    identifiers_json.label("identifiers"),
+                    subjects_json.label("classifications"),
+                    genres_json.label("genres"),
+                    target_age_json.label("target_age"),
+                ]
+            )
+            .select_from(works_alias)
+            .alias("search_data_subquery")
+        )
 
         # Finally, convert everything to json.
         search_json = query_to_json(search_data)
@@ -1737,25 +1808,19 @@ class Work(Base):
         # it alone. Otherwise, we subtract one to make it inclusive.
         upper_field = func.upper(Work.target_age)
         upper = case(
-            [(func.upper_inc(Work.target_age), upper_field)],
-            else_=upper_field-1
-        ).label('upper')
+            [(func.upper_inc(Work.target_age), upper_field)], else_=upper_field - 1
+        ).label("upper")
 
         # If the lower limit of the target age is inclusive, we leave
         # it alone. Otherwise, we add one to make it inclusive.
         lower_field = func.lower(Work.target_age)
         lower = case(
-            [(func.lower_inc(Work.target_age), lower_field)],
-            else_=lower_field+1
-        ).label('lower')
+            [(func.lower_inc(Work.target_age), lower_field)], else_=lower_field + 1
+        ).label("lower")
 
         # Subquery for target age. This has to be a subquery so it can
         # become a nested object in the final json.
-        target_age = select(
-            [upper, lower]
-        ).where(
-            Work.id==foreign_work_id_field
-        )
+        target_age = select([upper, lower]).where(Work.id == foreign_work_id_field)
         return target_age
 
     def to_search_document(self):
@@ -1783,55 +1848,66 @@ class Work(Base):
 
     @classmethod
     def restrict_to_custom_lists_from_data_source(
-            cls, _db, base_query, data_source, on_list_as_of=None):
+        cls, _db, base_query, data_source, on_list_as_of=None
+    ):
         """Annotate a query that joins Work against Edition to match only
         Works that are on a custom list from the given data source."""
 
-        condition = CustomList.data_source==data_source
+        condition = CustomList.data_source == data_source
         return cls._restrict_to_customlist_subquery_condition(
-            _db, base_query, condition, on_list_as_of)
+            _db, base_query, condition, on_list_as_of
+        )
 
     @classmethod
     def restrict_to_custom_lists(
-            cls, _db, base_query, custom_lists, on_list_as_of=None):
+        cls, _db, base_query, custom_lists, on_list_as_of=None
+    ):
         """Annotate a query that joins Work against Edition to match only
         Works that are on one of the given custom lists."""
         condition = CustomList.id.in_([x.id for x in custom_lists])
         return cls._restrict_to_customlist_subquery_condition(
-            _db, base_query, condition, on_list_as_of)
+            _db, base_query, condition, on_list_as_of
+        )
 
     @classmethod
     def _restrict_to_customlist_subquery_condition(
-            cls, _db, base_query, condition, on_list_as_of=None):
+        cls, _db, base_query, condition, on_list_as_of=None
+    ):
         """Annotate a query that joins Work against Edition to match only
         Works that are on a custom list from the given data source."""
         # Find works that are on a list that meets the given condition.
         qu = base_query.join(LicensePool.custom_list_entries).join(
-            CustomListEntry.customlist)
+            CustomListEntry.customlist
+        )
         if on_list_as_of:
-            qu = qu.filter(
-                CustomListEntry.most_recent_appearance >= on_list_as_of)
+            qu = qu.filter(CustomListEntry.most_recent_appearance >= on_list_as_of)
         qu = qu.filter(condition)
         return qu
 
     def classifications_with_genre(self):
         from .classification import Classification, Subject
+
         _db = Session.object_session(self)
         identifier = self.presentation_edition.primary_identifier
-        return _db.query(Classification) \
-            .join(Subject) \
-            .filter(Classification.identifier_id == identifier.id) \
-            .filter(Subject.genre_id != None) \
+        return (
+            _db.query(Classification)
+            .join(Subject)
+            .filter(Classification.identifier_id == identifier.id)
+            .filter(Subject.genre_id != None)
             .order_by(Classification.weight.desc())
+        )
 
     def top_genre(self):
         from .classification import Genre
+
         _db = Session.object_session(self)
-        genre = _db.query(Genre) \
-            .join(WorkGenre) \
-            .filter(WorkGenre.work_id == self.id) \
-            .order_by(WorkGenre.affinity.desc()) \
+        genre = (
+            _db.query(Genre)
+            .join(WorkGenre)
+            .filter(WorkGenre.work_id == self.id)
+            .order_by(WorkGenre.affinity.desc())
             .first()
+        )
         return genre.name if genre else None
 
     def delete(self, search_index=None):
@@ -1840,6 +1916,7 @@ class Work(Base):
         if search_index is None:
             try:
                 from ..external_search import ExternalSearchIndex
+
                 search_index = ExternalSearchIndex(_db)
             except CannotLoadConfiguration as e:
                 # No search index is configured. This is fine -- just skip that part.

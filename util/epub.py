@@ -40,16 +40,20 @@ class EpubAccessor(object):
 
             with zip_file.open(cls.CONTAINER_FILE) as container_file:
                 container = container_file.read()
-                rootfiles_element = etree.fromstring(container).find("{urn:oasis:names:tc:opendocument:xmlns:container}rootfiles")
+                rootfiles_element = etree.fromstring(container).find(
+                    "{urn:oasis:names:tc:opendocument:xmlns:container}rootfiles"
+                )
 
                 if rootfiles_element is None:
                     raise ValueError("Invalid EPUB file, not modifying: %s" % url)
 
-                rootfile_element = rootfiles_element.find("{urn:oasis:names:tc:opendocument:xmlns:container}rootfile")
+                rootfile_element = rootfiles_element.find(
+                    "{urn:oasis:names:tc:opendocument:xmlns:container}rootfile"
+                )
                 if rootfile_element is None:
                     raise ValueError("Invalid EPUB file, not modifying: %s" % url)
 
-                package_document_path = rootfile_element.get('full-path')
+                package_document_path = rootfile_element.get("full-path")
             yield zip_file, package_document_path
 
     @classmethod
@@ -73,6 +77,8 @@ class EpubAccessor(object):
                     "{%s}%s" % (cls.IDPF_NAMESPACE, element_tag)
                 )
                 if element is None:
-                    raise ValueError("Invalid EPUB file: '%s' could not be found" % element_tag)
+                    raise ValueError(
+                        "Invalid EPUB file: '%s' could not be found" % element_tag
+                    )
                 elements.append(element)
         return elements

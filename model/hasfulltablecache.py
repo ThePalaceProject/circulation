@@ -109,7 +109,8 @@ class HasFullTableCache(object):
             except Exception as e:
                 logging.error(
                     "Unable to merge cached object %r into database session",
-                    obj, exc_info=e
+                    obj,
+                    exc_info=e,
                 )
                 # Try to look up a fresh copy of the object.
                 obj, new = lookup_hook()
@@ -125,15 +126,15 @@ class HasFullTableCache(object):
     @classmethod
     def by_id(cls, _db, id):
         """Look up an item by its unique database ID."""
+
         def lookup_hook():
             return get_one(_db, cls, id=id), False
+
         obj, is_new = cls._cache_lookup(
-            _db, cls._id_cache, '_id_cache', id, lookup_hook
+            _db, cls._id_cache, "_id_cache", id, lookup_hook
         )
         return obj
 
     @classmethod
     def by_cache_key(cls, _db, cache_key, lookup_hook):
-        return cls._cache_lookup(
-            _db, cls._cache, '_cache', cache_key, lookup_hook
-        )
+        return cls._cache_lookup(_db, cls._cache, "_cache", cache_key, lookup_hook)

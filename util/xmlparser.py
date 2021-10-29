@@ -28,7 +28,10 @@ class XMLParser(object):
 
     def _cls(self, tag_name, class_name):
         """Return an XPath expression that will find a tag with the given CSS class."""
-        return 'descendant-or-self::node()/%s[contains(concat(" ", normalize-space(@class), " "), " %s ")]' % (tag_name, class_name)
+        return (
+            'descendant-or-self::node()/%s[contains(concat(" ", normalize-space(@class), " "), " %s ")]'
+            % (tag_name, class_name)
+        )
 
     def text_of_optional_subtag(self, tag, name, namespaces=None):
         tag = self._xpath1(tag, name, namespaces=namespaces)

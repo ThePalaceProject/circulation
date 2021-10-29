@@ -27,7 +27,9 @@ from core.model import (  # noqa: E402
 
 def dedupe(edition):
     print("Deduping edition %s (%s)" % (edition.id, edition.title))
-    primary_author = [x for x in edition.contributions if x.role == Contributor.PRIMARY_AUTHOR_ROLE]
+    primary_author = [
+        x for x in edition.contributions if x.role == Contributor.PRIMARY_AUTHOR_ROLE
+    ]
     seen = set()
     contributors_with_roles = set()
     unresolved_mysteries = {}
@@ -51,9 +53,12 @@ def dedupe(edition):
             _db.delete(contribution)
             continue
         seen.add(key)
-        if role == 'Unknown':
+        if role == "Unknown":
             if contributor in contributors_with_roles:
-                print(" Found unknown role for %s, but mystery already resolved." % contributor.name)
+                print(
+                    " Found unknown role for %s, but mystery already resolved."
+                    % contributor.name
+                )
                 _db.delete(contribution)
             else:
                 print(" The role of %s is a mystery." % contributor.name)
@@ -77,21 +82,24 @@ contribution2 = aliased(Contribution)
 # and some other role. Also find editions where one Contributor is listed
 # twice in author roles.
 unknown_role_or_duplicate_author_role = or_(
-    and_(Contribution.role==Contributor.UNKNOWN_ROLE,                   # noqa: E225
-         contribution2.role != Contributor.UNKNOWN_ROLE),
+    and_(
+        Contribution.role == Contributor.UNKNOWN_ROLE,  # noqa: E225
+        contribution2.role != Contributor.UNKNOWN_ROLE,
+    ),
     and_(
         Contribution.role.in_(Contributor.AUTHOR_ROLES),
         contribution2.role.in_(Contributor.AUTHOR_ROLES),
-    )
+    ),
 )
 
-qu = _db.query(Edition).join(Edition.contributions).join(
-    contribution2, contribution2.edition_id==Edition.id).filter(        # noqa: E225
-        contribution2.id != Contribution.id).filter(
-            contribution2.contributor_id==Contribution.contributor_id   # noqa: E225
-        ).filter(
-            unknown_role_or_duplicate_author_role
-        )
+qu = (
+    _db.query(Edition)
+    .join(Edition.contributions)
+    .join(contribution2, contribution2.edition_id == Edition.id)
+    .filter(contribution2.id != Contribution.id)  # noqa: E225
+    .filter(contribution2.contributor_id == Contribution.contributor_id)  # noqa: E225
+    .filter(unknown_role_or_duplicate_author_role)
+)
 
 print("Fixing %s Editions." % qu.count())
 qu = qu.limit(1000)
@@ -105,4 +113,4 @@ while results:
         dedupe(ed)
     _db.commit()
     b = time.time()
-    print("Batch processed in %.2f sec" % (b-a))
+    print("Batch processed in %.2f sec" % (b - a))

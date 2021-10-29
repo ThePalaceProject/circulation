@@ -1,5 +1,3 @@
-
-
 class EntryPoint(object):
 
     """A EntryPoint is a top-level entry point into a library's Lane structure
@@ -43,19 +41,16 @@ class EntryPoint(object):
         :param default_enabled: New libraries should have this entry point
             enabled by default.
         """
-        value = getattr(entrypoint_class, 'INTERNAL_NAME', None)
+        value = getattr(entrypoint_class, "INTERNAL_NAME", None)
         if not value:
             raise ValueError(
-                "EntryPoint class %s must define INTERNAL_NAME." % entrypoint_class.__name__
+                "EntryPoint class %s must define INTERNAL_NAME."
+                % entrypoint_class.__name__
             )
         if value in cls.BY_INTERNAL_NAME:
-            raise ValueError(
-                "Duplicate entry point internal name: %s" % value
-            )
+            raise ValueError("Duplicate entry point internal name: %s" % value)
         if display_title in list(cls.DISPLAY_TITLES.values()):
-            raise ValueError(
-                "Duplicate entry point display name: %s" % display_title
-            )
+            raise ValueError("Duplicate entry point display name: %s" % display_title)
         cls.DISPLAY_TITLES[entrypoint_class] = display_title
         cls.BY_INTERNAL_NAME[value] = entrypoint_class
         cls.ENTRY_POINTS.append(entrypoint_class)
@@ -98,8 +93,11 @@ class EntryPoint(object):
 
 class EverythingEntryPoint(EntryPoint):
     """An entry point that has everything."""
+
     INTERNAL_NAME = "All"
     URI = "http://schema.org/CreativeWork"
+
+
 EntryPoint.register(EverythingEntryPoint, "All")
 
 
@@ -118,7 +116,8 @@ class MediumEntryPoint(EntryPoint):
         to match only items with the right medium.
         """
         from .model import Edition
-        return qu.filter(Edition.medium==cls.INTERNAL_NAME)
+
+        return qu.filter(Edition.medium == cls.INTERNAL_NAME)
 
     @classmethod
     def modify_search_filter(cls, filter):
@@ -133,9 +132,14 @@ class MediumEntryPoint(EntryPoint):
 class EbooksEntryPoint(MediumEntryPoint):
     INTERNAL_NAME = "Book"
     URI = "http://schema.org/EBook"
+
+
 EntryPoint.register(EbooksEntryPoint, "eBooks", default_enabled=True)
+
 
 class AudiobooksEntryPoint(MediumEntryPoint):
     INTERNAL_NAME = "Audio"
     URI = "http://bib.schema.org/Audiobook"
+
+
 EntryPoint.register(AudiobooksEntryPoint, "Audiobooks")

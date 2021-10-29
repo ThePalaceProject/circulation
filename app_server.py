@@ -39,8 +39,11 @@ def cdn_url_for(*args, **kwargs):
 
 
 def load_facets_from_request(
-        facet_config=None, worklist=None, base_class=Facets,
-        base_class_constructor_kwargs=None, default_entrypoint=None
+    facet_config=None,
+    worklist=None,
+    base_class=Facets,
+    base_class_constructor_kwargs=None,
+    default_entrypoint=None,
 ):
     """Figure out which faceting object this request is asking for.
 
@@ -62,14 +65,18 @@ def load_facets_from_request(
     library = flask.request.library
     facet_config = facet_config or library
     return base_class.from_request(
-        library, facet_config, get_arg, get_header, worklist,
-        default_entrypoint, **kwargs
+        library,
+        facet_config,
+        get_arg,
+        get_header,
+        worklist,
+        default_entrypoint,
+        **kwargs
     )
 
 
 def load_pagination_from_request(
-    base_class=Pagination, base_class_constructor_kwargs=None,
-    default_size=None
+    base_class=Pagination, base_class_constructor_kwargs=None, default_size=None
 ):
     """Figure out which Pagination object this request is asking for.
 
@@ -92,6 +99,7 @@ def returns_problem_detail(f):
         if isinstance(v, ProblemDetail):
             return v.response
         return v
+
     return decorated
 
 
@@ -108,20 +116,23 @@ def compressible(f):
     though I don't know if that's the original source; it shows up in
     a lot of places.
     """
+
     @wraps(f)
     def compressor(*args, **kwargs):
         @flask.after_this_request
         def compress(response):
-            if (response.status_code < 200 or
-                response.status_code >= 300 or
-                'Content-Encoding' in response.headers):
+            if (
+                response.status_code < 200
+                or response.status_code >= 300
+                or "Content-Encoding" in response.headers
+            ):
                 # Don't encode anything other than a 2xx response
                 # code. Don't encode a response that's
                 # already been encoded.
                 return response
 
-            accept_encoding = flask.request.headers.get('Accept-Encoding', '')
-            if not 'gzip' in accept_encoding.lower():
+            accept_encoding = flask.request.headers.get("Accept-Encoding", "")
+            if not "gzip" in accept_encoding.lower():
                 return response
 
             # At this point we know we're going to be changing the
@@ -134,18 +145,19 @@ def compressible(f):
             response.direct_passthrough = False
 
             buffer = BytesIO()
-            gzipped = gzip.GzipFile(mode='wb', fileobj=buffer)
+            gzipped = gzip.GzipFile(mode="wb", fileobj=buffer)
             gzipped.write(response.data)
             gzipped.close()
             response.data = buffer.getvalue()
 
-            response.headers['Content-Encoding'] = 'gzip'
-            response.vary.add('Accept-Encoding')
-            response.headers['Content-Length'] = len(response.data)
+            response.headers["Content-Encoding"] = "gzip"
+            response.vary.add("Accept-Encoding")
+            response.headers["Content-Length"] = len(response.data)
 
             return response
 
         return f(*args, **kwargs)
+
     return compressor
 
 
@@ -165,9 +177,9 @@ class ErrorHandler(object):
         """Something very bad has happened. Notify the client."""
         # By default, when reporting errors, err on the side of
         # terseness, to avoid leaking sensitive information.
-        debug = self.app.config['DEBUG'] or self.debug
+        debug = self.app.config["DEBUG"] or self.debug
 
-        if hasattr(self.app, 'manager') and hasattr(self.app.manager, '_db'):
+        if hasattr(self.app, "manager") and hasattr(self.app.manager, "_db"):
             # There is an active database session.
 
             # Use it to determine whether we are in debug mode, in
@@ -177,10 +189,12 @@ class ErrorHandler(object):
             _db = self.app.manager._db
             try:
                 LogConfiguration.from_configuration(_db)
-                (log_level, database_log_level, handlers,
-                 errors) = LogConfiguration.from_configuration(
-                     self.app.manager._db
-                 )
+                (
+                    log_level,
+                    database_log_level,
+                    handlers,
+                    errors,
+                ) = LogConfiguration.from_configuration(self.app.manager._db)
                 debug = debug or (
                     LogConfiguration.DEBUG in (log_level, database_log_level)
                 )
@@ -200,9 +214,10 @@ class ErrorHandler(object):
             # and let uwsgi restart it.
             logging.error(
                 "Database error: %s Treating as fatal to avoid holding on to a tainted session!",
-                exception, exc_info=exception
+                exception,
+                exc_info=exception,
             )
-            shutdown = flask.request.environ.get('werkzeug.server.shutdown')
+            shutdown = flask.request.environ.get("werkzeug.server.shutdown")
             if shutdown:
                 shutdown()
             else:
@@ -213,7 +228,7 @@ class ErrorHandler(object):
 
         # Okay, it's not a database error. Turn it into a useful HTTP error
         # response.
-        if hasattr(exception, 'as_problem_detail_document'):
+        if hasattr(exception, "as_problem_detail_document"):
             # This exception can be turned directly into a problem
             # detail document.
             document = exception.as_problem_detail_document(debug)
@@ -238,7 +253,7 @@ class ErrorHandler(object):
             if debug:
                 body = tb
             else:
-                body = _('An internal error occured')
+                body = _("An internal error occured")
             response = make_response(str(body), 500, {"Content-Type": "text/plain"})
 
         log_method("Exception in web app: %s", exception, exc_info=exception)
@@ -247,17 +262,17 @@ class ErrorHandler(object):
 
 class HeartbeatController(object):
 
-    HEALTH_CHECK_TYPE = 'application/vnd.health+json'
-    VERSION_FILENAME = '.version'
+    HEALTH_CHECK_TYPE = "application/vnd.health+json"
+    VERSION_FILENAME = ".version"
 
     def heartbeat(self, conf_class=None):
-        health_check_object = dict(status='pass')
+        health_check_object = dict(status="pass")
 
         Conf = conf_class or Configuration
         app_version = Conf.app_version()
         if app_version and app_version != Conf.NO_APP_VERSION_FOUND:
-            health_check_object['releaseID'] = app_version
-            health_check_object['version'] = app_version.split('-')[0]
+            health_check_object["releaseID"] = app_version
+            health_check_object["version"] = app_version.split("-")[0]
 
         data = json.dumps(health_check_object)
         return make_response(data, 200, {"Content-Type": self.HEALTH_CHECK_TYPE})
@@ -275,9 +290,9 @@ class URNLookupController(object):
         """
         self._db = _db
 
-    def work_lookup(self, annotator, route_name='lookup', **process_urn_kwargs):
+    def work_lookup(self, annotator, route_name="lookup", **process_urn_kwargs):
         """Generate an OPDS feed describing works identified by identifier."""
-        urns = flask.request.args.getlist('urn')
+        urns = flask.request.args.getlist("urn")
 
         this_url = cdn_url_for(route_name, _external=True, urn=urns)
         handler = self.process_urns(urns, **process_urn_kwargs)
@@ -287,7 +302,11 @@ class URNLookupController(object):
             return handler
 
         opds_feed = LookupAcquisitionFeed(
-            self._db, "Lookup results", this_url, handler.works, annotator,
+            self._db,
+            "Lookup results",
+            this_url,
+            handler.works,
+            annotator,
             precomposed_entries=handler.precomposed_entries,
         )
         return OPDSFeedResponse(str(opds_feed))
@@ -306,7 +325,7 @@ class URNLookupController(object):
         handler.process_urns(urns, **process_urn_kwargs)
         return handler
 
-    def permalink(self, urn, annotator, route_name='work'):
+    def permalink(self, urn, annotator, route_name="work"):
         """Look up a single identifier and generate an OPDS feed.
 
         TODO: This method is tested, but it seems unused and it
@@ -321,8 +340,12 @@ class URNLookupController(object):
         # list of works.
         works = [work for (identifier, work) in handler.works]
         opds_feed = AcquisitionFeed(
-            self._db, urn, this_url, works, annotator,
-            precomposed_entries=handler.precomposed_entries
+            self._db,
+            urn,
+            this_url,
+            works,
+            annotator,
+            precomposed_entries=handler.precomposed_entries,
         )
         return OPDSFeedResponse(str(opds_feed))
 
@@ -364,8 +387,7 @@ class URNLookupHandler(object):
             self.add_message(urn, 400, INVALID_URN.detail)
 
     def process_identifier(self, identifier, urn, **kwargs):
-        """Turn a URN into a Work suitable for use in an OPDS feed.
-        """
+        """Turn a URN into a Work suitable for use in an OPDS feed."""
         if not identifier.licensed_through:
             # The default URNLookupHandler cannot look up an
             # Identifier that has no associated LicensePool.
@@ -394,9 +416,7 @@ class URNLookupHandler(object):
 
     def add_message(self, urn, status_code, message):
         """An identifier lookup resulted in the creation of a message."""
-        self.precomposed_entries.append(
-            OPDSMessage(urn, status_code, message)
-        )
+        self.precomposed_entries.append(OPDSMessage(urn, status_code, message))
 
     def post_lookup_hook(self):
         """Run after looking up a number of Identifiers.
@@ -420,13 +440,15 @@ class ComplaintController(object):
         except ValueError as e:
             return problem(None, 400, _("Invalid problem detail document"))
 
-        type = data.get('type')
-        source = data.get('source')
-        detail = data.get('detail')
+        type = data.get("type")
+        source = data.get("source")
+        detail = data.get("detail")
         if not type:
             return problem(None, 400, _("No problem type specified."))
         if type not in Complaint.VALID_TYPES:
-            return problem(None, 400, _("Unrecognized problem type: %(type)s", type=type))
+            return problem(
+                None, 400, _("Unrecognized problem type: %(type)s", type=type)
+            )
 
         complaint = None
         try:

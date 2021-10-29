@@ -46,31 +46,34 @@ class SelfTestResult(object):
         # Time formatting method
         f = AtomFeed._strftime
         if self.exception:
-            exception = { "class": self.exception.__class__.__name__,
-                          "message": str(self.exception),
-                          "debug_message" : self.debug_message }
+            exception = {
+                "class": self.exception.__class__.__name__,
+                "message": str(self.exception),
+                "debug_message": self.debug_message,
+            }
         else:
             exception = None
         value = dict(
-            name=self.name, success=self.success,
+            name=self.name,
+            success=self.success,
             duration=self.duration,
             exception=exception,
         )
         if self.start:
-            value['start'] = f(self.start)
+            value["start"] = f(self.start)
         if self.end:
-            value['end'] = f(self.end)
+            value["end"] = f(self.end)
 
         if self.collection:
-            value['collection'] = self.collection.name
+            value["collection"] = self.collection.name
 
         # String results will be displayed in a fixed-width font.
         # Lists of strings will be hidden behind an expandable toggle.
         # Other return values have no defined method of display.
         if isinstance(self.result, str) or isinstance(self.result, list):
-            value['result'] = self.result
+            value["result"] = self.result
         else:
-            value['result'] = None
+            value["result"] = None
         return value
 
     def __repr__(self):
@@ -78,7 +81,7 @@ class SelfTestResult(object):
             if isinstance(self.exception, IntegrationException):
                 exception = " exception=%r debug=%r" % (
                     str(self.exception),
-                    self.debug_message
+                    self.debug_message,
                 )
             else:
                 exception = " exception=%r" % self.exception
@@ -89,8 +92,12 @@ class SelfTestResult(object):
         else:
             collection = ""
         return "<SelfTestResult: name=%r%s duration=%.2fsec success=%r%s result=%r>" % (
-            self.name, collection, self.duration, self.success,
-            exception, self.result
+            self.name,
+            collection,
+            self.duration,
+            self.success,
+            exception,
+            self.result,
         )
 
     @property
@@ -98,14 +105,14 @@ class SelfTestResult(object):
         """How long the test took to run."""
         if not self.start or not self.end:
             return 0
-        return (self.end-self.start).total_seconds()
+        return (self.end - self.start).total_seconds()
 
     @property
     def debug_message(self):
         """The debug message associated with the Exception, if any."""
         if not self.exception:
             return None
-        return getattr(self.exception, 'debug_message', None)
+        return getattr(self.exception, "debug_message", None)
 
 
 class HasSelfTests(object):
@@ -115,7 +122,7 @@ class HasSelfTests(object):
 
     # Self-test results are stored in a ConfigurationSetting with this name,
     # associated with the appropriate ExternalIntegration.
-    SELF_TEST_RESULTS_SETTING = 'self_test_results'
+    SELF_TEST_RESULTS_SETTING = "self_test_results"
 
     @classmethod
     def run_self_tests(cls, _db, constructor_method=None, *args, **kwargs):
@@ -170,7 +177,6 @@ class HasSelfTests(object):
                 )
                 results.append(failure)
 
-
         end = utc_now()
 
         # Format the results in a useful way.
@@ -178,8 +184,8 @@ class HasSelfTests(object):
         value = dict(
             start=AtomFeed._strftime(start),
             end=AtomFeed._strftime(end),
-            duration = (end-start).total_seconds(),
-            results = [x.to_dict for x in results]
+            duration=(end - start).total_seconds(),
+            results=[x.to_dict for x in results],
         )
         # Store the formatted results in the database, if we can find
         # a place to store them.
@@ -194,9 +200,7 @@ class HasSelfTests(object):
             integration = instance.external_integration(_db)
 
         if integration:
-            integration.setting(
-                cls.SELF_TEST_RESULTS_SETTING
-            ).value = json.dumps(value)
+            integration.setting(cls.SELF_TEST_RESULTS_SETTING).value = json.dumps(value)
 
         return value, results
 
@@ -211,12 +215,16 @@ class HasSelfTests(object):
         instance = constructor_method(*args, **kwargs)
 
         from .external_search import ExternalSearchIndex
+
         if isinstance(instance, ExternalSearchIndex):
             integration = instance.search_integration(_db)
         else:
             integration = instance.external_integration(_db)
         if integration:
-            return integration.setting(cls.SELF_TEST_RESULTS_SETTING).json_value or "No results yet"
+            return (
+                integration.setting(cls.SELF_TEST_RESULTS_SETTING).json_value
+                or "No results yet"
+            )
 
     def external_integration(self, _db):
         """Locate the ExternalIntegration associated with this object.

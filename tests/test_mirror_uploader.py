@@ -19,7 +19,14 @@ class DummySuccessUploader(MirrorUploader):
     def __init__(self, integration=None):
         pass
 
-    def book_url(self, identifier, extension='.epub', open_access=True, data_source=None, title=None):
+    def book_url(
+        self,
+        identifier,
+        extension=".epub",
+        open_access=True,
+        data_source=None,
+        title=None,
+    ):
         pass
 
     def cover_image_url(self, data_source, identifier, filename=None, scaled_size=None):
@@ -39,7 +46,14 @@ class DummyFailureUploader(MirrorUploader):
     def __init__(self, integration=None):
         pass
 
-    def book_url(self, identifier, extension='.epub', open_access=True, data_source=None, title=None):
+    def book_url(
+        self,
+        identifier,
+        extension=".epub",
+        open_access=True,
+        data_source=None,
+        title=None,
+    ):
         pass
 
     def cover_image_url(self, data_source, identifier, filename=None, scaled_size=None):
@@ -69,22 +83,26 @@ class TestInitialization(DatabaseTest):
         integration.name = storage_name
         return integration
 
-    @parameterized.expand([
-        ('s3_uploader', ExternalIntegration.S3, S3Uploader),
-        (
-                'minio_uploader',
+    @parameterized.expand(
+        [
+            ("s3_uploader", ExternalIntegration.S3, S3Uploader),
+            (
+                "minio_uploader",
                 ExternalIntegration.MINIO,
                 MinIOUploader,
-                {MinIOUploaderConfiguration.ENDPOINT_URL: 'http://localhost'}
-        )
-    ])
+                {MinIOUploaderConfiguration.ENDPOINT_URL: "http://localhost"},
+            ),
+        ]
+    )
     def test_mirror(self, name, protocol, uploader_class, settings=None):
         storage_name = "some storage"
         # If there's no integration with goal=STORAGE or name=storage_name,
         # MirrorUploader.mirror raises an exception.
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             MirrorUploader.mirror(self._db, storage_name)
-        assert "No storage integration with name 'some storage' is configured" in str(excinfo.value)
+        assert "No storage integration with name 'some storage' is configured" in str(
+            excinfo.value
+        )
 
         # If there's only one, mirror() uses it to initialize a
         # MirrorUploader.
@@ -105,7 +123,9 @@ class TestInitialization(DatabaseTest):
         # No name was passed so nothing is found
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             MirrorUploader.integration_by_name(self._db)
-        assert "No storage integration with name 'None' is configured" in str(excinfo.value)
+        assert "No storage integration with name 'None' is configured" in str(
+            excinfo.value
+        )
 
         # Correct name was passed
         integration = MirrorUploader.integration_by_name(self._db, integration.name)
@@ -115,36 +135,41 @@ class TestInitialization(DatabaseTest):
         # This collection has no mirror_integration, so
         # there is no MirrorUploader for it.
         collection = self._collection()
-        assert None == MirrorUploader.for_collection(collection, ExternalIntegrationLink.COVERS)
+        assert None == MirrorUploader.for_collection(
+            collection, ExternalIntegrationLink.COVERS
+        )
 
         # This collection has a properly configured mirror_integration,
         # so it can have an MirrorUploader.
         integration = self._external_integration(
-            ExternalIntegration.S3, ExternalIntegration.STORAGE_GOAL,
-            username="username", password="password",
-            settings={S3UploaderConfiguration.BOOK_COVERS_BUCKET_KEY: "some-covers"}
+            ExternalIntegration.S3,
+            ExternalIntegration.STORAGE_GOAL,
+            username="username",
+            password="password",
+            settings={S3UploaderConfiguration.BOOK_COVERS_BUCKET_KEY: "some-covers"},
         )
         integration_link = self._external_integration_link(
             integration=collection._external_integration,
             other_integration=integration,
-            purpose=ExternalIntegrationLink.COVERS
+            purpose=ExternalIntegrationLink.COVERS,
         )
 
-        uploader = MirrorUploader.for_collection(collection, ExternalIntegrationLink.COVERS)
+        uploader = MirrorUploader.for_collection(
+            collection, ExternalIntegrationLink.COVERS
+        )
         assert isinstance(uploader, MirrorUploader)
 
-    @parameterized.expand([
-        (
-                's3_uploader',
-                ExternalIntegration.S3, S3Uploader
-        ),
-        (
-                'minio_uploader',
+    @parameterized.expand(
+        [
+            ("s3_uploader", ExternalIntegration.S3, S3Uploader),
+            (
+                "minio_uploader",
                 ExternalIntegration.MINIO,
                 MinIOUploader,
-                {MinIOUploaderConfiguration.ENDPOINT_URL: 'http://localhost'}
-        )
-    ])
+                {MinIOUploaderConfiguration.ENDPOINT_URL: "http://localhost"},
+            ),
+        ]
+    )
     def test_constructor(self, name, protocol, uploader_class, settings=None):
         # You can't create a MirrorUploader with an integration
         # that's not designed for storage.
@@ -185,13 +210,13 @@ class TestMirrorUploader(DatabaseTest):
     def test_success_and_then_failure(self):
         r, ignore = self._representation()
         now = utc_now()
-        DummySuccessUploader().mirror_one(r, '')
+        DummySuccessUploader().mirror_one(r, "")
         assert r.mirrored_at > now
         assert None == r.mirror_exception
 
         # Even if the original upload succeeds, a subsequent upload
         # may fail in a way that leaves the image in an inconsistent
         # state.
-        DummyFailureUploader().mirror_one(r, '')
+        DummyFailureUploader().mirror_one(r, "")
         assert None == r.mirrored_at
         assert "I always fail." == r.mirror_exception

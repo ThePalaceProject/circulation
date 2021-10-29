@@ -1,4 +1,3 @@
-
 import re
 from io import BytesIO
 
@@ -48,13 +47,24 @@ class Annotator(object):
     # There doesn't seem to be any particular vocabulary for this.
     FORMAT_TERMS = {
         (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM): "EPUB eBook",
-        (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM): "Adobe EPUB eBook",
+        (
+            Representation.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.ADOBE_DRM,
+        ): "Adobe EPUB eBook",
         (Representation.PDF_MEDIA_TYPE, DeliveryMechanism.NO_DRM): "PDF eBook",
         (Representation.PDF_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM): "Adobe PDF eBook",
     }
 
-    def annotate_work_record(self, work, active_license_pool, edition,
-                             identifier, record, integration=None, updated=None):
+    def annotate_work_record(
+        self,
+        work,
+        active_license_pool,
+        edition,
+        identifier,
+        record,
+        integration=None,
+        updated=None,
+    ):
         """Add metadata from this work to a MARC record.
 
         :work: The Work whose record is being annotated.
@@ -74,16 +84,18 @@ class Annotator(object):
         # The record length is automatically updated once fields are added.
         initial_record_length = "00000"
 
-        record_status = "n" # New record
+        record_status = "n"  # New record
         if getattr(work, cls.marc_cache_field):
-            record_status = "c" # Corrected or revised
+            record_status = "c"  # Corrected or revised
 
         # Distributors consistently seem to use type "a" - language material - for
         # ebooks, though there is also type "m" for computer files.
         record_type = "a"
-        bibliographic_level = "m" # Monograph/item
-        
-        leader = initial_record_length + record_status + record_type + bibliographic_level
+        bibliographic_level = "m"  # Monograph/item
+
+        leader = (
+            initial_record_length + record_status + record_type + bibliographic_level
+        )
         # Additional information about the record that's always the same.
         leader += "  2200000   4500"
         return leader
@@ -91,17 +103,14 @@ class Annotator(object):
     @classmethod
     def add_control_fields(cls, record, identifier, pool, edition):
         # Unique identifier for this record.
-        record.add_field(
-            Field(tag="001", data=identifier.urn))
+        record.add_field(Field(tag="001", data=identifier.urn))
 
         # Field 003 (MARC organization code) is library-specific, so it's added separately.
 
-        record.add_field(
-            Field(tag="005", data=utc_now().strftime("%Y%m%d%H%M%S.0")))
+        record.add_field(Field(tag="005", data=utc_now().strftime("%Y%m%d%H%M%S.0")))
 
         # Field 006: m = computer file, d = the file is a document
-        record.add_field(
-            Field(tag="006", data="m        d        "))
+        record.add_field(Field(tag="006", data="m        d        "))
 
         # Field 007: more details about electronic resource
         # Since this depends on the pool, it might be better not to cache it.
@@ -112,17 +121,18 @@ class Annotator(object):
         else:
             file_formats_code = "m"
         record.add_field(
-            Field(tag="007", data="cr cn ---" + file_formats_code + "nuuu"))
+            Field(tag="007", data="cr cn ---" + file_formats_code + "nuuu")
+        )
 
         # Field 008 (fixed-length data elements):
         data = utc_now().strftime("%y%m%d")
         publication_date = edition.issued or edition.published
         if publication_date:
-            date_type = "s" # single known date
+            date_type = "s"  # single known date
             # Not using strftime because some years are pre-1900.
             date_value = "%04i" % publication_date.year
         else:
-            date_type = "n" # dates unknown
+            date_type = "n"  # dates unknown
             date_value = "    "
         data += date_type + date_value
         data += "    "
@@ -135,13 +145,11 @@ class Annotator(object):
             language = LanguageCodes.string_to_alpha_3(edition.language)
         data += language
         data += "  "
-        record.add_field(
-            Field(tag="008", data=data))
+        record.add_field(Field(tag="008", data=data))
 
     @classmethod
     def add_marc_organization_code(cls, record, marc_org):
-        record.add_field(
-            Field(tag="003", data=marc_org))
+        record.add_field(Field(tag="003", data=marc_org))
 
     @classmethod
     def add_isbn(cls, record, identifier):
@@ -152,18 +160,24 @@ class Annotator(object):
         if not isbn:
             _db = Session.object_session(identifier)
             identifier_ids = identifier.equivalent_identifier_ids()[identifier.id]
-            isbn = _db.query(Identifier).filter(
-                Identifier.type==Identifier.ISBN).filter(
-                Identifier.id.in_(identifier_ids)).order_by(
-                Identifier.id).first()
+            isbn = (
+                _db.query(Identifier)
+                .filter(Identifier.type == Identifier.ISBN)
+                .filter(Identifier.id.in_(identifier_ids))
+                .order_by(Identifier.id)
+                .first()
+            )
         if isbn:
             record.add_field(
                 Field(
                     tag="020",
-                    indicators=[" "," "],
+                    indicators=[" ", " "],
                     subfields=[
-                        "a", isbn.identifier,
-                    ]))
+                        "a",
+                        isbn.identifier,
+                    ],
+                )
+            )
 
     @classmethod
     def add_title(cls, record, edition):
@@ -172,7 +186,7 @@ class Annotator(object):
         # the title and the sort_title.
         non_filing_characters = 0
         if edition.title != edition.sort_title and ("," in edition.sort_title):
-            stemmed = edition.sort_title[:edition.sort_title.rindex(",")]
+            stemmed = edition.sort_title[: edition.sort_title.rindex(",")]
             non_filing_characters = edition.title.index(stemmed)
         # MARC only supports up to 9 non-filing characters, but if we got more
         # something is probably wrong anyway.
@@ -189,7 +203,8 @@ class Annotator(object):
                 tag="245",
                 indicators=["0", non_filing_characters],
                 subfields=subfields,
-            ))
+            )
+        )
 
     @classmethod
     def add_contributors(cls, record, edition):
@@ -204,10 +219,13 @@ class Annotator(object):
             record.add_field(
                 Field(
                     tag="100",
-                    indicators=["1"," "],
+                    indicators=["1", " "],
                     subfields=[
-                        "a", str(edition.sort_author),
-                    ]))
+                        "a",
+                        str(edition.sort_author),
+                    ],
+                )
+            )
 
         if len(edition.contributions) > 1:
             for contribution in edition.contributions:
@@ -217,9 +235,13 @@ class Annotator(object):
                         tag="700",
                         indicators=["1", " "],
                         subfields=[
-                            "a", str(contributor.sort_name),
-                            "e", contribution.role,
-                        ]))
+                            "a",
+                            str(contributor.sort_name),
+                            "e",
+                            contribution.role,
+                        ],
+                    )
+                )
 
     @classmethod
     def add_publisher(cls, record, edition):
@@ -233,10 +255,15 @@ class Annotator(object):
                     tag="264",
                     indicators=[" ", "1"],
                     subfields=[
-                        "a", "[Place of publication not identified]",
-                        "b", str(edition.publisher or ""),
-                        "c", year,
-                    ]))
+                        "a",
+                        "[Place of publication not identified]",
+                        "b",
+                        str(edition.publisher or ""),
+                        "c",
+                        year,
+                    ],
+                )
+            )
 
     @classmethod
     def add_distributor(cls, record, pool):
@@ -246,8 +273,11 @@ class Annotator(object):
                 tag="264",
                 indicators=[" ", "2"],
                 subfields=[
-                    "b", str(pool.data_source.name),
-                ]))
+                    "b",
+                    str(pool.data_source.name),
+                ],
+            )
+        )
 
     @classmethod
     def add_physical_description(cls, record, edition):
@@ -258,58 +288,63 @@ class Annotator(object):
                     tag="300",
                     indicators=[" ", " "],
                     subfields=[
-                        "a", "1 online resource",
-                    ]))
+                        "a",
+                        "1 online resource",
+                    ],
+                )
+            )
 
             record.add_field(
                 Field(
                     tag="336",
                     indicators=[" ", " "],
-                    subfields=[
-                        "a", "text",
-                        "b", "txt",
-                        "2", "rdacontent"
-                    ]))
+                    subfields=["a", "text", "b", "txt", "2", "rdacontent"],
+                )
+            )
         elif edition.medium == Edition.AUDIO_MEDIUM:
             record.add_field(
                 Field(
                     tag="300",
                     indicators=[" ", " "],
                     subfields=[
-                        "a", "1 sound file",
-                        "b", "digital",
-                    ]))
+                        "a",
+                        "1 sound file",
+                        "b",
+                        "digital",
+                    ],
+                )
+            )
 
             record.add_field(
                 Field(
                     tag="336",
                     indicators=[" ", " "],
-                    subfields=[
-                        "a", "spoken word",
-                        "b", "spw",
-                        "2", "rdacontent"
-                    ]))
+                    subfields=["a", "spoken word", "b", "spw", "2", "rdacontent"],
+                )
+            )
 
         record.add_field(
             Field(
                 tag="337",
                 indicators=[" ", " "],
-                subfields=[
-                    "a", "computer",
-                    "b", "c",
-                    "2", "rdamedia"
-                ]))
+                subfields=["a", "computer", "b", "c", "2", "rdamedia"],
+            )
+        )
 
         record.add_field(
             Field(
                 tag="338",
                 indicators=[" ", " "],
                 subfields=[
-                    "a", "online resource",
-                    "b", "cr",
-                    "2", "rdacarrier",
-                ]))
-
+                    "a",
+                    "online resource",
+                    "b",
+                    "cr",
+                    "2",
+                    "rdacarrier",
+                ],
+            )
+        )
 
         file_type = None
         if edition.medium == Edition.BOOK_MEDIUM:
@@ -322,9 +357,13 @@ class Annotator(object):
                     tag="347",
                     indicators=[" ", " "],
                     subfields=[
-                        "a", file_type,
-                        "2", "rda",
-                    ]))
+                        "a",
+                        file_type,
+                        "2",
+                        "rda",
+                    ],
+                )
+            )
 
         # Form of work
         form = None
@@ -339,9 +378,13 @@ class Annotator(object):
                     tag="380",
                     indicators=[" ", " "],
                     subfields=[
-                        "a", "eBook",
-                        "2", "tlcgt",
-                    ]))
+                        "a",
+                        "eBook",
+                        "2",
+                        "tlcgt",
+                    ],
+                )
+            )
 
     @classmethod
     def add_audience(cls, record, work):
@@ -349,11 +392,15 @@ class Annotator(object):
         record.add_field(
             Field(
                 tag="385",
-                indicators=[" ",  " "],
+                indicators=[" ", " "],
                 subfields=[
-                    "a", audience,
-                    "2", "tlctarget",
-                ]))
+                    "a",
+                    audience,
+                    "2",
+                    "tlctarget",
+                ],
+            )
+        )
 
     @classmethod
     def add_series(cls, record, edition):
@@ -366,7 +413,8 @@ class Annotator(object):
                     tag="490",
                     indicators=["0", " "],
                     subfields=subfields,
-                    ))
+                )
+            )
 
     @classmethod
     def add_system_details(cls, record):
@@ -374,9 +422,9 @@ class Annotator(object):
             Field(
                 tag="538",
                 indicators=[" ", " "],
-                subfields=[
-                    "a", "Mode of access: World Wide Web."
-                ]))
+                subfields=["a", "Mode of access: World Wide Web."],
+            )
+        )
 
     @classmethod
     def add_formats(cls, record, pool):
@@ -389,24 +437,29 @@ class Annotator(object):
                 record.add_field(
                     Field(
                         tag="538",
-                        indicators=[" "," "],
+                        indicators=[" ", " "],
                         subfields=[
-                            "a", format,
-                        ]))
-
+                            "a",
+                            format,
+                        ],
+                    )
+                )
 
     @classmethod
     def add_summary(cls, record, work):
         summary = work.summary_text
         if summary:
-            stripped = re.sub('<[^>]+?>', ' ', summary)
+            stripped = re.sub("<[^>]+?>", " ", summary)
             record.add_field(
                 Field(
                     tag="520",
                     indicators=[" ", " "],
                     subfields=[
-                        "a", stripped.encode('ascii', 'ignore'),
-                    ]))
+                        "a",
+                        stripped.encode("ascii", "ignore"),
+                    ],
+                )
+            )
 
     @classmethod
     def add_simplified_genres(cls, record, work):
@@ -420,9 +473,13 @@ class Annotator(object):
                     tag="650",
                     indicators=["0", "7"],
                     subfields=[
-                        "a", genre.name,
-                        "2", "Library Simplified",
-                    ]))
+                        "a",
+                        genre.name,
+                        "2",
+                        "Library Simplified",
+                    ],
+                )
+            )
 
     @classmethod
     def add_ebooks_subject(cls, record):
@@ -432,8 +489,11 @@ class Annotator(object):
                 tag="655",
                 indicators=[" ", "0"],
                 subfields=[
-                    "a", "Electronic books.",
-                ]))
+                    "a",
+                    "Electronic books.",
+                ],
+            )
+        )
 
 
 class MARCExporterFacets(BaseFacets):
@@ -457,7 +517,9 @@ class MARCExporter(object):
 
     NAME = ExternalIntegration.MARC_EXPORT
 
-    DESCRIPTION = _("Export metadata into MARC files that can be imported into an ILS manually.")
+    DESCRIPTION = _(
+        "Export metadata into MARC files that can be imported into an ILS manually."
+    )
 
     # This setting (in days) controls how often MARC files should be
     # automatically updated. Since the crontab in docker isn't easily
@@ -471,65 +533,85 @@ class MARCExporter(object):
     # http://www.loc.gov/marc/organizations/org-search.php
     MARC_ORGANIZATION_CODE = "marc_organization_code"
 
-    WEB_CLIENT_URL = 'marc_web_client_url'
-    INCLUDE_SUMMARY = 'include_summary'
-    INCLUDE_SIMPLIFIED_GENRES = 'include_simplified_genres'
+    WEB_CLIENT_URL = "marc_web_client_url"
+    INCLUDE_SUMMARY = "include_summary"
+    INCLUDE_SIMPLIFIED_GENRES = "include_simplified_genres"
 
     LIBRARY_SETTINGS = [
-        { "key": UPDATE_FREQUENCY,
-          "label": _("Update frequency (in days)"),
-          "description": _("The circulation manager will wait this number of days between generating MARC files."),
-          "type": "number",
-          "default": DEFAULT_UPDATE_FREQUENCY,
-        },
-        { "key": MARC_ORGANIZATION_CODE,
-          "label": _("The MARC organization code for this library (003 field)."),
-          "description": _("MARC organization codes are assigned by the Library of Congress."),
+        {
+            "key": UPDATE_FREQUENCY,
+            "label": _("Update frequency (in days)"),
+            "description": _(
+                "The circulation manager will wait this number of days between generating MARC files."
+            ),
+            "type": "number",
+            "default": DEFAULT_UPDATE_FREQUENCY,
         },
         {
-          "key": WEB_CLIENT_URL,
-          "label": _("The base URL for the web catalog for this library, for the 856 field."),
-          "description": _("If using a library registry that provides a web catalog, this can be left blank."),
+            "key": MARC_ORGANIZATION_CODE,
+            "label": _("The MARC organization code for this library (003 field)."),
+            "description": _(
+                "MARC organization codes are assigned by the Library of Congress."
+            ),
         },
-        { "key": INCLUDE_SUMMARY,
-          "label": _("Include summaries in MARC records (520 field)"),
-          "type": "select",
-          "options": [
-              { "key": "false", "label": _("Do not include summaries") },
-              { "key": "true", "label": _("Include summaries") },
-          ],
-          "default": "false",
+        {
+            "key": WEB_CLIENT_URL,
+            "label": _(
+                "The base URL for the web catalog for this library, for the 856 field."
+            ),
+            "description": _(
+                "If using a library registry that provides a web catalog, this can be left blank."
+            ),
         },
-        { "key": INCLUDE_SIMPLIFIED_GENRES,
-          "label": _("Include Library Simplified genres in MARC records (650 fields)"),
-          "type": "select",
-          "options": [
-              { "key": "false", "label": _("Do not include Library Simplified genres") },
-              { "key": "true", "label": _("Include Library Simplified genres") },
-          ],
-          "default": "false",
+        {
+            "key": INCLUDE_SUMMARY,
+            "label": _("Include summaries in MARC records (520 field)"),
+            "type": "select",
+            "options": [
+                {"key": "false", "label": _("Do not include summaries")},
+                {"key": "true", "label": _("Include summaries")},
+            ],
+            "default": "false",
+        },
+        {
+            "key": INCLUDE_SIMPLIFIED_GENRES,
+            "label": _(
+                "Include Library Simplified genres in MARC records (650 fields)"
+            ),
+            "type": "select",
+            "options": [
+                {
+                    "key": "false",
+                    "label": _("Do not include Library Simplified genres"),
+                },
+                {"key": "true", "label": _("Include Library Simplified genres")},
+            ],
+            "default": "false",
         },
     ]
 
     NO_MIRROR_INTEGRATION = "NO_MIRROR"
     DEFAULT_MIRROR_INTEGRATION = dict(
-        key=NO_MIRROR_INTEGRATION,
-        label=_("None - Do not mirror MARC files")
+        key=NO_MIRROR_INTEGRATION, label=_("None - Do not mirror MARC files")
     )
     SETTING = {
         "key": "mirror_integration_id",
         "label": _("MARC Mirror"),
-        "description": _("Storage protocol to use for uploading generated MARC files. The service must already be configured under 'Storage Services'."),
+        "description": _(
+            "Storage protocol to use for uploading generated MARC files. The service must already be configured under 'Storage Services'."
+        ),
         "type": "select",
-        "options" : [DEFAULT_MIRROR_INTEGRATION]
+        "options": [DEFAULT_MIRROR_INTEGRATION],
     }
 
     @classmethod
     def from_config(cls, library):
         _db = Session.object_session(library)
         integration = ExternalIntegration.lookup(
-            _db, ExternalIntegration.MARC_EXPORT,
-            ExternalIntegration.CATALOG_GOAL, library=library
+            _db,
+            ExternalIntegration.MARC_EXPORT,
+            ExternalIntegration.CATALOG_GOAL,
+            library=library,
         )
         if not integration:
             raise CannotLoadConfiguration(
@@ -541,26 +623,27 @@ class MARCExporter(object):
         self._db = _db
         self.library = library
         self.integration = integration
-        
+
     @classmethod
     def get_storage_settings(cls, _db):
         integrations = ExternalIntegration.for_goal(
             _db, ExternalIntegration.STORAGE_GOAL
         )
-        cls.SETTING['options'] = [cls.DEFAULT_MIRROR_INTEGRATION]
+        cls.SETTING["options"] = [cls.DEFAULT_MIRROR_INTEGRATION]
         for integration in integrations:
-            # Only add an integration to choose from if it has a 
+            # Only add an integration to choose from if it has a
             # MARC File Bucket field in its settings.
-            configuration_settings = [s for s in integration.settings if s.key=="marc_bucket"]
+            configuration_settings = [
+                s for s in integration.settings if s.key == "marc_bucket"
+            ]
 
             if configuration_settings:
                 if configuration_settings[0].value:
-                    cls.SETTING['options'].append(
+                    cls.SETTING["options"].append(
                         dict(key=str(integration.id), label=integration.name)
                     )
-        
-        return cls.SETTING
 
+        return cls.SETTING
 
     @classmethod
     def create_record(cls, work, annotator, force_create=False, integration=None):
@@ -604,12 +687,22 @@ class MARCExporter(object):
             setattr(work, annotator.marc_cache_field, data.decode("utf8"))
 
         # Add additional fields that should not be cached.
-        annotator.annotate_work_record(work, pool, edition, identifier, record, integration)
+        annotator.annotate_work_record(
+            work, pool, edition, identifier, record, integration
+        )
         return record
 
-    def records(self, lane, annotator, mirror_integration, start_time=None,
-                force_refresh=False, mirror=None, search_engine=None,
-                query_batch_size=500, upload_batch_size=7500,
+    def records(
+        self,
+        lane,
+        annotator,
+        mirror_integration,
+        start_time=None,
+        force_refresh=False,
+        mirror=None,
+        search_engine=None,
+        query_batch_size=500,
+        upload_batch_size=7500,
     ):
         """
         Create and export a MARC file for the books in a lane.
@@ -633,7 +726,9 @@ class MARCExporter(object):
             storage_protocol = mirror_integration.protocol
             mirror = MirrorUploader.implementation(mirror_integration)
             if mirror.NAME != storage_protocol:
-                raise Exception("Mirror integration does not match configured storage protocol")
+                raise Exception(
+                    "Mirror integration does not match configured storage protocol"
+                )
 
         if not mirror:
             raise Exception("No mirror integration is configured")
@@ -650,8 +745,7 @@ class MARCExporter(object):
 
         url = mirror.marc_file_url(self.library, lane, end_time, start_time)
         representation, ignore = get_one_or_create(
-            self._db, Representation, url=url,
-            media_type=Representation.MARC_MEDIA_TYPE
+            self._db, Representation, url=url, media_type=Representation.MARC_MEDIA_TYPE
         )
 
         with mirror.multipart_upload(representation, url) as upload:
@@ -660,8 +754,10 @@ class MARCExporter(object):
             while pagination is not None:
                 # Retrieve one 'page' of works from the search index.
                 works = lane.works(
-                    self._db, pagination=pagination, facets=facets,
-                    search_engine=search_engine
+                    self._db,
+                    pagination=pagination,
+                    facets=facets,
+                    search_engine=search_engine,
                 )
                 for work in works:
                     # Create a record for each work and add it to the
@@ -687,10 +783,13 @@ class MARCExporter(object):
         representation.fetched_at = end_time
         if not representation.mirror_exception:
             cached, is_new = get_one_or_create(
-                self._db, CachedMARCFile, library=self.library,
+                self._db,
+                CachedMARCFile,
+                library=self.library,
                 lane=(lane if isinstance(lane, Lane) else None),
                 start_time=start_time,
-                create_method_kwargs=dict(representation=representation))
+                create_method_kwargs=dict(representation=representation),
+            )
             if not is_new:
                 cached.representation = representation
             cached.end_time = end_time

@@ -32,7 +32,6 @@ from ..util.datetime_helpers import utc_now
 
 
 class TestCirculationData(DatabaseTest):
-
     def test_circulationdata_may_require_collection(self):
         """Depending on the information provided in a CirculationData
         object, it might or might not be possible to call apply()
@@ -41,13 +40,12 @@ class TestCirculationData(DatabaseTest):
 
         identifier = IdentifierData(Identifier.OVERDRIVE_ID, "1")
         format = FormatData(
-            Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM,
-            rights_uri=RightsStatus.IN_COPYRIGHT
+            Representation.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.NO_DRM,
+            rights_uri=RightsStatus.IN_COPYRIGHT,
         )
         circdata = CirculationData(
-            DataSource.OVERDRIVE,
-            primary_identifier=identifier,
-            formats=[format]
+            DataSource.OVERDRIVE, primary_identifier=identifier, formats=[format]
         )
         circdata.apply(self._db, collection=None)
 
@@ -68,7 +66,10 @@ class TestCirculationData(DatabaseTest):
         circdata.licenses_owned = 0
         with pytest.raises(ValueError) as excinfo:
             circdata.apply(self._db, collection=None)
-        assert 'Cannot store circulation information because no Collection was provided.' in str(excinfo.value)
+        assert (
+            "Cannot store circulation information because no Collection was provided."
+            in str(excinfo.value)
+        )
 
     def test_circulationdata_can_be_deepcopied(self):
         # Check that we didn't put something in the CirculationData that
@@ -98,18 +99,20 @@ class TestCirculationData(DatabaseTest):
         # If deepcopy didn't throw an exception we're ok.
         assert circulation_data_copy is not None
 
-
     def test_links_filtered(self):
         # Tests that passed-in links filter down to only the relevant ones.
         link1 = LinkData(Hyperlink.OPEN_ACCESS_DOWNLOAD, "example.epub")
         link2 = LinkData(rel=Hyperlink.IMAGE, href="http://example.com/")
         link3 = LinkData(rel=Hyperlink.DESCRIPTION, content="foo")
         link4 = LinkData(
-            rel=Hyperlink.THUMBNAIL_IMAGE, href="http://thumbnail.com/",
+            rel=Hyperlink.THUMBNAIL_IMAGE,
+            href="http://thumbnail.com/",
             media_type=Representation.JPEG_MEDIA_TYPE,
         )
         link5 = LinkData(
-            rel=Hyperlink.IMAGE, href="http://example.com/", thumbnail=link4,
+            rel=Hyperlink.IMAGE,
+            href="http://example.com/",
+            thumbnail=link4,
             media_type=Representation.JPEG_MEDIA_TYPE,
         )
         links = [link1, link2, link3, link4, link5]
@@ -121,10 +124,9 @@ class TestCirculationData(DatabaseTest):
             links=links,
         )
 
-        filtered_links = sorted(circulation_data.links, key=lambda x:x.rel)
+        filtered_links = sorted(circulation_data.links, key=lambda x: x.rel)
 
         assert [link1] == filtered_links
-
 
     def test_explicit_formatdata(self):
         # Creating an edition with an open-access download will
@@ -144,8 +146,9 @@ class TestCirculationData(DatabaseTest):
         )
         circulation_data.apply(self._db, pool.collection)
 
-        [epub, pdf] = sorted(pool.delivery_mechanisms,
-                             key=lambda x: x.delivery_mechanism.content_type)
+        [epub, pdf] = sorted(
+            pool.delivery_mechanisms, key=lambda x: x.delivery_mechanism.content_type
+        )
         assert epub.resource == pool.best_open_access_resource
 
         assert Representation.PDF_MEDIA_TYPE == pdf.delivery_mechanism.content_type
@@ -154,8 +157,8 @@ class TestCirculationData(DatabaseTest):
         # If we tell Metadata to replace the list of formats, we only
         # have the one format we manually created.
         replace = ReplacementPolicy(
-                formats=True,
-            )
+            formats=True,
+        )
         circulation_data.apply(self._db, pool.collection, replace=replace)
         [pdf] = pool.delivery_mechanisms
         assert Representation.PDF_MEDIA_TYPE == pdf.delivery_mechanism.content_type
@@ -168,8 +171,11 @@ class TestCirculationData(DatabaseTest):
             self._db.delete(lpdm)
 
         old_lpdm = pool.set_delivery_mechanism(
-            Representation.PDF_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM,
-            RightsStatus.IN_COPYRIGHT, None)
+            Representation.PDF_MEDIA_TYPE,
+            DeliveryMechanism.ADOBE_DRM,
+            RightsStatus.IN_COPYRIGHT,
+            None,
+        )
 
         # And it has been loaned.
         patron = self._patron()
@@ -193,8 +199,11 @@ class TestCirculationData(DatabaseTest):
         circulation_data.apply(self._db, pool.collection, replacement_policy)
 
         assert 2 == len(pool.delivery_mechanisms)
-        assert (set([Representation.PDF_MEDIA_TYPE, Representation.EPUB_MEDIA_TYPE]) ==
-            set([lpdm.delivery_mechanism.content_type for lpdm in pool.delivery_mechanisms]))
+        assert set(
+            [Representation.PDF_MEDIA_TYPE, Representation.EPUB_MEDIA_TYPE]
+        ) == set(
+            [lpdm.delivery_mechanism.content_type for lpdm in pool.delivery_mechanisms]
+        )
         assert old_lpdm == loan.fulfillment
 
         # But if we make formats true in the policy, we'll delete the old format
@@ -203,7 +212,10 @@ class TestCirculationData(DatabaseTest):
         circulation_data.apply(self._db, pool.collection, replacement_policy)
 
         assert 1 == len(pool.delivery_mechanisms)
-        assert Representation.EPUB_MEDIA_TYPE == pool.delivery_mechanisms[0].delivery_mechanism.content_type
+        assert (
+            Representation.EPUB_MEDIA_TYPE
+            == pool.delivery_mechanisms[0].delivery_mechanism.content_type
+        )
         assert None == loan.fulfillment
 
     def test_apply_adds_new_licenses(self):
@@ -211,7 +223,9 @@ class TestCirculationData(DatabaseTest):
 
         # Start with one license for this pool.
         old_license = self._license(
-            pool, expires=None, remaining_checkouts=2,
+            pool,
+            expires=None,
+            remaining_checkouts=2,
             concurrent_checkouts=3,
         )
 
@@ -226,7 +240,9 @@ class TestCirculationData(DatabaseTest):
             checkout_url="https://borrow2",
             status_url="https://status2",
             expires=(utc_now() + datetime.timedelta(days=7)),
-            remaining_checkouts=None, concurrent_checkouts=1)
+            remaining_checkouts=None,
+            concurrent_checkouts=1,
+        )
 
         circulation_data = CirculationData(
             licenses=[license_data],
@@ -240,8 +256,9 @@ class TestCirculationData(DatabaseTest):
         self._db.commit()
 
         assert 2 == len(pool.licenses)
-        assert (set([old_license.identifier, license_data.identifier]) ==
-            set([license.identifier for license in pool.licenses]))
+        assert set([old_license.identifier, license_data.identifier]) == set(
+            [license.identifier for license in pool.licenses]
+        )
         assert old_license == loan.license
 
     def test_apply_creates_work_and_presentation_edition_if_needed(self):
@@ -288,9 +305,7 @@ class TestCirculationData(DatabaseTest):
             formats=[drm_format],
         )
         collection = self._default_collection
-        pool, is_new = circulation.license_pool(
-            self._db, collection
-        )
+        pool, is_new = circulation.license_pool(self._db, collection)
         assert True == is_new
         assert collection == pool.collection
 
@@ -314,11 +329,10 @@ class TestCirculationData(DatabaseTest):
         assert Representation.EPUB_MEDIA_TYPE == epub.delivery_mechanism.content_type
         assert DeliveryMechanism.ADOBE_DRM == epub.delivery_mechanism.drm_scheme
 
-
         link = LinkData(
             rel=Hyperlink.OPEN_ACCESS_DOWNLOAD,
             media_type=Representation.PDF_MEDIA_TYPE,
-            href=self._url
+            href=self._url,
         )
         circulation_data = CirculationData(
             data_source=DataSource.GUTENBERG,
@@ -327,8 +341,8 @@ class TestCirculationData(DatabaseTest):
         )
 
         replace = ReplacementPolicy(
-                formats=True,
-            )
+            formats=True,
+        )
         circulation_data.apply(self._db, pool.collection, replace)
 
         # We destroyed the default delivery format and added a new,
@@ -340,12 +354,12 @@ class TestCirculationData(DatabaseTest):
         circulation_data = CirculationData(
             data_source=DataSource.GUTENBERG,
             primary_identifier=edition.primary_identifier,
-            links=[]
+            links=[],
         )
         replace = ReplacementPolicy(
-                formats=True,
-                links=True,
-            )
+            formats=True,
+            links=True,
+        )
         circulation_data.apply(self._db, pool.collection, replace)
 
         # Now we have no formats at all.
@@ -359,13 +373,13 @@ class TestCirculationData(DatabaseTest):
         link = LinkData(
             rel=Hyperlink.DRM_ENCRYPTED_DOWNLOAD,
             media_type=Representation.EPUB_MEDIA_TYPE,
-            href=self._url
+            href=self._url,
         )
 
         circulation_data = CirculationData(
             data_source=DataSource.OA_CONTENT_SERVER,
             primary_identifier=identifier,
-            default_rights_uri = RightsStatus.CC_BY,
+            default_rights_uri=RightsStatus.CC_BY,
             links=[link],
         )
 
@@ -373,9 +387,7 @@ class TestCirculationData(DatabaseTest):
             formats=True,
         )
 
-        pool, ignore = circulation_data.license_pool(
-            self._db, self._default_collection
-        )
+        pool, ignore = circulation_data.license_pool(self._db, self._default_collection)
         circulation_data.apply(self._db, pool.collection, replace)
         assert True == pool.open_access
         assert 1 == len(pool.delivery_mechanisms)
@@ -390,7 +402,7 @@ class TestCirculationData(DatabaseTest):
         link = LinkData(
             rel=Hyperlink.DRM_ENCRYPTED_DOWNLOAD,
             media_type=Representation.EPUB_MEDIA_TYPE,
-            href=self._url
+            href=self._url,
         )
 
         circulation_data = CirculationData(
@@ -404,9 +416,7 @@ class TestCirculationData(DatabaseTest):
         )
 
         # This pool starts off as not being open-access.
-        pool, ignore = circulation_data.license_pool(
-            self._db, self._default_collection
-        )
+        pool, ignore = circulation_data.license_pool(self._db, self._default_collection)
         assert False == pool.open_access
 
         circulation_data.apply(self._db, pool.collection, replace)
@@ -416,7 +426,10 @@ class TestCirculationData(DatabaseTest):
         assert True == pool.open_access
         assert 1 == len(pool.delivery_mechanisms)
         # The rights status is the default for the OA content server.
-        assert RightsStatus.GENERIC_OPEN_ACCESS == pool.delivery_mechanisms[0].rights_status.uri
+        assert (
+            RightsStatus.GENERIC_OPEN_ACCESS
+            == pool.delivery_mechanisms[0].rights_status.uri
+        )
 
     def test_rights_status_open_access_link_no_rights_uses_data_source_default(self):
         identifier = IdentifierData(
@@ -429,7 +442,7 @@ class TestCirculationData(DatabaseTest):
         link = LinkData(
             rel=Hyperlink.OPEN_ACCESS_DOWNLOAD,
             media_type=Representation.EPUB_MEDIA_TYPE,
-            href=self._url
+            href=self._url,
         )
         circulation_data = CirculationData(
             data_source=DataSource.GUTENBERG,
@@ -440,9 +453,7 @@ class TestCirculationData(DatabaseTest):
             formats=True,
         )
 
-        pool, ignore = circulation_data.license_pool(
-            self._db, self._default_collection
-        )
+        pool, ignore = circulation_data.license_pool(self._db, self._default_collection)
         pool.open_access = False
 
         # Applying this CirculationData to a LicensePool makes it
@@ -453,7 +464,10 @@ class TestCirculationData(DatabaseTest):
 
         # The delivery mechanism's rights status is the default for
         # the data source.
-        assert RightsStatus.PUBLIC_DOMAIN_USA == pool.delivery_mechanisms[0].rights_status.uri
+        assert (
+            RightsStatus.PUBLIC_DOMAIN_USA
+            == pool.delivery_mechanisms[0].rights_status.uri
+        )
 
         # Even if a commercial source like Overdrive should offer a
         # link with rel="open access", unless we know it's an
@@ -466,7 +480,7 @@ class TestCirculationData(DatabaseTest):
         link = LinkData(
             rel=Hyperlink.OPEN_ACCESS_DOWNLOAD,
             media_type=Representation.EPUB_MEDIA_TYPE,
-            href=self._url
+            href=self._url,
         )
 
         circulation_data = CirculationData(
@@ -475,13 +489,12 @@ class TestCirculationData(DatabaseTest):
             links=[link],
         )
 
-        pool, ignore = circulation_data.license_pool(
-            self._db, self._default_collection
-        )
+        pool, ignore = circulation_data.license_pool(self._db, self._default_collection)
         pool.open_access = False
         circulation_data.apply(self._db, pool.collection, replace_formats)
-        assert (RightsStatus.IN_COPYRIGHT ==
-            pool.delivery_mechanisms[0].rights_status.uri)
+        assert (
+            RightsStatus.IN_COPYRIGHT == pool.delivery_mechanisms[0].rights_status.uri
+        )
 
         assert False == pool.open_access
 
@@ -506,9 +519,7 @@ class TestCirculationData(DatabaseTest):
             formats=True,
         )
 
-        pool, ignore = circulation_data.license_pool(
-            self._db, self._default_collection
-        )
+        pool, ignore = circulation_data.license_pool(self._db, self._default_collection)
         circulation_data.apply(self._db, pool.collection, replace)
         assert True == pool.open_access
         assert 1 == len(pool.delivery_mechanisms)
@@ -543,13 +554,13 @@ class TestCirculationData(DatabaseTest):
             formats=True,
         )
 
-        pool, ignore = circulation_data.license_pool(
-            self._db, self._default_collection
-        )
+        pool, ignore = circulation_data.license_pool(self._db, self._default_collection)
         circulation_data.apply(self._db, pool.collection, replace)
         assert False == pool.open_access
         assert 1 == len(pool.delivery_mechanisms)
-        assert RightsStatus.IN_COPYRIGHT == pool.delivery_mechanisms[0].rights_status.uri
+        assert (
+            RightsStatus.IN_COPYRIGHT == pool.delivery_mechanisms[0].rights_status.uri
+        )
 
     def test_format_change_may_change_open_access_status(self):
 
@@ -576,24 +587,21 @@ class TestCirculationData(DatabaseTest):
         )
 
         # Applying this information turns the pool into an open-access pool.
-        circulation_data.apply(
-            self._db, pool.collection, replace=replace_formats
-        )
+        circulation_data.apply(self._db, pool.collection, replace=replace_formats)
         assert True == pool.open_access
 
         # Then we find out it was a mistake -- the book is in copyright.
         format = FormatData(
-            Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM,
-            rights_uri=RightsStatus.IN_COPYRIGHT
+            Representation.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.NO_DRM,
+            rights_uri=RightsStatus.IN_COPYRIGHT,
         )
         circulation_data = CirculationData(
             data_source=pool.data_source,
             primary_identifier=pool.identifier,
-            formats=[format]
+            formats=[format],
         )
-        circulation_data.apply(
-            self._db, pool.collection, replace=replace_formats
-        )
+        circulation_data.apply(self._db, pool.collection, replace=replace_formats)
 
         # The original LPDM has been removed and only the new one remains.
         assert False == pool.open_access
@@ -601,42 +609,43 @@ class TestCirculationData(DatabaseTest):
 
 
 class TestMetaToModelUtility(DatabaseTest):
-
     def test_open_access_content_mirrored(self):
         # Make sure that open access material links are translated to our S3 buckets, and that
         # commercial material links are left as is.
         # Note: Mirroring tests passing does not guarantee that all code now
         # correctly calls on CirculationData, as well as Metadata.  This is a risk.
 
-        mirrors = dict(books_mirror=MockS3Uploader(),covers_mirror=None)
+        mirrors = dict(books_mirror=MockS3Uploader(), covers_mirror=None)
         mirror_type = ExternalIntegrationLink.OPEN_ACCESS_BOOKS
         # Here's a book.
         edition, pool = self._edition(with_license_pool=True)
 
         # Here's a link to the content of the book, which will be mirrored.
         link_mirrored = LinkData(
-            rel=Hyperlink.OPEN_ACCESS_DOWNLOAD, href="http://example.com/",
+            rel=Hyperlink.OPEN_ACCESS_DOWNLOAD,
+            href="http://example.com/",
             media_type=Representation.EPUB_MEDIA_TYPE,
-            content="i am a tiny book"
+            content="i am a tiny book",
         )
 
         # This link will not be mirrored.
         link_unmirrored = LinkData(
-            rel=Hyperlink.DRM_ENCRYPTED_DOWNLOAD, href="http://example.com/2",
+            rel=Hyperlink.DRM_ENCRYPTED_DOWNLOAD,
+            href="http://example.com/2",
             media_type=Representation.EPUB_MEDIA_TYPE,
-            content="i am a pricy book"
+            content="i am a pricy book",
         )
 
         # Apply the metadata.
         policy = ReplacementPolicy(mirrors=mirrors)
 
-        metadata = Metadata(data_source=edition.data_source,
-        	links=[link_mirrored, link_unmirrored],
-    	)
+        metadata = Metadata(
+            data_source=edition.data_source,
+            links=[link_mirrored, link_unmirrored],
+        )
         metadata.apply(edition, pool.collection, replace=policy)
         # make sure the refactor is done right, and metadata does not upload
         assert 0 == len(mirrors[mirror_type].uploaded)
-
 
         circulation_data = CirculationData(
             data_source=edition.data_source,
@@ -652,29 +661,28 @@ class TestMetaToModelUtility(DatabaseTest):
         [book] = mirrors[mirror_type].uploaded
 
         # It's remained an open-access link.
-        assert (
-            [Hyperlink.OPEN_ACCESS_DOWNLOAD] ==
-            [x.rel for x in book.resource.links])
-
+        assert [Hyperlink.OPEN_ACCESS_DOWNLOAD] == [x.rel for x in book.resource.links]
 
         # It's been 'mirrored' to the appropriate S3 bucket.
-        assert book.mirror_url.startswith('https://test-content-bucket.s3.amazonaws.com/')
-        expect = '/%s/%s.epub' % (
-            edition.primary_identifier.identifier,
-            edition.title
+        assert book.mirror_url.startswith(
+            "https://test-content-bucket.s3.amazonaws.com/"
         )
+        expect = "/%s/%s.epub" % (edition.primary_identifier.identifier, edition.title)
         assert book.mirror_url.endswith(expect)
 
         # make sure the mirrored link is safely on edition
         sorted_edition_links = sorted(pool.identifier.links, key=lambda x: x.rel)
-        unmirrored_representation, mirrored_representation = [edlink.resource.representation for edlink in sorted_edition_links]
-        assert mirrored_representation.mirror_url.startswith('https://test-content-bucket.s3.amazonaws.com/')
+        unmirrored_representation, mirrored_representation = [
+            edlink.resource.representation for edlink in sorted_edition_links
+        ]
+        assert mirrored_representation.mirror_url.startswith(
+            "https://test-content-bucket.s3.amazonaws.com/"
+        )
 
         # make sure the unmirrored link is safely on edition
-        assert 'http://example.com/2' == unmirrored_representation.url
+        assert "http://example.com/2" == unmirrored_representation.url
         # make sure the unmirrored link has not been translated to an S3 URL
         assert None == unmirrored_representation.mirror_url
-
 
     def test_mirror_open_access_link_fetch_failure(self):
         mirrors = dict(books_mirror=MockS3Uploader())
@@ -696,8 +704,11 @@ class TestMetaToModelUtility(DatabaseTest):
         )
 
         link_obj, ignore = edition.primary_identifier.add_link(
-            rel=link.rel, href=link.href, data_source=data_source,
-            media_type=link.media_type, content=link.content,
+            rel=link.rel,
+            href=link.href,
+            data_source=data_source,
+            media_type=link.media_type,
+            content=link.content,
         )
 
         h.queue_response(403)
@@ -718,9 +729,8 @@ class TestMetaToModelUtility(DatabaseTest):
         assert True == pool.suppressed
         assert representation.fetch_exception in pool.license_exception
 
-
     def test_mirror_open_access_link_mirror_failure(self):
-        mirrors = dict(books_mirror=MockS3Uploader(fail=True),covers_mirror=None)
+        mirrors = dict(books_mirror=MockS3Uploader(fail=True), covers_mirror=None)
         h = DummyHTTPClient()
 
         edition, pool = self._edition(with_license_pool=True)
@@ -740,8 +750,11 @@ class TestMetaToModelUtility(DatabaseTest):
         )
 
         link_obj, ignore = edition.primary_identifier.add_link(
-            rel=link.rel, href=link.href, data_source=data_source,
-            media_type=link.media_type, content=link.content
+            rel=link.rel,
+            href=link.href,
+            data_source=data_source,
+            media_type=link.media_type,
+            content=link.content,
         )
 
         h.queue_response(200, media_type=Representation.EPUB_MEDIA_TYPE)
@@ -824,4 +837,3 @@ class TestMetaToModelUtility(DatabaseTest):
         pool.last_checked = now
         assert True == recent_data._availability_needs_update(pool)
         assert False == old_data._availability_needs_update(pool)
-

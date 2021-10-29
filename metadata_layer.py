@@ -59,21 +59,22 @@ class ReplacementPolicy(object):
     """How serious should we be about overwriting old metadata with
     this new metadata?
     """
+
     def __init__(
-            self,
-            identifiers=False,
-            subjects=False,
-            contributions=False,
-            links=False,
-            formats=False,
-            rights=False,
-            link_content=False,
-            mirrors=None,
-            content_modifier=None,
-            analytics=None,
-            http_get=None,
-            even_if_not_apparently_updated=False,
-            presentation_calculation_policy=None
+        self,
+        identifiers=False,
+        subjects=False,
+        contributions=False,
+        links=False,
+        formats=False,
+        rights=False,
+        link_content=False,
+        mirrors=None,
+        content_modifier=None,
+        analytics=None,
+        http_get=None,
+        even_if_not_apparently_updated=False,
+        presentation_calculation_policy=None,
     ):
         self.identifiers = identifiers
         self.subjects = subjects
@@ -88,8 +89,7 @@ class ReplacementPolicy(object):
         self.analytics = analytics
         self.http_get = http_get
         self.presentation_calculation_policy = (
-            presentation_calculation_policy or
-            PresentationCalculationPolicy()
+            presentation_calculation_policy or PresentationCalculationPolicy()
         )
 
     @classmethod
@@ -144,6 +144,7 @@ class ReplacementPolicy(object):
             **args
         )
 
+
 class SubjectData(object):
     def __init__(self, type, identifier, name=None, weight=1):
         self.type = type
@@ -167,15 +168,27 @@ class SubjectData(object):
 
     def __repr__(self):
         return '<SubjectData type="%s" identifier="%s" name="%s" weight=%d>' % (
-            self.type, self.identifier, self.name, self.weight
+            self.type,
+            self.identifier,
+            self.name,
+            self.weight,
         )
 
 
 class ContributorData(object):
-
-    def __init__(self, sort_name=None, display_name=None,
-                 family_name=None, wikipedia_name=None, roles=None,
-                 lc=None, viaf=None, biography=None, aliases=None, extra=None):
+    def __init__(
+        self,
+        sort_name=None,
+        display_name=None,
+        family_name=None,
+        wikipedia_name=None,
+        roles=None,
+        lc=None,
+        viaf=None,
+        biography=None,
+        aliases=None,
+        extra=None,
+    ):
         self.sort_name = sort_name
         self.display_name = display_name
         self.family_name = family_name
@@ -193,10 +206,19 @@ class ContributorData(object):
         self.extra = extra or dict()
         # TODO:  consider if it's time for ContributorData to connect back to Contributions
 
-
     def __repr__(self):
-        return '<ContributorData sort="%s" display="%s" family="%s" wiki="%s" roles=%r lc=%s viaf=%s>' % (self.sort_name, self.display_name, self.family_name, self.wikipedia_name, self.roles, self.lc, self.viaf)
-
+        return (
+            '<ContributorData sort="%s" display="%s" family="%s" wiki="%s" roles=%r lc=%s viaf=%s>'
+            % (
+                self.sort_name,
+                self.display_name,
+                self.family_name,
+                self.wikipedia_name,
+                self.roles,
+                self.lc,
+                self.viaf,
+            )
+        )
 
     @classmethod
     def from_contribution(cls, contribution):
@@ -213,12 +235,11 @@ class ContributorData(object):
             viaf=c.viaf,
             biography=c.biography,
             aliases=c.aliases,
-            roles=[contribution.role]
+            roles=[contribution.role],
         )
 
     @classmethod
-    def lookup(cls, _db, sort_name=None, display_name=None, lc=None,
-               viaf=None):
+    def lookup(cls, _db, sort_name=None, display_name=None, lc=None, viaf=None):
         """Create a (potentially synthetic) ContributorData based on
         the best available information in the database.
 
@@ -226,13 +247,13 @@ class ContributorData(object):
         """
         clauses = []
         if sort_name:
-            clauses.append(Contributor.sort_name==sort_name)
+            clauses.append(Contributor.sort_name == sort_name)
         if display_name:
-            clauses.append(Contributor.display_name==display_name)
+            clauses.append(Contributor.display_name == display_name)
         if lc:
-            clauses.append(Contributor.lc==lc)
+            clauses.append(Contributor.lc == lc)
         if viaf:
-            clauses.append(Contributor.viaf==viaf)
+            clauses.append(Contributor.viaf == viaf)
 
         if not clauses:
             raise ValueError("No Contributor information provided!")
@@ -253,23 +274,18 @@ class ContributorData(object):
         # name doesn't match.
         for c in contributors:
             if c.sort_name:
-                values_by_field['sort_name'].add(c.sort_name)
+                values_by_field["sort_name"].add(c.sort_name)
             if c.display_name:
-                values_by_field['display_name'].add(c.display_name)
+                values_by_field["display_name"].add(c.display_name)
             if c.lc:
-                values_by_field['lc'].add(c.lc)
+                values_by_field["lc"].add(c.lc)
             if c.viaf:
-                values_by_field['viaf'].add(c.viaf)
+                values_by_field["viaf"].add(c.viaf)
 
         # Use any passed-in values as default values for the
         # ContributorData. Below, missing values may be filled in and
         # inaccurate values may be replaced.
-        kwargs = dict(
-            sort_name=sort_name,
-            display_name=display_name,
-            lc=lc,
-            viaf=viaf
-        )
+        kwargs = dict(sort_name=sort_name, display_name=display_name, lc=lc, viaf=viaf)
         for k, values in list(values_by_field.items()):
             if len(values) == 1:
                 # All the Contributors we found have the same
@@ -279,7 +295,7 @@ class ContributorData(object):
         return ContributorData(roles=[], **kwargs)
 
     def apply(self, destination, replace=None):
-        """ Update the passed-in Contributor-type object with this
+        """Update the passed-in Contributor-type object with this
         ContributorData's information.
 
         :param: destination -- the Contributor or ContributorData object to
@@ -289,7 +305,13 @@ class ContributorData(object):
         :return: the possibly changed Contributor object and a flag of whether it's been changed.
         """
         log = logging.getLogger("Abstract metadata layer")
-        log.debug("Applying %r (%s) into %r (%s)", self, self.viaf, destination, destination.viaf)
+        log.debug(
+            "Applying %r (%s) into %r (%s)",
+            self,
+            self.viaf,
+            destination,
+            destination.viaf,
+        )
 
         made_changes = False
 
@@ -317,21 +339,17 @@ class ContributorData(object):
         if self.viaf and self.viaf != destination.viaf:
             destination.viaf = self.viaf
             made_changes = True
-        if (self.family_name and
-            self.family_name != destination.family_name):
+        if self.family_name and self.family_name != destination.family_name:
             destination.family_name = self.family_name
             made_changes = True
-        if (self.display_name and
-            self.display_name != destination.display_name):
+        if self.display_name and self.display_name != destination.display_name:
             destination.display_name = self.display_name
             made_changes = True
-        if (self.wikipedia_name and
-            self.wikipedia_name != destination.wikipedia_name):
+        if self.wikipedia_name and self.wikipedia_name != destination.wikipedia_name:
             destination.wikipedia_name = self.wikipedia_name
             made_changes = True
 
-        if (self.biography and
-            self.biography != destination.biography):
+        if self.biography and self.biography != destination.biography:
             destination.biography = self.biography
             made_changes = True
 
@@ -341,11 +359,9 @@ class ContributorData(object):
 
         return destination, made_changes
 
-
     def find_sort_name(self, _db, identifiers, metadata_client):
 
-        """Try as hard as possible to find this person's sort name.
-        """
+        """Try as hard as possible to find this person's sort name."""
         log = logging.getLogger("Abstract metadata layer")
         if self.sort_name:
             # log.debug(
@@ -364,7 +380,8 @@ class ContributorData(object):
         # exact sort name? If so, use their display name.
         # If not, take our best guess based on the display name.
         sort_name = self.display_name_to_sort_name_from_existing_contributor(
-            _db, self.display_name)
+            _db, self.display_name
+        )
         if sort_name:
             self.sort_name = sort_name
             return True
@@ -383,7 +400,8 @@ class ContributorData(object):
                 log = logging.getLogger("Abstract metadata layer")
                 log.error(
                     "Metadata client exception while determining sort name for %s",
-                    self.display_name, exc_info=e
+                    self.display_name,
+                    exc_info=e,
                 )
             if sort_name:
                 self.sort_name = sort_name
@@ -393,7 +411,7 @@ class ContributorData(object):
         # on the display name.
         self.sort_name = display_name_to_sort_name(self.display_name)
 
-        return (self.sort_name is not None)
+        return self.sort_name is not None
 
     @classmethod
     def display_name_to_sort_name_from_existing_contributor(self, _db, display_name):
@@ -409,46 +427,53 @@ class ContributorData(object):
         time an external list item is relevant), this will probably be
         easy.
         """
-        contributors = _db.query(Contributor).filter(
-            Contributor.display_name==display_name).filter(
-                Contributor.sort_name != None).all()
+        contributors = (
+            _db.query(Contributor)
+            .filter(Contributor.display_name == display_name)
+            .filter(Contributor.sort_name != None)
+            .all()
+        )
         if contributors:
             log = logging.getLogger("Abstract metadata layer")
             log.debug(
                 "Determined that sort name of %s is %s based on previously existing contributor",
                 display_name,
-                contributors[0].sort_name
+                contributors[0].sort_name,
             )
             return contributors[0].sort_name
         return None
 
-    def _display_name_to_sort_name(
-            self, _db, metadata_client, identifier_obj
-    ):
+    def _display_name_to_sort_name(self, _db, metadata_client, identifier_obj):
         response = metadata_client.canonicalize_author_name(
-            identifier_obj, self.display_name)
+            identifier_obj, self.display_name
+        )
         sort_name = None
 
         if isinstance(response, (bytes, str)):
             sort_name = response
         else:
             log = logging.getLogger("Abstract metadata layer")
-            if (response.status_code == 200
-                and response.headers['Content-Type'].startswith('text/plain')):
+            if response.status_code == 200 and response.headers[
+                "Content-Type"
+            ].startswith("text/plain"):
                 sort_name = response.content
                 log.info(
                     "Canonicalizer found sort name for %r: %s => %s",
-                    identifier_obj, self.display_name, sort_name
+                    identifier_obj,
+                    self.display_name,
+                    sort_name,
                 )
             else:
                 log.warn(
                     "Canonicalizer could not find sort name for %r/%s",
-                    identifier_obj, self.display_name
+                    identifier_obj,
+                    self.display_name,
                 )
         return sort_name
 
     def display_name_to_sort_name_through_canonicalizer(
-            self, _db, identifiers, metadata_client):
+        self, _db, identifiers, metadata_client
+    ):
         sort_name = None
         for identifier in identifiers:
             if identifier.type != Identifier.ISBN:
@@ -461,9 +486,7 @@ class ContributorData(object):
                 break
 
         if not sort_name:
-            sort_name = self._display_name_to_sort_name(
-                _db, metadata_client, None
-            )
+            sort_name = self._display_name_to_sort_name(_db, metadata_client, None)
         return sort_name
 
 
@@ -475,19 +498,28 @@ class IdentifierData(object):
 
     def __repr__(self):
         return '<IdentifierData type="%s" identifier="%s" weight="%s">' % (
-            self.type, self.identifier, self.weight
+            self.type,
+            self.identifier,
+            self.weight,
         )
 
     def load(self, _db):
-        return Identifier.for_foreign_id(
-            _db, self.type, self.identifier
-        )
+        return Identifier.for_foreign_id(_db, self.type, self.identifier)
 
 
 class LinkData(object):
-    def __init__(self, rel, href=None, media_type=None, content=None,
-                 thumbnail=None, rights_uri=None, rights_explanation=None,
-                 original=None, transformation_settings=None):
+    def __init__(
+        self,
+        rel,
+        href=None,
+        media_type=None,
+        content=None,
+        thumbnail=None,
+        rights_uri=None,
+        rights_explanation=None,
+        original=None,
+        transformation_settings=None,
+    ):
         if not rel:
             raise ValueError("rel is required")
 
@@ -527,19 +559,21 @@ class LinkData(object):
         if self.content:
             content = ", %d bytes content" % len(self.content)
         else:
-            content = ''
+            content = ""
         if self.thumbnail:
-            thumbnail = ', has thumbnail'
+            thumbnail = ", has thumbnail"
         else:
-            thumbnail = ''
+            thumbnail = ""
         return '<LinkData: rel="%s" href="%s" media_type=%r%s%s>' % (
-            self.rel, self.href, self.media_type, thumbnail,
-            content
+            self.rel,
+            self.href,
+            self.media_type,
+            thumbnail,
+            content,
         )
 
     def mirror_type(self):
-        """Returns the type of mirror that should be used for the link.
-        """
+        """Returns the type of mirror that should be used for the link."""
         if self.rel in [Hyperlink.IMAGE, Hyperlink.THUMBNAIL_IMAGE]:
             return ExternalIntegrationLink.COVERS
 
@@ -550,11 +584,7 @@ class LinkData(object):
 
 
 class MeasurementData(object):
-    def __init__(self,
-                 quantity_measured,
-                 value,
-                 weight=1,
-                 taken_at=None):
+    def __init__(self, quantity_measured, value, weight=1, taken_at=None):
         if not quantity_measured:
             raise ValueError("quantity_measured is required.")
         if value is None:
@@ -568,7 +598,10 @@ class MeasurementData(object):
 
     def __repr__(self):
         return '<MeasurementData quantity="%s" value=%f weight=%d taken=%s>' % (
-            self.quantity_measured, self.value, self.weight, self.taken_at
+            self.quantity_measured,
+            self.value,
+            self.weight,
+            self.taken_at,
         )
 
 
@@ -577,18 +610,23 @@ class FormatData(object):
         self.content_type = content_type
         self.drm_scheme = drm_scheme
         if link and not isinstance(link, LinkData):
-            raise TypeError(
-                "Expected LinkData object, got %s" % type(link)
-            )
+            raise TypeError("Expected LinkData object, got %s" % type(link))
         self.link = link
         self.rights_uri = rights_uri
-        if ((not self.rights_uri) and self.link and self.link.rights_uri):
+        if (not self.rights_uri) and self.link and self.link.rights_uri:
             self.rights_uri = self.link.rights_uri
 
 
 class LicenseData(object):
-    def __init__(self, identifier, checkout_url, status_url, expires=None, remaining_checkouts=None,
-                 concurrent_checkouts=None):
+    def __init__(
+        self,
+        identifier,
+        checkout_url,
+        status_url,
+        expires=None,
+        remaining_checkouts=None,
+        concurrent_checkouts=None,
+    ):
         self.identifier = identifier
         self.checkout_url = checkout_url
         self.status_url = status_url
@@ -601,8 +639,9 @@ class TimestampData(object):
 
     CLEAR_VALUE = Timestamp.CLEAR_VALUE
 
-    def __init__(self, start=None, finish=None, achievements=None,
-                 counter=None, exception=None):
+    def __init__(
+        self, start=None, finish=None, achievements=None, counter=None, exception=None
+    ):
         """A constructor intended to be used by a service to customize its
         eventual Timestamp.
 
@@ -649,9 +688,17 @@ class TimestampData(object):
         """
         return self.is_failure or self.finish not in (None, self.CLEAR_VALUE)
 
-    def finalize(self, service, service_type, collection, start=None,
-                 finish=None, achievements=None, counter=None,
-                 exception=None):
+    def finalize(
+        self,
+        service,
+        service_type,
+        collection,
+        start=None,
+        finish=None,
+        achievements=None,
+        counter=None,
+        exception=None,
+    ):
         """Finalize any values that were not set during the constructor.
 
         This is intended to be run by the code that originally ran the
@@ -690,9 +737,15 @@ class TimestampData(object):
             )
 
         return Timestamp.stamp(
-            _db, self.service, self.service_type, self.collection(_db),
-            self.start, self.finish, self.achievements, self.counter,
-            self.exception
+            _db,
+            self.service,
+            self.service_type,
+            self.collection(_db),
+            self.start,
+            self.finish,
+            self.achievements,
+            self.counter,
+            self.exception,
         )
 
 
@@ -718,12 +771,9 @@ class MetaToModelUtility(object):
                 self.log.info("Not mirroring %s: rel=%s", link.href, link_obj.rel)
             return
 
-        if (link.rights_uri
-            and link.rights_uri == RightsStatus.IN_COPYRIGHT):
+        if link.rights_uri and link.rights_uri == RightsStatus.IN_COPYRIGHT:
             self.log.info(
-                "Not mirroring %s: rights status=%s" % (
-                    link.href, link.rights_uri
-                )
+                "Not mirroring %s: rights status=%s" % (link.href, link.rights_uri)
             )
             return
 
@@ -734,9 +784,7 @@ class MetaToModelUtility(object):
             if not mirror:
                 return
         else:
-            self.log.info(
-                "No mirror uploader with key %s found" % mirror_type
-            )
+            self.log.info("No mirror uploader with key %s found" % mirror_type)
             return
 
         http_get = policy.http_get
@@ -754,7 +802,11 @@ class MetaToModelUtility(object):
                 pools = [model_object]
                 identifier = model_object.identifier
 
-                if (identifier and identifier.primarily_identifies and identifier.primarily_identifies[0]):
+                if (
+                    identifier
+                    and identifier.primarily_identifies
+                    and identifier.primarily_identifies[0]
+                ):
                     edition = identifier.primarily_identifies[0]
             elif isinstance(model_object, Edition):
                 pools = model_object.license_pools
@@ -763,11 +815,15 @@ class MetaToModelUtility(object):
         if edition and edition.title:
             title = edition.title
         else:
-            title = getattr(self, 'title', None) or None
+            title = getattr(self, "title", None) or None
 
-        if ((not identifier) or (link_obj.identifier and identifier != link_obj.identifier)):
+        if (not identifier) or (
+            link_obj.identifier and identifier != link_obj.identifier
+        ):
             # insanity found
-            self.log.warn("Tried to mirror a link with an invalid identifier %r" % identifier)
+            self.log.warn(
+                "Tried to mirror a link with an invalid identifier %r" % identifier
+            )
             return
 
         max_age = None
@@ -780,7 +836,9 @@ class MetaToModelUtility(object):
         # This will fetch a representation of the original and
         # store it in the database.
         representation, is_new = Representation.get(
-            _db, link.href, do_get=http_get,
+            _db,
+            link.href,
+            do_get=http_get,
             presumed_media_type=link.media_type,
             max_age=max_age,
         )
@@ -798,7 +856,9 @@ class MetaToModelUtility(object):
             if pools and link.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD:
                 for pool in pools:
                     pool.suppressed = True
-                    pool.license_exception = "Fetch exception: %s" % representation.fetch_exception
+                    pool.license_exception = (
+                        "Fetch exception: %s" % representation.fetch_exception
+                    )
                     self.log.error(pool.license_exception)
             return
 
@@ -807,14 +867,16 @@ class MetaToModelUtility(object):
         # again.
         if representation.status_code == 304 and representation.mirror_url:
             self.log.info(
-                "Representation has not changed, assuming mirror at %s is up to date.", representation.mirror_url
+                "Representation has not changed, assuming mirror at %s is up to date.",
+                representation.mirror_url,
             )
             return
 
-        if representation.status_code // 100 not in (2,3):
+        if representation.status_code // 100 not in (2, 3):
             self.log.info(
                 "Representation %s gave %s status code, not mirroring.",
-                representation.url, representation.status_code
+                representation.url,
+                representation.status_code,
             )
             return
 
@@ -832,18 +894,27 @@ class MetaToModelUtility(object):
 
         if not representation.mirrorable_media_type:
             if link.media_type:
-                self.log.info("Saw unsupported media type for %s: %s. Assuming original media type %s is correct",
-                              representation.url, representation.media_type, link.media_type)
+                self.log.info(
+                    "Saw unsupported media type for %s: %s. Assuming original media type %s is correct",
+                    representation.url,
+                    representation.media_type,
+                    link.media_type,
+                )
                 representation.media_type = link.media_type
             else:
-                self.log.info("Not mirroring %s: unsupported media type %s",
-                              representation.url, representation.media_type)
+                self.log.info(
+                    "Not mirroring %s: unsupported media type %s",
+                    representation.url,
+                    representation.media_type,
+                )
                 return
 
         # Determine the best URL to use when mirroring this
         # representation.
-        if link.media_type in Representation.BOOK_MEDIA_TYPES or \
-                link.media_type in Representation.AUDIOBOOK_MEDIA_TYPES:
+        if (
+            link.media_type in Representation.BOOK_MEDIA_TYPES
+            or link.media_type in Representation.AUDIOBOOK_MEDIA_TYPES
+        ):
             url_title = title or identifier.identifier
             extension = representation.extension()
             mirror_url = mirror.book_url(
@@ -851,15 +922,13 @@ class MetaToModelUtility(object):
                 data_source=data_source,
                 title=url_title,
                 extension=extension,
-                open_access=link.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD
+                open_access=link.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD,
             )
         else:
             filename = representation.default_filename(
                 link_obj, representation.media_type
             )
-            mirror_url = mirror.cover_image_url(
-                data_source, identifier, filename
-            )
+            mirror_url = mirror.cover_image_url(data_source, identifier, filename)
 
         # Mirror it.
         collection = pools[0].collection if pools else None
@@ -871,7 +940,9 @@ class MetaToModelUtility(object):
             if pools and link.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD:
                 for pool in pools:
                     pool.suppressed = True
-                    pool.license_exception = "Mirror exception: %s" % representation.mirror_exception
+                    pool.license_exception = (
+                        "Mirror exception: %s" % representation.mirror_exception
+                    )
                     self.log.error(pool.license_exception)
 
         if link_obj.rel == Hyperlink.IMAGE:
@@ -880,20 +951,24 @@ class MetaToModelUtility(object):
                 link_obj, Representation.PNG_MEDIA_TYPE
             )
             thumbnail_url = mirror.cover_image_url(
-                data_source, identifier, thumbnail_filename,
-                Edition.MAX_THUMBNAIL_HEIGHT
+                data_source,
+                identifier,
+                thumbnail_filename,
+                Edition.MAX_THUMBNAIL_HEIGHT,
             )
             thumbnail, is_new = representation.scale(
                 max_height=Edition.MAX_THUMBNAIL_HEIGHT,
                 max_width=Edition.MAX_THUMBNAIL_WIDTH,
                 destination_url=thumbnail_url,
                 destination_media_type=Representation.PNG_MEDIA_TYPE,
-                force=True
+                force=True,
             )
             if is_new:
                 # A thumbnail was created distinct from the original
                 # image. Mirror it as well.
-                mirror.mirror_one(thumbnail, mirror_to=thumbnail_url, collection=collection)
+                mirror.mirror_one(
+                    thumbnail, mirror_to=thumbnail_url, collection=collection
+                )
 
         if link_obj.rel in Hyperlink.SELF_HOSTED_BOOKS:
             # If we mirrored book content successfully, remove it from
@@ -914,23 +989,21 @@ class CirculationData(MetaToModelUtility):
         Metadata : Edition :: CirculationData : Licensepool
     """
 
-    log = logging.getLogger(
-        "Abstract metadata layer - Circulation data"
-    )
+    log = logging.getLogger("Abstract metadata layer - Circulation data")
 
     def __init__(
-            self,
-            data_source,
-            primary_identifier,
-            licenses_owned=None,
-            licenses_available=None,
-            licenses_reserved=None,
-            patrons_in_hold_queue=None,
-            formats=None,
-            default_rights_uri=None,
-            links=None,
-            licenses=None,
-            last_checked=None,
+        self,
+        data_source,
+        primary_identifier,
+        licenses_owned=None,
+        licenses_available=None,
+        licenses_reserved=None,
+        patrons_in_hold_queue=None,
+        formats=None,
+        default_rights_uri=None,
+        links=None,
+        licenses=None,
+        last_checked=None,
     ):
         """Constructor.
 
@@ -968,7 +1041,10 @@ class CirculationData(MetaToModelUtility):
         self.formats = formats or []
 
         self.default_rights_uri = None
-        self.set_default_rights_uri(data_source_name=self.data_source_name, default_rights_uri=default_rights_uri)
+        self.set_default_rights_uri(
+            data_source_name=self.data_source_name,
+            default_rights_uri=default_rights_uri,
+        )
 
         self.__links = None
         self.links = links
@@ -982,8 +1058,8 @@ class CirculationData(MetaToModelUtility):
 
     @links.setter
     def links(self, arg_links):
-        """ If got passed all links, undiscriminately, filter out to only those relevant to
-            pools (the rights-related links).
+        """If got passed all links, undiscriminately, filter out to only those relevant to
+        pools (the rights-related links).
         """
         # start by deleting any old links
         self.__links = []
@@ -998,9 +1074,11 @@ class CirculationData(MetaToModelUtility):
                 self.__links.append(link)
 
                 # An open-access link or open-access rights implies a FormatData object.
-                open_access_link = (link.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD and link.href)
+                open_access_link = (
+                    link.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD and link.href
+                )
                 # try to deduce if the link is open-access, even if it doesn't explicitly say it is
-                rights_uri =  link.rights_uri or self.default_rights_uri
+                rights_uri = link.rights_uri or self.default_rights_uri
                 open_access_rights_link = (
                     link.media_type in Representation.BOOK_MEDIA_TYPES
                     and link.href
@@ -1008,9 +1086,11 @@ class CirculationData(MetaToModelUtility):
                 )
 
                 if open_access_link or open_access_rights_link:
-                    if (open_access_link
+                    if (
+                        open_access_link
                         and rights_uri != RightsStatus.IN_COPYRIGHT
-                        and not rights_uri in RightsStatus.OPEN_ACCESS):
+                        and not rights_uri in RightsStatus.OPEN_ACCESS
+                    ):
                         # We don't know exactly what's going on here but
                         # the link said it was an open-access book
                         # and the rights URI doesn't contradict it,
@@ -1033,23 +1113,23 @@ class CirculationData(MetaToModelUtility):
                             )
                         )
 
-
     def __repr__(self):
-        description_string = '<CirculationData primary_identifier=%(primary_identifier)r| licenses_owned=%(licenses_owned)s|'
-        description_string += ' licenses_available=%(licenses_available)s| default_rights_uri=%(default_rights_uri)s|'
-        description_string += ' links=%(links)r| formats=%(formats)r| data_source=%(data_source)s|>'
+        description_string = "<CirculationData primary_identifier=%(primary_identifier)r| licenses_owned=%(licenses_owned)s|"
+        description_string += " licenses_available=%(licenses_available)s| default_rights_uri=%(default_rights_uri)s|"
+        description_string += (
+            " links=%(links)r| formats=%(formats)r| data_source=%(data_source)s|>"
+        )
 
-
-        description_data = {'licenses_owned':self.licenses_owned}
+        description_data = {"licenses_owned": self.licenses_owned}
         if self._primary_identifier:
-            description_data['primary_identifier'] = self._primary_identifier
+            description_data["primary_identifier"] = self._primary_identifier
         else:
-            description_data['primary_identifier'] = self.primary_identifier_obj
-        description_data['licenses_available'] = self.licenses_available
-        description_data['default_rights_uri'] = self.default_rights_uri
-        description_data['links'] = self.links
-        description_data['formats'] = self.formats
-        description_data['data_source'] = self.data_source_name
+            description_data["primary_identifier"] = self.primary_identifier_obj
+        description_data["licenses_available"] = self.licenses_available
+        description_data["default_rights_uri"] = self.default_rights_uri
+        description_data["links"] = self.links
+        description_data["formats"] = self.formats
+        description_data["data_source"] = self.data_source_name
 
         return description_string % description_data
 
@@ -1085,9 +1165,7 @@ class CirculationData(MetaToModelUtility):
             will be tracked with this.
         """
         if not collection:
-            raise ValueError(
-                "Cannot find license pool: no collection provided."
-            )
+            raise ValueError("Cannot find license pool: no collection provided.")
         identifier = self.primary_identifier(_db)
         if not identifier:
             raise ValueError(
@@ -1096,10 +1174,11 @@ class CirculationData(MetaToModelUtility):
 
         data_source_obj = self.data_source(_db)
         license_pool, is_new = LicensePool.for_foreign_id(
-            _db, data_source=data_source_obj,
+            _db,
+            data_source=data_source_obj,
             foreign_id_type=identifier.type,
             foreign_id=identifier.identifier,
-            collection=collection
+            collection=collection,
         )
 
         if is_new:
@@ -1110,27 +1189,29 @@ class CirculationData(MetaToModelUtility):
             if analytics:
                 for library in collection.libraries:
                     analytics.collect_event(
-                        library, license_pool,
+                        library,
+                        license_pool,
                         CirculationEvent.DISTRIBUTOR_TITLE_ADD,
                         self.last_checked,
-                        old_value=0, new_value=1,
+                        old_value=0,
+                        new_value=1,
                     )
             license_pool.last_checked = self.last_checked
 
         return license_pool, is_new
 
-
     @property
     def has_open_access_link(self):
         """Does this Circulation object have an associated open-access link?"""
         return any(
-            [x for x in self.links
-             if x.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD
-             and x.href
-             and x.rights_uri != RightsStatus.IN_COPYRIGHT
+            [
+                x
+                for x in self.links
+                if x.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD
+                and x.href
+                and x.rights_uri != RightsStatus.IN_COPYRIGHT
             ]
         )
-
 
     def set_default_rights_uri(self, data_source_name, default_rights_uri=None):
         if default_rights_uri:
@@ -1138,7 +1219,9 @@ class CirculationData(MetaToModelUtility):
 
         elif data_source_name:
             # We didn't get rights passed in, so use the default rights for the data source if any.
-            default = RightsStatus.DATA_SOURCE_DEFAULT_RIGHTS_STATUS.get(data_source_name, None)
+            default = RightsStatus.DATA_SOURCE_DEFAULT_RIGHTS_STATUS.get(
+                data_source_name, None
+            )
             if default:
                 self.default_rights_uri = default
 
@@ -1160,10 +1243,12 @@ class CirculationData(MetaToModelUtility):
         # can only be stored in a LicensePool, but we have no
         # Collection to tell us which LicensePool to use. This is
         # indicative of an error in programming.
-        if not collection and (self.licenses_owned is not None
-                               or self.licenses_available is not None
-                               or self.licenses_reserved is not None
-                               or self.patrons_in_hold_queue is not None):
+        if not collection and (
+            self.licenses_owned is not None
+            or self.licenses_available is not None
+            or self.licenses_reserved is not None
+            or self.patrons_in_hold_queue is not None
+        ):
             raise ValueError(
                 "Cannot store circulation information because no "
                 "Collection was provided."
@@ -1190,8 +1275,11 @@ class CirculationData(MetaToModelUtility):
         for link in self.links:
             if link.rel in Hyperlink.CIRCULATION_ALLOWED:
                 link_obj, ignore = identifier.add_link(
-                    rel=link.rel, href=link.href, data_source=data_source,
-                    media_type=link.media_type, content=link.content
+                    rel=link.rel,
+                    href=link.href,
+                    data_source=data_source,
+                    media_type=link.media_type,
+                    content=link.content,
                 )
                 link_objects[link] = link_obj
 
@@ -1225,10 +1313,12 @@ class CirculationData(MetaToModelUtility):
                 resource = None
             # This can cause a non-open-access LicensePool to go open-access.
             lpdm = LicensePoolDeliveryMechanism.set(
-                data_source, identifier, format.content_type,
+                data_source,
+                identifier,
+                format.content_type,
                 format.drm_scheme,
                 format.rights_uri or self.default_rights_uri,
-                resource
+                resource,
             )
             new_lpdms.append(lpdm)
 
@@ -1239,14 +1329,17 @@ class CirculationData(MetaToModelUtility):
             for lpdm in old_lpdms:
                 if lpdm not in new_lpdms:
                     for loan in lpdm.fulfills:
-                        self.log.info("Loan %i is associated with a format that is no longer available. Deleting its delivery mechanism." % loan.id)
+                        self.log.info(
+                            "Loan %i is associated with a format that is no longer available. Deleting its delivery mechanism."
+                            % loan.id
+                        )
                         loan.fulfillment = None
                     # This can cause an open-access LicensePool to go
                     # non-open-access.
                     lpdm.delete()
 
         new_open_access = any(pool.open_access for pool in pools)
-        open_access_status_changed = (old_open_access != new_open_access)
+        open_access_status_changed = old_open_access != new_open_access
 
         old_licenses = new_licenses = []
         if pool:
@@ -1254,7 +1347,9 @@ class CirculationData(MetaToModelUtility):
 
             for license in self.licenses:
                 license_obj, ignore = get_one_or_create(
-                    _db, License, identifier=license.identifier,
+                    _db,
+                    License,
+                    identifier=license.identifier,
                     license_pool_id=pool.id,
                 )
                 license_obj.checkout_url = license.checkout_url
@@ -1273,7 +1368,10 @@ class CirculationData(MetaToModelUtility):
                 # still loans we'll need it.
                 # But if we track individual licenses for other protocols,
                 # we may need to handle this differently.
-                self.log.warn("License %i is no longer available but still has loans." % license.id)
+                self.log.warn(
+                    "License %i is no longer available but still has loans."
+                    % license.id
+                )
 
         # Finally, if we have data for a specific Collection's license
         # for this book, find its LicensePool and update it.
@@ -1287,7 +1385,7 @@ class CirculationData(MetaToModelUtility):
                 new_licenses_reserved=self.licenses_reserved,
                 new_patrons_in_hold_queue=self.patrons_in_hold_queue,
                 analytics=analytics,
-                as_of=self.last_checked
+                as_of=self.last_checked,
             )
 
         # If this is the first time we've seen this pool, or we never
@@ -1299,9 +1397,12 @@ class CirculationData(MetaToModelUtility):
                 work.set_presentation_ready()
                 work_changed = True
 
-        made_changes = (made_changes or changed_availability
-                        or open_access_status_changed
-                        or work_changed)
+        made_changes = (
+            made_changes
+            or changed_availability
+            or open_access_status_changed
+            or work_changed
+        )
 
         return pool, made_changes
 
@@ -1326,36 +1427,44 @@ class Metadata(MetaToModelUtility):
     log = logging.getLogger("Abstract metadata layer")
 
     BASIC_EDITION_FIELDS = [
-        'title', 'sort_title', 'subtitle', 'language', 'medium',
-        'series', 'series_position', 'publisher', 'imprint',
-        'issued', 'published'
+        "title",
+        "sort_title",
+        "subtitle",
+        "language",
+        "medium",
+        "series",
+        "series_position",
+        "publisher",
+        "imprint",
+        "issued",
+        "published",
     ]
 
     def __init__(
-            self,
-            data_source,
-            title=None,
-            subtitle=None,
-            sort_title=None,
-            language=None,
-            medium=None,
-            series=None,
-            series_position=None,
-            publisher=None,
-            imprint=None,
-            issued=None,
-            published=None,
-            primary_identifier=None,
-            identifiers=None,
-            recommendations=None,
-            subjects=None,
-            contributors=None,
-            measurements=None,
-            links=None,
-            data_source_last_updated=None,
-            # Note: brought back to keep callers of bibliographic extraction process_one() methods simple.
-            circulation=None,
-            **kwargs
+        self,
+        data_source,
+        title=None,
+        subtitle=None,
+        sort_title=None,
+        language=None,
+        medium=None,
+        series=None,
+        series_position=None,
+        publisher=None,
+        imprint=None,
+        issued=None,
+        published=None,
+        primary_identifier=None,
+        identifiers=None,
+        recommendations=None,
+        subjects=None,
+        contributors=None,
+        measurements=None,
+        links=None,
+        data_source_last_updated=None,
+        # Note: brought back to keep callers of bibliographic extraction process_one() methods simple.
+        circulation=None,
+        **kwargs
     ):
         # data_source is where the data comes from (e.g. overdrive, metadata wrangler, admin interface),
         # and not necessarily where the associated Identifier's LicencePool's lending licenses are coming from.
@@ -1380,11 +1489,10 @@ class Metadata(MetaToModelUtility):
         self.issued = issued
         self.published = published
 
-        self.primary_identifier=primary_identifier
+        self.primary_identifier = primary_identifier
         self.identifiers = identifiers or []
         self.permanent_work_id = None
-        if (self.primary_identifier
-            and self.primary_identifier not in self.identifiers):
+        if self.primary_identifier and self.primary_identifier not in self.identifiers:
             self.identifiers.append(self.primary_identifier)
         self.recommendations = recommendations or []
         self.subjects = subjects or []
@@ -1405,8 +1513,8 @@ class Metadata(MetaToModelUtility):
 
     @links.setter
     def links(self, arg_links):
-        """ If got passed all links, undiscriminately, filter out to only those relevant to
-            editions (the image/cover/etc links).
+        """If got passed all links, undiscriminately, filter out to only those relevant to
+        editions (the image/cover/etc links).
         """
         # start by deleting any old links
         self.__links = []
@@ -1418,7 +1526,6 @@ class Metadata(MetaToModelUtility):
             if link.rel in Hyperlink.METADATA_ALLOWED:
                 # only accept the types of links relevant to editions
                 self.__links.append(link)
-
 
     @classmethod
     def from_edition(cls, edition):
@@ -1441,9 +1548,11 @@ class Metadata(MetaToModelUtility):
             # the NYT best-seller API.
             if edition.sort_author and edition.sort_author != Edition.UNKNOWN_AUTHOR:
                 contributors.append(
-                    ContributorData(sort_name=edition.sort_author,
-                                    display_name=edition.author,
-                                    roles=[Contributor.PRIMARY_AUTHOR_ROLE])
+                    ContributorData(
+                        sort_name=edition.sort_author,
+                        display_name=edition.author,
+                        roles=[Contributor.PRIMARY_AUTHOR_ROLE],
+                    )
                 )
 
         i = edition.primary_identifier
@@ -1485,7 +1594,6 @@ class Metadata(MetaToModelUtility):
                 break
         return primary_author
 
-
     def update(self, metadata):
         """Update this Metadata object with values from the given Metadata
         object.
@@ -1496,16 +1604,15 @@ class Metadata(MetaToModelUtility):
         fields = self.BASIC_EDITION_FIELDS
         for field in fields:
             new_value = getattr(metadata, field)
-            if new_value != None and new_value != '':
+            if new_value != None and new_value != "":
                 setattr(self, field, new_value)
 
-        new_value = getattr(metadata, 'contributors')
+        new_value = getattr(metadata, "contributors")
         if new_value and isinstance(new_value, list):
-            old_value = getattr(self, 'contributors')
+            old_value = getattr(self, "contributors")
             # if we already have a better value, don't override it with a "missing info" placeholder value
             if not (old_value and new_value[0].sort_name == Edition.UNKNOWN_AUTHOR):
-                setattr(self, 'contributors', new_value)
-
+                setattr(self, "contributors", new_value)
 
     def calculate_permanent_work_id(self, _db, metadata_client):
         """Try to calculate a permanent work ID from this metadata.
@@ -1519,23 +1626,21 @@ class Metadata(MetaToModelUtility):
             return None, None
 
         if not primary_author.sort_name and metadata_client:
-            primary_author.find_sort_name(
-                _db, self.identifiers, metadata_client
-            )
+            primary_author.find_sort_name(_db, self.identifiers, metadata_client)
 
         sort_author = primary_author.sort_name
         pwid = Edition.calculate_permanent_work_id_for_title_and_author(
-            self.title, sort_author, "book")
-        self.permanent_work_id=pwid
+            self.title, sort_author, "book"
+        )
+        self.permanent_work_id = pwid
         return pwid
 
-    def associate_with_identifiers_based_on_permanent_work_id(
-            self, _db):
+    def associate_with_identifiers_based_on_permanent_work_id(self, _db):
         """Try to associate this object's primary identifier with
         the primary identifiers of Editions in the database which share
         a permanent work ID.
         """
-        if (not self.primary_identifier or not self.permanent_work_id):
+        if not self.primary_identifier or not self.permanent_work_id:
             # We don't have the information necessary to carry out this
             # task.
             return
@@ -1550,25 +1655,28 @@ class Metadata(MetaToModelUtility):
         # Try to find the primary identifiers of other Editions with
         # the same permanent work ID and the same medium, representing
         # books already in our collection.
-        qu = _db.query(Identifier).join(
-            Identifier.primarily_identifies).filter(
-                Edition.permanent_work_id==self.permanent_work_id).filter(
-                    Identifier.type.in_(
-                        Identifier.LICENSE_PROVIDING_IDENTIFIER_TYPES
-                    )
-                ).filter(
-                    Edition.medium==self.medium
-                )
+        qu = (
+            _db.query(Identifier)
+            .join(Identifier.primarily_identifies)
+            .filter(Edition.permanent_work_id == self.permanent_work_id)
+            .filter(Identifier.type.in_(Identifier.LICENSE_PROVIDING_IDENTIFIER_TYPES))
+            .filter(Edition.medium == self.medium)
+        )
         identifiers_same_work_id = qu.all()
         for same_work_id in identifiers_same_work_id:
-            if (same_work_id.type != self.primary_identifier.type
-                or same_work_id.identifier != self.primary_identifier.identifier):
+            if (
+                same_work_id.type != self.primary_identifier.type
+                or same_work_id.identifier != self.primary_identifier.identifier
+            ):
                 self.log.info(
                     "Discovered that %r is equivalent to %r because of matching permanent work ID %s",
-                    same_work_id, primary_identifier_obj, self.permanent_work_id
+                    same_work_id,
+                    primary_identifier_obj,
+                    self.permanent_work_id,
                 )
                 primary_identifier_obj.equivalent_to(
-                    self.data_source(_db), same_work_id, 0.85)
+                    self.data_source(_db), same_work_id, 0.85
+                )
 
     def data_source(self, _db):
         if not self.data_source_obj:
@@ -1580,21 +1688,19 @@ class Metadata(MetaToModelUtility):
         return self.data_source_obj
 
     def edition(self, _db, create_if_not_exists=True):
-        """ Find or create the edition described by this Metadata object.
-        """
+        """Find or create the edition described by this Metadata object."""
         if not self.primary_identifier:
-            raise ValueError(
-                "Cannot find edition: metadata has no primary identifier."
-            )
+            raise ValueError("Cannot find edition: metadata has no primary identifier.")
 
         data_source = self.data_source(_db)
 
         return Edition.for_foreign_id(
-            _db, data_source, self.primary_identifier.type,
+            _db,
+            data_source,
+            self.primary_identifier.type,
             self.primary_identifier.identifier,
-            create_if_not_exists=create_if_not_exists
+            create_if_not_exists=create_if_not_exists,
         )
-
 
     def consolidate_identifiers(self):
         by_weight = defaultdict(list)
@@ -1603,8 +1709,7 @@ class Metadata(MetaToModelUtility):
         new_identifiers = []
         for (type, identifier), weights in list(by_weight.items()):
             new_identifiers.append(
-                IdentifierData(type=type, identifier=identifier,
-                               weight=median(weights))
+                IdentifierData(type=type, identifier=identifier, weight=median(weights))
             )
         self.identifiers = new_identifiers
 
@@ -1613,33 +1718,39 @@ class Metadata(MetaToModelUtility):
         potentials = {}
         for contributor in self.contributors:
             if not any(
-                    x in contributor.roles for x in
-                    (Contributor.AUTHOR_ROLE,
-                     Contributor.PRIMARY_AUTHOR_ROLE)
+                x in contributor.roles
+                for x in (Contributor.AUTHOR_ROLE, Contributor.PRIMARY_AUTHOR_ROLE)
             ):
                 continue
             contributor.find_sort_name(_db, self.identifiers, metadata_client)
             confidence = 0
 
-            base = _db.query(Edition).filter(
-                Edition.title.ilike(self.title)).filter(
-                    Edition.medium==Edition.BOOK_MEDIUM)
+            base = (
+                _db.query(Edition)
+                .filter(Edition.title.ilike(self.title))
+                .filter(Edition.medium == Edition.BOOK_MEDIUM)
+            )
             success = False
 
             # A match based on work ID is the most reliable.
             pwid = self.calculate_permanent_work_id(_db, metadata_client)
-            clause = and_(Edition.data_source_id==LicensePool.data_source_id, Edition.primary_identifier_id==LicensePool.identifier_id)
-            qu = base.filter(Edition.permanent_work_id==pwid).join(LicensePool, clause)
+            clause = and_(
+                Edition.data_source_id == LicensePool.data_source_id,
+                Edition.primary_identifier_id == LicensePool.identifier_id,
+            )
+            qu = base.filter(Edition.permanent_work_id == pwid).join(
+                LicensePool, clause
+            )
             success = self._run_query(qu, potentials, 0.95)
             if not success and contributor.sort_name:
-                qu = base.filter(Edition.sort_author==contributor.sort_name)
+                qu = base.filter(Edition.sort_author == contributor.sort_name)
                 success = self._run_query(qu, potentials, 0.9)
             if not success and contributor.display_name:
-                qu = base.filter(Edition.author==contributor.display_name)
+                qu = base.filter(Edition.author == contributor.display_name)
                 success = self._run_query(qu, potentials, 0.8)
             if not success:
                 # Look for the book by an unknown author (our mistake)
-                qu = base.filter(Edition.author==Edition.UNKNOWN_AUTHOR)
+                qu = base.filter(Edition.author == Edition.UNKNOWN_AUTHOR)
                 success = self._run_query(qu, potentials, 0.45)
             if not success:
                 # See if there is any book with this title at all.
@@ -1657,21 +1768,27 @@ class Metadata(MetaToModelUtility):
         return success
 
     REL_REQUIRES_NEW_PRESENTATION_EDITION = [
-        LinkRelations.IMAGE, LinkRelations.THUMBNAIL_IMAGE
+        LinkRelations.IMAGE,
+        LinkRelations.THUMBNAIL_IMAGE,
     ]
     REL_REQUIRES_FULL_RECALCULATION = [LinkRelations.DESCRIPTION]
 
     # TODO: We need to change all calls to apply() to use a ReplacementPolicy
     # instead of passing in individual `replace` arguments. Once that's done,
     # we can get rid of the `replace` arguments.
-    def apply(self, edition, collection, metadata_client=None, replace=None,
-              replace_identifiers=False,
-              replace_subjects=False,
-              replace_contributions=False,
-              replace_links=False,
-              replace_formats=False,
-              replace_rights=False,
-              force=False,
+    def apply(
+        self,
+        edition,
+        collection,
+        metadata_client=None,
+        replace=None,
+        replace_identifiers=False,
+        replace_subjects=False,
+        replace_contributions=False,
+        replace_links=False,
+        replace_formats=False,
+        replace_rights=False,
+        force=False,
     ):
         """Apply this metadata to the given edition.
 
@@ -1701,17 +1818,21 @@ class Metadata(MetaToModelUtility):
                 links=replace_links,
                 formats=replace_formats,
                 rights=replace_rights,
-                even_if_not_apparently_updated=force
+                even_if_not_apparently_updated=force,
             )
 
         # We were given an Edition, so either this metadata's
         # primary_identifier must be missing or it must match the
         # Edition's primary identifier.
         if self.primary_identifier:
-            if (self.primary_identifier.type != edition.primary_identifier.type
-                or self.primary_identifier.identifier != edition.primary_identifier.identifier):
+            if (
+                self.primary_identifier.type != edition.primary_identifier.type
+                or self.primary_identifier.identifier
+                != edition.primary_identifier.identifier
+            ):
                 raise ValueError(
-                    "Metadata's primary identifier (%s/%s) does not match edition's primary identifier (%r)" % (
+                    "Metadata's primary identifier (%s/%s) does not match edition's primary identifier (%r)"
+                    % (
                         self.primary_identifier.type,
                         self.primary_identifier.identifier,
                         edition.primary_identifier,
@@ -1735,14 +1856,16 @@ class Metadata(MetaToModelUtility):
 
         identifier = edition.primary_identifier
 
-        self.log.info(
-            "APPLYING METADATA TO EDITION: %s",  self.title
-        )
-        fields = self.BASIC_EDITION_FIELDS+['permanent_work_id']
+        self.log.info("APPLYING METADATA TO EDITION: %s", self.title)
+        fields = self.BASIC_EDITION_FIELDS + ["permanent_work_id"]
         for field in fields:
             old_edition_value = getattr(edition, field)
             new_metadata_value = getattr(self, field)
-            if new_metadata_value != None and new_metadata_value != '' and (new_metadata_value != old_edition_value):
+            if (
+                new_metadata_value != None
+                and new_metadata_value != ""
+                and (new_metadata_value != old_edition_value)
+            ):
                 if new_metadata_value in [NO_VALUE, NO_NUMBER]:
                     new_metadata_value = None
                 setattr(edition, field, new_metadata_value)
@@ -1750,8 +1873,9 @@ class Metadata(MetaToModelUtility):
 
         # Create equivalencies between all given identifiers and
         # the edition's primary identifier.
-        contributors_changed = self.update_contributions(_db, edition,
-                                  metadata_client, replace.contributions)
+        contributors_changed = self.update_contributions(
+            _db, edition, metadata_client, replace.contributions
+        )
         if contributors_changed:
             work_requires_new_presentation_edition = True
 
@@ -1760,21 +1884,22 @@ class Metadata(MetaToModelUtility):
             for identifier_data in self.identifiers:
                 if not identifier_data.identifier:
                     continue
-                if (identifier_data.identifier==identifier.identifier and
-                    identifier_data.type==identifier.type):
+                if (
+                    identifier_data.identifier == identifier.identifier
+                    and identifier_data.type == identifier.type
+                ):
                     # These are the same identifier.
                     continue
                 new_identifier, ignore = Identifier.for_foreign_id(
-                    _db, identifier_data.type, identifier_data.identifier)
+                    _db, identifier_data.type, identifier_data.identifier
+                )
                 identifier.equivalent_to(
-                    data_source, new_identifier, identifier_data.weight)
+                    data_source, new_identifier, identifier_data.weight
+                )
 
         new_subjects = {}
         if self.subjects:
-            new_subjects = dict(
-                (subject.key, subject)
-                for subject in self.subjects
-            )
+            new_subjects = dict((subject.key, subject) for subject in self.subjects)
         if replace.subjects:
             # Remove any old Subjects from this data source, unless they
             # are also in the list of new subjects.
@@ -1807,8 +1932,12 @@ class Metadata(MetaToModelUtility):
         # Apply all new subjects to the identifier.
         for subject in list(new_subjects.values()):
             identifier.classify(
-                data_source, subject.type, subject.identifier,
-                subject.name, weight=subject.weight)
+                data_source,
+                subject.type,
+                subject.identifier,
+                subject.name,
+                weight=subject.weight,
+            )
             work_requires_full_recalculation = True
 
         # Associate all links with the primary identifier.
@@ -1832,21 +1961,30 @@ class Metadata(MetaToModelUtility):
                 if link.original:
                     rights_status = RightsStatus.lookup(_db, link.original.rights_uri)
                     original_resource, ignore = get_one_or_create(
-                        _db, Resource, url=link.original.href,
+                        _db,
+                        Resource,
+                        url=link.original.href,
                     )
                     if not original_resource.data_source:
                         original_resource.data_source = data_source
                     original_resource.rights_status = rights_status
-                    original_resource.rights_explanation = link.original.rights_explanation
+                    original_resource.rights_explanation = (
+                        link.original.rights_explanation
+                    )
                     if link.original.content:
                         original_resource.set_fetched_content(
                             link.original.guessed_media_type,
-                            link.original.content, None)
+                            link.original.content,
+                            None,
+                        )
 
                 link_obj, ignore = identifier.add_link(
-                    rel=link.rel, href=link.href, data_source=data_source,
+                    rel=link.rel,
+                    href=link.href,
+                    data_source=data_source,
                     media_type=link.guessed_media_type,
-                    content=link.content, rights_status_uri=link.rights_uri,
+                    content=link.content,
+                    rights_status_uri=link.rights_uri,
                     rights_explanation=link.rights_explanation,
                     original_resource=original_resource,
                     transformation_settings=link.transformation_settings,
@@ -1861,28 +1999,26 @@ class Metadata(MetaToModelUtility):
                 if link.thumbnail.rel == Hyperlink.THUMBNAIL_IMAGE:
                     thumbnail = link.thumbnail
                     thumbnail_obj, ignore = identifier.add_link(
-                        rel=thumbnail.rel, href=thumbnail.href,
+                        rel=thumbnail.rel,
+                        href=thumbnail.href,
                         data_source=data_source,
                         media_type=thumbnail.guessed_media_type,
-                        content=thumbnail.content
+                        content=thumbnail.content,
                     )
                     work_requires_new_presentation_edition = True
-                    if (thumbnail_obj.resource
-                        and thumbnail_obj.resource.representation):
+                    if thumbnail_obj.resource and thumbnail_obj.resource.representation:
                         thumbnail_obj.resource.representation.thumbnail_of = (
                             link_obj.resource.representation
                         )
                     else:
                         self.log.error(
-                            "Thumbnail link %r cannot be marked as a thumbnail of %r because it has no Representation, probably due to a missing media type." % (
-                                link.thumbnail, link
-                            )
+                            "Thumbnail link %r cannot be marked as a thumbnail of %r because it has no Representation, probably due to a missing media type."
+                            % (link.thumbnail, link)
                         )
                 else:
                     self.log.error(
-                        "Thumbnail link %r does not have the thumbnail link relation! Not acceptable as a thumbnail of %r." % (
-                            link.thumbnail, link
-                        )
+                        "Thumbnail link %r does not have the thumbnail link relation! Not acceptable as a thumbnail of %r."
+                        % (link.thumbnail, link)
                     )
                     link.thumbnail = None
 
@@ -1890,9 +2026,11 @@ class Metadata(MetaToModelUtility):
         for measurement in self.measurements:
             work_requires_full_recalculation = True
             identifier.add_measurement(
-                data_source, measurement.quantity_measured,
-                measurement.value, measurement.weight,
-                measurement.taken_at
+                data_source,
+                measurement.quantity_measured,
+                measurement.value,
+                measurement.weight,
+                measurement.taken_at,
             )
 
         if not edition.sort_author:
@@ -1904,7 +2042,7 @@ class Metadata(MetaToModelUtility):
                 self.log.info(
                     "In the absence of Contributor objects, setting Edition author name to %s/%s",
                     primary_author.sort_name,
-                    primary_author.display_name
+                    primary_author.display_name,
                 )
                 edition.sort_author = primary_author.sort_name
                 edition.display_author = primary_author.display_name
@@ -1958,7 +2096,11 @@ class Metadata(MetaToModelUtility):
             DataSource.BIBLIOTHECA,
             DataSource.AXIS_360,
         ]
-        if work_requires_new_presentation_edition and (not data_source.integration_client) and (data_source.name not in METADATA_UPLOAD_BLACKLIST):
+        if (
+            work_requires_new_presentation_edition
+            and (not data_source.integration_client)
+            and (data_source.name not in METADATA_UPLOAD_BLACKLIST)
+        ):
             # Create a transient failure CoverageRecord for this edition
             # so it will be processed by the MetadataUploadCoverageProvider.
             internal_processing = DataSource.lookup(_db, DataSource.INTERNAL_PROCESSING)
@@ -1966,19 +2108,27 @@ class Metadata(MetaToModelUtility):
             # If there's already a CoverageRecord, don't change it to transient failure.
             # TODO: Once the metadata wrangler can handle it, we'd like to re-sync the
             # metadata every time there's a change. For now,
-            cr = CoverageRecord.lookup(edition, internal_processing,
-                                       operation=CoverageRecord.METADATA_UPLOAD_OPERATION)
+            cr = CoverageRecord.lookup(
+                edition,
+                internal_processing,
+                operation=CoverageRecord.METADATA_UPLOAD_OPERATION,
+            )
             if not cr:
-                CoverageRecord.add_for(edition, internal_processing,
-                                       operation=CoverageRecord.METADATA_UPLOAD_OPERATION,
-                                       status=CoverageRecord.TRANSIENT_FAILURE)
+                CoverageRecord.add_for(
+                    edition,
+                    internal_processing,
+                    operation=CoverageRecord.METADATA_UPLOAD_OPERATION,
+                    status=CoverageRecord.TRANSIENT_FAILURE,
+                )
 
         # Update the coverage record for this edition and data
         # source. We omit the collection information, even if we know
         # which collection this is, because we only changed metadata.
         CoverageRecord.add_for(
-            edition, data_source, timestamp=self.data_source_last_updated,
-            collection=None
+            edition,
+            data_source,
+            timestamp=self.data_source_last_updated,
+            collection=None,
         )
 
         if work_requires_full_recalculation or work_requires_new_presentation_edition:
@@ -1988,8 +2138,10 @@ class Metadata(MetaToModelUtility):
             # Any LicensePool will do here, since all LicensePools for
             # a given Identifier have the same Work.
             pool = get_one(
-                _db, LicensePool, identifier=edition.primary_identifier,
-                on_multiple='interchangeable'
+                _db,
+                LicensePool,
+                identifier=edition.primary_identifier,
+                on_multiple="interchangeable",
             )
             if pool and pool.work:
                 work = pool.work
@@ -1999,7 +2151,6 @@ class Metadata(MetaToModelUtility):
                     work.needs_new_presentation_edition()
 
         return edition, work_requires_new_presentation_edition
-
 
     def make_thumbnail(self, data_source, link, link_obj):
         """Make sure a Hyperlink representing an image is connected
@@ -2013,26 +2164,29 @@ class Metadata(MetaToModelUtility):
             # The image serves as its own thumbnail. This is a
             # hacky way to represent this in the database.
             if link_obj.resource.representation:
-                link_obj.resource.representation.image_height = Edition.MAX_THUMBNAIL_HEIGHT
+                link_obj.resource.representation.image_height = (
+                    Edition.MAX_THUMBNAIL_HEIGHT
+                )
             return link_obj
 
         # The thumbnail and image are different. Make sure there's a
         # separate link to the thumbnail.
         thumbnail_obj, ignore = link_obj.identifier.add_link(
-            rel=thumbnail.rel, href=thumbnail.href,
+            rel=thumbnail.rel,
+            href=thumbnail.href,
             data_source=data_source,
             media_type=thumbnail.media_type,
-            content=thumbnail.content
+            content=thumbnail.content,
         )
         # And make sure the thumbnail knows it's a thumbnail of the main
         # image.
         if thumbnail_obj.resource.representation:
-            thumbnail_obj.resource.representation.thumbnail_of = link_obj.resource.representation
+            thumbnail_obj.resource.representation.thumbnail_of = (
+                link_obj.resource.representation
+            )
         return thumbnail_obj
 
-
-    def update_contributions(self, _db, edition, metadata_client=None,
-                             replace=True):
+    def update_contributions(self, _db, edition, metadata_client=None, replace=True):
         contributors_changed = False
         old_contributors = []
         new_contributors = []
@@ -2052,17 +2206,17 @@ class Metadata(MetaToModelUtility):
             edition.contributions = surviving_contributions
 
         for contributor_data in self.contributors:
-            contributor_data.find_sort_name(
-                _db, self.identifiers, metadata_client
-            )
-            if (contributor_data.sort_name
+            contributor_data.find_sort_name(_db, self.identifiers, metadata_client)
+            if (
+                contributor_data.sort_name
                 or contributor_data.lc
-                or contributor_data.viaf):
+                or contributor_data.viaf
+            ):
                 contributor = edition.add_contributor(
                     name=contributor_data.sort_name,
                     roles=contributor_data.roles,
                     lc=contributor_data.lc,
-                    viaf=contributor_data.viaf
+                    viaf=contributor_data.viaf,
                 )
                 new_contributors.append(contributor.id)
                 if contributor_data.display_name:
@@ -2080,14 +2234,13 @@ class Metadata(MetaToModelUtility):
             else:
                 self.log.info(
                     "Not registering %s because no sort name, LC, or VIAF",
-                    contributor_data.display_name
+                    contributor_data.display_name,
                 )
 
         if sorted(old_contributors) != sorted(new_contributors):
             contributors_changed = True
 
         return contributors_changed
-
 
     def filter_recommendations(self, _db):
         """Filters out recommended identifiers that don't exist in the db.
@@ -2100,9 +2253,11 @@ class Metadata(MetaToModelUtility):
 
         self.recommendations = []
         for type, identifiers in list(by_type.items()):
-            existing_identifiers = _db.query(Identifier).\
-                filter(Identifier.type==type).\
-                filter(Identifier.identifier.in_(identifiers))
+            existing_identifiers = (
+                _db.query(Identifier)
+                .filter(Identifier.type == type)
+                .filter(Identifier.identifier.in_(identifiers))
+            )
             self.recommendations += existing_identifiers.all()
 
         if self.primary_identifier in self.recommendations:
@@ -2123,47 +2278,49 @@ class CSVMetadataImporter(object):
         Identifier.AXIS_360_ID,
         Identifier.OVERDRIVE_ID,
         Identifier.THREEM_ID,
-        Identifier.ISBN
+        Identifier.ISBN,
     ]
 
     DEFAULT_IDENTIFIER_FIELD_NAMES = {
-        Identifier.OVERDRIVE_ID : ("overdrive id", 0.75),
-        Identifier.THREEM_ID : ("3m id", 0.75),
-        Identifier.AXIS_360_ID : ("axis 360 id", 0.75),
-        Identifier.ISBN : ("isbn", 0.75),
+        Identifier.OVERDRIVE_ID: ("overdrive id", 0.75),
+        Identifier.THREEM_ID: ("3m id", 0.75),
+        Identifier.AXIS_360_ID: ("axis 360 id", 0.75),
+        Identifier.ISBN: ("isbn", 0.75),
     }
 
-    # When classifications are imported from a CSV file, we treat 
+    # When classifications are imported from a CSV file, we treat
     # them as though they came from a trusted distributor.
     DEFAULT_SUBJECT_FIELD_NAMES = {
-        'tags': (Subject.TAG, Classification.TRUSTED_DISTRIBUTOR_WEIGHT),
-        'age' : (Subject.AGE_RANGE, Classification.TRUSTED_DISTRIBUTOR_WEIGHT),
-        'audience' : (Subject.FREEFORM_AUDIENCE,
-                      Classification.TRUSTED_DISTRIBUTOR_WEIGHT),
+        "tags": (Subject.TAG, Classification.TRUSTED_DISTRIBUTOR_WEIGHT),
+        "age": (Subject.AGE_RANGE, Classification.TRUSTED_DISTRIBUTOR_WEIGHT),
+        "audience": (
+            Subject.FREEFORM_AUDIENCE,
+            Classification.TRUSTED_DISTRIBUTOR_WEIGHT,
+        ),
     }
 
     def __init__(
-            self,
-            data_source_name,
-            title_field='title',
-            language_field='language',
-            default_language='eng',
-            medium_field='medium',
-            default_medium=Edition.BOOK_MEDIUM,
-            series_field='series',
-            publisher_field='publisher',
-            imprint_field='imprint',
-            issued_field='issued',
-            published_field=['published', 'publication year'],
-            identifier_fields=DEFAULT_IDENTIFIER_FIELD_NAMES,
-            subject_fields=DEFAULT_SUBJECT_FIELD_NAMES,
-            sort_author_field='file author as',
-            display_author_field=['author', 'display author as']
+        self,
+        data_source_name,
+        title_field="title",
+        language_field="language",
+        default_language="eng",
+        medium_field="medium",
+        default_medium=Edition.BOOK_MEDIUM,
+        series_field="series",
+        publisher_field="publisher",
+        imprint_field="imprint",
+        issued_field="issued",
+        published_field=["published", "publication year"],
+        identifier_fields=DEFAULT_IDENTIFIER_FIELD_NAMES,
+        subject_fields=DEFAULT_SUBJECT_FIELD_NAMES,
+        sort_author_field="file author as",
+        display_author_field=["author", "display author as"],
     ):
         self.data_source_name = data_source_name
         self.title_field = title_field
-        self.language_field=language_field
-        self.default_language=default_language
+        self.language_field = language_field
+        self.default_language = default_language
         self.medium_field = medium_field
         self.default_medium = default_medium
         self.series_field = series_field
@@ -2193,8 +2350,8 @@ class CSVMetadataImporter(object):
                 break
         if not found_identifier_field:
             raise CSVFormatError(
-                "Could not find a primary identifier field. Possibilities: %r. Actualities: %r." %
-                (possibilities, fields)
+                "Could not find a primary identifier field. Possibilities: %r. Actualities: %r."
+                % (possibilities, fields)
             )
 
         for row in dictreader:
@@ -2233,9 +2390,7 @@ class CSVMetadataImporter(object):
             if field_name in row:
                 value = self._field(row, field_name)
                 if value:
-                    identifier = IdentifierData(
-                        identifier_type, value, weight=weight
-                    )
+                    identifier = IdentifierData(identifier_type, value, weight=weight)
                     identifiers.append(identifier)
                     if not primary_identifier:
                         primary_identifier = identifier
@@ -2245,11 +2400,7 @@ class CSVMetadataImporter(object):
             values = self.list_field(row, field_name)
             for value in values:
                 subjects.append(
-                    SubjectData(
-                        type=subject_type,
-                        identifier=value,
-                        weight=weight
-                    )
+                    SubjectData(type=subject_type, identifier=value, weight=weight)
                 )
 
         contributors = []
@@ -2258,8 +2409,9 @@ class CSVMetadataImporter(object):
         if sort_author or display_author:
             contributors.append(
                 ContributorData(
-                    sort_name=sort_author, display_name=display_author,
-                    roles=[Contributor.AUTHOR_ROLE]
+                    sort_name=sort_author,
+                    display_name=display_author,
+                    roles=[Contributor.AUTHOR_ROLE],
                 )
             )
 
@@ -2276,7 +2428,7 @@ class CSVMetadataImporter(object):
             primary_identifier=primary_identifier,
             identifiers=identifiers,
             subjects=subjects,
-            contributors=contributors
+            contributors=contributors,
         )
         metadata.csv_row = row
         return metadata
@@ -2345,7 +2497,7 @@ class MARCExtractor(object):
     # Common things found in a MARC record after the name of the author
     # which we sould like to remove.
     END_OF_AUTHOR_NAME_RES = [
-        re.compile(",\s+[0-9]+-"), # Birth year
+        re.compile(",\s+[0-9]+-"),  # Birth year
         re.compile(",\s+active "),
         re.compile(",\s+graf,"),
         re.compile(",\s+author."),
@@ -2358,7 +2510,7 @@ class MARCExtractor(object):
         for regex in cls.END_OF_AUTHOR_NAME_RES:
             match = regex.search(name)
             if match:
-                name = name[:match.start()]
+                name = name[: match.start()]
                 break
         name = name_tidy(name)
         return name
@@ -2380,15 +2532,15 @@ class MARCExtractor(object):
 
         for record in reader:
             title = record.title()
-            if title.endswith(' /'):
-                title = title[:-len(' /')]
+            if title.endswith(" /"):
+                title = title[: -len(" /")]
             issued_year = cls.parse_year(record.pubyear())
             publisher = record.publisher()
-            if publisher.endswith(','):
+            if publisher.endswith(","):
                 publisher = publisher[:-1]
 
             links = []
-            summary = record.notes()[0]['a']
+            summary = record.notes()[0]["a"]
 
             if summary:
                 summary_link = LinkData(
@@ -2398,22 +2550,23 @@ class MARCExtractor(object):
                 )
                 links.append(summary_link)
 
-            isbn = record['020']['a'].split(" ")[0]
-            primary_identifier = IdentifierData(
-                Identifier.ISBN, isbn
-            )
+            isbn = record["020"]["a"].split(" ")[0]
+            primary_identifier = IdentifierData(Identifier.ISBN, isbn)
 
-            subjects = [SubjectData(
-                Classifier.FAST,
-                subject['a'],
-            ) for subject in record.subjects()]
+            subjects = [
+                SubjectData(
+                    Classifier.FAST,
+                    subject["a"],
+                )
+                for subject in record.subjects()
+            ]
 
             author = record.author()
             if author:
                 author = cls.name_cleanup(author)
                 author_names = [author]
             else:
-                author_names = ['Anonymous']
+                author_names = ["Anonymous"]
             contributors = [
                 ContributorData(
                     sort_name=author,
@@ -2422,16 +2575,18 @@ class MARCExtractor(object):
                 for author in author_names
             ]
 
-            metadata_records.append(Metadata(
-                data_source=data_source_name,
-                title=title,
-                language='eng',
-                medium=Edition.BOOK_MEDIUM,
-                publisher=publisher,
-                issued=issued_year,
-                primary_identifier=primary_identifier,
-                subjects=subjects,
-                contributors=contributors,
-                links=links
-            ))
+            metadata_records.append(
+                Metadata(
+                    data_source=data_source_name,
+                    title=title,
+                    language="eng",
+                    medium=Edition.BOOK_MEDIUM,
+                    publisher=publisher,
+                    issued=issued_year,
+                    primary_identifier=primary_identifier,
+                    subjects=subjects,
+                    contributors=contributors,
+                    links=links,
+                )
+            )
         return metadata_records

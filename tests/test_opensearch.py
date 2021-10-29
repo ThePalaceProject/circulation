@@ -6,7 +6,6 @@ from ..testing import DatabaseTest
 
 
 class TestOpenSearchDocument(DatabaseTest):
-
     def test_search_info(self):
         # Searching this lane will use the language
         # and audience restrictions from the lane.
@@ -17,14 +16,14 @@ class TestOpenSearchDocument(DatabaseTest):
         lane.fiction = True
 
         info = OpenSearchDocument.search_info(lane)
-        assert "Search" == info['name']
-        assert "Search English/Deutsch Young Adult" == info['description']
-        assert "english/deutsch-young-adult" == info['tags']
+        assert "Search" == info["name"]
+        assert "Search English/Deutsch Young Adult" == info["description"]
+        assert "english/deutsch-young-adult" == info["tags"]
 
         # This lane is the root for a patron type, so searching
         # it will use all the lane's restrictions.
         root_lane = self._lane()
-        root_lane.root_for_patron_type = ['A']
+        root_lane.root_for_patron_type = ["A"]
         root_lane.display_name = "Science Fiction & Fantasy"
         sf, ignore = Genre.lookup(self._db, "Science Fiction")
         fantasy, ignore = Genre.lookup(self._db, "Fantasy")
@@ -32,9 +31,9 @@ class TestOpenSearchDocument(DatabaseTest):
         root_lane.add_genre(fantasy)
 
         info = OpenSearchDocument.search_info(root_lane)
-        assert "Search" == info['name']
-        assert "Search Science Fiction & Fantasy" == info['description']
-        assert "science-fiction-&-fantasy" == info['tags']
+        assert "Search" == info["name"]
+        assert "Search Science Fiction & Fantasy" == info["description"]
+        assert "science-fiction-&-fantasy" == info["tags"]
 
     def test_escape_entities(self):
         """Verify that escape_entities properly escapes ampersands."""
@@ -49,9 +48,9 @@ class TestOpenSearchDocument(DatabaseTest):
         assert "http://url/?key=val&q={searchTerms}" == m("http://url/?key=val")
 
     def test_for_lane(self):
-
         class Mock(OpenSearchDocument):
             """Mock methods called by for_lane."""
+
             @classmethod
             def search_info(cls, lane):
                 return dict(
@@ -70,6 +69,6 @@ class TestOpenSearchDocument(DatabaseTest):
         # It's just the result of calling search_info() and url_template(),
         # and using the resulting dict as arguments into TEMPLATE.
         expect = Mock.search_info(object())
-        expect['url_template'] = Mock.url_template(object())
+        expect["url_template"] = Mock.url_template(object())
         expect = Mock.escape_entities(expect)
         assert Mock.TEMPLATE % expect == doc

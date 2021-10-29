@@ -7,30 +7,37 @@ from ..util.datetime_helpers import to_utc, utc_now
 
 
 class TestLocalAnalyticsProvider(DatabaseTest):
-
     def setup_method(self):
         super(TestLocalAnalyticsProvider, self).setup_method()
         self.integration, ignore = create(
-            self._db, ExternalIntegration,
+            self._db,
+            ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol="core.local_analytics_provider")
-        self.la = LocalAnalyticsProvider(
-            self.integration, self._default_library
+            protocol="core.local_analytics_provider",
         )
+        self.la = LocalAnalyticsProvider(self.integration, self._default_library)
 
     def test_collect_event(self):
         library2 = self._library()
 
         work = self._work(
-            title="title", authors="author", fiction=True,
-            audience="audience", language="lang",
-            with_license_pool=True
+            title="title",
+            authors="author",
+            fiction=True,
+            audience="audience",
+            language="lang",
+            with_license_pool=True,
         )
         [lp] = work.license_pools
         now = utc_now()
         self.la.collect_event(
-            self._default_library, lp, CirculationEvent.DISTRIBUTOR_CHECKIN, now,
-            old_value=None, new_value=None)
+            self._default_library,
+            lp,
+            CirculationEvent.DISTRIBUTOR_CHECKIN,
+            now,
+            old_value=None,
+            new_value=None,
+        )
 
         qu = self._db.query(CirculationEvent).filter(
             CirculationEvent.type == CirculationEvent.DISTRIBUTOR_CHECKIN
@@ -47,8 +54,13 @@ class TestLocalAnalyticsProvider(DatabaseTest):
         # for a different library.
         now = utc_now()
         self.la.collect_event(
-            library2, lp, CirculationEvent.DISTRIBUTOR_CHECKIN, now,
-            old_value=None, new_value=None)
+            library2,
+            lp,
+            CirculationEvent.DISTRIBUTOR_CHECKIN,
+            now,
+            old_value=None,
+            new_value=None,
+        )
         assert 1 == qu.count()
 
         # It's possible to instantiate the LocalAnalyticsProvider
@@ -58,9 +70,13 @@ class TestLocalAnalyticsProvider(DatabaseTest):
         # In that case, it will process events for any library.
         for library in [self._default_library, library2]:
             now = utc_now()
-            la.collect_event(library, lp,
-                             CirculationEvent.DISTRIBUTOR_CHECKIN, now,
-                             old_value=None, new_value=None
+            la.collect_event(
+                library,
+                lp,
+                CirculationEvent.DISTRIBUTOR_CHECKIN,
+                now,
+                old_value=None,
+                new_value=None,
             )
         assert 3 == qu.count()
 
@@ -85,8 +101,7 @@ class TestLocalAnalyticsProvider(DatabaseTest):
         # The default LocalAnalytics object doesn't have a location
         # gathering policy, and the default is to ignore location.
         event, is_new = self.la.collect_event(
-            self._default_library, None, "event", utc_now(),
-            neighborhood="Gormenghast"
+            self._default_library, None, "event", utc_now(), neighborhood="Gormenghast"
         )
         assert True == is_new
         assert None == event.location
@@ -95,14 +110,13 @@ class TestLocalAnalyticsProvider(DatabaseTest):
         # neighborhood as the event location.
 
         p = LocalAnalyticsProvider
-        self.integration.setting(p.LOCATION_SOURCE).value = (
-            p.LOCATION_SOURCE_NEIGHBORHOOD
-        )
+        self.integration.setting(
+            p.LOCATION_SOURCE
+        ).value = p.LOCATION_SOURCE_NEIGHBORHOOD
         la = p(self.integration, self._default_library)
 
         event, is_new = la.collect_event(
-            self._default_library, None, "event", utc_now(),
-            neighborhood="Gormenghast"
+            self._default_library, None, "event", utc_now(), neighborhood="Gormenghast"
         )
         assert True == is_new
         assert "Gormenghast" == event.location
@@ -110,7 +124,10 @@ class TestLocalAnalyticsProvider(DatabaseTest):
         # If no neighborhood is available, the event ends up with no location
         # anyway.
         event2, is_new = la.collect_event(
-            self._default_library, None, "event", utc_now(),
+            self._default_library,
+            None,
+            "event",
+            utc_now(),
         )
         assert event2 != event
         assert True == is_new

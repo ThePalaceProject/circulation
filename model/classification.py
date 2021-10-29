@@ -38,22 +38,20 @@ class Subject(Base):
     """A subject under which books might be classified."""
 
     # Types of subjects.
-    LCC = Classifier.LCC              # Library of Congress Classification
-    LCSH = Classifier.LCSH            # Library of Congress Subject Headings
+    LCC = Classifier.LCC  # Library of Congress Classification
+    LCSH = Classifier.LCSH  # Library of Congress Subject Headings
     FAST = Classifier.FAST
-    DDC = Classifier.DDC              # Dewey Decimal Classification
+    DDC = Classifier.DDC  # Dewey Decimal Classification
     OVERDRIVE = Classifier.OVERDRIVE  # Overdrive's classification system
     RBDIGITAL = Classifier.RBDIGITAL  # RBdigital's genre system
     BISAC = Classifier.BISAC
-    BIC = Classifier.BIC              # BIC Subject Categories
-    TAG = Classifier.TAG              # Folksonomic tags.
+    BIC = Classifier.BIC  # BIC Subject Categories
+    TAG = Classifier.TAG  # Folksonomic tags.
     FREEFORM_AUDIENCE = Classifier.FREEFORM_AUDIENCE
     NYPL_APPEAL = Classifier.NYPL_APPEAL
 
     # Types with terms that are suitable for search.
-    TYPES_FOR_SEARCH = [
-        FAST, OVERDRIVE, BISAC, TAG
-    ]
+    TYPES_FOR_SEARCH = [FAST, OVERDRIVE, BISAC, TAG]
 
     AXIS_360_AUDIENCE = Classifier.AXIS_360_AUDIENCE
     RBDIGITAL_AUDIENCE = Classifier.RBDIGITAL_AUDIENCE
@@ -72,26 +70,26 @@ class Subject(Base):
     SIMPLIFIED_FICTION_STATUS = Classifier.SIMPLIFIED_FICTION_STATUS
 
     by_uri = {
-        SIMPLIFIED_GENRE : SIMPLIFIED_GENRE,
-        SIMPLIFIED_FICTION_STATUS : SIMPLIFIED_FICTION_STATUS,
-        "http://librarysimplified.org/terms/genres/Overdrive/" : OVERDRIVE,
-        "http://librarysimplified.org/terms/genres/3M/" : BISAC,
-        "http://id.worldcat.org/fast/" : FAST, # I don't think this is official.
-        "http://purl.org/dc/terms/LCC" : LCC,
-        "http://purl.org/dc/terms/LCSH" : LCSH,
-        "http://purl.org/dc/terms/DDC" : DDC,
-        "http://schema.org/typicalAgeRange" : AGE_RANGE,
-        "http://schema.org/audience" : FREEFORM_AUDIENCE,
-        "http://www.bisg.org/standards/bisac_subject/" : BISAC,
+        SIMPLIFIED_GENRE: SIMPLIFIED_GENRE,
+        SIMPLIFIED_FICTION_STATUS: SIMPLIFIED_FICTION_STATUS,
+        "http://librarysimplified.org/terms/genres/Overdrive/": OVERDRIVE,
+        "http://librarysimplified.org/terms/genres/3M/": BISAC,
+        "http://id.worldcat.org/fast/": FAST,  # I don't think this is official.
+        "http://purl.org/dc/terms/LCC": LCC,
+        "http://purl.org/dc/terms/LCSH": LCSH,
+        "http://purl.org/dc/terms/DDC": DDC,
+        "http://schema.org/typicalAgeRange": AGE_RANGE,
+        "http://schema.org/audience": FREEFORM_AUDIENCE,
+        "http://www.bisg.org/standards/bisac_subject/": BISAC,
         # Feedbooks uses a modified BISAC which we know how to handle.
-        "http://www.feedbooks.com/categories" : BISAC,
+        "http://www.feedbooks.com/categories": BISAC,
     }
 
     uri_lookup = dict()
     for k, v in list(by_uri.items()):
         uri_lookup[v] = k
 
-    __tablename__ = 'subjects'
+    __tablename__ = "subjects"
     id = Column(Integer, primary_key=True)
     # Type should be one of the constants in this class.
     type = Column(Unicode, index=True)
@@ -111,16 +109,24 @@ class Subject(Base):
     # Whether classification under this subject implies anything about
     # the book's audience.
     audience = Column(
-        Enum("Adult", "Young Adult", "Children", "Adults Only",
-            "All Ages", "Research",
-            name="audience"),
-        default=None, index=True)
+        Enum(
+            "Adult",
+            "Young Adult",
+            "Children",
+            "Adults Only",
+            "All Ages",
+            "Research",
+            name="audience",
+        ),
+        default=None,
+        index=True,
+    )
 
     # For children's books, the target age implied by this subject.
     target_age = Column(INT4RANGE, default=None, index=True)
 
     # Each Subject may claim affinity with one Genre.
-    genre_id = Column(Integer, ForeignKey('genres.id'), index=True)
+    genre_id = Column(Integer, ForeignKey("genres.id"), index=True)
 
     # A locked Subject has been reviewed by a human and software will
     # not mess with it without permission.
@@ -131,14 +137,10 @@ class Subject(Base):
     checked = Column(Boolean, default=False, index=True)
 
     # One Subject may participate in many Classifications.
-    classifications = relationship(
-        "Classification", backref="subject"
-    )
+    classifications = relationship("Classification", backref="subject")
 
     # Type + identifier must be unique.
-    __table_args__ = (
-        UniqueConstraint('type', 'identifier'),
-    )
+    __table_args__ = (UniqueConstraint("type", "identifier"),)
 
     def __repr__(self):
         if self.name:
@@ -159,14 +161,21 @@ class Subject(Base):
             genre = ' genre="%s"' % self.genre.name
         else:
             genre = ""
-        if (self.target_age is not None
-            and (self.target_age.lower or self.target_age.upper)
+        if self.target_age is not None and (
+            self.target_age.lower or self.target_age.upper
         ):
-            age_range= " " + self.target_age_string
+            age_range = " " + self.target_age_string
         else:
             age_range = ""
-        a = '[%s:%s%s%s%s%s%s]' % (
-            self.type, self.identifier, name, fiction, audience, genre, age_range)
+        a = "[%s:%s%s%s%s%s%s]" % (
+            self.type,
+            self.identifier,
+            name,
+            fiction,
+            audience,
+            genre,
+            age_range,
+        )
         return str(a)
 
     @property
@@ -182,7 +191,7 @@ class Subject(Base):
         different adaptation of the same underlying work.
         TODO: See note in assign_genres about the hacky way this is used.
         """
-        if self.genre and self.genre.name==COMICS_AND_GRAPHIC_NOVELS:
+        if self.genre and self.genre.name == COMICS_AND_GRAPHIC_NOVELS:
             return True
         return False
 
@@ -207,14 +216,12 @@ class Subject(Base):
             # Type + identifier is unique, but type + name is not
             # (though maybe it should be). So we need to provide
             # on_multiple.
-            find_with = dict(name=name, on_multiple='interchangeable')
+            find_with = dict(name=name, on_multiple="interchangeable")
             create_with = dict()
 
         if autocreate:
             subject, new = get_one_or_create(
-                _db, Subject, type=type,
-                create_method_kwargs=create_with,
-                **find_with
+                _db, Subject, type=type, create_method_kwargs=create_with, **find_with
             )
         else:
             subject = get_one(_db, Subject, type=type, **find_with)
@@ -226,20 +233,22 @@ class Subject(Base):
         return subject, new
 
     @classmethod
-    def common_but_not_assigned_to_genre(cls, _db, min_occurances=1000,
-                                         type_restriction=None):
-        q = _db.query(Subject).join(Classification).filter(Subject.genre==None)
+    def common_but_not_assigned_to_genre(
+        cls, _db, min_occurances=1000, type_restriction=None
+    ):
+        q = _db.query(Subject).join(Classification).filter(Subject.genre == None)
 
         if type_restriction:
-            q = q.filter(Subject.type==type_restriction)
-        q = q.group_by(Subject.id).having(
-            func.count(Subject.id) > min_occurances).order_by(
-            func.count(Classification.id).desc())
+            q = q.filter(Subject.type == type_restriction)
+        q = (
+            q.group_by(Subject.id)
+            .having(func.count(Subject.id) > min_occurances)
+            .order_by(func.count(Classification.id).desc())
+        )
         return q
 
     @classmethod
-    def assign_to_genres(cls, _db, type_restriction=None, force=False,
-                         batch_size=1000):
+    def assign_to_genres(cls, _db, type_restriction=None, force=False, batch_size=1000):
         """Find subjects that have not been checked yet, assign each a
         genre/audience/fiction status if possible, and mark each as checked.
 
@@ -250,13 +259,13 @@ class Subject(Base):
             subjects have been checked.
 
         """
-        q = _db.query(Subject).filter(Subject.locked==False)
+        q = _db.query(Subject).filter(Subject.locked == False)
 
         if type_restriction:
-            q = q.filter(Subject.type==type_restriction)
+            q = q.filter(Subject.type == type_restriction)
 
         if not force:
-            q = q.filter(Subject.checked==False)
+            q = q.filter(Subject.checked == False)
 
         counter = 0
         for subject in q:
@@ -299,42 +308,39 @@ class Subject(Base):
         shorthand = ":".join(x for x in parts if x)
 
         if genre != self.genre:
-            log.info(
-                "%s genre %r=>%r", shorthand, self.genre, genre
-            )
+            log.info("%s genre %r=>%r", shorthand, self.genre, genre)
         self.genre = genre
 
         if audience:
             if self.audience != audience:
-                log.info(
-                    "%s audience %s=>%s", shorthand, self.audience, audience
-                )
+                log.info("%s audience %s=>%s", shorthand, self.audience, audience)
         self.audience = audience
 
         if fiction is not None:
             if self.fiction != fiction:
-                log.info(
-                    "%s fiction %s=>%s", shorthand, self.fiction, fiction
-                )
+                log.info("%s fiction %s=>%s", shorthand, self.fiction, fiction)
         self.fiction = fiction
 
-        if (numericrange_to_tuple(self.target_age) != target_age and
-            not (not self.target_age and not target_age)):
+        if numericrange_to_tuple(self.target_age) != target_age and not (
+            not self.target_age and not target_age
+        ):
             log.info(
-                "%s target_age %r=>%r", shorthand,
-                self.target_age, tuple_to_numericrange(target_age)
+                "%s target_age %r=>%r",
+                shorthand,
+                self.target_age,
+                tuple_to_numericrange(target_age),
             )
         self.target_age = tuple_to_numericrange(target_age)
 
 
 class Classification(Base):
     """The assignment of a Identifier to a Subject."""
-    __tablename__ = 'classifications'
+
+    __tablename__ = "classifications"
     id = Column(Integer, primary_key=True)
-    identifier_id = Column(
-        Integer, ForeignKey('identifiers.id'), index=True)
-    subject_id = Column(Integer, ForeignKey('subjects.id'), index=True)
-    data_source_id = Column(Integer, ForeignKey('datasources.id'), index=True)
+    identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
+    subject_id = Column(Integer, ForeignKey("subjects.id"), index=True)
+    data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
 
     # How much weight the data source gives to this classification.
     weight = Column(Integer)
@@ -363,12 +369,9 @@ class Classification(Base):
     # This goes into Classification rather than Subject because it's
     # possible that one particular data source could use a certain
     # subject type in an unreliable way.
-    _juvenile_subject_types = set([
-        Subject.LCC
-    ])
+    _juvenile_subject_types = set([Subject.LCC])
 
     _quality_as_indicator_of_target_age = {
-
         # Not all classifications are equally reliable as indicators
         # of a target age. This dictionary contains the coefficients
         # we multiply against the weights of incoming classifications
@@ -380,42 +383,35 @@ class Classification(Base):
         # classifications. But we sometimes have very little
         # information about target age, so being careful about how
         # much we trust different data sources can become important.
-
-        DataSourceConstants.MANUAL : 1.0,
+        DataSourceConstants.MANUAL: 1.0,
         DataSourceConstants.LIBRARY_STAFF: 1.0,
-        (DataSourceConstants.METADATA_WRANGLER, Subject.AGE_RANGE) : 1.0,
-
-        Subject.AXIS_360_AUDIENCE : 0.9,
-        (DataSourceConstants.OVERDRIVE, Subject.INTEREST_LEVEL) : 0.9,
-        (DataSourceConstants.OVERDRIVE, Subject.OVERDRIVE) : 0.9, # But see below
-        (DataSourceConstants.AMAZON, Subject.AGE_RANGE) : 0.85,
-        (DataSourceConstants.AMAZON, Subject.GRADE_LEVEL) : 0.85,
-
+        (DataSourceConstants.METADATA_WRANGLER, Subject.AGE_RANGE): 1.0,
+        Subject.AXIS_360_AUDIENCE: 0.9,
+        (DataSourceConstants.OVERDRIVE, Subject.INTEREST_LEVEL): 0.9,
+        (DataSourceConstants.OVERDRIVE, Subject.OVERDRIVE): 0.9,  # But see below
+        (DataSourceConstants.AMAZON, Subject.AGE_RANGE): 0.85,
+        (DataSourceConstants.AMAZON, Subject.GRADE_LEVEL): 0.85,
         # Although Overdrive usually reserves Fiction and Nonfiction
         # for books for adults, it's not as reliable an indicator as
         # other Overdrive classifications.
-        (DataSourceConstants.OVERDRIVE, Subject.OVERDRIVE, "Fiction") : 0.7,
-        (DataSourceConstants.OVERDRIVE, Subject.OVERDRIVE, "Nonfiction") : 0.7,
-
-        Subject.AGE_RANGE : 0.6,
-        Subject.GRADE_LEVEL : 0.6,
-
+        (DataSourceConstants.OVERDRIVE, Subject.OVERDRIVE, "Fiction"): 0.7,
+        (DataSourceConstants.OVERDRIVE, Subject.OVERDRIVE, "Nonfiction"): 0.7,
+        Subject.AGE_RANGE: 0.6,
+        Subject.GRADE_LEVEL: 0.6,
         # There's no real way to know what this measures, since it
         # could be anything. If a tag mentions a target age or a grade
         # level, the accuracy seems to be... not terrible.
-        Subject.TAG : 0.45,
-
+        Subject.TAG: 0.45,
         # Tags that come from OCLC Linked Data are of lower quality
         # because they sometimes talk about completely the wrong book.
-        (DataSourceConstants.OCLC_LINKED_DATA, Subject.TAG) : 0.3,
-
+        (DataSourceConstants.OCLC_LINKED_DATA, Subject.TAG): 0.3,
         # These measure reading level, not age appropriateness.
         # However, if the book is a remedial work for adults we won't
         # be calculating a target age in the first place, so it's okay
         # to use reading level as a proxy for age appropriateness in a
         # pinch. (But not outside of a pinch.)
-        (DataSourceConstants.OVERDRIVE, Subject.GRADE_LEVEL) : 0.35,
-        Subject.LEXILE_SCORE : 0.1,
+        (DataSourceConstants.OVERDRIVE, Subject.GRADE_LEVEL): 0.35,
+        Subject.LEXILE_SCORE: 0.1,
         Subject.ATOS_SCORE: 0.1,
     }
 
@@ -441,7 +437,7 @@ class Classification(Base):
             (data_source, subject_type, self.subject.identifier),
             (data_source, subject_type),
             data_source,
-            subject_type
+            subject_type,
         ]
         for key in keys:
             if key in q:
@@ -469,7 +465,8 @@ class Genre(Base, HasFullTableCache):
     """A subject-matter classification for a book.
     Much, much more general than Classification.
     """
-    __tablename__ = 'genres'
+
+    __tablename__ = "genres"
     id = Column(Integer, primary_key=True)
     name = Column(Unicode, unique=True, index=True)
 
@@ -477,10 +474,11 @@ class Genre(Base, HasFullTableCache):
     subjects = relationship("Subject", backref="genre")
 
     # One Genre may participate in many WorkGenre assignments.
-    works = association_proxy('work_genres', 'work')
+    works = association_proxy("work_genres", "work")
 
-    work_genres = relationship("WorkGenre", backref="genre",
-                               cascade="all, delete-orphan")
+    work_genres = relationship(
+        "WorkGenre", backref="genre", cascade="all, delete-orphan"
+    )
 
     _cache = HasFullTableCache.RESET
     _id_cache = HasFullTableCache.RESET
@@ -491,7 +489,11 @@ class Genre(Base, HasFullTableCache):
         else:
             length = 0
         return "<Genre %s (%d subjects, %d works, %d subcategories)>" % (
-            self.name, len(self.subjects), len(self.works), length)
+            self.name,
+            len(self.subjects),
+            len(self.works),
+            length,
+        )
 
     def cache_key(self):
         return self.name

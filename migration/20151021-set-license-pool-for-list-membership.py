@@ -11,7 +11,9 @@ from core.model import CustomListEntry, production_session  # noqa: E402
 
 _db = production_session()
 
-qu = _db.query(CustomListEntry).filter(CustomListEntry.license_pool==None)      # noqa: E225,E711
+qu = _db.query(CustomListEntry).filter(
+    CustomListEntry.license_pool == None
+)  # noqa: E225,E711
 print("Fixing %d custom list entries with no licensepool." % qu.count())
 
 for cle in qu:

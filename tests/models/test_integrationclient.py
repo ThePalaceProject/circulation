@@ -9,7 +9,6 @@ from ...util.datetime_helpers import utc_now
 
 
 class TestIntegrationClient(DatabaseTest):
-
     def setup_method(self):
         super(TestIntegrationClient, self).setup_method()
         self.client = self._integration_client()
@@ -53,7 +52,9 @@ class TestIntegrationClient(DatabaseTest):
         # It raises an error if the url is already registered and the
         # submitted shared_secret is inaccurate.
         pytest.raises(ValueError, IntegrationClient.register, self._db, client.url)
-        pytest.raises(ValueError, IntegrationClient.register, self._db, client.url, 'wrong')
+        pytest.raises(
+            ValueError, IntegrationClient.register, self._db, client.url, "wrong"
+        )
 
     def test_authenticate(self):
 
@@ -65,20 +66,20 @@ class TestIntegrationClient(DatabaseTest):
 
     def test_normalize_url(self):
         # http/https protocol is removed.
-        url = 'https://fake.com'
-        assert 'fake.com' == IntegrationClient.normalize_url(url)
+        url = "https://fake.com"
+        assert "fake.com" == IntegrationClient.normalize_url(url)
 
-        url = 'http://really-fake.com'
-        assert 'really-fake.com' == IntegrationClient.normalize_url(url)
+        url = "http://really-fake.com"
+        assert "really-fake.com" == IntegrationClient.normalize_url(url)
 
         # www is removed if it exists, along with any trailing /
-        url = 'https://www.also-fake.net/'
-        assert 'also-fake.net' == IntegrationClient.normalize_url(url)
+        url = "https://www.also-fake.net/"
+        assert "also-fake.net" == IntegrationClient.normalize_url(url)
 
         # Subdomains and paths are retained.
-        url = 'https://www.super.fake.org/wow/'
-        assert 'super.fake.org/wow' == IntegrationClient.normalize_url(url)
+        url = "https://www.super.fake.org/wow/"
+        assert "super.fake.org/wow" == IntegrationClient.normalize_url(url)
 
         # URL is lowercased.
-        url = 'http://OMG.soVeryFake.gov'
-        assert 'omg.soveryfake.gov' == IntegrationClient.normalize_url(url)
+        url = "http://OMG.soVeryFake.gov"
+        assert "omg.soveryfake.gov" == IntegrationClient.normalize_url(url)

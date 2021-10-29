@@ -29,23 +29,25 @@ class TestSelfTestResult(DatabaseTest):
         result.result = "The result"
         result.success = True
         assert (
-            "<SelfTestResult: name='success1' duration=5.00sec success=True result='The result'>" ==
-            repr(result))
+            "<SelfTestResult: name='success1' duration=5.00sec success=True result='The result'>"
+            == repr(result)
+        )
 
         # A SelfTestResult may have an associated Collection.
         self._default_collection.name = "CollectionA"
         result.collection = self._default_collection
         assert (
-            "<SelfTestResult: name='success1' collection='CollectionA' duration=5.00sec success=True result='The result'>" ==
-            repr(result))
+            "<SelfTestResult: name='success1' collection='CollectionA' duration=5.00sec success=True result='The result'>"
+            == repr(result)
+        )
 
         d = result.to_dict
-        assert "success1" == d['name']
-        assert "The result" == d['result']
-        assert 5.0 == d['duration']
-        assert True == d['success']
-        assert None == d['exception']
-        assert 'CollectionA' == d['collection']
+        assert "success1" == d["name"]
+        assert "The result" == d["result"]
+        assert 5.0 == d["duration"]
+        assert True == d["success"]
+        assert None == d["exception"]
+        assert "CollectionA" == d["collection"]
 
         # A test result can be either a string (which will be displayed
         # in a fixed-width font) or a list of strings (which will be hidden
@@ -53,13 +55,13 @@ class TestSelfTestResult(DatabaseTest):
         list_result = ["list", "of", "strings"]
         result.result = list_result
         d = result.to_dict
-        assert list_result == d['result']
+        assert list_result == d["result"]
 
         # Other .result values don't make it into the dictionary because
         # it's not defined how to display them.
         result.result = {"a": "dictionary"}
         d = result.to_dict
-        assert None == d['result']
+        assert None == d["result"]
 
     def test_repr_failure(self):
         """Show the string representation of a failed test result."""
@@ -72,21 +74,21 @@ class TestSelfTestResult(DatabaseTest):
         result.exception = exception
         result.result = "The result"
         assert (
-            "<SelfTestResult: name='failure1' duration=5.00sec success=False exception='basic info' debug='debug info' result='The result'>" ==
-            repr(result))
+            "<SelfTestResult: name='failure1' duration=5.00sec success=False exception='basic info' debug='debug info' result='The result'>"
+            == repr(result)
+        )
 
         d = result.to_dict
-        assert "failure1" == d['name']
-        assert "The result" == d['result']
-        assert 5.0 == d['duration']
-        assert False == d['success']
-        assert 'IntegrationException' == d['exception']['class']
-        assert 'basic info' == d['exception']['message']
-        assert 'debug info' == d['exception']['debug_message']
+        assert "failure1" == d["name"]
+        assert "The result" == d["result"]
+        assert 5.0 == d["duration"]
+        assert False == d["success"]
+        assert "IntegrationException" == d["exception"]["class"]
+        assert "basic info" == d["exception"]["message"]
+        assert "debug info" == d["exception"]["debug_message"]
 
 
 class TestHasSelfTests(DatabaseTest):
-
     def test_run_self_tests(self):
         """See what might happen when run_self_tests tries to instantiate an
         object and run its self-tests.
@@ -95,7 +97,7 @@ class TestHasSelfTests(DatabaseTest):
         class Tester(HasSelfTests):
             def __init__(self, extra_arg=None):
                 """This constructor works."""
-                self.invoked_with = (extra_arg)
+                self.invoked_with = extra_arg
 
             @classmethod
             def good_alternate_constructor(self, another_extra_arg=None):
@@ -116,6 +118,7 @@ class TestHasSelfTests(DatabaseTest):
             def _run_self_tests(self, _db):
                 self._run_self_tests_called_with = _db
                 return [SelfTestResult("a test result")]
+
         mock_db = object()
 
         # This integration will be used to store the test results.
@@ -124,9 +127,7 @@ class TestHasSelfTests(DatabaseTest):
 
         # By default, the default constructor is instantiated and its
         # _run_self_tests method is called.
-        data, [setup, test] = Tester.run_self_tests(
-            mock_db, extra_arg="a value"
-        )
+        data, [setup, test] = Tester.run_self_tests(mock_db, extra_arg="a value")
         assert mock_db == setup.result._run_self_tests_called_with
 
         # There are two results -- `setup` from the initial setup
@@ -138,13 +139,13 @@ class TestHasSelfTests(DatabaseTest):
 
         # The `data` variable contains a dictionary describing the test
         # suite as a whole.
-        assert data['duration'] < 1
-        for key in 'start', 'end':
+        assert data["duration"] < 1
+        for key in "start", "end":
             assert key in data
 
         # `data['results']` contains dictionary versions of the self-tests
         # that were returned separately.
-        r1, r2 = data['results']
+        r1, r2 = data["results"]
         assert r1 == setup.to_dict
         assert r2 == test.to_dict
 
@@ -164,8 +165,9 @@ class TestHasSelfTests(DatabaseTest):
         # constructor. Once the object is instantiated, the same basic
         # code runs.
         data, [setup, test] = Tester.run_self_tests(
-            mock_db, Tester.good_alternate_constructor,
-            another_extra_arg="another value"
+            mock_db,
+            Tester.good_alternate_constructor,
+            another_extra_arg="another value",
         )
         assert "Initial setup." == setup.name
         assert True == setup.success
@@ -182,7 +184,8 @@ class TestHasSelfTests(DatabaseTest):
         # single SelfTestResult describing that failure. Since there is
         # no instance, _run_self_tests can't be called.
         data, [result] = Tester.run_self_tests(
-            mock_db, Tester.bad_alternate_constructor,
+            mock_db,
+            Tester.bad_alternate_constructor,
         )
         assert isinstance(result, SelfTestResult)
         assert False == result.success
@@ -192,6 +195,7 @@ class TestHasSelfTests(DatabaseTest):
         """An exception raised in has_self_tests itself is converted into a
         test failure.
         """
+
         class Tester(HasSelfTests):
             def _run_self_tests(self, _db):
                 yield SelfTestResult("everything's ok so far")
@@ -215,19 +219,19 @@ class TestHasSelfTests(DatabaseTest):
         # This self-test method will succeed.
         def successful_test(arg, kwarg):
             return arg, kwarg
-        result = o.run_test(
-            "A successful test", successful_test, "arg1", kwarg="arg2"
-        )
+
+        result = o.run_test("A successful test", successful_test, "arg1", kwarg="arg2")
         assert True == result.success
         assert "A successful test" == result.name
         assert ("arg1", "arg2") == result.result
-        assert (result.end-result.start).total_seconds() < 1
+        assert (result.end - result.start).total_seconds() < 1
 
     def test_run_test_failure(self):
         o = HasSelfTests()
         # This self-test method will fail.
         def unsuccessful_test(arg, kwarg):
             raise IntegrationException(arg, kwarg)
+
         result = o.run_test(
             "An unsuccessful test", unsuccessful_test, "arg1", kwarg="arg2"
         )
@@ -236,7 +240,7 @@ class TestHasSelfTests(DatabaseTest):
         assert None == result.result
         assert "arg1" == str(result.exception)
         assert "arg2" == result.exception.debug_message
-        assert (result.end-result.start).total_seconds() < 1
+        assert (result.end - result.start).total_seconds() < 1
 
     def test_test_failure(self):
         o = HasSelfTests()
@@ -250,7 +254,7 @@ class TestHasSelfTests(DatabaseTest):
         assert "a failure" == result.name
         assert isinstance(result.exception, IntegrationException)
         assert "argh" == str(result.exception)
-        assert (result.start-now).total_seconds() < 1
+        assert (result.start - now).total_seconds() < 1
 
         # ... or you can pass in arguments to an IntegrationException
         result = o.test_failure("another failure", "message", "debug")

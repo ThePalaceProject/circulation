@@ -4,29 +4,28 @@ from ...classifier.overdrive import OverdriveClassifier as Overdrive
 
 
 class TestOverdriveClassifier(object):
-
     def test_lookup(self):
         assert Overdrive == Classifier.lookup(Classifier.OVERDRIVE)
 
     def test_scrub_identifier(self):
         scrub = Overdrive.scrub_identifier
-        assert ("Foreign Language Study" ==
-            scrub("Foreign Language Study - Italian"))
-        assert ("Foreign Language Study" ==
-            scrub("Foreign Language Study - Klingon"))
+        assert "Foreign Language Study" == scrub("Foreign Language Study - Italian")
+        assert "Foreign Language Study" == scrub("Foreign Language Study - Klingon")
         assert "Foreign Affairs" == scrub("Foreign Affairs")
 
     def test_target_age(self):
         def a(x, y):
-            return Overdrive.target_age(x,y)
-        assert (0,4) == a("Picture Book Nonfiction", None)
-        assert (5,8) == a("Beginning Reader", None)
-        assert (12,17) == a("Young Adult Fiction", None)
-        assert (None,None) == a("Fiction", None)
+            return Overdrive.target_age(x, y)
+
+        assert (0, 4) == a("Picture Book Nonfiction", None)
+        assert (5, 8) == a("Beginning Reader", None)
+        assert (12, 17) == a("Young Adult Fiction", None)
+        assert (None, None) == a("Fiction", None)
 
     def test_audience(self):
         def a(identifier):
             return Overdrive.audience(identifier, None)
+
         assert Classifier.AUDIENCE_CHILDREN == a("Picture Books")
         assert Classifier.AUDIENCE_CHILDREN == a("Beginning Reader")
         assert Classifier.AUDIENCE_CHILDREN == a("Children's Video")
@@ -93,6 +92,7 @@ class TestOverdriveClassifier(object):
     def test_genre(self):
         """Check the fiction status and genre of every known Overdrive
         subject."""
+
         def g(x, fiction=None):
             genre = Overdrive.genre(x, None, fiction=fiction)
             if genre:
@@ -166,7 +166,7 @@ class TestOverdriveClassifier(object):
 
         assert "Social Sciences" == g("Gender Studies")
         assert "Social Sciences" == g("Genealogy")
-        assert None == g("Geography") # This is all over the place.
+        assert None == g("Geography")  # This is all over the place.
         assert "Reference & Study Aids" == g("Grammar & Language Usage")
         assert "Health & Diet" == g("Health & Fitness")
         assert "Historical Fiction" == g("Historical Fiction")
@@ -176,14 +176,14 @@ class TestOverdriveClassifier(object):
         assert None == g("Human Rights")
         assert "Humorous Fiction" == g("Humor (Fiction)")
         assert "Humorous Nonfiction" == g("Humor (Nonfiction)")
-        assert None == g("Inspirational") # Mix of Christian nonfiction and fiction
+        assert None == g("Inspirational")  # Mix of Christian nonfiction and fiction
         assert None == g("Journalism")
         assert "Judaism" == g("Judaica")
         assert None == g("Juvenile Fiction")
         assert None == g("Juvenile Literature")
         assert None == g("Juvenile Nonfiction")
         assert "Literary Criticism" == g("Language Arts")
-        assert None == g("Latin") # A language, not a genre
+        assert None == g("Latin")  # A language, not a genre
         assert "Law" == g("Law")
         assert "Short Stories" == g("Literary Anthologies")
         assert "Literary Criticism" == g("Literary Criticism")
@@ -194,7 +194,7 @@ class TestOverdriveClassifier(object):
         assert "Social Sciences" == g("Media Studies")
         assert "Medical" == g("Medical")
         assert "Military History" == g("Military")
-        assert None == g("Multi-Cultural") # All over the place
+        assert None == g("Multi-Cultural")  # All over the place
         assert "Music" == g("Music")
         assert "Mystery" == g("Mystery")
         assert "Folklore" == g("Mythology")

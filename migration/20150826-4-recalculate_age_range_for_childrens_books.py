@@ -24,8 +24,11 @@ class RecalculateAgeRangeMonitor(SubjectSweepMonitor):
 
     def __init__(self, _db, interval_seconds=None):
         super(RecalculateAgeRangeMonitor, self).__init__(
-            _db, "20150825 migration - Recalculate age range for children's books",
-            interval_seconds, batch_size=1000)
+            _db,
+            "20150825 migration - Recalculate age range for children's books",
+            interval_seconds,
+            batch_size=1000,
+        )
 
     def subject_query(self):
         audiences = [Classifier.AUDIENCE_YOUNG_ADULT, Classifier.AUDIENCE_CHILDREN]
@@ -34,7 +37,10 @@ class RecalculateAgeRangeMonitor(SubjectSweepMonitor):
     def process_identifier(self, subject):
         old_target_age = subject.target_age
         subject.assign_to_genre()
-        if subject.target_age != old_target_age and subject.target_age.lower is not None:
+        if (
+            subject.target_age != old_target_age
+            and subject.target_age.lower is not None
+        ):
             print(("%r: %r->%r" % (subject, old_target_age, subject.target_age)))
 
 

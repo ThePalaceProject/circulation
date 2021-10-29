@@ -1,4 +1,3 @@
-
 import json
 
 from flask_babel import lazy_gettext as _
@@ -33,23 +32,20 @@ class ProfileController(object):
         try:
             profile_document = self.storage.profile_document
         except Exception as e:
-            if hasattr(e, 'as_problem_detail_document'):
+            if hasattr(e, "as_problem_detail_document"):
                 return e.as_problem_detail_document()
             else:
                 return INTERNAL_SERVER_ERROR.with_debug(str(e))
         if not isinstance(profile_document, dict):
             return INTERNAL_SERVER_ERROR.with_debug(
-                _("Profile document is not a JSON object: %r.") % (
-                    profile_document
-                )
+                _("Profile document is not a JSON object: %r.") % (profile_document)
             )
         try:
             body = json.dumps(profile_document)
         except Exception as e:
             return INTERNAL_SERVER_ERROR.with_debug(
-                _("Could not convert profile document to JSON: %r.") % (
-                    profile_document
-                )
+                _("Could not convert profile document to JSON: %r.")
+                % (profile_document)
             )
 
         return body, 200, {"Content-Type": self.MEDIA_TYPE}
@@ -61,11 +57,9 @@ class ProfileController(object):
         :param return: A ProblemDetail if there is a problem; otherwise,
             a 3-tuple (response code, media type, entity-body)
         """
-        media_type = headers.get('Content-Type')
+        media_type = headers.get("Content-Type")
         if media_type != self.MEDIA_TYPE:
-            return UNSUPPORTED_MEDIA_TYPE.detailed(
-                _("Expected %s") % self.MEDIA_TYPE
-            )
+            return UNSUPPORTED_MEDIA_TYPE.detailed(_("Expected %s") % self.MEDIA_TYPE)
         try:
             profile_document = json.loads(body)
         except Exception as e:
@@ -93,7 +87,7 @@ class ProfileController(object):
                 self.storage.update(new_settings, profile_document)
             except Exception as e:
                 # There was a problem updating the profile storage.
-                if hasattr(e, 'as_problem_detail_document'):
+                if hasattr(e, "as_problem_detail_document"):
                     return e.as_problem_detail_document()
                 else:
                     return INTERNAL_SERVER_ERROR.with_debug(str(e))
@@ -110,12 +104,12 @@ class ProfileStorage(object):
     not the set of all profiles.
     """
 
-    NS = 'simplified:'
-    FINES = NS + 'fines'
+    NS = "simplified:"
+    FINES = NS + "fines"
     AUTHORIZATION_IDENTIFIER = NS + "authorization_identifier"
     AUTHORIZATION_EXPIRES = NS + "authorization_expires"
-    SYNCHRONIZE_ANNOTATIONS = NS + 'synchronize_annotations'
-    SETTINGS_KEY = 'settings'
+    SYNCHRONIZE_ANNOTATIONS = NS + "synchronize_annotations"
+    SETTINGS_KEY = "settings"
 
     @property
     def profile_document(self):

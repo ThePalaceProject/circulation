@@ -45,7 +45,7 @@ class Manifest(JSONable):
     def __init__(self, context=None, type=None):
         self.context = context or self.DEFAULT_CONTEXT
         self.type = type or self.DEFAULT_TYPE
-        self.metadata = { "@type": self.type }
+        self.metadata = {"@type": self.type}
 
         # Initialize all component lists to the empty list.
         for name in self.component_lists:
@@ -53,10 +53,7 @@ class Manifest(JSONable):
 
     @property
     def as_dict(self):
-        data = {
-            "@context": self.context,
-            "metadata": self.metadata
-        }
+        data = {"@context": self.context, "metadata": self.metadata}
         for key in self.component_lists:
             value = getattr(self, key)
             if value:
@@ -65,7 +62,7 @@ class Manifest(JSONable):
 
     @property
     def component_lists(self):
-        return 'links', 'readingOrder', 'resources'
+        return "links", "readingOrder", "resources"
 
     def _append(self, append_to, **kwargs):
         # Omit properties with None values, rather than propagating nulls to manifest.
@@ -89,24 +86,26 @@ class Manifest(JSONable):
         already present and add a cover link even if the manifest
         already has one.
         """
-        self.metadata['identifier'] = license_pool.identifier.urn
+        self.metadata["identifier"] = license_pool.identifier.urn
 
         edition = license_pool.presentation_edition
         if not edition:
             return
-        self.metadata['title'] = edition.title
+        self.metadata["title"] = edition.title
 
-        self.metadata['language'] = LanguageCodes.three_to_two.get(
+        self.metadata["language"] = LanguageCodes.three_to_two.get(
             edition.language, edition.language
         )
-        authors = [author.display_name or author.sort_name
-                   for author in edition.author_contributors
-                   if author.display_name or author.sort_name]
+        authors = [
+            author.display_name or author.sort_name
+            for author in edition.author_contributors
+            if author.display_name or author.sort_name
+        ]
         if authors:
-            self.metadata['author'] = authors
+            self.metadata["author"] = authors
 
         if edition.cover_thumbnail_url:
-            self.add_link(edition.cover_thumbnail_url, 'cover')
+            self.add_link(edition.cover_thumbnail_url, "cover")
 
 
 class AudiobookManifest(Manifest):

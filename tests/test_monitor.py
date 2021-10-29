@@ -79,9 +79,7 @@ class MockMonitor(Monitor):
 
 
 class TestMonitor(DatabaseTest):
-
     def test_must_define_service_name(self):
-
         class NoServiceName(MockMonitor):
             SERVICE_NAME = None
 
@@ -119,6 +117,7 @@ class TestMonitor(DatabaseTest):
         # There is no timestamp for this monitor.
         def get_timestamp():
             return get_one(self._db, Timestamp, service=monitor.service_name)
+
         assert None == get_timestamp()
 
         # Run the monitor.
@@ -156,6 +155,7 @@ class TestMonitor(DatabaseTest):
         class RunLongAgoMonitor(MockMonitor):
             SERVICE_NAME = "Run long ago"
             DEFAULT_START_TIME = MockMonitor.ONE_YEAR_AGO
+
         # The Timestamp object is created, and its .timestamp is long ago.
         m = RunLongAgoMonitor(self._db, self._default_collection)
         timestamp = m.timestamp()
@@ -177,6 +177,7 @@ class TestMonitor(DatabaseTest):
         class Mock(MockMonitor):
             def run_once(self, progress):
                 return TimestampData(start=start, finish=finish, counter=-100)
+
         monitor = Mock(self._db, self._default_collection)
         monitor.run()
 
@@ -209,8 +210,10 @@ class TestMonitor(DatabaseTest):
         # Try a monitor that raises an unhandled exception.
         class DoomedMonitor(MockMonitor):
             SERVICE_NAME = "Doomed"
+
             def run_once(self, *args, **kwargs):
                 raise Exception("I'm doomed")
+
         m = DoomedMonitor(self._db, self._default_collection)
         assert_run_sets_exception(m, "Exception: I'm doomed")
 
@@ -218,8 +221,10 @@ class TestMonitor(DatabaseTest):
         # returns.
         class AlsoDoomed(MockMonitor):
             SERVICE_NAME = "Doomed, but in a different way."
+
             def run_once(self, progress):
                 return TimestampData(exception="I'm also doomed")
+
         m = AlsoDoomed(self._db, self._default_collection)
         assert_run_sets_exception(m, "I'm also doomed")
 
@@ -271,6 +276,7 @@ class TestCollectionMonitor(DatabaseTest):
         """A CollectionMonitor can require that it be instantiated
         with a Collection that implements a certain protocol.
         """
+
         class NoProtocolMonitor(CollectionMonitor):
             SERVICE_NAME = "Test Monitor 1"
             PROTOCOL = None
@@ -293,12 +299,16 @@ class TestCollectionMonitor(DatabaseTest):
         OverdriveMonitor(self._db, c1)
         with pytest.raises(ValueError) as excinfo:
             OverdriveMonitor(self._db, c2)
-        assert "Collection protocol (Bibliotheca) does not match Monitor protocol (Overdrive)" in str(excinfo.value)
+        assert (
+            "Collection protocol (Bibliotheca) does not match Monitor protocol (Overdrive)"
+            in str(excinfo.value)
+        )
         with pytest.raises(CollectionMissing):
             OverdriveMonitor(self._db, None)
 
     def test_all(self):
         """Test that we can create a list of Monitors using all()."""
+
         class OPDSCollectionMonitor(CollectionMonitor):
             SERVICE_NAME = "Test Monitor"
             PROTOCOL = ExternalIntegration.OPDS_IMPORT
@@ -313,23 +323,22 @@ class TestCollectionMonitor(DatabaseTest):
 
         # o1 just had its Monitor run.
         Timestamp.stamp(
-            self._db, OPDSCollectionMonitor.SERVICE_NAME,
-            Timestamp.MONITOR_TYPE, o1
+            self._db, OPDSCollectionMonitor.SERVICE_NAME, Timestamp.MONITOR_TYPE, o1
         )
 
         # o2 and b1 have never had their Monitor run, but o2 has had some other Monitor run.
-        Timestamp.stamp(
-            self._db, "A Different Service", Timestamp.MONITOR_TYPE,
-            o2
-        )
+        Timestamp.stamp(self._db, "A Different Service", Timestamp.MONITOR_TYPE, o2)
 
         # o3 had its Monitor run an hour ago.
         now = utc_now()
         an_hour_ago = now - datetime.timedelta(seconds=3600)
         Timestamp.stamp(
-            self._db, OPDSCollectionMonitor.SERVICE_NAME,
-            Timestamp.MONITOR_TYPE, o3, start=an_hour_ago,
-            finish=an_hour_ago
+            self._db,
+            OPDSCollectionMonitor.SERVICE_NAME,
+            Timestamp.MONITOR_TYPE,
+            o3,
+            start=an_hour_ago,
+            finish=an_hour_ago,
         )
 
         monitors = list(OPDSCollectionMonitor.all(self._db))
@@ -343,7 +352,9 @@ class TestCollectionMonitor(DatabaseTest):
 
         # If `collections` are specified, monitors should be yielded in the same order.
         opds_collections = [o3, o1, o2]
-        monitors = list(OPDSCollectionMonitor.all(self._db, collections=opds_collections))
+        monitors = list(
+            OPDSCollectionMonitor.all(self._db, collections=opds_collections)
+        )
         monitor_collections = [m.collection for m in monitors]
         # We should get a monitor for each collection.
         assert set(opds_collections) == set(monitor_collections)
@@ -352,7 +363,9 @@ class TestCollectionMonitor(DatabaseTest):
 
         # If `collections` are specified, monitors should be yielded in the same order.
         opds_collections = [o3, o1]
-        monitors = list(OPDSCollectionMonitor.all(self._db, collections=opds_collections))
+        monitors = list(
+            OPDSCollectionMonitor.all(self._db, collections=opds_collections)
+        )
         monitor_collections = [m.collection for m in monitors]
         # We should get a monitor for each collection.
         assert set(opds_collections) == set(monitor_collections)
@@ -362,16 +375,19 @@ class TestCollectionMonitor(DatabaseTest):
         # If collections are specified, they must match the monitor's protocol.
         with pytest.raises(ValueError) as excinfo:
             monitors = list(OPDSCollectionMonitor.all(self._db, collections=[b1]))
-        assert 'Collection protocol (Bibliotheca) does not match Monitor protocol (OPDS Import)' in str(excinfo.value)
-        assert 'Only the following collections are available: ' in str(excinfo.value)
+        assert (
+            "Collection protocol (Bibliotheca) does not match Monitor protocol (OPDS Import)"
+            in str(excinfo.value)
+        )
+        assert "Only the following collections are available: " in str(excinfo.value)
 
 
 class TestTimelineMonitor(DatabaseTest):
-
     def test_run_once(self):
         class Mock(TimelineMonitor):
             SERVICE_NAME = "Just a timeline"
             catchups = []
+
             def catch_up_from(self, start, cutoff, progress):
                 self.catchups.append((start, cutoff, progress))
 
@@ -396,9 +412,11 @@ class TestTimelineMonitor(DatabaseTest):
 
         If you want that, you shouldn't subclass TimelineMonitor.
         """
+
         class Mock(TimelineMonitor):
             DEFAULT_START_TIME = Monitor.NEVER
             SERVICE_NAME = "I aim to misbehave"
+
             def catch_up_from(self, start, cutoff, progress):
                 progress.start = 1
                 progress.finish = 2
@@ -423,9 +441,11 @@ class TestTimelineMonitor(DatabaseTest):
         """If the subclass sets .exception on the TimestampData
         passed into it, the dates aren't modified.
         """
+
         class Mock(TimelineMonitor):
             DEFAULT_START_TIME = datetime_utc(2011, 1, 1)
             SERVICE_NAME = "doomed"
+
             def catch_up_from(self, start, cutoff, progress):
                 self.started_at = start
                 progress.exception = "oops"
@@ -468,6 +488,7 @@ class TestTimelineMonitor(DatabaseTest):
 
 class MockSweepMonitor(SweepMonitor):
     """A SweepMonitor that does nothing."""
+
     MODEL_CLASS = Identifier
     SERVICE_NAME = "Sweep Monitor"
     DEFAULT_BATCH_SIZE = 2
@@ -493,7 +514,6 @@ class MockSweepMonitor(SweepMonitor):
 
 
 class TestSweepMonitor(DatabaseTest):
-
     def setup_method(self):
         super(TestSweepMonitor, self).setup_method()
         self.monitor = MockSweepMonitor(self._db)
@@ -501,6 +521,7 @@ class TestSweepMonitor(DatabaseTest):
     def test_model_class_is_required(self):
         class NoModelClass(SweepMonitor):
             MODEL_CLASS = None
+
         with pytest.raises(ValueError) as excinfo:
             NoModelClass(self._db)
         assert "NoModelClass must define MODEL_CLASS" in str(excinfo.value)
@@ -553,9 +574,10 @@ class TestSweepMonitor(DatabaseTest):
         # The monitor was just run, but it was not able to proceed past
         # i1.
         timestamp = Timestamp.stamp(
-            self._db, self.monitor.service_name,
+            self._db,
+            self.monitor.service_name,
             Timestamp.MONITOR_TYPE,
-            self.monitor.collection
+            self.monitor.collection,
         )
         timestamp.counter = i1.id
 
@@ -621,7 +643,6 @@ class TestSweepMonitor(DatabaseTest):
 
 
 class TestIdentifierSweepMonitor(DatabaseTest):
-
     def test_scope_to_collection(self):
         # Two Collections, each with a LicensePool.
         c1 = self._collection()
@@ -646,9 +667,7 @@ class TestIdentifierSweepMonitor(DatabaseTest):
 
 
 class TestSubjectSweepMonitor(DatabaseTest):
-
     def test_item_query(self):
-
         class Mock(SubjectSweepMonitor):
             SERVICE_NAME = "Mock"
 
@@ -679,7 +698,6 @@ class TestSubjectSweepMonitor(DatabaseTest):
 
 
 class TestCustomListEntrySweepMonitor(DatabaseTest):
-
     def test_item_query(self):
         class Mock(CustomListEntrySweepMonitor):
             SERVICE_NAME = "Mock"
@@ -714,7 +732,6 @@ class TestCustomListEntrySweepMonitor(DatabaseTest):
 
 
 class TestEditionSweepMonitor(DatabaseTest):
-
     def test_item_query(self):
         class Mock(EditionSweepMonitor):
             SERVICE_NAME = "Mock"
@@ -785,6 +802,7 @@ class TestWorkSweepMonitors(DatabaseTest):
         # works that are not presentation ready.
         class Mock(PresentationReadyWorkSweepMonitor):
             SERVICE_NAME = "Mock"
+
         assert [w1, w4] == Mock(self._db).item_query().all()
         assert [w1] == Mock(self._db, collection=c1).item_query().all()
         assert [] == Mock(self._db, collection=c2).item_query().all()
@@ -793,18 +811,19 @@ class TestWorkSweepMonitors(DatabaseTest):
         # includes works that are not presentation ready.
         class Mock(NotPresentationReadyWorkSweepMonitor):
             SERVICE_NAME = "Mock"
+
         assert [w2, w3] == Mock(self._db).item_query().all()
         assert [] == Mock(self._db, collection=c1).item_query().all()
         assert [w2] == Mock(self._db, collection=c2).item_query().all()
 
 
-
 class TestOPDSEntryCacheMonitor(DatabaseTest):
-
     def test_process_item(self):
         """This Monitor calculates OPDS entries for works."""
+
         class Mock(OPDSEntryCacheMonitor):
             SERVICE_NAME = "Mock"
+
         monitor = Mock(self._db)
         work = self._work()
         assert None == work.simple_opds_entry
@@ -816,11 +835,12 @@ class TestOPDSEntryCacheMonitor(DatabaseTest):
 
 
 class TestPermanentWorkIDRefresh(DatabaseTest):
-
     def test_process_item(self):
         """This Monitor calculates an Editions' permanent work ID."""
+
         class Mock(PermanentWorkIDRefreshMonitor):
             SERVICE_NAME = "Mock"
+
         edition = self._edition()
         assert None == edition.permanent_work_id
         Mock(self._db).process_item(edition)
@@ -828,7 +848,6 @@ class TestPermanentWorkIDRefresh(DatabaseTest):
 
 
 class TestMakePresentationReadyMonitor(DatabaseTest):
-
     def setup_method(self):
         super(TestMakePresentationReadyMonitor, self).setup_method()
 
@@ -847,8 +866,7 @@ class TestMakePresentationReadyMonitor(DatabaseTest):
         self.success = MockProvider1(self._db)
         self.failure = MockProvider2(self._db)
 
-        self.work = self._work(
-            DataSource.GUTENBERG, with_license_pool=True)
+        self.work = self._work(DataSource.GUTENBERG, with_license_pool=True)
         # Don't fake that the work is presentation ready, as we usually do,
         # because presentation readiness is what we're trying to test.
         self.work.presentation_ready = False
@@ -864,19 +882,16 @@ class TestMakePresentationReadyMonitor(DatabaseTest):
         assert True == self.work.presentation_ready
 
     def test_process_item_sets_exception_on_failure(self):
-        monitor = MakePresentationReadyMonitor(
-            self._db, [self.success, self.failure]
-        )
+        monitor = MakePresentationReadyMonitor(self._db, [self.success, self.failure])
         monitor.process_item(self.work)
         assert (
-            "Provider(s) failed: %s" % self.failure.SERVICE_NAME ==
-            self.work.presentation_ready_exception)
+            "Provider(s) failed: %s" % self.failure.SERVICE_NAME
+            == self.work.presentation_ready_exception
+        )
         assert False == self.work.presentation_ready
 
     def test_prepare_raises_exception_with_failing_providers(self):
-        monitor = MakePresentationReadyMonitor(
-            self._db, [self.success, self.failure]
-        )
+        monitor = MakePresentationReadyMonitor(self._db, [self.success, self.failure])
         with pytest.raises(CoverageProvidersFailed) as excinfo:
             monitor.prepare(self.work)
         assert self.failure.service_name in str(excinfo.value)
@@ -890,8 +905,9 @@ class TestMakePresentationReadyMonitor(DatabaseTest):
         assert [] == result
 
         # The 'success' monitor ran.
-        assert ([self.work.presentation_edition.primary_identifier] ==
-            self.success.attempts)
+        assert [
+            self.work.presentation_edition.primary_identifier
+        ] == self.success.attempts
 
         # The 'failure' monitor did not. (If it had, it would have
         # failed.)
@@ -903,7 +919,6 @@ class TestMakePresentationReadyMonitor(DatabaseTest):
 
 
 class TestCustomListEntryWorkUpdateMonitor(DatabaseTest):
-
     def test_set_item(self):
 
         # Create a CustomListEntry.
@@ -922,11 +937,10 @@ class TestCustomListEntryWorkUpdateMonitor(DatabaseTest):
 
 class MockReaperMonitor(ReaperMonitor):
     MODEL_CLASS = Timestamp
-    TIMESTAMP_FIELD = 'timestamp'
+    TIMESTAMP_FIELD = "timestamp"
 
 
 class TestReaperMonitor(DatabaseTest):
-
     def test_cutoff(self):
         """Test that cutoff behaves correctly when given different values for
         ReaperMonitor.MAX_AGE.
@@ -936,9 +950,7 @@ class TestReaperMonitor(DatabaseTest):
         # A number here means a number of days.
         for value in [1, 1.5, -1]:
             m.MAX_AGE = value
-            expect = utc_now() - datetime.timedelta(
-                days=value
-            )
+            expect = utc_now() - datetime.timedelta(days=value)
             self.time_eq(m.cutoff, expect)
 
         # But you can pass in a timedelta instead.
@@ -950,7 +962,9 @@ class TestReaperMonitor(DatabaseTest):
         assert 30 == CachedFeedReaper.MAX_AGE
         assert Credential.expires == CredentialReaper(self._db).timestamp_field
         assert 1 == CredentialReaper.MAX_AGE
-        assert Patron.authorization_expires == PatronRecordReaper(self._db).timestamp_field
+        assert (
+            Patron.authorization_expires == PatronRecordReaper(self._db).timestamp_field
+        )
         assert 60 == PatronRecordReaper.MAX_AGE
 
     def test_where_clause(self):
@@ -962,16 +976,12 @@ class TestReaperMonitor(DatabaseTest):
         expired1 = self._credential()
         expired2 = self._credential()
         now = utc_now()
-        expiration_date = now - datetime.timedelta(
-            days=CredentialReaper.MAX_AGE + 1
-        )
+        expiration_date = now - datetime.timedelta(days=CredentialReaper.MAX_AGE + 1)
         for e in [expired1, expired2]:
             e.expires = expiration_date
 
         active = self._credential()
-        active.expires = now - datetime.timedelta(
-            days=CredentialReaper.MAX_AGE - 1
-        )
+        active.expires = now - datetime.timedelta(days=CredentialReaper.MAX_AGE - 1)
 
         eternal = self._credential()
 
@@ -999,9 +1009,7 @@ class TestReaperMonitor(DatabaseTest):
             days=PatronRecordReaper.MAX_AGE + 1
         )
         active = self._patron()
-        active.expires = now - datetime.timedelta(
-            days=PatronRecordReaper.MAX_AGE - 1
-        )
+        active.expires = now - datetime.timedelta(days=PatronRecordReaper.MAX_AGE - 1)
         result = m.run_once()
         assert "Items deleted: 1" == result.achievements
         remaining = self._db.query(Patron).all()
@@ -1011,10 +1019,9 @@ class TestReaperMonitor(DatabaseTest):
 
 
 class TestWorkReaper(DatabaseTest):
-
     def test_end_to_end(self):
         # Search mock
-        class MockSearchIndex():
+        class MockSearchIndex:
             removed = []
 
             def remove_work(self, work):
@@ -1061,15 +1068,13 @@ class TestWorkReaper(DatabaseTest):
         # Each work has a CachedFeed.
         for work in works:
             feed = CachedFeed(
-                work=work, type='page', content="content",
-                pagination="", facets=""
+                work=work, type="page", content="content", pagination="", facets=""
             )
             self._db.add(feed)
 
         # Also create a CachedFeed that has no associated Work.
         workless_feed = CachedFeed(
-            work=None, type='page', content="content",
-            pagination="", facets=""
+            work=None, type="page", content="content", pagination="", facets=""
         )
         self._db.add(workless_feed)
 
@@ -1101,7 +1106,7 @@ class TestWorkReaper(DatabaseTest):
         assert [has_license_pool] == genre.works
         surviving_records = self._db.query(WorkCoverageRecord)
         assert surviving_records.count() > 0
-        assert all(x.work==has_license_pool for x in surviving_records)
+        assert all(x.work == has_license_pool for x in surviving_records)
 
         # The CustomListEntries still exist, but two of them have lost
         # their work.
@@ -1118,7 +1123,6 @@ class TestWorkReaper(DatabaseTest):
 
 
 class TestCollectionReaper(DatabaseTest):
-
     def test_query(self):
         # This reaper is looking for collections that are marked for
         # deletion.
@@ -1136,6 +1140,7 @@ class TestCollectionReaper(DatabaseTest):
         class MockCollection(object):
             def delete(self):
                 self.was_called = True
+
         collection = MockCollection()
         reaper = CollectionReaper(self._db)
         reaper.delete(collection)
@@ -1156,12 +1161,11 @@ class TestCollectionReaper(DatabaseTest):
 
 
 class TestMeasurementReaper(DatabaseTest):
-
     def test_query(self):
         # This reaper is looking for measurements that are not current.
         measurement, created = get_one_or_create(
-            self._db, Measurement,
-            is_most_recent=True)
+            self._db, Measurement, is_most_recent=True
+        )
         reaper = MeasurementReaper(self._db)
         assert [] == reaper.query().all()
         measurement.is_most_recent = False
@@ -1170,15 +1174,19 @@ class TestMeasurementReaper(DatabaseTest):
     def test_run_once(self):
         # End-to-end test
         measurement1, created = get_one_or_create(
-            self._db, Measurement,
+            self._db,
+            Measurement,
             quantity_measured="answer",
             value=12,
-            is_most_recent=True)
+            is_most_recent=True,
+        )
         measurement2, created = get_one_or_create(
-            self._db, Measurement,
+            self._db,
+            Measurement,
             quantity_measured="answer",
             value=42,
-            is_most_recent=False)
+            is_most_recent=False,
+        )
         reaper = MeasurementReaper(self._db)
         result = reaper.run_once()
         assert [measurement1] == self._db.query(Measurement).all()
@@ -1186,18 +1194,24 @@ class TestMeasurementReaper(DatabaseTest):
 
     def test_disable(self):
         # This reaper can be disabled with a configuration setting
-        enabled = ConfigurationSetting.sitewide(self._db, Configuration.MEASUREMENT_REAPER)
+        enabled = ConfigurationSetting.sitewide(
+            self._db, Configuration.MEASUREMENT_REAPER
+        )
         enabled.value = False
         measurement1, created = get_one_or_create(
-            self._db, Measurement,
+            self._db,
+            Measurement,
             quantity_measured="answer",
             value=12,
-            is_most_recent=True)
+            is_most_recent=True,
+        )
         measurement2, created = get_one_or_create(
-            self._db, Measurement,
+            self._db,
+            Measurement,
             quantity_measured="answer",
             value=42,
-            is_most_recent=False)
+            is_most_recent=False,
+        )
         reaper = MeasurementReaper(self._db)
         reaper.run()
         assert [measurement1, measurement2] == self._db.query(Measurement).all()
@@ -1207,7 +1221,6 @@ class TestMeasurementReaper(DatabaseTest):
 
 
 class TestScrubberMonitor(DatabaseTest):
-
     def test_run_once(self):
         # ScrubberMonitor is basically an abstract class, with
         # subclasses doing nothing but define missing constants. This
@@ -1220,22 +1233,14 @@ class TestScrubberMonitor(DatabaseTest):
         # CirculationEvents are only scrubbed if they have a location
         # *and* are older than MAX_AGE.
         now = utc_now()
-        not_long_ago = (
-            m.cutoff + datetime.timedelta(days=1)
-        )
-        long_ago = (
-            m.cutoff - datetime.timedelta(days=1)
-        )
+        not_long_ago = m.cutoff + datetime.timedelta(days=1)
+        long_ago = m.cutoff - datetime.timedelta(days=1)
 
-        new, ignore = create(
-            self._db, CirculationEvent, start=now, location="loc"
-        )
+        new, ignore = create(self._db, CirculationEvent, start=now, location="loc")
         recent, ignore = create(
             self._db, CirculationEvent, start=not_long_ago, location="loc"
         )
-        old, ignore = create(
-            self._db, CirculationEvent, start=long_ago, location="loc"
-        )
+        old, ignore = create(self._db, CirculationEvent, start=long_ago, location="loc")
         already_scrubbed, ignore = create(
             self._db, CirculationEvent, start=long_ago, location=None
         )

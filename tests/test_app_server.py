@@ -30,41 +30,40 @@ from ..util.opds_writer import OPDSFeed, OPDSMessage
 
 
 class TestHeartbeatController(object):
-
     def test_heartbeat(self):
         app = Flask(__name__)
         controller = HeartbeatController()
 
-        with app.test_request_context('/'):
+        with app.test_request_context("/"):
             response = controller.heartbeat()
         assert 200 == response.status_code
-        assert controller.HEALTH_CHECK_TYPE == response.headers.get('Content-Type')
+        assert controller.HEALTH_CHECK_TYPE == response.headers.get("Content-Type")
         data = json.loads(response.data.decode("utf8"))
-        assert 'pass' == data['status']
+        assert "pass" == data["status"]
 
         # Create a .version file.
         root_dir = os.path.join(os.path.split(__file__)[0], "..", "..")
         version_filename = os.path.join(root_dir, controller.VERSION_FILENAME)
-        with open(version_filename, 'w') as f:
-            f.write('ba.na.na-10-ssssssssss')
+        with open(version_filename, "w") as f:
+            f.write("ba.na.na-10-ssssssssss")
 
         # Create a mock configuration object to test with.
         class MockConfiguration(Configuration):
             instance = dict()
 
-        with app.test_request_context('/'):
+        with app.test_request_context("/"):
             response = controller.heartbeat(conf_class=MockConfiguration)
         if os.path.exists(version_filename):
             os.remove(version_filename)
 
         assert 200 == response.status_code
-        content_type = response.headers.get('Content-Type')
+        content_type = response.headers.get("Content-Type")
         assert controller.HEALTH_CHECK_TYPE == content_type
 
         data = json.loads(response.data.decode("utf8"))
-        assert 'pass' == data['status']
-        assert 'ba.na.na' == data['version']
-        assert 'ba.na.na-10-ssssssssss' == data['releaseID']
+        assert "pass" == data["status"]
+        assert "ba.na.na" == data["version"]
+        assert "ba.na.na-10-ssssssssss" == data["releaseID"]
 
 
 class TestURNLookupHandler(DatabaseTest):
@@ -90,6 +89,7 @@ class TestURNLookupHandler(DatabaseTest):
         class Mock(URNLookupHandler):
             def post_lookup_hook(self):
                 self.called = True
+
         handler = Mock(self._db)
         handler.process_urns([])
         assert True == handler.called
@@ -102,13 +102,11 @@ class TestURNLookupHandler(DatabaseTest):
     def test_process_urns_unrecognized_identifier(self):
         # Give the handler a URN that, although valid, doesn't
         # correspond to any Identifier in the database.
-        urn = Identifier.GUTENBERG_URN_SCHEME_PREFIX + 'Gutenberg%20ID/000'
+        urn = Identifier.GUTENBERG_URN_SCHEME_PREFIX + "Gutenberg%20ID/000"
         self.handler.process_urns([urn])
 
         # The result is a 404 message.
-        self.assert_one_message(
-            urn, 404, self.handler.UNRECOGNIZED_IDENTIFIER
-        )
+        self.assert_one_message(urn, 404, self.handler.UNRECOGNIZED_IDENTIFIER)
 
     def test_process_identifier_no_license_pool(self):
         # Give the handler a URN that corresponds to an Identifier
@@ -125,9 +123,7 @@ class TestURNLookupHandler(DatabaseTest):
         edition, pool = self._edition(with_license_pool=True)
         identifier = edition.primary_identifier
         self.handler.process_identifier(identifier, identifier.urn)
-        self.assert_one_message(
-            identifier.urn, 202, self.handler.WORK_NOT_CREATED
-        )
+        self.assert_one_message(identifier.urn, 202, self.handler.WORK_NOT_CREATED)
 
     def test_process_identifier_work_not_presentation_ready(self):
         work = self._work(with_license_pool=True)
@@ -144,21 +140,24 @@ class TestURNLookupHandler(DatabaseTest):
         identifier = work.license_pools[0].identifier
         self.handler.process_identifier(identifier, identifier.urn)
         assert [] == self.handler.precomposed_entries
-        assert ([(work.presentation_edition.primary_identifier, work)] ==
-            self.handler.works)
+        assert [
+            (work.presentation_edition.primary_identifier, work)
+        ] == self.handler.works
+
 
 class TestURNLookupController(DatabaseTest):
-
     def setup_method(self):
         super(TestURNLookupController, self).setup_method()
         self.controller = URNLookupController(self._db)
 
     # Set up a mock Flask app for testing the controller methods.
     app = Flask(__name__)
-    @app.route('/lookup')
+
+    @app.route("/lookup")
     def lookup(self, urn):
         pass
-    @app.route('/work')
+
+    @app.route("/work")
     def work(self, urn):
         pass
 
@@ -176,8 +175,9 @@ class TestURNLookupController(DatabaseTest):
 
                 # We got an OPDS feed that includes an entry for the work.
                 assert 200 == response.status_code
-                assert (OPDSFeed.ACQUISITION_FEED_TYPE ==
-                    response.headers['Content-Type'])
+                assert (
+                    OPDSFeed.ACQUISITION_FEED_TYPE == response.headers["Content-Type"]
+                )
                 response_data = response.data.decode("utf8")
                 assert identifier.urn in response_data
                 assert 1 == response_data.count(work.title)
@@ -188,6 +188,7 @@ class TestURNLookupController(DatabaseTest):
         class Mock(URNLookupController):
             def process_urns(self, urns, **kwargs):
                 return INVALID_INPUT
+
         controller = Mock(self._db)
         with self.app.test_request_context("/?urn=foobar"):
             response = controller.work_lookup(annotator=object())
@@ -203,15 +204,13 @@ class TestURNLookupController(DatabaseTest):
 
             # We got an OPDS feed that includes an entry for the work.
             assert 200 == response.status_code
-            assert (OPDSFeed.ACQUISITION_FEED_TYPE ==
-                response.headers['Content-Type'])
+            assert OPDSFeed.ACQUISITION_FEED_TYPE == response.headers["Content-Type"]
             response_data = response.data.decode("utf8")
             assert identifier.urn in response_data
             assert work.title in response_data
 
 
 class TestComplaintController(DatabaseTest):
-
     def setup_method(self):
         super(TestComplaintController, self).setup_method()
         self.controller = ComplaintController()
@@ -222,25 +221,26 @@ class TestComplaintController(DatabaseTest):
     def test_no_license_pool(self):
         with self.app.test_request_context("/"):
             response = self.controller.register(None, "{}")
-        assert response.status.startswith('400')
+        assert response.status.startswith("400")
         body = json.loads(response.data.decode("utf8"))
-        assert "No license pool specified" == body['title']
+        assert "No license pool specified" == body["title"]
 
     def test_invalid_document(self):
         with self.app.test_request_context("/"):
             response = self.controller.register(self.pool, "not {a} valid document")
-        assert response.status.startswith('400')
+        assert response.status.startswith("400")
         body = json.loads(response.data.decode("utf8"))
-        assert "Invalid problem detail document" == body['title']
+        assert "Invalid problem detail document" == body["title"]
 
     def test_invalid_type(self):
         data = json.dumps({"type": "http://not-a-recognized-type/"})
         with self.app.test_request_context("/"):
             response = self.controller.register(self.pool, data)
-        assert response.status.startswith('400')
+        assert response.status.startswith("400")
         body = json.loads(response.data.decode("utf8"))
-        assert ("Unrecognized problem type: http://not-a-recognized-type/" ==
-            body['title'])
+        assert (
+            "Unrecognized problem type: http://not-a-recognized-type/" == body["title"]
+        )
 
     def test_success(self):
         data = json.dumps(
@@ -252,14 +252,13 @@ class TestComplaintController(DatabaseTest):
         )
         with self.app.test_request_context("/"):
             response = self.controller.register(self.pool, data)
-        assert response.status.startswith('201')
+        assert response.status.startswith("201")
         [complaint] = self.pool.complaints
         assert "foo" == complaint.source
         assert "bar" == complaint.detail
 
 
 class TestLoadMethods(DatabaseTest):
-
     def setup_method(self):
         super(TestLoadMethods, self).setup_method()
         self.app = Flask(__name__)
@@ -267,12 +266,11 @@ class TestLoadMethods(DatabaseTest):
 
     def test_load_facets_from_request(self):
         # The library has two EntryPoints enabled.
-        self._default_library.setting(EntryPoint.ENABLED_SETTING).value = (
-            json.dumps([EbooksEntryPoint.INTERNAL_NAME,
-                        AudiobooksEntryPoint.INTERNAL_NAME])
+        self._default_library.setting(EntryPoint.ENABLED_SETTING).value = json.dumps(
+            [EbooksEntryPoint.INTERNAL_NAME, AudiobooksEntryPoint.INTERNAL_NAME]
         )
 
-        with self.app.test_request_context('/?order=%s' % Facets.ORDER_TITLE):
+        with self.app.test_request_context("/?order=%s" % Facets.ORDER_TITLE):
             flask.request.library = self._default_library
             facets = load_facets_from_request()
             assert Facets.ORDER_TITLE == facets.order
@@ -280,7 +278,7 @@ class TestLoadMethods(DatabaseTest):
             # in case the load method received a custom config.
             assert facets.facets_enabled_at_init != None
 
-        with self.app.test_request_context('/?order=bad_facet'):
+        with self.app.test_request_context("/?order=bad_facet"):
             flask.request.library = self._default_library
             problemdetail = load_facets_from_request()
             assert INVALID_INPUT.uri == problemdetail.uri
@@ -290,7 +288,7 @@ class TestLoadMethods(DatabaseTest):
         # configured on the present library.
         worklist = WorkList()
         worklist.initialize(self._default_library)
-        with self.app.test_request_context('/?entrypoint=Audio'):
+        with self.app.test_request_context("/?entrypoint=Audio"):
             flask.request.library = self._default_library
             facets = load_facets_from_request(worklist=worklist)
             assert AudiobooksEntryPoint == facets.entrypoint
@@ -298,9 +296,9 @@ class TestLoadMethods(DatabaseTest):
 
         # If the requested EntryPoint not configured, the default
         # EntryPoint is used.
-        with self.app.test_request_context('/?entrypoint=NoSuchEntryPoint'):
+        with self.app.test_request_context("/?entrypoint=NoSuchEntryPoint"):
             flask.request.library = self._default_library
-            default_entrypoint=object()
+            default_entrypoint = object()
             facets = load_facets_from_request(
                 worklist=worklist, default_entrypoint=default_entrypoint
             )
@@ -309,32 +307,31 @@ class TestLoadMethods(DatabaseTest):
 
         # Load a SearchFacets object that pulls information from an
         # HTTP header.
-        with self.app.test_request_context(
-                '/', headers = {'Accept-Language' : 'ja' }
-        ):
+        with self.app.test_request_context("/", headers={"Accept-Language": "ja"}):
             flask.request.library = self._default_library
             facets = load_facets_from_request(base_class=SearchFacets)
-            assert ['jpn'] == facets.languages
+            assert ["jpn"] == facets.languages
 
     def test_load_facets_from_request_class_instantiation(self):
         """The caller of load_facets_from_request() can specify a class other
         than Facets to call from_request() on.
         """
+
         class MockFacets(object):
             @classmethod
             def from_request(*args, **kwargs):
                 facets = MockFacets()
                 facets.called_with = kwargs
                 return facets
-        kwargs = dict(some_arg='some value')
-        with self.app.test_request_context(''):
+
+        kwargs = dict(some_arg="some value")
+        with self.app.test_request_context(""):
             flask.request.library = self._default_library
             facets = load_facets_from_request(
-                None, None, base_class=MockFacets,
-                base_class_constructor_kwargs=kwargs
+                None, None, base_class=MockFacets, base_class_constructor_kwargs=kwargs
             )
         assert isinstance(facets, MockFacets)
-        assert 'some value' == facets.called_with['some_arg']
+        assert "some value" == facets.called_with["some_arg"]
 
     def test_load_pagination_from_request(self):
         # Verify that load_pagination_from_request insantiates a
@@ -348,28 +345,27 @@ class TestLoadMethods(DatabaseTest):
                 cls.called_with = (get_arg, default_size, kwargs)
                 return "I'm a pagination object!"
 
-        with self.app.test_request_context('/'):
+        with self.app.test_request_context("/"):
             # Call load_pagination_from_request and verify that
             # Mock.from_request was called with the arguments we expect.
-            extra_kwargs = dict(extra='kwarg')
+            extra_kwargs = dict(extra="kwarg")
             pagination = load_pagination_from_request(
-                base_class=Mock, base_class_constructor_kwargs=extra_kwargs,
-                default_size=44
+                base_class=Mock,
+                base_class_constructor_kwargs=extra_kwargs,
+                default_size=44,
             )
             assert "I'm a pagination object!" == pagination
-            assert ((flask.request.args.get, 44, extra_kwargs) ==
-                Mock.called_with)
+            assert (flask.request.args.get, 44, extra_kwargs) == Mock.called_with
 
         # If no default size is specified, we trust from_request to
         # use the class default.
-        with self.app.test_request_context('/'):
+        with self.app.test_request_context("/"):
             pagination = load_pagination_from_request(base_class=Mock)
-            assert ((flask.request.args.get, None, {}) ==
-                Mock.called_with)
+            assert (flask.request.args.get, None, {}) == Mock.called_with
 
         # Now try a real case using the default pagination class,
         # Pagination
-        with self.app.test_request_context('/?size=50&after=10'):
+        with self.app.test_request_context("/?size=50&after=10"):
             pagination = load_pagination_from_request()
             assert isinstance(pagination, Pagination)
             assert 50 == pagination.size
@@ -387,12 +383,11 @@ class CanBeProblemDetailDocument(Exception):
     def as_problem_detail_document(self, debug):
         return INVALID_URN.detailed(
             _("detail info"),
-            debug_message="A debug_message which should only appear in debug mode."
+            debug_message="A debug_message which should only appear in debug mode.",
         )
 
 
 class TestErrorHandler(DatabaseTest):
-
     def setup_method(self):
         super(TestErrorHandler, self).setup_method()
 
@@ -402,6 +397,7 @@ class TestErrorHandler(DatabaseTest):
 
             This gives ErrorHandler access to a database connection.
             """
+
             _db = self._db
 
         self.app = Flask(__name__)
@@ -422,7 +418,7 @@ class TestErrorHandler(DatabaseTest):
 
     def test_unhandled_error(self):
         handler = ErrorHandler(self.app)
-        with self.app.test_request_context('/'):
+        with self.app.test_request_context("/"):
             response = None
             try:
                 self.raise_exception()
@@ -431,26 +427,24 @@ class TestErrorHandler(DatabaseTest):
             assert 500 == response.status_code
             assert "An internal error occured" == response.data.decode("utf8")
 
-
     def test_unhandled_error_debug(self):
         # Set the sitewide log level to DEBUG to get a stack trace
         # instead of a generic error message.
         handler = ErrorHandler(self.app)
         self.activate_debug_mode()
 
-        with self.app.test_request_context('/'):
+        with self.app.test_request_context("/"):
             response = None
             try:
                 self.raise_exception()
             except Exception as exception:
                 response = handler.handle(exception)
             assert 500 == response.status_code
-            assert response.data.startswith(b'Traceback (most recent call last)')
-
+            assert response.data.startswith(b"Traceback (most recent call last)")
 
     def test_handle_error_as_problem_detail_document(self):
         handler = ErrorHandler(self.app)
-        with self.app.test_request_context('/'):
+        with self.app.test_request_context("/"):
             try:
                 self.raise_exception(CanBeProblemDetailDocument)
             except Exception as exception:
@@ -458,18 +452,18 @@ class TestErrorHandler(DatabaseTest):
 
             assert 400 == response.status_code
             data = json.loads(response.data.decode("utf8"))
-            assert INVALID_URN.title == data['title']
+            assert INVALID_URN.title == data["title"]
 
             # Since we are not in debug mode, the debug_message is
             # destroyed.
-            assert 'debug_message' not in data
+            assert "debug_message" not in data
 
     def test_handle_error_as_problem_detail_document_debug(self):
         # When in debug mode, the debug_message is preserved and a
         # stack trace is appended to it.
         handler = ErrorHandler(self.app)
         self.activate_debug_mode()
-        with self.app.test_request_context('/'):
+        with self.app.test_request_context("/"):
             try:
                 self.raise_exception(CanBeProblemDetailDocument)
             except Exception as exception:
@@ -477,10 +471,10 @@ class TestErrorHandler(DatabaseTest):
 
             assert 400 == response.status_code
             data = json.loads(response.data.decode("utf8"))
-            assert INVALID_URN.title == data['title']
-            assert data['debug_message'].startswith(
+            assert INVALID_URN.title == data["title"]
+            assert data["debug_message"].startswith(
                 "A debug_message which should only appear in debug mode.\n\n"
-                'Traceback (most recent call last)'
+                "Traceback (most recent call last)"
             )
 
 
@@ -497,13 +491,13 @@ class TestCompressibleAnnotator(object):
         value = b"Compress me! (Or not.)"
 
         buffer = BytesIO()
-        gzipped = gzip.GzipFile(mode='wb', fileobj=buffer)
+        gzipped = gzip.GzipFile(mode="wb", fileobj=buffer)
         gzipped.write(value)
         gzipped.close()
         compressed = buffer.getvalue()
 
         # Spot-check the compressed value
-        assert b'-(J-.V' in compressed
+        assert b"-(J-.V" in compressed
 
         # This compressible controller function always returns the
         # same value.
@@ -511,7 +505,7 @@ class TestCompressibleAnnotator(object):
         def function():
             return value
 
-        def ask_for_compression(compression, header='Accept-Encoding'):
+        def ask_for_compression(compression, header="Accept-Encoding"):
             """This context manager simulates the entire Flask
             request-response cycle, including a call to
             process_response(), which triggers the @after_this_request
@@ -531,22 +525,22 @@ class TestCompressibleAnnotator(object):
         # representation is compressed.
         response = ask_for_compression("gzip")
         assert compressed == response.data
-        assert "gzip" == response.headers['Content-Encoding']
+        assert "gzip" == response.headers["Content-Encoding"]
 
         # If the client doesn't ask for compression, the value is
         # passed through unchanged.
         response = ask_for_compression(None)
         assert value == response.data
-        assert 'Content-Encoding' not in response.headers
+        assert "Content-Encoding" not in response.headers
 
         # Similarly if the client asks for an unsupported compression
         # mechanism.
-        response = ask_for_compression('compress')
+        response = ask_for_compression("compress")
         assert value == response.data
-        assert 'Content-Encoding' not in response.headers
+        assert "Content-Encoding" not in response.headers
 
         # Or if the client asks for a compression mechanism through
         # Accept-Transfer-Encoding, which is currently unsupported.
         response = ask_for_compression("gzip", "Accept-Transfer-Encoding")
         assert value == response.data
-        assert 'Content-Encoding' not in response.headers
+        assert "Content-Encoding" not in response.headers

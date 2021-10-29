@@ -18,11 +18,11 @@ from ...util.datetime_helpers import utc_now
 
 
 class TestSiteConfigurationHasChanged(DatabaseTest):
-
     class MockSiteConfigurationHasChanged(object):
         """Keep track of whether site_configuration_has_changed was
         ever called.
         """
+
         def __init__(self):
             self.was_called = False
 
@@ -42,7 +42,9 @@ class TestSiteConfigurationHasChanged(DatabaseTest):
         super(TestSiteConfigurationHasChanged, self).setup_method()
 
         # Mock model.site_configuration_has_changed
-        self.old_site_configuration_has_changed = model.listeners.site_configuration_has_changed
+        self.old_site_configuration_has_changed = (
+            model.listeners.site_configuration_has_changed
+        )
         self.mock = self.MockSiteConfigurationHasChanged()
         for module in model.listeners, lane:
             module.site_configuration_has_changed = self.mock.run
@@ -50,7 +52,9 @@ class TestSiteConfigurationHasChanged(DatabaseTest):
     def teardown_method(self):
         super(TestSiteConfigurationHasChanged, self).teardown_method()
         for module in model.listeners, lane:
-            module.site_configuration_has_changed = self.old_site_configuration_has_changed
+            module.site_configuration_has_changed = (
+                self.old_site_configuration_has_changed
+            )
 
     def test_site_configuration_has_changed(self):
         """Test the site_configuration_has_changed() function and its
@@ -63,9 +67,12 @@ class TestSiteConfigurationHasChanged(DatabaseTest):
 
         def ts():
             return Timestamp.value(
-                self._db, Configuration.SITE_CONFIGURATION_CHANGED,
-                service_type=None, collection=None
+                self._db,
+                Configuration.SITE_CONFIGURATION_CHANGED,
+                service_type=None,
+                collection=None,
             )
+
         timestamp_value = ts()
         assert timestamp_value == last_update
 
@@ -92,21 +99,22 @@ class TestSiteConfigurationHasChanged(DatabaseTest):
         # site_configuration_has_changed() -- they will know about the
         # change but we won't be informed.
         timestamp = Timestamp.stamp(
-            self._db, Configuration.SITE_CONFIGURATION_CHANGED,
-            service_type=None, collection=None
+            self._db,
+            Configuration.SITE_CONFIGURATION_CHANGED,
+            service_type=None,
+            collection=None,
         )
 
         # Calling Configuration.check_for_site_configuration_update
         # with a timeout doesn't detect the change.
-        assert (new_last_update_time ==
-            Configuration.site_configuration_last_update(self._db, timeout=60))
+        assert new_last_update_time == Configuration.site_configuration_last_update(
+            self._db, timeout=60
+        )
 
         # But the default behavior -- a timeout of zero -- forces
         # the method to go to the database and find the correct
         # answer.
-        newer_update = Configuration.site_configuration_last_update(
-            self._db
-        )
+        newer_update = Configuration.site_configuration_last_update(self._db)
         assert newer_update > last_update
 
         # The Timestamp that tracks the last configuration update has
@@ -126,8 +134,7 @@ class TestSiteConfigurationHasChanged(DatabaseTest):
 
         # Verify that the Timestamp has not changed (how could it,
         # with no database connection to modify the Timestamp?)
-        assert (newer_update ==
-            Configuration.site_configuration_last_update(self._db))
+        assert newer_update == Configuration.site_configuration_last_update(self._db)
 
     # We don't test every event listener, but we do test one of each type.
     def test_configuration_relevant_lifecycle_event_updates_configuration(self):
@@ -172,8 +179,9 @@ class TestSiteConfigurationHasChanged(DatabaseTest):
         # Associating a CachedFeed with the library does _not_ call
         # the method, because nothing changed on the Library object and
         # we don't listen for 'append' events on Library.cachedfeeds.
-        create(self._db, CachedFeed, type='page', pagination='',
-               facets='', library=library)
+        create(
+            self._db, CachedFeed, type="page", pagination="", facets="", library=library
+        )
         self._db.commit()
         self.mock.assert_was_not_called()
 
@@ -188,10 +196,18 @@ def _set_property(object, value, property_name):
 
 
 class TestListeners(DatabaseTest):
-    @parameterized.expand([
-        ('works_when_open_access_property_changes', functools.partial(_set_property, property_name='open_access')),
-        ('works_when_self_hosted_property_changes', functools.partial(_set_property, property_name='self_hosted'))
-    ])
+    @parameterized.expand(
+        [
+            (
+                "works_when_open_access_property_changes",
+                functools.partial(_set_property, property_name="open_access"),
+            ),
+            (
+                "works_when_self_hosted_property_changes",
+                functools.partial(_set_property, property_name="self_hosted"),
+            ),
+        ]
+    )
     def test_licensepool_storage_status_change(self, name, status_property_setter):
         # Arrange
         work = self._work(with_license_pool=True)
@@ -211,5 +227,8 @@ class TestListeners(DatabaseTest):
         # Assert
         assert 1 == len(work.coverage_records)
         assert work.id == work.coverage_records[0].work_id
-        assert WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION == work.coverage_records[0].operation
+        assert (
+            WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION
+            == work.coverage_records[0].operation
+        )
         assert WorkCoverageRecord.REGISTERED == work.coverage_records[0].status

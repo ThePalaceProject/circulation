@@ -10,14 +10,19 @@ class MockSubject(object):
         self.identifier = identifier
         self.name = name
 
+
 class ClassifierTest(object):
 
     CLASSIFIER = None
 
     def _subject(self, identifier, name):
         subject = MockSubject(identifier, name)
-        (subject.genre, subject.audience, subject.target_age,
-         subject.fiction) = self.CLASSIFIER.classify(subject)
+        (
+            subject.genre,
+            subject.audience,
+            subject.target_age,
+            subject.fiction,
+        ) = self.CLASSIFIER.classify(subject)
         return subject
 
     def genre_is(self, identifier, expect, name=None):
@@ -38,6 +43,7 @@ class ClassifierTest(object):
     def target_age_is(self, identifier, expect, name=None):
         subject = self._subject(identifier, name)
         assert expect == subject.target_age
+
 
 class TestRBDigitalAudienceClassifier(ClassifierTest):
 
@@ -107,8 +113,8 @@ class TestRBDigitalSubjectClassifier(ClassifierTest):
         # nonfiction in the same subject cannot.
         self.genre_is("lgbt-interest", None)
         assert (
-            self.CLASSIFIER.genre('lgbt interest', None, True).name ==
-            "LGBTQ Fiction")
+            self.CLASSIFIER.genre("lgbt interest", None, True).name == "LGBTQ Fiction"
+        )
 
         # But most subjects can be assigned to a genre no matter what.
         self.genre_is("arts-entertainment", "Entertainment")

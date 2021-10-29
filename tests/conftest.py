@@ -1,4 +1,3 @@
-
 # This is kind of janky, but we import the session fixture
 # into these tests here. Plugins need absolute import paths
 # and we don't have a package structure that gives us a reliable

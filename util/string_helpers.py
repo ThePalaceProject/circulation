@@ -39,6 +39,7 @@ class UnicodeAwareBase64(object):
             s = self._ensure_bytes(s)
             value = func(s, *args, **kwargs)
             return self._ensure_unicode(value)
+
         return wrapped
 
     # Wrap most of the base64 module API so that Unicode is handled
@@ -54,11 +55,13 @@ class UnicodeAwareBase64(object):
     # and we should use these instead:
     encodebytes = wrap(stdlib_base64.encodebytes)
     decodebytes = wrap(stdlib_base64.decodebytes)
-    
+
+
 # If you're okay with a Unicode strings being converted to/from UTF-8
 # when you try to encode/decode them, you can use this object instead of
 # the standard 'base64' module.
 base64 = UnicodeAwareBase64("utf8")
+
 
 def random_string(size):
     """Generate a random string of binary, encoded as hex digits.

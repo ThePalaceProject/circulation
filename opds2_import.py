@@ -81,7 +81,9 @@ def parse_feed(feed, silent=True):
         parsed_feed = feed
     else:
         raise ValueError(
-            "Argument 'feed' must be either a string or instance of {0} class".format(opds2_ast.OPDS2Feed)
+            "Argument 'feed' must be either a string or instance of {0} class".format(
+                opds2_ast.OPDS2Feed
+            )
         )
 
     return parsed_feed
@@ -336,9 +338,7 @@ class OPDS2Importer(OPDSImporter):
         :rtype: List[LinkData]
         """
         self._logger.debug(
-            "Started extracting image links from {0}".format(
-                encode(publication.images)
-            )
+            "Started extracting image links from {0}".format(encode(publication.images))
         )
 
         # FIXME: This code most likely will not work in general.
@@ -354,7 +354,8 @@ class OPDS2Importer(OPDSImporter):
         sorted_raw_image_links = list(
             reversed(
                 sorted(
-                    publication.images.links, key=lambda link: (link.width or 0, link.height or 0)
+                    publication.images.links,
+                    key=lambda link: (link.width or 0, link.height or 0),
                 )
             )
         )

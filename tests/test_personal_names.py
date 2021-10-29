@@ -23,7 +23,6 @@ from ..util.personal_names import display_name_to_sort_name
 
 
 class TestNameConversions(DatabaseTest):
-
     def test_display_name_to_sort_name(self):
         # Make sure the sort name algorithm processes the messy reality of contributor
         # names in a way we expect.
@@ -61,8 +60,9 @@ class TestNameConversions(DatabaseTest):
         sort_name = m("Bob Bitshifter, III")
         assert "Bitshifter, Bob III" == sort_name
 
-        assert ("Beck, James M. (James Montgomery)" ==
-            m("James M. (James Montgomery) Beck"))
+        assert "Beck, James M. (James Montgomery)" == m(
+            "James M. (James Montgomery) Beck"
+        )
 
         # all forms of PhD are recognized
         sort_name = m("John Doe, PhD")
@@ -99,8 +99,3 @@ class TestNameConversions(DatabaseTest):
         # retain proper period
         sort_name = display_name_to_sort_name("Bitshifter, B.")
         assert "Bitshifter, B." == sort_name
-
-
-
-
-

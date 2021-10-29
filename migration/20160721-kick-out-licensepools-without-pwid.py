@@ -28,27 +28,33 @@ def fix(_db, description, qu):
             _db.commit()
 
 
-no_presentation_edition = _db.query(LicensePool).outerjoin(
-    LicensePool.presentation_edition).filter(Edition.id==None).filter(      # noqa: E711,E225
-        LicensePool.work_id != None
-    )
+no_presentation_edition = (
+    _db.query(LicensePool)
+    .outerjoin(LicensePool.presentation_edition)
+    .filter(Edition.id == None)
+    .filter(LicensePool.work_id != None)  # noqa: E711,E225
+)
 
-no_permanent_work_id = _db.query(LicensePool).join(
-    LicensePool.presentation_edition).filter(
-        Edition.permanent_work_id==None             # noqa: E711,E225
-    ).filter(
-        LicensePool.work_id != None
-    )
+no_permanent_work_id = (
+    _db.query(LicensePool)
+    .join(LicensePool.presentation_edition)
+    .filter(Edition.permanent_work_id == None)  # noqa: E711,E225
+    .filter(LicensePool.work_id != None)
+)
 
-no_title = _db.query(LicensePool).join(
-    LicensePool.presentation_edition).filter(
-        Edition.title==None                         # noqa: E711,E225
-    ).filter(
-        LicensePool.work_id != None
-    )
+no_title = (
+    _db.query(LicensePool)
+    .join(LicensePool.presentation_edition)
+    .filter(Edition.title == None)  # noqa: E711,E225
+    .filter(LicensePool.work_id != None)
+)
 
-licensepools_in_same_work_as_another_licensepool_with_different_pwid = _db.execute("select lp1.id from licensepools lp1 join works w on lp1.work_id=w.id join editions e1 on lp1.presentation_edition_id=e1.id join licensepools lp2 on lp2.work_id=w.id join editions e2 on e2.id=lp2.presentation_edition_id and e2.permanent_work_id != e1.permanent_work_id;")  # noqa: E501
-ids = [x[0] for x in licensepools_in_same_work_as_another_licensepool_with_different_pwid]
+licensepools_in_same_work_as_another_licensepool_with_different_pwid = _db.execute(
+    "select lp1.id from licensepools lp1 join works w on lp1.work_id=w.id join editions e1 on lp1.presentation_edition_id=e1.id join licensepools lp2 on lp2.work_id=w.id join editions e2 on e2.id=lp2.presentation_edition_id and e2.permanent_work_id != e1.permanent_work_id;"
+)  # noqa: E501
+ids = [
+    x[0] for x in licensepools_in_same_work_as_another_licensepool_with_different_pwid
+]
 in_same_work = _db.query(LicensePool).filter(LicensePool.id.in_(ids))
 
 fix(_db, "Pools in the same work as another pool with a different pwid", in_same_work)

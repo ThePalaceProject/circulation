@@ -7,7 +7,6 @@ from ..util.summary import SummaryEvaluator
 
 
 class TestSummaryEvaluator(object):
-
     def _best(self, *summaries):
         e = SummaryEvaluator()
         for s in summaries:
@@ -49,11 +48,9 @@ class TestSummaryEvaluator(object):
         evaluator.add(dutch)
         evaluator.ready()
 
-        dutch_no_language_penalty = evaluator.score(
-            dutch, apply_language_penalty=False)
+        dutch_no_language_penalty = evaluator.score(dutch, apply_language_penalty=False)
 
-        dutch_language_penalty = evaluator.score(
-            dutch, apply_language_penalty=True)
+        dutch_language_penalty = evaluator.score(dutch, apply_language_penalty=True)
 
     def test_english_is_not_penalized(self):
         """If description text appears to be in English, it is not rated down
@@ -67,10 +64,10 @@ class TestSummaryEvaluator(object):
         evaluator.ready()
 
         english_no_language_penalty = evaluator.score(
-            english, apply_language_penalty=False)
+            english, apply_language_penalty=False
+        )
 
-        english_language_penalty = evaluator.score(
-            english, apply_language_penalty=True)
+        english_language_penalty = evaluator.score(english, apply_language_penalty=True)
         assert english_language_penalty == english_no_language_penalty
 
     def test_missing_corpus_error_ignored(self):

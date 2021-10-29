@@ -28,20 +28,25 @@ class RecalculateAgeRangeMonitor(WorkSweepMonitor):
 
     def __init__(self, _db, interval_seconds=None):
         super(RecalculateAgeRangeMonitor, self).__init__(
-            _db, "20150825 migration - Recalculate age range for children's books (Works)",
-            interval_seconds, batch_size=10)
+            _db,
+            "20150825 migration - Recalculate age range for children's books (Works)",
+            interval_seconds,
+            batch_size=10,
+        )
 
     def work_query(self):
         audiences = [Classifier.AUDIENCE_YOUNG_ADULT, Classifier.AUDIENCE_CHILDREN]
         return self._db.query(Work).filter(Work.audience.in_(audiences))
 
     def process_work(self, work):
-        primary_identifier_ids = [
-            x.primary_identifier.id for x in work.editions]
+        primary_identifier_ids = [x.primary_identifier.id for x in work.editions]
         data = Identifier.recursively_equivalent_identifier_ids(
-            self._db, primary_identifier_ids, 5, threshold=0.5)
+            self._db, primary_identifier_ids, 5, threshold=0.5
+        )
         flattened_data = Identifier.flatten_identifier_ids(data)
-        workgenres, work.fiction, work.audience, target_age = work.assign_genres(flattened_data)
+        workgenres, work.fiction, work.audience, target_age = work.assign_genres(
+            flattened_data
+        )
         old_target_age = work.target_age
         work.target_age = NumericRange(*target_age)
         if work.target_age != old_target_age and work.target_age.lower is not None:

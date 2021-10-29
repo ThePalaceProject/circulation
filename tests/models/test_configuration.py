@@ -28,23 +28,20 @@ from ...testing import DatabaseTest
 
 
 class TestConfigurationSetting(DatabaseTest):
-
     def test_is_secret(self):
         """Some configuration settings are considered secrets,
         and some are not.
         """
         m = ConfigurationSetting._is_secret
-        assert True == m('secret')
-        assert True == m('password')
-        assert True == m('its_a_secret_to_everybody')
-        assert True == m('the_password')
-        assert True == m('password_for_the_account')
-        assert False == m('public_information')
+        assert True == m("secret")
+        assert True == m("password")
+        assert True == m("its_a_secret_to_everybody")
+        assert True == m("the_password")
+        assert True == m("password_for_the_account")
+        assert False == m("public_information")
 
-        assert (True ==
-            ConfigurationSetting.sitewide(self._db, "secret_key").is_secret)
-        assert (False ==
-            ConfigurationSetting.sitewide(self._db, "public_key").is_secret)
+        assert True == ConfigurationSetting.sitewide(self._db, "secret_key").is_secret
+        assert False == ConfigurationSetting.sitewide(self._db, "public_key").is_secret
 
     def test_value_or_default(self):
         integration, ignore = create(
@@ -82,8 +79,10 @@ class TestConfigurationSetting(DatabaseTest):
 
         # Here's an integration, let's say the SIP2 authentication mechanism
         sip, ignore = create(
-            self._db, ExternalIntegration,
-            goal=ExternalIntegration.PATRON_AUTH_GOAL, protocol="SIP2"
+            self._db,
+            ExternalIntegration,
+            goal=ExternalIntegration.PATRON_AUTH_GOAL,
+            protocol="SIP2",
         )
 
         # It happens to a ConfigurationSetting for the same key used
@@ -119,8 +118,10 @@ class TestConfigurationSetting(DatabaseTest):
         # prefix.  This is set on the combination of a library and a
         # SIP2 integration.
         key = "patron_identifier_prefix"
-        library_patron_prefix_conf = ConfigurationSetting.for_library_and_externalintegration(
-            self._db, key, library, sip
+        library_patron_prefix_conf = (
+            ConfigurationSetting.for_library_and_externalintegration(
+                self._db, key, library, sip
+            )
         )
         assert None == library_patron_prefix_conf.value
 
@@ -165,9 +166,12 @@ class TestConfigurationSetting(DatabaseTest):
         assert setting.id == setting2.id
         pytest.raises(
             IntegrityError,
-            create, self._db, ConfigurationSetting,
+            create,
+            self._db,
+            ConfigurationSetting,
             key=key,
-            library=library, external_integration=integration
+            library=library,
+            external_integration=integration,
         )
 
     def test_relationships(self):
@@ -241,15 +245,16 @@ class TestConfigurationSetting(DatabaseTest):
         # That was a weird thing to do, but the ConfigurationSettings
         # are still in the database.
         for cs in for_library, for_integration:
-            assert (
-                cs == get_one(self._db, ConfigurationSetting, id=cs.id))
+            assert cs == get_one(self._db, ConfigurationSetting, id=cs.id)
 
-    @parameterized.expand([
-        ('no value', None, None),
-        ('stringable value', 1, '1'),
-        ('string value', 'snowman', 'snowman'),
-        ('bytes value', '☃'.encode("utf8"), '☃'),
-    ])
+    @parameterized.expand(
+        [
+            ("no value", None, None),
+            ("stringable value", 1, "1"),
+            ("string value", "snowman", "snowman"),
+            ("bytes value", "☃".encode("utf8"), "☃"),
+        ]
+    )
     def test_setter(self, _, set_to, expect):
         # Values are converted into Unicode strings on the way in to
         # the 'value' setter.
@@ -282,7 +287,7 @@ class TestConfigurationSetting(DatabaseTest):
         assert None == jsondata.int_value
 
         jsondata.value = "[1,2]"
-        assert [1,2] == jsondata.json_value
+        assert [1, 2] == jsondata.json_value
 
         jsondata.value = "tra la la"
         pytest.raises(ValueError, lambda: jsondata.json_value)
@@ -297,8 +302,7 @@ class TestConfigurationSetting(DatabaseTest):
         # the return value of the method is AUDIO_EXCLUSIONS -- whatever
         # the default is for the current version of the circulation manager.
         assert None == setting.value
-        assert (ConfigurationSetting.EXCLUDED_AUDIO_DATA_SOURCES_DEFAULT ==
-            m(self._db))
+        assert ConfigurationSetting.EXCLUDED_AUDIO_DATA_SOURCES_DEFAULT == m(self._db)
         # When an explicit value for the ConfigurationSetting, is set, that
         # value is interpreted as JSON and returned.
         setting.value = "[]"
@@ -320,15 +324,14 @@ a_secret='1'
 nonsecret_setting='2'"""
         assert expect == "\n".join(actual)
 
-        without_secrets = "\n".join(ConfigurationSetting.explain(
-            self._db, include_secrets=False
-        ))
-        assert 'a_secret' not in without_secrets
-        assert 'nonsecret_setting' in without_secrets
+        without_secrets = "\n".join(
+            ConfigurationSetting.explain(self._db, include_secrets=False)
+        )
+        assert "a_secret" not in without_secrets
+        assert "nonsecret_setting" in without_secrets
 
 
 class TestUniquenessConstraints(DatabaseTest):
-
     def test_duplicate_sitewide_setting(self):
         # You can't create two sitewide settings with the same key.
         c1 = ConfigurationSetting(key="key", value="value1")
@@ -371,14 +374,18 @@ class TestUniquenessConstraints(DatabaseTest):
         # different ways for the same key.
         integration = self._external_integration(self._str)
         c1 = ConfigurationSetting(
-            key="key", value="value1", library=self._default_library,
-            external_integration=integration
+            key="key",
+            value="value1",
+            library=self._default_library,
+            external_integration=integration,
         )
         self._db.add(c1)
         self._db.flush()
         c2 = ConfigurationSetting(
-            key="key", value="value1", library=self._default_library,
-            external_integration=integration
+            key="key",
+            value="value1",
+            library=self._default_library,
+            external_integration=integration,
         )
         self._db.add(c2)
         pytest.raises(IntegrityError, self._db.flush)
@@ -390,29 +397,39 @@ class TestExternalIntegrationLink(DatabaseTest):
 
         assert settings[0]["key"] == ExternalIntegrationLink.COVERS_KEY
         assert settings[0]["label"] == "Covers Mirror"
-        assert (settings[0]["options"][0]['key'] ==
-            ExternalIntegrationLink.NO_MIRROR_INTEGRATION)
-        assert (settings[0]["options"][0]['label'] ==
-            _("None - Do not mirror cover images"))
+        assert (
+            settings[0]["options"][0]["key"]
+            == ExternalIntegrationLink.NO_MIRROR_INTEGRATION
+        )
+        assert settings[0]["options"][0]["label"] == _(
+            "None - Do not mirror cover images"
+        )
 
         assert settings[1]["key"] == ExternalIntegrationLink.OPEN_ACCESS_BOOKS_KEY
         assert settings[1]["label"] == "Open Access Books Mirror"
-        assert (settings[1]["options"][0]['key'] ==
-            ExternalIntegrationLink.NO_MIRROR_INTEGRATION)
-        assert (settings[1]["options"][0]['label'] ==
-            _("None - Do not mirror free books"))
+        assert (
+            settings[1]["options"][0]["key"]
+            == ExternalIntegrationLink.NO_MIRROR_INTEGRATION
+        )
+        assert settings[1]["options"][0]["label"] == _(
+            "None - Do not mirror free books"
+        )
 
         assert settings[2]["key"] == ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS_KEY
         assert settings[2]["label"] == "Protected Access Books Mirror"
-        assert (settings[2]["options"][0]['key'] ==
-            ExternalIntegrationLink.NO_MIRROR_INTEGRATION)
-        assert (settings[2]["options"][0]['label'] ==
-            _("None - Do not mirror self-hosted, commercially licensed books"))
-    
+        assert (
+            settings[2]["options"][0]["key"]
+            == ExternalIntegrationLink.NO_MIRROR_INTEGRATION
+        )
+        assert settings[2]["options"][0]["label"] == _(
+            "None - Do not mirror self-hosted, commercially licensed books"
+        )
+
     def test_relationships(self):
         # Create a collection with two storage external integrations.
         collection = self._collection(
-            name="Collection", protocol=ExternalIntegration.OVERDRIVE,
+            name="Collection",
+            protocol=ExternalIntegration.OVERDRIVE,
         )
 
         storage1 = self._external_integration(
@@ -423,7 +440,8 @@ class TestExternalIntegrationLink(DatabaseTest):
             name="integration2",
             protocol=ExternalIntegration.S3,
             goal=ExternalIntegration.STORAGE_GOAL,
-            username="username", password="password",
+            username="username",
+            password="password",
         )
 
         # Two external integration links need to be created to associate
@@ -431,15 +449,18 @@ class TestExternalIntegrationLink(DatabaseTest):
         # external integrations.
         s1_external_integration_link = self._external_integration_link(
             integration=collection.external_integration,
-            other_integration=storage1, purpose="covers_mirror"
+            other_integration=storage1,
+            purpose="covers_mirror",
         )
         s2_external_integration_link = self._external_integration_link(
             integration=collection.external_integration,
-            other_integration=storage2, purpose="books_mirror"
+            other_integration=storage2,
+            purpose="books_mirror",
         )
 
-        qu = self._db.query(ExternalIntegrationLink
-            ).order_by(ExternalIntegrationLink.other_integration_id)
+        qu = self._db.query(ExternalIntegrationLink).order_by(
+            ExternalIntegrationLink.other_integration_id
+        )
         external_integration_links = qu.all()
 
         assert len(external_integration_links) == 2
@@ -457,8 +478,8 @@ class TestExternalIntegrationLink(DatabaseTest):
         assert len(external_integration_links) == 1
         assert external_integration_links[0].other_integration_id == storage2.id
 
-class TestExternalIntegration(DatabaseTest):
 
+class TestExternalIntegration(DatabaseTest):
     def setup_method(self):
         super(TestExternalIntegration, self).setup_method()
         self.external_integration, ignore = create(
@@ -482,8 +503,9 @@ class TestExternalIntegration(DatabaseTest):
         # also starts returning it.
         self.external_integration.libraries.append(self._default_library)
         assert [self.external_integration] == qu.all()
-        assert (self.external_integration ==
-            get_one(self._db, self._default_library, goal))
+        assert self.external_integration == get_one(
+            self._db, self._default_library, goal
+        )
 
         # Create another, similar ExternalIntegration. By itself, this
         # has no effect.
@@ -491,8 +513,9 @@ class TestExternalIntegration(DatabaseTest):
             self._db, ExternalIntegration, goal=goal, protocol=self._str
         )
         assert [self.external_integration] == qu.all()
-        assert (self.external_integration ==
-            get_one(self._db, self._default_library, goal))
+        assert self.external_integration == get_one(
+            self._db, self._default_library, goal
+        )
 
         # Associate that ExternalIntegration with the library, and
         # the query starts picking it up, and one_for_library_and_goal
@@ -501,18 +524,23 @@ class TestExternalIntegration(DatabaseTest):
         assert set([self.external_integration, integration2]) == set(qu.all())
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             get_one(self._db, self._default_library, goal)
-        assert "Library {} defines multiple integrations with goal {}".format(self._default_library.name, goal) \
-            in str(excinfo.value)
-    
+        assert "Library {} defines multiple integrations with goal {}".format(
+            self._default_library.name, goal
+        ) in str(excinfo.value)
+
     def test_for_collection_and_purpose(self):
         wrong_purpose = "isbn"
         collection = self._collection()
 
         with pytest.raises(CannotLoadConfiguration) as excinfo:
-            ExternalIntegration.for_collection_and_purpose(self._db, collection, wrong_purpose)
-        assert "No storage integration for collection '%s' and purpose '%s' is configured" \
-            % (collection.name, wrong_purpose) \
+            ExternalIntegration.for_collection_and_purpose(
+                self._db, collection, wrong_purpose
+            )
+        assert (
+            "No storage integration for collection '%s' and purpose '%s' is configured"
+            % (collection.name, wrong_purpose)
             in str(excinfo.value)
+        )
 
         external_integration = self._external_integration("some protocol")
         collection.external_integration_id = external_integration.id
@@ -604,9 +632,7 @@ class TestExternalIntegration(DatabaseTest):
         assert setting2 == self.external_integration.setting("website_id")
 
     def test_explain(self):
-        integration = self._external_integration(
-            "protocol", "goal"
-        )
+        integration = self._external_integration("protocol", "goal")
         integration.name = "The Integration"
         integration.url = "http://url/"
         integration.username = "someuser"
@@ -631,14 +657,17 @@ class TestExternalIntegration(DatabaseTest):
         # If we decline to pass in a library, we get information about how
         # each library in the system configures this integration.
 
-        expect = """ID: %s
+        expect = (
+            """ID: %s
 Name: The Integration
 Protocol/Goal: protocol/goal
 library-specific='value1' (applies only to First Library)
 library-specific='value2' (applies only to Second Library)
 somesetting='somevalue'
 url='http://url/'
-username='someuser'""" % integration.id
+username='someuser'"""
+            % integration.id
+        )
         actual = integration.explain()
         assert expect == "\n".join(actual)
 
@@ -661,80 +690,42 @@ username='someuser'""" % integration.id
         integration.custom_accept_header = "custom header"
         assert integration.custom_accept_header == "custom header"
 
-SETTING1_KEY = 'setting1'
-SETTING1_LABEL = 'Setting 1\'s label'
-SETTING1_DESCRIPTION = 'Setting 1\'s description'
+
+SETTING1_KEY = "setting1"
+SETTING1_LABEL = "Setting 1's label"
+SETTING1_DESCRIPTION = "Setting 1's description"
 SETTING1_TYPE = ConfigurationAttributeType.TEXT
 SETTING1_REQUIRED = False
-SETTING1_DEFAULT = '12345'
-SETTING1_CATEGORY = 'Settings'
+SETTING1_DEFAULT = "12345"
+SETTING1_CATEGORY = "Settings"
 
-SETTING2_KEY = 'setting2'
-SETTING2_LABEL = 'Setting 2\'s label'
-SETTING2_DESCRIPTION = 'Setting 2\'s description'
+SETTING2_KEY = "setting2"
+SETTING2_LABEL = "Setting 2's label"
+SETTING2_DESCRIPTION = "Setting 2's description"
 SETTING2_TYPE = ConfigurationAttributeType.SELECT
 SETTING2_REQUIRED = False
-SETTING2_DEFAULT = 'value1'
+SETTING2_DEFAULT = "value1"
 SETTING2_OPTIONS = [
-    ConfigurationOption('key1', 'value1'),
-    ConfigurationOption('key2', 'value2'),
-    ConfigurationOption('key3', 'value3')
+    ConfigurationOption("key1", "value1"),
+    ConfigurationOption("key2", "value2"),
+    ConfigurationOption("key3", "value3"),
 ]
-SETTING2_CATEGORY = 'Settings'
+SETTING2_CATEGORY = "Settings"
 
 
 class TestConfiguration(ConfigurationGrouping):
     setting1 = ConfigurationMetadata(
-        key='setting1',
-        label=SETTING1_LABEL,
-        description=SETTING1_DESCRIPTION,
-        type=SETTING1_TYPE,
-        required=SETTING1_REQUIRED,
-        default=SETTING1_DEFAULT,
-        category=SETTING1_CATEGORY
-    )
-
-    setting2 = ConfigurationMetadata(
-        key='setting2',
-        label=SETTING2_LABEL,
-        description=SETTING2_DESCRIPTION,
-        type=SETTING2_TYPE,
-        required=SETTING2_REQUIRED,
-        default=SETTING2_DEFAULT,
-        options=SETTING2_OPTIONS,
-        category=SETTING2_CATEGORY
-    )
-
-
-class ConfigurationWithBooleanProperty(ConfigurationGrouping):
-    boolean_setting = ConfigurationMetadata(
-        key='boolean_setting',
-        label='Boolean Setting',
-        description='Boolean Setting',
-        type=ConfigurationAttributeType.SELECT,
-        required=True,
-        default='true',
-        options=[
-            ConfigurationOption('true', 'True'),
-            ConfigurationOption('false', 'False')
-        ]
-    )
-
-
-class TestConfiguration2(ConfigurationGrouping):
-    setting1 = ConfigurationMetadata(
-        key='setting1',
+        key="setting1",
         label=SETTING1_LABEL,
         description=SETTING1_DESCRIPTION,
         type=SETTING1_TYPE,
         required=SETTING1_REQUIRED,
         default=SETTING1_DEFAULT,
         category=SETTING1_CATEGORY,
-        index=1
     )
 
     setting2 = ConfigurationMetadata(
-        key='setting2',
+        key="setting2",
         label=SETTING2_LABEL,
         description=SETTING2_DESCRIPTION,
         type=SETTING2_TYPE,
@@ -742,18 +733,54 @@ class TestConfiguration2(ConfigurationGrouping):
         default=SETTING2_DEFAULT,
         options=SETTING2_OPTIONS,
         category=SETTING2_CATEGORY,
-        index=0
+    )
+
+
+class ConfigurationWithBooleanProperty(ConfigurationGrouping):
+    boolean_setting = ConfigurationMetadata(
+        key="boolean_setting",
+        label="Boolean Setting",
+        description="Boolean Setting",
+        type=ConfigurationAttributeType.SELECT,
+        required=True,
+        default="true",
+        options=[
+            ConfigurationOption("true", "True"),
+            ConfigurationOption("false", "False"),
+        ],
+    )
+
+
+class TestConfiguration2(ConfigurationGrouping):
+    setting1 = ConfigurationMetadata(
+        key="setting1",
+        label=SETTING1_LABEL,
+        description=SETTING1_DESCRIPTION,
+        type=SETTING1_TYPE,
+        required=SETTING1_REQUIRED,
+        default=SETTING1_DEFAULT,
+        category=SETTING1_CATEGORY,
+        index=1,
+    )
+
+    setting2 = ConfigurationMetadata(
+        key="setting2",
+        label=SETTING2_LABEL,
+        description=SETTING2_DESCRIPTION,
+        type=SETTING2_TYPE,
+        required=SETTING2_REQUIRED,
+        default=SETTING2_DEFAULT,
+        options=SETTING2_OPTIONS,
+        category=SETTING2_CATEGORY,
+        index=0,
     )
 
 
 class TestConfigurationOption(object):
     def test_to_settings(self):
         # Arrange
-        option = ConfigurationOption('key1', 'value1')
-        expected_result = {
-            'key': 'key1',
-            'label': 'value1'
-        }
+        option = ConfigurationOption("key1", "value1")
+        expected_result = {"key": "key1", "label": "value1"}
 
         # Act
         result = option.to_settings()
@@ -764,11 +791,12 @@ class TestConfigurationOption(object):
     def test_from_enum(self):
         # Arrange
         class TestEnum(Enum):
-            LABEL1 = 'KEY1'
-            LABEL2 = 'KEY2'
+            LABEL1 = "KEY1"
+            LABEL2 = "KEY2"
+
         expected_result = [
-            ConfigurationOption('KEY1', 'LABEL1'),
-            ConfigurationOption('KEY2', 'LABEL2')
+            ConfigurationOption("KEY1", "LABEL1"),
+            ConfigurationOption("KEY2", "LABEL2"),
         ]
 
         # Act
@@ -779,10 +807,9 @@ class TestConfigurationOption(object):
 
 
 class TestConfigurationGrouping(object):
-    @parameterized.expand([
-        ('setting1', 'setting1', 12345),
-        ('setting2', 'setting2', '12345')
-    ])
+    @parameterized.expand(
+        [("setting1", "setting1", 12345), ("setting2", "setting2", "12345")]
+    )
     def test_getters(self, _, setting_name, expected_value):
         # Arrange
         configuration_storage = create_autospec(spec=ConfigurationStorage)
@@ -797,10 +824,9 @@ class TestConfigurationGrouping(object):
         assert setting_value == expected_value
         configuration_storage.load.assert_called_once_with(db, setting_name)
 
-    @parameterized.expand([
-        ('setting1', 'setting1', 12345),
-        ('setting2', 'setting2', '12345')
-    ])
+    @parameterized.expand(
+        [("setting1", "setting1", 12345), ("setting2", "setting2", "12345")]
+    )
     def test_setters(self, _, setting_name, expected_value):
         # Arrange
         configuration_storage = create_autospec(spec=ConfigurationStorage)
@@ -812,7 +838,9 @@ class TestConfigurationGrouping(object):
         setattr(configuration, setting_name, expected_value)
 
         # Assert
-        configuration_storage.save.assert_called_once_with(db, setting_name, expected_value)
+        configuration_storage.save.assert_called_once_with(
+            db, setting_name, expected_value
+        )
 
     def test_to_settings_considers_default_indices(self):
         # Act
@@ -823,7 +851,10 @@ class TestConfigurationGrouping(object):
 
         assert settings[0][ConfigurationAttribute.KEY.value] == SETTING1_KEY
         assert settings[0][ConfigurationAttribute.LABEL.value] == SETTING1_LABEL
-        assert settings[0][ConfigurationAttribute.DESCRIPTION.value] == SETTING1_DESCRIPTION
+        assert (
+            settings[0][ConfigurationAttribute.DESCRIPTION.value]
+            == SETTING1_DESCRIPTION
+        )
         assert settings[0][ConfigurationAttribute.TYPE.value] == None
         assert settings[0][ConfigurationAttribute.REQUIRED.value] == SETTING1_REQUIRED
         assert settings[0][ConfigurationAttribute.DEFAULT.value] == SETTING1_DEFAULT
@@ -831,11 +862,16 @@ class TestConfigurationGrouping(object):
 
         assert settings[1][ConfigurationAttribute.KEY.value] == SETTING2_KEY
         assert settings[1][ConfigurationAttribute.LABEL.value] == SETTING2_LABEL
-        assert settings[1][ConfigurationAttribute.DESCRIPTION.value] == SETTING2_DESCRIPTION
+        assert (
+            settings[1][ConfigurationAttribute.DESCRIPTION.value]
+            == SETTING2_DESCRIPTION
+        )
         assert settings[1][ConfigurationAttribute.TYPE.value] == SETTING2_TYPE.value
         assert settings[1][ConfigurationAttribute.REQUIRED.value] == SETTING2_REQUIRED
         assert settings[1][ConfigurationAttribute.DEFAULT.value] == SETTING2_DEFAULT
-        assert settings[1][ConfigurationAttribute.OPTIONS.value] == [option.to_settings() for option in SETTING2_OPTIONS]
+        assert settings[1][ConfigurationAttribute.OPTIONS.value] == [
+            option.to_settings() for option in SETTING2_OPTIONS
+        ]
         assert settings[1][ConfigurationAttribute.CATEGORY.value] == SETTING2_CATEGORY
 
     def test_to_settings_considers_explicit_indices(self):
@@ -847,16 +883,24 @@ class TestConfigurationGrouping(object):
 
         assert settings[0][ConfigurationAttribute.KEY.value] == SETTING2_KEY
         assert settings[0][ConfigurationAttribute.LABEL.value] == SETTING2_LABEL
-        assert settings[0][ConfigurationAttribute.DESCRIPTION.value] == SETTING2_DESCRIPTION
+        assert (
+            settings[0][ConfigurationAttribute.DESCRIPTION.value]
+            == SETTING2_DESCRIPTION
+        )
         assert settings[0][ConfigurationAttribute.TYPE.value] == SETTING2_TYPE.value
         assert settings[0][ConfigurationAttribute.REQUIRED.value] == SETTING2_REQUIRED
         assert settings[0][ConfigurationAttribute.DEFAULT.value] == SETTING2_DEFAULT
-        assert settings[0][ConfigurationAttribute.OPTIONS.value] == [option.to_settings() for option in SETTING2_OPTIONS]
+        assert settings[0][ConfigurationAttribute.OPTIONS.value] == [
+            option.to_settings() for option in SETTING2_OPTIONS
+        ]
         assert settings[0][ConfigurationAttribute.CATEGORY.value] == SETTING2_CATEGORY
 
         assert settings[1][ConfigurationAttribute.KEY.value] == SETTING1_KEY
         assert settings[1][ConfigurationAttribute.LABEL.value] == SETTING1_LABEL
-        assert settings[1][ConfigurationAttribute.DESCRIPTION.value] == SETTING1_DESCRIPTION
+        assert (
+            settings[1][ConfigurationAttribute.DESCRIPTION.value]
+            == SETTING1_DESCRIPTION
+        )
         assert settings[1][ConfigurationAttribute.TYPE.value] == None
         assert settings[1][ConfigurationAttribute.REQUIRED.value] == SETTING1_REQUIRED
         assert settings[1][ConfigurationAttribute.DEFAULT.value] == SETTING1_DEFAULT
@@ -864,15 +908,19 @@ class TestConfigurationGrouping(object):
 
 
 class TestBooleanConfigurationMetadata(DatabaseTest):
-    @parameterized.expand([
-        ('true', 'true', True),
-        ('t', 't', True),
-        ('yes', 'yes', True),
-        ('y', 'y', True),
-        (1, 1, False),
-        ('false', 'false', False),
-    ])
-    def test_configuration_metadata_correctly_recognize_bool_values(self, _, value, expected_result):
+    @parameterized.expand(
+        [
+            ("true", "true", True),
+            ("t", "t", True),
+            ("yes", "yes", True),
+            ("y", "y", True),
+            (1, 1, False),
+            ("false", "false", False),
+        ]
+    )
+    def test_configuration_metadata_correctly_recognize_bool_values(
+        self, _, value, expected_result
+    ):
         """Ensure that ConfigurationMetadata.to_bool correctly translates different values into boolean (True/False).
 
         :param _: Name of the test case
@@ -885,14 +933,18 @@ class TestBooleanConfigurationMetadata(DatabaseTest):
         :type expected_result: bool
         """
         # Arrange
-        external_integration = self._external_integration('test')
+        external_integration = self._external_integration("test")
 
         external_integration_association = create_autospec(spec=HasExternalIntegration)
-        external_integration_association.external_integration = MagicMock(return_value=external_integration)
+        external_integration_association.external_integration = MagicMock(
+            return_value=external_integration
+        )
 
         configuration_storage = ConfigurationStorage(external_integration_association)
 
-        configuration = ConfigurationWithBooleanProperty(configuration_storage, self._db)
+        configuration = ConfigurationWithBooleanProperty(
+            configuration_storage, self._db
+        )
 
         # We set a new value using ConfigurationMetadata.__set__
         configuration.boolean_setting = value

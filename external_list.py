@@ -30,23 +30,26 @@ from .util.datetime_helpers import utc_now
 class CustomListFromCSV(CSVMetadataImporter):
     """Create a CustomList, with entries, from a CSV file."""
 
-    def __init__(self, data_source_name, list_name, metadata_client=None,
-                 overwrite_old_data=False,
-                 annotation_field='text',
-                 annotation_author_name_field='name',
-                 annotation_author_affiliation_field='location',
-                 first_appearance_field='timestamp',
-                 **kwargs
-             ):
+    def __init__(
+        self,
+        data_source_name,
+        list_name,
+        metadata_client=None,
+        overwrite_old_data=False,
+        annotation_field="text",
+        annotation_author_name_field="name",
+        annotation_author_affiliation_field="location",
+        first_appearance_field="timestamp",
+        **kwargs
+    ):
         super(CustomListFromCSV, self).__init__(data_source_name, **kwargs)
         self.foreign_identifier = list_name
         self.list_name = list_name
-        self.overwrite_old_data=overwrite_old_data
+        self.overwrite_old_data = overwrite_old_data
 
         if not metadata_client:
             metadata_url = Configuration.integration_url(
-                Configuration.METADATA_WRANGLER_INTEGRATION,
-                required=True
+                Configuration.METADATA_WRANGLER_INTEGRATION, required=True
             )
             metadata_client = SimplifiedOPDSLookup(metadata_url)
         self.metadata_client = metadata_client
@@ -72,17 +75,16 @@ class CustomListFromCSV(CSVMetadataImporter):
             CustomList,
             data_source=data_source,
             foreign_identifier=self.foreign_identifier,
-            create_method_kwargs = dict(
+            create_method_kwargs=dict(
                 created=now,
-            )
+            ),
         )
         custom_list.updated = now
 
         # Turn the rows of the CSV file into a sequence of Metadata
         # objects, then turn each Metadata into a CustomListEntry object.
         for metadata in self.to_metadata(dictreader):
-            entry = self.metadata_to_list_entry(
-                custom_list, data_source, now, metadata)
+            entry = self.metadata_to_list_entry(custom_list, data_source, now, metadata)
 
     def metadata_to_list_entry(self, custom_list, data_source, now, metadata):
         """Convert a Metadata object to a CustomListEntry."""
@@ -90,7 +92,8 @@ class CustomListFromCSV(CSVMetadataImporter):
 
         title_from_external_list = self.metadata_to_title(now, metadata)
         list_entry, was_new = title_from_external_list.to_custom_list_entry(
-            custom_list, self.metadata_client, self.overwrite_old_data)
+            custom_list, self.metadata_client, self.overwrite_old_data
+        )
         e = list_entry.edition
 
         if not e:
@@ -98,16 +101,17 @@ class CustomListFromCSV(CSVMetadataImporter):
             # couldn't find a useful Identifier.
             self.log.info("Could not create edition for %s", metadata.title)
         else:
-            q = _db.query(Work).join(Work.presentation_edition).filter(
-                Edition.permanent_work_id==e.permanent_work_id)
+            q = (
+                _db.query(Work)
+                .join(Work.presentation_edition)
+                .filter(Edition.permanent_work_id == e.permanent_work_id)
+            )
             if q.count() > 0:
-                self.log.info("Found matching work in collection for %s",
-                              metadata.title
+                self.log.info(
+                    "Found matching work in collection for %s", metadata.title
                 )
             else:
-                self.log.info("No matching work found for %s",
-                              metadata.title
-                )
+                self.log.info("No matching work found for %s", metadata.title)
         return list_entry
 
     def metadata_to_title(self, now, metadata):
@@ -123,23 +127,24 @@ class CustomListFromCSV(CSVMetadataImporter):
             metadata=metadata,
             first_appearance=first_appearance,
             most_recent_appearance=now,
-            annotation=annotation
+            annotation=annotation,
         )
 
     def annotation_citation(self, row):
         """Extract a citation for an annotation from a row of a CSV file."""
         annotation_author = self._field(row, self.annotation_author_name_field)
         annotation_author_affiliation = self._field(
-            row, self.annotation_author_affiliation_field)
+            row, self.annotation_author_affiliation_field
+        )
         if annotation_author_affiliation == annotation_author:
             annotation_author_affiliation = None
-        annotation_extra = ''
+        annotation_extra = ""
         if annotation_author:
             annotation_extra = annotation_author
             if annotation_author_affiliation:
-                annotation_extra += ', ' + annotation_author_affiliation
+                annotation_extra += ", " + annotation_author_affiliation
         if annotation_extra:
-            return ' —' + annotation_extra
+            return " —" + annotation_extra
         return None
 
 
@@ -149,18 +154,16 @@ class TitleFromExternalList(object):
     Edition and CustomListEntry objects.
     """
 
-    def __init__(self, metadata, first_appearance, most_recent_appearance,
-                 annotation):
+    def __init__(self, metadata, first_appearance, most_recent_appearance, annotation):
         self.log = logging.getLogger("Title from external list")
         self.metadata = metadata
         self.first_appearance = first_appearance or most_recent_appearance
-        self.most_recent_appearance = (
-            most_recent_appearance or utc_now()
-        )
+        self.most_recent_appearance = most_recent_appearance or utc_now()
         self.annotation = annotation
 
-    def to_custom_list_entry(self, custom_list, metadata_client,
-                             overwrite_old_data=False):
+    def to_custom_list_entry(
+        self, custom_list, metadata_client, overwrite_old_data=False
+    ):
         """Turn this object into a CustomListEntry with associated Edition."""
         _db = Session.object_session(custom_list)
         edition = self.to_edition(_db, metadata_client, overwrite_old_data)
@@ -169,23 +172,29 @@ class TitleFromExternalList(object):
             _db, CustomListEntry, edition=edition, customlist=custom_list
         )
 
-        if (not list_entry.first_appearance
-            or list_entry.first_appearance > self.first_appearance):
+        if (
+            not list_entry.first_appearance
+            or list_entry.first_appearance > self.first_appearance
+        ):
             if list_entry.first_appearance:
                 self.log.info(
                     "I thought %s first showed up at %s, but then I saw it earlier, at %s!",
-                    self.metadata.title, list_entry.first_appearance,
-                    self.first_appearance
+                    self.metadata.title,
+                    list_entry.first_appearance,
+                    self.first_appearance,
                 )
             list_entry.first_appearance = self.first_appearance
 
-        if (not list_entry.most_recent_appearance
-            or list_entry.most_recent_appearance < self.most_recent_appearance):
+        if (
+            not list_entry.most_recent_appearance
+            or list_entry.most_recent_appearance < self.most_recent_appearance
+        ):
             if list_entry.most_recent_appearance:
                 self.log.info(
                     "I thought %s most recently showed up at %s, but then I saw it later, at %s!",
-                    self.metadata.title, list_entry.most_recent_appearance,
-                    self.most_recent_appearance
+                    self.metadata.title,
+                    list_entry.most_recent_appearance,
+                    self.most_recent_appearance,
                 )
             list_entry.most_recent_appearance = self.most_recent_appearance
 
@@ -217,8 +226,7 @@ class TitleFromExternalList(object):
         Edition's primary identifier may be associated with the other
         Editions' primary identifiers. (p=0.85)
         """
-        self.log.info("Converting %s to an Edition object.",
-                      self.metadata.title)
+        self.log.info("Converting %s to an Edition object.", self.metadata.title)
 
         # Make sure the Metadata object's view of the book is present
         # as an Edition. This will also associate all its identifiers
@@ -227,18 +235,14 @@ class TitleFromExternalList(object):
         try:
             edition, is_new = self.metadata.edition(_db)
         except ValueError as e:
-            self.log.info(
-                "Ignoring %s, no corresponding edition.", self.metadata.title
-            )
+            self.log.info("Ignoring %s, no corresponding edition.", self.metadata.title)
             return None
         if overwrite_old_data:
             policy = ReplacementPolicy.from_metadata_source(
                 even_if_not_apparently_updated=True
             )
         else:
-            policy = ReplacementPolicy.append_only(
-                even_if_not_apparently_updated=True
-            )
+            policy = ReplacementPolicy.append_only(even_if_not_apparently_updated=True)
         self.metadata.apply(
             edition=edition,
             collection=None,
@@ -307,6 +311,7 @@ class ClassificationBasedMembershipManager(MembershipManager):
     """Manage a custom list containing all Editions whose primary
     Identifier is classified under one of the given subject fragments.
     """
+
     def __init__(self, custom_list, subject_fragments):
         super(ClassificationBasedMembershipManager, self).__init__(custom_list)
         self.subject_fragments = subject_fragments
@@ -319,18 +324,17 @@ class ClassificationBasedMembershipManager(MembershipManager):
         """
         subject_clause = None
         for i in self.subject_fragments:
-            c = Subject.identifier.ilike('%' + i + '%')
+            c = Subject.identifier.ilike("%" + i + "%")
             if subject_clause is None:
                 subject_clause = c
             else:
                 subject_clause = or_(subject_clause, c)
-        qu = self._db.query(Edition).distinct(Edition.id).join(
-            Edition.primary_identifier
-        ).join(
-            Identifier.classifications
-        ).join(
-            Classification.subject
+        qu = (
+            self._db.query(Edition)
+            .distinct(Edition.id)
+            .join(Edition.primary_identifier)
+            .join(Identifier.classifications)
+            .join(Classification.subject)
         )
         qu = qu.filter(subject_clause)
         return qu
-

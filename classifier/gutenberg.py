@@ -7,17 +7,19 @@ class GutenbergBookshelfClassifier(Classifier):
 
     # Any classification that includes the string "Fiction" will be
     # counted as fiction. This is just the leftovers.
-    FICTION = set([
-        "Bestsellers, American, 1895-1923",
-        "Adventure",
-        "Fantasy",
-        "Horror",
-        "Mystery",
-        "Western",
-        "Suspense",
-        "Thriller",
-        "Children's Anthologies",
-        ])
+    FICTION = set(
+        [
+            "Bestsellers, American, 1895-1923",
+            "Adventure",
+            "Fantasy",
+            "Horror",
+            "Mystery",
+            "Western",
+            "Suspense",
+            "Thriller",
+            "Children's Anthologies",
+        ]
+    )
 
     GENRES = {
         Adventure: [
@@ -26,60 +28,60 @@ class GutenbergBookshelfClassifier(Classifier):
         ],
         # African_American : ["African American Writers"],
         Ancient_History: ["Classical Antiquity"],
-        Architecture : [
+        Architecture: [
             "Architecture",
             "The American Architect and Building News",
         ],
-        Art : ["Art"],
-        Biography_Memoir : [
+        Art: ["Art"],
+        Biography_Memoir: [
             "Biographies",
             "Children's Biography",
         ],
-        Christianity : ["Christianity"],
+        Christianity: ["Christianity"],
         Civil_War_History: "US Civil War",
-        Classics : [
+        Classics: [
             "Best Books Ever Listings",
             "Harvard Classics",
         ],
-        Cooking : [
+        Cooking: [
             "Armour's Monthly Cook Book",
             "Cookery",
         ],
-        Drama : [
+        Drama: [
             "One Act Plays",
             "Opera",
             "Plays",
         ],
-        Erotica : "Erotic Fiction",
-        Fantasy : "Fantasy",
-        Foreign_Language_Study : [
+        Erotica: "Erotic Fiction",
+        Fantasy: "Fantasy",
+        Foreign_Language_Study: [
             "Language Education",
         ],
-        Gardening : [
+        Gardening: [
             "Garden and Forest",
             "Horticulture",
         ],
-        Historical_Fiction : "Historical Fiction",
-        History : [
+        Historical_Fiction: "Historical Fiction",
+        History: [
             "Children's History",
         ],
-        Horror : ["Gothic Fiction", "Horror"],
-        Humorous_Fiction : ["Humor"],
-        Islam : "Islam",
-        Judaism : "Judaism",
-        Law : [
+        Horror: ["Gothic Fiction", "Horror"],
+        Humorous_Fiction: ["Humor"],
+        Islam: "Islam",
+        Judaism: "Judaism",
+        Law: [
             "British Law",
             "Noteworthy Trials",
             "United States Law",
         ],
-        Literary_Criticism : ["Bibliomania"],
-        Mathematics : "Mathematics",
-        Medical : [
+        Literary_Criticism: ["Bibliomania"],
+        Mathematics: "Mathematics",
+        Medical: [
             "Medicine",
             "The North American Medical and Surgical Journal",
             "Physiology",
         ],
-        Military_History : [
+        Military_History: [
             "American Revolutionary War",
             "World War I",
             "World War II",
@@ -88,22 +90,21 @@ class GutenbergBookshelfClassifier(Classifier):
             "Napoleonic",
         ],
         Modern_History: "Current History",
-        Music : [
+        Music: [
             "Music",
             "Child's Own Book of Great Musicians",
         ],
-        Mystery : [
+        Mystery: [
             "Crime Fiction",
             "Detective Fiction",
             "Mystery Fiction",
         ],
-        Nature : [
+        Nature: [
             "Animal",
             "Animals-Wild",
-            "Bird-Lore"
-            "Birds, Illustrated by Color Photography",
+            "Bird-Lore" "Birds, Illustrated by Color Photography",
         ],
-        Periodicals : [
+        Periodicals: [
             "Ainslee's",
             "Prairie Farmer",
             "Blackwood's Edinburgh Magazine",
@@ -172,31 +173,31 @@ class GutenbergBookshelfClassifier(Classifier):
             "The Yellow Book",
             "Women's Travel Journals",
         ],
-        Pets : ["Animals-Domestic"],
-        Philosophy : ["Philosophy"],
-        Photography : "Photography",
-        Poetry : [
+        Pets: ["Animals-Domestic"],
+        Philosophy: ["Philosophy"],
+        Photography: "Photography",
+        Poetry: [
             "Poetry",
             "Poetry, A Magazine of Verse",
             "Children's Verse",
         ],
-        Political_Science : [
+        Political_Science: [
             "Anarchism",
             "Politics",
         ],
-        Psychology : ["Psychology"],
-        Reference_Study_Aids : [
+        Psychology: ["Psychology"],
+        Reference_Study_Aids: [
             "Reference",
             "CIA World Factbooks",
         ],
-        Religion_Spirituality : [
+        Religion_Spirituality: [
             "Atheism",
             "Bahá'í Faith",
             "Hinduism",
             "Paganism",
             "Children's Religion",
         ],
-        Science : [
+        Science: [
             "Astronomy",
             "Biology",
             "Botany",
@@ -212,30 +213,30 @@ class GutenbergBookshelfClassifier(Classifier):
             "Physics",
             "Scientific American",
         ],
-        Science_Fiction : [
+        Science_Fiction: [
             "Astounding Stories",
             "Precursors of Science Fiction",
             "The Galaxy",
             "Science Fiction",
         ],
-        Social_Sciences : [
+        Social_Sciences: [
             "Anthropology",
             "Archaeology",
             "The American Journal of Archaeology",
             "Sociology",
         ],
-        Suspense_Thriller : [
+        Suspense_Thriller: [
             "Suspense",
             "Thriller",
         ],
-        Technology : [
+        Technology: [
             "Engineering",
             "Technology",
             "Transportation",
         ],
-        Travel : "Travel",
-        True_Crime : "Crime Nonfiction",
-        Westerns : "Western",
+        Travel: "Travel",
+        True_Crime: "Crime Nonfiction",
+        Westerns: "Western",
     }
 
     @classmethod
@@ -244,14 +245,17 @@ class GutenbergBookshelfClassifier(Classifier):
 
     @classmethod
     def is_fiction(cls, identifier, name):
-        if (identifier in cls.FICTION
-            or "Fiction" in identifier or "Stories" in identifier):
+        if (
+            identifier in cls.FICTION
+            or "Fiction" in identifier
+            or "Stories" in identifier
+        ):
             return True
         return None
 
     @classmethod
     def audience(cls, identifier, name):
-        if ("Children's" in identifier):
+        if "Children's" in identifier:
             return cls.AUDIENCE_CHILDREN
         return cls.AUDIENCE_ADULT
 
@@ -261,5 +265,6 @@ class GutenbergBookshelfClassifier(Classifier):
             if identifier == v or (isinstance(v, list) and identifier in v):
                 return l
         return None
+
 
 Classifier.classifiers[Classifier.GUTENBERG_BOOKSHELF] = GutenbergBookshelfClassifier

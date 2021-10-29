@@ -15,15 +15,13 @@ from . import Base, flush, get_one, get_one_or_create
 
 class CachedFeed(Base):
 
-    __tablename__ = 'cachedfeeds'
+    __tablename__ = "cachedfeeds"
     id = Column(Integer, primary_key=True)
 
     # Every feed is associated with a lane. If null, this is a feed
     # for a WorkList. If work_id is also null, it's a feed for the
     # top-level.
-    lane_id = Column(
-        Integer, ForeignKey('lanes.id'),
-        nullable=True, index=True)
+    lane_id = Column(Integer, ForeignKey("lanes.id"), nullable=True, index=True)
 
     # Every feed has a timestamp reflecting when it was created.
     timestamp = Column(DateTime(timezone=True), nullable=True, index=True)
@@ -46,23 +44,20 @@ class CachedFeed(Base):
     content = Column(Unicode, nullable=True)
 
     # Every feed is associated with a Library.
-    library_id = Column(
-        Integer, ForeignKey('libraries.id'), index=True
-    )
+    library_id = Column(Integer, ForeignKey("libraries.id"), index=True)
 
     # A feed may be associated with a Work.
-    work_id = Column(Integer, ForeignKey('works.id'),
-        nullable=True, index=True)
+    work_id = Column(Integer, ForeignKey("works.id"), nullable=True, index=True)
 
     # Distinct types of feeds that might be cached.
-    GROUPS_TYPE = 'groups'
-    PAGE_TYPE = 'page'
-    NAVIGATION_TYPE = 'navigation'
-    CRAWLABLE_TYPE = 'crawlable'
-    RELATED_TYPE = 'related'
-    RECOMMENDATIONS_TYPE = 'recommendations'
-    SERIES_TYPE = 'series'
-    CONTRIBUTOR_TYPE = 'contributor'
+    GROUPS_TYPE = "groups"
+    PAGE_TYPE = "page"
+    NAVIGATION_TYPE = "navigation"
+    CRAWLABLE_TYPE = "crawlable"
+    RELATED_TYPE = "related"
+    RECOMMENDATIONS_TYPE = "recommendations"
+    SERIES_TYPE = "series"
+    CONTRIBUTOR_TYPE = "contributor"
 
     # Special constants for cache durations.
     CACHE_FOREVER = object()
@@ -71,8 +66,16 @@ class CachedFeed(Base):
     log = logging.getLogger("CachedFeed")
 
     @classmethod
-    def fetch(cls, _db, worklist, facets, pagination, refresher_method,
-              max_age=None, raw=False, **response_kwargs
+    def fetch(
+        cls,
+        _db,
+        worklist,
+        facets,
+        pagination,
+        refresher_method,
+        max_age=None,
+        raw=False,
+        **response_kwargs
     ):
         """Retrieve a cached feed from the database if possible.
 
@@ -120,9 +123,9 @@ class CachedFeed(Base):
         # TODO: this constraint_clause might not be necessary anymore.
         # ISTR it was an attempt to avoid race conditions, and we do a
         # better job of that now.
-        constraint_clause = and_(cls.content!=None, cls.timestamp!=None)
+        constraint_clause = and_(cls.content != None, cls.timestamp != None)
         kwargs = dict(
-            on_multiple='interchangeable',
+            on_multiple="interchangeable",
             constraint=constraint_clause,
             type=keys.feed_type,
             library=keys.library,
@@ -130,10 +133,10 @@ class CachedFeed(Base):
             lane_id=keys.lane_id,
             unique_key=keys.unique_key,
             facets=keys.facets_key,
-            pagination=keys.pagination_key
+            pagination=keys.pagination_key,
         )
         feed_data = None
-        if (max_age is cls.IGNORE_CACHE or isinstance(max_age, int) and max_age <= 0):
+        if max_age is cls.IGNORE_CACHE or isinstance(max_age, int) and max_age <= 0:
             # Don't even bother checking for a CachedFeed: we're
             # just going to replace it.
             feed_obj = None
@@ -177,13 +180,13 @@ class CachedFeed(Base):
         #
         # Set some defaults in case the caller didn't pass them in.
         if isinstance(max_age, int):
-            response_kwargs.setdefault('max_age', max_age)
+            response_kwargs.setdefault("max_age", max_age)
 
         if max_age == cls.IGNORE_CACHE:
             # If we were asked to ignore our internal cache, we should
             # also tell the client not to store this document in _its_
             # internal cache.
-            response_kwargs['max_age'] = 0
+            response_kwargs["max_age"] = 0
 
         if keys.library and keys.library.has_root_lanes:
             # If this feed is associated with a Library that guides
@@ -196,12 +199,9 @@ class CachedFeed(Base):
             # TODO: it might be possible to make this decision in a
             # more fine-grained way, which would allow intermediaries
             # to cache these feeds.
-            response_kwargs['private'] = True
+            response_kwargs["private"] = True
 
-        return OPDSFeedResponse(
-            response=feed_data,
-            **response_kwargs
-        )
+        return OPDSFeedResponse(response=feed_data, **response_kwargs)
 
     @classmethod
     def feed_type(cls, worklist, facets):
@@ -276,9 +276,9 @@ class CachedFeed(Base):
             # If we found *anything*, and the cache time is CACHE_FOREVER,
             # we will never refresh.
             should_refresh = False
-        elif (feed_obj.timestamp
-              and feed_obj.timestamp + datetime.timedelta(seconds=max_age) <=
-                  utc_now()
+        elif (
+            feed_obj.timestamp
+            and feed_obj.timestamp + datetime.timedelta(seconds=max_age) <= utc_now()
         ):
             # Here it comes down to a date comparison: how old is the
             # CachedFeed?
@@ -288,9 +288,16 @@ class CachedFeed(Base):
     # This named tuple makes it easy to manage the return value of
     # _prepare_keys.
     CachedFeedKeys = namedtuple(
-        'CachedFeedKeys',
-        ['feed_type', 'library', 'work', 'lane_id', 'unique_key', 'facets_key',
-         'pagination_key']
+        "CachedFeedKeys",
+        [
+            "feed_type",
+            "library",
+            "work",
+            "lane_id",
+            "unique_key",
+            "facets_key",
+            "pagination_key",
+        ],
     )
 
     @classmethod
@@ -307,9 +314,7 @@ class CachedFeed(Base):
         :return: A CachedFeedKeys object.
         """
         if not worklist:
-            raise ValueError(
-                "Cannot prepare a CachedFeed without a WorkList."
-            )
+            raise ValueError("Cannot prepare a CachedFeed without a WorkList.")
 
         feed_type = cls.feed_type(worklist, facets)
 
@@ -318,10 +323,11 @@ class CachedFeed(Base):
 
         # A feed may be associated with a specific Work,
         # e.g. recommendations for readers of that Work.
-        work = getattr(worklist, 'work', None)
+        work = getattr(worklist, "work", None)
 
         # Either lane_id or unique_key must be set, but not both.
         from ..lane import Lane
+
         if isinstance(worklist, Lane):
             lane_id = worklist.id
             unique_key = None
@@ -344,9 +350,13 @@ class CachedFeed(Base):
                 pagination_key = pagination.query_string
 
         return cls.CachedFeedKeys(
-            feed_type=feed_type, library=library, work=work, lane_id=lane_id,
-            unique_key=unique_key, facets_key=facets_key,
-            pagination_key=pagination_key
+            feed_type=feed_type,
+            library=library,
+            work=work,
+            lane_id=lane_id,
+            unique_key=unique_key,
+            facets_key=facets_key,
+            pagination_key=pagination_key,
         )
 
     def update(self, _db, content):
@@ -360,16 +370,23 @@ class CachedFeed(Base):
         else:
             length = "No content"
         return "<CachedFeed #%s %s %s %s %s %s %s >" % (
-            self.id, self.lane_id, self.type,
-            self.facets, self.pagination,
-            self.timestamp, length
+            self.id,
+            self.lane_id,
+            self.type,
+            self.facets,
+            self.pagination,
+            self.timestamp,
+            length,
         )
 
 
 Index(
     "ix_cachedfeeds_library_id_lane_id_type_facets_pagination",
-    CachedFeed.library_id, CachedFeed.lane_id, CachedFeed.type,
-    CachedFeed.facets, CachedFeed.pagination
+    CachedFeed.library_id,
+    CachedFeed.lane_id,
+    CachedFeed.type,
+    CachedFeed.facets,
+    CachedFeed.pagination,
 )
 
 
@@ -377,28 +394,26 @@ class WillNotGenerateExpensiveFeed(Exception):
     """This exception is raised when a feed is not cached, but it's too
     expensive to generate.
     """
+
     pass
+
 
 class CachedMARCFile(Base):
     """A record that a MARC file has been created and cached for a particular lane."""
 
-    __tablename__ = 'cachedmarcfiles'
+    __tablename__ = "cachedmarcfiles"
     id = Column(Integer, primary_key=True)
 
     # Every MARC file is associated with a library and a lane. If the
     # lane is null, the file is for the top-level WorkList.
-    library_id = Column(
-        Integer, ForeignKey('libraries.id'),
-        nullable=False, index=True)
+    library_id = Column(Integer, ForeignKey("libraries.id"), nullable=False, index=True)
 
-    lane_id = Column(
-        Integer, ForeignKey('lanes.id'),
-        nullable=True, index=True)
+    lane_id = Column(Integer, ForeignKey("lanes.id"), nullable=True, index=True)
 
     # The representation for this file stores the URL where it was mirrored.
     representation_id = Column(
-        Integer, ForeignKey('representations.id'),
-        nullable=False)
+        Integer, ForeignKey("representations.id"), nullable=False
+    )
 
     start_time = Column(DateTime(timezone=True), nullable=True, index=True)
     end_time = Column(DateTime(timezone=True), nullable=True, index=True)

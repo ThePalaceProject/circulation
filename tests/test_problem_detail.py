@@ -5,7 +5,6 @@ from ..util.problem_detail import ProblemDetail
 
 
 class TestProblemDetail(object):
-
     def test_with_debug(self):
         detail = ProblemDetail("http://uri/", title="Title", detail="Detail")
         with_debug = detail.with_debug("Debug Message")
@@ -14,5 +13,5 @@ class TestProblemDetail(object):
         assert "Title" == with_debug.title
         json_data, status, headers = with_debug.response
         data = json.loads(json_data)
-        assert "Debug Message" == data['debug_message']
-        assert "Detail" == data['detail']
+        assert "Debug Message" == data["debug_message"]
+        assert "Detail" == data["detail"]
