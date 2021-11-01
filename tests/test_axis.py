@@ -1243,7 +1243,7 @@ class TestAvailabilityResponseParser(Axis360Test, BaseParserTest):
         # as its content_link.
         assert isinstance(fulfillment, FulfillmentInfo)
         assert not isinstance(fulfillment, Axis360FulfillmentInfo)
-        assert "http://adobe.acsm/" == fulfillment.content_link
+        assert "http://adobe.acsm/?src=library&transactionId=2a34598b-12af-41e4-a926-af5e42da7fe5&isbn=9780763654573&format=F2" == fulfillment.content_link
 
         # Next ask for AxisNow -- this will be more like
         # test_parse_audiobook_availability, since it requires an
