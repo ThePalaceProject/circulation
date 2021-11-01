@@ -455,7 +455,7 @@ class SignInController(AdminController):
 <meta charset="utf8">
 <title>{app_name}</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Open+Sans&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;700&display=swap');
 </style>
 </head>
 """.format(app_name=AdminClientConfig.APP_NAME)
