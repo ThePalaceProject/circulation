@@ -10,6 +10,7 @@ CORE_BINDIR=$WORKDIR/core/bin
 
 initialization_task="${BINDIR}/util/initialize_instance"
 migration_task="${CORE_BINDIR}/migrate_database"
+migration_logfile="/var/log/simplified/migrate.log"
 
 su simplified <<EOF
 # Default value 'ignore' does nothing.
@@ -23,15 +24,15 @@ if ! [[ $SIMPLIFIED_DB_TASK == "ignore" ]]; then
     # Use 'auto' to initialize the database and then migrate it -- accounting
     # for either starting off an untouched database or keeping an existing one
     # up to date. This option is great for automated deployment.
-    ${initialization_task} && ${migration_task};
+    (${initialization_task} && ${migration_task}) >> ${migration_logfile};
 
   elif [[ $SIMPLIFIED_DB_TASK == "init" ]] && [[ -f ${initialization_task} ]]; then
     # Initialize the database with value 'init'
-    ${initialization_task};
+    ${initialization_task} >> ${migration_logfile};
 
   elif [[ $SIMPLIFIED_DB_TASK == "migrate" ]] && [[ -f ${migration_task} ]]; then
     # Migrate the database with value 'migrate'
-    ${migration_task};
+    ${migration_task} >> ${migration_logfile};
 
   # Raise an error if any other value is sent
   else echo "Unknown database task '${SIMPLIFIED_DB_TASK}' requested" && exit 127;
