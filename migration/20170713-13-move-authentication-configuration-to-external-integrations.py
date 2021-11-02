@@ -1,6 +1,5 @@
-#!/usr/bin/env python3
-"""
-Move authentication integration details from the Configuration file
+#!/usr/bin/env python
+"""Move authentication integration details from the Configuration file
 into the database as ExternalIntegrations
 """
 import os
@@ -12,7 +11,7 @@ bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..")
 sys.path.append(os.path.abspath(package_dir))
 
-from core.model import (        # noqa: E402,F401
+from core.model import (
     ConfigurationSetting,
     ExternalIntegration,
     get_one_or_create,
@@ -21,20 +20,18 @@ from core.model import (        # noqa: E402,F401
     create,
 )
 
-from api.config import Configuration                    # noqa: E402
-from api.millenium_patron import MilleniumPatronAPI     # noqa: E402
-from api.sip import SIP2AuthenticationProvider          # noqa: E402
-from api.authenticator import (                         # noqa: E402
+from api.config import Configuration
+from api.millenium_patron import MilleniumPatronAPI
+from api.sip import SIP2AuthenticationProvider
+from api.authenticator import (
     BasicAuthenticationProvider,
     OAuthAuthenticationProvider,
 )
 
 log = logging.getLogger(name="Circulation manager authentication configuration import")
 
-
 def log_import(service_name):
     log.info("Importing configuration for %s" % service_name)
-
 
 def make_patron_auth_integration(_db, provider):
     integration, ignore = get_one_or_create(
@@ -59,7 +56,6 @@ def make_patron_auth_integration(_db, provider):
 
     return integration
 
-
 def convert_millenium(_db, integration, provider):
 
     # Cross-check MilleniumPatronAPI.__init__ to see how these values
@@ -68,11 +64,11 @@ def convert_millenium(_db, integration, provider):
     auth_mode = provider.get('auth_mode')
     blacklist = provider.get('authorization_identifier_blacklist')
     if blacklist:
-        integration.setting(MilleniumPatronAPI.IDENTIFIER_BLACKLIST).value = json.dumps(blacklist)
-
+        integration.setting(MilleniumPatronAPI.IDENTIFIER_BLACKLIST
+        ).value = json.dumps(blacklist)
     if auth_mode:
-        integration.setting(MilleniumPatronAPI.AUTHENTICATION_MODE).value = auth_mode
-
+        integration.setting(MilleniumPatronAPI.AUTHENTICATION_MODE
+        ).value = auth_mode
 
 def convert_sip(_db, integration, provider):
     # Cross-check SIP2AuthenticationProvider.__init__ to see how these values
@@ -91,13 +87,11 @@ def convert_sip(_db, integration, provider):
     if field_separator:
         integration.setting(SAP.FIELD_SEPARATOR).value = field_separator
 
-
 def convert_firstbook(_db, integration, provider):
     # Cross-check FirstBookAuthenticationAPI.__init__ to see how these values
     # are pulled from the ExternalIntegration.
     integration.url = provider.get('url')
     integration.password = provider.get('key')
-
 
 def convert_clever(_db, integration, provider):
     # Cross-check OAuthAuthenticationProvider.from_config to see how
@@ -106,17 +100,15 @@ def convert_clever(_db, integration, provider):
     integration.password = provider.get('client_secret')
     expiration_days = provider.get('token_expiration_days')
     if expiration_days:
-        integration.setting(OAuthAuthenticationProvider.TOKEN_EXPIRATION_DAYS).value = expiration_days
-
+        integration.setting(OAuthAuthenticationProvider.TOKEN_EXPIRATION_DAYS
+        ).value = expiration_days
 
 Configuration.load()
-
 if not Configuration.instance:
     # No need to import configuration if there isn't any.
     sys.exit()
 
 _db = production_session()
-
 try:
     integrations = []
     auth_conf = Configuration.policy('authentication')
@@ -152,9 +144,9 @@ try:
             if integration not in library.integrations:
                 library.integrations.append(integration)
 
-    print("Sitewide bearer token signing secret: %s" % secret_setting.value)
+    print "Sitewide bearer token signing secret: %s" % secret_setting.value
     for library in _db.query(Library):
-        print("\n".join(library.explain(include_secrets=True)))
+        print "\n".join(library.explain(include_secrets=True))
 finally:
     _db.commit()
     _db.close()

@@ -1,17 +1,17 @@
-#!/usr/bin/env python3
-"""
-Move per-library settings from the Configuration file
+#!/usr/bin/env python
+"""Move per-library settings from the Configuration file
 into the database as ConfigurationSettings.
 """
 import os
 import sys
 import json
+import logging
 
 bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..")
 sys.path.append(os.path.abspath(package_dir))
 
-from core.model import (        # noqa: E402,F401
+from core.model import (
     ConfigurationSetting,
     ExternalIntegration,
     get_one_or_create,
@@ -20,7 +20,7 @@ from core.model import (        # noqa: E402,F401
     create,
 )
 
-from api.config import Configuration    # noqa: E402
+from api.config import Configuration
 
 _db = production_session()
 try:

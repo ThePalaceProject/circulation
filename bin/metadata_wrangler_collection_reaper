@@ -1,14 +1,13 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """Remove unlicensed items from the remote metadata wrangler Collection."""
-
 import os
 import sys
-
 bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..")
 sys.path.append(os.path.abspath(package_dir))
+from api.metadata_wrangler import MetadataWranglerCollectionReaper
+from core.scripts import RunCollectionCoverageProviderScript
 
-from api.metadata_wrangler import MetadataWranglerCollectionReaper      # noqa: E402
-from core.scripts import RunCollectionCoverageProviderScript            # noqa: E402
-
-RunCollectionCoverageProviderScript(MetadataWranglerCollectionReaper).run()
+RunCollectionCoverageProviderScript(
+    MetadataWranglerCollectionReaper
+).run()

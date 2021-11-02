@@ -1,6 +1,5 @@
-#!/usr/bin/env python3
-"""
-Move integration details from the Configuration file into the
+#!/usr/bin/env python
+"""Move integration details from the Configuration file into the
 database as ExternalIntegrations
 """
 import os
@@ -12,7 +11,7 @@ bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..")
 sys.path.append(os.path.abspath(package_dir))
 
-from core.model import (        # noqa: E402,F401
+from core.model import (
     ConfigurationSetting,
     ExternalIntegration as EI,
     Library,
@@ -20,15 +19,13 @@ from core.model import (        # noqa: E402,F401
     production_session,
 )
 
-from api.adobe_vendor_id import AuthdataUtility     # noqa: E402
-from api.config import Configuration                # noqa: E402
+from api.adobe_vendor_id import AuthdataUtility
+from api.config import Configuration
 
 log = logging.getLogger(name="Circulation manager configuration import")
 
-
 def log_import(integration_or_setting):
     log.info("CREATED: %r" % integration_or_setting)
-
 
 try:
     Configuration.load()
@@ -41,7 +38,7 @@ try:
         url = circ_manager_conf.get('url')
         if url:
             setting = ConfigurationSetting.sitewide(_db, Configuration.BASE_URL_KEY)
-            setting.value = str(url)
+            setting.value = unicode(url)
             log_import(setting)
 
     # Import Metadata Wrangler configuration.
@@ -95,7 +92,7 @@ try:
             integration.password = node_value
 
             if other_libraries:
-                other_libraries = str(json.dumps(other_libraries))
+                other_libraries = unicode(json.dumps(other_libraries))
                 integration.set_setting('other_libraries', other_libraries)
             integration.libraries.append(node_library)
             log_import(integration)

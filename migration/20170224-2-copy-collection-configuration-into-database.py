@@ -1,19 +1,17 @@
-#!/usr/bin/env python3
-"""
-Copy the collection configuration information from the JSON configuration
+#!/usr/bin/env python
+"""Copy the collection configuration information from the JSON configuration
 into Collection objects.
 """
 
 import os
 import sys
 import uuid
-
+from pdb import set_trace
 bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..")
 sys.path.append(os.path.abspath(package_dir))
-
-from api.config import Configuration        # noqa: E402
-from core.model import (                    # noqa: E402
+from api.config import Configuration
+from core.model import (
     get_one_or_create,
     production_session,
     DataSource,
@@ -27,7 +25,6 @@ from core.model import (                    # noqa: E402
 # those shortcuts goes against the database.
 
 _db = production_session()
-
 
 def copy_library_registry_information(_db, library):
     config = Configuration.integration("Adobe Vendor ID")
@@ -61,7 +58,6 @@ def convert_overdrive(_db, library):
     collection.external_account_id = library_id
     collection.external_integration.set_setting("website_id", website_id)
 
-
 def convert_bibliotheca(_db, library):
     config = Configuration.integration('3M')
     if not config:
@@ -80,7 +76,6 @@ def convert_bibliotheca(_db, library):
     collection.external_integration.username = username
     collection.external_integration.password = password
     collection.external_account_id = library_id
-
 
 def convert_axis(_db, library):
     config = Configuration.integration('Axis 360')
@@ -104,7 +99,6 @@ def convert_axis(_db, library):
     collection.external_integration.password = password
     collection.external_account_id = library_id
     collection.external_integration.url = url
-
 
 def convert_one_click(_db, library):
     config = Configuration.integration('OneClick')
@@ -130,13 +124,12 @@ def convert_one_click(_db, library):
     collection.external_integration.set_setting("ebook_loan_length", ebook_loan_length)
     collection.external_integration.set_setting("eaudio_loan_length", eaudio_loan_length)
 
-
 def convert_content_server(_db, library):
     config = Configuration.integration("Content Server")
     if not config:
         print("No content server configuration, not creating a Collection for it.")
         return
-    url = config.get('url')                     # noqa: F841
+    url = config.get('url')
     collection, ignore = get_one_or_create(
         _db, Collection,
         protocol=Collection.OPDS_IMPORT,
@@ -144,7 +137,6 @@ def convert_content_server(_db, library):
     )
     collection.external_integration.setting("data_source").value = DataSource.OA_CONTENT_SERVER
     library.collections.append(collection)
-
 
 # This is the point in the migration where we first create a Library
 # for this system.
