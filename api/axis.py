@@ -1,3 +1,4 @@
+import html
 import json
 import logging
 import re
@@ -1386,7 +1387,7 @@ class AvailabilityResponseParser(ResponseParser):
                 # immediately, without making any more API requests.
                 fulfillment = Axis360AcsFulfillmentInfo(
                     collection=self.collection,
-                    content_link=download_url,
+                    content_link=html.unescape(download_url),
                     content_type=DeliveryMechanism.ADOBE_DRM,
                     content=None,
                     content_expires=None,
