@@ -9,8 +9,9 @@ from api.app import initialize_database
 from api.saml.configuration.model import SAMLConfiguration
 from api.saml.configuration.validator import (
     SAML_INCORRECT_METADATA,
+    SAML_INCORRECT_PATRON_ID_REGULAR_EXPRESSION,
     SAMLSettingsValidator,
-    SAML_INCORRECT_PATRON_ID_REGULAR_EXPRESSION)
+)
 from api.saml.metadata.filter import SAMLSubjectFilter
 from api.saml.metadata.parser import SAMLMetadataParser
 from api.saml.provider import SAMLWebSSOAuthenticationProvider

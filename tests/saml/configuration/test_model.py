@@ -515,6 +515,7 @@ class TestSAMLOneLoginConfiguration(object):
                 "wantAssertionsEncrypted": False,
                 "nameIdEncrypted": False,
                 "signatureAlgorithm": "http://www.w3.org/2000/09/xmldsig#rsa-sha1",
+                "allowRepeatAttributeName": False
             },
         }
         db = create_autospec(spec=sqlalchemy.orm.session.Session)

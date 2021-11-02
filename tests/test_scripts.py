@@ -10,6 +10,7 @@ from api.adobe_vendor_id import (
     AuthdataUtility,
     ShortClientTokenLibraryConfigurationScript,
 )
+from api.authenticator import BasicAuthenticationProvider
 
 from api.config import (
     temp_config,
@@ -93,12 +94,13 @@ from scripts import (
     CacheOPDSGroupFeedPerLane,
     CacheMARCFiles,
     DirectoryImportScript,
+    GenerateShortTokenScript,
     InstanceInitializationScript,
     LanguageListScript,
     NovelistSnapshotScript,
     LocalAnalyticsExportScript,
 )
-from core.util.datetime_helpers import utc_now
+from core.util.datetime_helpers import datetime_utc, utc_now
 
 class TestAdobeAccountIDResetScript(DatabaseTest):
 
@@ -1365,7 +1367,7 @@ class TestDirectoryImportScript(DatabaseTest):
             return path in mock_filesystem
 
         @contextlib.contextmanager
-        def mock_open(path):
+        def mock_open(path, mode="r"):
             yield StringIO(mock_filesystem[path])
         mock_filesystem_operations = mock_exists, mock_open
 
@@ -1450,3 +1452,122 @@ class TestLocalAnalyticsExportScript(DatabaseTest):
             exporter=exporter)
         assert "test" == output.getvalue()
         assert ['20190820', '20190827'] == exporter.called_with
+
+class TestGenerateShortTokenScript(DatabaseTest):
+
+    @pytest.fixture
+    def script(self):
+        return GenerateShortTokenScript()
+
+    @pytest.fixture
+    def output(self):
+        return StringIO()
+
+    @pytest.fixture
+    def authdata(self, monkeypatch):
+        authdata = AuthdataUtility(
+            vendor_id="The Vendor ID",
+            library_uri="http://your-library.org/",
+            library_short_name="you",
+            secret="Your library secret",
+        )
+        test_date = datetime_utc(2021, 5, 5)
+        monkeypatch.setattr(authdata, "_now", lambda: test_date)
+        return authdata
+
+    @pytest.fixture
+    def patron(self, authdata):
+        patron = self._patron(external_identifier='test')
+        patron.authorization_identifier = 'test'
+        adobe_credential = self._credential(
+            data_source_name=DataSource.INTERNAL_PROCESSING,
+            patron=patron,
+            type=authdata.ADOBE_ACCOUNT_ID_PATRON_IDENTIFIER)
+        adobe_credential.credential = '1234567'
+        return patron
+
+    @pytest.fixture
+    def authentication_provider(self):
+        barcode = '12345'
+        pin = 'abcd'
+        integration = self._external_integration(
+            'api.simple_authentication', goal=ExternalIntegration.PATRON_AUTH_GOAL
+        )
+        self._default_library.integrations.append(integration)
+        integration.setting(BasicAuthenticationProvider.TEST_IDENTIFIER).value = barcode
+        integration.setting(BasicAuthenticationProvider.TEST_PASSWORD).value = pin
+        return barcode, pin
+
+    def test_run_days(self, script, output, authdata, patron):
+        # Test with --days
+        cmd_args = ['--barcode={}'.format(patron.authorization_identifier), '--days=2', self._default_library.short_name]
+        script.do_run(
+            _db=self._db,
+            output=output, cmd_args=cmd_args,
+            authdata=authdata)
+        assert output.getvalue().split('\n') == [
+            'Vendor ID: The Vendor ID',
+            'Token: YOU|1620345600|1234567|ZP45vhpfs3fHREvFkDDVgDAmhoD699elFD3PGaZu7yo@',
+            'Username: YOU|1620345600|1234567',
+            'Password: ZP45vhpfs3fHREvFkDDVgDAmhoD699elFD3PGaZu7yo@',
+            ''
+        ]
+
+    def test_run_minutes(self, script, output, authdata, patron):
+        # Test with --minutes
+        cmd_args = ['--barcode={}'.format(patron.authorization_identifier), '--minutes=20', self._default_library.short_name]
+        script.do_run(
+            _db=self._db,
+            output=output, cmd_args=cmd_args,
+            authdata=authdata)
+        assert output.getvalue().split('\n')[2] == 'Username: YOU|1620174000|1234567'
+
+    def test_run_hours(self, script, output, authdata, patron):
+        # Test with --hours
+        cmd_args = ['--barcode={}'.format(patron.authorization_identifier), '--hours=4', self._default_library.short_name]
+        script.do_run(
+            _db=self._db,
+            output=output, cmd_args=cmd_args,
+            authdata=authdata)
+        assert output.getvalue().split('\n')[2] == 'Username: YOU|1620187200|1234567'
+
+    def test_no_registry(self, script, output, patron):
+        cmd_args = ['--barcode={}'.format(patron.authorization_identifier), '--minutes=20', self._default_library.short_name]
+        with pytest.raises(SystemExit) as pytest_exit:
+            script.do_run(
+                _db=self._db,
+                output=output, cmd_args=cmd_args)
+        assert pytest_exit.value.code == -1
+        assert "Library not registered with library registry" in output.getvalue()
+
+    def test_no_patron_auth_method(self, script, output):
+        # Test running when the patron does not exist
+        cmd_args = ['--barcode={}'.format('1234567'), '--hours=4', self._default_library.short_name]
+        with pytest.raises(SystemExit) as pytest_exit:
+            script.do_run(
+                _db=self._db,
+                output=output, cmd_args=cmd_args)
+        assert pytest_exit.value.code == -1
+        assert "No methods to authenticate patron found" in output.getvalue()
+
+    def test_patron_auth(self, script, output, authdata, authentication_provider):
+        barcode, pin = authentication_provider
+        # Test running when the patron does not exist
+        cmd_args = ['--barcode={}'.format(barcode), '--pin={}'.format(pin), '--hours=4', self._default_library.short_name]
+        script.do_run(
+            _db=self._db,
+            output=output, cmd_args=cmd_args,
+            authdata=authdata)
+        assert "Token: YOU|1620187200" in output.getvalue()
+
+    def test_patron_auth_no_patron(self, script, output, authdata, authentication_provider):
+        barcode = 'nonexistent'
+        # Test running when the patron does not exist
+        cmd_args = ['--barcode={}'.format(barcode), '--hours=4', self._default_library.short_name]
+        with pytest.raises(SystemExit) as pytest_exit:
+            script.do_run(
+                _db=self._db,
+                output=output, cmd_args=cmd_args,
+                authdata=authdata)
+        assert pytest_exit.value.code == -1
+        assert "Patron not found" in output.getvalue()

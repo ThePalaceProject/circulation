@@ -1,9 +1,9 @@
 import json
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 from flask import request
 from mock import MagicMock, PropertyMock, create_autospec
 from parameterized import parameterized
-from urllib.parse import parse_qs, urlsplit, urlencode
 
 from api.authenticator import Authenticator, PatronData
 from api.saml.auth import SAML_INCORRECT_RESPONSE, SAMLAuthenticationManager

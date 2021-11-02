@@ -1,113 +1,47 @@
 # Library Simplified Circulation Manager
+[![Test Circulation & Build Docker Images](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml/badge.svg)](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml)
 
-![Build Status](https://github.com/nypl-simplified/circulation/actions/workflows/test.yml/badge.svg?branch=develop) [![GitHub Release](https://img.shields.io/github/release/nypl-simplified/circulation.svg?style=flat)]()
+This is a [The Palace Project](https://thepalaceproject.org) maintained fork of the NYPL [Library Simplified](http://www.librarysimplified.org/) Circulation Manager.
 
-Table of contents
-=================
+It depends on [Circulation Core](https://github.com/thepalaceproject/circulation-core) as a git submodule.
 
-* [Overview](#Overview)
-* [Git Branch Workflow](#git-branch-workflow)
-* [Getting Started / Set Up](#getting-started--set-up)
-  * [Docker](#docker-setup)
-  * [Manual](#manual)
-  * [Adding Collections](#adding-collections-to-the-circulation-manager-admin)
-* [Generating Documentation](#generating-documentation)
-* [Testing](#testing)
-* [Debugging](#debugging)
-* [Contributing](#contributing)
-* [License](#license)
-* [Appendix](#appendix)
+## Installation
 
-## Overview
-
-Default Branch: `develop`
-
-This is the Circulation Manager for [Library Simplified](https://www.librarysimplified.org/). The Circulation Manager is the main connection between a library's collection and Library Simplified's various client-side applications, including SimplyE. It handles user authentication, combines licensed works with open access content, pulls in updated book information from the [Metadata Wrangler](https://github.com/NYPL-Simplified/metadata_wrangler), and serves up available books in appropriately organized OPDS feeds.
-
-It depends on [Library Simplified Server Core](https://github.com/NYPL-Simplified/server_core) as a git submodule.
+Docker images created from this code are available at:
+https://github.com/ThePalaceProject/circulation/pkgs/container/circ-webapp
+https://github.com/ThePalaceProject/circulation/pkgs/container/circ-scripts
 
 ## Git Branch Workflow
 
-| Branch  | Python Version |
-| ------- | -------------- |
-| develop | Python 3       |
-| main    | Python 3       |
-| python2 | Python 2       |
+| Branch   | Python Version |
+| -------- | -------------- |
+| main     | Python 3       |
+| python2  | Python 2       |
 
-The default branch is `develop` and that's the working branch that should be used when branching off for bug fixes or new features. Once a feature branch pull request is merged into `develop`, the changes can be merged to `main` to create releases.
+The default branch is `main` and that's the working branch that should be used when branching off for bug fixes or new features.
 
-Python 2 stopped being supported after January 1st, 2020 but there is still a `python2` branch which can be used. As of May 2021, development will be done in the `develop` and `main` branches.
+Python 2 stopped being supported after January 1st, 2020 but there is still a `python2` branch which can be used. As of August 2021, development will be done in the `main` branch and the `python2` branch will not be updated unless absolutely necessary.
 
-There are additional protected branches that are used for _NYPL-specific_ deployments to keep in mind.
+## Set Up
 
-| Branch                 |
-| ---------------------- |
-| nypl-deploy-qa         |
-| nypl-deploy-production |
-| openebooks-deploy-qa   |
-| openebooks-deploy-qa   |
-| bpl-deploy-qa          |
-| bpl-deploy-production  |
+### Python Set Up
 
+If you do not have Python 3 installed, you can use [Homebrew](https://brew.sh/)* to install it by running the command `$ brew install python3`.
 
-## Getting Started / Set Up
-To get this project up and running locally, you can follow the [Docker](#docker-setup) setup or the [Manual](#manual-setup) setup. The Docker setup will take care of many of the pre-requisites for you. Once you're set up, you can proceed with [adding collections](#adding-collections-to-the-circulation-manager-admin).
-
-### **Docker Setup**
----
-***Note**: For more in depth information on using Docker images for deployment, check out the [Docker README](/docker/README.md) in the `/docker` directory.*
-
-Before proceeding, ensure you have [Docker](https://docs.docker.com/get-docker/) installed for your environment.
-
-Clone this repo:
-
-```bash
-  git clone git@github.com:NYPL-Simplified/circulation.git
-```
-
-Go to the `docker` directory:
-
-```bash
-  cd circulation/docker
-```
-
-Build the containers:
-
-```bash
-  docker compose build
-```
-
-Run the containers:
-
-```bash
-  docker compose up -d
-```
-
-Confirm all of the containers are running successfully:
-
-```bash
-  docker ps -a
-```
-
-Finally, open the administration panel at http://localhost:80/admin to view the Circulation Manager Administration app. 
-
-### **Manual Setup**
----
-#### **Python Set Up**
-
-If you do not have Python 3 installed, and you are running MacOS or Linux, you can use [Homebrew](https://brew.sh/)\* to install it by running the command `$ brew install python3`.
-
-\*If you do not yet have Homebrew, you can install it by running the following:
+*If you do not yet have Homebrew, you can install it by running the following:
 
 ```
 $ /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
-
 While you're at it, go ahead and install the following required dependencies:
 
-- `$ brew install pkg-config libffi`
-- `$ brew install libxmlsec1`
-- `$ brew install libjpeg`
+* `$ brew install pkg-config libffi`
+* `$ brew install libxmlsec1`
+* `$ brew install libjpeg`
+
+Please note: only certain versions of Python 3 will work with this application. One such version is Python 3.6.5. Check to see which version you currently have installed by running `$ python -V`.
+
+If you're using a version of Python that doesn't work, install [pyenv](https://github.com/pyenv/pyenv-installer) using command `$ curl https://pyenv.run | bash`, then install the version of Python you want to work with, ie `$ pyenv install python3.6.5`, and then run `$ pyenv global 3.6.5`. Check the current version again with `$ python -V` to make sure it's correct before proceeding.
 
 You will need to set up a local virtual environment to install packages and run the project. If you haven't done so before, use pip to install virtualenv – `$ pip install virtualenv` – before creating the virtual environment in the root of the circulation repository:
 
@@ -115,36 +49,29 @@ You will need to set up a local virtual environment to install packages and run 
 $ python -m venv env
 ```
 
-As mentioned above, this application depends on [Library Simplified Server Core](https://github.com/NYPL-Simplified/server_core) as a git submodule. To set that up, in the repository, run:
+As mentioned above, this application depends on [LCirculation Core](https://github.com/thepalaceproject/circulation-core) as a git submodule. To set that up, in the repository, run:
 
-- `$ git submodule init`
-- `$ git submodule update`
+* `$ git submodule init`
+* `$ git submodule update`
 
-#### **Python Version**
-
-It is important to know that only certain versions of Python 3 will work with this application. One such version is Python 3.6.5. Check to see which version you currently have installed by running `$ python -V`.
-
-If you're using a version of Python that doesn't work, install [pyenv](https://github.com/pyenv/pyenv-installer) using command `$ curl https://pyenv.run | bash`, then install the version of Python you want to work with, ie `$ pyenv install python3.6.5`, and then run `$ pyenv global 3.6.5`. Check the current version again with `$ python -V` to make sure it's correct before proceeding.
-
-#### **Elasticsearch Set Up**
+### Elasticsearch Set Up
 
 The circulation manager requires Elasticsearch. If you don't have Elasticsearch, check out instructions in the [Library Simplified wiki](https://github.com/NYPL-Simplified/Simplified/wiki/Deployment-Instructions), or simply read on.
 
 1. Download it [here](https://www.elastic.co/downloads/past-releases/elasticsearch-6-8-6).
 2. `cd` into the `elasticsearch-[version number]` directory.
-3. Run `$ sudo bin/elasticsearch-plugin install analysis-icu`
+3. Run `$ elasticsearch-plugin install analysis-icu`
 4. Run `$ ./bin/elasticsearch`.
 5. You may be prompted to download [Java SE](https://www.oracle.com/java/technologies/javase-downloads.html). If so, go ahead and do so.
 6. Check `http://localhost:9200` to make sure the Elasticsearch server is running.
 
-#### **Database Set Up**
+### Database Set Up
 
 The databases should be created next. To find instructions for how to do so, check out the [Library Simplified wiki](https://github.com/NYPL-Simplified/Simplified/wiki/Deployment-Instructions), or simply read on.
 
 1. Download and install [Postgres](https://www.postgresql.org/download/) if you don't have it already.
 2. Use the command `$ psql` to access the Postgresql client.
 3. Within the session, run the following commands, adding your own password in lieu of the [password] placeholders:
-
 ```sh
 CREATE DATABASE simplified_circulation_test;
 CREATE DATABASE simplified_circulation_dev;
@@ -169,7 +96,7 @@ export SIMPLIFIED_PRODUCTION_DATABASE="postgres://simplified:[password]@localhos
 export SIMPLIFIED_TEST_DATABASE="postgres://simplified_test:[password]@localhost:5432/simplified_circulation_test"
 ```
 
-#### **Running the Application**
+### Running the Application
 
 Activate the virtual environment:
 
@@ -188,32 +115,17 @@ Run the application with:
 ```sh
 $ python app.py
 ```
+And visit `http://localhost:6500/`.
 
-Then, navigate to `http://localhost:6500/`.
-
-#### **Note on HTTP/S in development**
-
-When deployed, the application should be run behind a secure proxy responsible for SSL termination. 
-
-While developing locally, if it becomes necessary to observe app code serving HTTP/S requests, it is possible to start the Flask/Werkzeug development server with an ad-hoc SSL context (see [werkzeug.serving.run_simple()](https://werkzeug.palletsprojects.com/en/2.0.x/serving/#werkzeug.serving.run_simple) for more details). These ad-hoc certs work because of the pyopenssl package.
-
-To have the server listen for HTTP/S requests, supply an https:// URL on start:
-
-```sh
-$ python app.py https://localhost:6500/
-```
-
-Also note that this does not fully replicate secure requests as they would appear on a deployed app instance. In particular, the X-Forwarded-* headers may be different, since you are hitting the application server directly rather than through one or more proxy layers.
-
-#### **Python Installation Issues**
+### Python Installation Issues
 
 When running the `pip install ...` command, you may run into installation issues. The [Library Simplified wiki](https://github.com/NYPL-Simplified/Simplified/wiki/Deployment-Instructions) instructions say to install some packages through brew such as `libxmlsec1`. On newer macos machines, you may encounter an error such as:
 
 ```sh
 error: command '/usr/bin/clang' failed with exit code 1
   ----------------------------------------
-ERROR: Failed building wheel for xmlsec
-Failed to build dm.xmlsec.binding xmlsec
+  ERROR: Failed building wheel for xmlsec
+Failed to build xmlsec
 ERROR: Could not build wheels for xmlsec which use PEP 517 and cannot be installed directly
 ```
 
@@ -225,17 +137,13 @@ This [blog post](https://mbbroberg.fun/clang-error-in-pip/) explains and shows a
 export CPPFLAGS="-DXMLSEC_NO_XKMS=1"
 ```
 
-### Adding Collections to the Circulation Manager Admin
-
-If you are working on the Circulation Manager Admin, and need to add collections of books to your local app for testing purposes, you can follow [these instructions](https://docs.google.com/document/d/1a0QNWTvt9NKChr8TcLJ3G1PfpBCKV6hC2JuB5Yk_CYY/edit?usp=sharing).
-
 ## Generating Documentation
 
-Code documentation using Sphinx can be found on this repo's [Github Pages](http://nypl-simplified.github.io/circulation/index.html). It currently documents this repo's `api` directory, `scripts` file, and the `core` submodule directory. The configuration for the documentation can be found in `/docs`.
+Code documentation can be generated using Sphinx. The configuration for the documentation can be found in `/docs`.
 
 Github Actions handles generating the `.rst` source files, generating the HTML static site, and deploying the build to the `gh-pages` branch.
 
-To view the documentation _locally_, go into the `/docs` directory and run `make html`. This will generate the .rst source files and build the static site in `/docs/build/html`.
+To view the documentation _locally_, go into the `/docs` directory and run `make html`. This will generate the .rst source files and build the static site in `/docs/build/html`
 
 ## Continuous Integration
 
@@ -244,7 +152,6 @@ This project runs all the unit tests through Github Actions for new pull request
 As mentioned above, Github Actions is also used to build and deploy Sphinx documentation to Github Pages. The relevant file can be found in `.github/workflows/docks.yml`.
 
 ## Testing
-
 The Github Actions CI service runs the unit tests against Python 3.6, 3.7, and 3.8 automatically using [tox](https://tox.readthedocs.io/en/latest/).
 
 To run `pytest` unit tests locally, install `tox`.
@@ -269,7 +176,6 @@ All of these environments are tested by default when running tox. To test one sp
 flag.
 
 Test Python 3.8
-
 ```
 tox -e py38
 ```
@@ -291,7 +197,6 @@ The docker functionality is included in a `docker` factor that can be added to t
 with a particular factor you add it to the end of the environment.
 
 Test with Python 3.8 using docker containers for the services.
-
 ```
 tox -e py38-docker
 ```
@@ -327,20 +232,6 @@ Only run the `test_cdn` tests with Python 3.6 using docker.
 tox -e py36-docker -- tests/test_google_analytics_provider.py
 ```
 
-## Debugging
+## Usage with Docker
 
-If you are served an error message on the admin home screen, you may need to run `npm install` in the api/admin directory of the circulation repo. If you're running the application locally, you can also try running the same command in the root directory of the circulation-web repo.
-
-The latter command will only work if the circulation-web and circulation repos are linked using npm link. You can find more information on how to do this in the circulation-web repo's [README](https://github.com/NYPL-Simplified/circulation-web/blob/main/README.md).
-
-## Contributing
-
-See [here](CONTRIBUTING.md) for more information.
-
-## License
-
-This project is open-sourced software licensed under the [Apache-2.0 License](LICENSE.md).
-
-## Appendix
-
-View the [NYPL Simplified Wiki](https://github.com/NYPL-Simplified/Simplified/wiki) for more in depth information on various topics relating to the circulation manager.
+Check out the [Docker README](/docker/README.md) in the `/docker` directory for in-depth information on optionally running and developing the Circulation Manager locally with Docker, or for deploying the Circulation Manager with Docker.

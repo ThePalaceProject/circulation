@@ -442,11 +442,6 @@ def annotations_for_work(identifier_type, identifier):
 def borrow(identifier_type, identifier, mechanism_id=None):
     return app.manager.loans.borrow(identifier_type, identifier, mechanism_id)
 
-@library_route('/works/<license_pool_id>/fulfill/<mechanism_id>/<part>/rbdproxy/<bearer>')
-@has_library
-def proxy_rbdigital_patron_requests(license_pool_id, mechanism_id, part, bearer):
-    return app.manager.rbdproxy.proxy(bearer)
-
 @library_route('/works/<license_pool_id>/fulfill')
 @library_route('/works/<license_pool_id>/fulfill/<mechanism_id>')
 @library_route('/works/<license_pool_id>/fulfill/<mechanism_id>/<part>')
@@ -620,6 +615,7 @@ def saml_callback():
 
 
 @app.route('/<collection_name>/lcp/licenses/<license_id>/hint')
+@app.route('/<collection_name>/lcp/licenses/<path:license_id>/hint')
 @has_library_through_external_loan_identifier(parameter_name='license_id')
 @requires_auth
 @returns_problem_detail

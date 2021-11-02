@@ -1,41 +1,51 @@
-import pytest
-
 import base64
 import datetime
-import flask
-import json
-import urllib.request, urllib.parse, urllib.error
 from io import BytesIO
-from werkzeug.datastructures import ImmutableMultiDict, MultiDict
+import json
+
+import flask
+from PIL import Image
+import pytest
+from werkzeug.datastructures import MultiDict
+
+from .test_controller import SettingsControllerTest
+from api.admin.announcement_list_validator import AnnouncementListValidator
+from api.admin.controller.library_settings import LibrarySettingsController
 from api.admin.exceptions import *
-from api.config import Configuration
-from api.registry import (
-    Registration,
-    RemoteRegistry,
-)
-from core.facets import FacetConstants
-from core.model import (
-    AdminRole,
-    ConfigurationSetting,
-    create,
-    ExternalIntegration,
-    get_one,
-    get_one_or_create,
-    Library,
-)
-from core.testing import MockRequestsResponse
-from core.util.problem_detail import ProblemDetail
+from api.admin.geographic_validator import GeographicValidator
 from api.announcements import (
     Announcements,
     Announcement,
 )
-from api.admin.controller.library_settings import LibrarySettingsController
-from api.admin.announcement_list_validator import AnnouncementListValidator
-from api.admin.geographic_validator import GeographicValidator
+from api.config import Configuration
 from api.testing import AnnouncementTest
-from .test_controller import SettingsControllerTest
+from core.facets import FacetConstants
+from core.model import (
+    AdminRole,
+    ConfigurationSetting,
+    get_one,
+    get_one_or_create,
+    Library,
+)
+from core.util.problem_detail import ProblemDetail
+
 
 class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
+
+    @pytest.fixture()
+    def logo_properties(self):
+        image_data_raw = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x01\x03\x00\x00\x00%\xdbV\xca\x00\x00\x00\x06PLTE\xffM\x00\x01\x01\x01\x8e\x1e\xe5\x1b\x00\x00\x00\x01tRNS\xcc\xd24V\xfd\x00\x00\x00\nIDATx\x9cc`\x00\x00\x00\x02\x00\x01H\xaf\xa4q\x00\x00\x00\x00IEND\xaeB`\x82'
+        image_data_b64_bytes = base64.b64encode(image_data_raw)
+        image_data_b64_unicode = image_data_b64_bytes.decode("utf-8")
+        data_url = "data:image/png;base64," + image_data_b64_unicode
+        image = Image.open(BytesIO(image_data_raw))
+        return {
+            "raw_bytes": image_data_raw,
+            "base64_bytes": image_data_b64_bytes,
+            "base64_unicode": image_data_b64_unicode,
+            "data_url": data_url,
+            "image": image,
+        }
 
     def library_form(self, library, fields={}):
 
@@ -124,10 +134,10 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
         ConfigurationSetting.for_library(Configuration.FEATURED_LANE_SIZE, l2).value = 5
         ConfigurationSetting.for_library(
             Configuration.DEFAULT_FACET_KEY_PREFIX + FacetConstants.ORDER_FACET_GROUP_NAME, l2
-        ).value = FacetConstants.ORDER_RANDOM
+        ).value = FacetConstants.ORDER_TITLE
         ConfigurationSetting.for_library(
             Configuration.ENABLED_FACETS_KEY_PREFIX + FacetConstants.ORDER_FACET_GROUP_NAME, l2
-        ).value = json.dumps([FacetConstants.ORDER_TITLE, FacetConstants.ORDER_RANDOM])
+        ).value = json.dumps([FacetConstants.ORDER_TITLE, FacetConstants.ORDER_AUTHOR])
         ConfigurationSetting.for_library(
             Configuration.LARGE_COLLECTION_LANGUAGES, l2
         ).value = json.dumps(["French"])
@@ -154,9 +164,9 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
             assert 4 == len(libraries[1].get("settings").keys())
             settings = libraries[1].get("settings")
             assert "5" == settings.get(Configuration.FEATURED_LANE_SIZE)
-            assert (FacetConstants.ORDER_RANDOM ==
+            assert (FacetConstants.ORDER_TITLE ==
                 settings.get(Configuration.DEFAULT_FACET_KEY_PREFIX + FacetConstants.ORDER_FACET_GROUP_NAME))
-            assert ([FacetConstants.ORDER_TITLE, FacetConstants.ORDER_RANDOM] ==
+            assert ([FacetConstants.ORDER_TITLE, FacetConstants.ORDER_AUTHOR] ==
                settings.get(Configuration.ENABLED_FACETS_KEY_PREFIX + FacetConstants.ORDER_FACET_GROUP_NAME))
             assert ["French"] == settings.get(Configuration.LARGE_COLLECTION_LANGUAGES)
 
@@ -233,10 +243,27 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
             response = self.manager.admin_library_settings_controller.process_post()
             assert response.uri == INVALID_CONFIGURATION_OPTION.uri
 
-    def test_libraries_post_create(self):
+    def test__data_url_for_image(self, logo_properties):
+        """"""
+        image, expected_data_url = [logo_properties[key] for key in (
+            "image", "data_url"
+        )]
+        data_url = LibrarySettingsController._data_url_for_image(image)
+        assert expected_data_url == data_url
+
+    def test_libraries_post_create(self, logo_properties):
+
         class TestFileUpload(BytesIO):
             headers = { "Content-Type": "image/png" }
-        image_data = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x01\x03\x00\x00\x00%\xdbV\xca\x00\x00\x00\x06PLTE\xffM\x00\x01\x01\x01\x8e\x1e\xe5\x1b\x00\x00\x00\x01tRNS\xcc\xd24V\xfd\x00\x00\x00\nIDATx\x9cc`\x00\x00\x00\x02\x00\x01H\xaf\xa4q\x00\x00\x00\x00IEND\xaeB`\x82'
+
+        # Pull needed properties from logo fixture
+        image_data, expected_logo_data_url, image = [logo_properties[key] for key in (
+            "raw_bytes", "data_url", "image"
+        )]
+        # LibrarySettingsController scales down images that are too large,
+        # so we fail here if our test fixture image is large enough to cause
+        # a mismatch between the expected data URL and the one configured.
+        assert max(*image.size) <= Configuration.LOGO_MAX_DIMENSION
 
         original_geographic_validate = GeographicValidator().validate_geographic_areas
         class MockGeographicValidator(GeographicValidator):
@@ -295,12 +322,11 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
             ConfigurationSetting.for_library(
                 Configuration.DEFAULT_FACET_KEY_PREFIX + FacetConstants.ORDER_FACET_GROUP_NAME,
                 library).value)
-        assert (json.dumps([FacetConstants.ORDER_TITLE, FacetConstants.ORDER_RANDOM]) ==
+        assert (json.dumps([FacetConstants.ORDER_TITLE]) ==
             ConfigurationSetting.for_library(
                 Configuration.ENABLED_FACETS_KEY_PREFIX + FacetConstants.ORDER_FACET_GROUP_NAME,
                 library).value)
-        assert ("data:image/png;base64,%s" % base64.b64encode(image_data) ==
-            ConfigurationSetting.for_library(Configuration.LOGO, library).value)
+        assert (expected_logo_data_url == ConfigurationSetting.for_library(Configuration.LOGO, library).value)
         assert geographic_validator.was_called == True
         assert ('{"US": ["06759", "everywhere", "MD", "Boston, MA"], "CA": []}' ==
             ConfigurationSetting.for_library(Configuration.LIBRARY_SERVICE_AREA, library).value)
@@ -381,7 +407,7 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
         assert "0.9" == val(Configuration.MINIMUM_FEATURED_QUALITY)
         assert (FacetConstants.ORDER_AUTHOR ==
             val(Configuration.DEFAULT_FACET_KEY_PREFIX + FacetConstants.ORDER_FACET_GROUP_NAME))
-        assert (json.dumps([FacetConstants.ORDER_AUTHOR, FacetConstants.ORDER_RANDOM]) ==
+        assert (json.dumps([FacetConstants.ORDER_AUTHOR]) ==
             val(Configuration.ENABLED_FACETS_KEY_PREFIX + FacetConstants.ORDER_FACET_GROUP_NAME))
 
         # The library-wide logo was not updated and has been left alone.

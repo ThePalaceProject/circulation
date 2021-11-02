@@ -1,36 +1,30 @@
 import base64
+from io import BytesIO
+import json
+from typing import Any, Dict, Optional
+import uuid
+
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
-import json
-from pypostalcode import PostalCodeDatabase
-import re
-from io import BytesIO
-import urllib.request, urllib.parse, urllib.error
-import uszipcode
-import uuid
+from PIL import Image
 import wcag_contrast_ratio
 
 from . import SettingsController
+from api.admin.announcement_list_validator import AnnouncementListValidator
 from api.config import Configuration
 from api.lanes import create_default_lanes
+from api.admin.geographic_validator import GeographicValidator
+from api.admin.problem_details import *
 from core.model import (
     ConfigurationSetting,
     create,
-    ExternalIntegration,
     get_one,
     Library,
-    Representation,
 )
-from core.util.http import HTTP
-from PIL import Image
-from api.admin.exceptions import *
-from api.admin.problem_details import *
-from api.admin.geographic_validator import GeographicValidator
-from api.admin.announcement_list_validator import AnnouncementListValidator
 from core.util.problem_detail import ProblemDetail
 from core.util import LanguageCodes
-from api.registry import RemoteRegistry
+
 
 class LibrarySettingsController(SettingsController):
 
@@ -337,18 +331,37 @@ class LibrarySettingsController(SettingsController):
 
         return json.dumps([_f for _f in value if _f])
 
-    def image_setting(self, setting):
-        """Retrieve an uploaded image for the given setting from the current HTTP request."""
+    @staticmethod
+    def _data_url_for_image(image: Image, _format="PNG") -> str:
+        """Produce the `data` URL for the setting's uploaded image file.
+
+        :param image: A Pillow Image.
+        :param _format: A valid Pillow image format.
+        :return: The `data` URL for the image.
+        """
+        buffer = BytesIO()
+        image.save(buffer, format=_format)
+        b64 = base64.b64encode(buffer.getvalue())
+        return "data:image/png;base64,%s" % b64.decode('utf-8')
+
+    def image_setting(self, setting: Dict[str, Any], max_dimension=Configuration.LOGO_MAX_DIMENSION) -> Optional[str]:
+        """Retrieve an uploaded image file for the setting and return its data URL.
+
+        If the image is too large, scale it down to the `max_dimension`
+        while retaining its aspect ratio.
+
+        :param image: A Python Image Library image object.
+        :return: The `data` URL for the image file, if it was uploaded, else None.
+        """
         image_file = flask.request.files.get(setting.get("key"))
-        if image_file:
-            image = Image.open(image_file)
-            width, height = image.size
-            if width > 135 or height > 135:
-                image.thumbnail((135, 135), Image.ANTIALIAS)
-            buffer = BytesIO()
-            image.save(buffer, format="PNG")
-            b64 = base64.b64encode(buffer.getvalue())
-            return "data:image/png;base64,%s" % b64
+        if not image_file:
+            return None
+
+        image = Image.open(image_file)
+        width, height = image.size
+        if width > max_dimension or height > max_dimension:
+            image.thumbnail((max_dimension, max_dimension), Image.ANTIALIAS)
+        return self._data_url_for_image(image)
 
     def current_value(self, setting, library):
         """Retrieve the current value of the given setting from the database."""

@@ -33,10 +33,7 @@ from api.saml.provider import SAML_INVALID_SUBJECT, SAMLWebSSOAuthenticationProv
 from core.model.configuration import ConfigurationStorage, HasExternalIntegration
 from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvaluator
 from core.python_expression_dsl.parser import DSLParser
-from core.util.datetime_helpers import (
-    datetime_utc,
-    utc_now,
-)
+from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.problem_detail import ProblemDetail
 from tests.saml import fixtures
 from tests.saml.controller_test import ControllerTest

@@ -1,35 +1,25 @@
+from datetime import timedelta
 from functools import wraps
-import flask
-from flask import (
-    Response,
-    redirect,
-    make_response
-)
-import os
 
+import flask
+from flask import (make_response, redirect, Response)
+
+from api.admin.config import Configuration as AdminClientConfig
 from api.app import app
 from api.config import Configuration
-
-from core.util.problem_detail import ProblemDetail
+from api.routes import (allows_library, has_library, library_route)
 from core.app_server import returns_problem_detail
+from core.local_analytics_provider import LocalAnalyticsProvider
 from core.model import (
     ConfigurationSetting,
-    Library,
 )
-
-from .controller import setup_admin_controllers
+from core.util.problem_detail import ProblemDetail
+from .controller import (
+    setup_admin_controllers,
+)
 from .templates import (
     admin_sign_in_again as sign_in_again_template,
 )
-from api.routes import (
-    has_library,
-    library_route,
-    allows_library
-)
-
-import urllib.request, urllib.parse, urllib.error
-from datetime import timedelta
-from core.local_analytics_provider import LocalAnalyticsProvider
 
 # An admin's session will expire after this amount of time and
 # the admin will have to log in again.
@@ -650,14 +640,9 @@ def admin_view(collection=None, book=None, etc=None, **kwargs):
 def admin_base(**kwargs):
     return redirect(app.manager.url_for('admin_view'))
 
-@app.route('/admin/static/circulation-web.js')
+# This path is used only in debug mode to serve frontend assets.
+@app.route('/admin/static/<filename>')
 @returns_problem_detail
-def admin_js():
-    directory = os.path.join(os.path.abspath(os.path.dirname(__file__)), "node_modules", "simplified-circulation-web", "dist")
-    return app.manager.static_files.static_file(directory, "circulation-web.js")
+def admin_static_file(filename):
+    return app.manager.static_files.static_file(AdminClientConfig.static_files_directory(), filename)
 
-@app.route('/admin/static/circulation-web.css')
-@returns_problem_detail
-def admin_css():
-    directory = os.path.join(os.path.abspath(os.path.dirname(__file__)), "node_modules", "simplified-circulation-web", "dist")
-    return app.manager.static_files.static_file(directory, "circulation-web.css")

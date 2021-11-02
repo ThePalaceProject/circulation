@@ -1,44 +1,26 @@
+import hashlib
+import hmac
+import html
+import itertools
 import json
+import logging
+import re
+import time
+import urllib.parse
+from datetime import datetime, timedelta
 from io import (
     BytesIO,
     StringIO,
 )
-import itertools
-from datetime import datetime, timedelta
-import hashlib
-import hmac
-import itertools
-import logging
-import os
-import re
-import urllib.parse
-import time
 
 import dateutil.parser
 from flask_babel import lazy_gettext as _
 from lxml import etree
 from pymarc import parse_xml_to_array
-from sqlalchemy import or_
-from sqlalchemy.orm.session import Session
 
-from .web_publication_manifest import (
-    FindawayManifest,
-    SpineItem,
-)
-from .circulation import (
-    FulfillmentInfo,
-    HoldInfo,
-    LoanInfo,
-    BaseCirculationAPI,
-)
-from .selftest import (
-    HasSelfTests,
-    SelfTestResult,
-)
+from core.analytics import Analytics
 from core.config import (
-    Configuration,
     CannotLoadConfiguration,
-    temp_config,
 )
 from core.coverage import (
     BibliographicCoverageProvider
@@ -65,18 +47,14 @@ from core.model import (
     ExternalIntegration,
     get_one,
     get_one_or_create,
-    Hold,
     Hyperlink,
     Identifier,
-    Library,
     LicensePool,
-    Loan,
     Measurement,
     Representation,
     Session,
     Subject,
     Timestamp,
-    WorkCoverageRecord,
 )
 from core.monitor import (
     CollectionMonitor,
@@ -85,34 +63,33 @@ from core.monitor import (
 )
 from core.scripts import RunCollectionMonitorScript
 from core.testing import DatabaseTest
-from core.util.xmlparser import XMLParser
-from core.util.http import (
-    BadResponseException,
-    HTTP
-)
-
-from .circulation_exceptions import *
-from core.analytics import Analytics
-
-from core.metadata_layer import (
-    ContributorData,
-    CirculationData,
-    Metadata,
-    LinkData,
-    IdentifierData,
-    FormatData,
-    MeasurementData,
-    ReplacementPolicy,
-    SubjectData,
-)
 from core.util.datetime_helpers import (
     datetime_utc,
     strptime_utc,
     to_utc,
     utc_now,
 )
+from core.util.http import (
+    HTTP
+)
 from core.util.string_helpers import base64
-from core.testing import DatabaseTest
+from core.util.xmlparser import XMLParser
+from .circulation import (
+    FulfillmentInfo,
+    HoldInfo,
+    LoanInfo,
+    BaseCirculationAPI,
+)
+from .circulation_exceptions import *
+from .selftest import (
+    HasSelfTests,
+    SelfTestResult,
+)
+from .web_publication_manifest import (
+    FindawayManifest,
+    SpineItem,
+)
+
 
 class BibliothecaAPI(BaseCirculationAPI, HasSelfTests):
 
@@ -693,6 +670,8 @@ class ItemListParser(XMLParser):
 
     NAMESPACES = {}
 
+    unescape_entity_references = html.unescape
+
     def parse(self, xml):
         for i in self.process_all(xml, "//Item"):
             yield i
@@ -720,6 +699,11 @@ class ItemListParser(XMLParser):
         contributors = []
         if not string:
             return contributors
+
+        # Contributors may have two levels of entity reference escaping,
+        # one of which will have already been handled by the initial parse.
+        # We handle the potential need for a second unescaping here.
+        string = cls.unescape_entity_references(string)
 
         for sort_name in string.split(';'):
             sort_name = cls.parenthetical.sub("", sort_name.strip())

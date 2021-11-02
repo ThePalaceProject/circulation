@@ -8,14 +8,18 @@ bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..")
 sys.path.append(os.path.abspath(package_dir))
 
+from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
+
 from api.proquest.importer import ProQuestOPDS2Importer, ProQuestOPDS2ImportMonitor
 from api.proquest.scripts import ProQuestOPDS2ImportScript
 from core.model import ExternalIntegration
+from core.opds2_import import RWPMManifestParser
 
 import_script = ProQuestOPDS2ImportScript(
     importer_class=ProQuestOPDS2Importer,
     monitor_class=ProQuestOPDS2ImportMonitor,
-    protocol=ExternalIntegration.PROQUEST
+    protocol=ExternalIntegration.PROQUEST,
+    parser=RWPMManifestParser(OPDS2FeedParserFactory()),
 )
 
 import_script.run()

@@ -52,11 +52,11 @@ class Configuration(CoreConfiguration):
     # service for a library's inclusion in the SimplyE library
     # registry.
     CUSTOM_TOS_HREF = "tos_href"
-    DEFAULT_TOS_HREF = "https://librarysimplified.org/simplyetermsofservice2/"
+    DEFAULT_TOS_HREF = "https://thepalaceproject.org/terms-of-service/"
 
     # Custom text for the link defined in CUSTOM_TOS_LINK.
     CUSTOM_TOS_TEXT = "tos_text"
-    DEFAULT_TOS_TEXT = "Terms of Service for presenting e-reading materials through NYPL's SimplyE mobile app"
+    DEFAULT_TOS_TEXT = "Terms of Service for presenting content through the Palace client applications"
 
     # A short description of the library, used in its Authentication
     # for OPDS document.
@@ -78,7 +78,7 @@ class Configuration(CoreConfiguration):
     # The name of the per-library setting that sets the default email
     # address to use when notifying patrons of changes.
     DEFAULT_NOTIFICATION_EMAIL_ADDRESS = "default_notification_email_address"
-    STANDARD_NOREPLY_EMAIL_ADDRESS = "noreply@librarysimplified.org"
+    STANDARD_NOREPLY_EMAIL_ADDRESS = "noreply@thepalaceproject.org"
 
     # The name of the per-library setting that sets the email address
     # of the Designated Agent for copyright complaints
@@ -126,6 +126,8 @@ class Configuration(CoreConfiguration):
 
     # The library-wide logo setting.
     LOGO = "logo"
+    # Maximum height and width for the saved logo image
+    LOGO_MAX_DIMENSION = 135
 
     # Settings for geographic areas associated with the library.
     LIBRARY_FOCUS_AREA = "focus_area"
@@ -367,7 +369,13 @@ class Configuration(CoreConfiguration):
             "key": LOGO,
             "label": _("Logo image"),
             "type": "image",
-            "description": _("The image must be in GIF, PNG, or JPG format, approximately square, no larger than 135x135 pixels, and look good on a white background."),
+            "description": _(
+                "The image should be in GIF, PNG, or JPG format, approximately square, no larger than "
+                f"{LOGO_MAX_DIMENSION}x{LOGO_MAX_DIMENSION} pixels, "
+                "and look good on a light or dark mode background. "
+                "Larger images will be accepted, but scaled down (maintaining aspect ratio) such that "
+                f"the longest dimension does not excede {LOGO_MAX_DIMENSION} pixels."
+            ),
             "category": "Client Interface Customization",
             "level": CoreConfiguration.ALL_ACCESS
         },

@@ -1,6 +1,7 @@
 import logging
 import re
 from enum import Enum
+
 import six
 from flask_babel import lazy_gettext as _
 

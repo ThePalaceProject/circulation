@@ -1,0 +1,280 @@
+name: Test Circulation & Build Docker Images
+on: [push, pull_request]
+env:
+  POSTGRES_USER: simplified_test
+  POSTGRES_PASSWORD: test
+  POSTGRES_DB: simplified_circulation_test
+  # Don't push the Docker image if the `NO_DOCKER_IMAGE` secret is set.
+  IMAGE_PUSH_ENABLED: ${{ secrets.NO_DOCKER_IMAGE == null }}
+
+jobs:
+  test-circulation:
+    name: Run Circulation Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [3.6, 3.7, 3.8, 3.9]
+    # We want to run on external PRs, but not on our own internal PRs as they'll be run
+    # by the push to the branch. This prevents duplicated runs on internal PRs.
+    # Some discussion of this here:
+    # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Apt Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libxmlsec1-dev libxml2-dev
+
+      - name: Install Python Packages
+        run: |
+          pip install --upgrade pip
+          pip install tox tox-gh-actions tox-docker
+
+      - name: Run Circulation Tests
+        run: tox
+
+
+  test-core:
+    name: Run Core Tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [3.6, 3.7, 3.8, 3.9]
+    # We want to run on external PRs, but not on our own internal PRs as they'll be run
+    # by the push to the branch. This prevents duplicated runs on internal PRs.
+    # Some discussion of this here:
+    # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install tox tox-gh-actions tox-docker
+
+      - name: Run Core Tests
+        run: tox
+        working-directory: core
+
+
+  build-docker-exec:
+    name: Build and push circ-exec docker image
+    runs-on: ubuntu-latest
+    needs: [test-circulation, test-core]
+
+    # Only build docker containers on a branch push. PRs are run in the context of the repository
+    # they are made from, so they don't have the secrets necessary to push to docker hub.
+    if: github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate tags for circ-exec image
+        id: exec-tags
+        uses: docker/metadata-action@v3
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/circ-exec
+          tags: |
+            type=semver,pattern={{major}}.{{minor}},priority=10
+            type=semver,pattern={{version}},priority=20
+            type=ref,event=branch,priority=30
+            type=sha,priority=40
+
+      - name: Build & push circ-exec image
+        uses: docker/build-push-action@v2
+        with:
+          context: ./docker
+          file: ./docker/Dockerfile.exec
+          push: ${{ env.IMAGE_PUSH_ENABLED }}
+          tags: ${{ steps.exec-tags.outputs.tags }}
+          build-args: |
+            repo=${{ github.repository }}
+            version=${{ github.sha }}
+
+
+  build-docker-scripts:
+    name: Build and push circ-scripts docker image
+    runs-on: ubuntu-latest
+    needs: [test-circulation, test-core]
+
+    # Only build docker containers on a branch push. PRs are run in the context of the repository
+    # they are made from, so they don't have the secrets necessary to push to docker hub.
+    if: github.event_name == 'push'
+
+    services:
+      postgres:
+        image: postgres:12
+        env:
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build circ-scripts image
+        uses: docker/build-push-action@v2
+        with:
+          context: ./docker
+          file: ./docker/Dockerfile.scripts
+          load: true
+          tags: circ
+          build-args: |
+            repo=${{ github.repository }}
+            version=${{ github.sha }}
+
+      - name: Start circ-scripts docker container
+        run: >
+          docker run --rm --name circ -d
+          --network ${{job.services.postgres.network}}
+          -e SIMPLIFIED_PRODUCTION_DATABASE="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
+          circ
+
+      - name: Run circ-scripts tests
+        run: ./docker/ci/test_scripts.sh
+
+      - name: Stop circ-scripts docker container
+        if: always()
+        run: docker stop circ
+
+      - name: Generate tags for circ-scripts image
+        id: scripts-tags
+        uses: docker/metadata-action@v3
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/circ-scripts
+          tags: |
+            type=semver,pattern={{major}}.{{minor}},priority=10
+            type=semver,pattern={{version}},priority=20
+            type=ref,event=branch,priority=30
+            type=sha,priority=40
+
+      - name: Push circ-scripts image
+        uses: docker/build-push-action@v2
+        with:
+          context: ./docker
+          file: ./docker/Dockerfile.scripts
+          push: ${{ env.IMAGE_PUSH_ENABLED }}
+          tags: ${{ steps.scripts-tags.outputs.tags }}
+          build-args: |
+            repo=${{ github.repository }}
+            version=${{ github.sha }}
+
+
+  build-docker-webapp:
+    name: Build and push circ-webapp docker image
+    runs-on: ubuntu-latest
+    needs: [test-circulation, test-core]
+
+    # Only build docker containers on a branch push. PRs are run in the context of the repository
+    # they are made from, so they don't have the secrets necessary to push to docker hub.
+    if: github.event_name == 'push'
+
+    services:
+      postgres:
+        image: postgres:12
+        env:
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build circ-webapp image
+        uses: docker/build-push-action@v2
+        with:
+          context: ./docker
+          file: ./docker/Dockerfile.webapp
+          load: true
+          tags: circ
+          build-args: |
+            repo=${{ github.repository }}
+            version=${{ github.sha }}
+
+      - name: Start circ-webapp docker container
+        run: >
+          docker run --rm --name circ -p 8000:80 -d
+          --network ${{job.services.postgres.network}}
+          -e SIMPLIFIED_PRODUCTION_DATABASE="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
+          circ
+
+      - name: Run circ-webapp tests
+        run: ./docker/ci/test_webapp.sh
+
+      - name: Stop circ-webapp docker container
+        if: always()
+        run: docker stop circ
+
+      - name: Generate tags for circ-webapp image
+        id: webapp-tags
+        uses: docker/metadata-action@v3
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/circ-webapp
+          tags: |
+            type=semver,pattern={{major}}.{{minor}},priority=10
+            type=semver,pattern={{version}},priority=20
+            type=ref,event=branch,priority=30
+            type=sha,priority=40
+
+      - name: Push circ-webapp image
+        uses: docker/build-push-action@v2
+        with:
+          context: ./docker
+          file: ./docker/Dockerfile.webapp
+          push: ${{ env.IMAGE_PUSH_ENABLED }}
+          tags: ${{ steps.webapp-tags.outputs.tags }}
+          build-args: |
+            repo=${{ github.repository }}
+            version=${{ github.sha }}

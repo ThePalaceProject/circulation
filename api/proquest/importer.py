@@ -10,6 +10,7 @@ import webpub_manifest_parser.opds2.ast as opds2_ast
 from flask_babel import lazy_gettext as _
 from requests import HTTPError
 from sqlalchemy import or_
+from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 from webpub_manifest_parser.utils import encode
 
 from api.circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
@@ -41,8 +42,9 @@ from core.model.configuration import (
     ExternalIntegration,
     HasExternalIntegration,
 )
-from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, parse_feed
+from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, RWPMManifestParser
 from core.opds_import import OPDSImporter
+from core.util.datetime_helpers import utc_now
 
 MISSING_AFFILIATION_ID = BaseError(
     _(
@@ -182,6 +184,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         self,
         db,
         collection,
+        parser=None,
         data_source_name=None,
         identifier_mapping=None,
         http_get=None,
@@ -199,6 +202,9 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
             LicensePools created by this OPDS2Import class will be associated with the given Collection.
             If this is None, no LicensePools will be created -- only Editions.
         :type collection: Collection
+
+        :param parser: Feed parser
+        :type parser: RWPMManifestParser
 
         :param data_source_name: Name of the source of this OPDS feed.
             All Editions created by this import will be associated with this DataSource.
@@ -226,6 +232,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         super(ProQuestOPDS2Importer, self).__init__(
             db,
             collection,
+            parser if parser else RWPMManifestParser(OPDS2FeedParserFactory()),
             data_source_name,
             identifier_mapping,
             http_get,
@@ -549,6 +556,21 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
 
         return media_types_and_drm_scheme
 
+    def _is_identifier_allowed(self, identifier: Identifier) -> bool:
+        """Check the identifier and return a boolean value indicating whether CM can import it.
+
+        NOTE: Currently, this method hard codes allowed identifier types.
+        The next PR will add an additional configuration setting allowing to override this behaviour
+        and configure allowed identifier types in the CM Admin UI.
+
+        :param identifier: Identifier object
+        :type identifier: Identifier
+
+        :return: Boolean value indicating whether CM can import the identifier
+        :rtype: bool
+        """
+        return identifier.type == Identifier.PROQUEST_ID
+
     def _parse_identifier(self, identifier):
         """Parse the identifier and return an Identifier object representing it.
 
@@ -586,7 +608,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         :return: List of patron's loans
         :rtype: List[LoanInfo]
         """
-        now = datetime.datetime.utcnow()
+        now = utc_now()
         loans = (
             self._db.query(Loan)
             .join(LicensePool)
@@ -649,7 +671,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
                 self._get_or_create_proquest_token(patron, configuration)
 
                 loan_period = self.collection.default_loan_period(patron.library)
-                start_time = datetime.datetime.utcnow()
+                start_time = utc_now()
                 end_time = start_time + datetime.timedelta(days=loan_period)
                 loan = LoanInfo(
                     licensepool.collection,
@@ -713,7 +735,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
                         content_expires=None,
                     )
                 else:
-                    now = datetime.datetime.utcnow()
+                    now = utc_now()
                     expires_in = (token.expires - now).total_seconds()
                     token_document = dict(
                         token_type="Bearer",
@@ -766,6 +788,7 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
         db,
         collection,
         import_class,
+        parser,
         force_reimport=False,
         process_removals=False,
         **import_class_kwargs
@@ -784,6 +807,9 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
         :param import_class: Class containing the import logic
         :type import_class: Type
 
+        :param parser: Feed parser
+        :type parser: RWPMManifestParser
+
         :param force_reimport: Boolean value indicating whether the import process must be started from scratch
         :type force_reimport: bool
 
@@ -792,6 +818,11 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
             that are no longer present in the ProQuest feed from the CM's catalog
         :type process_removals: bool
         """
+        if not isinstance(parser, RWPMManifestParser):
+            raise ValueError("Argument 'parser' must be an instance of {0}".format(RWPMManifestParser))
+
+        import_class_kwargs["parser"] = parser
+
         super(ProQuestOPDS2ImportMonitor, self).__init__(
             db, collection, import_class, force_reimport, **import_class_kwargs
         )
@@ -800,6 +831,7 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
         self._feeds = None
         self._client = self._client_factory.create(self)
         self._process_removals = process_removals
+        self._parser = parser
 
         self._logger = logging.getLogger(__name__)
 
@@ -901,7 +933,8 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
         ) as feed_page_file_handle:
             feed = feed_page_file_handle.read()
 
-        feed = parse_feed(feed, silent=False)
+        parser_result = self._parser.parse_manifest(feed)
+        feed = parser_result.root
 
         self._logger.info("Page # {0}. Finished parsing the feed".format(page))
 

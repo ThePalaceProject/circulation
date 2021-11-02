@@ -1,5 +1,6 @@
 import logging
 
+import dateutil.parser
 from enum import Enum
 from lxml import etree
 
@@ -19,7 +20,7 @@ from core.model import (
     Representation,
     Subject,
     LicensePool, EditionConstants)
-from core.util.datetime_helpers import strptime_utc
+from core.util.datetime_helpers import to_utc
 from core.util.xmlparser import XMLParser
 
 
@@ -222,7 +223,13 @@ class ONIXExtractor(object):
             publishing_date = parser.text_of_optional_subtag(record, 'publishingdetail/publishingdate/b306')
             issued = None
             if publishing_date:
-                issued = strptime_utc(publishing_date, "%Y%m%d")
+                issued = dateutil.parser.isoparse(publishing_date)
+                if issued.tzinfo is None:
+                    cls._logger.warning(
+                        "Publishing date {} does not contain timezone information. Assuming UTC."
+                        .format(publishing_date)
+                    )
+                issued = to_utc(issued)
 
             identifier_tags = parser._xpath(record, 'productidentifier')
             identifiers = []
@@ -240,13 +247,16 @@ class ONIXExtractor(object):
             for tag in subject_tags:
                 type = parser.text_of_subtag(tag, 'b067')
                 if type in cls.SUBJECT_TYPES:
-                    subjects.append(
-                        SubjectData(
-                            cls.SUBJECT_TYPES[type],
-                            parser.text_of_subtag(tag, 'b069'),
-                            weight=weight
+                    b069 = parser.text_of_optional_subtag(tag, 'b069')
+
+                    if b069:
+                        subjects.append(
+                            SubjectData(
+                                cls.SUBJECT_TYPES[type],
+                                b069,
+                                weight=weight
+                            )
                         )
-                    )
 
             audience_tags = parser._xpath(record, 'descriptivedetail/audience/b204')
             audiences = []
@@ -260,15 +270,28 @@ class ONIXExtractor(object):
                         )
                     )
 
+            # TODO: We don't handle ONIX unnamed and alternatively named contributors.
             contributor_tags = parser._xpath(record, 'descriptivedetail/contributor')
             contributors = []
             for tag in contributor_tags:
                 type = parser.text_of_subtag(tag, 'b035')
                 if type in cls.CONTRIBUTOR_TYPES:
-                    display_name = parser.text_of_subtag(tag, 'b036')
-                    sort_name = parser.text_of_optional_subtag(tag, 'b037')
-                    family_name = parser.text_of_optional_subtag(tag, 'b040')
+                    person_name_display = parser.text_of_optional_subtag(tag, 'b036')
+                    person_name_inverted = parser.text_of_optional_subtag(tag, 'b037')
+                    corp_name_display = parser.text_of_optional_subtag(tag, 'b047')
+                    corp_name_inverted = parser.text_of_optional_subtag(tag, 'x443')
                     bio = parser.text_of_optional_subtag(tag, 'b044')
+                    family_name = None
+                    if person_name_display or person_name_inverted:
+                        display_name = person_name_display
+                        sort_name = person_name_inverted
+                        family_name = parser.text_of_optional_subtag(tag, 'b040')
+                    elif corp_name_display or corp_name_inverted:
+                        display_name = corp_name_display
+                        # Sort form for corporate name might just be the display name
+                        sort_name = corp_name_inverted or corp_name_display
+                    else:
+                        sort_name = display_name = None
                     contributors.append(ContributorData(sort_name=sort_name,
                                                         display_name=display_name,
                                                         family_name=family_name,

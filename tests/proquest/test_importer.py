@@ -10,8 +10,8 @@ from freezegun import freeze_time
 from mock import ANY, MagicMock, call, create_autospec, patch
 from parameterized import parameterized
 from requests import HTTPError
+from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
-import core
 from api.authenticator import BaseSAMLAuthenticationProvider
 from api.circulation import BaseCirculationAPI
 from api.circulation_exceptions import CannotFulfill, CannotLoan
@@ -34,7 +34,6 @@ from api.saml.metadata.model import (
     SAMLSubject,
     SAMLSubjectJSONEncoder,
 )
-from core import opds2_import
 from core.metadata_layer import LinkData
 from core.model import (
     Collection,
@@ -52,7 +51,9 @@ from core.model.configuration import (
     ConfigurationStorage,
     HasExternalIntegration,
 )
+from core.opds2_import import RWPMManifestParser
 from core.testing import DatabaseTest
+from core.util.datetime_helpers import utc_now, datetime_utc
 from tests.proquest import fixtures
 
 
@@ -71,7 +72,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
         )
 
         self._proquest_patron = self._patron()
-        self._loan_start_date = datetime.datetime(2020, 1, 1)
+        self._loan_start_date = datetime_utc(2020, 1, 1)
         self._loan_end_date = self._loan_start_date + datetime.timedelta(
             days=Collection.STANDARD_DEFAULT_LOAN_PERIOD
         )
@@ -98,7 +99,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
         self._configuration_storage = ConfigurationStorage(integration_owner)
         self._configuration_factory = ConfigurationFactory()
 
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_patron_activity(self):
         # We want to test that ProQuestOPDS2Importer.patron_activity returns actual loans made by patrons.
 
@@ -108,7 +109,11 @@ class TestProQuestOPDS2Importer(DatabaseTest):
         credential_manager_mock.lookup_proquest_token = MagicMock(
             return_value=proquest_token
         )
-        importer = ProQuestOPDS2Importer(self._db, self._proquest_collection)
+        importer = ProQuestOPDS2Importer(
+            self._db,
+            self._proquest_collection,
+            RWPMManifestParser(OPDS2FeedParserFactory()),
+        )
         loan, _ = self._proquest_license_pool.loan_to(self._proquest_patron)
 
         # Act
@@ -124,7 +129,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
         assert None == remote_loan_info.fulfillment_info
         assert None == remote_loan_info.external_identifier
 
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_checkout_lookups_for_existing_token(self):
         # We want to test that checkout operation always is always preceded by
         # checking for a ProQuest JWT bearer token.
@@ -143,7 +148,11 @@ class TestProQuestOPDS2Importer(DatabaseTest):
             credential_manager_constructor_mock.return_value = credential_manager_mock
 
             # Act
-            importer = ProQuestOPDS2Importer(self._db, self._proquest_collection)
+            importer = ProQuestOPDS2Importer(
+                self._db,
+                self._proquest_collection,
+                RWPMManifestParser(OPDS2FeedParserFactory()),
+            )
             loan = importer.checkout(
                 self._proquest_patron,
                 "pin",
@@ -157,9 +166,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
             assert self._proquest_license_pool == loan.license_pool(self._db)
             assert self._proquest_data_source.name == loan.data_source_name
             assert self._proquest_license_pool.identifier.type == loan.identifier_type
-            assert (
-                None ==
-                loan.external_identifier)
+            assert loan.external_identifier is None
             assert self._loan_start_date == loan.start_date
             assert self._loan_end_date == loan.end_date
 
@@ -169,7 +176,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
                 self._db, self._proquest_patron
             )
 
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_checkout_creates_new_token_if_there_is_none(self):
         # We want to test that checkout operation without an existing ProQuest JWT bearer token leads to the following:
         # 1. Circulation Manager (CM) lookups for an existing token and doesn't find any.
@@ -204,7 +211,11 @@ class TestProQuestOPDS2Importer(DatabaseTest):
             credential_manager_constructor_mock.return_value = credential_manager_mock
 
             # Act
-            importer = ProQuestOPDS2Importer(self._db, self._proquest_collection)
+            importer = ProQuestOPDS2Importer(
+                self._db,
+                self._proquest_collection,
+                RWPMManifestParser(OPDS2FeedParserFactory()),
+            )
             loan = importer.checkout(
                 self._proquest_patron,
                 "pin",
@@ -218,9 +229,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
             assert self._proquest_license_pool == loan.license_pool(self._db)
             assert self._proquest_data_source.name == loan.data_source_name
             assert self._proquest_license_pool.identifier.type == loan.identifier_type
-            assert (
-                None ==
-                loan.external_identifier)
+            assert loan.external_identifier is None
             assert self._loan_start_date == loan.start_date
             assert self._loan_end_date == loan.end_date
 
@@ -287,7 +296,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
             ),
         ]
     )
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_checkout_creates_new_token_using_affiliation_id_from_custom_saml_attribute(
         self, _, custom_affiliation_attributes
     ):
@@ -359,7 +368,11 @@ class TestProQuestOPDS2Importer(DatabaseTest):
                 )
 
                 # Act
-                importer = ProQuestOPDS2Importer(self._db, self._proquest_collection)
+                importer = ProQuestOPDS2Importer(
+                    self._db,
+                    self._proquest_collection,
+                    RWPMManifestParser(OPDS2FeedParserFactory()),
+                )
                 loan = importer.checkout(
                     self._proquest_patron,
                     "pin",
@@ -372,10 +385,10 @@ class TestProQuestOPDS2Importer(DatabaseTest):
                 assert self._proquest_collection == loan.collection(self._db)
                 assert self._proquest_license_pool == loan.license_pool(self._db)
                 assert self._proquest_data_source.name == loan.data_source_name
-                assert self._proquest_license_pool.identifier.type == loan.identifier_type
                 assert (
-                    None ==
-                    loan.external_identifier)
+                    self._proquest_license_pool.identifier.type == loan.identifier_type
+                )
+                assert loan.external_identifier is None
                 assert self._loan_start_date == loan.start_date
                 assert self._loan_end_date == loan.end_date
 
@@ -408,7 +421,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
                     proquest_token,
                 )
 
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_checkout_raises_cannot_loan_error_if_it_cannot_get_affiliation_id(self):
         # We want to test that checkout operation returns api.proquest.importer.MISSING_AFFILIATION_ID
         # when it cannot get the patron's affiliation ID.
@@ -425,7 +438,11 @@ class TestProQuestOPDS2Importer(DatabaseTest):
             credential_manager_constructor_mock.return_value = credential_manager_mock
 
             # Act
-            importer = ProQuestOPDS2Importer(self._db, self._proquest_collection)
+            importer = ProQuestOPDS2Importer(
+                self._db,
+                self._proquest_collection,
+                RWPMManifestParser(OPDS2FeedParserFactory()),
+            )
 
             with pytest.raises(CannotLoan):
                 importer.checkout(
@@ -449,7 +466,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
                 self._db, self._proquest_patron
             )
 
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_checkout_raises_cannot_loan_error_if_it_cannot_create_proquest_token(self):
         # We want to test that checkout operation returns api.proquest.importer.CANNOT_CREATE_PROQUEST_TOKEN
         # when it cannot create a ProQuest JWT bearer token using ProQuest API.
@@ -478,7 +495,11 @@ class TestProQuestOPDS2Importer(DatabaseTest):
             credential_manager_constructor_mock.return_value = credential_manager_mock
 
             # Act
-            importer = ProQuestOPDS2Importer(self._db, self._proquest_collection)
+            importer = ProQuestOPDS2Importer(
+                self._db,
+                self._proquest_collection,
+                RWPMManifestParser(OPDS2FeedParserFactory()),
+            )
             with pytest.raises(CannotLoan):
                 importer.checkout(
                     self._proquest_patron,
@@ -512,7 +533,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
             )
 
     @parameterized.expand([("default_value", None), ("custom_value_set_by_admin", 10)])
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_checkout_uses_loan_length_configuration_setting(self, _, loan_length=None):
         # We want to test that checkout operation always uses
         # loan length configuration setting BaseCirculationAPI.DEFAULT_LOAN_DURATION_SETTING.
@@ -560,7 +581,11 @@ class TestProQuestOPDS2Importer(DatabaseTest):
             credential_manager_constructor_mock.return_value = credential_manager_mock
 
             # Act
-            importer = ProQuestOPDS2Importer(self._db, self._proquest_collection)
+            importer = ProQuestOPDS2Importer(
+                self._db,
+                self._proquest_collection,
+                RWPMManifestParser(OPDS2FeedParserFactory()),
+            )
             loan = importer.checkout(
                 self._proquest_patron,
                 "pin",
@@ -574,9 +599,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
             assert self._proquest_license_pool == loan.license_pool(self._db)
             assert self._proquest_data_source.name == loan.data_source_name
             assert self._proquest_license_pool.identifier.type == loan.identifier_type
-            assert (
-                None ==
-                loan.external_identifier)
+            assert loan.external_identifier is None
             assert self._loan_start_date == loan.start_date
             assert loan_end_date == loan.end_date
 
@@ -609,7 +632,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
                 proquest_token,
             )
 
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_fulfil_lookups_for_existing_token(self):
         # We want to test that fulfil operation always is always preceded by
         # checking for a ProQuest JWT bearer token.
@@ -618,7 +641,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
 
         # Arrange
         proquest_token = "1234567890"
-        proquest_token_expires_in = datetime.datetime.utcnow() + datetime.timedelta(
+        proquest_token_expires_in = utc_now() + datetime.timedelta(
             hours=1
         )
         proquest_credential = Credential(
@@ -646,7 +669,11 @@ class TestProQuestOPDS2Importer(DatabaseTest):
             credential_manager_constructor_mock.return_value = credential_manager_mock
 
             # Act
-            importer = ProQuestOPDS2Importer(self._db, self._proquest_collection)
+            importer = ProQuestOPDS2Importer(
+                self._db,
+                self._proquest_collection,
+                RWPMManifestParser(OPDS2FeedParserFactory()),
+            )
             fulfilment_info = importer.fulfill(
                 self._proquest_patron,
                 "pin",
@@ -660,27 +687,24 @@ class TestProQuestOPDS2Importer(DatabaseTest):
             assert self._proquest_license_pool == fulfilment_info.license_pool(self._db)
             assert self._proquest_data_source.name == fulfilment_info.data_source_name
             assert (
-                self._proquest_license_pool.identifier.type ==
-                fulfilment_info.identifier_type)
+                self._proquest_license_pool.identifier.type
+                == fulfilment_info.identifier_type
+            )
 
             # Make sure that the fulfilment info doesn't contain a link but instead contains a JSON document
             # which is used to pass the book's link and the ProQuest token to the client app.
-            assert None == fulfilment_info.content_link
+            assert fulfilment_info.content_link is None
             assert DeliveryMechanism.BEARER_TOKEN == fulfilment_info.content_type
-            assert True == (fulfilment_info.content is not None)
+            assert fulfilment_info.content is not None
 
             token_document = json.loads(fulfilment_info.content)
             assert "Bearer" == token_document["token_type"]
             assert proquest_token == token_document["access_token"]
             assert (
-                (
-                    proquest_token_expires_in - datetime.datetime.utcnow()
-                ).total_seconds() ==
-                token_document["expires_in"])
+                proquest_token_expires_in - utc_now()
+            ).total_seconds() == token_document["expires_in"]
             assert drm_free_book.link == token_document["location"]
-            assert (
-                DeliveryMechanism.BEARER_TOKEN ==
-                fulfilment_info.content_type)
+            assert DeliveryMechanism.BEARER_TOKEN == fulfilment_info.content_type
             assert proquest_token_expires_in == fulfilment_info.content_expires
 
             # Assert than ProQuestOPDS2Importer correctly created an instance of ProQuestAPIClient.
@@ -700,7 +724,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
                 self._proquest_license_pool.identifier.identifier,
             )
 
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_fulfil_creates_new_token_if_there_is_none(self):
         # We want to test that fulfil operation without an existing ProQuest JWT bearer token leads to the following:
         # 1. Circulation Manager (CM) lookups for an existing token and doesn't find any.
@@ -738,7 +762,11 @@ class TestProQuestOPDS2Importer(DatabaseTest):
             credential_manager_constructor_mock.return_value = credential_manager_mock
 
             # Act
-            importer = ProQuestOPDS2Importer(self._db, self._proquest_collection)
+            importer = ProQuestOPDS2Importer(
+                self._db,
+                self._proquest_collection,
+                RWPMManifestParser(OPDS2FeedParserFactory()),
+            )
             fulfilment_info = importer.fulfill(
                 self._proquest_patron,
                 "pin",
@@ -752,14 +780,16 @@ class TestProQuestOPDS2Importer(DatabaseTest):
             assert self._proquest_license_pool == fulfilment_info.license_pool(self._db)
             assert self._proquest_data_source.name == fulfilment_info.data_source_name
             assert (
-                self._proquest_license_pool.identifier.type ==
-                fulfilment_info.identifier_type)
-            assert None == fulfilment_info.content_link
+                self._proquest_license_pool.identifier.type
+                == fulfilment_info.identifier_type
+            )
+            assert fulfilment_info.content_link is None
             assert (
-                self._proquest_delivery_mechanism.delivery_mechanism.content_type ==
-                fulfilment_info.content_type)
+                self._proquest_delivery_mechanism.delivery_mechanism.content_type
+                == fulfilment_info.content_type
+            )
             assert book.content == fulfilment_info.content
-            assert None == fulfilment_info.content_expires
+            assert fulfilment_info.content_expires is None
 
             # Assert than ProQuestOPDS2Importer correctly created an instance of ProQuestAPIClient.
             api_client_factory_mock.create.assert_called_once_with(importer)
@@ -801,7 +831,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
                 self._proquest_license_pool.identifier.identifier,
             )
 
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_fulfil_raises_cannot_fulfil_error_if_it_cannot_get_affiliation_id(self):
         # We want to test that fulfil operation returns api.proquest.importer.MISSING_AFFILIATION_ID
         # when it cannot get the patron's affiliation ID.
@@ -819,7 +849,11 @@ class TestProQuestOPDS2Importer(DatabaseTest):
             credential_manager_constructor_mock.return_value = credential_manager_mock
 
             # Act
-            importer = ProQuestOPDS2Importer(self._db, self._proquest_collection)
+            importer = ProQuestOPDS2Importer(
+                self._db,
+                self._proquest_collection,
+                RWPMManifestParser(OPDS2FeedParserFactory()),
+            )
 
             with pytest.raises(CannotFulfill):
                 importer.fulfill(
@@ -844,7 +878,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
                 ProQuestOPDS2ImporterConfiguration.DEFAULT_AFFILIATION_ATTRIBUTES,
             )
 
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_fulfil_raises_cannot_fulfil_error_if_it_cannot_create_proquest_token(self):
         # We want to test that fulfil operation returns api.proquest.importer.CANNOT_CREATE_PROQUEST_TOKEN
         # when it cannot create a ProQuest JWT bearer token using ProQuest API.
@@ -873,7 +907,11 @@ class TestProQuestOPDS2Importer(DatabaseTest):
             credential_manager_constructor_mock.return_value = credential_manager_mock
 
             # Act
-            importer = ProQuestOPDS2Importer(self._db, self._proquest_collection)
+            importer = ProQuestOPDS2Importer(
+                self._db,
+                self._proquest_collection,
+                RWPMManifestParser(OPDS2FeedParserFactory()),
+            )
 
             with pytest.raises(CannotFulfill):
                 importer.fulfill(
@@ -904,7 +942,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
                 self._db, affiliation_id
             )
 
-    @freeze_time("2020-01-01 00:00:00")
+    @freeze_time("2020-01-01 00:00:00+00:00")
     def test_fulfil_refreshes_expired_token(self):
         # By default ProQuest JWT bearer tokens should be valid for 1 hour but
         # since they are controlled by ProQuest we cannot be sure that they will not change this setting.
@@ -919,13 +957,13 @@ class TestProQuestOPDS2Importer(DatabaseTest):
         affiliation_id = "12345"
         expired_proquest_token = "1234567890"
         expired_proquest_token_expired_in = (
-            datetime.datetime.utcnow() - datetime.timedelta(minutes=1)
+            utc_now() - datetime.timedelta(minutes=1)
         )
         expired_proquest_token_credential = Credential(
             credential=expired_proquest_token, expires=expired_proquest_token_expired_in
         )
         new_proquest_token = "1234567890_"
-        new_proquest_token_expires_in = datetime.datetime.utcnow() + datetime.timedelta(
+        new_proquest_token_expires_in = utc_now() + datetime.timedelta(
             hours=1
         )
         new_proquest_token_credential = Credential(
@@ -967,7 +1005,11 @@ class TestProQuestOPDS2Importer(DatabaseTest):
             credential_manager_constructor_mock.return_value = credential_manager_mock
 
             # Act
-            importer = ProQuestOPDS2Importer(self._db, self._proquest_collection)
+            importer = ProQuestOPDS2Importer(
+                self._db,
+                self._proquest_collection,
+                RWPMManifestParser(OPDS2FeedParserFactory()),
+            )
             fulfilment_info = importer.fulfill(
                 self._proquest_patron,
                 "pin",
@@ -981,16 +1023,15 @@ class TestProQuestOPDS2Importer(DatabaseTest):
             assert self._proquest_license_pool == fulfilment_info.license_pool(self._db)
             assert self._proquest_data_source.name == fulfilment_info.data_source_name
             assert (
-                self._proquest_license_pool.identifier.type ==
-                fulfilment_info.identifier_type)
+                self._proquest_license_pool.identifier.type
+                == fulfilment_info.identifier_type
+            )
 
             # Make sure that fulfilment info contains content of the ACSM file not a link.
-            assert None == fulfilment_info.content_link
-            assert (
-                adobe_drm_protected_book.content_type ==
-                fulfilment_info.content_type)
+            assert fulfilment_info.content_link is None
+            assert adobe_drm_protected_book.content_type == fulfilment_info.content_type
             assert adobe_drm_protected_book.content == fulfilment_info.content
-            assert None == fulfilment_info.content_expires
+            assert fulfilment_info.content_expires is None
 
             # Assert than ProQuestOPDS2Importer correctly created an instance of ProQuestAPIClient.
             api_client_factory_mock.create.assert_called_once_with(importer)
@@ -1047,7 +1088,11 @@ class TestProQuestOPDS2Importer(DatabaseTest):
         # and generates LinkData for both, the full cover and thumbnail.
 
         # Act
-        importer = ProQuestOPDS2Importer(self._db, self._proquest_collection)
+        importer = ProQuestOPDS2Importer(
+            self._db,
+            self._proquest_collection,
+            RWPMManifestParser(OPDS2FeedParserFactory()),
+        )
 
         result = importer.extract_feed_data(fixtures.PROQUEST_RAW_FEED)
 
@@ -1055,9 +1100,9 @@ class TestProQuestOPDS2Importer(DatabaseTest):
         assert 2 == len(result)
         publication_metadata_dictionary = result[0]
 
-        assert (
-            True ==
-            (fixtures.PROQUEST_RAW_PUBLICATION_1_ID in publication_metadata_dictionary))
+        assert True == (
+            fixtures.PROQUEST_RAW_PUBLICATION_1_ID in publication_metadata_dictionary
+        )
         publication_metadata = publication_metadata_dictionary[
             fixtures.PROQUEST_RAW_PUBLICATION_1_ID
         ]
@@ -1065,13 +1110,15 @@ class TestProQuestOPDS2Importer(DatabaseTest):
         assert 1 == len(publication_metadata.links)
 
         [full_cover_link] = publication_metadata.links
-        assert True == isinstance(full_cover_link, LinkData)
+        assert isinstance(full_cover_link, LinkData)
         assert fixtures.PROQUEST_RAW_PUBLICATION_1_COVER_HREF == full_cover_link.href
         assert Hyperlink.IMAGE == full_cover_link.rel
 
         thumbnail_cover_link = full_cover_link.thumbnail
-        assert True == isinstance(thumbnail_cover_link, LinkData)
-        assert fixtures.PROQUEST_RAW_PUBLICATION_1_COVER_HREF == thumbnail_cover_link.href
+        assert isinstance(thumbnail_cover_link, LinkData)
+        assert (
+            fixtures.PROQUEST_RAW_PUBLICATION_1_COVER_HREF == thumbnail_cover_link.href
+        )
         assert Hyperlink.THUMBNAIL_IMAGE == thumbnail_cover_link.rel
 
 
@@ -1123,7 +1170,11 @@ class TestProQuestOPDS2ImportMonitor(DatabaseTest):
         client_factory.create = MagicMock(return_value=client)
 
         monitor = ProQuestOPDS2ImportMonitor(
-            client_factory, self._db, self._proquest_collection, ProQuestOPDS2Importer
+            client_factory,
+            self._db,
+            self._proquest_collection,
+            ProQuestOPDS2Importer,
+            RWPMManifestParser(OPDS2FeedParserFactory()),
         )
         monitor._get_feeds = MagicMock(return_value=list(zip([None] * len(feeds), feeds)))
         monitor.import_one_feed = MagicMock(return_value=([], []))
@@ -1169,8 +1220,14 @@ class TestProQuestOPDS2ImportMonitor(DatabaseTest):
         client_factory = create_autospec(spec=ProQuestAPIClientFactory)
         client_factory.create = MagicMock(return_value=client)
 
+        parser = RWPMManifestParser(OPDS2FeedParserFactory())
+        parser.parse_manifest = MagicMock(side_effect=parser.parse_manifest)
         monitor = ProQuestOPDS2ImportMonitor(
-            client_factory, self._db, self._proquest_collection, ProQuestOPDS2Importer
+            client_factory,
+            self._db,
+            self._proquest_collection,
+            ProQuestOPDS2Importer,
+            parser,
         )
         monitor.import_one_feed = MagicMock(return_value=([], []))
 
@@ -1178,7 +1235,6 @@ class TestProQuestOPDS2ImportMonitor(DatabaseTest):
         original_mkdtemp = tempfile.mkdtemp
         original_named_temporary_file_constructor = tempfile.NamedTemporaryFile
         original_rmtree = shutil.rmtree
-        original_parse_feed = core.opds2_import.parse_feed
 
         def create_temp_directory():
             results["temp_directory"] = original_mkdtemp()
@@ -1196,13 +1252,10 @@ class TestProQuestOPDS2ImportMonitor(DatabaseTest):
             "tempfile.NamedTemporaryFile"
         ) as named_temporary_file_constructor_mock, patch(
             "shutil.rmtree"
-        ) as rmtree_mock, patch(
-            "api.proquest.importer.parse_feed"
-        ) as parse_feed_mock:
+        ) as rmtree_mock:
             mkdtemp_mock.side_effect = create_temp_directory
             named_temporary_file_constructor_mock.side_effect = create_temp_file
             rmtree_mock.side_effect = original_rmtree
-            parse_feed_mock.side_effect = original_parse_feed
 
             monitor.run_once(False)
 
@@ -1216,14 +1269,12 @@ class TestProQuestOPDS2ImportMonitor(DatabaseTest):
                 * len(feed_pages)
             )
 
-            # Ensure that parse_feed method was called for each feed page.
-            parse_feed_mock.assert_has_calls(
-                [call(ANY, silent=False)] * len(feed_pages)
-            )
+            # Ensure that parse_manifest method was called for each feed page.
+            parser.parse_manifest.assert_has_calls([call(ANY)] * len(feed_pages))
 
             # Ensure that the temp directory was successfully removed.
             shutil.rmtree.assert_called_once_with(results["temp_directory"])
-            assert False == os.path.exists(results["temp_directory"])
+            assert not os.path.exists(results["temp_directory"])
 
     def test_monitor_correctly_deletes_temporary_directory_in_the_case_of_any_error(
         self,
@@ -1242,8 +1293,17 @@ class TestProQuestOPDS2ImportMonitor(DatabaseTest):
         client_factory = create_autospec(spec=ProQuestAPIClientFactory)
         client_factory.create = MagicMock(return_value=client)
 
+        parser = RWPMManifestParser(OPDS2FeedParserFactory())
+
+        # An exception will be raised while trying to parse the feed page.
+        parser.parse_manifest = MagicMock(side_effect=Exception(""))
+
         monitor = ProQuestOPDS2ImportMonitor(
-            client_factory, self._db, self._proquest_collection, ProQuestOPDS2Importer
+            client_factory,
+            self._db,
+            self._proquest_collection,
+            ProQuestOPDS2Importer,
+            parser,
         )
         monitor.import_one_feed = MagicMock(return_value=([], []))
 
@@ -1268,16 +1328,10 @@ class TestProQuestOPDS2ImportMonitor(DatabaseTest):
             "tempfile.NamedTemporaryFile"
         ) as named_temporary_file_constructor_mock, patch(
             "shutil.rmtree"
-        ) as rmtree_mock, patch(
-            "api.proquest.importer.parse_feed"
-        ) as parse_feed_mock:
+        ) as rmtree_mock:
             mkdtemp_mock.side_effect = create_temp_directory
             named_temporary_file_constructor_mock.side_effect = create_temp_file
             rmtree_mock.side_effect = original_rmtree
-            parse_feed_mock.side_effect = core.opds2_import.parse_feed
-
-            # An exception will be raised while trying to parse the feed page.
-            parse_feed_mock.side_effect = Exception("")
 
             monitor.run_once(False)
 
@@ -1290,12 +1344,12 @@ class TestProQuestOPDS2ImportMonitor(DatabaseTest):
                 [call(mode="r+", dir=results["temp_directory"], delete=False)]
             )
 
-            # Ensure that parse_feed method was called only once.
-            parse_feed_mock.assert_has_calls([call(ANY, silent=False)])
+            # Ensure that parse_manifest method was called only once.
+            parser.parse_manifest.assert_has_calls([call(ANY)])
 
             # Ensure that the temp directory was successfully removed.
             shutil.rmtree.assert_called_once_with(results["temp_directory"])
-            assert False == os.path.exists(results["temp_directory"])
+            assert not os.path.exists(results["temp_directory"])
 
     def test_monitor_correctly_does_not_process_already_processed_pages(self):
         """This test makes sure that the monitor has a short circuit breaker
@@ -1368,7 +1422,11 @@ class TestProQuestOPDS2ImportMonitor(DatabaseTest):
         client_factory.create = MagicMock(return_value=client)
 
         monitor = ProQuestOPDS2ImportMonitor(
-            client_factory, self._db, self._proquest_collection, ProQuestOPDS2Importer
+            client_factory,
+            self._db,
+            self._proquest_collection,
+            ProQuestOPDS2Importer,
+            RWPMManifestParser(OPDS2FeedParserFactory()),
         )
         monitor._get_feeds = MagicMock(return_value=list(zip([None] * len(feeds), feeds)))
         monitor.import_one_feed = MagicMock(return_value=([], []))

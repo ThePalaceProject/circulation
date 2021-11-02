@@ -7,14 +7,19 @@ bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..")
 sys.path.append(os.path.abspath(package_dir))
 
-from core.scripts import OPDSImportScript
+from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
+
+# NOTE: We need to import it explicitly to initialize MirrorUploader.IMPLEMENTATION_REGISTRY
+from core import s3
 from core.model import ExternalIntegration
-from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor
+from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, RWPMManifestParser
+from core.scripts import OPDSImportScript
 
 import_script = OPDSImportScript(
     importer_class=OPDS2Importer,
     monitor_class=OPDS2ImportMonitor,
-    protocol=ExternalIntegration.OPDS2_IMPORT
+    protocol=ExternalIntegration.OPDS2_IMPORT,
+    parser=RWPMManifestParser(OPDS2FeedParserFactory()),
 )
 
 import_script.run()
