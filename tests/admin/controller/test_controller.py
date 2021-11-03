@@ -1152,19 +1152,25 @@ class TestCustomListsController(AdminControllerTest):
         lane.customlists.append(list)
         lane.size = 350
 
-        # Whenever the mocked search engine is asked how many
-        # works are in a Lane, it will say there are two.
-        self.controller.search_engine.docs = dict(id1="doc1", id2="doc2")
+        self.controller.search_engine.docs = {}
 
-        w1 = self._work(with_license_pool=True, language="eng")
-        w2 = self._work(with_license_pool=True, language="fre")
-        w3 = self._work(with_license_pool=True)
+        w1 = self._work(title="Alpha", with_license_pool=True, language="eng")
+        w2 = self._work(title="Bravo", with_license_pool=True, language="fre")
+        w3 = self._work(title="Charlie", with_license_pool=True)
         w2.presentation_edition.medium = Edition.AUDIO_MEDIUM
         w3.presentation_edition.permanent_work_id = w2.presentation_edition.permanent_work_id
         w3.presentation_edition.medium = Edition.BOOK_MEDIUM
 
         list.add_entry(w1)
         list.add_entry(w2)
+        self.controller.search_engine.bulk_update([w1, w2, w3])
+
+        # All three works should be indexed, but only w1 and w2 should be related to the list
+        assert len(self.controller.search_engine.docs) == 3
+        currently_indexed_on_list = [v['title'] for (k, v)
+                                     in self.controller.search_engine.docs.items()
+                                     if v['customlists'] is not None]
+        assert sorted(currently_indexed_on_list) == ['Alpha', 'Bravo']
 
         new_entries = [dict(id=work.presentation_edition.primary_identifier.urn,
                             medium=Edition.medium_to_additional_type[work.presentation_edition.medium])
@@ -1180,6 +1186,11 @@ class TestCustomListsController(AdminControllerTest):
         list.collections = [c1]
         new_collections = [c2]
 
+        # The lane size is set to a static value above. After this call it should
+        # be reset to a value that reflects the number of documents in the search_engine,
+        # regardless of filter, since that's what the mock search engine's count_works does.
+        assert lane.size == 350
+
         with self.request_context_with_library_and_admin("/", method="POST"):
             flask.request.form = MultiDict([
                 ("id", str(list.id)),
@@ -1190,6 +1201,15 @@ class TestCustomListsController(AdminControllerTest):
             ])
 
             response = self.manager.admin_custom_lists_controller.custom_list(list.id)
+
+        # The works associated with the list in ES should have changed, though the total
+        # number of documents in the index should be the same.
+        assert len(self.controller.search_engine.docs) == 3
+        currently_indexed_on_list = [v['title'] for (k, v)
+                                     in self.controller.search_engine.docs.items()
+                                     if v['customlists'] is not None]
+        assert sorted(currently_indexed_on_list) == ['Bravo', 'Charlie']
+
         assert 200 == response.status_code
         assert list.id == int(response.get_data(as_text=True))
 
@@ -1198,9 +1218,13 @@ class TestCustomListsController(AdminControllerTest):
             set([entry.work for entry in list.entries]))
         assert new_collections == list.collections
 
-        # This change caused an immediate update to lane.size
-        # based on information from the mocked search index.
-        assert 2 == lane.size
+        # If we were using a real search engine instance, the lane's size would be set
+        # to 2, since that's the number of works that would be associated with the
+        # custom list that the lane is based on. In this case we're using an instance of
+        # MockExternalSearchIndex, whose count_works() method (called in Lane.update_size())
+        # returns the number of items in search_engine.docs. Testing that lane.size is now
+        # set to 3 shows that .update_size() was called during the call to custom_list().
+        assert lane.size == 3
 
         self.admin.remove_role(AdminRole.LIBRARIAN, self._default_library)
         with self.request_context_with_library_and_admin("/", method="POST"):
