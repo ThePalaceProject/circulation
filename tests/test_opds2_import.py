@@ -226,8 +226,8 @@ class TestOPDS2Importer(OPDS2Test):
         huckleberry_finn_license_pool = self._get_license_pool_by_identifier(
             pools, "urn:isbn:9781234567897"
         )
-        assert isinstance(huckleberry_finn_license_pool, LicensePool)
-        assert not huckleberry_finn_license_pool.open_access
+        assert True == isinstance(huckleberry_finn_license_pool, LicensePool)
+        assert False == huckleberry_finn_license_pool.open_access
         assert (
             LicensePool.UNLIMITED_ACCESS == huckleberry_finn_license_pool.licenses_owned
         )
