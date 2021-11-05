@@ -17,8 +17,10 @@ from core.util.problem_detail import ProblemDetail
 from api.admin.controller.self_tests import SelfTestsController
 from api.admin.controller.patron_auth_services import PatronAuthServicesController
 
-class PatronAuthServiceSelfTestsController(SelfTestsController, PatronAuthServicesController):
 
+class PatronAuthServiceSelfTestsController(
+    SelfTestsController, PatronAuthServicesController
+):
     def process_patron_auth_service_self_tests(self, identifier):
         return self._manage_self_tests(identifier)
 
@@ -27,20 +29,24 @@ class PatronAuthServiceSelfTestsController(SelfTestsController, PatronAuthServic
             self._db,
             ExternalIntegration,
             id=identifier,
-            goal=ExternalIntegration.PATRON_AUTH_GOAL
+            goal=ExternalIntegration.PATRON_AUTH_GOAL,
         )
         if not service:
             return MISSING_SERVICE
         return service
 
     def get_info(self, patron_auth_service):
-        [protocol] = [p for p in self._get_integration_protocols(self.provider_apis) if p.get("name") == patron_auth_service.protocol]
+        [protocol] = [
+            p
+            for p in self._get_integration_protocols(self.provider_apis)
+            if p.get("name") == patron_auth_service.protocol
+        ]
         info = dict(
             id=patron_auth_service.id,
             name=patron_auth_service.name,
             protocol=patron_auth_service.protocol,
             goal=patron_auth_service.goal,
-            settings=protocol.get("settings")
+            settings=protocol.get("settings"),
         )
         return info
 

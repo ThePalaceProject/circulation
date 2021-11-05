@@ -1,22 +1,26 @@
-
 from flask_babel import lazy_gettext as _
 from api.admin.problem_details import *
-from api.axis import (Axis360API, MockAxis360API)
-from core.opds_import import (OPDSImporter, OPDSImportMonitor)
+from api.axis import Axis360API, MockAxis360API
+from core.opds_import import OPDSImporter, OPDSImportMonitor
 from core.selftest import HasSelfTests
 from .test_controller import SettingsControllerTest
+
 
 class TestCollectionSelfTests(SettingsControllerTest):
     def test_collection_self_tests_with_no_identifier(self):
         with self.request_context_with_admin("/"):
-            response = self.manager.admin_collection_self_tests_controller.process_collection_self_tests(None)
+            response = self.manager.admin_collection_self_tests_controller.process_collection_self_tests(
+                None
+            )
             assert response.title == MISSING_IDENTIFIER.title
             assert response.detail == MISSING_IDENTIFIER.detail
             assert response.status_code == 400
 
     def test_collection_self_tests_with_no_collection_found(self):
         with self.request_context_with_admin("/"):
-            response = self.manager.admin_collection_self_tests_controller.process_collection_self_tests(-1)
+            response = self.manager.admin_collection_self_tests_controller.process_collection_self_tests(
+                -1
+            )
             assert response == NO_SUCH_COLLECTION
             assert response.status_code == 404
 
@@ -28,7 +32,9 @@ class TestCollectionSelfTests(SettingsControllerTest):
         # Make sure that HasSelfTest.prior_test_results() was called and that
         # it is in the response's collection object.
         with self.request_context_with_admin("/"):
-            response = self.manager.admin_collection_self_tests_controller.process_collection_self_tests(collection.id)
+            response = self.manager.admin_collection_self_tests_controller.process_collection_self_tests(
+                collection.id
+            )
 
             responseCollection = response.get("self_test_results")
 
@@ -48,9 +54,14 @@ class TestCollectionSelfTests(SettingsControllerTest):
 
         # Failed to run self tests
         with self.request_context_with_admin("/", method="POST"):
-            response = self.manager.admin_collection_self_tests_controller.process_collection_self_tests(collection.id)
+            response = self.manager.admin_collection_self_tests_controller.process_collection_self_tests(
+                collection.id
+            )
 
-            (run_self_tests_args, run_self_tests_kwargs) = self.failed_run_self_tests_called_with
+            (
+                run_self_tests_args,
+                run_self_tests_kwargs,
+            ) = self.failed_run_self_tests_called_with
             assert response.title == FAILED_TO_RUN_SELF_TESTS.title
             assert response.detail == "Failed to run self tests for this collection."
             assert response.status_code == 400
@@ -64,9 +75,14 @@ class TestCollectionSelfTests(SettingsControllerTest):
         collection = self._collection()
         # Successfully ran new self tests for the OPDSImportMonitor provider API
         with self.request_context_with_admin("/", method="POST"):
-            response = self.manager.admin_collection_self_tests_controller.process_collection_self_tests(collection.id)
+            response = self.manager.admin_collection_self_tests_controller.process_collection_self_tests(
+                collection.id
+            )
 
-            (run_self_tests_args, run_self_tests_kwargs) = self.run_self_tests_called_with
+            (
+                run_self_tests_args,
+                run_self_tests_kwargs,
+            ) = self.run_self_tests_called_with
             assert response.response == _("Successfully ran new self tests")
             assert response._status == "200 OK"
 
@@ -75,13 +91,17 @@ class TestCollectionSelfTests(SettingsControllerTest):
             assert run_self_tests_args[1] == OPDSImportMonitor
             assert run_self_tests_args[3] == collection
 
-
         collection = MockAxis360API.mock_collection(self._db)
         # Successfully ran new self tests
         with self.request_context_with_admin("/", method="POST"):
-            response = self.manager.admin_collection_self_tests_controller.process_collection_self_tests(collection.id)
+            response = self.manager.admin_collection_self_tests_controller.process_collection_self_tests(
+                collection.id
+            )
 
-            (run_self_tests_args, run_self_tests_kwargs) = self.run_self_tests_called_with
+            (
+                run_self_tests_args,
+                run_self_tests_kwargs,
+            ) = self.run_self_tests_called_with
             assert response.response == _("Successfully ran new self tests")
             assert response._status == "200 OK"
 
@@ -97,9 +117,14 @@ class TestCollectionSelfTests(SettingsControllerTest):
 
         # No protocol found so run_self_tests was not called
         with self.request_context_with_admin("/", method="POST"):
-            response = self.manager.admin_collection_self_tests_controller.process_collection_self_tests(collection.id)
+            response = self.manager.admin_collection_self_tests_controller.process_collection_self_tests(
+                collection.id
+            )
 
-            (run_self_tests_args, run_self_tests_kwargs) = self.run_self_tests_called_with
+            (
+                run_self_tests_args,
+                run_self_tests_kwargs,
+            ) = self.run_self_tests_called_with
             assert response.title == FAILED_TO_RUN_SELF_TESTS.title
             assert response.detail == "Failed to run self tests for this collection."
             assert response.status_code == 400

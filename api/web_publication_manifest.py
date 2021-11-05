@@ -7,11 +7,13 @@ from core.model import (
 )
 from core.util.web_publication_manifest import AudiobookManifest
 
+
 class SpineItem(object):
     """Metadata about a piece of playable audio from an audiobook."""
 
-    def __init__(self, title, duration, part, sequence,
-                 media_type=Representation.MP3_MEDIA_TYPE):
+    def __init__(
+        self, title, duration, part, sequence, media_type=Representation.MP3_MEDIA_TYPE
+    ):
         """Constructor.
 
         :param title: The title of this spine item.
@@ -40,14 +42,21 @@ class FindawayManifest(AudiobookManifest):
 
     # This URI prefix makes it clear when we are using a term coined
     # by Findaway in a JSON-LD document.
-    FINDAWAY_EXTENSION_CONTEXT = "http://librarysimplified.org/terms/third-parties/findaway.com/"
+    FINDAWAY_EXTENSION_CONTEXT = (
+        "http://librarysimplified.org/terms/third-parties/findaway.com/"
+    )
 
     MEDIA_TYPE = DeliveryMechanism.FINDAWAY_DRM
 
     def __init__(
-        self, license_pool, accountId=None, checkoutId=None,
-        fulfillmentId=None, licenseId=None, sessionKey=None,
-        spine_items=[]
+        self,
+        license_pool,
+        accountId=None,
+        checkoutId=None,
+        fulfillmentId=None,
+        licenseId=None,
+        sessionKey=None,
+        spine_items=[],
     ):
         """Create a FindawayManifest object from raw data.
 
@@ -78,7 +87,7 @@ class FindawayManifest(AudiobookManifest):
 
         context_with_extension = [
             "http://readium.org/webpub/default.jsonld",
-            {"findaway" : self.FINDAWAY_EXTENSION_CONTEXT},
+            {"findaway": self.FINDAWAY_EXTENSION_CONTEXT},
         ]
         super(FindawayManifest, self).__init__(context=context_with_extension)
 
@@ -89,40 +98,37 @@ class FindawayManifest(AudiobookManifest):
 
         # Add Findaway-specific DRM information as an 'encrypted' object
         # within the metadata object.
-        encrypted = dict(
-            scheme='http://librarysimplified.org/terms/drm/scheme/FAE'
-        )
-        self.metadata['encrypted'] = encrypted
+        encrypted = dict(scheme="http://librarysimplified.org/terms/drm/scheme/FAE")
+        self.metadata["encrypted"] = encrypted
         for findaway_extension, value in [
-                ('accountId', accountId),
-                ('checkoutId', checkoutId),
-                ('fulfillmentId', fulfillmentId),
-                ('licenseId', licenseId),
-                ('sessionKey', sessionKey)
+            ("accountId", accountId),
+            ("checkoutId", checkoutId),
+            ("fulfillmentId", fulfillmentId),
+            ("licenseId", licenseId),
+            ("sessionKey", sessionKey),
         ]:
             if not value:
                 continue
-            output_key = 'findaway:' + findaway_extension
+            output_key = "findaway:" + findaway_extension
             encrypted[output_key] = value
 
         # Add the SpineItems as reading order items. None of them will
         # have working 'href' fields -- it's just to give the client a
         # picture of the structure of the timeline.
-        part_key = 'findaway:part'
-        sequence_key = 'findaway:sequence'
+        part_key = "findaway:part"
+        sequence_key = "findaway:sequence"
         total_duration = 0
         spine_items.sort(key=SpineItem.sort_key)
         for item in spine_items:
-            kwargs = {
-                part_key: item.part,
-                sequence_key: item.sequence
-            }
+            kwargs = {part_key: item.part, sequence_key: item.sequence}
             self.add_reading_order(
-                href=None, title=item.title, duration=item.duration,
-                type=item.media_type, **kwargs
+                href=None,
+                title=item.title,
+                duration=item.duration,
+                type=item.media_type,
+                **kwargs
             )
             total_duration += item.duration
 
         if spine_items:
-            self.metadata['duration'] = total_duration
-
+            self.metadata["duration"] = total_duration

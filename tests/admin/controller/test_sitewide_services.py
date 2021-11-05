@@ -1,4 +1,3 @@
-
 import flask
 from api.admin.controller import SettingsController
 from api.admin.controller.sitewide_services import *
@@ -9,6 +8,7 @@ from core.model import (
 from core.s3 import S3Uploader, MockS3Uploader
 from .test_controller import SettingsControllerTest
 
+
 class TestSitewideServices(SettingsControllerTest):
     def test_sitewide_service_management(self):
         # The configuration of search and logging collections is delegated to
@@ -17,12 +17,14 @@ class TestSitewideServices(SettingsControllerTest):
         # Search collections are more comprehensively tested in test_search_services.
 
         EI = ExternalIntegration
+
         class MockSearch(SearchServicesController):
-            def _manage_sitewide_service(self,*args):
+            def _manage_sitewide_service(self, *args):
                 self.manage_called_with = args
 
             def _delete_integration(self, *args):
                 self.delete_called_with = args
+
         controller = MockSearch(self.manager)
 
         with self.request_context_with_admin("/"):
@@ -30,11 +32,10 @@ class TestSitewideServices(SettingsControllerTest):
             goal, apis, key_name, problem = controller.manage_called_with
             assert EI.SEARCH_GOAL == goal
             assert ExternalSearchIndex in apis
-            assert 'search_services' == key_name
-            assert 'new search service' in problem
+            assert "search_services" == key_name
+            assert "new search service" in problem
 
         with self.request_context_with_admin("/"):
             id = object()
             controller.process_delete(id)
-            assert ((id, EI.SEARCH_GOAL) ==
-                controller.delete_called_with)
+            assert (id, EI.SEARCH_GOAL) == controller.delete_called_with

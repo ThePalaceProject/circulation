@@ -5,6 +5,7 @@ from api.admin.problem_details import *
 from core.util.problem_detail import ProblemDetail
 from . import SettingsController
 
+
 class SelfTestsController(SettingsController):
     def _manage_self_tests(self, identifier):
         """Generic request-processing method."""
@@ -37,14 +38,12 @@ class SelfTestsController(SettingsController):
             name=integration.name,
             protocol=protocol,
             settings=protocol.get("settings"),
-            goal=integration.goal
+            goal=integration.goal,
         )
 
     def run_tests(self, integration):
         protocol_class, extra_arguments = self.find_protocol_class(integration)
-        value, results = protocol_class.run_self_tests(
-            self._db, *extra_arguments
-        )
+        value, results = protocol_class.run_self_tests(self._db, *extra_arguments)
         return value
 
     def self_tests_process_get(self, identifier):
@@ -60,7 +59,7 @@ class SelfTestsController(SettingsController):
 
     def self_tests_process_post(self, identifier):
         integration = self.look_up_by_id(identifier)
-        if isinstance (integration, ProblemDetail):
+        if isinstance(integration, ProblemDetail):
             return integration
         value = self.run_tests(integration)
         if value and isinstance(value, ProblemDetail):

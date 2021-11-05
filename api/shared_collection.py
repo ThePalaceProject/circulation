@@ -15,6 +15,7 @@ from core.config import CannotLoadConfiguration
 from core.util.http import HTTP
 import base64
 
+
 class SharedCollectionAPI(object):
     """Logic for circulating books to patrons of libraries on other
     circulation managers. This can be used for something like ODL where the
@@ -53,7 +54,8 @@ class SharedCollectionAPI(object):
                 except CannotLoadConfiguration as e:
                     self.log.error(
                         "Error loading configuration for %s: %s",
-                        collection.name, str(e)
+                        collection.name,
+                        str(e),
                     )
                     self.initialization_exceptions[collection.id] = e
                 if api:
@@ -65,6 +67,7 @@ class SharedCollectionAPI(object):
         API class Y to handle that collection.
         """
         from .odl import ODLAPI
+
         return {
             ODLAPI.NAME: ODLAPI,
         }
@@ -79,8 +82,11 @@ class SharedCollectionAPI(object):
         api = self.api_for_collection.get(collection.id)
         if not api:
             raise CirculationException(
-                _("Collection %(collection)s is not a shared collection.",
-                  collection=collection.name))
+                _(
+                    "Collection %(collection)s is not a shared collection.",
+                    collection=collection.name,
+                )
+            )
         return api
 
     def register(self, collection, auth_document_url, do_get=HTTP.get_with_timeout):
@@ -89,16 +95,20 @@ class SharedCollectionAPI(object):
         collection's settings."""
         if not auth_document_url:
             raise InvalidInputException(
-                _("An authentication document URL is required to register a library."))
+                _("An authentication document URL is required to register a library.")
+            )
 
         auth_response = do_get(auth_document_url, allowed_response_codes=["2xx", "3xx"])
         try:
             auth_document = json.loads(auth_response.content)
         except ValueError as e:
             raise RemoteInitiatedServerError(
-                _("Authentication document at %(auth_document_url)s was not valid JSON.",
-                  auth_document_url=auth_document_url),
-                _("Remote authentication document"))
+                _(
+                    "Authentication document at %(auth_document_url)s was not valid JSON.",
+                    auth_document_url=auth_document_url,
+                ),
+                _("Remote authentication document"),
+            )
 
         links = auth_document.get("links")
         start_url = None
@@ -109,25 +119,39 @@ class SharedCollectionAPI(object):
 
         if not start_url:
             raise RemoteInitiatedServerError(
-                _("Authentication document at %(auth_document_url)s did not contain a start link.",
-                  auth_document_url=auth_document_url),
-                _("Remote authentication document"))
+                _(
+                    "Authentication document at %(auth_document_url)s did not contain a start link.",
+                    auth_document_url=auth_document_url,
+                ),
+                _("Remote authentication document"),
+            )
 
         external_library_urls = ConfigurationSetting.for_externalintegration(
-            BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS, collection.external_integration
+            BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS,
+            collection.external_integration,
         ).json_value
 
         if not external_library_urls or start_url not in external_library_urls:
             raise AuthorizationFailedException(
-                _("Your library's URL is not one of the allowed URLs for this collection. Ask the collection administrator to add %(library_url)s to the list of allowed URLs.",
-                  library_url=start_url))
+                _(
+                    "Your library's URL is not one of the allowed URLs for this collection. Ask the collection administrator to add %(library_url)s to the list of allowed URLs.",
+                    library_url=start_url,
+                )
+            )
 
         public_key = auth_document.get("public_key")
-        if not public_key or not public_key.get("type") == "RSA" or not public_key.get("value"):
+        if (
+            not public_key
+            or not public_key.get("type") == "RSA"
+            or not public_key.get("value")
+        ):
             raise RemoteInitiatedServerError(
-                _("Authentication document at %(auth_document_url)s did not contain an RSA public key.",
-                  auth_document_url=auth_document_url),
-                _("Remote authentication document"))
+                _(
+                    "Authentication document at %(auth_document_url)s did not contain an RSA public key.",
+                    auth_document_url=auth_document_url,
+                ),
+                _("Remote authentication document"),
+            )
 
         public_key = public_key.get("value")
         encryptor = Configuration.cipher(public_key)
@@ -144,9 +168,12 @@ class SharedCollectionAPI(object):
     def check_client_authorization(self, collection, client):
         """Verify that an IntegrationClient is whitelisted for access to the collection."""
         external_library_urls = ConfigurationSetting.for_externalintegration(
-            BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS, collection.external_integration
+            BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS,
+            collection.external_integration,
         ).json_value
-        if client.url not in [IntegrationClient.normalize_url(url) for url in external_library_urls]:
+        if client.url not in [
+            IntegrationClient.normalize_url(url) for url in external_library_urls
+        ]:
             raise AuthorizationFailedException()
 
     def borrow(self, collection, client, pool, hold=None):
@@ -197,18 +224,26 @@ class BaseSharedCollectionAPI(object):
     SETTINGS = [
         {
             "key": EXTERNAL_LIBRARY_URLS,
-            "label": _("URLs for libraries on other circulation managers that use this collection"),
-            "description": _("A URL should include the library's short name (e.g. https://circulation.librarysimplified.org/NYNYPL/), even if it is the only library on the circulation manager."),
+            "label": _(
+                "URLs for libraries on other circulation managers that use this collection"
+            ),
+            "description": _(
+                "A URL should include the library's short name (e.g. https://circulation.librarysimplified.org/NYNYPL/), even if it is the only library on the circulation manager."
+            ),
             "type": "list",
             "format": "url",
         },
         {
             "key": Collection.EBOOK_LOAN_DURATION_KEY,
-            "label": _("Ebook Loan Duration for libraries on other circulation managers (in Days)"),
+            "label": _(
+                "Ebook Loan Duration for libraries on other circulation managers (in Days)"
+            ),
             "default": Collection.STANDARD_DEFAULT_LOAN_PERIOD,
-            "description": _("When a patron from another library borrows an ebook from this collection, the circulation manager will ask for a loan that lasts this number of days. This must be equal to or less than the maximum loan duration negotiated with the distributor."),
+            "description": _(
+                "When a patron from another library borrows an ebook from this collection, the circulation manager will ask for a loan that lasts this number of days. This must be equal to or less than the maximum loan duration negotiated with the distributor."
+            ),
             "type": "number",
-        }
+        },
     ]
 
     def checkout_to_external_library(self, client, pool, hold=None):

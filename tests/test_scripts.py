@@ -17,9 +17,7 @@ from api.config import (
     Configuration,
 )
 
-from api.novelist import (
-    NoveListAPI
-)
+from api.novelist import NoveListAPI
 
 from core.entrypoint import (
     AudiobooksEntryPoint,
@@ -64,7 +62,8 @@ from core.model import (
     Representation,
     RightsStatus,
     Timestamp,
-    EditionConstants)
+    EditionConstants,
+)
 from core.model.configuration import ExternalIntegrationLink
 
 from core.opds import AcquisitionFeed
@@ -76,12 +75,9 @@ from core.mirror import MirrorUploader
 from core.marc import MARCExporter
 from core.scripts import CollectionType
 
-from core.util.flask_util import (
-    Response,
-    OPDSFeedResponse
-)
+from core.util.flask_util import Response, OPDSFeedResponse
 
-from api.marc import LibraryAnnotator as  MARCLibraryAnnotator
+from api.marc import LibraryAnnotator as MARCLibraryAnnotator
 
 from core.testing import (
     DatabaseTest,
@@ -102,8 +98,8 @@ from scripts import (
 )
 from core.util.datetime_helpers import datetime_utc, utc_now
 
-class TestAdobeAccountIDResetScript(DatabaseTest):
 
+class TestAdobeAccountIDResetScript(DatabaseTest):
     def test_process_patron(self):
         patron = self._patron()
 
@@ -119,14 +115,14 @@ class TestAdobeAccountIDResetScript(DatabaseTest):
 
         # Create two Credentials that will be deleted and one that will be
         # left alone.
-        for type in (AdobeVendorIDModel.VENDOR_ID_UUID_TOKEN_TYPE,
-                     AuthdataUtility.ADOBE_ACCOUNT_ID_PATRON_IDENTIFIER,
-                     "Some other type"
+        for type in (
+            AdobeVendorIDModel.VENDOR_ID_UUID_TOKEN_TYPE,
+            AuthdataUtility.ADOBE_ACCOUNT_ID_PATRON_IDENTIFIER,
+            "Some other type",
         ):
 
             credential = Credential.lookup(
-                self._db, data_source, type, patron,
-                set_value, True
+                self._db, data_source, type, patron, set_value, True
             )
 
         assert 3 == len(patron.credentials)
@@ -151,59 +147,62 @@ class TestAdobeAccountIDResetScript(DatabaseTest):
 
 
 class TestLaneScript(DatabaseTest):
-
     def setup_method(self):
         super(TestLaneScript, self).setup_method()
         base_url_setting = ConfigurationSetting.sitewide(
-            self._db, Configuration.BASE_URL_KEY)
-        base_url_setting.value = 'http://test-circulation-manager/'
+            self._db, Configuration.BASE_URL_KEY
+        )
+        base_url_setting.value = "http://test-circulation-manager/"
         for k, v in [
-                (Configuration.LARGE_COLLECTION_LANGUAGES, []),
-                (Configuration.SMALL_COLLECTION_LANGUAGES, []),
-                (Configuration.TINY_COLLECTION_LANGUAGES, ['eng', 'fre'])
+            (Configuration.LARGE_COLLECTION_LANGUAGES, []),
+            (Configuration.SMALL_COLLECTION_LANGUAGES, []),
+            (Configuration.TINY_COLLECTION_LANGUAGES, ["eng", "fre"]),
         ]:
             ConfigurationSetting.for_library(
-                k, self._default_library).value = json.dumps(v)
+                k, self._default_library
+            ).value = json.dumps(v)
 
 
 class TestCacheRepresentationPerLane(TestLaneScript):
-
     def test_should_process_lane(self):
 
         # Test that should_process_lane respects any specified
         # language restrictions.
         script = CacheRepresentationPerLane(
-            self._db, ["--language=fre", "--language=English", "--language=none", "--min-depth=0"],
-            manager=object()
+            self._db,
+            [
+                "--language=fre",
+                "--language=English",
+                "--language=none",
+                "--min-depth=0",
+            ],
+            manager=object(),
         )
-        assert ['fre', 'eng'] == script.languages
+        assert ["fre", "eng"] == script.languages
 
-        english_lane = self._lane(languages=['eng'])
+        english_lane = self._lane(languages=["eng"])
         assert True == script.should_process_lane(english_lane)
 
-        no_english_lane = self._lane(languages=['spa','fre'])
+        no_english_lane = self._lane(languages=["spa", "fre"])
         assert True == script.should_process_lane(no_english_lane)
 
-        no_english_or_french_lane = self._lane(languages=['spa'])
+        no_english_or_french_lane = self._lane(languages=["spa"])
         assert False == script.should_process_lane(no_english_or_french_lane)
 
         # Test that should_process_lane respects maximum depth
         # restrictions.
         script = CacheRepresentationPerLane(
-            self._db, ["--max-depth=0", "--min-depth=0"],
-            manager=object()
+            self._db, ["--max-depth=0", "--min-depth=0"], manager=object()
         )
         assert 0 == script.max_depth
 
         child = self._lane(display_name="sublane")
         parent = self._lane(display_name="parent")
-        parent.sublanes=[child]
+        parent.sublanes = [child]
         assert True == script.should_process_lane(parent)
         assert False == script.should_process_lane(child)
 
-        script = CacheRepresentationPerLane(
-            self._db, ["--min-depth=1"], testing=True
-        )
+        script = CacheRepresentationPerLane(self._db, ["--min-depth=1"], testing=True)
         assert 1 == script.min_depth
         assert False == script.should_process_lane(parent)
         assert True == script.should_process_lane(child)
@@ -213,7 +212,6 @@ class TestCacheRepresentationPerLane(TestLaneScript):
         # combination of items yielded by facets() and pagination().
 
         class MockFacets(object):
-
             def __init__(self, query):
                 self.query = query
 
@@ -228,6 +226,7 @@ class TestCacheRepresentationPerLane(TestLaneScript):
 
         class Mock(CacheRepresentationPerLane):
             generated = []
+
             def do_generate(self, lane, facets, pagination):
                 value = (lane, facets, pagination)
                 response = Response("mock response")
@@ -256,50 +255,39 @@ class TestCacheRepresentationPerLane(TestLaneScript):
 
     def test_default_facets(self):
         # By default, do_generate will only be called once, with facets=None.
-        script = CacheRepresentationPerLane(
-            self._db, manager=object(), cmd_args=[]
-        )
+        script = CacheRepresentationPerLane(self._db, manager=object(), cmd_args=[])
         assert [None] == list(script.facets(object()))
 
     def test_default_pagination(self):
         # By default, do_generate will only be called once, with pagination=None.
-        script = CacheRepresentationPerLane(
-            self._db, manager=object(), cmd_args=[]
-        )
+        script = CacheRepresentationPerLane(self._db, manager=object(), cmd_args=[])
         assert [None] == list(script.pagination(object()))
 
 
 class TestCacheFacetListsPerLane(TestLaneScript):
-
     def test_arguments(self):
         # Verify that command-line arguments become attributes of
         # the CacheFacetListsPerLane object.
         script = CacheFacetListsPerLane(
-            self._db, ["--order=title", "--order=added"],
-            manager=object()
+            self._db, ["--order=title", "--order=added"], manager=object()
         )
-        assert ['title', 'added'] == script.orders
+        assert ["title", "added"] == script.orders
         script = CacheFacetListsPerLane(
-            self._db, ["--availability=all", "--availability=always"],
-            manager=object()
+            self._db, ["--availability=all", "--availability=always"], manager=object()
         )
-        assert ['all', 'always'] == script.availabilities
+        assert ["all", "always"] == script.availabilities
 
         script = CacheFacetListsPerLane(
-            self._db, ["--collection=main", "--collection=full"],
-            manager=object()
+            self._db, ["--collection=main", "--collection=full"], manager=object()
         )
-        assert ['main', 'full'] == script.collections
+        assert ["main", "full"] == script.collections
 
         script = CacheFacetListsPerLane(
-            self._db, ["--entrypoint=Audio", "--entrypoint=Book"],
-            manager=object()
+            self._db, ["--entrypoint=Audio", "--entrypoint=Book"], manager=object()
         )
-        assert ['Audio', 'Book'] == script.entrypoints
+        assert ["Audio", "Book"] == script.entrypoints
 
-        script = CacheFacetListsPerLane(
-            self._db, ['--pages=1'], manager=object()
-        )
+        script = CacheFacetListsPerLane(self._db, ["--pages=1"], manager=object())
         assert 1 == script.pages
 
     def test_facets(self):
@@ -308,8 +296,9 @@ class TestCacheFacetListsPerLane(TestLaneScript):
         script = CacheFacetListsPerLane(self._db, manager=object(), cmd_args=[])
         script.orders = [Facets.ORDER_TITLE, Facets.ORDER_AUTHOR, "nonsense"]
         script.entrypoints = [
-            AudiobooksEntryPoint.INTERNAL_NAME, "nonsense",
-            EbooksEntryPoint.INTERNAL_NAME
+            AudiobooksEntryPoint.INTERNAL_NAME,
+            "nonsense",
+            EbooksEntryPoint.INTERNAL_NAME,
         ]
         script.availabilities = [Facets.AVAILABLE_NOW, "nonsense"]
         script.collections = [Facets.COLLECTION_FULL, "nonsense"]
@@ -362,6 +351,7 @@ class TestCacheFacetListsPerLane(TestLaneScript):
         # is called with the right arguments.
         class MockAcquisitionFeed(object):
             called_with = None
+
             @classmethod
             def page(cls, **kwargs):
                 cls.called_with = kwargs
@@ -380,45 +370,42 @@ class TestCacheFacetListsPerLane(TestLaneScript):
             assert "here's your feed" == result
 
             args = MockAcquisitionFeed.called_with
-            assert self._db == args['_db']
-            assert lane == args['worklist']
-            assert lane.display_name == args['title']
-            assert 0 == args['max_age']
+            assert self._db == args["_db"]
+            assert lane == args["worklist"]
+            assert lane.display_name == args["title"]
+            assert 0 == args["max_age"]
 
             # The Pagination object was passed into
             # MockAcquisitionFeed.page, and it was also used to make the
             # feed URL (see below).
-            assert pagination == args['pagination']
+            assert pagination == args["pagination"]
 
             # The Facets object was passed into
             # MockAcquisitionFeed.page, and it was also used to make
             # the feed URL and to create the feed annotator.
-            assert facets == args['facets']
-            annotator = args['annotator']
+            assert facets == args["facets"]
+            annotator = args["annotator"]
             assert facets == annotator.facets
-            assert (
-                args['url'] ==
-                annotator.feed_url(lane, facets=facets, pagination=pagination))
+            assert args["url"] == annotator.feed_url(
+                lane, facets=facets, pagination=pagination
+            )
 
             # Try again without mocking AcquisitionFeed, to verify that
             # we get a Flask Response containing an OPDS feed.
             response = script.do_generate(lane, facets, pagination)
             assert isinstance(response, OPDSFeedResponse)
             assert AcquisitionFeed.ACQUISITION_FEED_TYPE == response.content_type
-            assert response.get_data(as_text=True).startswith('<feed')
+            assert response.get_data(as_text=True).startswith("<feed")
 
 
 class TestCacheOPDSGroupFeedPerLane(TestLaneScript):
-
     def test_should_process_lane(self):
         parent = self._lane()
         child = self._lane(parent=parent)
         grandchild = self._lane(parent=child)
 
         # Only WorkLists which have children are processed.
-        script = CacheOPDSGroupFeedPerLane(
-            self._db, manager=object(), cmd_args=[]
-        )
+        script = CacheOPDSGroupFeedPerLane(self._db, manager=object(), cmd_args=[])
         script.max_depth = 10
         assert True == script.should_process_lane(parent)
         assert True == script.should_process_lane(child)
@@ -436,6 +423,7 @@ class TestCacheOPDSGroupFeedPerLane(TestLaneScript):
 
         class MockAcquisitionFeed(object):
             called_with = None
+
             @classmethod
             def groups(cls, **kwargs):
                 cls.called_with = kwargs
@@ -454,37 +442,34 @@ class TestCacheOPDSGroupFeedPerLane(TestLaneScript):
             assert "here's your feed" == result
 
             args = MockAcquisitionFeed.called_with
-            assert self._db == args['_db']
-            assert lane == args['worklist']
-            assert lane.display_name == args['title']
-            assert 0 == args['max_age']
+            assert self._db == args["_db"]
+            assert lane == args["worklist"]
+            assert lane.display_name == args["title"]
+            assert 0 == args["max_age"]
             assert pagination == None
 
             # The Facets object was passed into
             # MockAcquisitionFeed.page, and it was also used to make
             # the feed URL and to create the feed annotator.
-            assert facets == args['facets']
-            annotator = args['annotator']
+            assert facets == args["facets"]
+            annotator = args["annotator"]
             assert facets == annotator.facets
-            assert args['url'] == annotator.groups_url(lane, facets)
+            assert args["url"] == annotator.groups_url(lane, facets)
 
             # Try again without mocking AcquisitionFeed to verify that
             # we get a Flask response.
             response = script.do_generate(lane, facets, pagination)
             assert AcquisitionFeed.ACQUISITION_FEED_TYPE == response.content_type
-            assert response.get_data(as_text=True).startswith('<feed')
+            assert response.get_data(as_text=True).startswith("<feed")
 
     def test_facets(self):
         # Normally we yield one FeaturedFacets object for each of the
         # library's enabled entry points.
         library = self._default_library
-        script = CacheOPDSGroupFeedPerLane(
-            self._db, manager=object(), cmd_args=[]
-        )
+        script = CacheOPDSGroupFeedPerLane(self._db, manager=object(), cmd_args=[])
         setting = library.setting(EntryPoint.ENABLED_SETTING)
         setting.value = json.dumps(
-            [AudiobooksEntryPoint.INTERNAL_NAME,
-             EbooksEntryPoint.INTERNAL_NAME]
+            [AudiobooksEntryPoint.INTERNAL_NAME, EbooksEntryPoint.INTERNAL_NAME]
         )
 
         lane = self._lane()
@@ -501,8 +486,7 @@ class TestCacheOPDSGroupFeedPerLane(TestLaneScript):
         for facets in (audio_facets, ebook_facets):
             # The FeaturedFacets objects knows to feature works at the
             # library's minimum quality level.
-            assert (library.minimum_featured_quality ==
-                facets.minimum_featured_quality)
+            assert library.minimum_featured_quality == facets.minimum_featured_quality
 
         # The first entry point is treated as the default only for WorkLists
         # that have no parent. When the WorkList has a parent, the selected
@@ -519,18 +503,19 @@ class TestCacheOPDSGroupFeedPerLane(TestLaneScript):
         # If the library has no enabled entry points, we yield one
         # FeaturedFacets object with no particular entry point.
         setting.value = json.dumps([])
-        no_entry_point, = script.facets(lane)
+        (no_entry_point,) = script.facets(lane)
         assert None == no_entry_point.entrypoint
 
     def test_do_run(self):
 
-        work = self._work(fiction=True, with_license_pool=True,
-                          genre="Science Fiction")
+        work = self._work(fiction=True, with_license_pool=True, genre="Science Fiction")
         work.quality = 1
         lane = self._lane(display_name="Fantastic Fiction", fiction=True)
         sublane = self._lane(
-            parent=lane, display_name="Science Fiction", fiction=True,
-            genres=["Science Fiction"]
+            parent=lane,
+            display_name="Science Fiction",
+            fiction=True,
+            genres=["Science Fiction"],
         )
         search_engine = MockExternalSearchIndex()
         search_engine.bulk_update([work])
@@ -547,14 +532,16 @@ class TestCacheOPDSGroupFeedPerLane(TestLaneScript):
         assert "Science Fiction" in feed.content
         assert work.title in feed.content
 
-class TestCacheMARCFiles(TestLaneScript):
 
+class TestCacheMARCFiles(TestLaneScript):
     def test_should_process_library(self):
         script = CacheMARCFiles(self._db, cmd_args=[])
         assert False == script.should_process_library(self._default_library)
         integration = self._external_integration(
-            ExternalIntegration.MARC_EXPORT, ExternalIntegration.CATALOG_GOAL,
-            libraries=[self._default_library])
+            ExternalIntegration.MARC_EXPORT,
+            ExternalIntegration.CATALOG_GOAL,
+            libraries=[self._default_library],
+        )
         assert True == script.should_process_library(self._default_library)
 
     def test_should_process_lane(self):
@@ -586,7 +573,8 @@ class TestCacheMARCFiles(TestLaneScript):
     def test_process_lane(self):
         lane = self._lane(genres=["Science Fiction"])
         integration = self._external_integration(
-            ExternalIntegration.MARC_EXPORT, ExternalIntegration.CATALOG_GOAL)
+            ExternalIntegration.MARC_EXPORT, ExternalIntegration.CATALOG_GOAL
+        )
 
         class MockMARCExporter(MARCExporter):
             called_with = []
@@ -599,7 +587,8 @@ class TestCacheMARCFiles(TestLaneScript):
         # This just needs to be an ExternalIntegration, but a storage integration
         # makes the most sense in this context.
         the_linked_integration, ignore = create(
-            self._db, ExternalIntegration,
+            self._db,
+            ExternalIntegration,
             protocol=ExternalIntegration.S3,
             goal=ExternalIntegration.STORAGE_GOAL,
         )
@@ -607,7 +596,7 @@ class TestCacheMARCFiles(TestLaneScript):
         integration_link = self._external_integration_link(
             integration=integration,
             other_integration=the_linked_integration,
-            purpose=ExternalIntegrationLink.MARC
+            purpose=ExternalIntegrationLink.MARC,
         )
 
         script = CacheMARCFiles(self._db, cmd_args=[])
@@ -630,12 +619,17 @@ class TestCacheMARCFiles(TestLaneScript):
         yesterday = now - datetime.timedelta(days=1)
         last_week = now - datetime.timedelta(days=7)
         ConfigurationSetting.for_library_and_externalintegration(
-            self._db, MARCExporter.UPDATE_FREQUENCY, self._default_library,
-            integration).value = 3
+            self._db, MARCExporter.UPDATE_FREQUENCY, self._default_library, integration
+        ).value = 3
         representation, ignore = self._representation()
         cached, ignore = create(
-            self._db, CachedMARCFile, library=self._default_library,
-            lane=lane, representation=representation, end_time=last_week)
+            self._db,
+            CachedMARCFile,
+            library=self._default_library,
+            lane=lane,
+            representation=representation,
+            end_time=last_week,
+        )
 
         script.process_lane(lane, exporter)
 
@@ -676,8 +670,8 @@ class TestCacheMARCFiles(TestLaneScript):
 
         # The update frequency can also be 0, in which case it will always run.
         ConfigurationSetting.for_library_and_externalintegration(
-            self._db, MARCExporter.UPDATE_FREQUENCY, self._default_library,
-            integration).value = 0
+            self._db, MARCExporter.UPDATE_FREQUENCY, self._default_library, integration
+        ).value = 0
         exporter.called_with = []
         script = CacheMARCFiles(self._db, cmd_args=[])
         script.process_lane(lane, exporter)
@@ -696,9 +690,7 @@ class TestCacheMARCFiles(TestLaneScript):
         assert exporter.called_with[1][3] > last_week
 
 
-
 class TestInstanceInitializationScript(DatabaseTest):
-
     def test_run(self):
 
         # If the database has been initialized -- which happened
@@ -707,6 +699,7 @@ class TestInstanceInitializationScript(DatabaseTest):
         class Mock(InstanceInitializationScript):
             def do_run(self):
                 raise Exception("I'll never be called.")
+
         Mock().run()
 
         # If the database has not been initialized, run() will detect
@@ -718,6 +711,7 @@ class TestInstanceInitializationScript(DatabaseTest):
         # and do_run() will be called.
         class Mock(InstanceInitializationScript):
             TEST_SQL = "select * from nosuchtable"
+
             def do_run(self, *args, **kwargs):
                 self.was_run = True
 
@@ -725,21 +719,23 @@ class TestInstanceInitializationScript(DatabaseTest):
         script.run()
         assert True == script.was_run
 
-
     def test_do_run(self):
         # Normally, do_run is only called by run() if the database has
         # not yet meen initialized. But we can test it by calling it
         # directly.
         timestamp = get_one(
-            self._db, Timestamp, service="Database Migration",
-            service_type=Timestamp.SCRIPT_TYPE
+            self._db,
+            Timestamp,
+            service="Database Migration",
+            service_type=Timestamp.SCRIPT_TYPE,
         )
         assert None == timestamp
 
         # Remove all secret keys, should they exist, before running the
         # script.
         secret_keys = self._db.query(ConfigurationSetting).filter(
-            ConfigurationSetting.key==Configuration.SECRET_KEY)
+            ConfigurationSetting.key == Configuration.SECRET_KEY
+        )
         [self._db.delete(secret_key) for secret_key in secret_keys]
 
         script = InstanceInitializationScript(_db=self._db)
@@ -747,23 +743,24 @@ class TestInstanceInitializationScript(DatabaseTest):
 
         # It initializes the database.
         timestamp = get_one(
-            self._db, Timestamp, service="Database Migration",
-            service_type=Timestamp.SCRIPT_TYPE
+            self._db,
+            Timestamp,
+            service="Database Migration",
+            service_type=Timestamp.SCRIPT_TYPE,
         )
         assert timestamp
 
         # It creates a secret key.
         assert 1 == secret_keys.count()
-        assert (
-            secret_keys.one().value ==
-            ConfigurationSetting.sitewide_secret(self._db, Configuration.SECRET_KEY))
+        assert secret_keys.one().value == ConfigurationSetting.sitewide_secret(
+            self._db, Configuration.SECRET_KEY
+        )
 
 
 class TestLanguageListScript(DatabaseTest):
-
     def test_languages(self):
         """Test the method that gives this script the bulk of its output."""
-        english = self._work(language='eng', with_open_access_download=True)
+        english = self._work(language="eng", with_open_access_download=True)
         tagalog = self._work(language="tgl", with_license_pool=True)
         [pool] = tagalog.license_pools
         self._add_generic_delivery_mechanism(pool)
@@ -776,60 +773,59 @@ class TestLanguageListScript(DatabaseTest):
 
 
 class TestShortClientTokenLibraryConfigurationScript(DatabaseTest):
-
     def setup_method(self):
         super(TestShortClientTokenLibraryConfigurationScript, self).setup_method()
-        self._default_library.setting(
-            Configuration.WEBSITE_URL
-        ).value = "http://foo/"
+        self._default_library.setting(Configuration.WEBSITE_URL).value = "http://foo/"
         self.script = ShortClientTokenLibraryConfigurationScript(self._db)
 
     def test_identify_library_by_url(self):
         with pytest.raises(Exception) as excinfo:
-            self.script.set_secret(self._db, "http://bar/", "vendorid", "libraryname", "secret", None)
-        assert "Could not locate library with URL http://bar/. Available URLs: http://foo/" in str(excinfo.value)
+            self.script.set_secret(
+                self._db, "http://bar/", "vendorid", "libraryname", "secret", None
+            )
+        assert (
+            "Could not locate library with URL http://bar/. Available URLs: http://foo/"
+            in str(excinfo.value)
+        )
 
     def test_set_secret(self):
         assert [] == self._default_library.integrations
 
         output = StringIO()
         self.script.set_secret(
-            self._db, "http://foo/", "vendorid", "libraryname", "secret",
-            output
+            self._db, "http://foo/", "vendorid", "libraryname", "secret", output
         )
         assert (
-            'Current Short Client Token configuration for http://foo/:\n Vendor ID: vendorid\n Library name: libraryname\n Shared secret: secret\n' ==
-            output.getvalue())
+            "Current Short Client Token configuration for http://foo/:\n Vendor ID: vendorid\n Library name: libraryname\n Shared secret: secret\n"
+            == output.getvalue()
+        )
         [integration] = self._default_library.integrations
-        assert (
-            [('password', 'secret'), ('username', 'libraryname'),
-             ('vendor_id', 'vendorid')] ==
-            sorted((x.key, x.value) for x in integration.settings))
+        assert [
+            ("password", "secret"),
+            ("username", "libraryname"),
+            ("vendor_id", "vendorid"),
+        ] == sorted((x.key, x.value) for x in integration.settings)
 
         # We can modify an existing configuration.
         output = StringIO()
         self.script.set_secret(
-            self._db, "http://foo/", "newid", "newname", "newsecret",
-            output
+            self._db, "http://foo/", "newid", "newname", "newsecret", output
         )
-        expect = 'Current Short Client Token configuration for http://foo/:\n Vendor ID: newid\n Library name: newname\n Shared secret: newsecret\n'
+        expect = "Current Short Client Token configuration for http://foo/:\n Vendor ID: newid\n Library name: newname\n Shared secret: newsecret\n"
         assert expect == output.getvalue()
         expect_settings = [
-            ('password', 'newsecret'), ('username', 'newname'),
-             ('vendor_id', 'newid')
+            ("password", "newsecret"),
+            ("username", "newname"),
+            ("vendor_id", "newid"),
         ]
-        assert (expect_settings ==
-            sorted((x.key, x.value) for x in integration.settings))
+        assert expect_settings == sorted((x.key, x.value) for x in integration.settings)
 
         # We can also just check on the existing configuration without
         # changing anything.
         output = StringIO()
-        self.script.set_secret(
-            self._db, "http://foo/", None, None, None, output
-        )
+        self.script.set_secret(self._db, "http://foo/", None, None, None, output)
         assert expect == output.getvalue()
-        assert (expect_settings ==
-            sorted((x.key, x.value) for x in integration.settings))
+        assert expect_settings == sorted((x.key, x.value) for x in integration.settings)
 
 
 class MockDirectoryImportScript(DirectoryImportScript):
@@ -842,13 +838,10 @@ class MockDirectoryImportScript(DirectoryImportScript):
 
     def _locate_file(self, identifier, directory, extensions, file_type):
         self._locate_file_args = (identifier, directory, extensions, file_type)
-        return self.mock_filesystem.get(
-            directory, (None, None, None)
-        )
+        return self.mock_filesystem.get(directory, (None, None, None))
 
 
 class TestDirectoryImportScript(DatabaseTest):
-
     def test_do_run(self):
         # Calling do_run with command-line arguments parses the
         # arguments and calls run_with_arguments.
@@ -868,23 +861,21 @@ class TestDirectoryImportScript(DatabaseTest):
                 "--ebook-directory=ebooks",
                 "--rights-uri=rights",
                 "--dry-run",
-                "--default-medium-type={0}".format(EditionConstants.AUDIO_MEDIUM)
+                "--default-medium-type={0}".format(EditionConstants.AUDIO_MEDIUM),
             ]
         )
-        assert (
-            {
-                'collection_name': 'coll1',
-                'collection_type': CollectionType.OPEN_ACCESS,
-                'data_source_name': 'ds1',
-                'metadata_file': 'metadata',
-                'metadata_format': 'marc',
-                'cover_directory': 'covers',
-                'ebook_directory': 'ebooks',
-                'rights_uri': 'rights',
-                'dry_run': True,
-                'default_medium_type': EditionConstants.AUDIO_MEDIUM
-            } ==
-            script.ran_with)
+        assert {
+            "collection_name": "coll1",
+            "collection_type": CollectionType.OPEN_ACCESS,
+            "data_source_name": "ds1",
+            "metadata_file": "metadata",
+            "metadata_format": "marc",
+            "cover_directory": "covers",
+            "ebook_directory": "ebooks",
+            "rights_uri": "rights",
+            "dry_run": True,
+            "default_medium_type": EditionConstants.AUDIO_MEDIUM,
+        } == script.ran_with
 
     def test_run_with_arguments(self):
 
@@ -897,6 +888,7 @@ class TestDirectoryImportScript(DatabaseTest):
 
         class Mock(DirectoryImportScript):
             """Mock the methods called by run_with_arguments."""
+
             def __init__(self, _db):
                 super(DirectoryImportScript, self).__init__(_db)
                 self.load_collection_calls = []
@@ -919,7 +911,7 @@ class TestDirectoryImportScript(DatabaseTest):
 
         # Make a change to a model object so we can track when the
         # session is committed.
-        self._default_collection.name = 'changed'
+        self._default_collection.name = "changed"
 
         script = Mock(self._db)
         basic_args = [
@@ -930,22 +922,28 @@ class TestDirectoryImportScript(DatabaseTest):
             "marc",
             "cover directory",
             "ebook directory",
-            "rights URI"
+            "rights URI",
         ]
-        script.run_with_arguments(*(basic_args + [True] + [EditionConstants.BOOK_MEDIUM]))
+        script.run_with_arguments(
+            *(basic_args + [True] + [EditionConstants.BOOK_MEDIUM])
+        )
 
         # load_collection was called with the collection and data source names.
-        assert (
-            [('collection name', CollectionType.OPEN_ACCESS, 'data source name')] ==
-            script.load_collection_calls)
+        assert [
+            ("collection name", CollectionType.OPEN_ACCESS, "data source name")
+        ] == script.load_collection_calls
 
         # load_metadata was called with the metadata file and data source name.
-        assert [('metadata file', 'marc', 'data source name', EditionConstants.BOOK_MEDIUM)] == script.load_metadata_calls
+        assert [
+            ("metadata file", "marc", "data source name", EditionConstants.BOOK_MEDIUM)
+        ] == script.load_metadata_calls
 
         # work_from_metadata was called twice, once on each metadata
         # object.
-        [(coll1, t1, o1, policy1, c1, e1, r1),
-         (coll2, t2, o2, policy2, c2, e2, r2)] = script.work_from_metadata_calls
+        [
+            (coll1, t1, o1, policy1, c1, e1, r1),
+            (coll2, t2, o2, policy2, c2, e2, r2),
+        ] = script.work_from_metadata_calls
 
         assert coll1 == self._default_collection
         assert coll1 == coll2
@@ -953,10 +951,10 @@ class TestDirectoryImportScript(DatabaseTest):
         assert o1 == metadata1
         assert o2 == metadata2
 
-        assert c1 == 'cover directory'
+        assert c1 == "cover directory"
         assert c1 == c2
 
-        assert e1 == 'ebook directory'
+        assert e1 == "ebook directory"
         assert e1 == e2
 
         assert "rights URI" == r1
@@ -977,8 +975,10 @@ class TestDirectoryImportScript(DatabaseTest):
 
         # This time, the ReplacementPolicy has a mirror set
         # appropriately.
-        [(coll1, t1, o1, policy1, c1, e1, r1),
-         (coll1, t2, o2, policy2, c2, e2, r2)] = script.work_from_metadata_calls
+        [
+            (coll1, t1, o1, policy1, c1, e1, r1),
+            (coll1, t2, o2, policy2, c2, e2, r2),
+        ] = script.work_from_metadata_calls
         for policy in policy1, policy2:
             assert mirrors == policy.mirrors
 
@@ -990,7 +990,8 @@ class TestDirectoryImportScript(DatabaseTest):
         # Calling load_collection does not create a new collection.
         script = DirectoryImportScript(self._db)
         collection, mirrors = script.load_collection(
-            "New collection", CollectionType.OPEN_ACCESS, "data source name")
+            "New collection", CollectionType.OPEN_ACCESS, "data source name"
+        )
         assert None == collection
         assert None == mirrors
 
@@ -999,7 +1000,8 @@ class TestDirectoryImportScript(DatabaseTest):
         )
 
         collection, mirrors = script.load_collection(
-            "some collection", CollectionType.OPEN_ACCESS, "data source name")
+            "some collection", CollectionType.OPEN_ACCESS, "data source name"
+        )
 
         # No covers or books mirrors were created beforehand for this collection
         # so nothing is returned.
@@ -1008,36 +1010,44 @@ class TestDirectoryImportScript(DatabaseTest):
 
         # Both mirrors need to set up or else nothing is returned.
         storage1 = self._external_integration(
-            ExternalIntegration.S3, ExternalIntegration.STORAGE_GOAL,
-            username="name", password="password"
+            ExternalIntegration.S3,
+            ExternalIntegration.STORAGE_GOAL,
+            username="name",
+            password="password",
         )
         external_integration_link = self._external_integration_link(
             integration=existing_collection.external_integration,
             other_integration=storage1,
-            purpose=ExternalIntegrationLink.COVERS
+            purpose=ExternalIntegrationLink.COVERS,
         )
 
         collection, mirrors = script.load_collection(
-            "some collection", CollectionType.OPEN_ACCESS, "data source name")
+            "some collection", CollectionType.OPEN_ACCESS, "data source name"
+        )
         assert None == collection
         assert None == mirrors
 
         # Create another storage and assign it for the books mirror
         storage2 = self._external_integration(
-            ExternalIntegration.S3, ExternalIntegration.STORAGE_GOAL,
-            username="name", password="password"
+            ExternalIntegration.S3,
+            ExternalIntegration.STORAGE_GOAL,
+            username="name",
+            password="password",
         )
         external_integration_link = self._external_integration_link(
             integration=existing_collection.external_integration,
             other_integration=storage2,
-            purpose=ExternalIntegrationLink.OPEN_ACCESS_BOOKS
+            purpose=ExternalIntegrationLink.OPEN_ACCESS_BOOKS,
         )
 
         collection, mirrors = script.load_collection(
-            "some collection", CollectionType.OPEN_ACCESS, "data source name")
+            "some collection", CollectionType.OPEN_ACCESS, "data source name"
+        )
         assert collection == existing_collection
         assert isinstance(mirrors[ExternalIntegrationLink.COVERS], MirrorUploader)
-        assert isinstance(mirrors[ExternalIntegrationLink.OPEN_ACCESS_BOOKS], MirrorUploader)
+        assert isinstance(
+            mirrors[ExternalIntegrationLink.OPEN_ACCESS_BOOKS], MirrorUploader
+        )
 
     def test_work_from_metadata(self):
         # Validate the ability to create a new Work from appropriate metadata.
@@ -1046,6 +1056,7 @@ class TestDirectoryImportScript(DatabaseTest):
             """In this test we need to verify that annotate_metadata
             was called but did nothing.
             """
+
             def annotate_metadata(self, collection_type, metadata, *args, **kwargs):
                 metadata.annotated = True
                 return super(Mock, self).annotate_metadata(
@@ -1055,14 +1066,12 @@ class TestDirectoryImportScript(DatabaseTest):
         identifier = IdentifierData(Identifier.GUTENBERG_ID, "1003")
         identifier_obj, ignore = identifier.load(self._db)
         metadata = Metadata(
-            DataSource.GUTENBERG,
-            primary_identifier=identifier,
-            title="A book"
+            DataSource.GUTENBERG, primary_identifier=identifier, title="A book"
         )
         metadata.annotated = False
         datasource = DataSource.lookup(self._db, DataSource.GUTENBERG)
         policy = ReplacementPolicy.from_license_source(self._db)
-        mirrors = dict(books_mirror=MockS3Uploader(),covers_mirror=MockS3Uploader())
+        mirrors = dict(books_mirror=MockS3Uploader(), covers_mirror=MockS3Uploader())
         mirror_type_books = ExternalIntegrationLink.OPEN_ACCESS_BOOKS
         mirror_type_covers = ExternalIntegrationLink.COVERS
         policy.mirrors = mirrors
@@ -1072,27 +1081,31 @@ class TestDirectoryImportScript(DatabaseTest):
         # disk' and thus no way to actually get the book.
         collection = self._default_collection
         collection_type = CollectionType.OPEN_ACCESS
-        shared_args = (collection_type, metadata, policy,
-                       "cover directory", "ebook directory", RightsStatus.CC0)
+        shared_args = (
+            collection_type,
+            metadata,
+            policy,
+            "cover directory",
+            "ebook directory",
+            RightsStatus.CC0,
+        )
         # args = (collection, *shared_args)
         script = Mock(self._db)
         assert None == script.work_from_metadata(collection, *shared_args)
         assert True == metadata.annotated
 
         # Now let's try it with some files 'on disk'.
-        with open(self.sample_cover_path('test-book-cover.png'), "rb") as fh:
+        with open(self.sample_cover_path("test-book-cover.png"), "rb") as fh:
             image = fh.read()
         mock_filesystem = {
-            'cover directory' : (
-                'cover.jpg', Representation.JPEG_MEDIA_TYPE, image
+            "cover directory": ("cover.jpg", Representation.JPEG_MEDIA_TYPE, image),
+            "ebook directory": (
+                "book.epub",
+                Representation.EPUB_MEDIA_TYPE,
+                "I'm an EPUB.",
             ),
-            'ebook directory' : (
-                'book.epub', Representation.EPUB_MEDIA_TYPE, "I'm an EPUB."
-            )
         }
-        script = MockDirectoryImportScript(
-            self._db, mock_filesystem=mock_filesystem
-        )
+        script = MockDirectoryImportScript(self._db, mock_filesystem=mock_filesystem)
         work, licensepool_for_work = script.work_from_metadata(collection, *shared_args)
 
         # Get the edition that was created for this book. It should have
@@ -1104,21 +1117,25 @@ class TestDirectoryImportScript(DatabaseTest):
         # thumbnail.
         assert "A book" == work.title
         assert (
-            work.cover_full_url ==
-            'https://test-cover-bucket.s3.amazonaws.com/Gutenberg/Gutenberg%20ID/1003/1003.jpg')
+            work.cover_full_url
+            == "https://test-cover-bucket.s3.amazonaws.com/Gutenberg/Gutenberg%20ID/1003/1003.jpg"
+        )
         assert (
-            work.cover_thumbnail_url ==
-            'https://test-cover-bucket.s3.amazonaws.com/scaled/300/Gutenberg/Gutenberg%20ID/1003/1003.png')
+            work.cover_thumbnail_url
+            == "https://test-cover-bucket.s3.amazonaws.com/scaled/300/Gutenberg/Gutenberg%20ID/1003/1003.png"
+        )
         assert 1 == len(work.license_pools)
         assert 1 == len(edition.license_pools)
-        assert 1 == len([lp for lp in edition.license_pools if lp.collection == collection])
+        assert 1 == len(
+            [lp for lp in edition.license_pools if lp.collection == collection]
+        )
         [pool] = work.license_pools
         assert licensepool_for_work == pool
         assert (
-            pool.open_access_download_url ==
-            'https://test-content-bucket.s3.amazonaws.com/Gutenberg/Gutenberg%20ID/1003/A%20book.epub')
-        assert (RightsStatus.CC0 ==
-            pool.delivery_mechanisms[0].rights_status.uri)
+            pool.open_access_download_url
+            == "https://test-content-bucket.s3.amazonaws.com/Gutenberg/Gutenberg%20ID/1003/A%20book.epub"
+        )
+        assert RightsStatus.CC0 == pool.delivery_mechanisms[0].rights_status.uri
 
         # The two mock S3Uploaders have records of 'uploading' all these files
         # to S3. The "books" mirror has the epubs and the "covers" mirror
@@ -1138,8 +1155,10 @@ class TestDirectoryImportScript(DatabaseTest):
         # the same metadata.
         # Even though there will be two license pools associated with the
         # work's presentation edition, the call should be successful.
-        collection2 = self._collection('second collection')
-        work2, licensepool_for_work2 = script.work_from_metadata(collection2, *shared_args)
+        collection2 = self._collection("second collection")
+        work2, licensepool_for_work2 = script.work_from_metadata(
+            collection2, *shared_args
+        )
 
         # The presentation edition should be the same for both works.
         edition2 = work2.presentation_edition
@@ -1153,7 +1172,9 @@ class TestDirectoryImportScript(DatabaseTest):
         # one for each collection.
         assert 2 == len(work2.license_pools)
         assert 2 == len(edition2.license_pools)
-        assert 1 == len([lp for lp in edition2.license_pools if lp.collection == collection2])
+        assert 1 == len(
+            [lp for lp in edition2.license_pools if lp.collection == collection2]
+        )
 
     def test_annotate_metadata(self):
         """Verify that annotate_metadata calls load_circulation_data
@@ -1165,6 +1186,7 @@ class TestDirectoryImportScript(DatabaseTest):
             """Do nothing when load_circulation_data is called. Explode if
             load_cover_link is called.
             """
+
             def load_circulation_data(self, *args):
                 self.load_circulation_data_args = args
                 return None
@@ -1177,9 +1199,7 @@ class TestDirectoryImportScript(DatabaseTest):
         identifier = IdentifierData(Identifier.GUTENBERG_ID, "11111")
         identifier_obj, ignore = identifier.load(self._db)
         metadata = Metadata(
-            title=self._str,
-            data_source=gutenberg,
-            primary_identifier=identifier
+            title=self._str, data_source=gutenberg, primary_identifier=identifier
         )
         mirrors = object()
         policy = ReplacementPolicy(mirrors=mirrors)
@@ -1194,22 +1214,20 @@ class TestDirectoryImportScript(DatabaseTest):
             policy,
             cover_directory,
             ebook_directory,
-            rights_uri
+            rights_uri,
         )
         script.annotate_metadata(*args)
 
         # load_circulation_data was called.
         assert (
-            (
-                collection_type,
-                identifier_obj,
-                gutenberg,
-                ebook_directory,
-                mirrors,
-                metadata.title,
-                rights_uri
-            ) ==
-            script.load_circulation_data_args)
+            collection_type,
+            identifier_obj,
+            gutenberg,
+            ebook_directory,
+            mirrors,
+            metadata.title,
+            rights_uri,
+        ) == script.load_circulation_data_args
 
         # But because load_circulation_data returned None,
         # metadata.circulation_data was not modified and
@@ -1222,6 +1240,7 @@ class TestDirectoryImportScript(DatabaseTest):
             """Return an object when load_circulation_data is called.
             Do nothing when load_cover_link is called.
             """
+
             def load_circulation_data(self, *args):
                 return "Some circulation data"
 
@@ -1238,8 +1257,11 @@ class TestDirectoryImportScript(DatabaseTest):
 
         # load_cover_link was called.
         assert (
-            (identifier_obj, gutenberg, cover_directory, mirrors) ==
-            script.load_cover_link_args)
+            identifier_obj,
+            gutenberg,
+            cover_directory,
+            mirrors,
+        ) == script.load_cover_link_args
 
         # But since it provided no cover link, metadata.links was empty.
         assert [] == metadata.links
@@ -1249,6 +1271,7 @@ class TestDirectoryImportScript(DatabaseTest):
             """Mock success for both load_circulation_data
             and load_cover_link.
             """
+
             def load_circulation_data(self, *args):
                 return "Some circulation data"
 
@@ -1260,7 +1283,7 @@ class TestDirectoryImportScript(DatabaseTest):
         script.annotate_metadata(*args)
 
         assert "Some circulation data" == metadata.circulation
-        assert ['A cover link'] == metadata.links
+        assert ["A cover link"] == metadata.links
 
     def test_load_circulation_data(self):
         # Create a directory import script with an empty mock filesystem.
@@ -1268,7 +1291,7 @@ class TestDirectoryImportScript(DatabaseTest):
 
         identifier = self._identifier(Identifier.GUTENBERG_ID, "2345")
         gutenberg = DataSource.lookup(self._db, DataSource.GUTENBERG)
-        mirrors = dict(books_mirror=MockS3Uploader(),covers_mirror=None)
+        mirrors = dict(books_mirror=MockS3Uploader(), covers_mirror=None)
         args = (
             CollectionType.OPEN_ACCESS,
             identifier,
@@ -1276,7 +1299,7 @@ class TestDirectoryImportScript(DatabaseTest):
             "ebooks",
             mirrors,
             "Name of book",
-            "rights URI"
+            "rights URI",
         )
 
         # There is nothing on the mock filesystem, so in this case
@@ -1285,15 +1308,15 @@ class TestDirectoryImportScript(DatabaseTest):
 
         # But we tried.
         assert (
-            ('2345', 'ebooks', Representation.COMMON_EBOOK_EXTENSIONS,
-             'ebook file') ==
-            script._locate_file_args)
+            "2345",
+            "ebooks",
+            Representation.COMMON_EBOOK_EXTENSIONS,
+            "ebook file",
+        ) == script._locate_file_args
 
         # Try another script that has a populated mock filesystem.
         mock_filesystem = {
-            'ebooks' : (
-                'book.epub', Representation.EPUB_MEDIA_TYPE, "I'm an EPUB."
-            )
+            "ebooks": ("book.epub", Representation.EPUB_MEDIA_TYPE, "I'm an EPUB.")
         }
         script = MockDirectoryImportScript(self._db, mock_filesystem)
 
@@ -1309,8 +1332,9 @@ class TestDirectoryImportScript(DatabaseTest):
         [link] = circulation.links
         assert Hyperlink.OPEN_ACCESS_DOWNLOAD == link.rel
         assert (
-            link.href ==
-            'https://test-content-bucket.s3.amazonaws.com/Gutenberg/Gutenberg%20ID/2345/Name%20of%20book.epub')
+            link.href
+            == "https://test-content-bucket.s3.amazonaws.com/Gutenberg/Gutenberg%20ID/2345/Name%20of%20book.epub"
+        )
         assert Representation.EPUB_MEDIA_TYPE == link.media_type
         assert "I'm an EPUB." == link.content
 
@@ -1327,7 +1351,7 @@ class TestDirectoryImportScript(DatabaseTest):
 
         identifier = self._identifier(Identifier.GUTENBERG_ID, "2345")
         gutenberg = DataSource.lookup(self._db, DataSource.GUTENBERG)
-        mirrors = dict(covers_mirror=MockS3Uploader(),books_mirror=None)
+        mirrors = dict(covers_mirror=MockS3Uploader(), books_mirror=None)
         args = (identifier, gutenberg, "covers", mirrors)
 
         # There is nothing on the mock filesystem, so in this case
@@ -1336,22 +1360,23 @@ class TestDirectoryImportScript(DatabaseTest):
 
         # But we tried.
         assert (
-            ('2345', 'covers', Representation.COMMON_IMAGE_EXTENSIONS,
-             'cover image') ==
-            script._locate_file_args)
+            "2345",
+            "covers",
+            Representation.COMMON_IMAGE_EXTENSIONS,
+            "cover image",
+        ) == script._locate_file_args
 
         # Try another script that has a populated mock filesystem.
         mock_filesystem = {
-            'covers' : (
-                'acover.jpeg', Representation.JPEG_MEDIA_TYPE, "I'm an image."
-            )
+            "covers": ("acover.jpeg", Representation.JPEG_MEDIA_TYPE, "I'm an image.")
         }
         script = MockDirectoryImportScript(self._db, mock_filesystem)
         link = script.load_cover_link(*args)
         assert Hyperlink.IMAGE == link.rel
         assert (
-            link.href ==
-            'https://test-cover-bucket.s3.amazonaws.com/Gutenberg/Gutenberg%20ID/2345/2345.jpg')
+            link.href
+            == "https://test-cover-bucket.s3.amazonaws.com/Gutenberg/Gutenberg%20ID/2345/2345.jpg"
+        )
         assert Representation.JPEG_MEDIA_TYPE == link.media_type
         assert "I'm an image." == link.content
 
@@ -1360,15 +1385,15 @@ class TestDirectoryImportScript(DatabaseTest):
         to find files on a mock filesystem.
         """
         # Create a mock filesystem with a single file.
-        mock_filesystem = {
-            "directory/thefile.JPEG" : "The contents"
-        }
+        mock_filesystem = {"directory/thefile.JPEG": "The contents"}
+
         def mock_exists(path):
             return path in mock_filesystem
 
         @contextlib.contextmanager
         def mock_open(path, mode="r"):
             yield StringIO(mock_filesystem[path])
+
         mock_filesystem_operations = mock_exists, mock_open
 
         def assert_not_found(base_filename, directory, extensions):
@@ -1376,8 +1401,11 @@ class TestDirectoryImportScript(DatabaseTest):
             _locate_file() does not find anything.
             """
             result = DirectoryImportScript._locate_file(
-                base_filename, directory, extensions, file_type="some file",
-                mock_filesystem_operations=mock_filesystem_operations
+                base_filename,
+                directory,
+                extensions,
+                file_type="some file",
+                mock_filesystem_operations=mock_filesystem_operations,
             )
             assert (None, None, None) == result
 
@@ -1386,36 +1414,39 @@ class TestDirectoryImportScript(DatabaseTest):
             finds and loads the single file on the mock filesystem..
             """
             result = DirectoryImportScript._locate_file(
-                base_filename, directory, extensions, file_type="some file",
-                mock_filesystem_operations=mock_filesystem_operations
+                base_filename,
+                directory,
+                extensions,
+                file_type="some file",
+                mock_filesystem_operations=mock_filesystem_operations,
             )
             assert (
-                ("thefile.JPEG", Representation.JPEG_MEDIA_TYPE,
-                 "The contents") ==
-                result)
+                "thefile.JPEG",
+                Representation.JPEG_MEDIA_TYPE,
+                "The contents",
+            ) == result
 
         # As long as the file and directory match we have some flexibility
         # regarding the extensions we look for.
-        assert_found('thefile', 'directory', ['.jpeg'])
-        assert_found('thefile', 'directory', ['.JPEG'])
-        assert_found('thefile', 'directory', ['jpeg'])
-        assert_found('thefile', 'directory', ['JPEG'])
-        assert_found('thefile', 'directory', ['.another-extension', '.jpeg'])
+        assert_found("thefile", "directory", [".jpeg"])
+        assert_found("thefile", "directory", [".JPEG"])
+        assert_found("thefile", "directory", ["jpeg"])
+        assert_found("thefile", "directory", ["JPEG"])
+        assert_found("thefile", "directory", [".another-extension", ".jpeg"])
 
         # But file, directory, and (flexible) extension must all match.
-        assert_not_found('anotherfile', 'directory', ['.jpeg'])
-        assert_not_found('thefile', 'another_directory', ['.jpeg'])
-        assert_not_found('thefile', 'directory', ['.another-extension'])
-        assert_not_found('thefile', 'directory', [])
+        assert_not_found("anotherfile", "directory", [".jpeg"])
+        assert_not_found("thefile", "another_directory", [".jpeg"])
+        assert_not_found("thefile", "directory", [".another-extension"])
+        assert_not_found("thefile", "directory", [])
+
 
 class TestNovelistSnapshotScript(DatabaseTest):
-
     def mockNoveListAPI(self, *args, **kwargs):
         self.called_with = (args, kwargs)
 
     def test_do_run(self):
-        """Test that NovelistSnapshotScript.do_run() calls the NoveList api.
-        """
+        """Test that NovelistSnapshotScript.do_run() calls the NoveList api."""
 
         class MockNovelistSnapshotScript(NovelistSnapshotScript):
             pass
@@ -1434,27 +1465,24 @@ class TestNovelistSnapshotScript(DatabaseTest):
 
         NoveListAPI.from_config = oldNovelistConfig
 
+
 class TestLocalAnalyticsExportScript(DatabaseTest):
-
     def test_do_run(self):
-
         class MockLocalAnalyticsExporter(object):
             def export(self, _db, start, end):
                 self.called_with = [start, end]
                 return "test"
 
         output = StringIO()
-        cmd_args = ['--start=20190820', '--end=20190827']
+        cmd_args = ["--start=20190820", "--end=20190827"]
         exporter = MockLocalAnalyticsExporter()
         script = LocalAnalyticsExportScript()
-        script.do_run(
-            output=output, cmd_args=cmd_args,
-            exporter=exporter)
+        script.do_run(output=output, cmd_args=cmd_args, exporter=exporter)
         assert "test" == output.getvalue()
-        assert ['20190820', '20190827'] == exporter.called_with
+        assert ["20190820", "20190827"] == exporter.called_with
+
 
 class TestGenerateShortTokenScript(DatabaseTest):
-
     @pytest.fixture
     def script(self):
         return GenerateShortTokenScript()
@@ -1477,21 +1505,22 @@ class TestGenerateShortTokenScript(DatabaseTest):
 
     @pytest.fixture
     def patron(self, authdata):
-        patron = self._patron(external_identifier='test')
-        patron.authorization_identifier = 'test'
+        patron = self._patron(external_identifier="test")
+        patron.authorization_identifier = "test"
         adobe_credential = self._credential(
             data_source_name=DataSource.INTERNAL_PROCESSING,
             patron=patron,
-            type=authdata.ADOBE_ACCOUNT_ID_PATRON_IDENTIFIER)
-        adobe_credential.credential = '1234567'
+            type=authdata.ADOBE_ACCOUNT_ID_PATRON_IDENTIFIER,
+        )
+        adobe_credential.credential = "1234567"
         return patron
 
     @pytest.fixture
     def authentication_provider(self):
-        barcode = '12345'
-        pin = 'abcd'
+        barcode = "12345"
+        pin = "abcd"
         integration = self._external_integration(
-            'api.simple_authentication', goal=ExternalIntegration.PATRON_AUTH_GOAL
+            "api.simple_authentication", goal=ExternalIntegration.PATRON_AUTH_GOAL
         )
         self._default_library.integrations.append(integration)
         integration.setting(BasicAuthenticationProvider.TEST_IDENTIFIER).value = barcode
@@ -1500,74 +1529,88 @@ class TestGenerateShortTokenScript(DatabaseTest):
 
     def test_run_days(self, script, output, authdata, patron):
         # Test with --days
-        cmd_args = ['--barcode={}'.format(patron.authorization_identifier), '--days=2', self._default_library.short_name]
-        script.do_run(
-            _db=self._db,
-            output=output, cmd_args=cmd_args,
-            authdata=authdata)
-        assert output.getvalue().split('\n') == [
-            'Vendor ID: The Vendor ID',
-            'Token: YOU|1620345600|1234567|ZP45vhpfs3fHREvFkDDVgDAmhoD699elFD3PGaZu7yo@',
-            'Username: YOU|1620345600|1234567',
-            'Password: ZP45vhpfs3fHREvFkDDVgDAmhoD699elFD3PGaZu7yo@',
-            ''
+        cmd_args = [
+            "--barcode={}".format(patron.authorization_identifier),
+            "--days=2",
+            self._default_library.short_name,
+        ]
+        script.do_run(_db=self._db, output=output, cmd_args=cmd_args, authdata=authdata)
+        assert output.getvalue().split("\n") == [
+            "Vendor ID: The Vendor ID",
+            "Token: YOU|1620345600|1234567|ZP45vhpfs3fHREvFkDDVgDAmhoD699elFD3PGaZu7yo@",
+            "Username: YOU|1620345600|1234567",
+            "Password: ZP45vhpfs3fHREvFkDDVgDAmhoD699elFD3PGaZu7yo@",
+            "",
         ]
 
     def test_run_minutes(self, script, output, authdata, patron):
         # Test with --minutes
-        cmd_args = ['--barcode={}'.format(patron.authorization_identifier), '--minutes=20', self._default_library.short_name]
-        script.do_run(
-            _db=self._db,
-            output=output, cmd_args=cmd_args,
-            authdata=authdata)
-        assert output.getvalue().split('\n')[2] == 'Username: YOU|1620174000|1234567'
+        cmd_args = [
+            "--barcode={}".format(patron.authorization_identifier),
+            "--minutes=20",
+            self._default_library.short_name,
+        ]
+        script.do_run(_db=self._db, output=output, cmd_args=cmd_args, authdata=authdata)
+        assert output.getvalue().split("\n")[2] == "Username: YOU|1620174000|1234567"
 
     def test_run_hours(self, script, output, authdata, patron):
         # Test with --hours
-        cmd_args = ['--barcode={}'.format(patron.authorization_identifier), '--hours=4', self._default_library.short_name]
-        script.do_run(
-            _db=self._db,
-            output=output, cmd_args=cmd_args,
-            authdata=authdata)
-        assert output.getvalue().split('\n')[2] == 'Username: YOU|1620187200|1234567'
+        cmd_args = [
+            "--barcode={}".format(patron.authorization_identifier),
+            "--hours=4",
+            self._default_library.short_name,
+        ]
+        script.do_run(_db=self._db, output=output, cmd_args=cmd_args, authdata=authdata)
+        assert output.getvalue().split("\n")[2] == "Username: YOU|1620187200|1234567"
 
     def test_no_registry(self, script, output, patron):
-        cmd_args = ['--barcode={}'.format(patron.authorization_identifier), '--minutes=20', self._default_library.short_name]
+        cmd_args = [
+            "--barcode={}".format(patron.authorization_identifier),
+            "--minutes=20",
+            self._default_library.short_name,
+        ]
         with pytest.raises(SystemExit) as pytest_exit:
-            script.do_run(
-                _db=self._db,
-                output=output, cmd_args=cmd_args)
+            script.do_run(_db=self._db, output=output, cmd_args=cmd_args)
         assert pytest_exit.value.code == -1
         assert "Library not registered with library registry" in output.getvalue()
 
     def test_no_patron_auth_method(self, script, output):
         # Test running when the patron does not exist
-        cmd_args = ['--barcode={}'.format('1234567'), '--hours=4', self._default_library.short_name]
+        cmd_args = [
+            "--barcode={}".format("1234567"),
+            "--hours=4",
+            self._default_library.short_name,
+        ]
         with pytest.raises(SystemExit) as pytest_exit:
-            script.do_run(
-                _db=self._db,
-                output=output, cmd_args=cmd_args)
+            script.do_run(_db=self._db, output=output, cmd_args=cmd_args)
         assert pytest_exit.value.code == -1
         assert "No methods to authenticate patron found" in output.getvalue()
 
     def test_patron_auth(self, script, output, authdata, authentication_provider):
         barcode, pin = authentication_provider
         # Test running when the patron does not exist
-        cmd_args = ['--barcode={}'.format(barcode), '--pin={}'.format(pin), '--hours=4', self._default_library.short_name]
-        script.do_run(
-            _db=self._db,
-            output=output, cmd_args=cmd_args,
-            authdata=authdata)
+        cmd_args = [
+            "--barcode={}".format(barcode),
+            "--pin={}".format(pin),
+            "--hours=4",
+            self._default_library.short_name,
+        ]
+        script.do_run(_db=self._db, output=output, cmd_args=cmd_args, authdata=authdata)
         assert "Token: YOU|1620187200" in output.getvalue()
 
-    def test_patron_auth_no_patron(self, script, output, authdata, authentication_provider):
-        barcode = 'nonexistent'
+    def test_patron_auth_no_patron(
+        self, script, output, authdata, authentication_provider
+    ):
+        barcode = "nonexistent"
         # Test running when the patron does not exist
-        cmd_args = ['--barcode={}'.format(barcode), '--hours=4', self._default_library.short_name]
+        cmd_args = [
+            "--barcode={}".format(barcode),
+            "--hours=4",
+            self._default_library.short_name,
+        ]
         with pytest.raises(SystemExit) as pytest_exit:
             script.do_run(
-                _db=self._db,
-                output=output, cmd_args=cmd_args,
-                authdata=authdata)
+                _db=self._db, output=output, cmd_args=cmd_args, authdata=authdata
+            )
         assert pytest_exit.value.code == -1
         assert "Patron not found" in output.getvalue()

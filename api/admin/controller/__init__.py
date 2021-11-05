@@ -13,27 +13,31 @@ from datetime import (
 
 import flask
 import jwt
-from flask import (redirect, Response)
+from flask import redirect, Response
 from flask_babel import lazy_gettext as _
 from sqlalchemy.sql import func
-from sqlalchemy.sql.expression import (and_, desc, distinct, join, nullslast, select)
+from sqlalchemy.sql.expression import and_, desc, distinct, join, nullslast, select
 
 from api.admin.config import Configuration as AdminClientConfig
 from api.admin.exceptions import *
-from api.admin.google_oauth_admin_authentication_provider import GoogleOAuthAdminAuthenticationProvider
+from api.admin.google_oauth_admin_authentication_provider import (
+    GoogleOAuthAdminAuthenticationProvider,
+)
 from api.admin.opds import (
     AdminAnnotator,
     AdminFeed,
 )
-from api.admin.password_admin_authentication_provider import PasswordAdminAuthenticationProvider
+from api.admin.password_admin_authentication_provider import (
+    PasswordAdminAuthenticationProvider,
+)
 from api.admin.template_styles import *
 from api.admin.templates import admin as admin_template
 from api.admin.validator import Validator
 from api.adobe_vendor_id import AuthdataUtility
-from api.authenticator import (CannotCreateLocalPatron, LibraryAuthenticator, PatronData)
+from api.authenticator import CannotCreateLocalPatron, LibraryAuthenticator, PatronData
 from api.axis import Axis360API
 from api.bibliotheca import BibliothecaAPI
-from api.config import (CannotLoadConfiguration, Configuration)
+from api.config import CannotLoadConfiguration, Configuration
 from api.controller import CirculationManagerController
 from api.enki import EnkiAPI
 from api.feedbooks import FeedbooksOPDSImporter
@@ -52,9 +56,7 @@ from api.proquest.importer import ProQuestOPDS2Importer
 from core.app_server import (
     load_pagination_from_request,
 )
-from core.classifier import (
-    genres
-)
+from core.classifier import genres
 from core.external_search import ExternalSearchIndex
 from core.lane import (
     Lane,
@@ -86,7 +88,7 @@ from core.model import (
 from core.model.configuration import ExternalIntegrationLink
 from core.opds import AcquisitionFeed
 from core.opds2_import import OPDS2Importer
-from core.opds_import import (OPDSImporter, OPDSImportMonitor)
+from core.opds_import import OPDSImporter, OPDSImportMonitor
 from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
 from core.util.datetime_helpers import utc_now
@@ -108,6 +110,7 @@ def setup_admin_controllers(manager):
     manager.admin_sign_in_controller = SignInController(manager)
     manager.timestamps_controller = TimestampsController(manager)
     from api.admin.controller.work_editor import WorkController
+
     manager.admin_work_controller = WorkController(manager)
     manager.admin_feed_controller = FeedController(manager)
     manager.admin_custom_lists_controller = CustomListsController(manager)
@@ -116,50 +119,105 @@ def setup_admin_controllers(manager):
     manager.admin_settings_controller = SettingsController(manager)
     manager.admin_patron_controller = PatronController(manager)
     from api.admin.controller.self_tests import SelfTestsController
+
     manager.admin_self_tests_controller = SelfTestsController(manager)
     from api.admin.controller.discovery_services import DiscoveryServicesController
+
     manager.admin_discovery_services_controller = DiscoveryServicesController(manager)
-    from api.admin.controller.discovery_service_library_registrations import DiscoveryServiceLibraryRegistrationsController
-    manager.admin_discovery_service_library_registrations_controller = DiscoveryServiceLibraryRegistrationsController(manager)
+    from api.admin.controller.discovery_service_library_registrations import (
+        DiscoveryServiceLibraryRegistrationsController,
+    )
+
+    manager.admin_discovery_service_library_registrations_controller = (
+        DiscoveryServiceLibraryRegistrationsController(manager)
+    )
     from api.admin.controller.cdn_services import CDNServicesController
+
     manager.admin_cdn_services_controller = CDNServicesController(manager)
     from api.admin.controller.analytics_services import AnalyticsServicesController
+
     manager.admin_analytics_services_controller = AnalyticsServicesController(manager)
     from api.admin.controller.metadata_services import MetadataServicesController
+
     manager.admin_metadata_services_controller = MetadataServicesController(manager)
     from api.admin.controller.patron_auth_services import PatronAuthServicesController
-    from api.admin.controller.metadata_service_self_tests import MetadataServiceSelfTestsController
-    manager.admin_metadata_service_self_tests_controller = MetadataServiceSelfTestsController(manager)
-    manager.admin_patron_auth_services_controller = PatronAuthServicesController(manager)
-    from api.admin.controller.patron_auth_service_self_tests import PatronAuthServiceSelfTestsController
-    manager.admin_patron_auth_service_self_tests_controller = PatronAuthServiceSelfTestsController(manager)
+    from api.admin.controller.metadata_service_self_tests import (
+        MetadataServiceSelfTestsController,
+    )
+
+    manager.admin_metadata_service_self_tests_controller = (
+        MetadataServiceSelfTestsController(manager)
+    )
+    manager.admin_patron_auth_services_controller = PatronAuthServicesController(
+        manager
+    )
+    from api.admin.controller.patron_auth_service_self_tests import (
+        PatronAuthServiceSelfTestsController,
+    )
+
+    manager.admin_patron_auth_service_self_tests_controller = (
+        PatronAuthServiceSelfTestsController(manager)
+    )
     from api.admin.controller.admin_auth_services import AdminAuthServicesController
+
     manager.admin_auth_services_controller = AdminAuthServicesController(manager)
     from api.admin.controller.collection_settings import CollectionSettingsController
+
     manager.admin_collection_settings_controller = CollectionSettingsController(manager)
     from api.admin.controller.collection_self_tests import CollectionSelfTestsController
-    manager.admin_collection_self_tests_controller = CollectionSelfTestsController(manager)
-    from api.admin.controller.collection_library_registrations import CollectionLibraryRegistrationsController
-    manager.admin_collection_library_registrations_controller = CollectionLibraryRegistrationsController(manager)
-    from api.admin.controller.sitewide_settings import SitewideConfigurationSettingsController
-    manager.admin_sitewide_configuration_settings_controller = SitewideConfigurationSettingsController(manager)
+
+    manager.admin_collection_self_tests_controller = CollectionSelfTestsController(
+        manager
+    )
+    from api.admin.controller.collection_library_registrations import (
+        CollectionLibraryRegistrationsController,
+    )
+
+    manager.admin_collection_library_registrations_controller = (
+        CollectionLibraryRegistrationsController(manager)
+    )
+    from api.admin.controller.sitewide_settings import (
+        SitewideConfigurationSettingsController,
+    )
+
+    manager.admin_sitewide_configuration_settings_controller = (
+        SitewideConfigurationSettingsController(manager)
+    )
     from api.admin.controller.library_settings import LibrarySettingsController
+
     manager.admin_library_settings_controller = LibrarySettingsController(manager)
-    from api.admin.controller.individual_admin_settings import IndividualAdminSettingsController
-    manager.admin_individual_admin_settings_controller = IndividualAdminSettingsController(manager)
-    from api.admin.controller.sitewide_services import SitewideServicesController, LoggingServicesController, SearchServicesController
+    from api.admin.controller.individual_admin_settings import (
+        IndividualAdminSettingsController,
+    )
+
+    manager.admin_individual_admin_settings_controller = (
+        IndividualAdminSettingsController(manager)
+    )
+    from api.admin.controller.sitewide_services import (
+        SitewideServicesController,
+        LoggingServicesController,
+        SearchServicesController,
+    )
+
     manager.admin_sitewide_services_controller = SitewideServicesController(manager)
     manager.admin_logging_services_controller = LoggingServicesController(manager)
-    from api.admin.controller.search_service_self_tests import SearchServiceSelfTestsController
-    manager.admin_search_service_self_tests_controller = SearchServiceSelfTestsController(manager)
+    from api.admin.controller.search_service_self_tests import (
+        SearchServiceSelfTestsController,
+    )
+
+    manager.admin_search_service_self_tests_controller = (
+        SearchServiceSelfTestsController(manager)
+    )
     manager.admin_search_services_controller = SearchServicesController(manager)
     from api.admin.controller.storage_services import StorageServicesController
+
     manager.admin_storage_services_controller = StorageServicesController(manager)
     from api.admin.controller.catalog_services import CatalogServicesController
+
     manager.admin_catalog_services_controller = CatalogServicesController(manager)
 
-class AdminController(object):
 
+class AdminController(object):
     def __init__(self, manager):
         self.manager = manager
         self._db = self.manager._db
@@ -171,15 +229,19 @@ class AdminController(object):
         auth_providers = []
         auth_service = ExternalIntegration.admin_authentication(self._db)
         if auth_service and auth_service.protocol == ExternalIntegration.GOOGLE_OAUTH:
-            auth_providers.append(GoogleOAuthAdminAuthenticationProvider(
-                auth_service,
-                self.url_for('google_auth_callback'),
-                test_mode=self.manager.testing,
-            ))
+            auth_providers.append(
+                GoogleOAuthAdminAuthenticationProvider(
+                    auth_service,
+                    self.url_for("google_auth_callback"),
+                    test_mode=self.manager.testing,
+                )
+            )
         if Admin.with_password(self._db).count() != 0:
-            auth_providers.append(PasswordAdminAuthenticationProvider(
-                auth_service,
-            ))
+            auth_providers.append(
+                PasswordAdminAuthenticationProvider(
+                    auth_service,
+                )
+            )
         return auth_providers
 
     def admin_auth_provider(self, type):
@@ -212,23 +274,27 @@ class AdminController(object):
     def authenticated_admin(self, admin_details):
         """Creates or updates an admin with the given details"""
 
-        admin, is_new = get_one_or_create(
-            self._db, Admin, email=admin_details['email']
-        )
+        admin, is_new = get_one_or_create(self._db, Admin, email=admin_details["email"])
         admin.update_credentials(
             self._db,
-            credential=admin_details.get('credentials'),
+            credential=admin_details.get("credentials"),
         )
         if is_new and admin_details.get("roles"):
             for role in admin_details.get("roles"):
                 if role.get("role") in AdminRole.ROLES:
                     library = Library.lookup(self._db, role.get("library"))
                     if role.get("library") and not library:
-                        self.log.warn("%s authentication provider specifiec an unknown library for a new admin: %s" % (admin_details.get("type"), role.get("library")))
+                        self.log.warn(
+                            "%s authentication provider specifiec an unknown library for a new admin: %s"
+                            % (admin_details.get("type"), role.get("library"))
+                        )
                     else:
                         admin.add_role(role.get("role"), library)
                 else:
-                    self.log.warn("%s authentication provider specified an unknown role for a new admin: %s" % (admin_details.get("type"), role.get("role")))
+                    self.log.warn(
+                        "%s authentication provider specified an unknown role for a new admin: %s"
+                        % (admin_details.get("type"), role.get("role"))
+                    )
 
         # Set up the admin's flask session.
         flask.session["admin_email"] = admin_details.get("email")
@@ -244,11 +310,9 @@ class AdminController(object):
         # current request. This assumes the first authenticated admin
         # is accessing the admin interface through the hostname they
         # want to be used for the site itself.
-        base_url = ConfigurationSetting.sitewide(
-            self._db, Configuration.BASE_URL_KEY
-        )
+        base_url = ConfigurationSetting.sitewide(self._db, Configuration.BASE_URL_KEY)
         if not base_url.value:
-            base_url.value = urllib.parse.urljoin(flask.request.url, '/')
+            base_url.value = urllib.parse.urljoin(flask.request.url, "/")
 
         return admin
 
@@ -269,6 +333,7 @@ class AdminController(object):
     def generate_csrf_token(self):
         """Generate a random CSRF token."""
         return base64.b64encode(os.urandom(24)).decode("utf-8")
+
 
 class AdminCirculationManagerController(CirculationManagerController):
     """Parent class that provides methods for verifying an admin's roles."""
@@ -304,24 +369,24 @@ class AdminCirculationManagerController(CirculationManagerController):
 
 class ViewController(AdminController):
     def __call__(self, collection, book, path=None):
-        setting_up = (self.admin_auth_providers == [])
+        setting_up = self.admin_auth_providers == []
         email = None
         roles = []
         if not setting_up:
             admin = self.authenticated_admin_from_request()
             if isinstance(admin, ProblemDetail):
                 redirect_url = flask.request.url
-                if (collection):
+                if collection:
                     quoted_collection = urllib.parse.quote(collection)
                     redirect_url = redirect_url.replace(
-                        quoted_collection,
-                        quoted_collection.replace("/", "%2F"))
-                if (book):
+                        quoted_collection, quoted_collection.replace("/", "%2F")
+                    )
+                if book:
                     quoted_book = urllib.parse.quote(book)
                     redirect_url = redirect_url.replace(
-                        quoted_book,
-                        quoted_book.replace("/", "%2F"))
-                return redirect(self.url_for('admin_sign_in', redirect=redirect_url))
+                        quoted_book, quoted_book.replace("/", "%2F")
+                    )
+                return redirect(self.url_for("admin_sign_in", redirect=redirect_url))
 
             if not collection and not book and not path:
                 if self._db.query(Library).count() > 0:
@@ -332,49 +397,62 @@ class ViewController(AdminController):
                             library_name = library.short_name
                             break
                     if not library_name:
-                        return Response(_("Your admin account doesn't have access to any libraries. Contact your library manager for assistance."), 200)
-                    return redirect(self.url_for('admin_view', collection=library_name))
+                        return Response(
+                            _(
+                                "Your admin account doesn't have access to any libraries. Contact your library manager for assistance."
+                            ),
+                            200,
+                        )
+                    return redirect(self.url_for("admin_view", collection=library_name))
 
             email = admin.email
             for role in admin.roles:
                 if role.library:
-                    roles.append({ "role": role.role, "library": role.library })
+                    roles.append({"role": role.role, "library": role.library})
                 else:
-                    roles.append({ "role": role.role })
+                    roles.append({"role": role.role})
 
-        csrf_token = flask.request.cookies.get("csrf_token") or self.generate_csrf_token()
-        admin_js = AdminClientConfig.lookup_asset_url(key='admin_js')
-        admin_css = AdminClientConfig.lookup_asset_url(key='admin_css')
+        csrf_token = (
+            flask.request.cookies.get("csrf_token") or self.generate_csrf_token()
+        )
+        admin_js = AdminClientConfig.lookup_asset_url(key="admin_js")
+        admin_css = AdminClientConfig.lookup_asset_url(key="admin_css")
 
         # Find the URL and text to use when rendering the Terms of
         # Service link in the footer.
-        sitewide_tos_href = ConfigurationSetting.sitewide(
-            self._db, Configuration.CUSTOM_TOS_HREF
-        ).value or Configuration.DEFAULT_TOS_HREF
+        sitewide_tos_href = (
+            ConfigurationSetting.sitewide(self._db, Configuration.CUSTOM_TOS_HREF).value
+            or Configuration.DEFAULT_TOS_HREF
+        )
 
-        sitewide_tos_text = ConfigurationSetting.sitewide(
-            self._db, Configuration.CUSTOM_TOS_TEXT
-        ).value or Configuration.DEFAULT_TOS_TEXT
+        sitewide_tos_text = (
+            ConfigurationSetting.sitewide(self._db, Configuration.CUSTOM_TOS_TEXT).value
+            or Configuration.DEFAULT_TOS_TEXT
+        )
 
         local_analytics = get_one(
-            self._db, ExternalIntegration,
+            self._db,
+            ExternalIntegration,
             protocol=LocalAnalyticsProvider.__module__,
-            goal=ExternalIntegration.ANALYTICS_GOAL)
-        show_circ_events_download = (local_analytics != None)
+            goal=ExternalIntegration.ANALYTICS_GOAL,
+        )
+        show_circ_events_download = local_analytics != None
 
-        response = Response(flask.render_template_string(
-            admin_template,
-            app_name=AdminClientConfig.APP_NAME,
-            csrf_token=csrf_token,
-            sitewide_tos_href=sitewide_tos_href,
-            sitewide_tos_text=sitewide_tos_text,
-            show_circ_events_download=show_circ_events_download,
-            setting_up=setting_up,
-            email=email,
-            roles=roles,
-            admin_js=admin_js,
-            admin_css=admin_css
-        ))
+        response = Response(
+            flask.render_template_string(
+                admin_template,
+                app_name=AdminClientConfig.APP_NAME,
+                csrf_token=csrf_token,
+                sitewide_tos_href=sitewide_tos_href,
+                sitewide_tos_text=sitewide_tos_text,
+                show_circ_events_download=show_circ_events_download,
+                setting_up=setting_up,
+                email=email,
+                roles=roles,
+                admin_js=admin_js,
+                admin_css=admin_css,
+            )
+        )
 
         # The CSRF token is in its own cookie instead of the session cookie,
         # because if your session expires and you log in again, you should
@@ -382,6 +460,7 @@ class ViewController(AdminController):
         # until the user closes the browser window.
         response.set_cookie("csrf_token", csrf_token, httponly=True)
         return response
+
 
 class TimestampsController(AdminCirculationManagerController):
     """Returns a dict: each key is a type of service (script, monitor, or coverage provider);
@@ -447,8 +526,9 @@ class TimestampsController(AdminCirculationManagerController):
             exception=timestamp.exception,
             service=timestamp.service,
             collection_name=collection_name,
-            achievements=timestamp.achievements
+            achievements=timestamp.achievements,
         )
+
 
 class SignInController(AdminController):
     HEAD_TEMPLATE = """<head>
@@ -458,7 +538,9 @@ class SignInController(AdminController):
 @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;700&display=swap');
 </style>
 </head>
-""".format(app_name=AdminClientConfig.APP_NAME)
+""".format(
+        app_name=AdminClientConfig.APP_NAME
+    )
 
     ERROR_RESPONSE_TEMPLATE = """<!DOCTYPE HTML>
 <html lang="en">
@@ -468,7 +550,9 @@ class SignInController(AdminController):
 <hr style="{hr}">
 <a href="/admin/sign_in" style="{link}">Try again</a>
 </body>
-</html>""".format(head_html=HEAD_TEMPLATE, error=error_style, hr=hr_style, link=small_link_style)
+</html>""".format(
+        head_html=HEAD_TEMPLATE, error=error_style, hr=hr_style, link=small_link_style
+    )
 
     SIGN_IN_TEMPLATE = """<!DOCTYPE HTML>
 <html lang="en">
@@ -477,7 +561,12 @@ class SignInController(AdminController):
 <img src="%(logo_url)s" alt="{app_name}" style="{logo}">
 %(auth_provider_html)s
 </body>
-</html>""".format(head_html=HEAD_TEMPLATE, body=body_style, app_name=AdminClientConfig.APP_NAME, logo=logo_style)
+</html>""".format(
+        head_html=HEAD_TEMPLATE,
+        body=body_style,
+        app_name=AdminClientConfig.APP_NAME,
+        logo=logo_style,
+    )
 
     def sign_in(self):
         """Redirects admin if they're signed in, or shows the sign in page."""
@@ -488,19 +577,26 @@ class SignInController(AdminController):
 
         if isinstance(admin, ProblemDetail):
             redirect_url = flask.request.args.get("redirect")
-            auth_provider_html = [auth.sign_in_template(redirect_url) for auth in self.admin_auth_providers]
+            auth_provider_html = [
+                auth.sign_in_template(redirect_url)
+                for auth in self.admin_auth_providers
+            ]
             auth_provider_html = """
                 <section style="{section}">
                 <hr style="{hr}">or<hr style="{hr}">
                 </section>
-            """.format(section=section_style, hr=hr_style).join(auth_provider_html)
+            """.format(
+                section=section_style, hr=hr_style
+            ).join(
+                auth_provider_html
+            )
 
             html = self.SIGN_IN_TEMPLATE % dict(
                 auth_provider_html=auth_provider_html,
-                logo_url=AdminClientConfig.lookup_asset_url(key='admin_logo')
+                logo_url=AdminClientConfig.lookup_asset_url(key="admin_logo"),
             )
             headers = dict()
-            headers['Content-Type'] = "text/html"
+            headers["Content-Type"] = "text/html"
             return Response(html, 200, headers)
         elif admin:
             return redirect(flask.request.args.get("redirect"), Response=Response)
@@ -549,19 +645,20 @@ class SignInController(AdminController):
         flask.session.pop("admin_email", None)
         flask.session.pop("auth_type", None)
 
-        redirect_url = self.url_for("admin_sign_in", redirect=self.url_for("admin_view"), _external=True)
+        redirect_url = self.url_for(
+            "admin_sign_in", redirect=self.url_for("admin_view"), _external=True
+        )
         return redirect(redirect_url)
 
     def error_response(self, problem_detail):
         """Returns a problem detail as an HTML response"""
         html = self.ERROR_RESPONSE_TEMPLATE % dict(
-            status_code=problem_detail.status_code,
-            message=problem_detail.detail
+            status_code=problem_detail.status_code, message=problem_detail.detail
         )
         return Response(html, problem_detail.status_code)
 
-class PatronController(AdminCirculationManagerController):
 
+class PatronController(AdminCirculationManagerController):
     def _load_patrondata(self, authenticator=None):
         """Extract a patron identifier from an incoming form submission,
         and ask the library's LibraryAuthenticator to turn it into a
@@ -597,8 +694,10 @@ class PatronController(AdminCirculationManagerController):
         # If we get here, none of the providers succeeded.
         if not complete_patron_data:
             return NO_SUCH_PATRON.detailed(
-                _("No patron with identifier %(patron_identifier)s was found at your library",
-                  patron_identifier=identifier),
+                _(
+                    "No patron with identifier %(patron_identifier)s was found at your library",
+                    patron_identifier=identifier,
+                ),
             )
 
     def lookup_patron(self, authenticator=None):
@@ -629,8 +728,9 @@ class PatronController(AdminCirculationManagerController):
             )
         except CannotCreateLocalPatron as e:
             return NO_SUCH_PATRON.detailed(
-                _("Could not create local patron object for %(patron_identifier)s",
-                  patron_identifier=patrondata.authorization_identifier
+                _(
+                    "Could not create local patron object for %(patron_identifier)s",
+                    patron_identifier=patrondata.authorization_identifier,
                 )
             )
 
@@ -642,55 +742,64 @@ class PatronController(AdminCirculationManagerController):
         else:
             identifier = "with identifier " + patron.authorization_identifier
         return Response(
-            str(_("Adobe ID for patron %(name_or_auth_id)s has been reset.", name_or_auth_id=identifier)),
-            200
+            str(
+                _(
+                    "Adobe ID for patron %(name_or_auth_id)s has been reset.",
+                    name_or_auth_id=identifier,
+                )
+            ),
+            200,
         )
 
-class FeedController(AdminCirculationManagerController):
 
+class FeedController(AdminCirculationManagerController):
     def complaints(self):
         self.require_librarian(flask.request.library)
 
-        this_url = self.url_for('complaints')
+        this_url = self.url_for("complaints")
         annotator = AdminAnnotator(self.circulation, flask.request.library)
         pagination = load_pagination_from_request()
         if isinstance(pagination, ProblemDetail):
             return pagination
         opds_feed = AdminFeed.complaints(
-            library=flask.request.library, title="Complaints",
-            url=this_url, annotator=annotator,
-            pagination=pagination
+            library=flask.request.library,
+            title="Complaints",
+            url=this_url,
+            annotator=annotator,
+            pagination=pagination,
         )
         return OPDSFeedResponse(opds_feed, max_age=0)
 
     def suppressed(self):
         self.require_librarian(flask.request.library)
 
-        this_url = self.url_for('suppressed')
+        this_url = self.url_for("suppressed")
         annotator = AdminAnnotator(self.circulation, flask.request.library)
         pagination = load_pagination_from_request()
         if isinstance(pagination, ProblemDetail):
             return pagination
         opds_feed = AdminFeed.suppressed(
-            _db=self._db, title="Hidden Books",
-            url=this_url, annotator=annotator,
-            pagination=pagination
+            _db=self._db,
+            title="Hidden Books",
+            url=this_url,
+            annotator=annotator,
+            pagination=pagination,
         )
         return OPDSFeedResponse(opds_feed, max_age=0)
 
     def genres(self):
-        data = dict({
-            "Fiction": dict({}),
-            "Nonfiction": dict({})
-        })
+        data = dict({"Fiction": dict({}), "Nonfiction": dict({})})
         for name in genres:
             top = "Fiction" if genres[name].is_fiction else "Nonfiction"
-            data[top][name] = dict({
-                "name": name,
-                "parents": [parent.name for parent in genres[name].parents],
-                "subgenres": [subgenre.name for subgenre in genres[name].subgenres]
-            })
+            data[top][name] = dict(
+                {
+                    "name": name,
+                    "parents": [parent.name for parent in genres[name].parents],
+                    "subgenres": [subgenre.name for subgenre in genres[name].subgenres],
+                }
+            )
         return data
+
 
 class CustomListsController(AdminCirculationManagerController):
     def custom_lists(self):
@@ -702,16 +811,33 @@ class CustomListsController(AdminCirculationManagerController):
             for list in library.custom_lists:
                 collections = []
                 for collection in list.collections:
-                    collections.append(dict(id=collection.id, name=collection.name, protocol=collection.protocol))
-                custom_lists.append(dict(id=list.id, name=list.name, collections=collections, entry_count=list.size))
+                    collections.append(
+                        dict(
+                            id=collection.id,
+                            name=collection.name,
+                            protocol=collection.protocol,
+                        )
+                    )
+                custom_lists.append(
+                    dict(
+                        id=list.id,
+                        name=list.name,
+                        collections=collections,
+                        entry_count=list.size,
+                    )
+                )
             return dict(custom_lists=custom_lists)
 
         if flask.request.method == "POST":
             id = flask.request.form.get("id")
             name = flask.request.form.get("name")
             entries = self._getJSONFromRequest(flask.request.form.get("entries"))
-            collections = self._getJSONFromRequest(flask.request.form.get("collections"))
-            return self._create_or_update_list(library, name, entries, collections, id=id)
+            collections = self._getJSONFromRequest(
+                flask.request.form.get("collections")
+            )
+            return self._create_or_update_list(
+                library, name, entries, collections, id=id
+            )
 
     def _getJSONFromRequest(self, values):
         if values:
@@ -723,21 +849,19 @@ class CustomListsController(AdminCirculationManagerController):
 
     def _get_work_from_urn(self, library, urn):
         identifier, ignore = Identifier.parse_urn(self._db, urn)
-        query = self._db.query(
-            Work
-        ).join(
-            LicensePool, LicensePool.work_id==Work.id
-        ).join(
-            Collection, LicensePool.collection_id==Collection.id
-        ).filter(
-            LicensePool.identifier_id==identifier.id
-        ).filter(
-            Collection.id.in_([c.id for c in library.all_collections])
+        query = (
+            self._db.query(Work)
+            .join(LicensePool, LicensePool.work_id == Work.id)
+            .join(Collection, LicensePool.collection_id == Collection.id)
+            .filter(LicensePool.identifier_id == identifier.id)
+            .filter(Collection.id.in_([c.id for c in library.all_collections]))
         )
         work = query.one()
         return work
 
-    def _create_or_update_list(self, library, name, entries, collections, deletedEntries=None, id=None):
+    def _create_or_update_list(
+        self, library, name, entries, collections, deletedEntries=None, id=None
+    ):
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
 
         old_list_with_name = CustomList.find(self._db, name, library=library)
@@ -754,7 +878,9 @@ class CustomListsController(AdminCirculationManagerController):
         elif old_list_with_name:
             return CUSTOM_LIST_NAME_ALREADY_IN_USE
         else:
-            list, is_new = create(self._db, CustomList, name=name, data_source=data_source)
+            list, is_new = create(
+                self._db, CustomList, name=name, data_source=data_source
+            )
             list.created = datetime.now()
             list.library = library
 
@@ -812,7 +938,13 @@ class CustomListsController(AdminCirculationManagerController):
 
     def url_for_custom_list(self, library, list):
         def url_fn(after):
-            return self.url_for("custom_list", after=after, library_short_name=library.short_name, list_id=list.id)
+            return self.url_for(
+                "custom_list",
+                after=after,
+                library_short_name=library.short_name,
+                list_id=list.id,
+            )
+
         return url_fn
 
     def custom_list(self, list_id):
@@ -829,17 +961,15 @@ class CustomListsController(AdminCirculationManagerController):
             if isinstance(pagination, ProblemDetail):
                 return pagination
 
-            query = self._db.query(
-                Work
-            ).join(
-                Work.custom_list_entries
-            ).filter(
-                CustomListEntry.list_id==list_id
-            ).order_by(
-                Work.id
+            query = (
+                self._db.query(Work)
+                .join(Work.custom_list_entries)
+                .filter(CustomListEntry.list_id == list_id)
+                .order_by(Work.id)
             )
             url = self.url_for(
-                "custom_list", list_name=list.name,
+                "custom_list",
+                list_name=list.name,
                 library_short_name=library.short_name,
                 list_id=list_id,
             )
@@ -850,8 +980,7 @@ class CustomListsController(AdminCirculationManagerController):
             annotator = self.manager.annotator(worklist)
             url_fn = self.url_for_custom_list(library, list)
             feed = AcquisitionFeed.from_query(
-                query, self._db, list.name,
-                url, pagination, url_fn, annotator
+                query, self._db, list.name, url, pagination, url_fn, annotator
             )
             annotator.annotate_feed(feed, worklist)
 
@@ -860,9 +989,20 @@ class CustomListsController(AdminCirculationManagerController):
         elif flask.request.method == "POST":
             name = flask.request.form.get("name")
             entries = self._getJSONFromRequest(flask.request.form.get("entries"))
-            collections = self._getJSONFromRequest(flask.request.form.get("collections"))
-            deletedEntries = self._getJSONFromRequest(flask.request.form.get("deletedEntries"))
-            return self._create_or_update_list(library, name, entries, collections, deletedEntries=deletedEntries, id=list_id)
+            collections = self._getJSONFromRequest(
+                flask.request.form.get("collections")
+            )
+            deletedEntries = self._getJSONFromRequest(
+                flask.request.form.get("deletedEntries")
+            )
+            return self._create_or_update_list(
+                library,
+                name,
+                entries,
+                collections,
+                deletedEntries=deletedEntries,
+                id=list_id,
+            )
 
         elif flask.request.method == "DELETE":
             # Deleting requires a library manager.
@@ -873,8 +1013,7 @@ class CustomListsController(AdminCirculationManagerController):
             affected_lanes = Lane.affected_by_customlist(list)
             surviving_lanes = []
             for lane in affected_lanes:
-                if (lane.list_datasource == None
-                    and len(lane.customlist_ids) == 1):
+                if lane.list_datasource == None and len(lane.customlist_ids) == 1:
                     # This Lane is based solely upon this custom list,
                     # which is about to be deleted. Delete the Lane
                     # itself.
@@ -893,22 +1032,32 @@ class CustomListsController(AdminCirculationManagerController):
 
 
 class LanesController(AdminCirculationManagerController):
-
     def lanes(self):
         library = flask.request.library
         self.require_librarian(library)
 
         if flask.request.method == "GET":
+
             def lanes_for_parent(parent):
-                lanes = self._db.query(Lane).filter(Lane.library==library).filter(Lane.parent==parent).order_by(Lane.priority)
-                return [{ "id": lane.id,
-                          "display_name": lane.display_name,
-                          "visible": lane.visible,
-                          "count": lane.size,
-                          "sublanes": lanes_for_parent(lane),
-                          "custom_list_ids": [list.id for list in lane.customlists],
-                          "inherit_parent_restrictions": lane.inherit_parent_restrictions,
-                          } for lane in lanes]
+                lanes = (
+                    self._db.query(Lane)
+                    .filter(Lane.library == library)
+                    .filter(Lane.parent == parent)
+                    .order_by(Lane.priority)
+                )
+                return [
+                    {
+                        "id": lane.id,
+                        "display_name": lane.display_name,
+                        "visible": lane.visible,
+                        "count": lane.size,
+                        "sublanes": lanes_for_parent(lane),
+                        "custom_list_ids": [list.id for list in lane.customlists],
+                        "inherit_parent_restrictions": lane.inherit_parent_restrictions,
+                    }
+                    for lane in lanes
+                ]
+
             return dict(lanes=lanes_for_parent(None))
 
         if flask.request.method == "POST":
@@ -917,8 +1066,12 @@ class LanesController(AdminCirculationManagerController):
             id = flask.request.form.get("id")
             parent_id = flask.request.form.get("parent_id")
             display_name = flask.request.form.get("display_name")
-            custom_list_ids = json.loads(flask.request.form.get("custom_list_ids", "[]"))
-            inherit_parent_restrictions = flask.request.form.get("inherit_parent_restrictions")
+            custom_list_ids = json.loads(
+                flask.request.form.get("custom_list_ids", "[]")
+            )
+            inherit_parent_restrictions = flask.request.form.get(
+                "inherit_parent_restrictions"
+            )
             if inherit_parent_restrictions == "true":
                 inherit_parent_restrictions = True
             else:
@@ -938,7 +1091,9 @@ class LanesController(AdminCirculationManagerController):
                 if not lane.customlists:
                     return CANNOT_EDIT_DEFAULT_LANE
                 if display_name != lane.display_name:
-                    old_lane = get_one(self._db, Lane, display_name=display_name, parent=lane.parent)
+                    old_lane = get_one(
+                        self._db, Lane, display_name=display_name, parent=lane.parent
+                    )
                     if old_lane:
                         return LANE_WITH_PARENT_AND_DISPLAY_NAME_ALREADY_EXISTS
                 lane.display_name = display_name
@@ -947,17 +1102,32 @@ class LanesController(AdminCirculationManagerController):
                 if parent_id:
                     parent = get_one(self._db, Lane, id=parent_id, library=library)
                     if not parent:
-                        return MISSING_LANE.detailed(_("The specified parent lane does not exist, or is associated with a different library."))
-                old_lane = get_one(self._db, Lane, display_name=display_name, parent=parent)
+                        return MISSING_LANE.detailed(
+                            _(
+                                "The specified parent lane does not exist, or is associated with a different library."
+                            )
+                        )
+                old_lane = get_one(
+                    self._db, Lane, display_name=display_name, parent=parent
+                )
                 if old_lane:
                     return LANE_WITH_PARENT_AND_DISPLAY_NAME_ALREADY_EXISTS
 
                 lane, is_new = create(
-                    self._db, Lane, display_name=display_name,
-                    parent=parent, library=library)
+                    self._db,
+                    Lane,
+                    display_name=display_name,
+                    parent=parent,
+                    library=library,
+                )
 
                 # Make a new lane the first child of its parent and bump all the siblings down in priority.
-                siblings = self._db.query(Lane).filter(Lane.library==library).filter(Lane.parent==lane.parent).filter(Lane.id!=lane.id)
+                siblings = (
+                    self._db.query(Lane)
+                    .filter(Lane.library == library)
+                    .filter(Lane.parent == lane.parent)
+                    .filter(Lane.id != lane.id)
+                )
                 for sibling in siblings:
                     sibling.priority += 1
                 lane.priority = 0
@@ -969,7 +1139,11 @@ class LanesController(AdminCirculationManagerController):
                 if not list:
                     self._db.rollback()
                     return MISSING_CUSTOM_LIST.detailed(
-                        _("The list with id %(list_id)s does not exist or is associated with a different library.", list_id=list_id))
+                        _(
+                            "The list with id %(list_id)s does not exist or is associated with a different library.",
+                            list_id=list_id,
+                        )
+                    )
                 lane.customlists.append(list)
 
             for list in lane.customlists:
@@ -1038,7 +1212,7 @@ class LanesController(AdminCirculationManagerController):
         def update_lane_order(lanes):
             for index, lane_data in enumerate(lanes):
                 lane_id = lane_data.get("id")
-                lane = self._db.query(Lane).filter(Lane.id==lane_id).one()
+                lane = self._db.query(Lane).filter(Lane.id == lane_id).one()
                 lane.priority = index
                 update_lane_order(lane_data.get("sublanes", []))
 
@@ -1048,7 +1222,6 @@ class LanesController(AdminCirculationManagerController):
 
 
 class DashboardController(AdminCirculationManagerController):
-
     def stats(self):
         library_stats = {}
 
@@ -1058,46 +1231,52 @@ class DashboardController(AdminCirculationManagerController):
 
         collection_counts = dict()
         for collection in self._db.query(Collection):
-            if not flask.request.admin or not flask.request.admin.can_see_collection(collection):
+            if not flask.request.admin or not flask.request.admin.can_see_collection(
+                collection
+            ):
                 continue
 
-            licensed_title_count = self._db.query(
-                LicensePool
-            ).filter(
-                LicensePool.collection_id == collection.id
-            ).filter(
-                and_(
-                    LicensePool.licenses_owned > 0,
-                    LicensePool.open_access == False,
+            licensed_title_count = (
+                self._db.query(LicensePool)
+                .filter(LicensePool.collection_id == collection.id)
+                .filter(
+                    and_(
+                        LicensePool.licenses_owned > 0,
+                        LicensePool.open_access == False,
+                    )
                 )
-            ).count()
+                .count()
+            )
 
-            open_title_count = self._db.query(
-                LicensePool
-            ).filter(
-                LicensePool.collection_id == collection.id
-            ).filter(
-                LicensePool.open_access == True
-            ).count()
+            open_title_count = (
+                self._db.query(LicensePool)
+                .filter(LicensePool.collection_id == collection.id)
+                .filter(LicensePool.open_access == True)
+                .count()
+            )
 
             # The sum queries return None instead of 0 if there are
             # no license pools in the db.
 
-            license_count = self._db.query(
-                func.sum(LicensePool.licenses_owned)
-            ).filter(
-                LicensePool.collection_id == collection.id
-            ).filter(
-                LicensePool.open_access == False,
-            ).all()[0][0] or 0
+            license_count = (
+                self._db.query(func.sum(LicensePool.licenses_owned))
+                .filter(LicensePool.collection_id == collection.id)
+                .filter(
+                    LicensePool.open_access == False,
+                )
+                .all()[0][0]
+                or 0
+            )
 
-            available_license_count = self._db.query(
-                func.sum(LicensePool.licenses_available)
-            ).filter(
-                LicensePool.collection_id == collection.id
-            ).filter(
-                LicensePool.open_access == False,
-            ).all()[0][0] or 0
+            available_license_count = (
+                self._db.query(func.sum(LicensePool.licenses_available))
+                .filter(LicensePool.collection_id == collection.id)
+                .filter(
+                    LicensePool.open_access == False,
+                )
+                .all()[0][0]
+                or 0
+            )
 
             total_title_count += licensed_title_count + open_title_count
             total_license_count += license_count
@@ -1110,80 +1289,76 @@ class DashboardController(AdminCirculationManagerController):
                 available_licenses=available_license_count,
             )
 
-
         for library in self._db.query(Library):
             # Only include libraries this admin has librarian access to.
             if not flask.request.admin or not flask.request.admin.is_librarian(library):
                 continue
 
-            patron_count = self._db.query(Patron).filter(Patron.library_id==library.id).count()
+            patron_count = (
+                self._db.query(Patron).filter(Patron.library_id == library.id).count()
+            )
 
-            active_loans_patron_count = self._db.query(
-                distinct(Patron.id)
-            ).join(
-                Patron.loans
-            ).filter(
-                Loan.end >= datetime.now(),
-            ).filter(
-                Patron.library_id == library.id
-            ).count()
-
-            active_patrons = select(
-                [Patron.id]
-            ).select_from(
-                join(
-                    Loan,
-                    Patron,
-                    and_(
-                        Patron.id == Loan.patron_id,
-                        Patron.library_id == library.id,
-                        Loan.id != None,
-                        Loan.end >= datetime.now()
-                    )
+            active_loans_patron_count = (
+                self._db.query(distinct(Patron.id))
+                .join(Patron.loans)
+                .filter(
+                    Loan.end >= datetime.now(),
                 )
-            ).union(
-                select(
-                    [Patron.id]
-                ).select_from(
+                .filter(Patron.library_id == library.id)
+                .count()
+            )
+
+            active_patrons = (
+                select([Patron.id])
+                .select_from(
                     join(
-                        Hold,
+                        Loan,
                         Patron,
                         and_(
-                            Patron.id == Hold.patron_id,
+                            Patron.id == Loan.patron_id,
                             Patron.library_id == library.id,
-                            Hold.id != None,
+                            Loan.id != None,
+                            Loan.end >= datetime.now(),
+                        ),
+                    )
+                )
+                .union(
+                    select([Patron.id]).select_from(
+                        join(
+                            Hold,
+                            Patron,
+                            and_(
+                                Patron.id == Hold.patron_id,
+                                Patron.library_id == library.id,
+                                Hold.id != None,
+                            ),
                         )
                     )
                 )
-            ).alias()
-
+                .alias()
+            )
 
             active_loans_or_holds_patron_count_query = select(
                 [func.count(distinct(active_patrons.c.id))]
-            ).select_from(
-                active_patrons
-            )
+            ).select_from(active_patrons)
 
             result = self._db.execute(active_loans_or_holds_patron_count_query)
             active_loans_or_holds_patron_count = [r[0] for r in result][0]
 
-            loan_count = self._db.query(
-                Loan
-            ).join(
-                Loan.patron
-            ).filter(
-                Patron.library_id == library.id
-            ).filter(
-                Loan.end >= datetime.now()
-            ).count()
+            loan_count = (
+                self._db.query(Loan)
+                .join(Loan.patron)
+                .filter(Patron.library_id == library.id)
+                .filter(Loan.end >= datetime.now())
+                .count()
+            )
 
-            hold_count = self._db.query(
-                Hold
-            ).join(
-                Hold.patron
-            ).filter(
-                Patron.library_id == library.id
-            ).count()
+            hold_count = (
+                self._db.query(Hold)
+                .join(Hold.patron)
+                .filter(Patron.library_id == library.id)
+                .count()
+            )
 
             title_count = 0
             license_count = 0
@@ -1193,7 +1368,9 @@ class DashboardController(AdminCirculationManagerController):
             for collection in library.all_collections:
                 counts = collection_counts[collection.name]
                 library_collection_counts[collection.name] = counts
-                title_count += counts.get("licensed_titles", 0) + counts.get("open_access_titles", 0)
+                title_count += counts.get("licensed_titles", 0) + counts.get(
+                    "open_access_titles", 0
+                )
                 license_count += counts.get("licenses", 0)
                 available_license_count += counts.get("available_licenses", 0)
 
@@ -1213,24 +1390,39 @@ class DashboardController(AdminCirculationManagerController):
                 collections=library_collection_counts,
             )
 
-        total_patrons = sum([
-            stats.get("patrons", {}).get("total", 0)
-            for stats in list(library_stats.values())])
-        total_with_active_loans = sum([
-            stats.get("patrons", {}).get("with_active_loans", 0)
-            for stats in list(library_stats.values())])
-        total_with_active_loans_or_holds = sum([
-            stats.get("patrons", {}).get("with_active_loans_or_holds", 0)
-            for stats in list(library_stats.values())])
+        total_patrons = sum(
+            [
+                stats.get("patrons", {}).get("total", 0)
+                for stats in list(library_stats.values())
+            ]
+        )
+        total_with_active_loans = sum(
+            [
+                stats.get("patrons", {}).get("with_active_loans", 0)
+                for stats in list(library_stats.values())
+            ]
+        )
+        total_with_active_loans_or_holds = sum(
+            [
+                stats.get("patrons", {}).get("with_active_loans_or_holds", 0)
+                for stats in list(library_stats.values())
+            ]
+        )
 
         # TODO: show shared collection loans and holds for libraries outside this
         # circ manager?
-        total_loans = sum([
-            stats.get("patrons", {}).get("loans", 0)
-            for stats in list(library_stats.values())])
-        total_holds = sum([
-            stats.get("patrons", {}).get("holds", 0)
-            for stats in list(library_stats.values())])
+        total_loans = sum(
+            [
+                stats.get("patrons", {}).get("loans", 0)
+                for stats in list(library_stats.values())
+            ]
+        )
+        total_holds = sum(
+            [
+                stats.get("patrons", {}).get("holds", 0)
+                for stats in list(library_stats.values())
+            ]
+        )
 
         library_stats["total"] = dict(
             patrons=dict(
@@ -1254,29 +1446,39 @@ class DashboardController(AdminCirculationManagerController):
         annotator = AdminAnnotator(self.circulation, flask.request.library)
         num = min(int(flask.request.args.get("num", "100")), 500)
 
-        results = self._db.query(CirculationEvent) \
-            .join(LicensePool) \
-            .join(Work) \
-            .join(DataSource) \
-            .join(Identifier) \
-            .order_by(nullslast(desc(CirculationEvent.start))) \
-            .limit(num) \
+        results = (
+            self._db.query(CirculationEvent)
+            .join(LicensePool)
+            .join(Work)
+            .join(DataSource)
+            .join(Identifier)
+            .order_by(nullslast(desc(CirculationEvent.start)))
+            .limit(num)
             .all()
+        )
 
-        events = [{
-            "id": result.id,
-            "type": result.type,
-            "time": result.start,
-            "book": {
-                "title": result.license_pool.work.title,
-                "url": annotator.permalink_for(result.license_pool.work, result.license_pool, result.license_pool.identifier)
+        events = [
+            {
+                "id": result.id,
+                "type": result.type,
+                "time": result.start,
+                "book": {
+                    "title": result.license_pool.work.title,
+                    "url": annotator.permalink_for(
+                        result.license_pool.work,
+                        result.license_pool,
+                        result.license_pool.identifier,
+                    ),
+                },
             }
-        } for result in results]
+            for result in results
+        ]
 
-        return dict({ "circulation_events": events })
+        return dict({"circulation_events": events})
 
     def bulk_circulation_events(self, analytics_exporter=None):
         date_format = "%Y-%m-%d"
+
         def get_date(field):
             # Return a date or datetime object representing the
             # _beginning_ of the asked-for day, local time.
@@ -1306,19 +1508,24 @@ class DashboardController(AdminCirculationManagerController):
         date_end_label = get_date("dateEnd")
         date_end = date_end_label + timedelta(days=1)
         locations = flask.request.args.get("locations", None)
-        library = getattr(flask.request, 'library', None)
+        library = getattr(flask.request, "library", None)
         library_short_name = library.short_name if library else None
 
         analytics_exporter = analytics_exporter or LocalAnalyticsExporter()
         data = analytics_exporter.export(
             self._db, date_start, date_end, locations, library
         )
-        return (data, date_start.strftime(date_format),
-                date_end_label.strftime(date_format), library_short_name)
+        return (
+            data,
+            date_start.strftime(date_format),
+            date_end_label.strftime(date_format),
+            library_short_name,
+        )
+
 
 class SettingsController(AdminCirculationManagerController):
 
-    METADATA_SERVICE_URI_TYPE = 'application/opds+json;profile=https://librarysimplified.org/rel/profile/metadata-service'
+    METADATA_SERVICE_URI_TYPE = "application/opds+json;profile=https://librarysimplified.org/rel/profile/metadata-service"
 
     NO_MIRROR_INTEGRATION = "NO_MIRROR"
 
@@ -1336,7 +1543,7 @@ class SettingsController(AdminCirculationManagerController):
         ODL2API,
         SharedODLAPI,
         FeedbooksOPDSImporter,
-        LCPAPI
+        LCPAPI,
     ]
 
     @classmethod
@@ -1373,16 +1580,16 @@ class SettingsController(AdminCirculationManagerController):
             if library_settings != None:
                 protocol["library_settings"] = list(library_settings)
 
-            cardinality = getattr(api, 'CARDINALITY', None)
+            cardinality = getattr(api, "CARDINALITY", None)
             if cardinality != None:
-                protocol['cardinality'] = cardinality
+                protocol["cardinality"] = cardinality
 
             supports_registration = getattr(api, "SUPPORTS_REGISTRATION", None)
             if supports_registration != None:
-                protocol['supports_registration'] = supports_registration
+                protocol["supports_registration"] = supports_registration
             supports_staging = getattr(api, "SUPPORTS_STAGING", None)
             if supports_staging != None:
-                protocol['supports_staging'] = supports_staging
+                protocol["supports_staging"] = supports_staging
 
             protocols.append(protocol)
         return protocols
@@ -1406,7 +1613,8 @@ class SettingsController(AdminCirculationManagerController):
     def _get_integration_info(self, goal, protocols):
         services = []
         for service in self._db.query(ExternalIntegration).filter(
-            ExternalIntegration.goal==goal):
+            ExternalIntegration.goal == goal
+        ):
             candidates = [p for p in protocols if p.get("name") == service.protocol]
             if not candidates:
                 continue
@@ -1414,8 +1622,9 @@ class SettingsController(AdminCirculationManagerController):
             libraries = []
             if not protocol.get("sitewide") or protocol.get("library_settings"):
                 for library in service.libraries:
-                    libraries.append(self._get_integration_library_info(
-                            service, library, protocol))
+                    libraries.append(
+                        self._get_integration_library_info(service, library, protocol)
+                    )
 
             settings = dict()
             for setting in protocol.get("settings", []):
@@ -1424,9 +1633,11 @@ class SettingsController(AdminCirculationManagerController):
                 # If the setting is a covers or books mirror, we need to get
                 # the value from ExternalIntegrationLink and
                 # not from a ConfigurationSetting.
-                if key.endswith('mirror_integration_id'):
+                if key.endswith("mirror_integration_id"):
                     storage_integration = get_one(
-                        self._db, ExternalIntegrationLink, external_integration_id=service.id
+                        self._db,
+                        ExternalIntegrationLink,
+                        external_integration_id=service.id,
                     )
                     if storage_integration:
                         value = str(storage_integration.other_integration_id)
@@ -1435,10 +1646,12 @@ class SettingsController(AdminCirculationManagerController):
                 else:
                     if setting.get("type") in ("list", "menu"):
                         value = ConfigurationSetting.for_externalintegration(
-                            key, service).json_value
+                            key, service
+                        ).json_value
                     else:
                         value = ConfigurationSetting.for_externalintegration(
-                            key, service).value
+                            key, service
+                        ).value
                 settings[key] = value
 
             service_info = dict(
@@ -1450,7 +1663,9 @@ class SettingsController(AdminCirculationManagerController):
             )
 
             if "test_search_term" in [x.get("key") for x in protocol.get("settings")]:
-                service_info["self_test_results"] = self._get_prior_test_results(service)
+                service_info["self_test_results"] = self._get_prior_test_results(
+                    service
+                )
 
             services.append(service_info)
         return services
@@ -1480,9 +1695,9 @@ class SettingsController(AdminCirculationManagerController):
 
         for form_item_key in list(form.keys()):
             if setting_key in form_item_key:
-                value = form_item_key.replace(setting_key, '').lstrip('_')
+                value = form_item_key.replace(setting_key, "").lstrip("_")
 
-                if value != 'menu':
+                if value != "menu":
                     values.append(value)
 
         return values
@@ -1495,7 +1710,7 @@ class SettingsController(AdminCirculationManagerController):
             value = [item for item in flask.request.form.getlist(setting_key) if item]
             if value:
                 value = json.dumps(value)
-        elif setting_type == 'menu':
+        elif setting_type == "menu":
             value = self._get_menu_values(setting_key, flask.request.form)
         else:
             value = flask.request.form.get(setting_key)
@@ -1511,14 +1726,23 @@ class SettingsController(AdminCirculationManagerController):
 
             for submitted_value in submitted_values:
                 if submitted_value not in allowed_values:
-                    return INVALID_CONFIGURATION_OPTION.detailed(_(
-                        "The configuration value for %(setting)s is invalid.",
-                        setting=setting.get("label"),
-                    ))
-        if not value and setting.get("required") and not "default" in list(setting.keys()):
+                    return INVALID_CONFIGURATION_OPTION.detailed(
+                        _(
+                            "The configuration value for %(setting)s is invalid.",
+                            setting=setting.get("label"),
+                        )
+                    )
+        if (
+            not value
+            and setting.get("required")
+            and not "default" in list(setting.keys())
+        ):
             return INCOMPLETE_CONFIGURATION.detailed(
-                _("The configuration is missing a required setting: %(setting)s",
-                  setting=setting.get("label")))
+                _(
+                    "The configuration is missing a required setting: %(setting)s",
+                    setting=setting.get("label"),
+                )
+            )
 
         if isinstance(value, list):
             value = json.dumps(value)
@@ -1528,7 +1752,12 @@ class SettingsController(AdminCirculationManagerController):
     def _set_integration_library(self, integration, library_info, protocol):
         library = get_one(self._db, Library, short_name=library_info.get("short_name"))
         if not library:
-            return NO_SUCH_LIBRARY.detailed(_("You attempted to add the integration to %(library_short_name)s, but it does not exist.", library_short_name=library_info.get("short_name")))
+            return NO_SUCH_LIBRARY.detailed(
+                _(
+                    "You attempted to add the integration to %(library_short_name)s, but it does not exist.",
+                    library_short_name=library_info.get("short_name"),
+                )
+            )
 
         integration.libraries += [library]
         for setting in protocol.get("library_settings", []):
@@ -1536,23 +1765,31 @@ class SettingsController(AdminCirculationManagerController):
             value = library_info.get(key)
             if value and setting.get("type") == "list" and not setting.get("options"):
                 value = json.dumps(value)
-            if setting.get("options") and value not in [option.get("key") for option in setting.get("options")]:
-                return INVALID_CONFIGURATION_OPTION.detailed(_(
-                    "The configuration value for %(setting)s is invalid.",
-                    setting=setting.get("label"),
-                ))
+            if setting.get("options") and value not in [
+                option.get("key") for option in setting.get("options")
+            ]:
+                return INVALID_CONFIGURATION_OPTION.detailed(
+                    _(
+                        "The configuration value for %(setting)s is invalid.",
+                        setting=setting.get("label"),
+                    )
+                )
             if not value and setting.get("required"):
                 return INCOMPLETE_CONFIGURATION.detailed(
-                    _("The configuration is missing a required setting: %(setting)s for library %(library)s",
-                      setting=setting.get("label"),
-                      library=library.short_name,
-                      ))
-            ConfigurationSetting.for_library_and_externalintegration(self._db, key, library, integration).value = value
+                    _(
+                        "The configuration is missing a required setting: %(setting)s for library %(library)s",
+                        setting=setting.get("label"),
+                        library=library.short_name,
+                    )
+                )
+            ConfigurationSetting.for_library_and_externalintegration(
+                self._db, key, library, integration
+            ).value = value
 
     def _set_integration_settings_and_libraries(self, integration, protocol):
         settings = protocol.get("settings")
         for setting in settings:
-            if not setting.get('key').endswith('mirror_integration_id'):
+            if not setting.get("key").endswith("mirror_integration_id"):
                 result = self._set_integration_setting(integration, setting)
                 if isinstance(result, ProblemDetail):
                     return result
@@ -1565,7 +1802,9 @@ class SettingsController(AdminCirculationManagerController):
                 libraries = json.loads(flask.request.form.get("libraries"))
 
             for library_info in libraries:
-                result = self._set_integration_library(integration, library_info, protocol)
+                result = self._set_integration_library(
+                    integration, library_info, protocol
+                )
                 if isinstance(result, ProblemDetail):
                     return result
         return True
@@ -1575,22 +1814,27 @@ class SettingsController(AdminCirculationManagerController):
             return
         self.require_system_admin()
 
-        integration = get_one(self._db, ExternalIntegration,
-                              id=integration_id, goal=goal)
+        integration = get_one(
+            self._db, ExternalIntegration, id=integration_id, goal=goal
+        )
         if not integration:
             return MISSING_SERVICE
         self._db.delete(integration)
         return Response(str(_("Deleted")), 200)
 
     def _get_collection_protocols(self, provider_apis):
-        protocols = self._get_integration_protocols(provider_apis, protocol_name_attr="NAME")
+        protocols = self._get_integration_protocols(
+            provider_apis, protocol_name_attr="NAME"
+        )
         protocols.append(
             {
-                'name': ExternalIntegration.MANUAL,
-                'label': _('Manual import'),
-                'description': _('Books will be manually added to the circulation manager, '
-                                 'not imported automatically through a protocol.'),
-                'settings': []
+                "name": ExternalIntegration.MANUAL,
+                "label": _("Manual import"),
+                "description": _(
+                    "Books will be manually added to the circulation manager, "
+                    "not imported automatically through a protocol."
+                ),
+                "settings": [],
             }
         )
 
@@ -1616,8 +1860,10 @@ class SettingsController(AdminCirculationManagerController):
                 if item.protocol == OPDSImportMonitor.PROTOCOL:
                     protocol_class = OPDSImportMonitor
 
-                if protocol_class in provider_apis and issubclass(protocol_class, HasSelfTests):
-                    if (item.protocol == OPDSImportMonitor.PROTOCOL):
+                if protocol_class in provider_apis and issubclass(
+                    protocol_class, HasSelfTests
+                ):
+                    if item.protocol == OPDSImportMonitor.PROTOCOL:
                         extra_args = (OPDSImporter,)
                     else:
                         extra_args = ()
@@ -1643,8 +1889,10 @@ class SettingsController(AdminCirculationManagerController):
                     )
                 else:
                     self_test_results = dict(
-                        exception=_("You must associate this service with at least one library before you can run self tests for it."),
-                        disabled=True
+                        exception=_(
+                            "You must associate this service with at least one library before you can run self tests for it."
+                        ),
+                        disabled=True,
                     )
 
         except Exception as e:
@@ -1664,44 +1912,48 @@ class SettingsController(AdminCirculationManagerController):
         """Create a setting interface for selecting a storage integration to
         be used when mirroring items from a collection.
         """
-        integrations = self._db.query(ExternalIntegration).filter(
-            ExternalIntegration.goal==ExternalIntegration.STORAGE_GOAL
-        ).order_by(
-            ExternalIntegration.name
+        integrations = (
+            self._db.query(ExternalIntegration)
+            .filter(ExternalIntegration.goal == ExternalIntegration.STORAGE_GOAL)
+            .order_by(ExternalIntegration.name)
         )
 
         if not integrations.all():
             return
 
-        mirror_integration_settings = copy.deepcopy(ExternalIntegrationLink.COLLECTION_MIRROR_SETTINGS)
+        mirror_integration_settings = copy.deepcopy(
+            ExternalIntegrationLink.COLLECTION_MIRROR_SETTINGS
+        )
         for integration in integrations:
-            book_covers_bucket = integration.setting(S3UploaderConfiguration.BOOK_COVERS_BUCKET_KEY).value
-            open_access_bucket = integration.setting(S3UploaderConfiguration.OA_CONTENT_BUCKET_KEY).value
-            protected_access_bucket = integration.setting(S3UploaderConfiguration.PROTECTED_CONTENT_BUCKET_KEY).value
+            book_covers_bucket = integration.setting(
+                S3UploaderConfiguration.BOOK_COVERS_BUCKET_KEY
+            ).value
+            open_access_bucket = integration.setting(
+                S3UploaderConfiguration.OA_CONTENT_BUCKET_KEY
+            ).value
+            protected_access_bucket = integration.setting(
+                S3UploaderConfiguration.PROTECTED_CONTENT_BUCKET_KEY
+            ).value
 
             for setting in mirror_integration_settings:
-                if setting['key'] == ExternalIntegrationLink.COVERS_KEY and book_covers_bucket:
-                    setting['options'].append(
-                        {
-                            'key': str(integration.id),
-                            'label': integration.name
-                        }
+                if (
+                    setting["key"] == ExternalIntegrationLink.COVERS_KEY
+                    and book_covers_bucket
+                ):
+                    setting["options"].append(
+                        {"key": str(integration.id), "label": integration.name}
                     )
-                elif setting['key'] == ExternalIntegrationLink.OPEN_ACCESS_BOOKS_KEY:
+                elif setting["key"] == ExternalIntegrationLink.OPEN_ACCESS_BOOKS_KEY:
                     if open_access_bucket:
-                        setting['options'].append(
-                            {
-                                'key': str(integration.id),
-                                'label': integration.name
-                            }
+                        setting["options"].append(
+                            {"key": str(integration.id), "label": integration.name}
                         )
-                elif setting['key'] == ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS_KEY:
+                elif (
+                    setting["key"] == ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS_KEY
+                ):
                     if protected_access_bucket:
-                        setting['options'].append(
-                            {
-                                'key': str(integration.id),
-                                'label': integration.name
-                            }
+                        setting["options"].append(
+                            {"key": str(integration.id), "label": integration.name}
                         )
 
         return mirror_integration_settings
@@ -1717,7 +1969,7 @@ class SettingsController(AdminCirculationManagerController):
         """
         if not protocol:
             return NO_PROTOCOL_FOR_NEW_SERVICE, False
-        matches = [x for x in protocol_definitions if x.get('name') == protocol]
+        matches = [x for x in protocol_definitions if x.get("name") == protocol]
         if not matches:
             return UNKNOWN_PROTOCOL, False
         definition = matches[0]
@@ -1728,7 +1980,7 @@ class SettingsController(AdminCirculationManagerController):
         m = create
         args = (self._db, ExternalIntegration)
         kwargs = dict(protocol=protocol, goal=goal)
-        if definition.get('cardinality') == 1:
+        if definition.get("cardinality") == 1:
             # ...but not all the time.
             allow_multiple = False
             existing = get_one(*args, **kwargs)
@@ -1786,7 +2038,7 @@ class SettingsController(AdminCirculationManagerController):
         if url.endswith("/"):
             yield url[:-1]
         else:
-            yield url + '/'
+            yield url + "/"
 
         # Changing protocols may create one or more variants.
         https = "https://"
@@ -1820,22 +2072,29 @@ class SettingsController(AdminCirculationManagerController):
         # because we're doing the comparison in the database.
         urls = list(self.url_variants(url))
 
-        qu = self._db.query(ExternalIntegration).join(
-            ExternalIntegration.settings
-        ).filter(
-            # Protocol must match.
-            ExternalIntegration.protocol==protocol
-        ).filter(
-            # Goal must match.
-            ExternalIntegration.goal==goal
-        ).filter(
-            ConfigurationSetting.key==ExternalIntegration.URL
-        ).filter(
-            # URL must be one of the URLs we're concerned about.
-            ConfigurationSetting.value.in_(urls)
-        ).filter(
-            # But don't count the service we're trying to edit.
-            ExternalIntegration.id != new_service.id
+        qu = (
+            self._db.query(ExternalIntegration)
+            .join(ExternalIntegration.settings)
+            .filter(
+                # Protocol must match.
+                ExternalIntegration.protocol
+                == protocol
+            )
+            .filter(
+                # Goal must match.
+                ExternalIntegration.goal
+                == goal
+            )
+            .filter(ConfigurationSetting.key == ExternalIntegration.URL)
+            .filter(
+                # URL must be one of the URLs we're concerned about.
+                ConfigurationSetting.value.in_(urls)
+            )
+            .filter(
+                # But don't count the service we're trying to edit.
+                ExternalIntegration.id
+                != new_service.id
+            )
         )
         if qu.count() > 0:
             return INTEGRATION_URL_ALREADY_IN_USE
@@ -1879,8 +2138,12 @@ class SettingsController(AdminCirculationManagerController):
             return UNKNOWN_PROTOCOL
 
     def _get_settings(self):
-        if hasattr(self, 'protocols'):
-            [protocol] = [p for p in self.protocols if p.get("name") == flask.request.form.get("protocol")]
+        if hasattr(self, "protocols"):
+            [protocol] = [
+                p
+                for p in self.protocols
+                if p.get("name") == flask.request.form.get("protocol")
+            ]
             return protocol.get("settings")
         return []
 
@@ -1911,8 +2174,8 @@ class SitewideRegistrationController(SettingsController):
     the circulation manager.
     """
 
-    def process_sitewide_registration(self, integration, do_get=HTTP.debuggable_get,
-                              do_post=HTTP.debuggable_post
+    def process_sitewide_registration(
+        self, integration, do_get=HTTP.debuggable_get, do_post=HTTP.debuggable_post
     ):
         """Performs a sitewide registration for a particular service.
 
@@ -1932,7 +2195,7 @@ class SitewideRegistrationController(SettingsController):
             return self.check_content_type(catalog_response)
 
         catalog = catalog_response.json()
-        links = catalog.get('links', [])
+        links = catalog.get("links", [])
 
         register_url = self.get_registration_link(catalog, links)
         if isinstance(register_url, ProblemDetail):
@@ -1970,31 +2233,31 @@ class SitewideRegistrationController(SettingsController):
     def check_content_type(self, catalog_response):
         """Make sure the catalog for the service is in a valid format."""
 
-        content_type = catalog_response.headers.get('Content-Type')
-        if content_type != 'application/opds+json':
+        content_type = catalog_response.headers.get("Content-Type")
+        if content_type != "application/opds+json":
             return REMOTE_INTEGRATION_FAILED.detailed(
-                _('The service did not provide a valid catalog.')
+                _("The service did not provide a valid catalog.")
             )
 
     def get_registration_link(self, catalog, links):
         """Get the link for registration from the catalog."""
 
         register_link_filter = lambda l: (
-            l.get('rel')=='register' and
-            l.get('type')==self.METADATA_SERVICE_URI_TYPE
+            l.get("rel") == "register"
+            and l.get("type") == self.METADATA_SERVICE_URI_TYPE
         )
 
         register_urls = list(filter(register_link_filter, links))
         if not register_urls:
             return REMOTE_INTEGRATION_FAILED.detailed(
-                _('The service did not provide a register link.')
+                _("The service did not provide a register link.")
             )
 
         # Get the full registration url.
-        register_url = register_urls[0].get('href')
-        if not register_url.startswith('http'):
+        register_url = register_urls[0].get("href")
+        if not register_url.startswith("http"):
             # We have a relative path. Create a full registration url.
-            base_url = catalog.get('id')
+            base_url = catalog.get("id")
             register_url = urllib.parse.urljoin(base_url, register_url)
 
         return register_url
@@ -2005,10 +2268,10 @@ class SitewideRegistrationController(SettingsController):
 
         # NOTE: This is no longer technically necessary since we prove
         # ownership with a signed JWT.
-        headers = { 'Content-Type' : 'application/x-www-form-urlencoded' }
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
         if integration.password:
-            token = base64.b64encode(integration.password.encode('utf-8'))
-            headers['Authorization'] = 'Bearer ' + token
+            token = base64.b64encode(integration.password.encode("utf-8"))
+            headers["Authorization"] = "Bearer " + token
         return headers
 
     def register(self, register_url, headers, do_post):
@@ -2017,8 +2280,7 @@ class SitewideRegistrationController(SettingsController):
         try:
             body = self.sitewide_registration_document()
             response = do_post(
-                register_url, body, allowed_response_codes=['2xx'],
-                headers=headers
+                register_url, body, allowed_response_codes=["2xx"], headers=headers
             )
         except Exception as e:
             return REMOTE_INTEGRATION_FAILED.detailed(str(e))
@@ -2029,10 +2291,10 @@ class SitewideRegistrationController(SettingsController):
         service, or return an error message if there is no shared secret."""
 
         registration_info = response.json()
-        shared_secret = registration_info.get('metadata', {}).get('shared_secret')
+        shared_secret = registration_info.get("metadata", {}).get("shared_secret")
         if not shared_secret:
             return REMOTE_INTEGRATION_FAILED.detailed(
-                _('The service did not provide registration information.')
+                _("The service did not provide registration information.")
             )
         return shared_secret
 
@@ -2048,10 +2310,10 @@ class SitewideRegistrationController(SettingsController):
         public_key, private_key = self.manager.sitewide_key_pair
         # Advertise the public key so that the foreign site can encrypt
         # things for us.
-        public_key_dict = dict(type='RSA', value=public_key)
-        public_key_url = self.url_for('public_key_document')
+        public_key_dict = dict(type="RSA", value=public_key)
+        public_key_url = self.url_for("public_key_document")
         in_one_minute = utc_now() + timedelta(seconds=60)
-        payload = {'exp': in_one_minute}
+        payload = {"exp": in_one_minute}
         # Sign a JWT with the private key to prove ownership of the site.
-        token = jwt.encode(payload, private_key, algorithm='RS256')
+        token = jwt.encode(payload, private_key, algorithm="RS256")
         return dict(url=public_key_url, jwt=token)

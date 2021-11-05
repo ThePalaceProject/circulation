@@ -17,6 +17,7 @@ from core.util.http import HTTP
 from core.util.problem_detail import ProblemDetail
 from . import SettingsController
 
+
 class CollectionLibraryRegistrationsController(SettingsController):
     """Use the OPDS Directory Registration Protocol to register a
     Collection with its remote source of truth.
@@ -29,15 +30,17 @@ class CollectionLibraryRegistrationsController(SettingsController):
         super(CollectionLibraryRegistrationsController, self).__init__(manager)
         self.shared_collection_provider_apis = [SharedODLAPI]
 
-    def process_collection_library_registrations(self,
-            do_get=HTTP.debuggable_get,
-            do_post=HTTP.debuggable_post,
-            key=None,
-            registration_class=Registration):
+    def process_collection_library_registrations(
+        self,
+        do_get=HTTP.debuggable_get,
+        do_post=HTTP.debuggable_post,
+        key=None,
+        registration_class=Registration,
+    ):
 
         registration_class = registration_class or Registration
         self.require_system_admin()
-        if flask.request.method == 'GET':
+        if flask.request.method == "GET":
             return self.process_get()
         else:
             return self.process_post(registration_class, do_get, do_post)
@@ -48,7 +51,10 @@ class CollectionLibraryRegistrationsController(SettingsController):
 
         library_info = dict(short_name=library.short_name)
         status = ConfigurationSetting.for_library_and_externalintegration(
-            self._db, Registration.LIBRARY_REGISTRATION_STATUS, library, collection.external_integration,
+            self._db,
+            Registration.LIBRARY_REGISTRATION_STATUS,
+            library,
+            collection.external_integration,
         ).value
         if status:
             library_info["status"] = status
@@ -89,9 +95,11 @@ class CollectionLibraryRegistrationsController(SettingsController):
 
         registration = registration_class(registry, library)
         registered = registration.push(
-            Registration.PRODUCTION_STAGE, self.url_for,
+            Registration.PRODUCTION_STAGE,
+            self.url_for,
             catalog_url=collection.external_account_id,
-            do_get=do_get, do_post=do_post
+            do_get=do_get,
+            do_post=do_post,
         )
 
         if isinstance(registered, ProblemDetail):
@@ -106,7 +114,9 @@ class CollectionLibraryRegistrationsController(SettingsController):
         collection = get_one(self._db, Collection, id=collection_id)
         if not collection:
             return MISSING_COLLECTION
-        if collection.protocol not in [api.NAME for api in self.shared_collection_provider_apis]:
+        if collection.protocol not in [
+            api.NAME for api in self.shared_collection_provider_apis
+        ]:
             return COLLECTION_DOES_NOT_SUPPORT_REGISTRATION
         return collection
 

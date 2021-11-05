@@ -27,45 +27,53 @@ from core.util.problem_detail import ProblemDetail
 class PatronAuthServicesController(SettingsController):
     def __init__(self, manager):
         super(PatronAuthServicesController, self).__init__(manager)
-        self.provider_apis = [SimpleAuthenticationProvider,
-                              MilleniumPatronAPI,
-                              SIP2AuthenticationProvider,
-                              FirstBookAuthenticationAPI,
-                              OldFirstBookAuthenticationAPI,
-                              CleverAuthenticationAPI,
-                              KansasAuthenticationAPI,
-                              SAMLWebSSOAuthenticationProvider
-                              ]
+        self.provider_apis = [
+            SimpleAuthenticationProvider,
+            MilleniumPatronAPI,
+            SIP2AuthenticationProvider,
+            FirstBookAuthenticationAPI,
+            OldFirstBookAuthenticationAPI,
+            CleverAuthenticationAPI,
+            KansasAuthenticationAPI,
+            SAMLWebSSOAuthenticationProvider,
+        ]
         self.protocols = self._get_integration_protocols(self.provider_apis)
 
-        self.basic_auth_protocols = [SimpleAuthenticationProvider.__module__,
-                                MilleniumPatronAPI.__module__,
-                                SIP2AuthenticationProvider.__module__,
-                                FirstBookAuthenticationAPI.__module__,
-                                OldFirstBookAuthenticationAPI.__module__,
-                                KansasAuthenticationAPI.__module__,
-                               ]
+        self.basic_auth_protocols = [
+            SimpleAuthenticationProvider.__module__,
+            MilleniumPatronAPI.__module__,
+            SIP2AuthenticationProvider.__module__,
+            FirstBookAuthenticationAPI.__module__,
+            OldFirstBookAuthenticationAPI.__module__,
+            KansasAuthenticationAPI.__module__,
+        ]
         self.type = _("patron authentication service")
         self._validator_factory = PatronAuthenticationValidatorFactory()
 
     def process_patron_auth_services(self):
         self.require_system_admin()
 
-        if flask.request.method == 'GET':
+        if flask.request.method == "GET":
             return self.process_get()
         else:
             return self.process_post()
 
     def process_get(self):
-        services = self._get_integration_info(ExternalIntegration.PATRON_AUTH_GOAL, self.protocols)
+        services = self._get_integration_info(
+            ExternalIntegration.PATRON_AUTH_GOAL, self.protocols
+        )
 
         for service in services:
-            service_object = get_one(self._db, ExternalIntegration, id=service.get("id"), goal=ExternalIntegration.PATRON_AUTH_GOAL)
-            service["self_test_results"] = self._get_prior_test_results(service_object, self._find_protocol_class(service_object))
-        return dict(
-            patron_auth_services=services,
-            protocols=self.protocols
-        )
+            service_object = get_one(
+                self._db,
+                ExternalIntegration,
+                id=service.get("id"),
+                goal=ExternalIntegration.PATRON_AUTH_GOAL,
+            )
+            service["self_test_results"] = self._get_prior_test_results(
+                service_object, self._find_protocol_class(service_object)
+            )
+        return dict(patron_auth_services=services, protocols=self.protocols)
 
     def process_post(self):
         protocol = flask.request.form.get("protocol")
@@ -77,7 +85,12 @@ class PatronAuthServicesController(SettingsController):
         id = flask.request.form.get("id")
         if id:
             # Find an existing service to edit
-            auth_service = get_one(self._db, ExternalIntegration, id=id, goal=ExternalIntegration.PATRON_AUTH_GOAL)
+            auth_service = get_one(
+                self._db,
+                ExternalIntegration,
+                id=id,
+                goal=ExternalIntegration.PATRON_AUTH_GOAL,
+            )
             if not auth_service:
                 return MISSING_SERVICE
             if protocol != auth_service.protocol:
@@ -119,7 +132,9 @@ class PatronAuthServicesController(SettingsController):
             return Response(str(auth_service.id), 200)
 
     def _find_protocol_class(self, service_object):
-        [protocol_class] = [p for p in self.provider_apis if p.__module__ == service_object.protocol]
+        [protocol_class] = [
+            p for p in self.provider_apis if p.__module__ == service_object.protocol
+        ]
         return protocol_class
 
     def validate_form_fields(self, protocol):
@@ -145,20 +160,28 @@ class PatronAuthServicesController(SettingsController):
 
         basic_auth_count = 0
         for integration in library.integrations:
-            if integration.goal == ExternalIntegration.PATRON_AUTH_GOAL and integration.protocol in self.basic_auth_protocols:
+            if (
+                integration.goal == ExternalIntegration.PATRON_AUTH_GOAL
+                and integration.protocol in self.basic_auth_protocols
+            ):
                 basic_auth_count += 1
                 if basic_auth_count > 1:
-                    return MULTIPLE_BASIC_AUTH_SERVICES.detailed(_(
-                        "You tried to add a patron authentication service that uses basic auth to %(library)s, but it already has one.",
-                        library=library.short_name,
-                    ))
+                    return MULTIPLE_BASIC_AUTH_SERVICES.detailed(
+                        _(
+                            "You tried to add a patron authentication service that uses basic auth to %(library)s, but it already has one.",
+                            library=library.short_name,
+                        )
+                    )
 
     def check_external_type(self, library, auth_service):
         """Check that the library's external type regular expression is valid, if it was set."""
 
         value = ConfigurationSetting.for_library_and_externalintegration(
-            self._db, AuthenticationProvider.EXTERNAL_TYPE_REGULAR_EXPRESSION,
-            library, auth_service).value
+            self._db,
+            AuthenticationProvider.EXTERNAL_TYPE_REGULAR_EXPRESSION,
+            library,
+            auth_service,
+        ).value
         if value:
             try:
                 re.compile(value)
@@ -169,13 +192,27 @@ class PatronAuthServicesController(SettingsController):
         """Check whether the library's identifier restriction regular expression is set and
         is supposed to be a regular expression; if so, check that it's valid."""
 
-        identifier_restriction_type = ConfigurationSetting.for_library_and_externalintegration(
-            self._db, AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE,
-            library, auth_service).value
-        identifier_restriction = ConfigurationSetting.for_library_and_externalintegration(
-            self._db, AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION,
-            library, auth_service).value
-        if identifier_restriction and identifier_restriction_type == AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX:
+        identifier_restriction_type = (
+            ConfigurationSetting.for_library_and_externalintegration(
+                self._db,
+                AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE,
+                library,
+                auth_service,
+            ).value
+        )
+        identifier_restriction = (
+            ConfigurationSetting.for_library_and_externalintegration(
+                self._db,
+                AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION,
+                library,
+                auth_service,
+            ).value
+        )
+        if (
+            identifier_restriction
+            and identifier_restriction_type
+            == AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX
+        ):
             try:
                 re.compile(identifier_restriction)
             except Exception as e:
@@ -186,7 +223,11 @@ class PatronAuthServicesController(SettingsController):
         to configure this patron auth service."""
 
         for library in auth_service.libraries:
-            error = self.check_library_integrations(library) or self.check_external_type(library, auth_service) or self.check_identifier_restriction(library, auth_service)
+            error = (
+                self.check_library_integrations(library)
+                or self.check_external_type(library, auth_service)
+                or self.check_identifier_restriction(library, auth_service)
+            )
             if error:
                 return error
 

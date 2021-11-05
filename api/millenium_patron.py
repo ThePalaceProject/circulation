@@ -31,95 +31,132 @@ from core.model import (
 from core.util.http import HTTP
 from core.util import MoneyUtility
 
+
 class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
 
     NAME = "Millenium"
 
-    RECORD_NUMBER_FIELD = 'RECORD #[p81]'
-    PATRON_TYPE_FIELD = 'P TYPE[p47]'
-    EXPIRATION_FIELD = 'EXP DATE[p43]'
-    HOME_BRANCH_FIELD = 'HOME LIBR[p53]'
-    ADDRESS_FIELD = 'ADDRESS[pa]'
-    BARCODE_FIELD = 'P BARCODE[pb]'
-    USERNAME_FIELD = 'ALT ID[pu]'
-    FINES_FIELD = 'MONEY OWED[p96]'
-    BLOCK_FIELD = 'MBLOCK[p56]'
-    ERROR_MESSAGE_FIELD = 'ERRMSG'
-    PERSONAL_NAME_FIELD = 'PATRN NAME[pn]'
-    EMAIL_ADDRESS_FIELD = 'EMAIL ADDR[pz]'
-    EXPIRATION_DATE_FORMAT = '%m-%d-%y'
+    RECORD_NUMBER_FIELD = "RECORD #[p81]"
+    PATRON_TYPE_FIELD = "P TYPE[p47]"
+    EXPIRATION_FIELD = "EXP DATE[p43]"
+    HOME_BRANCH_FIELD = "HOME LIBR[p53]"
+    ADDRESS_FIELD = "ADDRESS[pa]"
+    BARCODE_FIELD = "P BARCODE[pb]"
+    USERNAME_FIELD = "ALT ID[pu]"
+    FINES_FIELD = "MONEY OWED[p96]"
+    BLOCK_FIELD = "MBLOCK[p56]"
+    ERROR_MESSAGE_FIELD = "ERRMSG"
+    PERSONAL_NAME_FIELD = "PATRN NAME[pn]"
+    EMAIL_ADDRESS_FIELD = "EMAIL ADDR[pz]"
+    EXPIRATION_DATE_FORMAT = "%m-%d-%y"
 
-    MULTIVALUE_FIELDS = set(['NOTE[px]', BARCODE_FIELD])
+    MULTIVALUE_FIELDS = set(["NOTE[px]", BARCODE_FIELD])
 
     DEFAULT_CURRENCY = "USD"
 
     # Identifiers that contain any of these strings are ignored when
     # finding the "correct" identifier in a patron's record, even if
     # it means they end up with no identifier at all.
-    IDENTIFIER_BLACKLIST = 'identifier_blacklist'
+    IDENTIFIER_BLACKLIST = "identifier_blacklist"
 
     # A configuration value for whether or not to validate the SSL certificate
     # of the Millenium Patron API server.
     VERIFY_CERTIFICATE = "verify_certificate"
 
     # The field to use when validating a patron's credential.
-    AUTHENTICATION_MODE = 'auth_mode'
-    PIN_AUTHENTICATION_MODE = 'pin'
-    FAMILY_NAME_AUTHENTICATION_MODE = 'family_name'
+    AUTHENTICATION_MODE = "auth_mode"
+    PIN_AUTHENTICATION_MODE = "pin"
+    FAMILY_NAME_AUTHENTICATION_MODE = "family_name"
 
-    NEIGHBORHOOD_MODE = 'neighborhood_mode'
-    NO_NEIGHBORHOOD_MODE = 'disabled'
-    HOME_BRANCH_NEIGHBORHOOD_MODE = 'home_branch'
-    POSTAL_CODE_NEIGHBORHOOD_MODE = 'postal_code'
+    NEIGHBORHOOD_MODE = "neighborhood_mode"
+    NO_NEIGHBORHOOD_MODE = "disabled"
+    HOME_BRANCH_NEIGHBORHOOD_MODE = "home_branch"
+    POSTAL_CODE_NEIGHBORHOOD_MODE = "postal_code"
     NEIGHBORHOOD_MODES = set(
-        [NO_NEIGHBORHOOD_MODE, HOME_BRANCH_NEIGHBORHOOD_MODE, POSTAL_CODE_NEIGHBORHOOD_MODE]
+        [
+            NO_NEIGHBORHOOD_MODE,
+            HOME_BRANCH_NEIGHBORHOOD_MODE,
+            POSTAL_CODE_NEIGHBORHOOD_MODE,
+        ]
     )
 
     # The field to use when seeing which values of MBLOCK[p56] mean a patron
     # is blocked. By default, any value other than '-' indicates a block.
-    BLOCK_TYPES = 'block_types'
+    BLOCK_TYPES = "block_types"
 
-    AUTHENTICATION_MODES = [
-        PIN_AUTHENTICATION_MODE, FAMILY_NAME_AUTHENTICATION_MODE
-    ]
+    AUTHENTICATION_MODES = [PIN_AUTHENTICATION_MODE, FAMILY_NAME_AUTHENTICATION_MODE]
 
     SETTINGS = [
-        { "key": ExternalIntegration.URL, "format": "url", "label": _("URL"), "required": True },
-        { "key": VERIFY_CERTIFICATE, "label": _("Certificate Verification"),
-          "type": "select", "options": [
-              { "key": "true", "label": _("Verify Certificate Normally (Required for production)") },
-              { "key": "false", "label": _("Ignore Certificate Problems (For temporary testing only)") },
-          ],
-          "default": "true"
+        {
+            "key": ExternalIntegration.URL,
+            "format": "url",
+            "label": _("URL"),
+            "required": True,
         },
-        { "key": BLOCK_TYPES, "label": _("Block types"),
-          "description": _("Values of MBLOCK[p56] which mean a patron is blocked. By default, any value other than '-' indicates a block."),
+        {
+            "key": VERIFY_CERTIFICATE,
+            "label": _("Certificate Verification"),
+            "type": "select",
+            "options": [
+                {
+                    "key": "true",
+                    "label": _("Verify Certificate Normally (Required for production)"),
+                },
+                {
+                    "key": "false",
+                    "label": _(
+                        "Ignore Certificate Problems (For temporary testing only)"
+                    ),
+                },
+            ],
+            "default": "true",
         },
-        { "key": IDENTIFIER_BLACKLIST, "label": _("Identifier Blacklist"),
-          "type": "list",
-          "description": _("Identifiers containing any of these strings are ignored when finding the 'correct' " +
-                           "identifier for a patron's record, even if it means they end up with no identifier at all. " +
-                           "If librarians invalidate library cards by adding strings like \"EXPIRED\" or \"INVALID\" " +
-                           "on to the beginning of the card number, put those strings here so the Circulation Manager " +
-                           "knows they do not represent real card numbers."),
+        {
+            "key": BLOCK_TYPES,
+            "label": _("Block types"),
+            "description": _(
+                "Values of MBLOCK[p56] which mean a patron is blocked. By default, any value other than '-' indicates a block."
+            ),
         },
-        { "key": AUTHENTICATION_MODE, "label": _("Authentication Mode"),
-          "type": "select",
-          "options": [
-              { "key": PIN_AUTHENTICATION_MODE, "label": _("PIN") },
-              { "key": FAMILY_NAME_AUTHENTICATION_MODE, "label": _("Family Name") },
-          ],
-          "default": PIN_AUTHENTICATION_MODE
+        {
+            "key": IDENTIFIER_BLACKLIST,
+            "label": _("Identifier Blacklist"),
+            "type": "list",
+            "description": _(
+                "Identifiers containing any of these strings are ignored when finding the 'correct' "
+                + "identifier for a patron's record, even if it means they end up with no identifier at all. "
+                + 'If librarians invalidate library cards by adding strings like "EXPIRED" or "INVALID" '
+                + "on to the beginning of the card number, put those strings here so the Circulation Manager "
+                + "knows they do not represent real card numbers."
+            ),
+        },
+        {
+            "key": AUTHENTICATION_MODE,
+            "label": _("Authentication Mode"),
+            "type": "select",
+            "options": [
+                {"key": PIN_AUTHENTICATION_MODE, "label": _("PIN")},
+                {"key": FAMILY_NAME_AUTHENTICATION_MODE, "label": _("Family Name")},
+            ],
+            "default": PIN_AUTHENTICATION_MODE,
         },
         {
             "key": NEIGHBORHOOD_MODE,
             "label": _("Patron neighborhood field"),
-            "description": _("It's sometimes possible to guess a patron's neighborhood from their ILS record. You can use this when analyzing circulation activity by neighborhood. If you don't need to do this, it's better for patron privacy to disable this feature."),
+            "description": _(
+                "It's sometimes possible to guess a patron's neighborhood from their ILS record. You can use this when analyzing circulation activity by neighborhood. If you don't need to do this, it's better for patron privacy to disable this feature."
+            ),
             "type": "select",
             "options": [
-                { "key": NO_NEIGHBORHOOD_MODE, "label": _("Disable this feature") },
-                { "key": HOME_BRANCH_NEIGHBORHOOD_MODE, "label": _("Patron's home library branch is their neighborhood.") },
-                { "key": POSTAL_CODE_NEIGHBORHOOD_MODE, "label": _("Patron's postal code is their neighborhood.") },
+                {"key": NO_NEIGHBORHOOD_MODE, "label": _("Disable this feature")},
+                {
+                    "key": HOME_BRANCH_NEIGHBORHOOD_MODE,
+                    "label": _("Patron's home library branch is their neighborhood."),
+                },
+                {
+                    "key": POSTAL_CODE_NEIGHBORHOOD_MODE,
+                    "label": _("Patron's postal code is their neighborhood."),
+                },
             ],
             "default": NO_NEIGHBORHOOD_MODE,
         },
@@ -128,16 +165,20 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
     # Replace library settings to allow text in identifier field.
     LIBRARY_SETTINGS = []
     for setting in BasicAuthenticationProvider.LIBRARY_SETTINGS:
-        if setting['key'] == BasicAuthenticationProvider.LIBRARY_IDENTIFIER_FIELD:
-            LIBRARY_SETTINGS.append({
-                "key": BasicAuthenticationProvider.LIBRARY_IDENTIFIER_FIELD,
-                "label": _("Library Identifier Field"),
-                "description": _("This is the field on the patron record that the <em>Library Identifier Restriction " +
-                                 "Type</em> is applied to. The option 'barcode' matches the users barcode, other " +
-                                 "values are pulled directly from the patron record for example: 'P TYPE[p47]'. " +
-                                 "This value is not used if <em>Library Identifier Restriction Type</em> " +
-                                 "is set to 'No restriction'."),
-            })
+        if setting["key"] == BasicAuthenticationProvider.LIBRARY_IDENTIFIER_FIELD:
+            LIBRARY_SETTINGS.append(
+                {
+                    "key": BasicAuthenticationProvider.LIBRARY_IDENTIFIER_FIELD,
+                    "label": _("Library Identifier Field"),
+                    "description": _(
+                        "This is the field on the patron record that the <em>Library Identifier Restriction "
+                        + "Type</em> is applied to. The option 'barcode' matches the users barcode, other "
+                        + "values are pulled directly from the patron record for example: 'P TYPE[p47]'. "
+                        + "This value is not used if <em>Library Identifier Restriction Type</em> "
+                        + "is set to 'No restriction'."
+                    ),
+                }
+            )
         else:
             LIBRARY_SETTINGS.append(setting)
 
@@ -145,15 +186,14 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
         super(MilleniumPatronAPI, self).__init__(library, integration, analytics)
         url = integration.url
         if not url:
-            raise CannotLoadConfiguration(
-                "Millenium Patron API server not configured."
-            )
+            raise CannotLoadConfiguration("Millenium Patron API server not configured.")
 
-        if not url.endswith('/'):
+        if not url.endswith("/"):
             url = url + "/"
         self.root = url
         self.verify_certificate = integration.setting(
-            self.VERIFY_CERTIFICATE).json_value
+            self.VERIFY_CERTIFICATE
+        ).json_value
         if self.verify_certificate is None:
             self.verify_certificate = True
         self.parser = etree.HTMLParser()
@@ -162,13 +202,17 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
         # identifiers, some of which are not real library cards. A
         # blacklist allows us to exclude certain types of identifiers
         # from being considered as library cards.
-        authorization_identifier_blacklist = integration.setting(
-            self.IDENTIFIER_BLACKLIST).json_value or []
-        self.blacklist = [re.compile(x, re.I)
-                          for x in authorization_identifier_blacklist]
+        authorization_identifier_blacklist = (
+            integration.setting(self.IDENTIFIER_BLACKLIST).json_value or []
+        )
+        self.blacklist = [
+            re.compile(x, re.I) for x in authorization_identifier_blacklist
+        ]
 
-        auth_mode = integration.setting(
-            self.AUTHENTICATION_MODE).value or self.PIN_AUTHENTICATION_MODE
+        auth_mode = (
+            integration.setting(self.AUTHENTICATION_MODE).value
+            or self.PIN_AUTHENTICATION_MODE
+        )
 
         if auth_mode not in self.AUTHENTICATION_MODES:
             raise CannotLoadConfiguration(
@@ -178,15 +222,16 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
 
         self.block_types = integration.setting(self.BLOCK_TYPES).value or None
 
-        neighborhood_mode = integration.setting(
-            self.NEIGHBORHOOD_MODE
-        ).value or self.NO_NEIGHBORHOOD_MODE
+        neighborhood_mode = (
+            integration.setting(self.NEIGHBORHOOD_MODE).value
+            or self.NO_NEIGHBORHOOD_MODE
+        )
         if neighborhood_mode not in self.NEIGHBORHOOD_MODES:
             raise CannotLoadConfiguration(
-                "Unrecognized Millenium Patron API neighborhood mode: %s." % neighborhood_mode
+                "Unrecognized Millenium Patron API neighborhood mode: %s."
+                % neighborhood_mode
             )
         self.neighborhood_mode = neighborhood_mode
-
 
     # Begin implementation of BasicAuthenticationProvider abstract
     # methods.
@@ -215,14 +260,14 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
             # The PIN is URL-encoded. The username is not: as far as
             # we can tell Millenium Patron doesn't even try to decode
             # it.
-            quoted_password = parse.quote(password, safe='') if password else password
+            quoted_password = parse.quote(password, safe="") if password else password
             path = "%(barcode)s/%(pin)s/pintest" % dict(
                 barcode=username, pin=quoted_password
             )
             url = self.root + path
             response = self.request(url)
             data = dict(self._extract_text_nodes(response.content))
-            if data.get('RETCOD') == '0':
+            if data.get("RETCOD") == "0":
                 return PatronData(authorization_identifier=username, complete=False)
             return False
         elif self.auth_mode == self.FAMILY_NAME_AUTHENTICATION_MODE:
@@ -245,10 +290,10 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
         """Does `supposed_family_name` match `actual_name`?"""
         if actual_name is None or supposed_family_name is None:
             return False
-        if actual_name.find(',') != -1:
-            actual_family_name = actual_name.split(',')[0]
+        if actual_name.find(",") != -1:
+            actual_family_name = actual_name.split(",")[0]
         else:
-            actual_name_split = actual_name.split(' ')
+            actual_name_split = actual_name.split(" ")
             actual_family_name = actual_name_split[-1]
         if actual_family_name.upper() == supposed_family_name.upper():
             return True
@@ -265,7 +310,6 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
         response = self.request(url)
         return self.patron_dump_to_patrondata(identifier, response.content)
 
-
     # End implementation of BasicAuthenticationProvider abstract
     # methods.
 
@@ -280,7 +324,7 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
         """Modify the kwargs to HTTP.request_with_timeout to reflect the API
         configuration, in a testable way.
         """
-        kwargs['verify'] = self.verify_certificate
+        kwargs["verify"] = self.verify_certificate
 
     @classmethod
     def _patron_block_reason(cls, block_types, mblock_value):
@@ -292,7 +336,7 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
 
         if not block_types:
             # Apply the default rules.
-            if not mblock_value or mblock_value.strip() in ('', '-'):
+            if not mblock_value or mblock_value.strip() in ("", "-"):
                 # This patron is not blocked at all.
                 return PatronData.NO_VALUE
             else:
@@ -367,23 +411,26 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
                     # Parse the expiration date according to server local
                     # time, not UTC.
                     expires_local = datetime.datetime.strptime(
-                        v, self.EXPIRATION_DATE_FORMAT).replace(
-                            tzinfo=dateutil.tz.tzlocal()
-                        )
+                        v, self.EXPIRATION_DATE_FORMAT
+                    ).replace(tzinfo=dateutil.tz.tzlocal())
                     expires_local = expires_local.date()
                     authorization_expires = expires_local
                 except ValueError:
                     self.log.warn(
                         'Malformed expiration date for patron: "%s". Treating as unexpirable.',
-                        v
+                        v,
                     )
             elif k == self.PATRON_TYPE_FIELD:
                 external_type = v
-            elif (k == self.HOME_BRANCH_FIELD
-                  and self.neighborhood_mode == self.HOME_BRANCH_NEIGHBORHOOD_MODE):
+            elif (
+                k == self.HOME_BRANCH_FIELD
+                and self.neighborhood_mode == self.HOME_BRANCH_NEIGHBORHOOD_MODE
+            ):
                 neighborhood = v.strip()
-            elif (k == self.ADDRESS_FIELD
-                  and self.neighborhood_mode == self.POSTAL_CODE_NEIGHBORHOOD_MODE):
+            elif (
+                k == self.ADDRESS_FIELD
+                and self.neighborhood_mode == self.POSTAL_CODE_NEIGHBORHOOD_MODE
+            ):
                 neighborhood = self.extract_postal_code(v)
             elif k == self.ERROR_MESSAGE_FIELD:
                 # An error has occured. Most likely the patron lookup
@@ -431,7 +478,7 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
             # database record because syncing with the ILS is so
             # expensive.
             cached_neighborhood=neighborhood,
-            complete=True
+            complete=True,
         )
         return data
 
@@ -440,25 +487,26 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
         if isinstance(content, bytes):
             content = content.decode("utf8")
         for line in content.split("\n"):
-            if line.startswith('<HTML><BODY>'):
+            if line.startswith("<HTML><BODY>"):
                 line = line[12:]
-            if not line.endswith('<BR>'):
+            if not line.endswith("<BR>"):
                 continue
             kv = line[:-4]
-            if not '=' in kv:
+            if not "=" in kv:
                 # This shouldn't happen, but there's no need to crash.
                 self.log.warn("Unexpected line in patron dump: %s", line)
                 continue
-            yield kv.split('=', 1)
+            yield kv.split("=", 1)
 
     # A number of regular expressions for finding postal codes in
     # freeform addresses, with more reliable techniques at the front.
     POSTAL_CODE_RES = [
-        re.compile(x) for x in [
-            "[^0-9]([0-9]{5})-[0-9]{4}$", # ZIP+4 at end
-            "[^0-9]([0-9]{5})$", # ZIP at end
-            ".*[^0-9]([0-9]{5})-[0-9]{4}[^0-9]", # ZIP+4 as close to end as possible without being at the end
-            ".*[^0-9]([0-9]{5})[^0-9]", # ZIP as close to end as possible without being at the end
+        re.compile(x)
+        for x in [
+            "[^0-9]([0-9]{5})-[0-9]{4}$",  # ZIP+4 at end
+            "[^0-9]([0-9]{5})$",  # ZIP at end
+            ".*[^0-9]([0-9]{5})-[0-9]{4}[^0-9]",  # ZIP+4 as close to end as possible without being at the end
+            ".*[^0-9]([0-9]{5})[^0-9]",  # ZIP as close to end as possible without being at the end
         ]
     ]
 
@@ -489,7 +537,7 @@ class MockMilleniumPatronAPI(MilleniumPatronAPI):
         permanent_id="12345",
         authorization_identifier="0",
         username="alice",
-        authorization_expires = datetime_utc(2015, 4, 1)
+        authorization_expires=datetime_utc(2015, 4, 1),
     )
 
     # This user's card still has ten days on it.
@@ -498,7 +546,7 @@ class MockMilleniumPatronAPI(MilleniumPatronAPI):
         permanent_id="67890",
         authorization_identifier="5",
         username="bob",
-        authorization_expires = the_future,
+        authorization_expires=the_future,
     )
 
     users = [user1, user2]
@@ -518,7 +566,7 @@ class MockMilleniumPatronAPI(MilleniumPatronAPI):
 
         """
         u = self.dump(barcode)
-        if 'ERRNUM' in u:
+        if "ERRNUM" in u:
             return False
         return len(barcode) == 14 or pin == barcode[0] * 4
 
@@ -529,5 +577,6 @@ class MockMilleniumPatronAPI(MilleniumPatronAPI):
             if u.authorization_identifier == look_for:
                 return u
         return None
+
 
 AuthenticationProvider = MilleniumPatronAPI

@@ -1,23 +1,27 @@
-EXISTING_BOOK_FILE_PATH = '/books/ebook.epub'
-NOT_EXISTING_BOOK_FILE_PATH = '/books/notexistingbook.epub'
+EXISTING_BOOK_FILE_PATH = "/books/ebook.epub"
+NOT_EXISTING_BOOK_FILE_PATH = "/books/notexistingbook.epub"
 
-BOOK_IDENTIFIER = 'EBOOK'
+BOOK_IDENTIFIER = "EBOOK"
 
-CONTENT_ENCRYPTION_KEY = '+RulyN2G8MfAahNEO/Xz0TwBT5xMzvbFFHqqWGPrO3M='
-PROTECTED_CONTENT_LOCATION = '/opt/readium/files/encrypted/1f162bc2-be6f-42a9-8153-96d675418ff1.epub'
-PROTECTED_CONTENT_DISPOSITION = '1f162bc2-be6f-42a9-8153-96d675418ff1.epub'
-PROTECTED_CONTENT_TYPE = 'application/epub+zip'
+CONTENT_ENCRYPTION_KEY = "+RulyN2G8MfAahNEO/Xz0TwBT5xMzvbFFHqqWGPrO3M="
+PROTECTED_CONTENT_LOCATION = (
+    "/opt/readium/files/encrypted/1f162bc2-be6f-42a9-8153-96d675418ff1.epub"
+)
+PROTECTED_CONTENT_DISPOSITION = "1f162bc2-be6f-42a9-8153-96d675418ff1.epub"
+PROTECTED_CONTENT_TYPE = "application/epub+zip"
 PROTECTED_CONTENT_LENGTH = 798385
-PROTECTED_CONTENT_SHA256 = 'e058281cbc11bae29451e5e2c8003efa1164c3f6dde6dcc003c8bb79e2acb88f'
+PROTECTED_CONTENT_SHA256 = (
+    "e058281cbc11bae29451e5e2c8003efa1164c3f6dde6dcc003c8bb79e2acb88f"
+)
 
 
-LCPENCRYPT_NOT_EXISTING_DIRECTORY_RESULT = \
-    '''Error opening input file, for more information type 'lcpencrypt -help' ; level 30
+LCPENCRYPT_NOT_EXISTING_DIRECTORY_RESULT = """Error opening input file, for more information type 'lcpencrypt -help' ; level 30
 open {0}: no such file or directory
-'''.format(NOT_EXISTING_BOOK_FILE_PATH)
+""".format(
+    NOT_EXISTING_BOOK_FILE_PATH
+)
 
-LCPENCRYPT_FAILED_ENCRYPTION_RESULT = \
-    '''{{
+LCPENCRYPT_FAILED_ENCRYPTION_RESULT = """{{
    "content-id": "{0}",
    "content-encryption-key": null,
    "protected-content-location": "{1}",
@@ -26,14 +30,11 @@ LCPENCRYPT_FAILED_ENCRYPTION_RESULT = \
    "protected-content-disposition": "{2}"
 }}
 Encryption was successful
-'''.format(
-        BOOK_IDENTIFIER,
-        PROTECTED_CONTENT_LOCATION,
-        NOT_EXISTING_BOOK_FILE_PATH
-    )
+""".format(
+    BOOK_IDENTIFIER, PROTECTED_CONTENT_LOCATION, NOT_EXISTING_BOOK_FILE_PATH
+)
 
-LCPENCRYPT_SUCCESSFUL_ENCRYPTION_RESULT = \
-    '''{{
+LCPENCRYPT_SUCCESSFUL_ENCRYPTION_RESULT = """{{
    "content-id": "{0}",
    "content-encryption-key": "{1}",
    "protected-content-location": "{2}",
@@ -43,22 +44,20 @@ LCPENCRYPT_SUCCESSFUL_ENCRYPTION_RESULT = \
    "protected-content-type": "{6}"
 }}
 Encryption was successful
-'''.format(
-        BOOK_IDENTIFIER,
-        CONTENT_ENCRYPTION_KEY,
-        PROTECTED_CONTENT_LOCATION,
-        PROTECTED_CONTENT_LENGTH,
-        PROTECTED_CONTENT_SHA256,
-        PROTECTED_CONTENT_DISPOSITION,
-        PROTECTED_CONTENT_TYPE
-    )
+""".format(
+    BOOK_IDENTIFIER,
+    CONTENT_ENCRYPTION_KEY,
+    PROTECTED_CONTENT_LOCATION,
+    PROTECTED_CONTENT_LENGTH,
+    PROTECTED_CONTENT_SHA256,
+    PROTECTED_CONTENT_DISPOSITION,
+    PROTECTED_CONTENT_TYPE,
+)
 
-LCPENCRYPT_FAILED_LCPSERVER_NOTIFICATION = \
-    '''Error notifying the License Server; level 60
-lcp server error 401'''
+LCPENCRYPT_FAILED_LCPSERVER_NOTIFICATION = """Error notifying the License Server; level 60
+lcp server error 401"""
 
-LCPENCRYPT_SUCCESSFUL_NOTIFICATION_RESULT = \
-    '''License Server was notified
+LCPENCRYPT_SUCCESSFUL_NOTIFICATION_RESULT = """License Server was notified
 {{
    "content-id": "{0}",
    "content-encryption-key": "{1}",
@@ -69,18 +68,18 @@ LCPENCRYPT_SUCCESSFUL_NOTIFICATION_RESULT = \
    "protected-content-type": "{6}"
 }}
 Encryption was successful
-'''.format(
-        BOOK_IDENTIFIER,
-        CONTENT_ENCRYPTION_KEY,
-        PROTECTED_CONTENT_LOCATION,
-        PROTECTED_CONTENT_LENGTH,
-        PROTECTED_CONTENT_SHA256,
-        PROTECTED_CONTENT_DISPOSITION,
-        PROTECTED_CONTENT_TYPE
-    )
+""".format(
+    BOOK_IDENTIFIER,
+    CONTENT_ENCRYPTION_KEY,
+    PROTECTED_CONTENT_LOCATION,
+    PROTECTED_CONTENT_LENGTH,
+    PROTECTED_CONTENT_SHA256,
+    PROTECTED_CONTENT_DISPOSITION,
+    PROTECTED_CONTENT_TYPE,
+)
 
 
-LCPSERVER_LICENSE = '''
+LCPSERVER_LICENSE = """
 {
   "provider": "http://circulation.manager",
   "id": "e99be177-4902-426a-9b96-0872ae877e2f",
@@ -127,13 +126,13 @@ LCPSERVER_LICENSE = '''
     "algorithm": "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
   }
 }
-'''
+"""
 
-LCPSERVER_URL = 'http://localhost:8989'
-LCPSERVER_USER = 'lcp'
-LCPSERVER_PASSWORD = 'secretpassword'
-LCPSERVER_INPUT_DIRECTORY = '/opt/readium/encrypted'
+LCPSERVER_URL = "http://localhost:8989"
+LCPSERVER_USER = "lcp"
+LCPSERVER_PASSWORD = "secretpassword"
+LCPSERVER_INPUT_DIRECTORY = "/opt/readium/encrypted"
 
-CONTENT_ID = '1'
-TEXT_HINT = 'Not very helpful hint'
-PROVIDER_NAME = 'http://circulation.manager'
+CONTENT_ID = "1"
+TEXT_HINT = "Not very helpful hint"
+PROVIDER_NAME = "http://circulation.manager"

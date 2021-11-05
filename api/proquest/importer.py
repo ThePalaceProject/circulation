@@ -450,9 +450,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         :rtype: List[LinkData]
         """
         self._logger.debug(
-            "Started extracting image links from {0}".format(
-                encode(publication.images)
-            )
+            "Started extracting image links from {0}".format(encode(publication.images))
         )
 
         image_links = []
@@ -819,7 +817,11 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
         :type process_removals: bool
         """
         if not isinstance(parser, RWPMManifestParser):
-            raise ValueError("Argument 'parser' must be an instance of {0}".format(RWPMManifestParser))
+            raise ValueError(
+                "Argument 'parser' must be an instance of {0}".format(
+                    RWPMManifestParser
+                )
+            )
 
         import_class_kwargs["parser"] = parser
 
@@ -896,7 +898,9 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
 
             try:
                 feed_page_content = json.dumps(
-                    feed, default=str, ensure_ascii=True,
+                    feed,
+                    default=str,
+                    ensure_ascii=True,
                 )
                 feed_page_file.write(feed_page_content)
                 feed_page_file.flush()

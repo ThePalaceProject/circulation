@@ -1075,9 +1075,7 @@ class SAMLSubject(object):
         elif isinstance(valid_till, datetime.datetime):
             self._valid_till = valid_till - utc_now()
         elif isinstance(valid_till, int):
-            self._valid_till = (
-                from_timestamp(valid_till) - utc_now()
-            )
+            self._valid_till = from_timestamp(valid_till) - utc_now()
         elif isinstance(valid_till, datetime.timedelta):
             self._valid_till = valid_till
         else:

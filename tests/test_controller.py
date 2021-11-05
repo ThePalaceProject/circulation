@@ -139,24 +139,21 @@ from core.util.opds_writer import OPDSFeed
 from core.util.problem_detail import ProblemDetail
 from core.util.string_helpers import base64
 
+
 class ControllerTest(VendorIDTest):
     """A test that requires a functional app server."""
 
     # Authorization headers that will succeed (or fail) against the
     # SimpleAuthenticationProvider set up in ControllerTest.setup().
-    valid_auth = 'Basic ' + base64.b64encode(
-        'unittestuser:unittestpassword'
-    )
-    invalid_auth = 'Basic ' + base64.b64encode('user1:password2')
-    valid_credentials = dict(
-        username="unittestuser", password="unittestpassword"
-    )
+    valid_auth = "Basic " + base64.b64encode("unittestuser:unittestpassword")
+    invalid_auth = "Basic " + base64.b64encode("user1:password2")
+    valid_credentials = dict(username="unittestuser", password="unittestpassword")
 
     def setup_method(self):
         super(ControllerTest, self).setup_method()
         self.app = app
 
-        if not hasattr(self, 'setup_circulation_manager'):
+        if not hasattr(self, "setup_circulation_manager"):
             self.setup_circulation_manager = True
 
         # PRESERVE_CONTEXT_ON_EXCEPTION needs to be off in tests
@@ -165,10 +162,10 @@ class ControllerTest(VendorIDTest):
         # from previous tests would cause flask to roll back the db
         # when you entered a new request context, deleting rows that
         # were created in the test setup.
-        app.config['PRESERVE_CONTEXT_ON_EXCEPTION'] = False
+        app.config["PRESERVE_CONTEXT_ON_EXCEPTION"] = False
 
         Configuration.instance[Configuration.INTEGRATIONS][ExternalIntegration.CDN] = {
-            "" : "http://cdn"
+            "": "http://cdn"
         }
 
         if self.setup_circulation_manager:
@@ -180,7 +177,7 @@ class ControllerTest(VendorIDTest):
 
     def set_base_url(self, _db):
         base_url = ConfigurationSetting.sitewide(_db, Configuration.BASE_URL_KEY)
-        base_url.value = 'http://test-circulation-manager/'
+        base_url.value = "http://test-circulation-manager/"
 
     def circulation_manager_setup(self, _db):
         """Set up initial Library arrangements for this test.
@@ -208,8 +205,7 @@ class ControllerTest(VendorIDTest):
         """
         self.libraries = self.make_default_libraries(_db)
         self.collections = [
-            self.make_default_collection(_db, library)
-            for library in self.libraries
+            self.make_default_collection(_db, library) for library in self.libraries
         ]
         self.default_patrons = {}
 
@@ -227,24 +223,19 @@ class ControllerTest(VendorIDTest):
 
         self.authdata = AuthdataUtility.from_config(self.library)
 
-        self.manager = CirculationManager(
-            _db, testing=True
-        )
+        self.manager = CirculationManager(_db, testing=True)
 
         # Set CirculationAPI and top-level lane for the default
         # library, for convenience in tests.
-        self.manager.d_circulation = self.manager.circulation_apis[
-            self.library.id
-        ]
-        self.manager.d_top_level_lane = self.manager.top_level_lanes[
-            self.library.id
-        ]
+        self.manager.d_circulation = self.manager.circulation_apis[self.library.id]
+        self.manager.d_top_level_lane = self.manager.top_level_lanes[self.library.id]
         self.controller = CirculationManagerController(self.manager)
 
         # Set a convenient default lane.
         [self.english_adult_fiction] = [
-            x for x in self.library.lanes
-            if x.display_name=='Fiction' and x.languages==['eng']
+            x
+            for x in self.library.lanes
+            if x.display_name == "Fiction" and x.languages == ["eng"]
         ]
 
         return self.manager
@@ -254,24 +245,29 @@ class ControllerTest(VendorIDTest):
         _db = Session.object_session(library)
         # Create the patron used by the dummy authentication mechanism.
         default_patron, ignore = get_one_or_create(
-            _db, Patron,
+            _db,
+            Patron,
             library=library,
             authorization_identifier="unittestuser",
-            create_method_kwargs=dict(
-                external_identifier="unittestuser"
-            )
+            create_method_kwargs=dict(external_identifier="unittestuser"),
         )
         self.default_patrons[library] = default_patron
 
         # Create a simple authentication integration for this library,
         # unless it already has a way to authenticate patrons
         # (in which case we would just screw things up).
-        if not any([x for x in library.integrations if x.goal==
-                    ExternalIntegration.PATRON_AUTH_GOAL]):
+        if not any(
+            [
+                x
+                for x in library.integrations
+                if x.goal == ExternalIntegration.PATRON_AUTH_GOAL
+            ]
+        ):
             integration, ignore = create(
-                _db, ExternalIntegration,
+                _db,
+                ExternalIntegration,
                 protocol="api.simple_authentication",
-                goal=ExternalIntegration.PATRON_AUTH_GOAL
+                goal=ExternalIntegration.PATRON_AUTH_GOAL,
             )
             p = SimpleAuthenticationProvider
             integration.setting(p.TEST_IDENTIFIER).value = "unittestuser"
@@ -280,9 +276,9 @@ class ControllerTest(VendorIDTest):
             library.integrations.append(integration)
 
         for k, v in [
-                (Configuration.LARGE_COLLECTION_LANGUAGES, []),
-                (Configuration.SMALL_COLLECTION_LANGUAGES, ['eng']),
-                (Configuration.TINY_COLLECTION_LANGUAGES, ['spa','chi','fre'])
+            (Configuration.LARGE_COLLECTION_LANGUAGES, []),
+            (Configuration.SMALL_COLLECTION_LANGUAGES, ["eng"]),
+            (Configuration.TINY_COLLECTION_LANGUAGES, ["spa", "chi", "fre"]),
         ]:
             ConfigurationSetting.for_library(k, library).value = json.dumps(v)
         create_default_lanes(_db, library)
@@ -295,8 +291,8 @@ class ControllerTest(VendorIDTest):
 
     @contextmanager
     def request_context_with_library(self, route, *args, **kwargs):
-        if 'library' in kwargs:
-            library = kwargs.pop('library')
+        if "library" in kwargs:
+            library = kwargs.pop("library")
         else:
             library = self._default_library
         with self.app.test_request_context(route, *args, **kwargs) as c:
@@ -316,8 +312,13 @@ class CirculationControllerTest(ControllerTest):
         super(CirculationControllerTest, self).setup_method()
         self.works = []
         for (variable_name, title, author, language, fiction) in self.BOOKS:
-            work = self._work(title, author, language=language, fiction=fiction,
-                              with_open_access_download=True)
+            work = self._work(
+                title,
+                author,
+                language=language,
+                fiction=fiction,
+                with_open_access_download=True,
+            )
             setattr(self, variable_name, work)
             work.license_pools[0].collection = self.collection
             self.works.append(work)
@@ -325,9 +326,7 @@ class CirculationControllerTest(ControllerTest):
 
         # Enable the audiobook entry point for the default library -- a lot of
         # tests verify that non-default entry points can be selected.
-        self._default_library.setting(
-            EntryPoint.ENABLED_SETTING
-        ).value = json.dumps(
+        self._default_library.setting(EntryPoint.ENABLED_SETTING).value = json.dumps(
             [EbooksEntryPoint.INTERNAL_NAME, AudiobooksEntryPoint.INTERNAL_NAME]
         )
 
@@ -345,10 +344,13 @@ class CirculationControllerTest(ControllerTest):
             response = test_function()
             assert 502 == response.status_code
             assert (
-                "http://librarysimplified.org/terms/problem/remote-integration-failed" ==
-                response.uri)
-            assert ('The search index for this site is not properly configured.' ==
-                response.detail)
+                "http://librarysimplified.org/terms/problem/remote-integration-failed"
+                == response.uri
+            )
+            assert (
+                "The search index for this site is not properly configured."
+                == response.detail
+            )
         self.manager.setup_external_search = old_setup
         self.manager._external_search = old_value
 
@@ -362,8 +364,8 @@ class TestCirculationManager(CirculationControllerTest):
         public, private = ConfigurationSetting.sitewide(
             self._db, Configuration.KEY_PAIR
         ).json_value
-        assert 'BEGIN PUBLIC KEY' in public
-        assert 'BEGIN RSA PRIVATE KEY' in private
+        assert "BEGIN PUBLIC KEY" in public
+        assert "BEGIN RSA PRIVATE KEY" in private
 
     def test_load_settings(self):
         # Here's a CirculationManager which we've been using for a while.
@@ -405,24 +407,27 @@ class TestCirculationManager(CirculationControllerTest):
 
         # We also register a CustomIndexView for this new library.
         mock_custom_view = object()
+
         @classmethod
         def mock_for_library(cls, incoming_library):
             if incoming_library == library:
                 return mock_custom_view
             return None
+
         old_for_library = CustomIndexView.for_library
         CustomIndexView.for_library = mock_for_library
 
         # We also set up some configuration settings that will
         # be loaded.
         ConfigurationSetting.sitewide(
-            self._db, Configuration.PATRON_WEB_HOSTNAMES).value = "http://sitewide/1234"
+            self._db, Configuration.PATRON_WEB_HOSTNAMES
+        ).value = "http://sitewide/1234"
         registry = self._external_integration(
             protocol="some protocol", goal=ExternalIntegration.DISCOVERY_GOAL
         )
         ConfigurationSetting.for_library_and_externalintegration(
-            self._db, Registration.LIBRARY_REGISTRATION_WEB_CLIENT,
-            library, registry).value = "http://registration"
+            self._db, Registration.LIBRARY_REGISTRATION_WEB_CLIENT, library, registry
+        ).value = "http://registration"
 
         ConfigurationSetting.sitewide(
             self._db, Configuration.AUTHENTICATION_DOCUMENT_CACHE_TIME
@@ -449,7 +454,7 @@ class TestCirculationManager(CirculationControllerTest):
         # how to authenticate patrons of the new library.
         assert isinstance(
             manager.auth.library_authenticators[library.short_name],
-            LibraryAuthenticator
+            LibraryAuthenticator,
         )
 
         # The ExternalSearch object has been reset.
@@ -459,16 +464,19 @@ class TestCirculationManager(CirculationControllerTest):
         assert isinstance(manager.oauth_controller, OAuthController)
 
         # So has the controller for the Device Management Protocol.
-        assert isinstance(manager.adobe_device_management,
-                          DeviceManagementProtocolController)
+        assert isinstance(
+            manager.adobe_device_management, DeviceManagementProtocolController
+        )
 
         # So has the SharecCollectionAPI.
-        assert isinstance(manager.shared_collection_api,
-                          SharedCollectionAPI)
+        assert isinstance(manager.shared_collection_api, SharedCollectionAPI)
 
         # So have the patron web domains, and their paths have been
         # removed.
-        assert set(["http://sitewide", "http://registration"]) == manager.patron_web_domains
+        assert (
+            set(["http://sitewide", "http://registration"])
+            == manager.patron_web_domains
+        )
 
         # The authentication document cache has been rebuilt with a
         # new max_age.
@@ -483,23 +491,33 @@ class TestCirculationManager(CirculationControllerTest):
 
         # The sitewide patron web domain can also be set to *.
         ConfigurationSetting.sitewide(
-            self._db, Configuration.PATRON_WEB_HOSTNAMES).value = "*"
+            self._db, Configuration.PATRON_WEB_HOSTNAMES
+        ).value = "*"
         self.manager.load_settings()
         assert set(["*", "http://registration"]) == manager.patron_web_domains
 
         # The sitewide patron web domain can have pipe separated domains, and will get spaces stripped
         ConfigurationSetting.sitewide(
-            self._db, Configuration.PATRON_WEB_HOSTNAMES).value = "https://1.com|http://2.com |  http://subdomain.3.com|4.com"
+            self._db, Configuration.PATRON_WEB_HOSTNAMES
+        ).value = "https://1.com|http://2.com |  http://subdomain.3.com|4.com"
         self.manager.load_settings()
-        assert set(["https://1.com", "http://2.com",  "http://subdomain.3.com", "http://registration"]) == manager.patron_web_domains
+        assert (
+            set(
+                [
+                    "https://1.com",
+                    "http://2.com",
+                    "http://subdomain.3.com",
+                    "http://registration",
+                ]
+            )
+            == manager.patron_web_domains
+        )
 
         # Restore the CustomIndexView.for_library implementation
         CustomIndexView.for_library = old_for_library
 
     def test_exception_during_external_search_initialization_is_stored(self):
-
         class BadSearch(CirculationManager):
-
             @property
             def setup_search(self):
                 raise Exception("doomed!")
@@ -520,7 +538,8 @@ class TestCirculationManager(CirculationControllerTest):
         # library.
         registry_integration = self._external_integration(
             protocol=ExternalIntegration.OPDS_REGISTRATION,
-            goal=ExternalIntegration.DISCOVERY_GOAL, libraries=[self.library]
+            goal=ExternalIntegration.DISCOVERY_GOAL,
+            libraries=[self.library],
         )
         registry_integration.username = "something"
         registry_integration.set_setting(AuthdataUtility.VENDOR_ID_KEY, "vendorid")
@@ -558,8 +577,8 @@ class TestCirculationManager(CirculationControllerTest):
 
         # Calling sitewide_key_pair will create a new pair of keys.
         new_public, new_private = self.manager.sitewide_key_pair
-        assert 'BEGIN PUBLIC KEY' in new_public
-        assert 'BEGIN RSA PRIVATE KEY' in new_private
+        assert "BEGIN PUBLIC KEY" in new_public
+        assert "BEGIN RSA PRIVATE KEY" in new_private
 
         # The new values are stored in the appropriate
         # ConfigurationSetting.
@@ -578,8 +597,10 @@ class TestCirculationManager(CirculationControllerTest):
         facets = Facets.default(self._default_library)
         annotator = self.manager.annotator(lane, facets)
         assert isinstance(annotator, LibraryAnnotator)
-        assert (self.manager.circulation_apis[self._default_library.id] ==
-            annotator.circulation)
+        assert (
+            self.manager.circulation_apis[self._default_library.id]
+            == annotator.circulation
+        )
         assert "All Books" == annotator.top_level_title()
         assert True == annotator.identifies_patrons
 
@@ -607,13 +628,17 @@ class TestCirculationManager(CirculationControllerTest):
             def __init__(self, *args, **kwargs):
                 self.positional = args
                 self.keyword = kwargs
+
         annotator = self.manager.annotator(
-            lane, facets, "extra positional",
-            kw="extra keyword", annotator_class=MockAnnotator
+            lane,
+            facets,
+            "extra positional",
+            kw="extra keyword",
+            annotator_class=MockAnnotator,
         )
         assert isinstance(annotator, MockAnnotator)
-        assert 'extra positional' == annotator.positional[-1]
-        assert 'extra keyword' == annotator.keyword.pop('kw')
+        assert "extra positional" == annotator.positional[-1]
+        assert "extra keyword" == annotator.keyword.pop("kw")
 
         # Now let's try more and more obscure ways of figuring out which
         # library should be used to build the LibraryAnnotator.
@@ -657,6 +682,7 @@ class TestCirculationManager(CirculationControllerTest):
 
             def authenticated_admin_from_request(self):
                 return self.admin
+
         admin = Admin()
         controller = MockAdminSignInController()
 
@@ -767,6 +793,7 @@ class TestCirculationManager(CirculationControllerTest):
         # to see if it wants to disable caching.
         class MockFacets(BaseFacets):
             max_cache_age = None
+
         kwargs_with_facets = dict(kwargs)
         kwargs_with_facets.update(_facets=MockFacets)
         url = manager.cdn_url_for("view", *args, **kwargs_with_facets)
@@ -792,7 +819,6 @@ class TestCirculationManager(CirculationControllerTest):
 
 
 class TestBaseController(CirculationControllerTest):
-
     def test_unscoped_session(self):
 
         """Compare to TestScopedSession.test_scoped_session to see
@@ -822,10 +848,13 @@ class TestBaseController(CirculationControllerTest):
         # If not, authenticated_patron_from_request is called; it's
         # supposed to set flask.request.patron.
         o2 = object()
+
         def set_patron():
             flask.request.patron = o2
-        mock = MagicMock(side_effect = set_patron,
-                         return_value = "return value will be ignored")
+
+        mock = MagicMock(
+            side_effect=set_patron, return_value="return value will be ignored"
+        )
         self.controller.authenticated_patron_from_request = mock
         with self.app.test_request_context("/"):
             assert o2 == self.controller.request_patron
@@ -844,8 +873,8 @@ class TestBaseController(CirculationControllerTest):
 
         # No authorization header -> 401 error.
         with patch(
-                'api.base_controller.BaseCirculationManagerController.authorization_header',
-                  lambda x: None
+            "api.base_controller.BaseCirculationManagerController.authorization_header",
+            lambda x: None,
         ):
             with self.request_context_with_library("/"):
                 result = self.controller.authenticated_patron_from_request()
@@ -855,9 +884,10 @@ class TestBaseController(CirculationControllerTest):
         # Exception contacting the authentication authority -> ProblemDetail
         def remote_failure(self, header):
             raise RemoteInitiatedServerError("argh", "service")
+
         with patch(
-                'api.base_controller.BaseCirculationManagerController.authenticated_patron',
-                remote_failure
+            "api.base_controller.BaseCirculationManagerController.authenticated_patron",
+            remote_failure,
         ):
             with self.request_context_with_library(
                 "/", headers=dict(Authorization=self.valid_auth)
@@ -871,8 +901,8 @@ class TestBaseController(CirculationControllerTest):
         # Credentials provided but don't identify anyone in particular
         # -> 401 error.
         with patch(
-                'api.base_controller.BaseCirculationManagerController.authenticated_patron',
-                lambda self, x: None
+            "api.base_controller.BaseCirculationManagerController.authenticated_patron",
+            lambda self, x: None,
         ):
             with self.request_context_with_library(
                 "/", headers=dict(Authorization=self.valid_auth)
@@ -896,14 +926,10 @@ class TestBaseController(CirculationControllerTest):
         """
         one_year_ago = utc_now() - datetime.timedelta(days=365)
         with self.request_context_with_library("/"):
-            patron = self.controller.authenticated_patron(
-                self.valid_credentials
-            )
+            patron = self.controller.authenticated_patron(self.valid_credentials)
             patron.expires = one_year_ago
 
-            patron = self.controller.authenticated_patron(
-                self.valid_credentials
-            )
+            patron = self.controller.authenticated_patron(self.valid_credentials)
             assert one_year_ago == patron.expires
 
     def test_authenticated_patron_correct_credentials(self):
@@ -922,13 +948,15 @@ class TestBaseController(CirculationControllerTest):
         # Without quotes, some iOS versions don't recognize the header value.
 
         base_url = ConfigurationSetting.sitewide(self._db, Configuration.BASE_URL_KEY)
-        base_url.value = 'http://url'
+        base_url.value = "http://url"
 
         with self.request_context_with_library("/"):
             response = self.controller.authenticate()
-            assert response.headers['WWW-Authenticate'] == 'Basic realm="Library card"'
+            assert response.headers["WWW-Authenticate"] == 'Basic realm="Library card"'
 
-        with self.request_context_with_library("/", headers={"X-Requested-With": "XMLHttpRequest"}):
+        with self.request_context_with_library(
+            "/", headers={"X-Requested-With": "XMLHttpRequest"}
+        ):
             response = self.controller.authenticate()
             assert None == response.headers.get("WWW-Authenticate")
 
@@ -945,9 +973,7 @@ class TestBaseController(CirculationControllerTest):
         # microseconds value of 'now'.
         now_datetime = now_datetime.replace(microsecond=random.randint(0, 999999))
 
-        with self.app.test_request_context(
-            headers={"If-Modified-Since": now_string}
-        ):
+        with self.app.test_request_context(headers={"If-Modified-Since": now_string}):
             response = self.controller.handle_conditional_request(now_datetime)
             assert 304 == response.status_code
 
@@ -955,13 +981,11 @@ class TestBaseController(CirculationControllerTest):
         # extent with the date-format spec.
         very_old = datetime_utc(2000, 1, 1)
         for value in [
-                "Thu, 01 Aug 2019 10:00:40 -0000",
-                "Thu, 01 Aug 2019 10:00:40",
-                "01 Aug 2019 10:00:40",
+            "Thu, 01 Aug 2019 10:00:40 -0000",
+            "Thu, 01 Aug 2019 10:00:40",
+            "01 Aug 2019 10:00:40",
         ]:
-            with self.app.test_request_context(
-                    headers={"If-Modified-Since": value}
-            ):
+            with self.app.test_request_context(headers={"If-Modified-Since": value}):
                 response = self.controller.handle_conditional_request(very_old)
                 assert 304 == response.status_code
 
@@ -969,9 +993,7 @@ class TestBaseController(CirculationControllerTest):
         # the request is not a valid conditional request and the
         # method returns None.
 
-        with self.app.test_request_context(
-            headers={"If-Modified-Since": now_string}
-        ):
+        with self.app.test_request_context(headers={"If-Modified-Since": now_string}):
             # This request _would_ be a conditional request, but the
             # precondition fails: If-Modified-Since is earlier than
             # the 'last modified' date known by the server.
@@ -1014,37 +1036,33 @@ class TestBaseController(CirculationControllerTest):
             data_source_name=DataSource.GUTENBERG,
             identifier_type=i1.type,
             identifier_id=i1.identifier,
-            with_license_pool = True,
-            collection=c1
+            with_license_pool=True,
+            collection=c1,
         )
         e2, lp2 = self._edition(
             data_source_name=DataSource.OVERDRIVE,
             identifier_type=i1.type,
             identifier_id=i1.identifier,
-            with_license_pool = True,
-            collection=c2
+            with_license_pool=True,
+            collection=c2,
         )
         e3, lp3 = self._edition(
             data_source_name=DataSource.BIBLIOTHECA,
             identifier_type=i1.type,
             identifier_id=i1.identifier,
-            with_license_pool = True,
-            collection=c3
+            with_license_pool=True,
+            collection=c3,
         )
 
         # The first collection also has a LicensePool for a totally
         # different Identifier.
         e4, lp4 = self._edition(
-            data_source_name=DataSource.GUTENBERG,
-            with_license_pool=True,
-            collection=c1
+            data_source_name=DataSource.GUTENBERG, with_license_pool=True, collection=c1
         )
 
         # Same for the third collection
         e5, lp5 = self._edition(
-            data_source_name=DataSource.GUTENBERG,
-            with_license_pool=True,
-            collection=c3
+            data_source_name=DataSource.GUTENBERG, with_license_pool=True, collection=c3
         )
 
         # Now let's try to load LicensePools for the first Identifier
@@ -1059,7 +1077,7 @@ class TestBaseController(CirculationControllerTest):
         assert lp1 in loaded
         assert lp2 in loaded
         assert 2 == len(loaded)
-        assert all([lp.identifier==i1 for lp in loaded])
+        assert all([lp.identifier == i1 for lp in loaded])
 
         # Note that the LicensePool in c3 was not loaded, even though
         # the Identifier matches, because that collection is not
@@ -1075,14 +1093,16 @@ class TestBaseController(CirculationControllerTest):
             self._default_library, "bad identifier type", i1.identifier
         )
         assert NO_LICENSES.uri == problem_detail.uri
-        expect = "The item you're asking about (bad identifier type/%s) isn't in this collection." % i1.identifier
+        expect = (
+            "The item you're asking about (bad identifier type/%s) isn't in this collection."
+            % i1.identifier
+        )
         assert expect == problem_detail.detail
 
         # Try an identifier that would work except that it's not in a
         # Collection associated with the given Library.
         problem_detail = self.controller.load_licensepools(
-            self._default_library, lp5.identifier.type,
-            lp5.identifier.identifier
+            self._default_library, lp5.identifier.type, lp5.identifier.identifier
         )
         assert NO_LICENSES.uri == problem_detail.uri
 
@@ -1097,25 +1117,22 @@ class TestBaseController(CirculationControllerTest):
         # Either identifier suffices to identify the Work.
         for i in [pool1.identifier, pool2.identifier]:
             with self.request_context_with_library("/"):
-                assert (
-                    work ==
-                    self.controller.load_work(
-                        self._default_library, i.type, i.identifier
-                    ))
+                assert work == self.controller.load_work(
+                    self._default_library, i.type, i.identifier
+                )
 
         # If a patron is authenticated, the requested Work must be
         # age-appropriate for that patron, or this method will return
         # a problem detail.
         headers = dict(Authorization=self.valid_auth)
         for retval, expect in ((True, work), (False, NOT_AGE_APPROPRIATE)):
-            work.age_appropriate_for_patron = MagicMock(return_value = retval)
+            work.age_appropriate_for_patron = MagicMock(return_value=retval)
             with self.request_context_with_library("/", headers=headers):
-                assert (
-                    expect ==
-                    self.controller.load_work(
-                        self._default_library, pool1.identifier.type,
-                        pool1.identifier.identifier
-                    ))
+                assert expect == self.controller.load_work(
+                    self._default_library,
+                    pool1.identifier.type,
+                    pool1.identifier.identifier,
+                )
                 work.age_appropriate_for_patron.called_with(self.default_patron)
 
     def test_load_licensepooldelivery(self):
@@ -1174,10 +1191,7 @@ class TestBaseController(CirculationControllerTest):
         with self.request_context_with_library("/"):
             # Arrange
             patron = self.controller.authenticated_patron(self.valid_credentials)
-            work = self._work(
-                with_license_pool=True,
-                with_open_access_download=False
-            )
+            work = self._work(with_license_pool=True, with_open_access_download=False)
             [pool] = work.license_pools
             pool.open_access = False
             pool.self_hosted = False
@@ -1193,10 +1207,7 @@ class TestBaseController(CirculationControllerTest):
         with self.request_context_with_library("/"):
             # Arrange
             patron = self.controller.authenticated_patron(self.valid_credentials)
-            work = self._work(
-                with_license_pool=True,
-                with_open_access_download=False
-            )
+            work = self._work(with_license_pool=True, with_open_access_download=False)
             [pool] = work.license_pools
             pool.licenses_available = 0
             pool.licenses_owned = 0
@@ -1217,8 +1228,7 @@ class TestBaseController(CirculationControllerTest):
             library.setting(library.ALLOW_HOLDS).value = "False"
 
             # This is an open-access work.
-            work = self._work(with_license_pool=True,
-                              with_open_access_download=True)
+            work = self._work(with_license_pool=True, with_open_access_download=True)
             [pool] = work.license_pools
             pool.licenses_available = 0
             assert True == pool.open_access
@@ -1240,8 +1250,10 @@ class TestBaseController(CirculationControllerTest):
 
         # Set up lanes for different patron types.
         children_lane = self._lane()
-        children_lane.audiences = [Classifier.AUDIENCE_CHILDREN,
-                              Classifier.AUDIENCE_YOUNG_ADULT]
+        children_lane.audiences = [
+            Classifier.AUDIENCE_CHILDREN,
+            Classifier.AUDIENCE_YOUNG_ADULT,
+        ]
         children_lane.target_age = tuple_to_numericrange((9, 12))
         children_lane.root_for_patron_type = ["child"]
 
@@ -1252,13 +1264,11 @@ class TestBaseController(CirculationControllerTest):
         # This book is age-appropriate for anyone 13 years old or older.
         work = self._work(with_license_pool=True)
         work.audience = Classifier.AUDIENCE_CHILDREN
-        work.target_age = tuple_to_numericrange((13,15))
+        work.target_age = tuple_to_numericrange((13, 15))
         [pool] = work.license_pools
 
         with self.request_context_with_library("/"):
-            patron = self.controller.authenticated_patron(
-                self.valid_credentials
-            )
+            patron = self.controller.authenticated_patron(self.valid_credentials)
             # This patron is restricted to a lane in which the 13-year-old
             # book would not appear.
             patron.external_type = "child"
@@ -1269,7 +1279,7 @@ class TestBaseController(CirculationControllerTest):
 
             # If the lane is expanded to allow the book's age range, there's
             # no problem.
-            children_lane.target_age = tuple_to_numericrange((9,13))
+            children_lane.target_age = tuple_to_numericrange((9, 13))
             assert None == self.controller.apply_borrowing_policy(patron, pool)
 
             # Similarly if the patron has an external type
@@ -1285,7 +1295,9 @@ class TestBaseController(CirculationControllerTest):
             assert LIBRARY_NOT_FOUND == value
 
         with self.app.test_request_context("/"):
-            value = self.controller.library_for_request(self._default_library.short_name)
+            value = self.controller.library_for_request(
+                self._default_library.short_name
+            )
             assert self._default_library == value
             assert self._default_library == flask.request.library
 
@@ -1307,7 +1319,6 @@ class TestBaseController(CirculationControllerTest):
         with self.app.test_request_context("/"):
             problem = self.controller.library_for_request(new_name)
             assert LIBRARY_NOT_FOUND == problem
-
 
         # Make the change.
         self._default_library.short_name = new_name
@@ -1342,9 +1353,7 @@ class TestBaseController(CirculationControllerTest):
 
         with self.request_context_with_library("/"):
             top_level = self.controller.load_lane(None)
-            expect = self.controller.manager.top_level_lanes[
-                self._default_library.id
-            ]
+            expect = self.controller.manager.top_level_lanes[self._default_library.id]
 
             # expect and top_level are different ORM objects
             # representing the same lane. (They're different objects
@@ -1361,15 +1370,15 @@ class TestBaseController(CirculationControllerTest):
 
             # If a lane cannot be looked up by ID, a problem detail
             # is returned.
-            for bad_id in ('nosuchlane', -1):
+            for bad_id in ("nosuchlane", -1):
                 not_found = self.controller.load_lane(bad_id)
                 assert isinstance(not_found, ProblemDetail)
                 assert not_found.uri == NO_SUCH_LANE.uri
                 assert (
-                    "Lane %s does not exist or is not associated with library %s" % (
-                        bad_id, self._default_library.id
-                    ) ==
-                    not_found.detail)
+                    "Lane %s does not exist or is not associated with library %s"
+                    % (bad_id, self._default_library.id)
+                    == not_found.detail
+                )
 
         # If the requested lane exists but is not visible to the
         # authenticated patron, the server _acts_ like the lane does
@@ -1395,18 +1404,18 @@ class TestBaseController(CirculationControllerTest):
 
 
 class TestIndexController(CirculationControllerTest):
-
     def test_simple_redirect(self):
-        with self.app.test_request_context('/'):
+        with self.app.test_request_context("/"):
             flask.request.library = self.library
             response = self.manager.index_controller()
             assert 302 == response.status_code
-            assert "http://cdn/default/groups/" == response.headers['location']
+            assert "http://cdn/default/groups/" == response.headers["location"]
 
     def test_custom_index_view(self):
         """If a custom index view is registered for a library,
         it is called instead of the normal IndexController code.
         """
+
         class MockCustomIndexView(object):
             def __call__(self, library, annotator):
                 self.called_with = (library, annotator)
@@ -1420,14 +1429,17 @@ class TestIndexController(CirculationControllerTest):
         # Mock CirculationManager.annotator so it's easy to check
         # that it was called.
         mock_annotator = object()
+
         def make_mock_annotator(lane):
             assert lane == None
             return mock_annotator
+
         self.manager.annotator = make_mock_annotator
 
         # Make a request, and the custom index is invoked.
         with self.request_context_with_library(
-            "/", headers=dict(Authorization=self.invalid_auth)):
+            "/", headers=dict(Authorization=self.invalid_auth)
+        ):
             response = self.manager.index_controller()
         assert "fake response" == response
 
@@ -1448,66 +1460,85 @@ class TestIndexController(CirculationControllerTest):
 
         self.default_patron.external_type = "1"
         with self.request_context_with_library(
-            "/", headers=dict(Authorization=self.invalid_auth)):
+            "/", headers=dict(Authorization=self.invalid_auth)
+        ):
             response = self.manager.index_controller()
             assert 401 == response.status_code
 
         with self.request_context_with_library(
-            "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             response = self.manager.index_controller()
             assert 302 == response.status_code
-            assert ("http://cdn/default/groups/%s" % root_1.id ==
-                response.headers['location'])
+            assert (
+                "http://cdn/default/groups/%s" % root_1.id
+                == response.headers["location"]
+            )
 
         self.default_patron.external_type = "2"
         with self.request_context_with_library(
-            "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             response = self.manager.index_controller()
             assert 302 == response.status_code
-            assert "http://cdn/default/groups/%s" % root_1.id == response.headers['location']
+            assert (
+                "http://cdn/default/groups/%s" % root_1.id
+                == response.headers["location"]
+            )
 
         self.default_patron.external_type = "3"
         with self.request_context_with_library(
-            "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             response = self.manager.index_controller()
             assert 302 == response.status_code
-            assert "http://cdn/default/groups/%s" % root_2.id == response.headers['location']
+            assert (
+                "http://cdn/default/groups/%s" % root_2.id
+                == response.headers["location"]
+            )
 
         # Patrons with a different type get sent to the top-level lane.
-        self.default_patron.external_type = '4'
+        self.default_patron.external_type = "4"
         with self.request_context_with_library(
-            "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             response = self.manager.index_controller()
             assert 302 == response.status_code
-            assert "http://cdn/default/groups/" == response.headers['location']
+            assert "http://cdn/default/groups/" == response.headers["location"]
 
         # Patrons with no type get sent to the top-level lane.
         self.default_patron.external_type = None
         with self.request_context_with_library(
-            "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             response = self.manager.index_controller()
             assert 302 == response.status_code
-            assert "http://cdn/default/groups/" == response.headers['location']
+            assert "http://cdn/default/groups/" == response.headers["location"]
 
     def test_authentication_document(self):
         # Test the ability to retrieve an Authentication For OPDS document.
         library_name = self.library.short_name
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.invalid_auth)):
+            "/", headers=dict(Authorization=self.invalid_auth)
+        ):
             response = self.manager.index_controller.authentication_document()
             assert 200 == response.status_code
-            assert AuthenticationForOPDSDocument.MEDIA_TYPE == response.headers['Content-Type']
+            assert (
+                AuthenticationForOPDSDocument.MEDIA_TYPE
+                == response.headers["Content-Type"]
+            )
             data = response.get_data(as_text=True)
             assert self.manager.auth.create_authentication_document() == data
 
             # Make sure we got the A4OPDS document for the right library.
             doc = json.loads(data)
-            assert library_name == doc['title']
+            assert library_name == doc["title"]
 
         # Currently, the authentication document cache is disabled by default.
         self.manager.authentication_for_opds_documents[library_name] = "Cached value"
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.invalid_auth)):
+            "/", headers=dict(Authorization=self.invalid_auth)
+        ):
             response = self.manager.index_controller.authentication_document()
             assert "Cached value" != response.get_data(as_text=True)
 
@@ -1516,51 +1547,54 @@ class TestIndexController(CirculationControllerTest):
         cached_value = json.dumps(dict(key="Cached document"))
         self.manager.authentication_for_opds_documents[library_name] = cached_value
         with self.request_context_with_library(
-                "/?debug", headers=dict(Authorization=self.invalid_auth)):
+            "/?debug", headers=dict(Authorization=self.invalid_auth)
+        ):
             response = self.manager.index_controller.authentication_document()
             assert cached_value == response.get_data(as_text=True)
 
             # Note that WSGI debugging data was not provided, even
             # though we requested it, since WSGI debugging is
             # disabled.
-            assert '_debug' not in response.get_data(as_text=True)
+            assert "_debug" not in response.get_data(as_text=True)
 
         # When WSGI debugging is enabled and requested, an
         # authentication document includes some extra information in a
         # special '_debug' section.
         self.manager.wsgi_debug = True
         with self.request_context_with_library(
-                "/?debug", headers=dict(Authorization=self.invalid_auth)):
+            "/?debug", headers=dict(Authorization=self.invalid_auth)
+        ):
             response = self.manager.index_controller.authentication_document()
             doc = json.loads(response.data)
-            assert doc['key'] == 'Cached document'
-            debug = doc['_debug']
-            assert all(x in debug for x in ('url', 'cache', 'environ'))
+            assert doc["key"] == "Cached document"
+            debug = doc["_debug"]
+            assert all(x in debug for x in ("url", "cache", "environ"))
 
         # WSGI debugging is not provided unless requested.
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.invalid_auth)):
+            "/", headers=dict(Authorization=self.invalid_auth)
+        ):
             response = self.manager.index_controller.authentication_document()
-            assert '_debug' not in response.get_data(as_text=True)
+            assert "_debug" not in response.get_data(as_text=True)
 
     def test_public_key_integration_document(self):
-        base_url = ConfigurationSetting.sitewide(self._db, Configuration.BASE_URL_KEY).value
+        base_url = ConfigurationSetting.sitewide(
+            self._db, Configuration.BASE_URL_KEY
+        ).value
 
         # When a sitewide key pair exists (which should be all the
         # time), all of its data is included.
-        key_setting = ConfigurationSetting.sitewide(
-            self._db, Configuration.KEY_PAIR
-        )
-        key_setting.value = json.dumps(['public key', 'private key'])
-        with self.app.test_request_context('/'):
+        key_setting = ConfigurationSetting.sitewide(self._db, Configuration.KEY_PAIR)
+        key_setting.value = json.dumps(["public key", "private key"])
+        with self.app.test_request_context("/"):
             response = self.manager.index_controller.public_key_document()
 
         assert 200 == response.status_code
-        assert 'application/opds+json' == response.headers.get('Content-Type')
+        assert "application/opds+json" == response.headers.get("Content-Type")
 
         data = json.loads(response.get_data(as_text=True))
-        assert 'RSA' == data.get('public_key', {}).get('type')
-        assert 'public key' == data.get('public_key', {}).get('value')
+        assert "RSA" == data.get("public_key", {}).get("type")
+        assert "public key" == data.get("public_key", {}).get("value")
 
         # If there is no sitewide key pair (which should never
         # happen), a new one is created. Library-specific public keys
@@ -1568,28 +1602,30 @@ class TestIndexController(CirculationControllerTest):
         key_setting.value = None
         ConfigurationSetting.for_library(
             Configuration.KEY_PAIR, self.library
-        ).value = 'ignore me'
+        ).value = "ignore me"
 
-        with self.app.test_request_context('/'):
+        with self.app.test_request_context("/"):
             response = self.manager.index_controller.public_key_document()
 
         assert 200 == response.status_code
-        assert 'application/opds+json' == response.headers.get('Content-Type')
+        assert "application/opds+json" == response.headers.get("Content-Type")
 
         data = json.loads(response.get_data(as_text=True))
-        assert 'http://test-circulation-manager/' == data.get('id')
-        key = data.get('public_key')
-        assert 'RSA' == key['type']
-        assert 'BEGIN PUBLIC KEY' in key['value']
+        assert "http://test-circulation-manager/" == data.get("id")
+        key = data.get("public_key")
+        assert "RSA" == key["type"]
+        assert "BEGIN PUBLIC KEY" in key["value"]
+
 
 class TestMultipleLibraries(CirculationControllerTest):
-
     def make_default_libraries(self, _db):
         return [self._library() for x in range(2)]
 
     def make_default_collection(self, _db, library):
         collection, ignore = get_one_or_create(
-            _db, Collection, name=self._str + " (for multi-library test)",
+            _db,
+            Collection,
+            name=self._str + " (for multi-library test)",
         )
         collection.create_external_integration(ExternalIntegration.OPDS_IMPORT)
         library.collections.append(collection)
@@ -1604,12 +1640,16 @@ class TestMultipleLibraries(CirculationControllerTest):
         for library in self.libraries:
             headers = dict(Authorization=self.valid_auth)
             with self.request_context_with_library(
-                    "/", headers=headers, library=library):
+                "/", headers=headers, library=library
+            ):
                 patron = self.manager.loans.authenticated_patron_from_request()
                 assert library == patron.library
                 response = self.manager.index_controller()
-                assert ("http://cdn/%s/groups/" % library.short_name ==
-                    response.headers['location'])
+                assert (
+                    "http://cdn/%s/groups/" % library.short_name
+                    == response.headers["location"]
+                )
+
 
 class TestLoanController(CirculationControllerTest):
     def setup_method(self):
@@ -1617,8 +1657,10 @@ class TestLoanController(CirculationControllerTest):
         self.pool = self.english_1.license_pools[0]
         [self.mech1] = self.pool.delivery_mechanisms
         self.mech2 = self.pool.set_delivery_mechanism(
-            Representation.PDF_MEDIA_TYPE, DeliveryMechanism.NO_DRM,
-            RightsStatus.CC_BY, None
+            Representation.PDF_MEDIA_TYPE,
+            DeliveryMechanism.NO_DRM,
+            RightsStatus.CC_BY,
+            None,
         )
         self.edition = self.pool.presentation_edition
         self.data_source = self.edition.data_source
@@ -1644,12 +1686,15 @@ class TestLoanController(CirculationControllerTest):
         # okay.
         class MockLibraryAuthenticator(object):
             identifies_individuals = False
+
         self.manager.auth.library_authenticators[
             self._default_library.short_name
         ] = MockLibraryAuthenticator()
+
         def mock_can_fulfill_without_loan(patron, pool, lpdm):
             self.called_with = (patron, pool, lpdm)
             return True
+
         with self.request_context_with_library("/"):
             self.manager.loans.circulation.can_fulfill_without_loan = (
                 mock_can_fulfill_without_loan
@@ -1663,9 +1708,10 @@ class TestLoanController(CirculationControllerTest):
         """
         # Give the Work a second LicensePool.
         edition, other_pool = self._edition(
-            with_open_access_download=True, with_license_pool=True,
+            with_open_access_download=True,
+            with_license_pool=True,
             data_source_name=DataSource.BIBLIOTHECA,
-            collection=self.pool.collection
+            collection=self.pool.collection,
         )
         other_pool.identifier = self.identifier
         other_pool.work = self.pool.work
@@ -1675,42 +1721,37 @@ class TestLoanController(CirculationControllerTest):
         )
 
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             self.manager.loans.authenticated_patron_from_request()
 
             # Without a loan or a hold, nothing is returned.
             # No loans.
-            result = self.manager.loans.get_patron_loan(
-                self.default_patron, pools
-            )
+            result = self.manager.loans.get_patron_loan(self.default_patron, pools)
             assert (None, None) == result
 
             # No holds.
-            result = self.manager.loans.get_patron_hold(
-                self.default_patron, pools
-            )
+            result = self.manager.loans.get_patron_hold(self.default_patron, pools)
             assert (None, None) == result
 
             # When there's a loan, we retrieve it.
             loan, newly_created = self.pool.loan_to(self.default_patron)
-            result = self.manager.loans.get_patron_loan(
-                self.default_patron, pools
-            )
+            result = self.manager.loans.get_patron_loan(self.default_patron, pools)
             assert (loan, self.pool) == result
 
             # When there's a hold, we retrieve it.
             hold, newly_created = other_pool.on_hold_to(self.default_patron)
-            result = self.manager.loans.get_patron_hold(
-                self.default_patron, pools
-            )
+            result = self.manager.loans.get_patron_hold(self.default_patron, pools)
             assert (hold, other_pool) == result
 
     def test_borrow_success(self):
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             self.manager.loans.authenticated_patron_from_request()
             response = self.manager.loans.borrow(
-                self.identifier.type, self.identifier.identifier)
+                self.identifier.type, self.identifier.identifier
+            )
 
             # A loan has been created for this license pool.
             loan = get_one(self._db, Loan, license_pool=self.pool)
@@ -1722,9 +1763,12 @@ class TestLoanController(CirculationControllerTest):
             # to fulfill the license.
             assert 201 == response.status_code
             feed = feedparser.parse(response.get_data())
-            [entry] = feed['entries']
-            fulfillment_links = [x['href'] for x in entry['links']
-                                if x['rel'] == OPDSFeed.ACQUISITION_REL]
+            [entry] = feed["entries"]
+            fulfillment_links = [
+                x["href"]
+                for x in entry["links"]
+                if x["rel"] == OPDSFeed.ACQUISITION_REL
+            ]
 
             assert self.mech1.resource is not None
 
@@ -1734,11 +1778,16 @@ class TestLoanController(CirculationControllerTest):
             fulfillable_mechanism = self.mech1
             self._db.commit()
 
-            expects = [url_for('fulfill',
-                               license_pool_id=self.pool.id,
-                               mechanism_id=mech.delivery_mechanism.id,
-                               library_short_name=self.library.short_name,
-                               _external=True) for mech in [self.mech1, self.mech2]]
+            expects = [
+                url_for(
+                    "fulfill",
+                    license_pool_id=self.pool.id,
+                    mechanism_id=mech.delivery_mechanism.id,
+                    library_short_name=self.library.short_name,
+                    _external=True,
+                )
+                for mech in [self.mech1, self.mech2]
+            ]
             assert set(expects) == set(fulfillment_links)
 
             # Make sure the first delivery mechanism has the data necessary
@@ -1749,13 +1798,17 @@ class TestLoanController(CirculationControllerTest):
 
             # Now let's try to fulfill the loan using the first delivery mechanism.
             response = self.manager.loans.fulfill(
-                self.pool.id, fulfillable_mechanism.delivery_mechanism.id,
+                self.pool.id,
+                fulfillable_mechanism.delivery_mechanism.id,
             )
             if isinstance(response, ProblemDetail):
                 j, status, headers = response.response
                 raise Exception(repr(j))
             assert 302 == response.status_code
-            assert fulfillable_mechanism.resource.representation.public_url == response.headers.get("Location")
+            assert (
+                fulfillable_mechanism.resource.representation.public_url
+                == response.headers.get("Location")
+            )
 
             # The mechanism we used has been registered with the loan.
             assert fulfillable_mechanism == loan.fulfillment
@@ -1774,16 +1827,15 @@ class TestLoanController(CirculationControllerTest):
                 content_link=fulfillable_mechanism.resource.url,
                 content_type=fulfillable_mechanism.resource.representation.media_type,
                 content=None,
-                content_expires=None)
+                content_expires=None,
+            )
 
             # Now that we've set a mechanism, we can fulfill the loan
             # again without specifying a mechanism.
             self.manager.d_circulation.queue_fulfill(self.pool, fulfillment)
             http.queue_response(200, content="I am an ACSM file")
 
-            response = self.manager.loans.fulfill(
-                self.pool.id, do_get=http.do_get
-            )
+            response = self.manager.loans.fulfill(self.pool.id, do_get=http.do_get)
             assert 200 == response.status_code
             assert "I am an ACSM file" == response.get_data(as_text=True)
             assert http.requests == [fulfillable_mechanism.resource.url]
@@ -1795,16 +1847,18 @@ class TestLoanController(CirculationControllerTest):
             )
 
             assert 409 == response.status_code
-            assert "You already fulfilled this loan as application/epub+zip (DRM Scheme 1), you can't also do it as application/pdf (DRM Scheme 2)" in response.detail
+            assert (
+                "You already fulfilled this loan as application/epub+zip (DRM Scheme 1), you can't also do it as application/pdf (DRM Scheme 2)"
+                in response.detail
+            )
 
             # If the remote server fails, we get a problem detail.
             def doomed_get(url, headers, **kwargs):
                 raise RemoteIntegrationException("fulfill service", "Error!")
+
             self.manager.d_circulation.queue_fulfill(self.pool, fulfillment)
 
-            response = self.manager.loans.fulfill(
-                self.pool.id, do_get=doomed_get
-            )
+            response = self.manager.loans.fulfill(self.pool.id, do_get=doomed_get)
             assert isinstance(response, ProblemDetail)
             assert 502 == response.status_code
 
@@ -1815,26 +1869,29 @@ class TestLoanController(CirculationControllerTest):
         pool = work.license_pools[0]
         pool.open_access = False
         streaming_mech = pool.set_delivery_mechanism(
-            DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE, DeliveryMechanism.OVERDRIVE_DRM,
-            RightsStatus.IN_COPYRIGHT, None
+            DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+            DeliveryMechanism.OVERDRIVE_DRM,
+            RightsStatus.IN_COPYRIGHT,
+            None,
         )
         identifier = edition.primary_identifier
 
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             self.manager.loans.authenticated_patron_from_request()
             self.manager.d_circulation.queue_checkout(
                 pool,
                 LoanInfo(
-                    pool.collection, pool.data_source.name,
+                    pool.collection,
+                    pool.data_source.name,
                     pool.identifier.type,
                     pool.identifier.identifier,
                     utc_now(),
                     utc_now() + datetime.timedelta(seconds=3600),
-                )
+                ),
             )
-            response = self.manager.loans.borrow(
-                identifier.type, identifier.identifier)
+            response = self.manager.loans.borrow(identifier.type, identifier.identifier)
 
             # A loan has been created for this license pool.
             loan = get_one(self._db, Loan, license_pool=pool)
@@ -1846,35 +1903,45 @@ class TestLoanController(CirculationControllerTest):
             # to fulfill the license.
             assert 201 == response.status_code
             feed = feedparser.parse(response.get_data())
-            [entry] = feed['entries']
-            fulfillment_links = [x['href'] for x in entry['links']
-                                if x['rel'] == OPDSFeed.ACQUISITION_REL]
+            [entry] = feed["entries"]
+            fulfillment_links = [
+                x["href"]
+                for x in entry["links"]
+                if x["rel"] == OPDSFeed.ACQUISITION_REL
+            ]
             [mech1, mech2] = sorted(
                 pool.delivery_mechanisms,
-                key=lambda x: x.delivery_mechanism.is_streaming
+                key=lambda x: x.delivery_mechanism.is_streaming,
             )
 
             streaming_mechanism = mech2
 
-            expects = [url_for('fulfill',
-                               license_pool_id=pool.id,
-                               mechanism_id=mech.delivery_mechanism.id,
-                               library_short_name=self.library.short_name,
-                               _external=True) for mech in [mech1, mech2]]
+            expects = [
+                url_for(
+                    "fulfill",
+                    license_pool_id=pool.id,
+                    mechanism_id=mech.delivery_mechanism.id,
+                    library_short_name=self.library.short_name,
+                    _external=True,
+                )
+                for mech in [mech1, mech2]
+            ]
             assert set(expects) == set(fulfillment_links)
 
             # Now let's try to fulfill the loan using the streaming mechanism.
             self.manager.d_circulation.queue_fulfill(
                 pool,
                 FulfillmentInfo(
-                    pool.collection, pool.data_source.name,
+                    pool.collection,
+                    pool.data_source.name,
                     pool.identifier.type,
                     pool.identifier.identifier,
                     "http://streaming-content-link",
-                    Representation.TEXT_HTML_MEDIA_TYPE + DeliveryMechanism.STREAMING_PROFILE,
+                    Representation.TEXT_HTML_MEDIA_TYPE
+                    + DeliveryMechanism.STREAMING_PROFILE,
                     None,
                     None,
-                )
+                ),
             )
             response = self.manager.loans.fulfill(
                 pool.id, streaming_mechanism.delivery_mechanism.id
@@ -1882,18 +1949,24 @@ class TestLoanController(CirculationControllerTest):
 
             # We get an OPDS entry.
             assert 200 == response.status_code
-            opds_entries = feedparser.parse(response.response[0])['entries']
+            opds_entries = feedparser.parse(response.response[0])["entries"]
             assert 1 == len(opds_entries)
-            links = opds_entries[0]['links']
+            links = opds_entries[0]["links"]
 
             # The entry includes one fulfill link.
-            fulfill_links = [link for link in links if link['rel'] == "http://opds-spec.org/acquisition"]
+            fulfill_links = [
+                link
+                for link in links
+                if link["rel"] == "http://opds-spec.org/acquisition"
+            ]
             assert 1 == len(fulfill_links)
 
-            assert (Representation.TEXT_HTML_MEDIA_TYPE + DeliveryMechanism.STREAMING_PROFILE ==
-                fulfill_links[0]['type'])
-            assert "http://streaming-content-link" == fulfill_links[0]['href']
-
+            assert (
+                Representation.TEXT_HTML_MEDIA_TYPE
+                + DeliveryMechanism.STREAMING_PROFILE
+                == fulfill_links[0]["type"]
+            )
+            assert "http://streaming-content-link" == fulfill_links[0]["href"]
 
             # The mechanism has not been set, since fulfilling a streaming
             # mechanism does not lock in the format.
@@ -1906,7 +1979,8 @@ class TestLoanController(CirculationControllerTest):
             self.manager.d_circulation.queue_fulfill(
                 pool,
                 FulfillmentInfo(
-                    pool.collection, pool.data_source.name,
+                    pool.collection,
+                    pool.data_source.name,
                     pool.identifier.type,
                     pool.identifier.identifier,
                     "http://other-content-link",
@@ -1927,38 +2001,47 @@ class TestLoanController(CirculationControllerTest):
             self.manager.d_circulation.queue_fulfill(
                 pool,
                 FulfillmentInfo(
-                    pool.collection, pool.data_source.name,
+                    pool.collection,
+                    pool.data_source.name,
                     pool.identifier.type,
                     pool.identifier.identifier,
                     "http://streaming-content-link",
-                    Representation.TEXT_HTML_MEDIA_TYPE + DeliveryMechanism.STREAMING_PROFILE,
+                    Representation.TEXT_HTML_MEDIA_TYPE
+                    + DeliveryMechanism.STREAMING_PROFILE,
                     None,
                     None,
-                )
+                ),
             )
 
             response = self.manager.loans.fulfill(
                 pool.id, streaming_mechanism.delivery_mechanism.id
             )
             assert 200 == response.status_code
-            opds_entries = feedparser.parse(response.response[0])['entries']
+            opds_entries = feedparser.parse(response.response[0])["entries"]
             assert 1 == len(opds_entries)
-            links = opds_entries[0]['links']
+            links = opds_entries[0]["links"]
 
-            fulfill_links = [link for link in links if link['rel'] == "http://opds-spec.org/acquisition"]
+            fulfill_links = [
+                link
+                for link in links
+                if link["rel"] == "http://opds-spec.org/acquisition"
+            ]
             assert 1 == len(fulfill_links)
 
-            assert (Representation.TEXT_HTML_MEDIA_TYPE + DeliveryMechanism.STREAMING_PROFILE ==
-                fulfill_links[0]['type'])
-            assert "http://streaming-content-link" == fulfill_links[0]['href']
+            assert (
+                Representation.TEXT_HTML_MEDIA_TYPE
+                + DeliveryMechanism.STREAMING_PROFILE
+                == fulfill_links[0]["type"]
+            )
+            assert "http://streaming-content-link" == fulfill_links[0]["href"]
 
     def test_borrow_nonexistent_delivery_mechanism(self):
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             self.manager.loans.authenticated_patron_from_request()
             response = self.manager.loans.borrow(
-                self.identifier.type, self.identifier.identifier,
-                -100
+                self.identifier.type, self.identifier.identifier, -100
             )
             assert BAD_DELIVERY_MECHANISM == response
 
@@ -1976,24 +2059,25 @@ class TestLoanController(CirculationControllerTest):
         pool.open_access = False
 
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             self.manager.loans.authenticated_patron_from_request()
-            self.manager.d_circulation.queue_checkout(
-                pool, NoAvailableCopies()
-            )
+            self.manager.d_circulation.queue_checkout(pool, NoAvailableCopies())
             self.manager.d_circulation.queue_hold(
                 pool,
                 HoldInfo(
-                    pool.collection, pool.data_source.name,
+                    pool.collection,
+                    pool.data_source.name,
                     pool.identifier.type,
                     pool.identifier.identifier,
                     utc_now(),
                     utc_now() + datetime.timedelta(seconds=3600),
                     1,
-                )
+                ),
             )
             response = self.manager.loans.borrow(
-                pool.identifier.type, pool.identifier.identifier)
+                pool.identifier.type, pool.identifier.identifier
+            )
             assert 201 == response.status_code
 
             # A hold has been created for this license pool.
@@ -2009,12 +2093,14 @@ class TestLoanController(CirculationControllerTest):
         )
 
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             self.manager.loans.authenticated_patron_from_request()
             self.manager.d_circulation.queue_checkout(pool, NoLicenses())
 
             response = self.manager.loans.borrow(
-                pool.identifier.type, pool.identifier.identifier)
+                pool.identifier.type, pool.identifier.identifier
+            )
             assert 404 == response.status_code
             assert NOT_FOUND_ON_REMOTE == response
 
@@ -2035,23 +2121,25 @@ class TestLoanController(CirculationControllerTest):
         pool.open_access = False
 
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             self.manager.loans.authenticated_patron_from_request()
-            self.manager.d_circulation.queue_checkout(
-                pool, AlreadyOnHold()
-            )
+            self.manager.d_circulation.queue_checkout(pool, AlreadyOnHold())
             self.manager.d_circulation.queue_hold(
-                pool, HoldInfo(
-                    pool.collection, pool.data_source.name,
+                pool,
+                HoldInfo(
+                    pool.collection,
+                    pool.data_source.name,
                     pool.identifier.type,
                     pool.identifier.identifier,
                     utc_now(),
                     utc_now() + datetime.timedelta(seconds=3600),
                     1,
-                )
+                ),
             )
             response = self.manager.loans.borrow(
-                pool.identifier.type, pool.identifier.identifier)
+                pool.identifier.type, pool.identifier.identifier
+            )
             assert 201 == response.status_code
 
             # A hold has been created for this license pool.
@@ -2059,40 +2147,42 @@ class TestLoanController(CirculationControllerTest):
             assert hold != None
 
     def test_borrow_fails_when_work_not_present_on_remote(self):
-         threem_edition, pool = self._edition(
-             with_open_access_download=False,
-             data_source_name=DataSource.THREEM,
-             identifier_type=Identifier.THREEM_ID,
-             with_license_pool=True,
-         )
-         threem_book = self._work(
-             presentation_edition=threem_edition,
-         )
-         pool.licenses_available = 1
-         pool.open_access = False
+        threem_edition, pool = self._edition(
+            with_open_access_download=False,
+            data_source_name=DataSource.THREEM,
+            identifier_type=Identifier.THREEM_ID,
+            with_license_pool=True,
+        )
+        threem_book = self._work(
+            presentation_edition=threem_edition,
+        )
+        pool.licenses_available = 1
+        pool.open_access = False
 
-         with self.request_context_with_library(
-                 "/", headers=dict(Authorization=self.valid_auth)):
-             self.manager.loans.authenticated_patron_from_request()
-             self.manager.d_circulation.queue_checkout(
-                 pool, NotFoundOnRemote()
-             )
-             response = self.manager.loans.borrow(
-                 pool.identifier.type, pool.identifier.identifier)
-             assert 404 == response.status_code
-             assert "http://librarysimplified.org/terms/problem/not-found-on-remote" == response.uri
+        with self.request_context_with_library(
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
+            self.manager.loans.authenticated_patron_from_request()
+            self.manager.d_circulation.queue_checkout(pool, NotFoundOnRemote())
+            response = self.manager.loans.borrow(
+                pool.identifier.type, pool.identifier.identifier
+            )
+            assert 404 == response.status_code
+            assert (
+                "http://librarysimplified.org/terms/problem/not-found-on-remote"
+                == response.uri
+            )
 
     def test_borrow_succeeds_when_work_already_checked_out(self):
         # An attempt to borrow a book that's already on loan is
         # treated as success without even going to the remote API.
         loan, _ignore = get_one_or_create(
-            self._db, Loan, license_pool=self.pool,
-            patron=self.default_patron
+            self._db, Loan, license_pool=self.pool, patron=self.default_patron
         )
 
-
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             self.manager.loans.authenticated_patron_from_request()
 
             # Set it up that going to the remote API would raise an
@@ -2101,29 +2191,47 @@ class TestLoanController(CirculationControllerTest):
             circulation.queue_checkout(loan.license_pool, NotFoundOnRemote())
 
             mock_remote = circulation.api_for_license_pool(loan.license_pool)
-            assert 1 == len(mock_remote.responses['checkout'])
+            assert 1 == len(mock_remote.responses["checkout"])
             response = self.manager.loans.borrow(
-                self.identifier.type, self.identifier.identifier)
+                self.identifier.type, self.identifier.identifier
+            )
 
             # No checkout request was actually made to the remote.
-            assert 1 == len(mock_remote.responses['checkout'])
+            assert 1 == len(mock_remote.responses["checkout"])
 
             # We got an OPDS entry that includes at least one
             # fulfillment link, which is what we expect when we ask
             # about an active loan.
             assert 200 == response.status_code
-            [entry] = feedparser.parse(response.response[0])['entries']
-            assert any([x for x in entry['links'] if x['rel'] == 'http://opds-spec.org/acquisition'])
+            [entry] = feedparser.parse(response.response[0])["entries"]
+            assert any(
+                [
+                    x
+                    for x in entry["links"]
+                    if x["rel"] == "http://opds-spec.org/acquisition"
+                ]
+            )
 
     def test_fulfill(self):
         # Verify that arguments to the fulfill() method are propagated
         # correctly to the CirculationAPI.
         class MockCirculationAPI(object):
-            def fulfill(self, patron, credential, requested_license_pool,
-                        mechanism, part, fulfill_part_url):
+            def fulfill(
+                self,
+                patron,
+                credential,
+                requested_license_pool,
+                mechanism,
+                part,
+                fulfill_part_url,
+            ):
                 self.called_with = (
-                    patron, credential, requested_license_pool,
-                    mechanism, part, fulfill_part_url
+                    patron,
+                    credential,
+                    requested_license_pool,
+                    mechanism,
+                    part,
+                    fulfill_part_url,
                 )
                 raise CannotFulfill()
 
@@ -2140,16 +2248,20 @@ class TestLoanController(CirculationControllerTest):
 
             # Try to fulfill a certain part of the loan.
             part = "part 1 million"
-            controller.fulfill(
-                self.pool.id, self.mech2.delivery_mechanism.id, part
-            )
+            controller.fulfill(self.pool.id, self.mech2.delivery_mechanism.id, part)
 
             # Verify that the right arguments were passed into
             # CirculationAPI.
-            (patron, credential, pool, mechanism, part,
-             fulfill_part_url) = mock.called_with
+            (
+                patron,
+                credential,
+                pool,
+                mechanism,
+                part,
+                fulfill_part_url,
+            ) = mock.called_with
             assert authenticated == patron
-            assert self.valid_credentials['password'] == credential
+            assert self.valid_credentials["password"] == credential
             assert self.pool == pool
             assert self.mech2 == mechanism
             assert "part 1 million" == part
@@ -2158,10 +2270,12 @@ class TestLoanController(CirculationControllerTest):
             # generating partial fulfillment URLs. Let's try it out
             # and make sure it gives the result we expect.
             expect = url_for(
-                "fulfill", license_pool_id=self.pool.id,
+                "fulfill",
+                license_pool_id=self.pool.id,
                 mechanism_id=mechanism.delivery_mechanism.id,
                 library_short_name=library_short_name,
-                part=part, _external=True
+                part=part,
+                _external=True,
             )
             part_url = fulfill_part_url(part)
             assert expect == part_url
@@ -2180,9 +2294,11 @@ class TestLoanController(CirculationControllerTest):
             Response(status=200, response="Here's your response"),
             Response(status=401, response="Error"),
             Response(status=500, response="Fault"),
-        ]
+        ],
     )
-    def test_fulfill_returns_fulfillment_info_implementing_as_response(self, as_response_value):
+    def test_fulfill_returns_fulfillment_info_implementing_as_response(
+        self, as_response_value
+    ):
         # If CirculationAPI.fulfill returns a FulfillmentInfo that
         # defines as_response, the result of as_response is returned
         # directly and the normal process of converting a FulfillmentInfo
@@ -2195,8 +2311,7 @@ class TestLoanController(CirculationControllerTest):
         class MockCirculationAPI(object):
             def fulfill(slf, *args, **kwargs):
                 return MockFulfillmentInfo(
-                    self._default_collection, None, None, None, None,
-                    None, None, None
+                    self._default_collection, None, None, None, None, None, None, None
                 )
 
         controller = self.manager.loans
@@ -2210,9 +2325,7 @@ class TestLoanController(CirculationControllerTest):
             loan, ignore = self.pool.loan_to(authenticated)
 
             # Fulfill the loan.
-            result = controller.fulfill(
-                self.pool.id, self.mech2.delivery_mechanism.id
-            )
+            result = controller.fulfill(self.pool.id, self.mech2.delivery_mechanism.id)
 
             # The result of MockFulfillmentInfo.as_response was
             # returned directly.
@@ -2226,7 +2339,8 @@ class TestLoanController(CirculationControllerTest):
         # patron has no active loan for the title. This might be
         # because the patron never checked out the book...
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             controller.authenticated_patron_from_request()
             response = controller.fulfill(
                 self.pool.id, self.mech2.delivery_mechanism.id
@@ -2245,13 +2359,13 @@ class TestLoanController(CirculationControllerTest):
         # ...or it might be because of an error communicating
         # with the authentication provider.
         old_authenticated_patron = controller.authenticated_patron_from_request
+
         def mock_authenticated_patron():
             return INTEGRATION_ERROR
+
         controller.authenticated_patron_from_request = mock_authenticated_patron
         with self.request_context_with_library("/"):
-            problem = controller.fulfill(
-                self.pool.id, self.mech2.delivery_mechanism.id
-            )
+            problem = controller.fulfill(self.pool.id, self.mech2.delivery_mechanism.id)
             assert INTEGRATION_ERROR == problem
         controller.authenticated_patron_from_request = old_authenticated_patron
 
@@ -2270,7 +2384,9 @@ class TestLoanController(CirculationControllerTest):
                 self.pool.data_source.name,
                 self.pool.identifier.type,
                 self.pool.identifier.identifier,
-                None, "text/html", "here's your book",
+                None,
+                "text/html",
+                "here's your book",
                 utc_now(),
             )
 
@@ -2287,32 +2403,35 @@ class TestLoanController(CirculationControllerTest):
             assert [] == self._db.query(Loan).all()
 
     def test_revoke_loan(self):
-         with self.request_context_with_library(
-                 "/", headers=dict(Authorization=self.valid_auth)):
-             patron = self.manager.loans.authenticated_patron_from_request()
-             loan, newly_created = self.pool.loan_to(patron)
+        with self.request_context_with_library(
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
+            patron = self.manager.loans.authenticated_patron_from_request()
+            loan, newly_created = self.pool.loan_to(patron)
 
-             self.manager.d_circulation.queue_checkin(self.pool, True)
+            self.manager.d_circulation.queue_checkin(self.pool, True)
 
-             response = self.manager.loans.revoke(self.pool.id)
+            response = self.manager.loans.revoke(self.pool.id)
 
-             assert 200 == response.status_code
+            assert 200 == response.status_code
 
     def test_revoke_hold(self):
-         with self.request_context_with_library(
-                 "/", headers=dict(Authorization=self.valid_auth)):
-             patron = self.manager.loans.authenticated_patron_from_request()
-             hold, newly_created = self.pool.on_hold_to(patron, position=0)
+        with self.request_context_with_library(
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
+            patron = self.manager.loans.authenticated_patron_from_request()
+            hold, newly_created = self.pool.on_hold_to(patron, position=0)
 
-             self.manager.d_circulation.queue_release_hold(self.pool, True)
+            self.manager.d_circulation.queue_release_hold(self.pool, True)
 
-             response = self.manager.loans.revoke(self.pool.id)
+            response = self.manager.loans.revoke(self.pool.id)
 
-             assert 200 == response.status_code
+            assert 200 == response.status_code
 
     def test_revoke_hold_nonexistent_licensepool(self):
-         with self.request_context_with_library(
-                 "/", headers=dict(Authorization=self.valid_auth)):
+        with self.request_context_with_library(
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             patron = self.manager.loans.authenticated_patron_from_request()
             response = self.manager.loans.revoke(-10)
             assert isinstance(response, ProblemDetail)
@@ -2322,17 +2441,13 @@ class TestLoanController(CirculationControllerTest):
         edition, pool = self._edition(with_license_pool=True)
         pool.open_access = False
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             patron = self.manager.loans.authenticated_patron_from_request()
-            self.manager.d_circulation.queue_checkout(
-                pool, NoAvailableCopies()
-            )
-            self.manager.d_circulation.queue_hold(
-                pool, PatronHoldLimitReached()
-            )
+            self.manager.d_circulation.queue_checkout(pool, NoAvailableCopies())
+            self.manager.d_circulation.queue_hold(pool, PatronHoldLimitReached())
             response = self.manager.loans.borrow(
-                pool.identifier.type,
-                pool.identifier.identifier
+                pool.identifier.type, pool.identifier.identifier
             )
             assert isinstance(response, ProblemDetail)
             assert HOLD_LIMIT_REACHED.uri == response.uri
@@ -2350,16 +2465,19 @@ class TestLoanController(CirculationControllerTest):
         pool.open_access = False
 
         ConfigurationSetting.for_library(
-            Configuration.MAX_OUTSTANDING_FINES, self._default_library).value = "$0.50"
+            Configuration.MAX_OUTSTANDING_FINES, self._default_library
+        ).value = "$0.50"
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
 
             # The patron's credentials are valid, but they have a lot
             # of fines.
             patron = self.manager.loans.authenticated_patron_from_request()
             patron.fines = Decimal("12345678.90")
             response = self.manager.loans.borrow(
-                pool.identifier.type, pool.identifier.identifier)
+                pool.identifier.type, pool.identifier.identifier
+            )
 
             assert 403 == response.status_code
             assert OUTSTANDING_FINES.uri == response.uri
@@ -2367,44 +2485,51 @@ class TestLoanController(CirculationControllerTest):
 
         # Reduce the patron's fines, and there's no problem.
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             patron = self.manager.loans.authenticated_patron_from_request()
             patron.fines = Decimal("0.49")
             self.manager.d_circulation.queue_checkout(
                 pool,
                 LoanInfo(
-                    pool.collection, pool.data_source.name,
+                    pool.collection,
+                    pool.data_source.name,
                     pool.identifier.type,
                     pool.identifier.identifier,
                     utc_now(),
                     utc_now() + datetime.timedelta(seconds=3600),
-                )
+                ),
             )
             response = self.manager.loans.borrow(
-                pool.identifier.type, pool.identifier.identifier)
+                pool.identifier.type, pool.identifier.identifier
+            )
 
             assert 201 == response.status_code
 
     def test_3m_cant_revoke_hold_if_reserved(self):
-         threem_edition, pool = self._edition(
-             with_open_access_download=False,
-             data_source_name=DataSource.THREEM,
-             identifier_type=Identifier.THREEM_ID,
-             with_license_pool=True,
-         )
-         threem_book = self._work(
-             presentation_edition=threem_edition,
-         )
-         pool.open_access = False
+        threem_edition, pool = self._edition(
+            with_open_access_download=False,
+            data_source_name=DataSource.THREEM,
+            identifier_type=Identifier.THREEM_ID,
+            with_license_pool=True,
+        )
+        threem_book = self._work(
+            presentation_edition=threem_edition,
+        )
+        pool.open_access = False
 
-         with self.request_context_with_library(
-                 "/", headers=dict(Authorization=self.valid_auth)):
+        with self.request_context_with_library(
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             patron = self.manager.loans.authenticated_patron_from_request()
             hold, newly_created = pool.on_hold_to(patron, position=0)
             response = self.manager.loans.revoke(pool.id)
             assert 400 == response.status_code
             assert CANNOT_RELEASE_HOLD.uri == response.uri
-            assert "Cannot release a hold once it enters reserved state." == response.detail
+            assert (
+                "Cannot release a hold once it enters reserved state."
+                == response.detail
+            )
 
     def test_active_loans(self):
 
@@ -2412,8 +2537,10 @@ class TestLoanController(CirculationControllerTest):
         # GET by calling handle_conditional_request and propagating
         # any Response it returns.
         response_304 = Response(status=304)
+
         def handle_conditional_request(last_modified=None):
             return response_304
+
         original_handle_conditional_request = self.controller.handle_conditional_request
         self.manager.loans.handle_conditional_request = handle_conditional_request
 
@@ -2421,9 +2548,7 @@ class TestLoanController(CirculationControllerTest):
         # to a known value.
         patron = None
         with self.request_context_with_library("/"):
-            patron = self.controller.authenticated_patron(
-                self.valid_credentials
-            )
+            patron = self.controller.authenticated_patron(self.valid_credentials)
         now = utc_now()
         patron.last_loan_activity_sync = now
 
@@ -2464,7 +2589,7 @@ class TestLoanController(CirculationControllerTest):
             patron = self.manager.loans.authenticated_patron_from_request()
             response = self.manager.loans.sync()
             assert not "<entry>" in response.get_data(as_text=True)
-            assert response.headers['Cache-Control'].startswith('private,')
+            assert response.headers["Cache-Control"].startswith("private,")
 
             # patron.last_loan_activity_sync was set to the moment the
             # LoanController started calling out to the remote APIs.
@@ -2496,14 +2621,16 @@ class TestLoanController(CirculationControllerTest):
         bibliotheca_pool.open_access = False
 
         self.manager.d_circulation.add_remote_loan(
-            overdrive_pool.collection, overdrive_pool.data_source,
+            overdrive_pool.collection,
+            overdrive_pool.data_source,
             overdrive_pool.identifier.type,
             overdrive_pool.identifier.identifier,
             utc_now(),
-            utc_now() + datetime.timedelta(seconds=3600)
+            utc_now() + datetime.timedelta(seconds=3600),
         )
         self.manager.d_circulation.add_remote_hold(
-            bibliotheca_pool.collection, bibliotheca_pool.data_source,
+            bibliotheca_pool.collection,
+            bibliotheca_pool.data_source,
             bibliotheca_pool.identifier.type,
             bibliotheca_pool.identifier.identifier,
             utc_now(),
@@ -2516,10 +2643,11 @@ class TestLoanController(CirculationControllerTest):
         # APIs. The resulting feed won't reflect what we know to be
         # the reality.
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             patron = self.manager.loans.authenticated_patron_from_request()
             response = self.manager.loans.sync()
-            assert '<entry>' not in response.get_data(as_text=True)
+            assert "<entry>" not in response.get_data(as_text=True)
 
         # patron.last_loan_activity_sync was not changed as the result
         # of this request, since we didn't go to the vendor APIs.
@@ -2533,35 +2661,62 @@ class TestLoanController(CirculationControllerTest):
         # LoanController actually goes out to the vendor APIs for new
         # information.
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             patron = self.manager.loans.authenticated_patron_from_request()
             response = self.manager.loans.sync()
 
             # This time, the feed contains entries.
             feed = feedparser.parse(response.data)
-            entries = feed['entries']
+            entries = feed["entries"]
 
-            overdrive_entry = [entry for entry in entries if entry['title'] == overdrive_book.title][0]
-            bibliotheca_entry = [entry for entry in entries if entry['title'] == bibliotheca_book.title][0]
+            overdrive_entry = [
+                entry for entry in entries if entry["title"] == overdrive_book.title
+            ][0]
+            bibliotheca_entry = [
+                entry for entry in entries if entry["title"] == bibliotheca_book.title
+            ][0]
 
-            assert overdrive_entry['opds_availability']['status'] == 'available'
-            assert bibliotheca_entry['opds_availability']['status'] == 'ready'
+            assert overdrive_entry["opds_availability"]["status"] == "available"
+            assert bibliotheca_entry["opds_availability"]["status"] == "ready"
 
-            overdrive_links = overdrive_entry['links']
-            fulfill_link = [x for x in overdrive_links if x['rel'] == 'http://opds-spec.org/acquisition'][0]['href']
-            revoke_link = [x for x in overdrive_links if x['rel'] == OPDSFeed.REVOKE_LOAN_REL][0]['href']
-            bibliotheca_links = bibliotheca_entry['links']
-            borrow_link = [x for x in bibliotheca_links if x['rel'] == 'http://opds-spec.org/acquisition/borrow'][0]['href']
-            bibliotheca_revoke_links = [x for x in bibliotheca_links if x['rel'] == OPDSFeed.REVOKE_LOAN_REL]
+            overdrive_links = overdrive_entry["links"]
+            fulfill_link = [
+                x
+                for x in overdrive_links
+                if x["rel"] == "http://opds-spec.org/acquisition"
+            ][0]["href"]
+            revoke_link = [
+                x for x in overdrive_links if x["rel"] == OPDSFeed.REVOKE_LOAN_REL
+            ][0]["href"]
+            bibliotheca_links = bibliotheca_entry["links"]
+            borrow_link = [
+                x
+                for x in bibliotheca_links
+                if x["rel"] == "http://opds-spec.org/acquisition/borrow"
+            ][0]["href"]
+            bibliotheca_revoke_links = [
+                x for x in bibliotheca_links if x["rel"] == OPDSFeed.REVOKE_LOAN_REL
+            ]
 
             assert urllib.parse.quote("%s/fulfill" % overdrive_pool.id) in fulfill_link
             assert urllib.parse.quote("%s/revoke" % overdrive_pool.id) in revoke_link
-            assert urllib.parse.quote("%s/%s/borrow" % (bibliotheca_pool.identifier.type, bibliotheca_pool.identifier.identifier)) in borrow_link
+            assert (
+                urllib.parse.quote(
+                    "%s/%s/borrow"
+                    % (
+                        bibliotheca_pool.identifier.type,
+                        bibliotheca_pool.identifier.identifier,
+                    )
+                )
+                in borrow_link
+            )
             assert 0 == len(bibliotheca_revoke_links)
 
             # Since we went out the the vendor APIs,
             # patron.last_loan_activity_sync was updated.
             assert patron.last_loan_activity_sync > new_sync_time
+
 
 class TestAnnotationController(CirculationControllerTest):
     def setup_method(self):
@@ -2572,30 +2727,32 @@ class TestAnnotationController(CirculationControllerTest):
 
     def test_get_empty_container(self):
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             self.manager.loans.authenticated_patron_from_request()
             response = self.manager.annotations.container()
             assert 200 == response.status_code
 
             # We've been given an annotation container with no items.
             container = json.loads(response.get_data(as_text=True))
-            assert [] == container['first']['items']
-            assert 0 == container['total']
+            assert [] == container["first"]["items"]
+            assert 0 == container["total"]
 
             # The response has the appropriate headers.
-            allow_header = response.headers['Allow']
-            for method in ['GET', 'HEAD', 'OPTIONS', 'POST']:
+            allow_header = response.headers["Allow"]
+            for method in ["GET", "HEAD", "OPTIONS", "POST"]:
                 assert method in allow_header
 
-            assert AnnotationWriter.CONTENT_TYPE == response.headers['Accept-Post']
-            assert AnnotationWriter.CONTENT_TYPE == response.headers['Content-Type']
-            assert 'W/""' == response.headers['ETag']
+            assert AnnotationWriter.CONTENT_TYPE == response.headers["Accept-Post"]
+            assert AnnotationWriter.CONTENT_TYPE == response.headers["Content-Type"]
+            assert 'W/""' == response.headers["ETag"]
 
     def test_get_container_with_item(self):
         self.pool.loan_to(self.default_patron)
 
         annotation, ignore = create(
-            self._db, Annotation,
+            self._db,
+            Annotation,
             patron=self.default_patron,
             identifier=self.identifier,
             motivation=Annotation.IDLING,
@@ -2604,34 +2761,36 @@ class TestAnnotationController(CirculationControllerTest):
         annotation.timestamp = utc_now()
 
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             self.manager.annotations.authenticated_patron_from_request()
             response = self.manager.annotations.container()
             assert 200 == response.status_code
 
             # We've been given an annotation container with one item.
             container = json.loads(response.get_data(as_text=True))
-            assert 1 == container['total']
-            item = container['first']['items'][0]
-            assert annotation.motivation == item['motivation']
+            assert 1 == container["total"]
+            item = container["first"]["items"][0]
+            assert annotation.motivation == item["motivation"]
 
             # The response has the appropriate headers.
-            allow_header = response.headers['Allow']
-            for method in ['GET', 'HEAD', 'OPTIONS', 'POST']:
+            allow_header = response.headers["Allow"]
+            for method in ["GET", "HEAD", "OPTIONS", "POST"]:
                 assert method in allow_header
 
-            assert AnnotationWriter.CONTENT_TYPE == response.headers['Accept-Post']
-            assert AnnotationWriter.CONTENT_TYPE == response.headers['Content-Type']
+            assert AnnotationWriter.CONTENT_TYPE == response.headers["Accept-Post"]
+            assert AnnotationWriter.CONTENT_TYPE == response.headers["Content-Type"]
             expected_etag = 'W/"%s"' % annotation.timestamp
-            assert expected_etag == response.headers['ETag']
+            assert expected_etag == response.headers["ETag"]
             expected_time = format_date_time(mktime(annotation.timestamp.timetuple()))
-            assert expected_time == response.headers['Last-Modified']
+            assert expected_time == response.headers["Last-Modified"]
 
     def test_get_container_for_work(self):
         self.pool.loan_to(self.default_patron)
 
         annotation, ignore = create(
-            self._db, Annotation,
+            self._db,
+            Annotation,
             patron=self.default_patron,
             identifier=self.identifier,
             motivation=Annotation.IDLING,
@@ -2640,56 +2799,71 @@ class TestAnnotationController(CirculationControllerTest):
         annotation.timestamp = utc_now()
 
         other_annotation, ignore = create(
-            self._db, Annotation,
+            self._db,
+            Annotation,
             patron=self.default_patron,
             identifier=self._identifier(),
             motivation=Annotation.IDLING,
         )
 
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             self.manager.annotations.authenticated_patron_from_request()
-            response = self.manager.annotations.container_for_work(self.identifier.type, self.identifier.identifier)
+            response = self.manager.annotations.container_for_work(
+                self.identifier.type, self.identifier.identifier
+            )
             assert 200 == response.status_code
 
             # We've been given an annotation container with one item.
             container = json.loads(response.get_data(as_text=True))
-            assert 1 == container['total']
-            item = container['first']['items'][0]
-            assert annotation.motivation == item['motivation']
+            assert 1 == container["total"]
+            item = container["first"]["items"][0]
+            assert annotation.motivation == item["motivation"]
 
             # The response has the appropriate headers - POST is not allowed.
-            allow_header = response.headers['Allow']
-            for method in ['GET', 'HEAD', 'OPTIONS']:
+            allow_header = response.headers["Allow"]
+            for method in ["GET", "HEAD", "OPTIONS"]:
                 assert method in allow_header
 
-            assert 'Accept-Post' not in list(response.headers.keys())
-            assert AnnotationWriter.CONTENT_TYPE == response.headers['Content-Type']
+            assert "Accept-Post" not in list(response.headers.keys())
+            assert AnnotationWriter.CONTENT_TYPE == response.headers["Content-Type"]
             expected_etag = 'W/"%s"' % annotation.timestamp
-            assert expected_etag == response.headers['ETag']
+            assert expected_etag == response.headers["ETag"]
             expected_time = format_date_time(mktime(annotation.timestamp.timetuple()))
-            assert expected_time == response.headers['Last-Modified']
+            assert expected_time == response.headers["Last-Modified"]
 
     def test_post_to_container(self):
         data = dict()
-        data['@context'] = AnnotationWriter.JSONLD_CONTEXT
-        data['type'] = "Annotation"
-        data['motivation'] = Annotation.IDLING
-        data['target'] = dict(source=self.identifier.urn, selector="epubcfi(/6/4[chap01ref]!/4[body01]/10[para05]/3:10)")
+        data["@context"] = AnnotationWriter.JSONLD_CONTEXT
+        data["type"] = "Annotation"
+        data["motivation"] = Annotation.IDLING
+        data["target"] = dict(
+            source=self.identifier.urn,
+            selector="epubcfi(/6/4[chap01ref]!/4[body01]/10[para05]/3:10)",
+        )
 
         with self.request_context_with_library(
-            "/", headers=dict(Authorization=self.valid_auth), method='POST', data=json.dumps(data)):
+            "/",
+            headers=dict(Authorization=self.valid_auth),
+            method="POST",
+            data=json.dumps(data),
+        ):
             patron = self.manager.annotations.authenticated_patron_from_request()
             patron.synchronize_annotations = True
             # The patron doesn't have any annotations yet.
-            annotations = self._db.query(Annotation).filter(Annotation.patron==patron).all()
+            annotations = (
+                self._db.query(Annotation).filter(Annotation.patron == patron).all()
+            )
             assert 0 == len(annotations)
 
             response = self.manager.annotations.container()
 
             # The patron doesn't have the pool on loan yet, so the request fails.
             assert 400 == response.status_code
-            annotations = self._db.query(Annotation).filter(Annotation.patron==patron).all()
+            annotations = (
+                self._db.query(Annotation).filter(Annotation.patron == patron).all()
+            )
             assert 0 == len(annotations)
 
             # Give the patron a loan and try again, and the request creates an annotation.
@@ -2697,23 +2871,30 @@ class TestAnnotationController(CirculationControllerTest):
             response = self.manager.annotations.container()
             assert 200 == response.status_code
 
-            annotations = self._db.query(Annotation).filter(Annotation.patron==patron).all()
+            annotations = (
+                self._db.query(Annotation).filter(Annotation.patron == patron).all()
+            )
             assert 1 == len(annotations)
             annotation = annotations[0]
             assert Annotation.IDLING == annotation.motivation
-            selector = json.loads(annotation.target).get("http://www.w3.org/ns/oa#hasSelector")[0].get('@id')
-            assert data['target']['selector'] == selector
+            selector = (
+                json.loads(annotation.target)
+                .get("http://www.w3.org/ns/oa#hasSelector")[0]
+                .get("@id")
+            )
+            assert data["target"]["selector"] == selector
 
             # The response contains the annotation in the db.
             item = json.loads(response.get_data(as_text=True))
-            assert str(annotation.id) in item['id']
-            assert annotation.motivation == item['motivation']
+            assert str(annotation.id) in item["id"]
+            assert annotation.motivation == item["motivation"]
 
     def test_detail(self):
         self.pool.loan_to(self.default_patron)
 
         annotation, ignore = create(
-            self._db, Annotation,
+            self._db,
+            Annotation,
             patron=self.default_patron,
             identifier=self.identifier,
             motivation=Annotation.IDLING,
@@ -2721,29 +2902,31 @@ class TestAnnotationController(CirculationControllerTest):
         annotation.active = True
 
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             self.manager.annotations.authenticated_patron_from_request()
             response = self.manager.annotations.detail(annotation.id)
             assert 200 == response.status_code
 
             # We've been given a single annotation item.
             item = json.loads(response.get_data(as_text=True))
-            assert str(annotation.id) in item['id']
-            assert annotation.motivation == item['motivation']
+            assert str(annotation.id) in item["id"]
+            assert annotation.motivation == item["motivation"]
 
             # The response has the appropriate headers.
-            allow_header = response.headers['Allow']
-            for method in ['GET', 'HEAD', 'OPTIONS', 'DELETE']:
+            allow_header = response.headers["Allow"]
+            for method in ["GET", "HEAD", "OPTIONS", "DELETE"]:
                 assert method in allow_header
 
-            assert AnnotationWriter.CONTENT_TYPE == response.headers['Content-Type']
+            assert AnnotationWriter.CONTENT_TYPE == response.headers["Content-Type"]
 
     def test_detail_for_other_patrons_annotation_returns_404(self):
         patron = self._patron()
         self.pool.loan_to(patron)
 
         annotation, ignore = create(
-            self._db, Annotation,
+            self._db,
+            Annotation,
             patron=patron,
             identifier=self.identifier,
             motivation=Annotation.IDLING,
@@ -2751,7 +2934,8 @@ class TestAnnotationController(CirculationControllerTest):
         annotation.active = True
 
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             self.manager.annotations.authenticated_patron_from_request()
 
             # The patron can't see that this annotation exists.
@@ -2760,7 +2944,8 @@ class TestAnnotationController(CirculationControllerTest):
 
     def test_detail_for_missing_annotation_returns_404(self):
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             self.manager.annotations.authenticated_patron_from_request()
 
             # This annotation does not exist.
@@ -2771,7 +2956,8 @@ class TestAnnotationController(CirculationControllerTest):
         self.pool.loan_to(self.default_patron)
 
         annotation, ignore = create(
-            self._db, Annotation,
+            self._db,
+            Annotation,
             patron=self.default_patron,
             identifier=self.identifier,
             motivation=Annotation.IDLING,
@@ -2779,7 +2965,8 @@ class TestAnnotationController(CirculationControllerTest):
         annotation.active = False
 
         with self.request_context_with_library(
-                "/", headers=dict(Authorization=self.valid_auth)):
+            "/", headers=dict(Authorization=self.valid_auth)
+        ):
             self.manager.annotations.authenticated_patron_from_request()
             response = self.manager.annotations.detail(annotation.id)
             assert 404 == response.status_code
@@ -2788,7 +2975,8 @@ class TestAnnotationController(CirculationControllerTest):
         self.pool.loan_to(self.default_patron)
 
         annotation, ignore = create(
-            self._db, Annotation,
+            self._db,
+            Annotation,
             patron=self.default_patron,
             identifier=self.identifier,
             motivation=Annotation.IDLING,
@@ -2796,7 +2984,8 @@ class TestAnnotationController(CirculationControllerTest):
         annotation.active = True
 
         with self.request_context_with_library(
-                "/", method='DELETE', headers=dict(Authorization=self.valid_auth)):
+            "/", method="DELETE", headers=dict(Authorization=self.valid_auth)
+        ):
             self.manager.annotations.authenticated_patron_from_request()
             response = self.manager.annotations.detail(annotation.id)
             assert 200 == response.status_code
@@ -2827,16 +3016,16 @@ class TestWorkController(CirculationControllerTest):
         contributor.sort_name = None
 
         # No contributor name -> ProblemDetail
-        with self.request_context_with_library('/'):
-            response = m('', None, None)
+        with self.request_context_with_library("/"):
+            response = m("", None, None)
         assert 404 == response.status_code
         assert NO_SUCH_LANE.uri == response.uri
         assert "No contributor provided" == response.detail
 
         # Unable to load ContributorData from contributor name ->
         # ProblemDetail
-        with self.request_context_with_library('/'):
-            response = m('Unknown Author', None, None)
+        with self.request_context_with_library("/"):
+            response = m("Unknown Author", None, None)
         assert 404 == response.status_code
         assert NO_SUCH_LANE.uri == response.uri
         assert "Unknown contributor: Unknown Author" == response.detail
@@ -2845,19 +3034,17 @@ class TestWorkController(CirculationControllerTest):
 
         # Search index misconfiguration -> Problem detail
         self.assert_bad_search_index_gives_problem_detail(
-            lambda: self.manager.work_controller.series(
-                contributor, None, None
-            )
+            lambda: self.manager.work_controller.series(contributor, None, None)
         )
 
         # Bad facet data -> ProblemDetail
-        with self.request_context_with_library('/?order=nosuchorder'):
+        with self.request_context_with_library("/?order=nosuchorder"):
             response = m(contributor, None, None)
             assert 400 == response.status_code
             assert INVALID_INPUT.uri == response.uri
 
         # Bad pagination data -> ProblemDetail
-        with self.request_context_with_library('/?size=abc'):
+        with self.request_context_with_library("/?size=abc"):
             response = m(contributor, None, None)
             assert 400 == response.status_code
             assert INVALID_INPUT.uri == response.uri
@@ -2865,32 +3052,31 @@ class TestWorkController(CirculationControllerTest):
         # Test an end-to-end success (not including a test that the
         # search engine can actually find books by a given person --
         # that's tested in core/tests/test_external_search.py).
-        with self.request_context_with_library('/'):
-            response = m(contributor, 'eng,spa', 'Children,Young Adult')
+        with self.request_context_with_library("/"):
+            response = m(contributor, "eng,spa", "Children,Young Adult")
         assert 200 == response.status_code
-        assert OPDSFeed.ACQUISITION_FEED_TYPE == response.headers['Content-Type']
+        assert OPDSFeed.ACQUISITION_FEED_TYPE == response.headers["Content-Type"]
         feed = feedparser.parse(response.data)
 
         # The feed is named after the person we looked up.
-        assert contributor == feed['feed']['title']
+        assert contributor == feed["feed"]["title"]
 
         # It's got one entry -- the book added to the search engine
         # during test setup.
-        [entry] = feed['entries']
-        assert self.english_1.title == entry['title']
+        [entry] = feed["entries"]
+        assert self.english_1.title == entry["title"]
 
         # The feed has facet links.
-        links = feed['feed']['links']
-        facet_links = [link for link in links
-                       if link['rel'] == 'http://opds-spec.org/facet']
+        links = feed["feed"]["links"]
+        facet_links = [
+            link for link in links if link["rel"] == "http://opds-spec.org/facet"
+        ]
         assert 8 == len(facet_links)
 
         # The feed was cached.
         cached = self._db.query(CachedFeed).one()
         assert CachedFeed.CONTRIBUTOR_TYPE == cached.type
-        assert (
-            'John Bull-eng,spa-Children,Young+Adult' ==
-            cached.unique_key)
+        assert "John Bull-eng,spa-Children,Young+Adult" == cached.unique_key
 
         # At this point we don't want to generate real feeds anymore.
         # We can't do a real end-to-end test without setting up a real
@@ -2922,9 +3108,7 @@ class TestWorkController(CirculationControllerTest):
         audiences = "some audiences"
         sort_key = ["sort", "pagination", "key"]
         with self.request_context_with_library(
-            "/?order=title&size=100&key=%s&entrypoint=Audio" % (
-                json.dumps(sort_key)
-            )
+            "/?order=title&size=100&key=%s&entrypoint=Audio" % (json.dumps(sort_key))
         ):
             response = m(contributor, languages, audiences, feed_class=Mock)
 
@@ -2937,26 +3121,26 @@ class TestWorkController(CirculationControllerTest):
         # page().
         kwargs = self.called_with
 
-        assert self._db == kwargs.pop('_db')
-        assert self.manager._external_search == kwargs.pop('search_engine')
+        assert self._db == kwargs.pop("_db")
+        assert self.manager._external_search == kwargs.pop("search_engine")
 
         # The feed is named after the contributor the request asked
         # about.
-        assert contributor == kwargs.pop('title')
+        assert contributor == kwargs.pop("title")
 
         # Query string arguments were taken into account when
         # creating the Facets and Pagination objects.
-        facets = kwargs.pop('facets')
+        facets = kwargs.pop("facets")
         assert isinstance(facets, ContributorFacets)
         assert AudiobooksEntryPoint == facets.entrypoint
-        assert 'title' == facets.order
+        assert "title" == facets.order
 
-        pagination = kwargs.pop('pagination')
+        pagination = kwargs.pop("pagination")
         assert isinstance(pagination, SortKeyPagination)
         assert sort_key == pagination.last_item_on_previous_page
         assert 100 == pagination.size
 
-        lane = kwargs.pop('worklist')
+        lane = kwargs.pop("worklist")
         assert isinstance(lane, ContributorLane)
         assert isinstance(lane.contributor, ContributorData)
 
@@ -2977,15 +3161,16 @@ class TestWorkController(CirculationControllerTest):
         url_kwargs.update(dict(list(pagination.items())))
         with self.request_context_with_library(""):
             expect_url = self.manager.opds_feeds.url_for(
-                route, lane_identifier=None,
+                route,
+                lane_identifier=None,
                 library_short_name=library.short_name,
                 **url_kwargs
             )
-        assert kwargs.pop('url') == expect_url
+        assert kwargs.pop("url") == expect_url
 
         # The Annotator object was instantiated with the proper lane
         # and the newly created Facets object.
-        annotator = kwargs.pop('annotator')
+        annotator = kwargs.pop("annotator")
         assert lane == annotator.lane
         assert facets == annotator.facets
 
@@ -3017,17 +3202,16 @@ class TestWorkController(CirculationControllerTest):
             # author, we're denied access -- the authenticated
             # patron's root lane would make any adult books
             # age-inappropriate.
-            audiences = ",".join([
-                Classifier.AUDIENCE_ADULT, Classifier.AUDIENCE_CHILDREN
-            ])
+            audiences = ",".join(
+                [Classifier.AUDIENCE_ADULT, Classifier.AUDIENCE_CHILDREN]
+            )
             response = m(contributor.sort_name, "eng", audiences)
             assert isinstance(response, ProblemDetail)
             assert NO_SUCH_LANE.uri == response.uri
 
             # If we only ask for children's books by the same author,
             # we're fine.
-            response = m(contributor.sort_name, "eng",
-                         Classifier.AUDIENCE_CHILDREN)
+            response = m(contributor.sort_name, "eng", Classifier.AUDIENCE_CHILDREN)
             assert 200 == response.status_code
 
         # We're also fine if we don't authenticate the request at all.
@@ -3037,7 +3221,9 @@ class TestWorkController(CirculationControllerTest):
 
     def test_permalink(self):
         with self.request_context_with_library("/"):
-            response = self.manager.work_controller.permalink(self.identifier.type, self.identifier.identifier)
+            response = self.manager.work_controller.permalink(
+                self.identifier.type, self.identifier.identifier
+            )
             annotator = LibraryAnnotator(None, None, self._default_library)
             expect = AcquisitionFeed.single_entry(
                 self._db, self.english_1, annotator
@@ -3045,9 +3231,11 @@ class TestWorkController(CirculationControllerTest):
 
         assert 200 == response.status_code
         assert expect == response.get_data()
-        assert OPDSFeed.ENTRY_TYPE == response.headers['Content-Type']
+        assert OPDSFeed.ENTRY_TYPE == response.headers["Content-Type"]
 
-    def test_permalink_does_not_return_fulfillment_links_for_authenticated_patrons_without_loans(self):
+    def test_permalink_does_not_return_fulfillment_links_for_authenticated_patrons_without_loans(
+        self,
+    ):
         with self.request_context_with_library("/"):
             # We have two patrons.
             patron_1 = self._patron()
@@ -3057,17 +3245,15 @@ class TestWorkController(CirculationControllerTest):
             flask.request.patron = patron_1
 
             identifier_type = Identifier.GUTENBERG_ID
-            identifier = '1234567890'
+            identifier = "1234567890"
             edition, _ = self._edition(
-                title='Test Book',
+                title="Test Book",
                 identifier_type=identifier_type,
                 identifier_id=identifier,
-                with_license_pool=True
+                with_license_pool=True,
             )
             work = self._work(
-                'Test Book',
-                presentation_edition=edition,
-                with_license_pool=True
+                "Test Book", presentation_edition=edition, with_license_pool=True
             )
             pool = work.license_pools[0]
 
@@ -3080,19 +3266,21 @@ class TestWorkController(CirculationControllerTest):
                 None,
                 None,
                 self._default_library,
-                active_loans_by_work=active_loans_by_work
+                active_loans_by_work=active_loans_by_work,
             )
-            expect = AcquisitionFeed.single_entry(
-                self._db, work, annotator
-            ).data
+            expect = AcquisitionFeed.single_entry(self._db, work, annotator).data
 
-            response = self.manager.work_controller.permalink(identifier_type, identifier)
+            response = self.manager.work_controller.permalink(
+                identifier_type, identifier
+            )
 
         assert 200 == response.status_code
         assert expect == response.get_data()
-        assert OPDSFeed.ENTRY_TYPE == response.headers['Content-Type']
+        assert OPDSFeed.ENTRY_TYPE == response.headers["Content-Type"]
 
-    def test_permalink_returns_fulfillment_links_for_authenticated_patrons_with_loans(self):
+    def test_permalink_returns_fulfillment_links_for_authenticated_patrons_with_loans(
+        self,
+    ):
         with self.request_context_with_library("/"):
             # We have two patrons.
             patron_1 = self._patron()
@@ -3102,17 +3290,15 @@ class TestWorkController(CirculationControllerTest):
             flask.request.patron = patron_1
 
             identifier_type = Identifier.GUTENBERG_ID
-            identifier = '1234567890'
+            identifier = "1234567890"
             edition, _ = self._edition(
-                title='Test Book',
+                title="Test Book",
                 identifier_type=identifier_type,
                 identifier_id=identifier,
-                with_license_pool=True
+                with_license_pool=True,
             )
             work = self._work(
-                'Test Book',
-                presentation_edition=edition,
-                with_license_pool=True
+                "Test Book", presentation_edition=edition, with_license_pool=True
             )
             pool = work.license_pools[0]
 
@@ -3121,30 +3307,30 @@ class TestWorkController(CirculationControllerTest):
             patron2_loan, _ = pool.loan_to(patron_2)
 
             # We want to make sure that only the first patron's loan will be in the feed.
-            active_loans_by_work = {
-                work: patron1_loan
-            }
+            active_loans_by_work = {work: patron1_loan}
             annotator = LibraryAnnotator(
                 None,
                 None,
                 self._default_library,
-                active_loans_by_work=active_loans_by_work
+                active_loans_by_work=active_loans_by_work,
             )
-            expect = AcquisitionFeed.single_entry(
-                self._db, work, annotator
-            ).data
+            expect = AcquisitionFeed.single_entry(self._db, work, annotator).data
 
-            response = self.manager.work_controller.permalink(identifier_type, identifier)
+            response = self.manager.work_controller.permalink(
+                identifier_type, identifier
+            )
 
         assert 200 == response.status_code
         assert expect == response.get_data()
-        assert OPDSFeed.ENTRY_TYPE == response.headers['Content-Type']
+        assert OPDSFeed.ENTRY_TYPE == response.headers["Content-Type"]
 
-    def test_permalink_returns_fulfillment_links_for_authenticated_patrons_with_fulfillment(self):
+    def test_permalink_returns_fulfillment_links_for_authenticated_patrons_with_fulfillment(
+        self,
+    ):
         auth = dict(Authorization=self.valid_auth)
 
         with self.request_context_with_library("/", headers=auth):
-            content_link = 'https://content'
+            content_link = "https://content"
 
             # We have two patrons.
             patron_1 = self.controller.authenticated_patron(self.valid_credentials)
@@ -3154,32 +3340,28 @@ class TestWorkController(CirculationControllerTest):
             flask.request.patron = patron_1
 
             identifier_type = Identifier.GUTENBERG_ID
-            identifier = '1234567890'
+            identifier = "1234567890"
             edition, _ = self._edition(
-                title='Test Book',
+                title="Test Book",
                 identifier_type=identifier_type,
                 identifier_id=identifier,
-                with_license_pool=True
+                with_license_pool=True,
             )
             work = self._work(
-                'Test Book',
-                presentation_edition=edition,
-                with_license_pool=True
+                "Test Book", presentation_edition=edition, with_license_pool=True
             )
             pool = work.license_pools[0]
             [delivery_mechanism] = pool.delivery_mechanisms
 
             loan_info = LoanInfo(
-                pool.collection, pool.data_source.name,
+                pool.collection,
+                pool.data_source.name,
                 pool.identifier.type,
                 pool.identifier.identifier,
                 utc_now(),
                 utc_now() + datetime.timedelta(seconds=3600),
             )
-            self.manager.d_circulation.queue_checkout(
-                pool,
-                loan_info
-            )
+            self.manager.d_circulation.queue_checkout(pool, loan_info)
 
             fulfillment = FulfillmentInfo(
                 pool.collection,
@@ -3189,7 +3371,7 @@ class TestWorkController(CirculationControllerTest):
                 content_link=content_link,
                 content_type=MediaTypes.EPUB_MEDIA_TYPE,
                 content=None,
-                content_expires=None
+                content_expires=None,
             )
             self.manager.d_circulation.queue_fulfill(pool, fulfillment)
 
@@ -3197,10 +3379,13 @@ class TestWorkController(CirculationControllerTest):
             # - the first patron's loan and fulfillment will be created via API.
             # - the second patron's loan will be created via loan_to method.
             self.manager.loans.borrow(
-                pool.identifier.type, pool.identifier.identifier, delivery_mechanism.delivery_mechanism.id
+                pool.identifier.type,
+                pool.identifier.identifier,
+                delivery_mechanism.delivery_mechanism.id,
             )
             self.manager.loans.fulfill(
-                pool.id, delivery_mechanism.delivery_mechanism.id,
+                pool.id,
+                delivery_mechanism.delivery_mechanism.id,
             )
 
             patron1_loan = pool.loans[0]
@@ -3211,24 +3396,22 @@ class TestWorkController(CirculationControllerTest):
             patron2_loan, _ = pool.loan_to(patron_2)
 
             # We want to make sure that only the first patron's fulfillment will be in the feed.
-            active_loans_by_work = {
-                work: patron1_loan
-            }
+            active_loans_by_work = {work: patron1_loan}
             annotator = LibraryAnnotator(
                 None,
                 None,
                 self._default_library,
                 active_loans_by_work=active_loans_by_work,
             )
-            expect = AcquisitionFeed.single_entry(
-                self._db, work, annotator
-            ).data
+            expect = AcquisitionFeed.single_entry(self._db, work, annotator).data
 
-            response = self.manager.work_controller.permalink(identifier_type, identifier)
+            response = self.manager.work_controller.permalink(
+                identifier_type, identifier
+            )
 
         assert 200 == response.status_code
         assert expect == response.get_data()
-        assert OPDSFeed.ENTRY_TYPE == response.headers['Content-Type']
+        assert OPDSFeed.ENTRY_TYPE == response.headers["Content-Type"]
 
     def test_recommendations(self):
         # Test the ability to get a feed of works recommended by an
@@ -3243,33 +3426,26 @@ class TestWorkController(CirculationControllerTest):
         metadata = Metadata(source)
         mock_api = MockNoveListAPI(self._db)
 
-        args = [self.identifier.type,
-                self.identifier.identifier]
+        args = [self.identifier.type, self.identifier.identifier]
         kwargs = dict(novelist_api=mock_api)
 
         # We get a 400 response if the pagination data is bad.
-        with self.request_context_with_library('/?size=abc'):
-            response = self.manager.work_controller.recommendations(
-                *args, **kwargs
-            )
+        with self.request_context_with_library("/?size=abc"):
+            response = self.manager.work_controller.recommendations(*args, **kwargs)
             assert 400 == response.status_code
 
         # Or if the facet data is bad.
-        with self.request_context_with_library('/?order=nosuchorder'):
-            response = self.manager.work_controller.recommendations(
-                *args, **kwargs
-            )
+        with self.request_context_with_library("/?order=nosuchorder"):
+            response = self.manager.work_controller.recommendations(*args, **kwargs)
             assert 400 == response.status_code
 
         # Or if the search index is misconfigured.
         self.assert_bad_search_index_gives_problem_detail(
-            lambda: self.manager.work_controller.recommendations(
-                *args, **kwargs
-            )
+            lambda: self.manager.work_controller.recommendations(*args, **kwargs)
         )
 
         # If no NoveList API is configured, the lane does not exist.
-        with self.request_context_with_library('/'):
+        with self.request_context_with_library("/"):
             response = self.manager.work_controller.recommendations(
                 *args, novelist_api=None
             )
@@ -3285,18 +3461,16 @@ class TestWorkController(CirculationControllerTest):
         # created with .return_nothing set, but our mock
         # ExternalSearchIndex will ignore that setting and return
         # everything in its index -- as it always does.
-        with self.request_context_with_library('/'):
-            response = self.manager.work_controller.recommendations(
-                *args, **kwargs
-            )
+        with self.request_context_with_library("/"):
+            response = self.manager.work_controller.recommendations(*args, **kwargs)
 
         # A feed is returned with the data from the
         # ExternalSearchIndex.
         assert 200 == response.status_code
         feed = feedparser.parse(response.data)
-        assert 'Titles recommended by NoveList' == feed['feed']['title']
+        assert "Titles recommended by NoveList" == feed["feed"]["title"]
         [entry] = feed.entries
-        assert self.english_1.title == entry['title']
+        assert self.english_1.title == entry["title"]
         author = self.edition.author_contributors[0]
         expected_author_name = author.display_name or author.sort_name
         assert expected_author_name == entry.author
@@ -3309,13 +3483,11 @@ class TestWorkController(CirculationControllerTest):
                 cls.called_with = kwargs
                 return Response("A bunch of titles")
 
-        kwargs['feed_class'] = Mock
+        kwargs["feed_class"] = Mock
         with self.request_context_with_library(
-            '/?order=title&size=2&after=30&entrypoint=Audio'
+            "/?order=title&size=2&after=30&entrypoint=Audio"
         ):
-            response = self.manager.work_controller.recommendations(
-                *args, **kwargs
-            )
+            response = self.manager.work_controller.recommendations(*args, **kwargs)
 
         # The return value of Mock.page was used as the response
         # to the incoming request.
@@ -3323,29 +3495,29 @@ class TestWorkController(CirculationControllerTest):
         assert "A bunch of titles" == response.get_data(as_text=True)
 
         kwargs = Mock.called_with
-        assert self._db == kwargs.pop('_db')
-        assert 'Titles recommended by NoveList' == kwargs.pop('title')
+        assert self._db == kwargs.pop("_db")
+        assert "Titles recommended by NoveList" == kwargs.pop("title")
 
         # The RecommendationLane is set up to ask for recommendations
         # for this book.
-        lane = kwargs.pop('worklist')
+        lane = kwargs.pop("worklist")
         assert isinstance(lane, RecommendationLane)
         library = self._default_library
         assert library.id == lane.library_id
         assert self.english_1 == lane.work
-        assert 'Recommendations for Quite British by John Bull' == lane.display_name
+        assert "Recommendations for Quite British by John Bull" == lane.display_name
         assert mock_api == lane.novelist_api
 
-        facets = kwargs.pop('facets')
+        facets = kwargs.pop("facets")
         assert isinstance(facets, Facets)
         assert Facets.ORDER_TITLE == facets.order
         assert AudiobooksEntryPoint == facets.entrypoint
 
-        pagination = kwargs.pop('pagination')
+        pagination = kwargs.pop("pagination")
         assert 30 == pagination.offset
         assert 2 == pagination.size
 
-        annotator = kwargs.pop('annotator')
+        annotator = kwargs.pop("annotator")
         assert lane == annotator.lane
 
         # Checking the URL is difficult because it requires a request
@@ -3356,10 +3528,9 @@ class TestWorkController(CirculationControllerTest):
         url_kwargs.update(dict(list(pagination.items())))
         with self.request_context_with_library(""):
             expect_url = self.manager.work_controller.url_for(
-                route, library_short_name=library.short_name,
-                **url_kwargs
+                route, library_short_name=library.short_name, **url_kwargs
             )
-        assert kwargs.pop('url') == expect_url
+        assert kwargs.pop("url") == expect_url
 
     def test_related_books(self):
         # Test the related_books controller.
@@ -3380,12 +3551,16 @@ class TestWorkController(CirculationControllerTest):
         # integration is configured. The 'related books' lane ends up
         # with no sublanes, so the controller acts as if the lane
         # itself does not exist.
-        with self.request_context_with_library('/'):
+        with self.request_context_with_library("/"):
             response = self.manager.work_controller.related(
-                identifier.type, identifier.identifier,
+                identifier.type,
+                identifier.identifier,
             )
             assert 404 == response.status_code
-            assert "http://librarysimplified.org/terms/problem/unknown-lane" == response.uri
+            assert (
+                "http://librarysimplified.org/terms/problem/unknown-lane"
+                == response.uri
+            )
 
         # Now test some error cases where the lane exists but
         # something else goes wrong.
@@ -3439,51 +3614,53 @@ class TestWorkController(CirculationControllerTest):
 
         # Now, ask for works related to self.english_1.
         with mock_search_index(self.manager.external_search):
-            with self.request_context_with_library('/?entrypoint=Book'):
+            with self.request_context_with_library("/?entrypoint=Book"):
                 response = self.manager.work_controller.related(
-                    self.identifier.type, self.identifier.identifier,
-                    novelist_api=mock_api
+                    self.identifier.type,
+                    self.identifier.identifier,
+                    novelist_api=mock_api,
                 )
         assert 200 == response.status_code
-        assert OPDSFeed.ACQUISITION_FEED_TYPE == response.headers['content-type']
+        assert OPDSFeed.ACQUISITION_FEED_TYPE == response.headers["content-type"]
         feed = feedparser.parse(response.data)
-        assert "Related Books" == feed['feed']['title']
+        assert "Related Books" == feed["feed"]["title"]
 
         # The feed contains three entries: one for each sublane.
-        assert 3 == len(feed['entries'])
+        assert 3 == len(feed["entries"])
 
         # Group the entries by the sublane they're in.
         def collection_link(entry):
-            [link] = [l for l in entry['links'] if l['rel']=='collection']
-            return link['title'], link['href']
+            [link] = [l for l in entry["links"] if l["rel"] == "collection"]
+            return link["title"], link["href"]
+
         by_collection_link = {}
-        for entry in feed['entries']:
+        for entry in feed["entries"]:
             title, href = collection_link(entry)
             by_collection_link[title] = (href, entry)
 
         # Here's the sublane for books in the same series.
-        [same_series_href, same_series_entry] = by_collection_link[
-            'Around the World'
-        ]
-        assert "Same author and series" == same_series_entry['title']
-        expected_series_link = 'series/%s/eng/Adult' % urllib.parse.quote("Around the World")
+        [same_series_href, same_series_entry] = by_collection_link["Around the World"]
+        assert "Same author and series" == same_series_entry["title"]
+        expected_series_link = "series/%s/eng/Adult" % urllib.parse.quote(
+            "Around the World"
+        )
         assert same_series_href.endswith(expected_series_link)
 
         # Here's the sublane for books by this contributor.
         [same_contributor_href, same_contributor_entry] = by_collection_link[
-            'John Bull'
+            "John Bull"
         ]
-        assert "Same author and series" == same_contributor_entry['title']
-        expected_contributor_link = urllib.parse.quote('contributor/John Bull/eng/')
+        assert "Same author and series" == same_contributor_entry["title"]
+        expected_contributor_link = urllib.parse.quote("contributor/John Bull/eng/")
         assert same_contributor_href.endswith(expected_contributor_link)
 
         # Here's the sublane for recommendations from NoveList.
         [recommended_href, recommended_entry] = by_collection_link[
-            'Similar titles recommended by NoveList'
+            "Similar titles recommended by NoveList"
         ]
-        assert "Same author and series" == recommended_entry['title']
+        assert "Same author and series" == recommended_entry["title"]
         work_url = "/works/%s/%s/" % (identifier.type, identifier.identifier)
-        expected = urllib.parse.quote(work_url + 'recommendations')
+        expected = urllib.parse.quote(work_url + "recommendations")
         assert True == recommended_href.endswith(expected)
 
         # Finally, let's pass in a mock feed class so we can look at the
@@ -3495,10 +3672,12 @@ class TestWorkController(CirculationControllerTest):
                 return Response("An OPDS feed")
 
         mock_api.setup_method(metadata)
-        with self.request_context_with_library('/?entrypoint=Audio'):
+        with self.request_context_with_library("/?entrypoint=Audio"):
             response = self.manager.work_controller.related(
-                self.identifier.type, self.identifier.identifier,
-                novelist_api=mock_api, feed_class=Mock
+                self.identifier.type,
+                self.identifier.identifier,
+                novelist_api=mock_api,
+                feed_class=Mock,
             )
 
         # The return value of Mock.groups was used as the response
@@ -3508,19 +3687,19 @@ class TestWorkController(CirculationControllerTest):
 
         # Verify that groups() was called with the arguments we expect.
         kwargs = Mock.called_with
-        assert self._db == kwargs.pop('_db')
-        assert self.manager.external_search == kwargs.pop('search_engine')
-        assert "Related Books" == kwargs.pop('title')
+        assert self._db == kwargs.pop("_db")
+        assert self.manager.external_search == kwargs.pop("search_engine")
+        assert "Related Books" == kwargs.pop("title")
 
         # We're passing in a FeaturedFacets. Each lane will have a chance
         # to adapt it to a faceting object appropriate for that lane.
-        facets = kwargs.pop('facets')
+        facets = kwargs.pop("facets")
         assert isinstance(facets, FeaturedFacets)
         assert AudiobooksEntryPoint == facets.entrypoint
 
         # We're generating a grouped feed using a RelatedBooksLane
         # that has three sublanes.
-        lane = kwargs.pop('worklist')
+        lane = kwargs.pop("worklist")
         assert isinstance(lane, RelatedBooksLane)
         contributor_lane, novelist_lane, series_lane = lane.children
 
@@ -3534,7 +3713,7 @@ class TestWorkController(CirculationControllerTest):
         assert "Around the World" == series_lane.series
 
         # The Annotator is associated with the parent RelatedBooksLane.
-        annotator = kwargs.pop('annotator')
+        annotator = kwargs.pop("annotator")
         assert isinstance(annotator, LibraryAnnotator)
         assert self._default_library == annotator.library
         assert lane == annotator.lane
@@ -3547,31 +3726,33 @@ class TestWorkController(CirculationControllerTest):
         url_kwargs.update(dict(list(facets.items())))
         with self.request_context_with_library(""):
             expect_url = self.manager.work_controller.url_for(
-                route, lane_identifier=None,
+                route,
+                lane_identifier=None,
                 library_short_name=library.short_name,
                 **url_kwargs
             )
-        assert kwargs.pop('url') == expect_url
+        assert kwargs.pop("url") == expect_url
 
         # That's it!
         assert {} == kwargs
 
     def test_report_problem_get(self):
         with self.request_context_with_library("/"):
-            response = self.manager.work_controller.report(self.identifier.type, self.identifier.identifier)
+            response = self.manager.work_controller.report(
+                self.identifier.type, self.identifier.identifier
+            )
         assert 200 == response.status_code
-        assert "text/uri-list" == response.headers['Content-Type']
+        assert "text/uri-list" == response.headers["Content-Type"]
         for i in Complaint.VALID_TYPES:
             assert i in response.get_data(as_text=True)
 
     def test_report_problem_post_success(self):
         error_type = random.choice(list(Complaint.VALID_TYPES))
-        data = json.dumps({ "type": error_type,
-                            "source": "foo",
-                            "detail": "bar"}
-        )
+        data = json.dumps({"type": error_type, "source": "foo", "detail": "bar"})
         with self.request_context_with_library("/", method="POST", data=data):
-            response = self.manager.work_controller.report(self.identifier.type, self.identifier.identifier)
+            response = self.manager.work_controller.report(
+                self.identifier.type, self.identifier.identifier
+            )
         assert 201 == response.status_code
         [complaint] = self.lp.complaints
         assert error_type == complaint.type
@@ -3585,18 +3766,18 @@ class TestWorkController(CirculationControllerTest):
         series_name = "Like As If Whatever Mysteries"
 
         # If no series is given, a ProblemDetail is returned.
-        with self.request_context_with_library('/'):
+        with self.request_context_with_library("/"):
             response = self.manager.work_controller.series("", None, None)
         assert 404 == response.status_code
         assert "http://librarysimplified.org/terms/problem/unknown-lane" == response.uri
 
         # Similarly if the pagination data is bad.
-        with self.request_context_with_library('/?size=abc'):
+        with self.request_context_with_library("/?size=abc"):
             response = self.manager.work_controller.series(series_name, None, None)
             assert 400 == response.status_code
 
         # Or if the facet data is bad
-        with self.request_context_with_library('/?order=nosuchorder'):
+        with self.request_context_with_library("/?order=nosuchorder"):
             response = self.manager.work_controller.series(series_name, None, None)
             assert 400 == response.status_code
 
@@ -3615,9 +3796,11 @@ class TestWorkController(CirculationControllerTest):
         search_engine.bulk_update([work])
 
         # If a series is provided, a feed for that series is returned.
-        with self.request_context_with_library('/'):
+        with self.request_context_with_library("/"):
             response = self.manager.work_controller.series(
-                series_name, "eng,spa", "Children,Young Adult",
+                series_name,
+                "eng,spa",
+                "Children,Young Adult",
             )
         assert 200 == response.status_code
         feed = feedparser.parse(response.data)
@@ -3625,30 +3808,30 @@ class TestWorkController(CirculationControllerTest):
         # The book we added to the mock search engine is in the feed.
         # This demonstrates that series() asks the search engine for
         # books to put in the feed.
-        assert series_name == feed['feed']['title']
-        [entry] = feed['entries']
-        assert work.title == entry['title']
+        assert series_name == feed["feed"]["title"]
+        [entry] = feed["entries"]
+        assert work.title == entry["title"]
 
         # The feed has facet links.
-        links = feed['feed']['links']
-        facet_links = [link for link in links
-                       if link['rel'] == 'http://opds-spec.org/facet']
+        links = feed["feed"]["links"]
+        facet_links = [
+            link for link in links if link["rel"] == "http://opds-spec.org/facet"
+        ]
         assert 9 == len(facet_links)
 
         # The facet link we care most about is the default sort order,
         # put into place by SeriesFacets.
-        [series_position] = [
-            x for x in facet_links if x['title'] == 'Series Position'
-        ]
-        assert 'Sort by' == series_position['opds:facetgroup']
-        assert 'true' == series_position['opds:activefacet']
+        [series_position] = [x for x in facet_links if x["title"] == "Series Position"]
+        assert "Sort by" == series_position["opds:facetgroup"]
+        assert "true" == series_position["opds:activefacet"]
 
         # The feed was cached.
         cached = self._db.query(CachedFeed).one()
         assert CachedFeed.SERIES_TYPE == cached.type
         assert (
-            'Like As If Whatever Mysteries-eng,spa-Children,Young+Adult' ==
-            cached.unique_key)
+            "Like As If Whatever Mysteries-eng,spa-Children,Young+Adult"
+            == cached.unique_key
+        )
 
         # At this point we don't want to generate real feeds anymore.
         # We can't do a real end-to-end test without setting up a real
@@ -3680,8 +3863,7 @@ class TestWorkController(CirculationControllerTest):
             "/?order=title&size=100&key=%s" % json.dumps(sort_key)
         ):
             response = self.manager.work_controller.series(
-                series_name, "some languages", "some audiences",
-                feed_class=Mock
+                series_name, "some languages", "some audiences", feed_class=Mock
             )
 
         # The return value of Mock.page() is the response to the
@@ -3690,14 +3872,14 @@ class TestWorkController(CirculationControllerTest):
         assert "An OPDS feed" == response.get_data(as_text=True)
 
         kwargs = self.called_with
-        assert self._db == kwargs.pop('_db')
+        assert self._db == kwargs.pop("_db")
 
         # The feed is titled after the series.
-        assert series_name == kwargs.pop('title')
+        assert series_name == kwargs.pop("title")
 
         # A SeriesLane was created to ask the search index for
         # matching works.
-        lane = kwargs.pop('worklist')
+        lane = kwargs.pop("worklist")
         assert isinstance(lane, SeriesLane)
         assert self._default_library.id == lane.library_id
         assert series_name == lane.series
@@ -3707,7 +3889,7 @@ class TestWorkController(CirculationControllerTest):
         # A SeriesFacets was created to add an extra sort order and
         # to provide additional search index constraints that can only
         # be provided through the faceting object.
-        facets = kwargs.pop('facets')
+        facets = kwargs.pop("facets")
         assert isinstance(facets, SeriesFacets)
 
         # The 'order' in the query string went into the SeriesFacets
@@ -3715,23 +3897,23 @@ class TestWorkController(CirculationControllerTest):
         assert "title" == facets.order
 
         # The 'key' and 'size' went into a SortKeyPagination object.
-        pagination = kwargs.pop('pagination')
+        pagination = kwargs.pop("pagination")
         assert isinstance(pagination, SortKeyPagination)
         assert sort_key == pagination.last_item_on_previous_page
         assert 100 == pagination.size
 
         # The lane, facets, and pagination were all taken into effect
         # when constructing the feed URL.
-        annotator = kwargs.pop('annotator')
+        annotator = kwargs.pop("annotator")
         assert lane == annotator.lane
         with self.request_context_with_library("/"):
-            assert (
-                annotator.feed_url(lane, facets=facets, pagination=pagination) ==
-                kwargs.pop('url'))
+            assert annotator.feed_url(
+                lane, facets=facets, pagination=pagination
+            ) == kwargs.pop("url")
 
         # The (mocked) search engine associated with the CirculationManager was
         # passed in.
-        assert self.manager.external_search == kwargs.pop('search_engine')
+        assert self.manager.external_search == kwargs.pop("search_engine")
 
         # No other arguments were passed into Mock.page.
         assert {} == kwargs
@@ -3743,7 +3925,7 @@ class TestWorkController(CirculationControllerTest):
             response = self.manager.work_controller.series(
                 series_name, None, None, feed_class=Mock
             )
-        facets = self.called_with.pop('facets')
+        facets = self.called_with.pop("facets")
         assert isinstance(facets, SeriesFacets)
         assert "series" == facets.order
 
@@ -3770,8 +3952,9 @@ class TestOPDSFeedController(CirculationControllerTest):
             response = self.manager.opds_feeds.feed(-1)
             assert 404 == response.status_code
             assert (
-                "http://librarysimplified.org/terms/problem/unknown-lane" ==
-                response.uri)
+                "http://librarysimplified.org/terms/problem/unknown-lane"
+                == response.uri
+            )
 
         # Bad faceting information -> Problem detail
         lane_id = self.english_adult_fiction.id
@@ -3779,16 +3962,18 @@ class TestOPDSFeedController(CirculationControllerTest):
             response = self.manager.opds_feeds.feed(lane_id)
             assert 400 == response.status_code
             assert (
-                "http://librarysimplified.org/terms/problem/invalid-input" ==
-                response.uri)
+                "http://librarysimplified.org/terms/problem/invalid-input"
+                == response.uri
+            )
 
         # Bad pagination -> Problem detail
         with self.request_context_with_library("/?size=abc"):
             response = self.manager.opds_feeds.feed(lane_id)
             assert 400 == response.status_code
             assert (
-                "http://librarysimplified.org/terms/problem/invalid-input" ==
-                response.uri)
+                "http://librarysimplified.org/terms/problem/invalid-input"
+                == response.uri
+            )
 
         # Bad search index setup -> Problem detail
         self.assert_bad_search_index_gives_problem_detail(
@@ -3799,20 +3984,17 @@ class TestOPDSFeedController(CirculationControllerTest):
 
         # Set up configuration settings for links and entry points
         library = self._default_library
-        for rel, value in [(LibraryAnnotator.TERMS_OF_SERVICE, "a"),
-                           (LibraryAnnotator.PRIVACY_POLICY, "b"),
-                           (LibraryAnnotator.COPYRIGHT, "c"),
-                           (LibraryAnnotator.ABOUT, "d"),
-                           ]:
+        for rel, value in [
+            (LibraryAnnotator.TERMS_OF_SERVICE, "a"),
+            (LibraryAnnotator.PRIVACY_POLICY, "b"),
+            (LibraryAnnotator.COPYRIGHT, "c"),
+            (LibraryAnnotator.ABOUT, "d"),
+        ]:
             ConfigurationSetting.for_library(rel, library).value = value
 
         # Make a real OPDS feed and poke at it.
-        with self.request_context_with_library(
-            "/?entrypoint=Book&size=10"
-        ):
-            response = self.manager.opds_feeds.feed(
-                self.english_adult_fiction.id
-            )
+        with self.request_context_with_library("/?entrypoint=Book&size=10"):
+            response = self.manager.opds_feeds.feed(self.english_adult_fiction.id)
 
             # The mock search index returned every book it has, without
             # respect to which books _ought_ to show up on this page.
@@ -3823,62 +4005,64 @@ class TestOPDSFeedController(CirculationControllerTest):
 
             assert 200 == response.status_code
             assert (
-                'max-age=%d' % Lane.MAX_CACHE_AGE
-                in response.headers['Cache-Control']
+                "max-age=%d" % Lane.MAX_CACHE_AGE in response.headers["Cache-Control"]
             )
             feed = feedparser.parse(response.data)
-            assert (set([x.title for x in self.works]) ==
-                set([x['title'] for x in feed['entries']]))
+            assert set([x.title for x in self.works]) == set(
+                [x["title"] for x in feed["entries"]]
+            )
 
             # But the rest of the feed looks good.
-            links = feed['feed']['links']
+            links = feed["feed"]["links"]
             by_rel = dict()
 
             # Put the links into a data structure based on their rel values.
             for i in links:
-                rel = i['rel']
-                href = i['href']
+                rel = i["rel"]
+                href = i["href"]
                 if isinstance(by_rel.get(rel), (bytes, str)):
                     by_rel[rel] = [by_rel[rel]]
                 if isinstance(by_rel.get(rel), list):
                     by_rel[rel].append(href)
                 else:
-                    by_rel[i['rel']] = i['href']
+                    by_rel[i["rel"]] = i["href"]
 
             assert "a" == by_rel[LibraryAnnotator.TERMS_OF_SERVICE]
             assert "b" == by_rel[LibraryAnnotator.PRIVACY_POLICY]
             assert "c" == by_rel[LibraryAnnotator.COPYRIGHT]
             assert "d" == by_rel[LibraryAnnotator.ABOUT]
 
-            next_link = by_rel['next']
+            next_link = by_rel["next"]
             lane_str = str(lane_id)
             assert lane_str in next_link
-            assert 'entrypoint=Book' in next_link
-            assert 'size=10' in next_link
+            assert "entrypoint=Book" in next_link
+            assert "size=10" in next_link
             last_item = self.works[-1]
 
             # The pagination key for the next page is derived from the
             # sort fields of the last work in the current page.
             expected_pagination_key = [
-                last_item.sort_title, last_item.sort_author, last_item.id
+                last_item.sort_title,
+                last_item.sort_author,
+                last_item.id,
             ]
             expect = "key=%s" % urllib.parse.quote_plus(
                 json.dumps(expected_pagination_key)
             )
             assert expect in next_link
 
-            search_link = by_rel['search']
+            search_link = by_rel["search"]
             assert lane_str in search_link
-            assert 'entrypoint=Book' in search_link
+            assert "entrypoint=Book" in search_link
 
-            shelf_link = by_rel['http://opds-spec.org/shelf']
-            assert shelf_link.endswith('/loans/')
+            shelf_link = by_rel["http://opds-spec.org/shelf"]
+            assert shelf_link.endswith("/loans/")
 
-            facet_links = by_rel['http://opds-spec.org/facet']
+            facet_links = by_rel["http://opds-spec.org/facet"]
             assert all(lane_str in x for x in facet_links)
-            assert all('entrypoint=Book' in x for x in facet_links)
-            assert any('order=title' in x for x in facet_links)
-            assert any('order=author' in x for x in facet_links)
+            assert all("entrypoint=Book" in x for x in facet_links)
+            assert any("order=title" in x for x in facet_links)
+            assert any("order=author" in x for x in facet_links)
 
         # Now let's take a closer look at what this controller method
         # passes into AcquisitionFeed.page(), by mocking page().
@@ -3890,9 +4074,7 @@ class TestOPDSFeedController(CirculationControllerTest):
 
         sort_key = ["sort", "pagination", "key"]
         with self.request_context_with_library(
-            "/?entrypoint=Audio&size=36&key=%s&order=added" % (
-                json.dumps(sort_key)
-            )
+            "/?entrypoint=Audio&size=36&key=%s&order=added" % (json.dumps(sort_key))
         ):
             response = self.manager.opds_feeds.feed(
                 self.english_adult_fiction.id, feed_class=Mock
@@ -3901,9 +4083,10 @@ class TestOPDSFeedController(CirculationControllerTest):
             # While we're in request context, generate the URL we
             # expect to be used for this feed.
             expect_url = self.controller.cdn_url_for(
-                "feed", lane_identifier=lane_id,
+                "feed",
+                lane_identifier=lane_id,
                 library_short_name=self._default_library.short_name,
-                _facets=load_facets_from_request()
+                _facets=load_facets_from_request(),
             )
 
         assert isinstance(response, Response)
@@ -3912,32 +4095,32 @@ class TestOPDSFeedController(CirculationControllerTest):
         # Now check all the keyword arguments that were passed into
         # page().
         kwargs = self.called_with
-        assert kwargs.pop('url') == expect_url
-        assert self._db == kwargs.pop('_db')
-        assert self.english_adult_fiction.display_name == kwargs.pop('title')
-        assert self.english_adult_fiction == kwargs.pop('worklist')
+        assert kwargs.pop("url") == expect_url
+        assert self._db == kwargs.pop("_db")
+        assert self.english_adult_fiction.display_name == kwargs.pop("title")
+        assert self.english_adult_fiction == kwargs.pop("worklist")
 
         # Query string arguments were taken into account when
         # creating the Facets and Pagination objects.
-        facets = kwargs.pop('facets')
+        facets = kwargs.pop("facets")
         assert AudiobooksEntryPoint == facets.entrypoint
-        assert 'added' == facets.order
+        assert "added" == facets.order
 
-        pagination = kwargs.pop('pagination')
+        pagination = kwargs.pop("pagination")
         assert isinstance(pagination, SortKeyPagination)
         assert 36 == pagination.size
         assert sort_key == pagination.last_item_on_previous_page
 
         # The Annotator object was instantiated with the proper lane
         # and the newly created Facets object.
-        annotator = kwargs.pop('annotator')
+        annotator = kwargs.pop("annotator")
         assert self.english_adult_fiction == annotator.lane
         assert facets == annotator.facets
 
         # The ExternalSearchIndex associated with the
         # CirculationManager was passed in; that way we don't have to
         # connect to the search engine again.
-        assert self.manager.external_search == kwargs.pop('search_engine')
+        assert self.manager.external_search == kwargs.pop("search_engine")
 
         # No other arguments were passed into page().
         assert {} == kwargs
@@ -3961,19 +4144,21 @@ class TestOPDSFeedController(CirculationControllerTest):
             response = controller.groups(None)
             assert 302 == response.status_code
             expect_url = controller.cdn_url_for(
-                'acquisition_groups',
+                "acquisition_groups",
                 library_short_name=self._default_library.short_name,
-                lane_identifier=lane.id, _external=True
+                lane_identifier=lane.id,
+                _external=True,
             )
-            assert response.headers['Location'] == expect_url
+            assert response.headers["Location"] == expect_url
 
         # Bad lane -> Problem detail
         with self.request_context_with_library("/"):
             response = self.manager.opds_feeds.groups(-1)
             assert 404 == response.status_code
             assert (
-                "http://librarysimplified.org/terms/problem/unknown-lane" ==
-                response.uri)
+                "http://librarysimplified.org/terms/problem/unknown-lane"
+                == response.uri
+            )
 
         # Bad search index setup -> Problem detail
         self.assert_bad_search_index_gives_problem_detail(
@@ -4028,28 +4213,29 @@ class TestOPDSFeedController(CirculationControllerTest):
             # While we're in request context, generate the URL we
             # expect to be used for this feed.
             expect_url = self.manager.opds_feeds.cdn_url_for(
-                "acquisition_groups", lane_identifier=None,
+                "acquisition_groups",
+                lane_identifier=None,
                 library_short_name=library.short_name,
-                _facets=load_facets_from_request()
+                _facets=load_facets_from_request(),
             )
 
         kwargs = self.groups_called_with
-        assert self._db == kwargs.pop('_db')
-        lane = kwargs.pop('worklist')
+        assert self._db == kwargs.pop("_db")
+        lane = kwargs.pop("worklist")
         assert expect_lane == lane
-        assert lane.display_name == kwargs.pop('title')
-        assert expect_url == kwargs.pop('url')
+        assert lane.display_name == kwargs.pop("title")
+        assert expect_url == kwargs.pop("url")
 
         # A FeaturedFacets object was loaded from library, lane and
         # request configuration.
-        facets = kwargs.pop('facets')
+        facets = kwargs.pop("facets")
         assert isinstance(facets, FeaturedFacets)
         assert AudiobooksEntryPoint == facets.entrypoint
         assert 0.15 == facets.minimum_featured_quality
 
         # A LibraryAnnotator object was created from the Lane and
         # Facets objects.
-        annotator = kwargs.pop('annotator')
+        annotator = kwargs.pop("annotator")
         assert lane == annotator.lane
         assert facets == annotator.facets
 
@@ -4066,22 +4252,23 @@ class TestOPDSFeedController(CirculationControllerTest):
             # While we're in request context, generate the URL we
             # expect to be used for this feed.
             expect_url = self.manager.opds_feeds.cdn_url_for(
-                "feed", lane_identifier=self.english_adult_fiction.id,
+                "feed",
+                lane_identifier=self.english_adult_fiction.id,
                 library_short_name=library.short_name,
-                _facets=load_facets_from_request()
+                _facets=load_facets_from_request(),
             )
 
-        assert self.english_adult_fiction == self.page_called_with.pop('worklist')
+        assert self.english_adult_fiction == self.page_called_with.pop("worklist")
 
         # The canonical URL for this feed is a page-type URL, not a
         # groups-type URL.
-        assert expect_url == self.page_called_with.pop('url')
+        assert expect_url == self.page_called_with.pop("url")
 
         # The faceting and pagination objects are typical for the
         # first page of a paginated feed.
-        pagination = self.page_called_with.pop('pagination')
+        pagination = self.page_called_with.pop("pagination")
         assert isinstance(pagination, SortKeyPagination)
-        facets = self.page_called_with.pop('facets')
+        facets = self.page_called_with.pop("facets")
         assert isinstance(facets, Facets)
 
         # groups() was never called.
@@ -4095,9 +4282,9 @@ class TestOPDSFeedController(CirculationControllerTest):
                 self.english_adult_fiction.id, feed_class=Mock
             )
         assert None == self.page_called_with
-        assert self.english_adult_fiction == self.groups_called_with.pop('worklist')
-        assert isinstance(self.groups_called_with.pop('facets'), FeaturedFacets)
-        assert 'pagination' not in self.groups_called_with
+        assert self.english_adult_fiction == self.groups_called_with.pop("worklist")
+        assert isinstance(self.groups_called_with.pop("facets"), FeaturedFacets)
+        assert "pagination" not in self.groups_called_with
 
     def test_navigation(self):
         library = self._default_library
@@ -4107,17 +4294,19 @@ class TestOPDSFeedController(CirculationControllerTest):
         # Mock NavigationFeed.navigation so we can see the arguments going
         # into it.
         old_navigation = NavigationFeed.navigation
+
         @classmethod
         def mock_navigation(cls, *args, **kwargs):
             self.called_with = (args, kwargs)
             return old_navigation(*args, **kwargs)
+
         NavigationFeed.navigation = mock_navigation
 
         with self.request_context_with_library("/"):
             response = self.manager.opds_feeds.navigation(lane.id)
 
             feed = feedparser.parse(response.data)
-            entries = feed['entries']
+            entries = feed["entries"]
             # The default top-level lane is "World Languages", which contains
             # sublanes for English, Spanish, Chinese, and French.
             assert len(lane.sublanes) == len(entries)
@@ -4125,7 +4314,7 @@ class TestOPDSFeedController(CirculationControllerTest):
         # A NavigationFacets object was created and passed in to
         # NavigationFeed.navigation().
         args, kwargs = self.called_with
-        facets = kwargs['facets']
+        facets = kwargs["facets"]
         assert isinstance(facets, NavigationFacets)
         NavigationFeed.navigation = old_navigation
 
@@ -4140,6 +4329,7 @@ class TestOPDSFeedController(CirculationControllerTest):
             work.last_update_time = time
             for lp in work.license_pools:
                 lp.availability_time = time
+
         the_far_future = now + datetime.timedelta(hours=2)
         the_future = now + datetime.timedelta(hours=1)
         the_past = now - datetime.timedelta(hours=1)
@@ -4156,7 +4346,10 @@ class TestOPDSFeedController(CirculationControllerTest):
         # term, you get an OpenSearch document.
         with self.request_context_with_library("/"):
             response = self.manager.opds_feeds.search(None)
-            assert response.headers['Content-Type'] == 'application/opensearchdescription+xml'
+            assert (
+                response.headers["Content-Type"]
+                == "application/opensearchdescription+xml"
+            )
             assert "OpenSearchDescription" in response.get_data(as_text=True)
 
     def test_search(self):
@@ -4167,16 +4360,18 @@ class TestOPDSFeedController(CirculationControllerTest):
             response = self.manager.opds_feeds.search(-1)
             assert 404 == response.status_code
             assert (
-                "http://librarysimplified.org/terms/problem/unknown-lane" ==
-                response.uri)
+                "http://librarysimplified.org/terms/problem/unknown-lane"
+                == response.uri
+            )
 
         # Bad pagination -> problem detail
         with self.request_context_with_library("/?size=abc"):
             response = self.manager.opds_feeds.search(None)
             assert 400 == response.status_code
             assert (
-                "http://librarysimplified.org/terms/problem/invalid-input" ==
-                response.uri)
+                "http://librarysimplified.org/terms/problem/invalid-input"
+                == response.uri
+            )
 
         # Bad search index setup -> Problem detail
         self.assert_bad_search_index_gives_problem_detail(
@@ -4196,29 +4391,27 @@ class TestOPDSFeedController(CirculationControllerTest):
                 self.called_with = kwargs
                 return "An OPDS feed"
 
-        with self.request_context_with_library(
-            "/?q=t&size=99&after=22&media=Music"
-        ):
+        with self.request_context_with_library("/?q=t&size=99&after=22&media=Music"):
             # Try the top-level lane, "World Languages"
             expect_lane = self.manager.opds_feeds.load_lane(None)
             response = self.manager.opds_feeds.search(None, feed_class=Mock)
 
         kwargs = self.called_with
-        assert self._db == kwargs.pop('_db')
+        assert self._db == kwargs.pop("_db")
 
         # Unlike other types of feeds, here the argument is called
         # 'lane' instead of 'worklist', because a Lane is the _only_
         # kind of WorkList that is currently searchable.
-        lane = kwargs.pop('lane')
+        lane = kwargs.pop("lane")
         assert expect_lane == lane
         query = kwargs.pop("query")
         assert "t" == query
         assert "Search" == kwargs.pop("title")
-        assert self.manager.external_search == kwargs.pop('search_engine')
+        assert self.manager.external_search == kwargs.pop("search_engine")
 
         # A SearchFacets object was loaded from library, lane and
         # request configuration.
-        facets = kwargs.pop('facets')
+        facets = kwargs.pop("facets")
         assert isinstance(facets, SearchFacets)
 
         # There are multiple possible entry points, and the request
@@ -4232,13 +4425,13 @@ class TestOPDSFeedController(CirculationControllerTest):
 
         # Information from the query string was used to make a
         # Pagination object.
-        pagination = kwargs.pop('pagination')
+        pagination = kwargs.pop("pagination")
         assert 22 == pagination.offset
         assert 99 == pagination.size
 
         # A LibraryAnnotator object was created from the Lane and
         # Facets objects.
-        annotator = kwargs.pop('annotator')
+        annotator = kwargs.pop("annotator")
         assert lane == annotator.lane
         assert facets == annotator.facets
 
@@ -4248,11 +4441,13 @@ class TestOPDSFeedController(CirculationControllerTest):
         library = self._default_library
         with self.request_context_with_library(""):
             expect_url = self.manager.opds_feeds.url_for(
-                'lane_search', lane_identifier=None,
+                "lane_search",
+                lane_identifier=None,
                 library_short_name=library.short_name,
-                **dict(list(facets.items())), q=query
+                **dict(list(facets.items())),
+                q=query
             )
-        assert expect_url == kwargs.pop('url')
+        assert expect_url == kwargs.pop("url")
 
         # No other arguments were passed into search().
         assert {} == kwargs
@@ -4267,10 +4462,10 @@ class TestOPDSFeedController(CirculationControllerTest):
             kwargs = self.called_with
 
             # We're searching that lane.
-            assert self.english_adult_fiction == kwargs['lane']
+            assert self.english_adult_fiction == kwargs["lane"]
 
             # And we get the entry point we asked for.
-            assert AudiobooksEntryPoint == kwargs['facets'].entrypoint
+            assert AudiobooksEntryPoint == kwargs["facets"].entrypoint
 
         # When only a single entry point is enabled, it's used as the
         # default.
@@ -4279,12 +4474,10 @@ class TestOPDSFeedController(CirculationControllerTest):
         )
         with self.request_context_with_library("/?q=t"):
             response = self.manager.opds_feeds.search(None, feed_class=Mock)
-            assert AudiobooksEntryPoint == self.called_with['facets'].entrypoint
+            assert AudiobooksEntryPoint == self.called_with["facets"].entrypoint
 
     def test_misconfigured_search(self):
-
         class BadSearch(CirculationManager):
-
             @property
             def setup_search(self):
                 raise Exception("doomed!")
@@ -4296,8 +4489,10 @@ class TestOPDSFeedController(CirculationControllerTest):
         with self.request_context_with_library("/?q=t"):
             problem = circulation.opds_feeds.search(None)
             assert REMOTE_INTEGRATION_FAILED.uri == problem.uri
-            assert ('The search index for this site is not properly configured.' ==
-                problem.detail)
+            assert (
+                "The search index for this site is not properly configured."
+                == problem.detail
+            )
 
     def test__qa_feed(self):
         # Test the _qa_feed() controller method.
@@ -4309,26 +4504,25 @@ class TestOPDSFeedController(CirculationControllerTest):
         feed_method = MagicMock(return_value="an OPDS feed")
 
         m = self.manager.opds_feeds._qa_feed
-        args = (feed_method, "QA test feed", "qa_feed", Facets,
-                worklist_factory)
+        args = (feed_method, "QA test feed", "qa_feed", Facets, worklist_factory)
 
         # Bad search index setup -> Problem detail
-        self.assert_bad_search_index_gives_problem_detail(
-            lambda: m(*args)
-        )
+        self.assert_bad_search_index_gives_problem_detail(lambda: m(*args))
 
         # Bad faceting information -> Problem detail
         with self.request_context_with_library("/?order=nosuchorder"):
             response = m(*args)
             assert 400 == response.status_code
             assert (
-                "http://librarysimplified.org/terms/problem/invalid-input" ==
-                response.uri)
+                "http://librarysimplified.org/terms/problem/invalid-input"
+                == response.uri
+            )
 
         # Now test success.
         with self.request_context_with_library("/"):
             expect_url = self.manager.opds_feeds.url_for(
-                'qa_feed', library_short_name=self._default_library.short_name,
+                "qa_feed",
+                library_short_name=self._default_library.short_name,
             )
 
             response = m(*args)
@@ -4349,33 +4543,33 @@ class TestOPDSFeedController(CirculationControllerTest):
         [call] = feed_method.mock_calls
         kwargs = call.kwargs
 
-        assert self._db == kwargs.pop('_db')
+        assert self._db == kwargs.pop("_db")
         assert "QA test feed" == kwargs.pop("title")
-        assert self.manager.external_search == kwargs.pop('search_engine')
-        assert expect_url == kwargs.pop('url')
+        assert self.manager.external_search == kwargs.pop("search_engine")
+        assert expect_url == kwargs.pop("url")
 
         # These feeds are never to be cached.
-        assert CachedFeed.IGNORE_CACHE == kwargs.pop('max_age')
+        assert CachedFeed.IGNORE_CACHE == kwargs.pop("max_age")
 
         # To improve performance, a Pagination object was created that
         # limits each lane in the test feed to a single Work.
-        pagination = kwargs.pop('pagination')
+        pagination = kwargs.pop("pagination")
         assert isinstance(pagination, Pagination)
         assert 1 == pagination.size
 
         # The WorkList returned by worklist_factory was passed into
         # feed_method.
-        assert wl == kwargs.pop('worklist')
+        assert wl == kwargs.pop("worklist")
 
         # So was a LibraryAnnotator object created from that WorkList.
-        annotator = kwargs.pop('annotator')
+        annotator = kwargs.pop("annotator")
         assert isinstance(annotator, LibraryAnnotator)
         assert wl == annotator.lane
         assert None == annotator.facets
 
         # The Facets object used to initialize the feed is the same
         # one passed into worklist_factory.
-        assert facets == kwargs.pop('facets')
+        assert facets == kwargs.pop("facets")
 
         # No other arguments were passed into feed_method().
         assert {} == kwargs
@@ -4393,8 +4587,8 @@ class TestOPDSFeedController(CirculationControllerTest):
 
         # For the most part, we're verifying that the expected values
         # are passed in to _qa_feed.
-        assert AcquisitionFeed.groups == kwargs.pop('feed_method')
-        assert JackpotFacets == kwargs.pop('facet_class')
+        assert AcquisitionFeed.groups == kwargs.pop("feed_method")
+        assert JackpotFacets == kwargs.pop("facet_class")
         assert "qa_feed" == kwargs.pop("controller_name")
         assert "QA test feed" == kwargs.pop("feed_title")
         factory = kwargs.pop("worklist_factory")
@@ -4406,8 +4600,7 @@ class TestOPDSFeedController(CirculationControllerTest):
         # other calls.
         with self.request_context_with_library("/"):
             facets = load_facets_from_request(
-                base_class=JackpotFacets,
-                default_entrypoint=EverythingEntryPoint
+                base_class=JackpotFacets, default_entrypoint=EverythingEntryPoint
             )
 
         worklist = factory(self._default_library, facets)
@@ -4431,8 +4624,8 @@ class TestOPDSFeedController(CirculationControllerTest):
 
         # For the most part, we're verifying that the expected values
         # are passed in to _qa_feed.
-        assert AcquisitionFeed.groups == kwargs.pop('feed_factory')
-        assert JackpotFacets == kwargs.pop('facet_class')
+        assert AcquisitionFeed.groups == kwargs.pop("feed_factory")
+        assert JackpotFacets == kwargs.pop("facet_class")
         assert "qa_feed" == kwargs.pop("controller_name")
         assert "QA test feed" == kwargs.pop("feed_title")
         factory = kwargs.pop("worklist_factory")
@@ -4444,8 +4637,7 @@ class TestOPDSFeedController(CirculationControllerTest):
         # other calls.
         with self.request_context_with_library("/"):
             facets = load_facets_from_request(
-                base_class=JackpotFacets,
-                default_entrypoint=EverythingEntryPoint
+                base_class=JackpotFacets, default_entrypoint=EverythingEntryPoint
             )
 
         worklist = factory(self._default_library, facets)
@@ -4473,8 +4665,8 @@ class TestOPDSFeedController(CirculationControllerTest):
 
         # Note that the feed_method is different from the one in qa_feed.
         # We want to generate an ungrouped feed rather than a grouped one.
-        assert AcquisitionFeed.page == kwargs.pop('feed_factory')
-        assert HasSeriesFacets == kwargs.pop('facet_class')
+        assert AcquisitionFeed.page == kwargs.pop("feed_factory")
+        assert HasSeriesFacets == kwargs.pop("facet_class")
         assert "qa_series_feed" == kwargs.pop("controller_name")
         assert "QA series test feed" == kwargs.pop("feed_title")
         factory = kwargs.pop("worklist_factory")
@@ -4492,7 +4684,6 @@ class TestOPDSFeedController(CirculationControllerTest):
 
 
 class TestCrawlableFeed(CirculationControllerTest):
-
     @contextmanager
     def mock_crawlable_feed(self):
         """Temporarily mock _crawlable_feed with something
@@ -4500,13 +4691,17 @@ class TestCrawlableFeed(CirculationControllerTest):
         """
         controller = self.manager.opds_feeds
         original = controller._crawlable_feed
-        def mock(title, url, worklist, annotator=None,
-                 feed_class=AcquisitionFeed):
+
+        def mock(title, url, worklist, annotator=None, feed_class=AcquisitionFeed):
             self._crawlable_feed_called_with = dict(
-                title=title, url=url, worklist=worklist, annotator=annotator,
-                feed_class=feed_class
+                title=title,
+                url=url,
+                worklist=worklist,
+                annotator=annotator,
+                feed_class=feed_class,
             )
             return "An OPDS feed."
+
         controller._crawlable_feed = mock
         yield
         controller._crawlable_feed = original
@@ -4531,14 +4726,14 @@ class TestCrawlableFeed(CirculationControllerTest):
 
         # Verify that _crawlable_feed was called with the right arguments.
         kwargs = self._crawlable_feed_called_with
-        assert expect_url == kwargs.pop('url')
-        assert library.name == kwargs.pop('title')
-        assert None == kwargs.pop('annotator')
-        assert AcquisitionFeed == kwargs.pop('feed_class')
+        assert expect_url == kwargs.pop("url")
+        assert library.name == kwargs.pop("title")
+        assert None == kwargs.pop("annotator")
+        assert AcquisitionFeed == kwargs.pop("feed_class")
 
         # A CrawlableCollectionBasedLane has been set up to show
         # everything in any of the requested library's collections.
-        lane = kwargs.pop('worklist')
+        lane = kwargs.pop("worklist")
         assert isinstance(lane, CrawlableCollectionBasedLane)
         assert library.id == lane.library_id
         assert [x.id for x in library.collections] == lane.collection_ids
@@ -4578,12 +4773,12 @@ class TestCrawlableFeed(CirculationControllerTest):
 
         # Verify that _crawlable_feed was called with the right arguments.
         kwargs = self._crawlable_feed_called_with
-        assert expect_url == kwargs.pop('url')
-        assert collection.name == kwargs.pop('title')
+        assert expect_url == kwargs.pop("url")
+        assert collection.name == kwargs.pop("title")
 
         # A CrawlableCollectionBasedLane has been set up to show
         # everything in the requested collection.
-        lane = kwargs.pop('worklist')
+        lane = kwargs.pop("worklist")
         assert isinstance(lane, CrawlableCollectionBasedLane)
         assert None == lane.library_id
         assert [collection.id] == lane.collection_ids
@@ -4591,7 +4786,7 @@ class TestCrawlableFeed(CirculationControllerTest):
         # No specific Annotator as created to build the OPDS
         # feed. We'll be using the default for a request with no
         # library context--a CirculationManagerAnnotator.
-        assert None == kwargs.pop('annotator')
+        assert None == kwargs.pop("annotator")
 
         # A specific annotator _is_ created for an ODL collection:
         # A SharedCollectionAnnotator that knows about the Collection
@@ -4603,10 +4798,10 @@ class TestCrawlableFeed(CirculationControllerTest):
                     collection_name=collection.name
                 )
         kwargs = self._crawlable_feed_called_with
-        annotator = kwargs['annotator']
+        annotator = kwargs["annotator"]
         assert isinstance(annotator, SharedCollectionAnnotator)
         assert collection == annotator.collection
-        assert kwargs['worklist'] == annotator.lane
+        assert kwargs["worklist"] == annotator.lane
 
     def test_crawlable_list_feed(self):
         # Test the creation of a crawlable feed for everything in
@@ -4643,14 +4838,14 @@ class TestCrawlableFeed(CirculationControllerTest):
 
         # Verify that _crawlable_feed was called with the right arguments.
         kwargs = self._crawlable_feed_called_with
-        assert expect_url == kwargs.pop('url')
-        assert customlist.name == kwargs.pop('title')
-        assert None == kwargs.pop('annotator')
-        assert AcquisitionFeed == kwargs.pop('feed_class')
+        assert expect_url == kwargs.pop("url")
+        assert customlist.name == kwargs.pop("title")
+        assert None == kwargs.pop("annotator")
+        assert AcquisitionFeed == kwargs.pop("feed_class")
 
         # A CrawlableCustomListBasedLane was created to fetch only
         # the works in the custom list.
-        lane = kwargs.pop('worklist')
+        lane = kwargs.pop("worklist")
         assert isinstance(lane, CrawlableCustomListBasedLane)
         assert [customlist.id] == lane.customlist_ids
         assert {} == kwargs
@@ -4658,6 +4853,7 @@ class TestCrawlableFeed(CirculationControllerTest):
     def test__crawlable_feed(self):
         # Test the helper method called by all other feed methods.
         self.page_called_with = None
+
         class MockFeed(object):
             @classmethod
             def page(cls, **kwargs):
@@ -4665,6 +4861,7 @@ class TestCrawlableFeed(CirculationControllerTest):
                 return Response("An OPDS feed")
 
         work = self._work(with_open_access_download=True)
+
         class MockLane(DynamicLane):
             def works(self, _db, facets, pagination, *args, **kwargs):
                 # We need to call page_loaded() (normally called by
@@ -4675,9 +4872,7 @@ class TestCrawlableFeed(CirculationControllerTest):
                 # It's not necessary for this test to call it with a
                 # realistic value, but we might as well.
                 results = [
-                    MockSearchResult(
-                        work.sort_title, work.sort_author, {}, work.id
-                    )
+                    MockSearchResult(work.sort_title, work.sort_author, {}, work.id)
                 ]
                 pagination.page_loaded(results)
                 return [work]
@@ -4685,10 +4880,7 @@ class TestCrawlableFeed(CirculationControllerTest):
         mock_lane = MockLane()
         mock_lane.initialize(None)
         in_kwargs = dict(
-            title="Lane title",
-            url="Lane URL",
-            worklist=mock_lane,
-            feed_class=MockFeed
+            title="Lane title", url="Lane URL", worklist=mock_lane, feed_class=MockFeed
         )
 
         # Bad pagination data -> problem detail
@@ -4705,9 +4897,7 @@ class TestCrawlableFeed(CirculationControllerTest):
 
         # Good pagination data -> feed_class.page() is called.
         sort_key = ["sort", "pagination", "key"]
-        with self.app.test_request_context(
-                "/?size=23&key=%s" % json.dumps(sort_key)
-        ):
+        with self.app.test_request_context("/?size=23&key=%s" % json.dumps(sort_key)):
             response = self.manager.opds_feeds._crawlable_feed(**in_kwargs)
 
         # The result of page() was served as an OPDS feed.
@@ -4716,28 +4906,27 @@ class TestCrawlableFeed(CirculationControllerTest):
 
         # Verify the arguments passed in to page().
         out_kwargs = self.page_called_with
-        assert self._db == out_kwargs.pop('_db')
-        assert (self.manager.opds_feeds.search_engine ==
-            out_kwargs.pop('search_engine'))
-        assert in_kwargs['worklist'] == out_kwargs.pop('worklist')
-        assert in_kwargs['title'] == out_kwargs.pop('title')
-        assert in_kwargs['url'] == out_kwargs.pop('url')
+        assert self._db == out_kwargs.pop("_db")
+        assert self.manager.opds_feeds.search_engine == out_kwargs.pop("search_engine")
+        assert in_kwargs["worklist"] == out_kwargs.pop("worklist")
+        assert in_kwargs["title"] == out_kwargs.pop("title")
+        assert in_kwargs["url"] == out_kwargs.pop("url")
 
         # Since no annotator was provided and the request did not
         # happen in a library context, a generic
         # CirculationManagerAnnotator was created.
-        annotator = out_kwargs.pop('annotator')
+        annotator = out_kwargs.pop("annotator")
         assert isinstance(annotator, CirculationManagerAnnotator)
         assert mock_lane == annotator.lane
 
         # There's only one way to configure CrawlableFacets, so it's
         # sufficient to check that our faceting object is in fact a
         # CrawlableFacets.
-        facets = out_kwargs.pop('facets')
+        facets = out_kwargs.pop("facets")
         assert isinstance(facets, CrawlableFacets)
 
         # Verify that pagination was picked up from the request.
-        pagination = out_kwargs.pop('pagination')
+        pagination = out_kwargs.pop("pagination")
         assert isinstance(pagination, SortKeyPagination)
         assert sort_key == pagination.last_item_on_previous_page
         assert 23 == pagination.size
@@ -4752,18 +4941,18 @@ class TestCrawlableFeed(CirculationControllerTest):
             response = self.manager.opds_feeds._crawlable_feed(
                 annotator=mock_annotator, **in_kwargs
             )
-            assert mock_annotator == self.page_called_with['annotator']
+            assert mock_annotator == self.page_called_with["annotator"]
 
         # Finally, remove the mock feed class and verify that a real OPDS
         # feed is generated from the result of MockLane.works()
-        del in_kwargs['feed_class']
+        del in_kwargs["feed_class"]
         with self.request_context_with_library("/"):
             response = self.manager.opds_feeds._crawlable_feed(**in_kwargs)
         feed = feedparser.parse(response.data)
 
         # There is one entry with the expected title.
-        [entry] = feed['entries']
-        assert entry['title'] == work.title
+        [entry] = feed["entries"]
+        assert entry["title"] == work.title
 
 
 class TestMARCRecordController(CirculationControllerTest):
@@ -4775,40 +4964,62 @@ class TestMARCRecordController(CirculationControllerTest):
         lane = self._lane(display_name="Test Lane")
 
         exporter = self._external_integration(
-            ExternalIntegration.MARC_EXPORT, ExternalIntegration.CATALOG_GOAL,
-            libraries=[self._default_library])
+            ExternalIntegration.MARC_EXPORT,
+            ExternalIntegration.CATALOG_GOAL,
+            libraries=[self._default_library],
+        )
 
         rep1, ignore = create(
-            self._db, Representation,
-            url="http://mirror1", mirror_url="http://mirror1",
+            self._db,
+            Representation,
+            url="http://mirror1",
+            mirror_url="http://mirror1",
             media_type=Representation.MARC_MEDIA_TYPE,
-            mirrored_at=now)
+            mirrored_at=now,
+        )
         cache1, ignore = create(
-            self._db, CachedMARCFile,
-            library=self._default_library, lane=None,
-            representation=rep1, end_time=now)
+            self._db,
+            CachedMARCFile,
+            library=self._default_library,
+            lane=None,
+            representation=rep1,
+            end_time=now,
+        )
 
         rep2, ignore = create(
-            self._db, Representation,
-            url="http://mirror2", mirror_url="http://mirror2",
+            self._db,
+            Representation,
+            url="http://mirror2",
+            mirror_url="http://mirror2",
             media_type=Representation.MARC_MEDIA_TYPE,
-            mirrored_at=yesterday)
+            mirrored_at=yesterday,
+        )
         cache2, ignore = create(
-            self._db, CachedMARCFile,
-            library=self._default_library, lane=lane,
-            representation=rep2, end_time=yesterday)
+            self._db,
+            CachedMARCFile,
+            library=self._default_library,
+            lane=lane,
+            representation=rep2,
+            end_time=yesterday,
+        )
 
         rep3, ignore = create(
-            self._db, Representation,
-            url="http://mirror3", mirror_url="http://mirror3",
+            self._db,
+            Representation,
+            url="http://mirror3",
+            mirror_url="http://mirror3",
             media_type=Representation.MARC_MEDIA_TYPE,
-            mirrored_at=now)
+            mirrored_at=now,
+        )
         cache3, ignore = create(
-            self._db, CachedMARCFile,
-            library=self._default_library, lane=None,
-            representation=rep3, end_time=now,
-            start_time=yesterday)
-
+            self._db,
+            CachedMARCFile,
+            library=self._default_library,
+            lane=None,
+            representation=rep3,
+            end_time=now,
+            start_time=yesterday,
+        )
 
         with self.request_context_with_library("/"):
             response = self.manager.marc_records.download_page()
@@ -4817,12 +5028,24 @@ class TestMARCRecordController(CirculationControllerTest):
             assert ("Download MARC files for %s" % library.name) in html
 
             assert "<h3>All Books</h3>" in html
-            assert '<a href="http://mirror1">Full file - last updated %s</a>' % now.strftime("%B %-d, %Y") in html
+            assert (
+                '<a href="http://mirror1">Full file - last updated %s</a>'
+                % now.strftime("%B %-d, %Y")
+                in html
+            )
             assert "<h4>Update-only files</h4>" in html
-            assert '<a href="http://mirror3">Updates from %s to %s</a>' % (yesterday.strftime("%B %-d, %Y"), now.strftime("%B %-d, %Y")) in html
+            assert (
+                '<a href="http://mirror3">Updates from %s to %s</a>'
+                % (yesterday.strftime("%B %-d, %Y"), now.strftime("%B %-d, %Y"))
+                in html
+            )
 
-            assert '<h3>Test Lane</h3>' in html
-            assert '<a href="http://mirror2">Full file - last updated %s</a>' % yesterday.strftime("%B %-d, %Y") in html
+            assert "<h3>Test Lane</h3>" in html
+            assert (
+                '<a href="http://mirror2">Full file - last updated %s</a>'
+                % yesterday.strftime("%B %-d, %Y")
+                in html
+            )
 
     def test_download_page_with_exporter_but_no_files(self):
         now = utc_now()
@@ -4831,8 +5054,10 @@ class TestMARCRecordController(CirculationControllerTest):
         library = self._default_library
 
         exporter = self._external_integration(
-            ExternalIntegration.MARC_EXPORT, ExternalIntegration.CATALOG_GOAL,
-            libraries=[self._default_library])
+            ExternalIntegration.MARC_EXPORT,
+            ExternalIntegration.CATALOG_GOAL,
+            libraries=[self._default_library],
+        )
 
         with self.request_context_with_library("/"):
             response = self.manager.marc_records.download_page()
@@ -4855,14 +5080,21 @@ class TestMARCRecordController(CirculationControllerTest):
         # they will still be available to download.
         now = utc_now()
         rep, ignore = create(
-            self._db, Representation,
-            url="http://mirror1", mirror_url="http://mirror1",
+            self._db,
+            Representation,
+            url="http://mirror1",
+            mirror_url="http://mirror1",
             media_type=Representation.MARC_MEDIA_TYPE,
-            mirrored_at=now)
+            mirrored_at=now,
+        )
         cache, ignore = create(
-            self._db, CachedMARCFile,
-            library=self._default_library, lane=None,
-            representation=rep, end_time=now)
+            self._db,
+            CachedMARCFile,
+            library=self._default_library,
+            lane=None,
+            representation=rep,
+            end_time=now,
+        )
 
         with self.request_context_with_library("/"):
             response = self.manager.marc_records.download_page()
@@ -4870,8 +5102,12 @@ class TestMARCRecordController(CirculationControllerTest):
             html = response.get_data(as_text=True)
             assert ("Download MARC files for %s" % library.name) in html
             assert "No MARC exporter is currently configured" in html
-            assert '<h3>All Books</h3>' in html
-            assert '<a href="http://mirror1">Full file - last updated %s</a>' % now.strftime("%B %-d, %Y") in html
+            assert "<h3>All Books</h3>" in html
+            assert (
+                '<a href="http://mirror1">Full file - last updated %s</a>'
+                % now.strftime("%B %-d, %Y")
+                in html
+            )
 
 
 class TestAnalyticsController(CirculationControllerTest):
@@ -4882,7 +5118,8 @@ class TestAnalyticsController(CirculationControllerTest):
 
     def test_track_event(self):
         integration, ignore = create(
-            self._db, ExternalIntegration,
+            self._db,
+            ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol="core.local_analytics_provider",
         )
@@ -4892,7 +5129,9 @@ class TestAnalyticsController(CirculationControllerTest):
         self.manager.analytics = Analytics(self._db)
 
         with self.request_context_with_library("/"):
-            response = self.manager.analytics_controller.track_event(self.identifier.type, self.identifier.identifier, "invalid_type")
+            response = self.manager.analytics_controller.track_event(
+                self.identifier.type, self.identifier.identifier, "invalid_type"
+            )
             assert 400 == response.status_code
             assert INVALID_ANALYTICS_EVENT_TYPE.uri == response.uri
 
@@ -4904,15 +5143,12 @@ class TestAnalyticsController(CirculationControllerTest):
             with self.request_context_with_library("/"):
                 flask.request.patron = request_patron
                 response = self.manager.analytics_controller.track_event(
-                    self.identifier.type, self.identifier.identifier,
-                    "open_book"
+                    self.identifier.type, self.identifier.identifier, "open_book"
                 )
                 assert 200 == response.status_code
 
                 circulation_event = get_one(
-                    self._db, CirculationEvent,
-                    type="open_book",
-                    license_pool=self.lp
+                    self._db, CirculationEvent, type="open_book", license_pool=self.lp
                 )
                 assert None == circulation_event.location
                 self._db.delete(circulation_event)
@@ -4930,15 +5166,13 @@ class TestAnalyticsController(CirculationControllerTest):
             assert 200 == response.status_code
 
             circulation_event = get_one(
-                self._db, CirculationEvent,
-                type="open_book",
-                license_pool=self.lp
+                self._db, CirculationEvent, type="open_book", license_pool=self.lp
             )
             assert patron.neighborhood == circulation_event.location
             self._db.delete(circulation_event)
 
-class TestDeviceManagementProtocolController(ControllerTest):
 
+class TestDeviceManagementProtocolController(ControllerTest):
     def setup_method(self):
         super(TestDeviceManagementProtocolController, self).setup_method()
         self.initialize_adobe(self.library, self.libraries)
@@ -4965,7 +5199,7 @@ class TestDeviceManagementProtocolController(ControllerTest):
         return self._credential(
             DataSource.INTERNAL_PROCESSING,
             AuthdataUtility.ADOBE_ACCOUNT_ID_PATRON_IDENTIFIER,
-            self.default_patron
+            self.default_patron,
         )
 
     def test_link_template_header(self):
@@ -4975,8 +5209,13 @@ class TestDeviceManagementProtocolController(ControllerTest):
         with self.request_context_with_library("/"):
             headers = self.controller.link_template_header
             assert 1 == len(headers)
-            template = headers['Link-Template']
-            expected_url = url_for("adobe_drm_device", library_short_name=self.library.short_name, device_id="{id}", _external=True)
+            template = headers["Link-Template"]
+            expected_url = url_for(
+                "adobe_drm_device",
+                library_short_name=self.library.short_name,
+                device_id="{id}",
+                _external=True,
+            )
             expected_url = expected_url.replace("%7Bid%7D", "{id}")
             assert '<%s>; rel="item"' % expected_url == template
 
@@ -4994,9 +5233,9 @@ class TestDeviceManagementProtocolController(ControllerTest):
         # The patron has no credentials, and thus no registered devices.
         assert [] == self.default_patron.credentials
         headers = dict(self.auth)
-        headers['Content-Type'] = self.controller.DEVICE_ID_LIST_MEDIA_TYPE
+        headers["Content-Type"] = self.controller.DEVICE_ID_LIST_MEDIA_TYPE
         with self.request_context_with_library(
-            "/", method='POST', headers=headers, data="device"
+            "/", method="POST", headers=headers, data="device"
         ):
             self.controller.authenticated_patron_from_request()
             response = self.controller.device_id_list_handler()
@@ -5007,11 +5246,11 @@ class TestDeviceManagementProtocolController(ControllerTest):
             # them.
             [credential] = self.default_patron.credentials
             assert DataSource.INTERNAL_PROCESSING == credential.data_source.name
-            assert (AuthdataUtility.ADOBE_ACCOUNT_ID_PATRON_IDENTIFIER ==
-                credential.type)
+            assert AuthdataUtility.ADOBE_ACCOUNT_ID_PATRON_IDENTIFIER == credential.type
 
-            assert (['device'] ==
-                [x.device_identifier for x in credential.drm_device_identifiers])
+            assert ["device"] == [
+                x.device_identifier for x in credential.drm_device_identifiers
+            ]
 
     def test_device_id_list_handler_get_success(self):
         credential = self._create_credential()
@@ -5023,8 +5262,10 @@ class TestDeviceManagementProtocolController(ControllerTest):
             assert 200 == response.status_code
 
             # We got a list of device IDs.
-            assert (self.controller.DEVICE_ID_LIST_MEDIA_TYPE ==
-                response.headers['Content-Type'])
+            assert (
+                self.controller.DEVICE_ID_LIST_MEDIA_TYPE
+                == response.headers["Content-Type"]
+            )
             assert "device1\ndevice2" == response.get_data(as_text=True)
 
             # We got a URL Template (see test_link_template_header())
@@ -5041,9 +5282,7 @@ class TestDeviceManagementProtocolController(ControllerTest):
             assert 401 == response.status_code
 
     def device_id_list_handler_bad_method(self):
-        with self.request_context_with_library(
-            "/", method='DELETE', headers=self.auth
-        ):
+        with self.request_context_with_library("/", method="DELETE", headers=self.auth):
             self.controller.authenticated_patron_from_request()
             response = self.controller.device_id_list_handler()
             assert isinstance(response, ProblemDetail)
@@ -5052,9 +5291,9 @@ class TestDeviceManagementProtocolController(ControllerTest):
     def test_device_id_list_handler_too_many_simultaneous_registrations(self):
         # We only allow registration of one device ID at a time.
         headers = dict(self.auth)
-        headers['Content-Type'] = self.controller.DEVICE_ID_LIST_MEDIA_TYPE
+        headers["Content-Type"] = self.controller.DEVICE_ID_LIST_MEDIA_TYPE
         with self.request_context_with_library(
-            "/", method='POST', headers=headers, data="device1\ndevice2"
+            "/", method="POST", headers=headers, data="device1\ndevice2"
         ):
             self.controller.authenticated_patron_from_request()
             response = self.controller.device_id_list_handler()
@@ -5063,32 +5302,32 @@ class TestDeviceManagementProtocolController(ControllerTest):
 
     def test_device_id_list_handler_wrong_media_type(self):
         headers = dict(self.auth)
-        headers['Content-Type'] = "text/plain"
+        headers["Content-Type"] = "text/plain"
         with self.request_context_with_library(
-            "/", method='POST', headers=headers, data="device1\ndevice2"
+            "/", method="POST", headers=headers, data="device1\ndevice2"
         ):
             self.controller.authenticated_patron_from_request()
             response = self.controller.device_id_list_handler()
             assert 415 == response.status_code
-            assert ("Expected vnd.librarysimplified/drm-device-id-list document." ==
-                response.detail)
+            assert (
+                "Expected vnd.librarysimplified/drm-device-id-list document."
+                == response.detail
+            )
 
     def test_device_id_handler_success(self):
         credential = self._create_credential()
         credential.register_drm_device_identifier("device")
 
-        with self.request_context_with_library(
-                "/", method='DELETE', headers=self.auth
-        ):
+        with self.request_context_with_library("/", method="DELETE", headers=self.auth):
             patron = self.controller.authenticated_patron_from_request()
             response = self.controller.device_id_handler("device")
             assert 200 == response.status_code
 
     def test_device_id_handler_bad_auth(self):
-        with self.request_context_with_library("/", method='DELETE'):
+        with self.request_context_with_library("/", method="DELETE"):
             with temp_config() as config:
                 config[Configuration.INTEGRATIONS] = {
-                    "Circulation Manager" : { "url" : "http://foo/" }
+                    "Circulation Manager": {"url": "http://foo/"}
                 }
                 patron = self.controller.authenticated_patron_from_request()
                 response = self.controller.device_id_handler("device")
@@ -5096,7 +5335,7 @@ class TestDeviceManagementProtocolController(ControllerTest):
             assert 401 == response.status_code
 
     def test_device_id_handler_bad_method(self):
-        with self.request_context_with_library("/", method='POST', headers=self.auth):
+        with self.request_context_with_library("/", method="POST", headers=self.auth):
             patron = self.controller.authenticated_patron_from_request()
             response = self.controller.device_id_handler("device")
             assert isinstance(response, ProblemDetail)
@@ -5118,16 +5357,19 @@ class TestODLNotificationController(ControllerTest):
         loan.external_identifier = self._str
 
         with self.request_context_with_library("/", method="POST"):
-            flask.request.data = json.dumps({
-               "id": loan.external_identifier,
-               "status": "revoked",
-            })
-            response = self.manager.odl_notification_controller.notify(
-                loan.id)
+            flask.request.data = json.dumps(
+                {
+                    "id": loan.external_identifier,
+                    "status": "revoked",
+                }
+            )
+            response = self.manager.odl_notification_controller.notify(loan.id)
             assert 200 == response.status_code
 
             # The pool's availability has been updated.
-            api = self.manager.circulation_apis[self._default_library.id].api_for_license_pool(loan.license_pool)
+            api = self.manager.circulation_apis[
+                self._default_library.id
+            ].api_for_license_pool(loan.license_pool)
             assert [loan.license_pool] == api.availability_updated_for
 
     def test_notify_errors(self):
@@ -5146,6 +5388,7 @@ class TestODLNotificationController(ControllerTest):
             response = self.manager.odl_notification_controller.notify(loan.id)
             assert INVALID_LOAN_FOR_ODL_NOTIFICATION == response
 
+
 class TestSharedCollectionController(ControllerTest):
     """Test that other circ managers can register to borrow books
     from a shared collection."""
@@ -5154,28 +5397,27 @@ class TestSharedCollectionController(ControllerTest):
         self.setup_circulation_manager = False
         super(TestSharedCollectionController, self).setup_method()
         from api.odl import ODLAPI
+
         self.collection = self._collection(protocol=ODLAPI.NAME)
         self._default_library.collections = [self.collection]
         self.client, ignore = IntegrationClient.register(self._db, "http://library.org")
         self.app.manager = self.circulation_manager_setup(self._db)
-        self.work = self._work(
-            with_license_pool=True, collection=self.collection
-        )
+        self.work = self._work(with_license_pool=True, collection=self.collection)
         self.pool = self.work.license_pools[0]
         [self.delivery_mechanism] = self.pool.delivery_mechanisms
 
     @contextmanager
     def request_context_with_client(self, route, *args, **kwargs):
-        if 'client' in kwargs:
-            client = kwargs.pop('client')
+        if "client" in kwargs:
+            client = kwargs.pop("client")
         else:
             client = self.client
-        if 'headers' in kwargs:
-            headers = kwargs.pop('headers')
+        if "headers" in kwargs:
+            headers = kwargs.pop("headers")
         else:
             headers = dict()
-        headers['Authorization'] = "Bearer " + base64.b64encode(client.shared_secret)
-        kwargs['headers'] = headers
+        headers["Authorization"] = "Bearer " + base64.b64encode(client.shared_secret)
+        kwargs["headers"] = headers
         with self.app.test_request_context(route, *args, **kwargs) as c:
             yield c
 
@@ -5184,19 +5426,30 @@ class TestSharedCollectionController(ControllerTest):
             collection = self.manager.shared_collection_controller.info(self._str)
             assert NO_SUCH_COLLECTION == collection
 
-            response = self.manager.shared_collection_controller.info(self.collection.name)
+            response = self.manager.shared_collection_controller.info(
+                self.collection.name
+            )
             assert 200 == response.status_code
-            assert response.headers.get("Content-Type").startswith("application/opds+json")
+            assert response.headers.get("Content-Type").startswith(
+                "application/opds+json"
+            )
             links = json.loads(response.get_data(as_text=True)).get("links")
             [register_link] = [link for link in links if link.get("rel") == "register"]
-            assert "/collections/%s/register" % self.collection.name in register_link.get("href")
+            assert (
+                "/collections/%s/register" % self.collection.name
+                in register_link.get("href")
+            )
 
     def test_load_collection(self):
         with self.app.test_request_context("/"):
-            collection = self.manager.shared_collection_controller.load_collection(self._str)
+            collection = self.manager.shared_collection_controller.load_collection(
+                self._str
+            )
             assert NO_SUCH_COLLECTION == collection
 
-            collection = self.manager.shared_collection_controller.load_collection(self.collection.name)
+            collection = self.manager.shared_collection_controller.load_collection(
+                self.collection.name
+            )
             assert self.collection == collection
 
     def test_register(self):
@@ -5205,60 +5458,91 @@ class TestSharedCollectionController(ControllerTest):
             flask.request.form = ImmutableMultiDict([("url", "http://test")])
 
             api.queue_register(InvalidInputException())
-            response = self.manager.shared_collection_controller.register(self.collection.name)
+            response = self.manager.shared_collection_controller.register(
+                self.collection.name
+            )
             assert 400 == response.status_code
             assert INVALID_REGISTRATION.uri == response.uri
 
             api.queue_register(AuthorizationFailedException())
-            response = self.manager.shared_collection_controller.register(self.collection.name)
+            response = self.manager.shared_collection_controller.register(
+                self.collection.name
+            )
             assert 401 == response.status_code
             assert INVALID_CREDENTIALS.uri == response.uri
 
             api.queue_register(RemoteInitiatedServerError("Error", "Service"))
-            response = self.manager.shared_collection_controller.register(self.collection.name)
+            response = self.manager.shared_collection_controller.register(
+                self.collection.name
+            )
             assert 502 == response.status_code
             assert INTEGRATION_ERROR.uri == response.uri
 
             api.queue_register(dict(shared_secret="secret"))
-            response = self.manager.shared_collection_controller.register(self.collection.name)
+            response = self.manager.shared_collection_controller.register(
+                self.collection.name
+            )
             assert 200 == response.status_code
-            assert "secret" == json.loads(response.get_data(as_text=True)).get("shared_secret")
+            assert "secret" == json.loads(response.get_data(as_text=True)).get(
+                "shared_secret"
+            )
 
     def test_loan_info(self):
         now = utc_now()
         tomorrow = utc_now() + datetime.timedelta(days=1)
 
-        other_client, ignore = IntegrationClient.register(self._db, "http://otherlibrary")
+        other_client, ignore = IntegrationClient.register(
+            self._db, "http://otherlibrary"
+        )
         other_client_loan, ignore = create(
-            self._db, Loan, license_pool=self.pool, integration_client=other_client,
+            self._db,
+            Loan,
+            license_pool=self.pool,
+            integration_client=other_client,
         )
 
         ignore, other_pool = self._edition(
-            with_license_pool=True, collection=self._collection(),
+            with_license_pool=True,
+            collection=self._collection(),
         )
         other_pool_loan, ignore = create(
-            self._db, Loan, license_pool=other_pool, integration_client=self.client,
+            self._db,
+            Loan,
+            license_pool=other_pool,
+            integration_client=self.client,
         )
 
         loan, ignore = create(
-            self._db, Loan, license_pool=self.pool, integration_client=self.client,
-            start=now, end=tomorrow,
+            self._db,
+            Loan,
+            license_pool=self.pool,
+            integration_client=self.client,
+            start=now,
+            end=tomorrow,
         )
         with self.request_context_with_client("/"):
             # This loan doesn't exist.
-            response = self.manager.shared_collection_controller.loan_info(self.collection.name, 1234567)
+            response = self.manager.shared_collection_controller.loan_info(
+                self.collection.name, 1234567
+            )
             assert LOAN_NOT_FOUND == response
 
             # This loan belongs to a different library.
-            response = self.manager.shared_collection_controller.loan_info(self.collection.name, other_client_loan.id)
+            response = self.manager.shared_collection_controller.loan_info(
+                self.collection.name, other_client_loan.id
+            )
             assert LOAN_NOT_FOUND == response
 
             # This loan's pool belongs to a different collection.
-            response = self.manager.shared_collection_controller.loan_info(self.collection.name, other_pool_loan.id)
+            response = self.manager.shared_collection_controller.loan_info(
+                self.collection.name, other_pool_loan.id
+            )
             assert LOAN_NOT_FOUND == response
 
             # This loan is ours.
-            response = self.manager.shared_collection_controller.loan_info(self.collection.name, loan.id)
+            response = self.manager.shared_collection_controller.loan_info(
+                self.collection.name, loan.id
+            )
             assert 200 == response.status_code
             feed = feedparser.parse(response.data)
             [entry] = feed.get("entries")
@@ -5266,53 +5550,113 @@ class TestSharedCollectionController(ControllerTest):
             since = availability.get("since")
             until = availability.get("until")
             assert datetime.datetime.strftime(now, "%Y-%m-%dT%H:%M:%S+00:00") == since
-            assert datetime.datetime.strftime(tomorrow, "%Y-%m-%dT%H:%M:%S+00:00") == until
-            [revoke_url] = [link.get("href") for link in entry.get("links") if link.get("rel") == "http://librarysimplified.org/terms/rel/revoke"]
-            assert "/collections/%s/loans/%s/revoke" % (self.collection.name, loan.id) in revoke_url
-            [fulfill_url] = [link.get("href") for link in entry.get("links") if link.get("rel") == "http://opds-spec.org/acquisition"]
-            assert "/collections/%s/loans/%s/fulfill/%s" % (self.collection.name, loan.id, self.delivery_mechanism.delivery_mechanism.id) in fulfill_url
-            [self_url] = [link.get("href") for link in entry.get("links") if link.get("rel") == "self"]
+            assert (
+                datetime.datetime.strftime(tomorrow, "%Y-%m-%dT%H:%M:%S+00:00") == until
+            )
+            [revoke_url] = [
+                link.get("href")
+                for link in entry.get("links")
+                if link.get("rel") == "http://librarysimplified.org/terms/rel/revoke"
+            ]
+            assert (
+                "/collections/%s/loans/%s/revoke" % (self.collection.name, loan.id)
+                in revoke_url
+            )
+            [fulfill_url] = [
+                link.get("href")
+                for link in entry.get("links")
+                if link.get("rel") == "http://opds-spec.org/acquisition"
+            ]
+            assert (
+                "/collections/%s/loans/%s/fulfill/%s"
+                % (
+                    self.collection.name,
+                    loan.id,
+                    self.delivery_mechanism.delivery_mechanism.id,
+                )
+                in fulfill_url
+            )
+            [self_url] = [
+                link.get("href")
+                for link in entry.get("links")
+                if link.get("rel") == "self"
+            ]
             assert "/collections/%s/loans/%s" % (self.collection.name, loan.id)
 
     def test_borrow(self):
         now = utc_now()
         tomorrow = utc_now() + datetime.timedelta(days=1)
         loan, ignore = create(
-            self._db, Loan, license_pool=self.pool, integration_client=self.client,
-            start=now, end=tomorrow,
+            self._db,
+            Loan,
+            license_pool=self.pool,
+            integration_client=self.client,
+            start=now,
+            end=tomorrow,
         )
 
         hold, ignore = create(
-            self._db, Hold, license_pool=self.pool, integration_client=self.client,
-            start=now, end=tomorrow,
+            self._db,
+            Hold,
+            license_pool=self.pool,
+            integration_client=self.client,
+            start=now,
+            end=tomorrow,
         )
 
         no_pool = self._identifier()
         with self.request_context_with_client("/"):
-            response = self.manager.shared_collection_controller.borrow(self.collection.name, no_pool.type, no_pool.identifier, None)
+            response = self.manager.shared_collection_controller.borrow(
+                self.collection.name, no_pool.type, no_pool.identifier, None
+            )
             assert NO_LICENSES.uri == response.uri
 
             api = self.app.manager.shared_collection_controller.shared_collection
 
             # Attempt to borrow without a previous hold.
             api.queue_borrow(AuthorizationFailedException())
-            response = self.manager.shared_collection_controller.borrow(self.collection.name, self.pool.identifier.type, self.pool.identifier.identifier, None)
+            response = self.manager.shared_collection_controller.borrow(
+                self.collection.name,
+                self.pool.identifier.type,
+                self.pool.identifier.identifier,
+                None,
+            )
             assert INVALID_CREDENTIALS.uri == response.uri
 
             api.queue_borrow(CannotLoan())
-            response = self.manager.shared_collection_controller.borrow(self.collection.name, self.pool.identifier.type, self.pool.identifier.identifier, None)
+            response = self.manager.shared_collection_controller.borrow(
+                self.collection.name,
+                self.pool.identifier.type,
+                self.pool.identifier.identifier,
+                None,
+            )
             assert CHECKOUT_FAILED.uri == response.uri
 
             api.queue_borrow(NoAvailableCopies())
-            response = self.manager.shared_collection_controller.borrow(self.collection.name, self.pool.identifier.type, self.pool.identifier.identifier, None)
+            response = self.manager.shared_collection_controller.borrow(
+                self.collection.name,
+                self.pool.identifier.type,
+                self.pool.identifier.identifier,
+                None,
+            )
             assert NO_AVAILABLE_LICENSE.uri == response.uri
 
             api.queue_borrow(RemoteIntegrationException("error!", "service"))
-            response = self.manager.shared_collection_controller.borrow(self.collection.name, self.pool.identifier.type, self.pool.identifier.identifier, None)
+            response = self.manager.shared_collection_controller.borrow(
+                self.collection.name,
+                self.pool.identifier.type,
+                self.pool.identifier.identifier,
+                None,
+            )
             assert INTEGRATION_ERROR.uri == response.uri
 
             api.queue_borrow(loan)
-            response = self.manager.shared_collection_controller.borrow(self.collection.name, self.pool.identifier.type, self.pool.identifier.identifier, None)
+            response = self.manager.shared_collection_controller.borrow(
+                self.collection.name,
+                self.pool.identifier.type,
+                self.pool.identifier.identifier,
+                None,
+            )
             assert 201 == response.status_code
             feed = feedparser.parse(response.data)
             [entry] = feed.get("entries")
@@ -5320,34 +5664,72 @@ class TestSharedCollectionController(ControllerTest):
             since = availability.get("since")
             until = availability.get("until")
             assert datetime.datetime.strftime(now, "%Y-%m-%dT%H:%M:%S+00:00") == since
-            assert datetime.datetime.strftime(tomorrow, "%Y-%m-%dT%H:%M:%S+00:00") == until
+            assert (
+                datetime.datetime.strftime(tomorrow, "%Y-%m-%dT%H:%M:%S+00:00") == until
+            )
             assert "available" == availability.get("status")
-            [revoke_url] = [link.get("href") for link in entry.get("links") if link.get("rel") == "http://librarysimplified.org/terms/rel/revoke"]
-            assert "/collections/%s/loans/%s/revoke" % (self.collection.name, loan.id) in revoke_url
-            [fulfill_url] = [link.get("href") for link in entry.get("links") if link.get("rel") == "http://opds-spec.org/acquisition"]
-            assert "/collections/%s/loans/%s/fulfill/%s" % (self.collection.name, loan.id, self.delivery_mechanism.delivery_mechanism.id) in fulfill_url
-            [self_url] = [link.get("href") for link in entry.get("links") if link.get("rel") == "self"]
+            [revoke_url] = [
+                link.get("href")
+                for link in entry.get("links")
+                if link.get("rel") == "http://librarysimplified.org/terms/rel/revoke"
+            ]
+            assert (
+                "/collections/%s/loans/%s/revoke" % (self.collection.name, loan.id)
+                in revoke_url
+            )
+            [fulfill_url] = [
+                link.get("href")
+                for link in entry.get("links")
+                if link.get("rel") == "http://opds-spec.org/acquisition"
+            ]
+            assert (
+                "/collections/%s/loans/%s/fulfill/%s"
+                % (
+                    self.collection.name,
+                    loan.id,
+                    self.delivery_mechanism.delivery_mechanism.id,
+                )
+                in fulfill_url
+            )
+            [self_url] = [
+                link.get("href")
+                for link in entry.get("links")
+                if link.get("rel") == "self"
+            ]
             assert "/collections/%s/loans/%s" % (self.collection.name, loan.id)
 
             # Now try to borrow when we already have a previous hold.
             api.queue_borrow(AuthorizationFailedException())
-            response = self.manager.shared_collection_controller.borrow(self.collection.name, self.pool.identifier.type, self.pool.identifier.identifier, hold.id)
+            response = self.manager.shared_collection_controller.borrow(
+                self.collection.name,
+                self.pool.identifier.type,
+                self.pool.identifier.identifier,
+                hold.id,
+            )
             assert INVALID_CREDENTIALS.uri == response.uri
 
             api.queue_borrow(CannotLoan())
-            response = self.manager.shared_collection_controller.borrow(self.collection.name, None, None, hold.id)
+            response = self.manager.shared_collection_controller.borrow(
+                self.collection.name, None, None, hold.id
+            )
             assert CHECKOUT_FAILED.uri == response.uri
 
             api.queue_borrow(NoAvailableCopies())
-            response = self.manager.shared_collection_controller.borrow(self.collection.name, None, None, hold.id)
+            response = self.manager.shared_collection_controller.borrow(
+                self.collection.name, None, None, hold.id
+            )
             assert NO_AVAILABLE_LICENSE.uri == response.uri
 
             api.queue_borrow(RemoteIntegrationException("error!", "service"))
-            response = self.manager.shared_collection_controller.borrow(self.collection.name, None, None, hold.id)
+            response = self.manager.shared_collection_controller.borrow(
+                self.collection.name, None, None, hold.id
+            )
             assert INTEGRATION_ERROR.uri == response.uri
 
             api.queue_borrow(loan)
-            response = self.manager.shared_collection_controller.borrow(self.collection.name, None, None, hold.id)
+            response = self.manager.shared_collection_controller.borrow(
+                self.collection.name, None, None, hold.id
+            )
             assert 201 == response.status_code
             feed = feedparser.parse(response.data)
             [entry] = feed.get("entries")
@@ -5356,17 +5738,47 @@ class TestSharedCollectionController(ControllerTest):
             until = availability.get("until")
             assert "available" == availability.get("status")
             assert datetime.datetime.strftime(now, "%Y-%m-%dT%H:%M:%S+00:00") == since
-            assert datetime.datetime.strftime(tomorrow, "%Y-%m-%dT%H:%M:%S+00:00") == until
-            [revoke_url] = [link.get("href") for link in entry.get("links") if link.get("rel") == "http://librarysimplified.org/terms/rel/revoke"]
-            assert "/collections/%s/loans/%s/revoke" % (self.collection.name, loan.id) in revoke_url
-            [fulfill_url] = [link.get("href") for link in entry.get("links") if link.get("rel") == "http://opds-spec.org/acquisition"]
-            assert "/collections/%s/loans/%s/fulfill/%s" % (self.collection.name, loan.id, self.delivery_mechanism.delivery_mechanism.id) in fulfill_url
-            [self_url] = [link.get("href") for link in entry.get("links") if link.get("rel") == "self"]
+            assert (
+                datetime.datetime.strftime(tomorrow, "%Y-%m-%dT%H:%M:%S+00:00") == until
+            )
+            [revoke_url] = [
+                link.get("href")
+                for link in entry.get("links")
+                if link.get("rel") == "http://librarysimplified.org/terms/rel/revoke"
+            ]
+            assert (
+                "/collections/%s/loans/%s/revoke" % (self.collection.name, loan.id)
+                in revoke_url
+            )
+            [fulfill_url] = [
+                link.get("href")
+                for link in entry.get("links")
+                if link.get("rel") == "http://opds-spec.org/acquisition"
+            ]
+            assert (
+                "/collections/%s/loans/%s/fulfill/%s"
+                % (
+                    self.collection.name,
+                    loan.id,
+                    self.delivery_mechanism.delivery_mechanism.id,
+                )
+                in fulfill_url
+            )
+            [self_url] = [
+                link.get("href")
+                for link in entry.get("links")
+                if link.get("rel") == "self"
+            ]
             assert "/collections/%s/loans/%s" % (self.collection.name, loan.id)
 
             # Now try to borrow, but actually get a hold.
             api.queue_borrow(hold)
-            response = self.manager.shared_collection_controller.borrow(self.collection.name, self.pool.identifier.type, self.pool.identifier.identifier, None)
+            response = self.manager.shared_collection_controller.borrow(
+                self.collection.name,
+                self.pool.identifier.type,
+                self.pool.identifier.identifier,
+                None,
+            )
             assert 201 == response.status_code
             feed = feedparser.parse(response.data)
             [entry] = feed.get("entries")
@@ -5374,92 +5786,152 @@ class TestSharedCollectionController(ControllerTest):
             since = availability.get("since")
             until = availability.get("until")
             assert datetime.datetime.strftime(now, "%Y-%m-%dT%H:%M:%S+00:00") == since
-            assert datetime.datetime.strftime(tomorrow, "%Y-%m-%dT%H:%M:%S+00:00") == until
+            assert (
+                datetime.datetime.strftime(tomorrow, "%Y-%m-%dT%H:%M:%S+00:00") == until
+            )
             assert "reserved" == availability.get("status")
-            [revoke_url] = [link.get("href") for link in entry.get("links") if link.get("rel") == "http://librarysimplified.org/terms/rel/revoke"]
-            assert "/collections/%s/holds/%s/revoke" % (self.collection.name, hold.id) in revoke_url
-            assert [] == [link.get("href") for link in entry.get("links") if link.get("rel") == "http://opds-spec.org/acquisition"]
-            [self_url] = [link.get("href") for link in entry.get("links") if link.get("rel") == "self"]
+            [revoke_url] = [
+                link.get("href")
+                for link in entry.get("links")
+                if link.get("rel") == "http://librarysimplified.org/terms/rel/revoke"
+            ]
+            assert (
+                "/collections/%s/holds/%s/revoke" % (self.collection.name, hold.id)
+                in revoke_url
+            )
+            assert [] == [
+                link.get("href")
+                for link in entry.get("links")
+                if link.get("rel") == "http://opds-spec.org/acquisition"
+            ]
+            [self_url] = [
+                link.get("href")
+                for link in entry.get("links")
+                if link.get("rel") == "self"
+            ]
             assert "/collections/%s/holds/%s" % (self.collection.name, hold.id)
 
     def test_revoke_loan(self):
         now = utc_now()
         tomorrow = utc_now() + datetime.timedelta(days=1)
         loan, ignore = create(
-            self._db, Loan, license_pool=self.pool, integration_client=self.client,
-            start=now, end=tomorrow,
+            self._db,
+            Loan,
+            license_pool=self.pool,
+            integration_client=self.client,
+            start=now,
+            end=tomorrow,
         )
 
-        other_client, ignore = IntegrationClient.register(self._db, "http://otherlibrary")
+        other_client, ignore = IntegrationClient.register(
+            self._db, "http://otherlibrary"
+        )
         other_client_loan, ignore = create(
-            self._db, Loan, license_pool=self.pool, integration_client=other_client,
+            self._db,
+            Loan,
+            license_pool=self.pool,
+            integration_client=other_client,
         )
 
         ignore, other_pool = self._edition(
-            with_license_pool=True, collection=self._collection(),
+            with_license_pool=True,
+            collection=self._collection(),
         )
         other_pool_loan, ignore = create(
-            self._db, Loan, license_pool=other_pool, integration_client=self.client,
+            self._db,
+            Loan,
+            license_pool=other_pool,
+            integration_client=self.client,
         )
 
         with self.request_context_with_client("/"):
-            response = self.manager.shared_collection_controller.revoke_loan(self.collection.name, other_pool_loan.id)
+            response = self.manager.shared_collection_controller.revoke_loan(
+                self.collection.name, other_pool_loan.id
+            )
             assert LOAN_NOT_FOUND.uri == response.uri
 
-            response = self.manager.shared_collection_controller.revoke_loan(self.collection.name, other_client_loan.id)
+            response = self.manager.shared_collection_controller.revoke_loan(
+                self.collection.name, other_client_loan.id
+            )
             assert LOAN_NOT_FOUND.uri == response.uri
 
             api = self.app.manager.shared_collection_controller.shared_collection
 
             api.queue_revoke_loan(AuthorizationFailedException())
-            response = self.manager.shared_collection_controller.revoke_loan(self.collection.name, loan.id)
+            response = self.manager.shared_collection_controller.revoke_loan(
+                self.collection.name, loan.id
+            )
             assert INVALID_CREDENTIALS.uri == response.uri
 
             api.queue_revoke_loan(CannotReturn())
-            response = self.manager.shared_collection_controller.revoke_loan(self.collection.name, loan.id)
+            response = self.manager.shared_collection_controller.revoke_loan(
+                self.collection.name, loan.id
+            )
             assert COULD_NOT_MIRROR_TO_REMOTE.uri == response.uri
 
             api.queue_revoke_loan(NotCheckedOut())
-            response = self.manager.shared_collection_controller.revoke_loan(self.collection.name, loan.id)
+            response = self.manager.shared_collection_controller.revoke_loan(
+                self.collection.name, loan.id
+            )
             assert NO_ACTIVE_LOAN.uri == response.uri
 
     def test_fulfill(self):
         now = utc_now()
         tomorrow = utc_now() + datetime.timedelta(days=1)
         loan, ignore = create(
-            self._db, Loan, license_pool=self.pool, integration_client=self.client,
-            start=now, end=tomorrow,
+            self._db,
+            Loan,
+            license_pool=self.pool,
+            integration_client=self.client,
+            start=now,
+            end=tomorrow,
         )
 
         ignore, other_pool = self._edition(
-            with_license_pool=True, collection=self._collection(),
+            with_license_pool=True,
+            collection=self._collection(),
         )
         other_pool_loan, ignore = create(
-            self._db, Loan, license_pool=other_pool, integration_client=self.client,
+            self._db,
+            Loan,
+            license_pool=other_pool,
+            integration_client=self.client,
         )
 
         with self.request_context_with_client("/"):
-            response = self.manager.shared_collection_controller.fulfill(self.collection.name, other_pool_loan.id, None)
+            response = self.manager.shared_collection_controller.fulfill(
+                self.collection.name, other_pool_loan.id, None
+            )
             assert LOAN_NOT_FOUND.uri == response.uri
 
             api = self.app.manager.shared_collection_controller.shared_collection
 
             # If the loan doesn't have a mechanism set, we need to specify one.
-            response = self.manager.shared_collection_controller.fulfill(self.collection.name, loan.id, None)
+            response = self.manager.shared_collection_controller.fulfill(
+                self.collection.name, loan.id, None
+            )
             assert BAD_DELIVERY_MECHANISM.uri == response.uri
 
             loan.fulfillment = self.delivery_mechanism
 
             api.queue_fulfill(AuthorizationFailedException())
-            response = self.manager.shared_collection_controller.fulfill(self.collection.name, loan.id, None)
+            response = self.manager.shared_collection_controller.fulfill(
+                self.collection.name, loan.id, None
+            )
             assert INVALID_CREDENTIALS.uri == response.uri
 
             api.queue_fulfill(CannotFulfill())
-            response = self.manager.shared_collection_controller.fulfill(self.collection.name, loan.id, None)
+            response = self.manager.shared_collection_controller.fulfill(
+                self.collection.name, loan.id, None
+            )
             assert CANNOT_FULFILL.uri == response.uri
 
             api.queue_fulfill(RemoteIntegrationException("error!", "service"))
-            response = self.manager.shared_collection_controller.fulfill(self.collection.name, loan.id, self.delivery_mechanism.delivery_mechanism.id)
+            response = self.manager.shared_collection_controller.fulfill(
+                self.collection.name,
+                loan.id,
+                self.delivery_mechanism.delivery_mechanism.id,
+            )
             assert INTEGRATION_ERROR.uri == response.uri
 
             fulfillment_info = FulfillmentInfo(
@@ -5467,20 +5939,36 @@ class TestSharedCollectionController(ControllerTest):
                 self.pool.data_source.name,
                 self.pool.identifier.type,
                 self.pool.identifier.identifier,
-                "http://content", "text/html", None,
+                "http://content",
+                "text/html",
+                None,
                 utc_now(),
             )
 
             api.queue_fulfill(fulfillment_info)
+
             def do_get_error(url):
                 raise RemoteIntegrationException("error!", "service")
-            response = self.manager.shared_collection_controller.fulfill(self.collection.name, loan.id, self.delivery_mechanism.delivery_mechanism.id, do_get=do_get_error)
+
+            response = self.manager.shared_collection_controller.fulfill(
+                self.collection.name,
+                loan.id,
+                self.delivery_mechanism.delivery_mechanism.id,
+                do_get=do_get_error,
+            )
             assert INTEGRATION_ERROR.uri == response.uri
 
             api.queue_fulfill(fulfillment_info)
+
             def do_get_success(url):
                 return MockRequestsResponse(200, content="Content")
-            response = self.manager.shared_collection_controller.fulfill(self.collection.name, loan.id, self.delivery_mechanism.delivery_mechanism.id, do_get=do_get_success)
+
+            response = self.manager.shared_collection_controller.fulfill(
+                self.collection.name,
+                loan.id,
+                self.delivery_mechanism.delivery_mechanism.id,
+                do_get=do_get_success,
+            )
             assert 200 == response.status_code
             assert "Content" == response.get_data(as_text=True)
             assert "text/html" == response.headers.get("Content-Type")
@@ -5488,7 +5976,11 @@ class TestSharedCollectionController(ControllerTest):
             fulfillment_info.content_link = None
             fulfillment_info.content = "Content"
             api.queue_fulfill(fulfillment_info)
-            response = self.manager.shared_collection_controller.fulfill(self.collection.name, loan.id, self.delivery_mechanism.delivery_mechanism.id)
+            response = self.manager.shared_collection_controller.fulfill(
+                self.collection.name,
+                loan.id,
+                self.delivery_mechanism.delivery_mechanism.id,
+            )
             assert 200 == response.status_code
             assert "Content" == response.get_data(as_text=True)
             assert "text/html" == response.headers.get("Content-Type")
@@ -5497,37 +5989,58 @@ class TestSharedCollectionController(ControllerTest):
         now = utc_now()
         tomorrow = utc_now() + datetime.timedelta(days=1)
 
-        other_client, ignore = IntegrationClient.register(self._db, "http://otherlibrary")
+        other_client, ignore = IntegrationClient.register(
+            self._db, "http://otherlibrary"
+        )
         other_client_hold, ignore = create(
-            self._db, Hold, license_pool=self.pool, integration_client=other_client,
+            self._db,
+            Hold,
+            license_pool=self.pool,
+            integration_client=other_client,
         )
 
         ignore, other_pool = self._edition(
-            with_license_pool=True, collection=self._collection(),
+            with_license_pool=True,
+            collection=self._collection(),
         )
         other_pool_hold, ignore = create(
-            self._db, Hold, license_pool=other_pool, integration_client=self.client,
+            self._db,
+            Hold,
+            license_pool=other_pool,
+            integration_client=self.client,
         )
 
         hold, ignore = create(
-            self._db, Hold, license_pool=self.pool, integration_client=self.client,
-            start=now, end=tomorrow,
+            self._db,
+            Hold,
+            license_pool=self.pool,
+            integration_client=self.client,
+            start=now,
+            end=tomorrow,
         )
         with self.request_context_with_client("/"):
             # This hold doesn't exist.
-            response = self.manager.shared_collection_controller.hold_info(self.collection.name, 1234567)
+            response = self.manager.shared_collection_controller.hold_info(
+                self.collection.name, 1234567
+            )
             assert HOLD_NOT_FOUND == response
 
             # This hold belongs to a different library.
-            response = self.manager.shared_collection_controller.hold_info(self.collection.name, other_client_hold.id)
+            response = self.manager.shared_collection_controller.hold_info(
+                self.collection.name, other_client_hold.id
+            )
             assert HOLD_NOT_FOUND == response
 
             # This hold's pool belongs to a different collection.
-            response = self.manager.shared_collection_controller.hold_info(self.collection.name, other_pool_hold.id)
+            response = self.manager.shared_collection_controller.hold_info(
+                self.collection.name, other_pool_hold.id
+            )
             assert HOLD_NOT_FOUND == response
 
             # This hold is ours.
-            response = self.manager.shared_collection_controller.hold_info(self.collection.name, hold.id)
+            response = self.manager.shared_collection_controller.hold_info(
+                self.collection.name, hold.id
+            )
             assert 200 == response.status_code
             feed = feedparser.parse(response.data)
             [entry] = feed.get("entries")
@@ -5535,52 +6048,92 @@ class TestSharedCollectionController(ControllerTest):
             since = availability.get("since")
             until = availability.get("until")
             assert datetime.datetime.strftime(now, "%Y-%m-%dT%H:%M:%S+00:00") == since
-            assert datetime.datetime.strftime(tomorrow, "%Y-%m-%dT%H:%M:%S+00:00") == until
-            [revoke_url] = [link.get("href") for link in entry.get("links") if link.get("rel") == "http://librarysimplified.org/terms/rel/revoke"]
-            assert "/collections/%s/holds/%s/revoke" % (self.collection.name, hold.id) in revoke_url
-            assert [] == [link.get("href") for link in entry.get("links") if link.get("rel") == "http://opds-spec.org/acquisition"]
-            [self_url] = [link.get("href") for link in entry.get("links") if link.get("rel") == "self"]
+            assert (
+                datetime.datetime.strftime(tomorrow, "%Y-%m-%dT%H:%M:%S+00:00") == until
+            )
+            [revoke_url] = [
+                link.get("href")
+                for link in entry.get("links")
+                if link.get("rel") == "http://librarysimplified.org/terms/rel/revoke"
+            ]
+            assert (
+                "/collections/%s/holds/%s/revoke" % (self.collection.name, hold.id)
+                in revoke_url
+            )
+            assert [] == [
+                link.get("href")
+                for link in entry.get("links")
+                if link.get("rel") == "http://opds-spec.org/acquisition"
+            ]
+            [self_url] = [
+                link.get("href")
+                for link in entry.get("links")
+                if link.get("rel") == "self"
+            ]
             assert "/collections/%s/holds/%s" % (self.collection.name, hold.id)
 
     def test_revoke_hold(self):
         now = utc_now()
         tomorrow = utc_now() + datetime.timedelta(days=1)
         hold, ignore = create(
-            self._db, Hold, license_pool=self.pool, integration_client=self.client,
-            start=now, end=tomorrow,
+            self._db,
+            Hold,
+            license_pool=self.pool,
+            integration_client=self.client,
+            start=now,
+            end=tomorrow,
         )
 
-        other_client, ignore = IntegrationClient.register(self._db, "http://otherlibrary")
+        other_client, ignore = IntegrationClient.register(
+            self._db, "http://otherlibrary"
+        )
         other_client_hold, ignore = create(
-            self._db, Hold, license_pool=self.pool, integration_client=other_client,
+            self._db,
+            Hold,
+            license_pool=self.pool,
+            integration_client=other_client,
         )
 
         ignore, other_pool = self._edition(
-            with_license_pool=True, collection=self._collection(),
+            with_license_pool=True,
+            collection=self._collection(),
         )
         other_pool_hold, ignore = create(
-            self._db, Hold, license_pool=other_pool, integration_client=self.client,
+            self._db,
+            Hold,
+            license_pool=other_pool,
+            integration_client=self.client,
         )
 
         with self.request_context_with_client("/"):
-            response = self.manager.shared_collection_controller.revoke_hold(self.collection.name, other_pool_hold.id)
+            response = self.manager.shared_collection_controller.revoke_hold(
+                self.collection.name, other_pool_hold.id
+            )
             assert HOLD_NOT_FOUND.uri == response.uri
 
-            response = self.manager.shared_collection_controller.revoke_hold(self.collection.name, other_client_hold.id)
+            response = self.manager.shared_collection_controller.revoke_hold(
+                self.collection.name, other_client_hold.id
+            )
             assert HOLD_NOT_FOUND.uri == response.uri
 
             api = self.app.manager.shared_collection_controller.shared_collection
 
             api.queue_revoke_hold(AuthorizationFailedException())
-            response = self.manager.shared_collection_controller.revoke_hold(self.collection.name, hold.id)
+            response = self.manager.shared_collection_controller.revoke_hold(
+                self.collection.name, hold.id
+            )
             assert INVALID_CREDENTIALS.uri == response.uri
 
             api.queue_revoke_hold(CannotReleaseHold())
-            response = self.manager.shared_collection_controller.revoke_hold(self.collection.name, hold.id)
+            response = self.manager.shared_collection_controller.revoke_hold(
+                self.collection.name, hold.id
+            )
             assert CANNOT_RELEASE_HOLD.uri == response.uri
 
             api.queue_revoke_hold(NotOnHold())
-            response = self.manager.shared_collection_controller.revoke_hold(self.collection.name, hold.id)
+            response = self.manager.shared_collection_controller.revoke_hold(
+                self.collection.name, hold.id
+            )
             assert NO_ACTIVE_HOLD.uri == response.uri
 
 
@@ -5599,27 +6152,25 @@ class TestURNLookupController(ControllerTest):
 
             # We got an OPDS feed.
             assert 200 == response.status_code
-            assert (
-                OPDSFeed.ACQUISITION_FEED_TYPE ==
-                response.headers['Content-Type'])
+            assert OPDSFeed.ACQUISITION_FEED_TYPE == response.headers["Content-Type"]
 
             # Parse it.
             feed = feedparser.parse(response.data)
 
             # The route name we passed into work_lookup shows up in
             # the feed-level link with rel="self".
-            [self_link] = feed['feed']['links']
-            assert '/' + route_name in self_link['href']
+            [self_link] = feed["feed"]["links"]
+            assert "/" + route_name in self_link["href"]
 
             # The work we looked up has an OPDS entry.
-            [entry] = feed['entries']
-            assert work.title == entry['title']
+            [entry] = feed["entries"]
+            assert work.title == entry["title"]
 
             # The OPDS feed includes an open-access acquisition link
             # -- something that only gets inserted by the
             # CirculationManagerAnnotator.
             [link] = entry.links
-            assert LinkRelations.OPEN_ACCESS_DOWNLOAD == link['rel']
+            assert LinkRelations.OPEN_ACCESS_DOWNLOAD == link["rel"]
 
 
 class TestProfileController(ControllerTest):
@@ -5638,46 +6189,47 @@ class TestProfileController(ControllerTest):
 
     def test_controller_uses_circulation_patron_profile_storage(self):
         """Verify that this controller uses circulation manager-specific extensions."""
-        with self.request_context_with_library(
-                "/", method='GET', headers=self.auth
-        ):
-            assert isinstance(self.manager.profiles._controller.storage, CirculationPatronProfileStorage)
+        with self.request_context_with_library("/", method="GET", headers=self.auth):
+            assert isinstance(
+                self.manager.profiles._controller.storage,
+                CirculationPatronProfileStorage,
+            )
 
     def test_get(self):
         """Verify that a patron can see their own profile."""
-        with self.request_context_with_library(
-                "/", method='GET', headers=self.auth
-        ):
+        with self.request_context_with_library("/", method="GET", headers=self.auth):
             patron = self.controller.authenticated_patron_from_request()
             patron.synchronize_annotations = True
             response = self.manager.profiles.protocol()
             assert "200 OK" == response.status
             data = json.loads(response.get_data(as_text=True))
-            settings = data['settings']
+            settings = data["settings"]
             assert True == settings[ProfileStorage.SYNCHRONIZE_ANNOTATIONS]
 
     def test_put(self):
         """Verify that a patron can modify their own profile."""
-        payload = {
-            'settings': {
-                ProfileStorage.SYNCHRONIZE_ANNOTATIONS: True
-            }
-        }
+        payload = {"settings": {ProfileStorage.SYNCHRONIZE_ANNOTATIONS: True}}
 
         request_patron = None
         identifier = self._identifier()
         with self.request_context_with_library(
-                "/", method='PUT', headers=self.auth,
-                content_type=ProfileController.MEDIA_TYPE,
-                data=json.dumps(payload)
+            "/",
+            method="PUT",
+            headers=self.auth,
+            content_type=ProfileController.MEDIA_TYPE,
+            data=json.dumps(payload),
         ):
             # By default, a patron has no value for synchronize_annotations.
             request_patron = self.controller.authenticated_patron_from_request()
             assert None == request_patron.synchronize_annotations
 
             # This means we can't create annotations for them.
-            pytest.raises(ValueError,  Annotation.get_one_or_create,
-                self._db, patron=request_patron, identifier=identifier
+            pytest.raises(
+                ValueError,
+                Annotation.get_one_or_create,
+                self._db,
+                patron=request_patron,
+                identifier=identifier,
             )
 
             # But by sending a PUT request...
@@ -5692,16 +6244,19 @@ class TestProfileController(ControllerTest):
         # Now we can create an annotation for the patron who enabled
         # annotation sync.
         annotation = Annotation.get_one_or_create(
-            self._db, patron=request_patron, identifier=identifier)
+            self._db, patron=request_patron, identifier=identifier
+        )
         assert 1 == len(request_patron.annotations)
 
         # But if we make another request and change their
         # synchronize_annotations field to False...
-        payload['settings'][ProfileStorage.SYNCHRONIZE_ANNOTATIONS] = False
+        payload["settings"][ProfileStorage.SYNCHRONIZE_ANNOTATIONS] = False
         with self.request_context_with_library(
-                "/", method='PUT', headers=self.auth,
-                content_type=ProfileController.MEDIA_TYPE,
-                data=json.dumps(payload)
+            "/",
+            method="PUT",
+            headers=self.auth,
+            content_type=ProfileController.MEDIA_TYPE,
+            data=json.dumps(payload),
         ):
             response = self.manager.profiles.protocol()
 
@@ -5715,14 +6270,15 @@ class TestProfileController(ControllerTest):
         from the controller.
         """
         with self.request_context_with_library(
-                "/", method='PUT', headers=self.auth,
-                content_type="text/plain",
+            "/",
+            method="PUT",
+            headers=self.auth,
+            content_type="text/plain",
         ):
             response = self.manager.profiles.protocol()
             assert isinstance(response, ProblemDetail)
             assert 415 == response.status_code
-            assert ("Expected vnd.librarysimplified/user-profile+json" ==
-                response.detail)
+            assert "Expected vnd.librarysimplified/user-profile+json" == response.detail
 
 
 class TestScopedSession(ControllerTest):
@@ -5760,7 +6316,9 @@ class TestScopedSession(ControllerTest):
         uses the scoped session.
         """
         collection, ignore = create(
-            _db, Collection, name=self._str + " (collection for scoped session)",
+            _db,
+            Collection,
+            name=self._str + " (collection for scoped session)",
         )
         collection.create_external_integration(ExternalIntegration.OPDS_IMPORT)
         library.collections.append(collection)
@@ -5773,9 +6331,7 @@ class TestScopedSession(ControllerTest):
         """
         with self.app.test_request_context(*args) as ctx:
             transaction = current_session.begin_nested()
-            self.app.manager = self.circulation_manager_setup(
-                current_session
-            )
+            self.app.manager = self.circulation_manager_setup(current_session)
             yield ctx
             transaction.rollback()
 
@@ -5860,6 +6416,7 @@ class TestScopedSession(ControllerTest):
         # used by most other unit tests.
         assert session1 != session2
 
+
 class TestStaticFileController(CirculationControllerTest):
     def test_static_file(self):
         cache_timeout = ConfigurationSetting.sitewide(
@@ -5867,7 +6424,9 @@ class TestStaticFileController(CirculationControllerTest):
         )
         cache_timeout.value = 10
 
-        directory = os.path.join(os.path.abspath(os.path.dirname(__file__)), "files", "images")
+        directory = os.path.join(
+            os.path.abspath(os.path.dirname(__file__)), "files", "images"
+        )
         filename = "blue.jpg"
         with open(os.path.join(directory, filename), "rb") as f:
             expected_content = f.read()
@@ -5876,15 +6435,21 @@ class TestStaticFileController(CirculationControllerTest):
             response = self.app.manager.static_files.static_file(directory, filename)
 
         assert 200 == response.status_code
-        assert 'public, max-age=10' == response.headers.get('Cache-Control')
+        assert "public, max-age=10" == response.headers.get("Cache-Control")
         assert expected_content == response.response.file.read()
 
         with self.app.test_request_context("/"):
-            pytest.raises(NotFound, self.app.manager.static_files.static_file,
-                          directory, "missing.png")
+            pytest.raises(
+                NotFound,
+                self.app.manager.static_files.static_file,
+                directory,
+                "missing.png",
+            )
 
     def test_image(self):
-        directory = os.path.join(os.path.abspath(os.path.dirname(__file__)), "..", "resources", "images")
+        directory = os.path.join(
+            os.path.abspath(os.path.dirname(__file__)), "..", "resources", "images"
+        )
         filename = "CleverLoginButton280.png"
         with open(os.path.join(directory, filename), "rb") as f:
             expected_content = f.read()

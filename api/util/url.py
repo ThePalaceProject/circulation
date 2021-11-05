@@ -24,7 +24,7 @@ class URLUtility(object):
             result.path,
             result.params,
             urlencode(query_parameters),
-            result.fragment
+            result.fragment,
         )
 
         return result.geturl()

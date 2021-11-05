@@ -20,6 +20,11 @@ class LCPServerFactory(object):
         configuration_factory = ConfigurationFactory()
         hasher_factory = HasherFactory()
         credential_factory = LCPCredentialFactory()
-        lcp_server = LCPServer(configuration_storage, configuration_factory, hasher_factory, credential_factory)
+        lcp_server = LCPServer(
+            configuration_storage,
+            configuration_factory,
+            hasher_factory,
+            credential_factory,
+        )
 
         return lcp_server

@@ -14,7 +14,7 @@ from api.overdrive import (
     OverdriveCollectionReaper,
     OverdriveFormatSweep,
     OverdriveManifestFulfillmentInfo,
-    RecentOverdriveCollectionMonitor
+    RecentOverdriveCollectionMonitor,
 )
 
 from api.authenticator import BasicAuthenticationProvider
@@ -56,20 +56,20 @@ from core.testing import (
 
 from api.config import temp_config
 
-class OverdriveAPITest(DatabaseTest):
 
+class OverdriveAPITest(DatabaseTest):
     def setup_method(self):
         super(OverdriveAPITest, self).setup_method()
         library = self._default_library
         self.collection = MockOverdriveAPI.mock_collection(self._db)
         self.circulation = CirculationAPI(
-            self._db, library, api_map={ExternalIntegration.OVERDRIVE:MockOverdriveAPI}
+            self._db, library, api_map={ExternalIntegration.OVERDRIVE: MockOverdriveAPI}
         )
         self.api = self.circulation.api_for_collection[self.collection.id]
 
     @classmethod
     def sample_data(self, filename):
-        return sample_data(filename, 'overdrive')
+        return sample_data(filename, "overdrive")
 
     @classmethod
     def sample_json(self, filename):
@@ -85,11 +85,12 @@ class OverdriveAPITest(DatabaseTest):
         data = dict(errorCode=error_code, message=message, token=token)
         return json.dumps(data)
 
-class TestOverdriveAPI(OverdriveAPITest):
 
+class TestOverdriveAPI(OverdriveAPITest):
     def test_external_integration(self):
-        assert (self.collection.external_integration ==
-            self.api.external_integration(self._db))
+        assert self.collection.external_integration == self.api.external_integration(
+            self._db
+        )
 
     def test_lock_in_format(self):
         # Verify which formats do or don't need to be locked in before
@@ -98,9 +99,8 @@ class TestOverdriveAPI(OverdriveAPITest):
 
         # Streaming and manifest-based formats are exempt; all
         # other formats need lock-in.
-        exempt = (
-            list(self.api.STREAMING_FORMATS) +
-            list(self.api.MANIFEST_INTERNAL_FORMATS)
+        exempt = list(self.api.STREAMING_FORMATS) + list(
+            self.api.MANIFEST_INTERNAL_FORMATS
         )
         for i in self.api.FORMATS:
             if i not in exempt:
@@ -117,12 +117,14 @@ class TestOverdriveAPI(OverdriveAPITest):
 
             # First we will call check_creds() to get a fresh credential.
             mock_credential = object()
+
             def check_creds(self, force_refresh=False):
                 self.check_creds_called_with = force_refresh
                 return self.mock_credential
 
             # Then we will call get_advantage_accounts().
             mock_advantage_accounts = [object(), object()]
+
             def get_advantage_accounts(self):
                 return self.mock_advantage_accounts
 
@@ -136,6 +138,7 @@ class TestOverdriveAPI(OverdriveAPITest):
             # the credentials of that library's test patron.
             mock_patron_credential = object()
             get_patron_credential_called_with = []
+
             def get_patron_credential(self, patron, pin):
                 self.get_patron_credential_called_with.append((patron, pin))
                 return self.mock_patron_credential
@@ -150,7 +153,7 @@ class TestOverdriveAPI(OverdriveAPITest):
         integration = self._external_integration(
             "api.simple_authentication",
             ExternalIntegration.PATRON_AUTH_GOAL,
-            libraries=[with_default_patron]
+            libraries=[with_default_patron],
         )
         p = BasicAuthenticationProvider
         integration.setting(p.TEST_IDENTIFIER).value = "username1"
@@ -158,39 +161,47 @@ class TestOverdriveAPI(OverdriveAPITest):
 
         # Now that everything is set up, run the self-test.
         api = Mock(self._db, self.collection)
-        results = sorted(
-            api._run_self_tests(self._db), key=lambda x: x.name
-        )
-        [no_patron_credential, default_patron_credential,
-         global_privileges, collection_size, advantage] = results
+        results = sorted(api._run_self_tests(self._db), key=lambda x: x.name)
+        [
+            no_patron_credential,
+            default_patron_credential,
+            global_privileges,
+            collection_size,
+            advantage,
+        ] = results
 
         # Verify that each test method was called and returned the
         # expected SelfTestResult object.
-        assert ('Checking global Client Authentication privileges' ==
-            global_privileges.name)
+        assert (
+            "Checking global Client Authentication privileges" == global_privileges.name
+        )
         assert True == global_privileges.success
         assert api.mock_credential == global_privileges.result
 
-        assert 'Looking up Overdrive Advantage accounts' == advantage.name
+        assert "Looking up Overdrive Advantage accounts" == advantage.name
         assert True == advantage.success
-        assert 'Found 2 Overdrive Advantage account(s).' == advantage.result
+        assert "Found 2 Overdrive Advantage account(s)." == advantage.result
 
-        assert 'Counting size of collection' == collection_size.name
+        assert "Counting size of collection" == collection_size.name
         assert True == collection_size.success
-        assert '2010 item(s) in collection' == collection_size.result
+        assert "2010 item(s) in collection" == collection_size.result
         url, headers, error_on_401 = api.get_called_with
         assert api._all_products_link == url
 
         assert (
-            "Acquiring test patron credentials for library %s" % no_default_patron.name ==
-            no_patron_credential.name)
+            "Acquiring test patron credentials for library %s" % no_default_patron.name
+            == no_patron_credential.name
+        )
         assert False == no_patron_credential.success
-        assert ("Library has no test patron configured." ==
-            str(no_patron_credential.exception))
+        assert "Library has no test patron configured." == str(
+            no_patron_credential.exception
+        )
 
         assert (
-            "Checking Patron Authentication privileges, using test patron for library %s" % with_default_patron.name ==
-            default_patron_credential.name)
+            "Checking Patron Authentication privileges, using test patron for library %s"
+            % with_default_patron.name
+            == default_patron_credential.name
+        )
         assert True == default_patron_credential.success
         assert api.mock_patron_credential == default_patron_credential.result
 
@@ -208,8 +219,10 @@ class TestOverdriveAPI(OverdriveAPITest):
         This probably doesn't matter much, because if check_creds doesn't
         work we won't be able to instantiate the OverdriveAPI class.
         """
+
         def explode(*args, **kwargs):
             raise Exception("Failure!")
+
         self.api.check_creds = explode
 
         # Only one test will be run.
@@ -221,54 +234,50 @@ class TestOverdriveAPI(OverdriveAPITest):
         previously given by the patron to Overdrive for the purpose of
         notifications.
         """
-        ignore, patron_with_email = self.sample_json(
-            "patron_info.json"
-        )
+        ignore, patron_with_email = self.sample_json("patron_info.json")
         self.api.queue_response(200, content=patron_with_email)
         patron = self._patron()
 
         # The site default for notification emails will never be used.
         configuration_setting = ConfigurationSetting.for_library(
-            Configuration.DEFAULT_NOTIFICATION_EMAIL_ADDRESS,
-            self._default_library
+            Configuration.DEFAULT_NOTIFICATION_EMAIL_ADDRESS, self._default_library
         )
         configuration_setting.value = "notifications@example.com"
 
         # If the patron has used a particular email address to put
         # books on hold, use that email address, not the site default.
-        assert ("foo@bar.com" ==
-            self.api.default_notification_email_address(patron, 'pin'))
+        assert "foo@bar.com" == self.api.default_notification_email_address(
+            patron, "pin"
+        )
 
         # If the patron's email address according to Overdrive _is_
         # the site default, it is ignored. This can only happen if
         # this patron placed a hold using an older version of the
         # circulation manager.
-        patron_with_email['lastHoldEmail'] = configuration_setting.value
+        patron_with_email["lastHoldEmail"] = configuration_setting.value
         self.api.queue_response(200, content=patron_with_email)
-        assert (None ==
-            self.api.default_notification_email_address(patron, 'pin'))
+        assert None == self.api.default_notification_email_address(patron, "pin")
 
         # If the patron has never before put an Overdrive book on
         # hold, their JSON object has no `lastHoldEmail` key. In this
         # case we return None -- again, ignoring the site default.
         patron_with_no_email = dict(patron_with_email)
-        del patron_with_no_email['lastHoldEmail']
+        del patron_with_no_email["lastHoldEmail"]
         self.api.queue_response(200, content=patron_with_no_email)
-        assert (None ==
-            self.api.default_notification_email_address(patron, 'pin'))
+        assert None == self.api.default_notification_email_address(patron, "pin")
 
         # If there's an error getting the information from Overdrive,
         # we return None.
         self.api.queue_response(404)
-        assert (None ==
-            self.api.default_notification_email_address(patron, 'pin'))
+        assert None == self.api.default_notification_email_address(patron, "pin")
 
     def test_scope_string(self):
         # scope_string() puts the website ID of the Overdrive
         # integration and the ILS name associated with the library
         # into the form expected by Overdrive.
         expect = "websiteid:%s authorizationname:%s" % (
-            self.api.website_id.decode("utf-8"), self.api.ils_name(self._default_library)
+            self.api.website_id.decode("utf-8"),
+            self.api.ils_name(self._default_library),
         )
         assert expect == self.api.scope_string(self._default_library)
 
@@ -312,13 +321,13 @@ class TestOverdriveAPI(OverdriveAPITest):
         # Verify that a good-looking patron request went out.
         endpoint, ignore, kwargs = api.requests.pop()
         assert endpoint.endswith("/me/checkouts")
-        assert patron == kwargs.pop('_patron')
-        extra_headers = kwargs.pop('extra_headers')
+        assert patron == kwargs.pop("_patron")
+        extra_headers = kwargs.pop("extra_headers")
         assert {"Content-Type": "application/json"} == extra_headers
-        data = json.loads(kwargs.pop('data'))
-        assert (
-            {'fields': [{'name': 'reserveId', 'value': pool.identifier.identifier}]} ==
-            data)
+        data = json.loads(kwargs.pop("data"))
+        assert {
+            "fields": [{"name": "reserveId", "value": pool.identifier.identifier}]
+        } == data
 
         # The API response was passed into extract_expiration_date.
         #
@@ -345,19 +354,27 @@ class TestOverdriveAPI(OverdriveAPITest):
         with pytest.raises(Exception) as excinfo:
             api.checkout(patron, pin, pool, "internal format is ignored")
         assert "exception in _process_checkout_error" in str(excinfo.value)
-        assert (patron, pin, pool, "some data") == api._process_checkout_error_called_with.pop()
+        assert (
+            patron,
+            pin,
+            pool,
+            "some data",
+        ) == api._process_checkout_error_called_with.pop()
 
         # However, if _process_checkout_error is able to recover from
         # the error and ends up returning something, the return value
         # is propagated from checkout().
         api.PROCESS_CHECKOUT_ERROR_RESULT = "Actually, I was able to recover"
         api.queue_response(400, content=api_response)
+        assert "Actually, I was able to recover" == api.checkout(
+            patron, pin, pool, "internal format is ignored"
+        )
         assert (
-            "Actually, I was able to recover" ==
-            api.checkout(
-                patron, pin, pool, "internal format is ignored"
-            ))
-        assert (patron, pin, pool, "some data") == api._process_checkout_error_called_with.pop()
+            patron,
+            pin,
+            pool,
+            "some data",
+        ) == api._process_checkout_error_called_with.pop()
 
     def test__process_checkout_error(self):
         # Verify that _process_checkout_error handles common API-side errors,
@@ -415,10 +432,14 @@ class TestOverdriveAPI(OverdriveAPITest):
         assert "Unknown Error" in str(excinfo.value)
 
         # Some known errors become specific subclasses of CannotLoan.
-        pytest.raises(PatronLoanLimitReached, with_error_code,
-                      "PatronHasExceededCheckoutLimit")
-        pytest.raises(PatronLoanLimitReached, with_error_code,
-                      "PatronHasExceededCheckoutLimit_ForCPC")
+        pytest.raises(
+            PatronLoanLimitReached, with_error_code, "PatronHasExceededCheckoutLimit"
+        )
+        pytest.raises(
+            PatronLoanLimitReached,
+            with_error_code,
+            "PatronHasExceededCheckoutLimit_ForCPC",
+        )
 
         # There are two cases where we need to make follow-up API
         # requests as the result of a failure during the loan process.
@@ -426,8 +447,7 @@ class TestOverdriveAPI(OverdriveAPITest):
         # First, if the error is "NoCopiesAvailable", we know we have
         # out-of-date availability information and we need to call
         # update_licensepool before raising NoAvailbleCopies().
-        pytest.raises(NoAvailableCopies, with_error_code,
-                      "NoCopiesAvailable")
+        pytest.raises(NoAvailableCopies, with_error_code, "NoCopiesAvailable")
         assert identifier.identifier == api.update_licensepool_called_with.pop()
 
         # If the error is "TitleAlreadyCheckedOut", then the problem
@@ -438,8 +458,7 @@ class TestOverdriveAPI(OverdriveAPITest):
         loan = with_error_code("TitleAlreadyCheckedOut")
 
         # get_loan was called with the patron's details.
-        assert ((patron, pin, identifier.identifier) ==
-            api.get_loan_called_with.pop())
+        assert (patron, pin, identifier.identifier) == api.get_loan_called_with.pop()
 
         # extract_expiration_date was called on the return value of get_loan.
         assert api.MOCK_LOAN == api.extract_expiration_date_called_with.pop()
@@ -458,7 +477,9 @@ class TestOverdriveAPI(OverdriveAPITest):
         m = OverdriveAPI.extract_expiration_date
 
         # Success
-        assert datetime_utc(2020, 1, 2, 3, 4, 5) == m(dict(expires="2020-01-02T03:04:05Z"))
+        assert datetime_utc(2020, 1, 2, 3, 4, 5) == m(
+            dict(expires="2020-01-02T03:04:05Z")
+        )
 
         # Various failure cases.
         assert None == m(dict(expiresPresent=False))
@@ -478,9 +499,7 @@ class TestOverdriveAPI(OverdriveAPITest):
                 self.DEFAULT_NOTIFICATION_EMAIL_ADDRESS = None
 
             def default_notification_email_address(self, patron, pin):
-                self.default_notification_email_address_called_with = (
-                    patron, pin
-                )
+                self.default_notification_email_address_called_with = (patron, pin)
                 return self.DEFAULT_NOTIFICATION_EMAIL_ADDRESS
 
             def fill_out_form(self, **form_fields):
@@ -493,11 +512,12 @@ class TestOverdriveAPI(OverdriveAPITest):
                 self.patron_request_called_with = (args, kwargs)
                 return "A mock response"
 
-            def process_place_hold_response(
-                self, response, patron, pin, licensepool
-            ):
+            def process_place_hold_response(self, response, patron, pin, licensepool):
                 self.process_place_hold_response_called_with = (
-                    response, patron, pin, licensepool
+                    response,
+                    patron,
+                    pin,
+                    licensepool,
                 )
                 return "OK, I processed it."
 
@@ -525,15 +545,17 @@ class TestOverdriveAPI(OverdriveAPITest):
         # patron_request was called with the filled-out form and other
         # information necessary to authenticate the request.
         args, kwargs = api.patron_request_called_with
-        assert ((patron, pin, api.HOLDS_ENDPOINT, 'headers', 'filled-out form') ==
-            args)
+        assert (patron, pin, api.HOLDS_ENDPOINT, "headers", "filled-out form") == args
         assert {} == kwargs
 
         # Finally, process_place_hold_response was called on
         # the return value of patron_request
         assert (
-            ("A mock response", patron, pin, pool) ==
-             api.process_place_hold_response_called_with)
+            "A mock response",
+            patron,
+            pin,
+            pool,
+        ) == api.process_place_hold_response_called_with
         assert "OK, I processed it." == response
 
         # Now we need to test two more cases.
@@ -564,6 +586,7 @@ class TestOverdriveAPI(OverdriveAPITest):
         # to a HOLDS_ENDPOINT request.
 
         ignore, successful_hold = self.sample_json("successful_hold.json")
+
         class Mock(MockOverdriveAPI):
             def get_hold(self, patron, pin, overdrive_id):
                 # Return a sample hold representation rather than
@@ -583,12 +606,9 @@ class TestOverdriveAPI(OverdriveAPITest):
             return api.process_place_hold_response(response, None, None, None)
 
         # Some error messages result in specific CirculationExceptions.
+        pytest.raises(CannotRenew, process_error_response, "NotWithinRenewalWindow")
         pytest.raises(
-            CannotRenew, process_error_response, "NotWithinRenewalWindow"
-        )
-        pytest.raises(
-            PatronHoldLimitReached, process_error_response,
-            "PatronExceededHoldLimit"
+            PatronHoldLimitReached, process_error_response, "PatronExceededHoldLimit"
         )
 
         # An unrecognized error message results in a generic
@@ -604,8 +624,7 @@ class TestOverdriveAPI(OverdriveAPITest):
         # (which shouldn't happen in real life).
         response = MockRequestsResponse(999)
         pytest.raises(
-            CannotHold, api.process_place_hold_response,
-            response, None, None, None
+            CannotHold, api.process_place_hold_response, response, None, None, None
         )
 
         # At this point patron and book details become important --
@@ -632,14 +651,11 @@ class TestOverdriveAPI(OverdriveAPITest):
         # on hold.
         already_on_hold = dict(errorCode="AlreadyOnWaitList")
         response = MockRequestsResponse(400, content=already_on_hold)
-        result = api.process_place_hold_response(
-            response, patron, pin, licensepool
-        )
+        result = api.process_place_hold_response(response, patron, pin, licensepool)
 
         # get_hold() was called with the arguments we expect.
         identifier = licensepool.identifier
-        assert ((patron, pin, identifier.identifier) ==
-            api.get_hold_called_with)
+        assert (patron, pin, identifier.identifier) == api.get_hold_called_with
 
         # The result was converted into a HoldInfo object. The
         # effective result is exactly as if we had successfully put
@@ -650,9 +666,7 @@ class TestOverdriveAPI(OverdriveAPITest):
         # there is.
         api.get_hold_called_with = None
         response = MockRequestsResponse(200, content=successful_hold)
-        result = api.process_place_hold_response(
-            response, patron, pin, licensepool
-        )
+        result = api.process_place_hold_response(response, patron, pin, licensepool)
         assert_correct_holdinfo(result)
 
         # Here, get_hold was _not_ called, because the hold didn't
@@ -660,7 +674,6 @@ class TestOverdriveAPI(OverdriveAPITest):
         assert None == api.get_hold_called_with
 
     def test_checkin(self):
-
         class Mock(MockOverdriveAPI):
             EARLY_RETURN_SUCCESS = False
 
@@ -680,8 +693,7 @@ class TestOverdriveAPI(OverdriveAPITest):
         patron = self._patron()
         pin = object()
         expect_url = overdrive.endpoint(
-            overdrive.CHECKOUT_ENDPOINT,
-            overdrive_id=pool.identifier.identifier
+            overdrive.CHECKOUT_ENDPOINT, overdrive_id=pool.identifier.identifier
         )
 
         def assert_no_early_return():
@@ -740,7 +752,6 @@ class TestOverdriveAPI(OverdriveAPITest):
         assert None == overdrive.patron_request_call
 
     def test_perform_early_return(self):
-
         class Mock(MockOverdriveAPI):
 
             EARLY_RETURN_URL = "http://early-return/"
@@ -792,19 +803,22 @@ class TestOverdriveAPI(OverdriveAPITest):
         #
         # get_fulfillment_link was called with appropriate arguments.
         assert (
-            (patron, pin, pool.identifier.identifier, 'ebook-epub-adobe') ==
-            overdrive.get_fulfillment_link_call)
+            patron,
+            pin,
+            pool.identifier.identifier,
+            "ebook-epub-adobe",
+        ) == overdrive.get_fulfillment_link_call
 
         # The URL returned by that method was 'requested'.
-        assert 'http://fulfillment/' == http.requests.pop(0)
+        assert "http://fulfillment/" == http.requests.pop(0)
 
         # The resulting URL was passed into _extract_early_return_url.
         assert (
-            ('http://fulfill-this-book/?or=return-early',) ==
-            overdrive._extract_early_return_url_call)
+            "http://fulfill-this-book/?or=return-early",
+        ) == overdrive._extract_early_return_url_call
 
         # Then the URL returned by _that_ method was 'requested'.
-        assert 'http://early-return/' == http.requests.pop(0)
+        assert "http://early-return/" == http.requests.pop(0)
 
         # If no early return URL can be extracted from the fulfillment URL,
         # perform_early_return has no effect.
@@ -812,18 +826,17 @@ class TestOverdriveAPI(OverdriveAPITest):
         overdrive._extract_early_return_url_call = None
         overdrive.EARLY_RETURN_URL = None
         http.responses.append(
-            MockRequestsResponse(
-                302, dict(location="http://fulfill-this-book/")
-            )
+            MockRequestsResponse(302, dict(location="http://fulfill-this-book/"))
         )
         success = overdrive.perform_early_return(patron, pin, loan, http.do_get)
         assert False == success
 
         # extract_early_return_url_call was called, but since it returned
         # None, no second HTTP request was made.
-        assert 'http://fulfillment/' == http.requests.pop(0)
-        assert (("http://fulfill-this-book/",) ==
-            overdrive._extract_early_return_url_call)
+        assert "http://fulfillment/" == http.requests.pop(0)
+        assert (
+            "http://fulfill-this-book/",
+        ) == overdrive._extract_early_return_url_call
         assert [] == http.requests
 
         # If we can't map the delivery mechanism to one of Overdrive's
@@ -845,9 +858,7 @@ class TestOverdriveAPI(OverdriveAPITest):
                 302, dict(location="http://fulfill-this-book/?or=return-early")
             )
         )
-        http.responses.append(
-            MockRequestsResponse(401, content="Unauthorized!")
-        )
+        http.responses.append(MockRequestsResponse(401, content="Unauthorized!"))
         success = overdrive.perform_early_return(patron, pin, loan, http.do_get)
         assert False == success
 
@@ -858,54 +869,57 @@ class TestOverdriveAPI(OverdriveAPITest):
         assert None == m(None)
 
         # This is based on a real Overdrive early return URL.
-        has_early_return = 'https://openepub-gk.cdn.overdrive.com/OpenEPUBStore1/1577-1/%7B5880F6D0-48AC-44DE-8BF1-FD1CE62E97A8%7DFzr418.epub?e=1518753718&loanExpirationDate=2018-03-01T17%3a12%3a33Z&loanEarlyReturnUrl=https%3a%2f%2fnotifications-ofs.contentreserve.com%2fEarlyReturn%2fnypl%2f037-1374147-00279%2f5480F6E1-48F3-00DE-96C1-FD3CE32D94FD-312%3fh%3dVgvxBQHdQxtsbgb43AH6%252bEmpni9LoffkPczNiUz7%252b10%253d&sourceId=nypl&h=j7nGk7qxE71X2ZcdLw%2bqa04jqEw%3d'
-        assert 'https://notifications-ofs.contentreserve.com/EarlyReturn/nypl/037-1374147-00279/5480F6E1-48F3-00DE-96C1-FD3CE32D94FD-312?h=VgvxBQHdQxtsbgb43AH6%2bEmpni9LoffkPczNiUz7%2b10%3d' == m(has_early_return)
+        has_early_return = "https://openepub-gk.cdn.overdrive.com/OpenEPUBStore1/1577-1/%7B5880F6D0-48AC-44DE-8BF1-FD1CE62E97A8%7DFzr418.epub?e=1518753718&loanExpirationDate=2018-03-01T17%3a12%3a33Z&loanEarlyReturnUrl=https%3a%2f%2fnotifications-ofs.contentreserve.com%2fEarlyReturn%2fnypl%2f037-1374147-00279%2f5480F6E1-48F3-00DE-96C1-FD3CE32D94FD-312%3fh%3dVgvxBQHdQxtsbgb43AH6%252bEmpni9LoffkPczNiUz7%252b10%253d&sourceId=nypl&h=j7nGk7qxE71X2ZcdLw%2bqa04jqEw%3d"
+        assert (
+            "https://notifications-ofs.contentreserve.com/EarlyReturn/nypl/037-1374147-00279/5480F6E1-48F3-00DE-96C1-FD3CE32D94FD-312?h=VgvxBQHdQxtsbgb43AH6%2bEmpni9LoffkPczNiUz7%2b10%3d"
+            == m(has_early_return)
+        )
 
     def test_place_hold_raises_exception_if_patron_over_hold_limit(self):
         over_hold_limit = self.error_message(
             "PatronExceededHoldLimit",
-            "Patron cannot place any more holds, already has maximum holds placed."
+            "Patron cannot place any more holds, already has maximum holds placed.",
         )
 
         edition, pool = self._edition(
             identifier_type=Identifier.OVERDRIVE_ID,
             data_source_name=DataSource.OVERDRIVE,
-            with_license_pool=True
+            with_license_pool=True,
         )
         self.api.queue_response(400, content=over_hold_limit)
         pytest.raises(
             PatronHoldLimitReached,
-            self.api.place_hold, self._patron(), 'pin', pool,
-            notification_email_address='foo@bar.com'
+            self.api.place_hold,
+            self._patron(),
+            "pin",
+            pool,
+            notification_email_address="foo@bar.com",
         )
 
     def test_place_hold_looks_up_notification_address(self):
         edition, pool = self._edition(
             identifier_type=Identifier.OVERDRIVE_ID,
             data_source_name=DataSource.OVERDRIVE,
-            with_license_pool=True
+            with_license_pool=True,
         )
 
         # The first request we make will be to get patron info,
         # so that we know that the most recent email address used
         # to put a book on hold is foo@bar.com.
-        ignore, patron_with_email = self.sample_json(
-            "patron_info.json"
-        )
+        ignore, patron_with_email = self.sample_json("patron_info.json")
 
         # The second request we make will be to put a book on hold,
         # and when we do so we will ask for the notification to be
         # sent to foo@bar.com.
-        ignore, successful_hold = self.sample_json(
-            "successful_hold.json"
-        )
+        ignore, successful_hold = self.sample_json("successful_hold.json")
 
         self.api.queue_response(200, content=patron_with_email)
         self.api.queue_response(200, content=successful_hold)
         with temp_config() as config:
-            config['default_notification_email_address'] = "notifications@example.com"
-            hold = self.api.place_hold(self._patron(), 'pin', pool,
-                                       notification_email_address=None)
+            config["default_notification_email_address"] = "notifications@example.com"
+            hold = self.api.place_hold(
+                self._patron(), "pin", pool, notification_email_address=None
+            )
 
         # The book was placed on hold.
         assert 1 == hold.hold_position
@@ -921,7 +935,8 @@ class TestOverdriveAPI(OverdriveAPITest):
         # If get_fulfillment_link returns a FulfillmentInfo, it is returned
         # immediately and the rest of fulfill() does not run.
 
-        fulfillment = FulfillmentInfo(self.collection, *[None]*7)
+        fulfillment = FulfillmentInfo(self.collection, *[None] * 7)
+
         class MockAPI(OverdriveAPI):
             def get_fulfillment_link(*args, **kwargs):
                 return fulfillment
@@ -937,16 +952,18 @@ class TestOverdriveAPI(OverdriveAPITest):
         edition, pool = self._edition(
             identifier_type=Identifier.OVERDRIVE_ID,
             data_source_name=DataSource.OVERDRIVE,
-            with_license_pool=True
+            with_license_pool=True,
         )
 
         # This pool has a format that's no longer available from overdrive.
-        pool.set_delivery_mechanism(Representation.PDF_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM,
-                                    RightsStatus.IN_COPYRIGHT, None)
-
-        ignore, loan = self.sample_json(
-            "single_loan.json"
+        pool.set_delivery_mechanism(
+            Representation.PDF_MEDIA_TYPE,
+            DeliveryMechanism.ADOBE_DRM,
+            RightsStatus.IN_COPYRIGHT,
+            None,
         )
+
+        ignore, loan = self.sample_json("single_loan.json")
 
         ignore, lock_in_format_not_available = self.sample_json(
             "lock_in_format_not_available.json"
@@ -960,18 +977,18 @@ class TestOverdriveAPI(OverdriveAPITest):
         pytest.raises(
             FormatNotAvailable,
             self.api.get_fulfillment_link,
-            self._patron(), 'pin', pool.identifier.identifier,
-            'ebook-epub-adobe'
+            self._patron(),
+            "pin",
+            pool.identifier.identifier,
+            "ebook-epub-adobe",
         )
 
         # Fulfill will also update the formats.
-        ignore, bibliographic = self.sample_json(
-            "bibliographic_information.json"
-        )
+        ignore, bibliographic = self.sample_json("bibliographic_information.json")
 
         # To avoid a mismatch, make it look like the information is
         # for the correct Identifier.
-        bibliographic['id'] = pool.identifier.identifier
+        bibliographic["id"] = pool.identifier.identifier
 
         # If we have the LicensePool available (as opposed to just the
         # identifier), we will get the loan, try to lock in the
@@ -983,16 +1000,34 @@ class TestOverdriveAPI(OverdriveAPITest):
         pytest.raises(
             FormatNotAvailable,
             self.api.fulfill,
-            self._patron(), 'pin', pool,
-            'ebook-epub-adobe'
+            self._patron(),
+            "pin",
+            pool,
+            "ebook-epub-adobe",
         )
 
         # The delivery mechanisms have been updated.
         assert 4 == len(pool.delivery_mechanisms)
-        assert (set([MediaTypes.EPUB_MEDIA_TYPE, DeliveryMechanism.KINDLE_CONTENT_TYPE, DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE, MediaTypes.OVERDRIVE_EBOOK_MANIFEST_MEDIA_TYPE]) ==
-            set([lpdm.delivery_mechanism.content_type for lpdm in pool.delivery_mechanisms]))
-        assert (set([DeliveryMechanism.ADOBE_DRM, DeliveryMechanism.KINDLE_DRM, DeliveryMechanism.LIBBY_DRM, DeliveryMechanism.STREAMING_DRM]) ==
-            set([lpdm.delivery_mechanism.drm_scheme for lpdm in pool.delivery_mechanisms]))
+        assert set(
+            [
+                MediaTypes.EPUB_MEDIA_TYPE,
+                DeliveryMechanism.KINDLE_CONTENT_TYPE,
+                DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+                MediaTypes.OVERDRIVE_EBOOK_MANIFEST_MEDIA_TYPE,
+            ]
+        ) == set(
+            [lpdm.delivery_mechanism.content_type for lpdm in pool.delivery_mechanisms]
+        )
+        assert set(
+            [
+                DeliveryMechanism.ADOBE_DRM,
+                DeliveryMechanism.KINDLE_DRM,
+                DeliveryMechanism.LIBBY_DRM,
+                DeliveryMechanism.STREAMING_DRM,
+            ]
+        ) == set(
+            [lpdm.delivery_mechanism.drm_scheme for lpdm in pool.delivery_mechanisms]
+        )
 
     def test_get_fulfillment_link_from_download_link(self):
         patron = self._patron()
@@ -1003,9 +1038,13 @@ class TestOverdriveAPI(OverdriveAPITest):
 
         self.api.queue_response(200, content=streaming_fulfill_link)
 
-        href, type = self.api.get_fulfillment_link_from_download_link(patron, '1234', "http://download-link", fulfill_url="http://fulfill")
-        assert ("https://fulfill.contentreserve.com/PerfectLife9780345530967.epub-sample.overdrive.com?RetailerID=nypl&Expires=1469825647&Token=dd0e19b4-eb70-439d-8c50-a65201060f4c&Signature=asl67/G154KeeUsL1mHPwEbZfgc=" ==
-            href)
+        href, type = self.api.get_fulfillment_link_from_download_link(
+            patron, "1234", "http://download-link", fulfill_url="http://fulfill"
+        )
+        assert (
+            "https://fulfill.contentreserve.com/PerfectLife9780345530967.epub-sample.overdrive.com?RetailerID=nypl&Expires=1469825647&Token=dd0e19b4-eb70-439d-8c50-a65201060f4c&Signature=asl67/G154KeeUsL1mHPwEbZfgc="
+            == href
+        )
         assert "text/html" == type
 
     def test_get_fulfillment_link_returns_fulfillmentinfo_for_manifest_format(self):
@@ -1017,16 +1056,14 @@ class TestOverdriveAPI(OverdriveAPITest):
         # To keep things simple, our mock API will always return the same
         # fulfillment link.
         loan_info = {"isFormatLockedIn": False}
-        class MockAPI(MockOverdriveAPI):
 
+        class MockAPI(MockOverdriveAPI):
             def get_loan(self, patron, pin, overdrive_id):
                 self.get_loan_called_with = (patron, pin, overdrive_id)
                 return loan_info
 
             def get_download_link(self, loan, format_type, error_url):
-                self.get_download_link_called_with = (
-                    loan, format_type, error_url
-                )
+                self.get_download_link_called_with = (loan, format_type, error_url)
                 return "http://fulfillment-link/"
 
             def get_fulfillment_link_from_download_link(self, *args, **kwargs):
@@ -1038,14 +1075,14 @@ class TestOverdriveAPI(OverdriveAPITest):
 
         # Randomly choose one of the formats that must be fulfilled as
         # a link to a manifest.
-        overdrive_format = random.choice(
-            list(OverdriveAPI.MANIFEST_INTERNAL_FORMATS)
-        )
+        overdrive_format = random.choice(list(OverdriveAPI.MANIFEST_INTERNAL_FORMATS))
 
         # Get the fulfillment link.
         patron = self._patron()
         fulfillmentinfo = api.get_fulfillment_link(
-            patron, '1234', "http://download-link",
+            patron,
+            "1234",
+            "http://download-link",
             overdrive_format,
         )
         assert isinstance(fulfillmentinfo, OverdriveManifestFulfillmentInfo)
@@ -1054,7 +1091,7 @@ class TestOverdriveAPI(OverdriveAPITest):
         # let's see how we got there.
 
         # First, our mocked get_loan() was called.
-        assert (patron, '1234', 'http://download-link') == api.get_loan_called_with
+        assert (patron, "1234", "http://download-link") == api.get_loan_called_with
 
         # It returned a dictionary that contained no information
         # except isFormatLockedIn: false.
@@ -1064,8 +1101,10 @@ class TestOverdriveAPI(OverdriveAPITest):
         # loan info was passed into our mocked get_download_link.
 
         assert (
-            (loan_info, overdrive_format, api.DEFAULT_ERROR_URL) ==
-            api.get_download_link_called_with)
+            loan_info,
+            overdrive_format,
+            api.DEFAULT_ERROR_URL,
+        ) == api.get_download_link_called_with
 
         # Since the manifest formats cannot be retrieved by the
         # circulation manager, the result of get_download_link was
@@ -1080,22 +1119,24 @@ class TestOverdriveAPI(OverdriveAPITest):
         edition, pool = self._edition(
             data_source_name=DataSource.OVERDRIVE,
             identifier_type=Identifier.OVERDRIVE_ID,
-            with_license_pool=True
+            with_license_pool=True,
         )
         edition.medium = Edition.PERIODICAL_MEDIUM
 
         # Add the bad delivery mechanism.
-        pool.set_delivery_mechanism(Representation.PDF_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM,
-                                    RightsStatus.IN_COPYRIGHT, None)
+        pool.set_delivery_mechanism(
+            Representation.PDF_MEDIA_TYPE,
+            DeliveryMechanism.ADOBE_DRM,
+            RightsStatus.IN_COPYRIGHT,
+            None,
+        )
 
         # Prepare the bibliographic information.
-        ignore, bibliographic = self.sample_json(
-            "bibliographic_information.json"
-        )
+        ignore, bibliographic = self.sample_json("bibliographic_information.json")
 
         # To avoid a mismatch, make it look like the information is
         # for the new pool's Identifier.
-        bibliographic['id'] = pool.identifier.identifier
+        bibliographic["id"] = pool.identifier.identifier
 
         self.api.queue_response(200, content=bibliographic)
 
@@ -1103,10 +1144,26 @@ class TestOverdriveAPI(OverdriveAPITest):
 
         # The delivery mechanisms have been updated.
         assert 4 == len(pool.delivery_mechanisms)
-        assert (set([MediaTypes.EPUB_MEDIA_TYPE, DeliveryMechanism.KINDLE_CONTENT_TYPE, DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE, MediaTypes.OVERDRIVE_EBOOK_MANIFEST_MEDIA_TYPE]) ==
-            set([lpdm.delivery_mechanism.content_type for lpdm in pool.delivery_mechanisms]))
-        assert (set([DeliveryMechanism.ADOBE_DRM, DeliveryMechanism.KINDLE_DRM, DeliveryMechanism.LIBBY_DRM, DeliveryMechanism.STREAMING_DRM]) ==
-            set([lpdm.delivery_mechanism.drm_scheme for lpdm in pool.delivery_mechanisms]))
+        assert set(
+            [
+                MediaTypes.EPUB_MEDIA_TYPE,
+                DeliveryMechanism.KINDLE_CONTENT_TYPE,
+                DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+                MediaTypes.OVERDRIVE_EBOOK_MANIFEST_MEDIA_TYPE,
+            ]
+        ) == set(
+            [lpdm.delivery_mechanism.content_type for lpdm in pool.delivery_mechanisms]
+        )
+        assert set(
+            [
+                DeliveryMechanism.ADOBE_DRM,
+                DeliveryMechanism.KINDLE_DRM,
+                DeliveryMechanism.LIBBY_DRM,
+                DeliveryMechanism.STREAMING_DRM,
+            ]
+        ) == set(
+            [lpdm.delivery_mechanism.drm_scheme for lpdm in pool.delivery_mechanisms]
+        )
 
         # The Edition's medium has been corrected.
         assert Edition.BOOK_MEDIUM == edition.medium
@@ -1120,7 +1177,7 @@ class TestOverdriveAPI(OverdriveAPITest):
             identifier_type=Identifier.OVERDRIVE_ID,
             data_source_name=DataSource.OVERDRIVE,
             with_license_pool=True,
-            collection=self.collection
+            collection=self.collection,
         )
 
         # We have never checked the circulation information for this
@@ -1137,14 +1194,12 @@ class TestOverdriveAPI(OverdriveAPITest):
         )
         # Since this is the first time we've seen this book,
         # we'll also be updating the bibliographic information.
-        ignore, bibliographic = self.sample_json(
-            "bibliographic_information.json"
-        )
+        ignore, bibliographic = self.sample_json("bibliographic_information.json")
 
         # To avoid a mismatch, make it look like the information is
         # for the new pool's Identifier.
-        availability['id'] = pool.identifier.identifier
-        bibliographic['id'] = pool.identifier.identifier
+        availability["id"] = pool.identifier.identifier
+        bibliographic["id"] = pool.identifier.identifier
 
         self.api.queue_response(200, content=availability)
         self.api.queue_response(200, content=bibliographic)
@@ -1176,10 +1231,10 @@ class TestOverdriveAPI(OverdriveAPITest):
 
         request_url, ignore1, ignore2 = self.api.requests.pop()
         expect_url = self.api.endpoint(
-                self.api.AVAILABILITY_ENDPOINT,
-                collection_token=self.api.collection_token,
-                product_id="an-identifier"
-            )
+            self.api.AVAILABILITY_ENDPOINT,
+            collection_token=self.api.collection_token,
+            product_id="an-identifier",
+        )
         assert request_url == expect_url
         assert "/v2/collections" in request_url
 
@@ -1203,9 +1258,7 @@ class TestOverdriveAPI(OverdriveAPITest):
 
     def test_update_licensepool_error(self):
         # Create an identifier.
-        identifier = self._identifier(
-            identifier_type=Identifier.OVERDRIVE_ID
-        )
+        identifier = self._identifier(identifier_type=Identifier.OVERDRIVE_ID)
         ignore, availability = self.sample_json(
             "overdrive_availability_information.json"
         )
@@ -1218,12 +1271,8 @@ class TestOverdriveAPI(OverdriveAPITest):
         # If the Overdrive API says a book is not found in the
         # collection, that's treated as useful information, not an error.
         # Create an identifier.
-        identifier = self._identifier(
-            identifier_type=Identifier.OVERDRIVE_ID
-        )
-        ignore, not_found = self.sample_json(
-            "overdrive_availability_not_found.json"
-        )
+        identifier = self._identifier(identifier_type=Identifier.OVERDRIVE_ID)
+        ignore, not_found = self.sample_json("overdrive_availability_not_found.json")
 
         # Queue the 'not found' response twice -- once for the circulation
         # lookup and once for the metadata lookup.
@@ -1238,23 +1287,19 @@ class TestOverdriveAPI(OverdriveAPITest):
 
     def test_update_licensepool_provides_bibliographic_coverage(self):
         # Create an identifier.
-        identifier = self._identifier(
-            identifier_type=Identifier.OVERDRIVE_ID
-        )
+        identifier = self._identifier(identifier_type=Identifier.OVERDRIVE_ID)
 
         # Prepare bibliographic and availability information
         # for this identifier.
         ignore, availability = self.sample_json(
             "overdrive_availability_information.json"
         )
-        ignore, bibliographic = self.sample_json(
-            "bibliographic_information.json"
-        )
+        ignore, bibliographic = self.sample_json("bibliographic_information.json")
 
         # To avoid a mismatch, make it look like the information is
         # for the newly created Identifier.
-        availability['id'] = identifier.identifier
-        bibliographic['id'] = identifier.identifier
+        availability["id"] = identifier.identifier
+        bibliographic["id"] = identifier.identifier
 
         self.api.queue_response(200, content=availability)
         self.api.queue_response(200, content=bibliographic)
@@ -1266,22 +1311,22 @@ class TestOverdriveAPI(OverdriveAPITest):
         # create an Edition and a presentation-ready Work.
         pool, was_new, changed = self.api.update_licensepool(identifier.identifier)
         assert True == was_new
-        assert availability['copiesOwned'] == pool.licenses_owned
+        assert availability["copiesOwned"] == pool.licenses_owned
 
         edition = pool.presentation_edition
         assert "Ancillary Justice" == edition.title
 
         assert True == pool.work.presentation_ready
         assert pool.work.cover_thumbnail_url.startswith(
-            'http://images.contentreserve.com/'
+            "http://images.contentreserve.com/"
         )
 
         # The book has been run through the bibliographic coverage
         # provider.
         coverage = [
-            x for x in identifier.coverage_records
-            if x.operation is None
-            and x.data_source.name == DataSource.OVERDRIVE
+            x
+            for x in identifier.coverage_records
+            if x.operation is None and x.data_source.name == DataSource.OVERDRIVE
         ]
         assert 1 == len(coverage)
 
@@ -1290,8 +1335,11 @@ class TestOverdriveAPI(OverdriveAPITest):
         self._db.delete(pool.work)
         self._db.commit()
         pool, is_new = LicensePool.for_foreign_id(
-            self._db, DataSource.OVERDRIVE, Identifier.OVERDRIVE_ID, identifier.identifier,
-            collection=self.collection
+            self._db,
+            DataSource.OVERDRIVE,
+            Identifier.OVERDRIVE_ID,
+            identifier.identifier,
+            collection=self.collection,
         )
         assert not pool.work
         self.api.queue_response(200, content=availability)
@@ -1304,18 +1352,18 @@ class TestOverdriveAPI(OverdriveAPITest):
         data, raw = self.sample_json("overdrive_availability_information.json")
 
         # Create an identifier
-        identifier = self._identifier(
-            identifier_type=Identifier.OVERDRIVE_ID
-        )
+        identifier = self._identifier(identifier_type=Identifier.OVERDRIVE_ID)
 
         # Make it look like the availability information is for the
         # newly created Identifier.
-        raw['reserveId'] = identifier.identifier
+        raw["reserveId"] = identifier.identifier
 
         pool, was_new = LicensePool.for_foreign_id(
-            self._db, DataSource.OVERDRIVE,
-            identifier.type, identifier.identifier,
-            collection=self.collection
+            self._db,
+            DataSource.OVERDRIVE,
+            identifier.type,
+            identifier.identifier,
+            collection=self.collection,
         )
 
         pool, was_new, changed = self.api.update_licensepool_with_book_info(
@@ -1326,10 +1374,10 @@ class TestOverdriveAPI(OverdriveAPITest):
 
         self._db.commit()
 
-        assert raw['copiesOwned'] == pool.licenses_owned
-        assert raw['copiesAvailable'] == pool.licenses_available
+        assert raw["copiesOwned"] == pool.licenses_owned
+        assert raw["copiesAvailable"] == pool.licenses_available
         assert 0 == pool.licenses_reserved
-        assert raw['numberOfHolds'] == pool.patrons_in_hold_queue
+        assert raw["numberOfHolds"] == pool.patrons_in_hold_queue
 
     def test_update_existing_licensepool(self):
         data, raw = self.sample_json("overdrive_availability_information.json")
@@ -1338,12 +1386,12 @@ class TestOverdriveAPI(OverdriveAPITest):
         wr, pool = self._edition(
             data_source_name=DataSource.OVERDRIVE,
             identifier_type=Identifier.OVERDRIVE_ID,
-            with_license_pool=True
+            with_license_pool=True,
         )
 
         # Make it look like the availability information is for the
         # newly created LicensePool.
-        raw['id'] = pool.identifier.identifier
+        raw["id"] = pool.identifier.identifier
 
         wr.title = "The real title."
         assert 1 == pool.licenses_owned
@@ -1360,12 +1408,14 @@ class TestOverdriveAPI(OverdriveAPITest):
         # The title didn't change to that title given in the availability
         # information, because we already set a title for that work.
         assert "The real title." == wr.title
-        assert raw['copiesOwned'] == pool.licenses_owned
-        assert raw['copiesAvailable'] == pool.licenses_available
+        assert raw["copiesOwned"] == pool.licenses_owned
+        assert raw["copiesAvailable"] == pool.licenses_available
         assert 0 == pool.licenses_reserved
-        assert raw['numberOfHolds'] == pool.patrons_in_hold_queue
+        assert raw["numberOfHolds"] == pool.patrons_in_hold_queue
 
-    def test_update_new_licensepool_when_same_book_has_pool_in_different_collection(self):
+    def test_update_new_licensepool_when_same_book_has_pool_in_different_collection(
+        self,
+    ):
         old_edition, old_pool = self._edition(
             data_source_name=DataSource.OVERDRIVE,
             identifier_type=Identifier.OVERDRIVE_ID,
@@ -1379,12 +1429,14 @@ class TestOverdriveAPI(OverdriveAPITest):
         # Make it look like the availability information is for the
         # old pool's Identifier.
         identifier = old_pool.identifier
-        raw['id'] = identifier.identifier
+        raw["id"] = identifier.identifier
 
         new_pool, was_new = LicensePool.for_foreign_id(
-            self._db, DataSource.OVERDRIVE,
-            identifier.type, identifier.identifier,
-            collection=collection
+            self._db,
+            DataSource.OVERDRIVE,
+            identifier.type,
+            identifier.identifier,
+            collection=collection,
         )
         # The new pool doesn't have a presentation edition yet,
         # but it will be updated to share the old pool's edition.
@@ -1400,14 +1452,15 @@ class TestOverdriveAPI(OverdriveAPITest):
 
     def test_update_licensepool_with_holds(self):
         data, raw = self.sample_json("overdrive_availability_information_holds.json")
-        identifier = self._identifier(
-            identifier_type=Identifier.OVERDRIVE_ID
-        )
-        raw['id'] = identifier.identifier
+        identifier = self._identifier(identifier_type=Identifier.OVERDRIVE_ID)
+        raw["id"] = identifier.identifier
 
         license_pool, is_new = LicensePool.for_foreign_id(
-            self._db, DataSource.OVERDRIVE, identifier.type,
-            identifier.identifier, collection=self._default_collection
+            self._db,
+            DataSource.OVERDRIVE,
+            identifier.type,
+            identifier.identifier,
+            collection=self._default_collection,
         )
         pool, was_new, changed = self.api.update_licensepool_with_book_info(
             raw, license_pool, is_new
@@ -1420,7 +1473,7 @@ class TestOverdriveAPI(OverdriveAPITest):
         when refreshing a patron access token.
         """
         patron = self._patron()
-        patron.authorization_identifier = 'barcode'
+        patron.authorization_identifier = "barcode"
         credential = self._credential(patron=patron)
 
         data, raw = self.sample_json("patron_token.json")
@@ -1437,48 +1490,48 @@ class TestOverdriveAPI(OverdriveAPITest):
         with_pin, without_pin = self.api.access_token_requests
         url, payload, headers, kwargs = with_pin
         assert "https://oauth-patron.overdrive.com/patrontoken" == url
-        assert "barcode" == payload['username']
+        assert "barcode" == payload["username"]
         expect_scope = "websiteid:%s authorizationname:%s" % (
-            self.api.website_id.decode("utf-8"), self.api.ils_name(patron.library)
+            self.api.website_id.decode("utf-8"),
+            self.api.ils_name(patron.library),
         )
-        assert expect_scope == payload['scope']
-        assert "a pin" == payload['password']
-        assert not 'password_required' in payload
+        assert expect_scope == payload["scope"]
+        assert "a pin" == payload["password"]
+        assert not "password_required" in payload
 
         url, payload, headers, kwargs = without_pin
         assert "https://oauth-patron.overdrive.com/patrontoken" == url
-        assert "barcode" == payload['username']
-        assert expect_scope == payload['scope']
-        assert "false" == payload['password_required']
-        assert "[ignore]" == payload['password']
+        assert "barcode" == payload["username"]
+        assert expect_scope == payload["scope"]
+        assert "false" == payload["password_required"]
+        assert "[ignore]" == payload["password"]
 
 
 class TestOverdriveAPICredentials(OverdriveAPITest):
-
     def test_patron_correct_credentials_for_multiple_overdrive_collections(self):
         # Verify that the correct credential will be used
         # when a library has more than one OverDrive collection.
 
         def _optional_value(self, obj, key):
-            return obj.get(key, 'none')
+            return obj.get(key, "none")
 
-        def _make_token(scope, username, password, grant_type='password'):
-            return '%s|%s|%s|%s' % (grant_type, scope, username, password)
+        def _make_token(scope, username, password, grant_type="password"):
+            return "%s|%s|%s|%s" % (grant_type, scope, username, password)
 
         class MockAPI(MockOverdriveAPI):
-
             def token_post(self, url, payload, headers={}, **kwargs):
                 url = self.endpoint(url)
                 self.access_token_requests.append((url, payload, headers, kwargs))
                 token = _make_token(
-                    _optional_value(self, payload, 'scope'),
-                    _optional_value(self, payload, 'username'),
-                    _optional_value(self, payload, 'password'),
-                    grant_type=_optional_value(self, payload, 'grant_type'),
+                    _optional_value(self, payload, "scope"),
+                    _optional_value(self, payload, "username"),
+                    _optional_value(self, payload, "password"),
+                    grant_type=_optional_value(self, payload, "grant_type"),
                 )
                 response = self.mock_access_token_response(token)
 
                 from core.util.http import HTTP
+
                 return HTTP._process_response(url, response, **kwargs)
 
         library = self._default_library
@@ -1493,65 +1546,90 @@ class TestOverdriveAPICredentials(OverdriveAPITest):
         # library has membership.
         library_collection_properties = [
             dict(
-                library=library, name="Test OD Collection 1",
-                client_key="client_key_1", client_secret="client_secret_1",
-                library_id="lib_id_1", website_id="ws_id_1", ils_name="lib1_coll1_ils"
+                library=library,
+                name="Test OD Collection 1",
+                client_key="client_key_1",
+                client_secret="client_secret_1",
+                library_id="lib_id_1",
+                website_id="ws_id_1",
+                ils_name="lib1_coll1_ils",
             ),
             dict(
-                library=library, name="Test OD Collection 2",
-                client_key="client_key_2", client_secret="client_secret_2",
-                library_id="lib_id_2", website_id="ws_id_2", ils_name="lib1_coll2_ils"
-            )
+                library=library,
+                name="Test OD Collection 2",
+                client_key="client_key_2",
+                client_secret="client_secret_2",
+                library_id="lib_id_2",
+                website_id="ws_id_2",
+                ils_name="lib1_coll2_ils",
+            ),
         ]
 
         # These are the credentials we'll expect for each of our collections.
         expected_credentials = {
-            props['name']: _make_token(
-                'websiteid:%s authorizationname:%s' % (props['website_id'], props['ils_name']),
-                patron.authorization_identifier, pin,
+            props["name"]: _make_token(
+                "websiteid:%s authorizationname:%s"
+                % (props["website_id"], props["ils_name"]),
+                patron.authorization_identifier,
+                pin,
             )
             for props in library_collection_properties
         }
 
         # Add the collections.
-        collections = [MockAPI.mock_collection(self._db, **props)
-                       for props in library_collection_properties]
+        collections = [
+            MockAPI.mock_collection(self._db, **props)
+            for props in library_collection_properties
+        ]
 
         circulation = CirculationAPI(
             self._db, library, api_map={ExternalIntegration.OVERDRIVE: MockAPI}
         )
-        od_apis = {api.collection.name: api
-                   for api in list(circulation.api_for_collection.values())}
+        od_apis = {
+            api.collection.name: api
+            for api in list(circulation.api_for_collection.values())
+        }
 
         # Ensure that we have the correct number of OverDrive collections.
         assert len(library_collection_properties) == len(od_apis)
 
         # Verify that the expected credentials match what we got.
-        for name in list(expected_credentials.keys()) + list(reversed(list(expected_credentials.keys()))):
+        for name in list(expected_credentials.keys()) + list(
+            reversed(list(expected_credentials.keys()))
+        ):
             credential = od_apis[name].get_patron_credential(patron, pin)
             assert expected_credentials[name] == credential.credential
 
 
 class TestExtractData(OverdriveAPITest):
-
     def test_get_download_link(self):
         data, json = self.sample_json("checkout_response_locked_in_format.json")
         url = MockOverdriveAPI.get_download_link(
-            json, "ebook-epub-adobe", "http://foo.com/")
-        assert "http://patron.api.overdrive.com/v1/patrons/me/checkouts/76C1B7D0-17F4-4C05-8397-C66C17411584/formats/ebook-epub-adobe/downloadlink?errorpageurl=http://foo.com/" == url
+            json, "ebook-epub-adobe", "http://foo.com/"
+        )
+        assert (
+            "http://patron.api.overdrive.com/v1/patrons/me/checkouts/76C1B7D0-17F4-4C05-8397-C66C17411584/formats/ebook-epub-adobe/downloadlink?errorpageurl=http://foo.com/"
+            == url
+        )
 
         pytest.raises(
             NoAcceptableFormat,
             MockOverdriveAPI.get_download_link,
-            json, "no-such-format", "http://foo.com/"
+            json,
+            "no-such-format",
+            "http://foo.com/",
         )
 
-    def test_get_download_link_raises_exception_if_loan_fulfilled_on_incompatible_platform(self):
+    def test_get_download_link_raises_exception_if_loan_fulfilled_on_incompatible_platform(
+        self,
+    ):
         data, json = self.sample_json("checkout_response_book_fulfilled_on_kindle.json")
         pytest.raises(
             FulfilledOnIncompatiblePlatform,
             MockOverdriveAPI.get_download_link,
-            json, "ebook-epub-adobe", "http://foo.com/"
+            json,
+            "ebook-epub-adobe",
+            "http://foo.com/",
         )
 
     def test_get_download_link_for_manifest_format(self):
@@ -1561,7 +1639,7 @@ class TestExtractData(OverdriveAPITest):
 
         # This is part of the URL from `json` that we expect
         # get_download_link to use as a base.
-        base_url = 'http://patron.api.overdrive.com/v1/patrons/me/checkouts/98EA8135-52C0-4480-9C0E-1D0779670D4A/formats/ebook-overdrive/downloadlink'
+        base_url = "http://patron.api.overdrive.com/v1/patrons/me/checkouts/98EA8135-52C0-4480-9C0E-1D0779670D4A/formats/ebook-overdrive/downloadlink"
 
         # First, let's ask for the streaming format.
         link = MockOverdriveAPI.get_download_link(
@@ -1571,8 +1649,9 @@ class TestExtractData(OverdriveAPITest):
         # The base URL is returned, with {errorpageurl} filled in and
         # {odreadauthurl} left for other code to fill in.
         assert (
-            base_url + "?errorpageurl=http://foo.com/&odreadauthurl={odreadauthurl}" ==
-            link)
+            base_url + "?errorpageurl=http://foo.com/&odreadauthurl={odreadauthurl}"
+            == link
+        )
 
         # Now let's ask for the manifest format.
         link = MockOverdriveAPI.get_download_link(
@@ -1581,7 +1660,7 @@ class TestExtractData(OverdriveAPITest):
 
         # The {errorpageurl} and {odreadauthurl} parameters
         # have been removed, and contentfile=true has been appended.
-        assert base_url + '?contentfile=true' == link
+        assert base_url + "?contentfile=true" == link
 
     def test_extract_download_link(self):
         # Verify that extract_download_link can or cannot find a
@@ -1589,10 +1668,12 @@ class TestExtractData(OverdriveAPITest):
 
         class Mock(OverdriveAPI):
             called_with = None
+
             @classmethod
             def make_direct_download_link(cls, download_link):
                 cls.called_with = download_link
                 return "http://manifest/"
+
         m = Mock.extract_download_link
         error_url = "http://error/"
 
@@ -1603,27 +1684,21 @@ class TestExtractData(OverdriveAPITest):
         assert "No linkTemplates for format (unknown)" in str(excinfo.value)
 
         # Here we know the name, but there are no link templates.
-        no_templates = dict(formatType='someformat')
+        no_templates = dict(formatType="someformat")
         with pytest.raises(IOError) as excinfo:
             m(no_templates, error_url)
         assert "No linkTemplates for format someformat" in str(excinfo.value)
 
         # Here there's a link template structure, but no downloadLink
         # inside.
-        no_download_link = dict(
-            formatType='someformat',
-            linkTemplates=dict()
-        )
+        no_download_link = dict(formatType="someformat", linkTemplates=dict())
         with pytest.raises(IOError) as excinfo:
             m(no_download_link, error_url)
         assert "No downloadLink for format someformat" in str(excinfo.value)
 
         # Here there's a downloadLink structure, but no href inside.
         href_is_missing = dict(
-            formatType='someformat',
-            linkTemplates=dict(
-                downloadLink=dict()
-            )
+            formatType="someformat", linkTemplates=dict(downloadLink=dict())
         )
         with pytest.raises(IOError) as excinfo:
             m(href_is_missing, error_url)
@@ -1634,12 +1709,10 @@ class TestExtractData(OverdriveAPITest):
         # or not we want to return a link to the manifest file.
 
         working = dict(
-            formatType='someformat',
+            formatType="someformat",
             linkTemplates=dict(
-                downloadLink=dict(
-                    href='http://download/?errorpageurl={errorpageurl}'
-                )
-            )
+                downloadLink=dict(href="http://download/?errorpageurl={errorpageurl}")
+            ),
         )
 
         # If we don't want a manifest, make_direct_download_link is
@@ -1648,14 +1721,12 @@ class TestExtractData(OverdriveAPITest):
         assert None == Mock.called_with
 
         # The errorpageurl template is filled in.
-        assert ("http://download/?errorpageurl=http://error/" ==
-            do_not_fetch_manifest)
+        assert "http://download/?errorpageurl=http://error/" == do_not_fetch_manifest
 
         # If we do want a manifest, make_direct_download_link is called
         # without errorpageurl being affected.
         do_fetch_manifest = m(working, error_url, fetch_manifest=True)
-        assert ("http://download/?errorpageurl={errorpageurl}" ==
-            Mock.called_with)
+        assert "http://download/?errorpageurl={errorpageurl}" == Mock.called_with
         assert "http://manifest/" == do_fetch_manifest
 
     def test_make_direct_download_link(self):
@@ -1665,30 +1736,40 @@ class TestExtractData(OverdriveAPITest):
         base = "http://overdrive/downloadlink"
         m = OverdriveAPI.make_direct_download_link
         assert base + "?contentfile=true" == m(base)
-        assert (base + "?contentfile=true" ==
-            m(base + "?odreadauthurl={odreadauthurl}"))
-        assert (base + "?other=other&contentfile=true" ==
-            m(base + "?odreadauthurl={odreadauthurl}&other=other"))
+        assert base + "?contentfile=true" == m(base + "?odreadauthurl={odreadauthurl}")
+        assert base + "?other=other&contentfile=true" == m(
+            base + "?odreadauthurl={odreadauthurl}&other=other"
+        )
 
     def test_extract_data_from_checkout_resource(self):
         data, json = self.sample_json("checkout_response_locked_in_format.json")
         expires, url = MockOverdriveAPI.extract_data_from_checkout_response(
-            json, "ebook-epub-adobe", "http://foo.com/")
+            json, "ebook-epub-adobe", "http://foo.com/"
+        )
         assert 2013 == expires.year
         assert 10 == expires.month
         assert 4 == expires.day
-        assert "http://patron.api.overdrive.com/v1/patrons/me/checkouts/76C1B7D0-17F4-4C05-8397-C66C17411584/formats/ebook-epub-adobe/downloadlink?errorpageurl=http://foo.com/" == url
+        assert (
+            "http://patron.api.overdrive.com/v1/patrons/me/checkouts/76C1B7D0-17F4-4C05-8397-C66C17411584/formats/ebook-epub-adobe/downloadlink?errorpageurl=http://foo.com/"
+            == url
+        )
 
     def test_process_checkout_data(self):
-        data, json = self.sample_json("shelf_with_book_already_fulfilled_on_kindle.json")
+        data, json = self.sample_json(
+            "shelf_with_book_already_fulfilled_on_kindle.json"
+        )
         [on_kindle, not_on_kindle] = json["checkouts"]
 
         # The book already fulfilled on Kindle doesn't get turned into
         # LoanInfo at all.
-        assert None == MockOverdriveAPI.process_checkout_data(on_kindle, self.collection)
+        assert None == MockOverdriveAPI.process_checkout_data(
+            on_kindle, self.collection
+        )
 
         # The book not yet fulfilled does show up as a LoanInfo.
-        loan_info = MockOverdriveAPI.process_checkout_data(not_on_kindle, self.collection)
+        loan_info = MockOverdriveAPI.process_checkout_data(
+            not_on_kindle, self.collection
+        )
         assert "2fadd2ac-a8ec-4938-a369-4c3260e8922b" == loan_info.identifier
 
         # Since there are two usable formats (Adobe EPUB and Adobe
@@ -1697,8 +1778,12 @@ class TestExtractData(OverdriveAPITest):
 
         # A book that's on loan and locked to a specific format has a
         # DeliveryMechanismInfo associated with that format.
-        data, format_locked_in = self.sample_json("checkout_response_locked_in_format.json")
-        loan_info = MockOverdriveAPI.process_checkout_data(format_locked_in, self.collection)
+        data, format_locked_in = self.sample_json(
+            "checkout_response_locked_in_format.json"
+        )
+        loan_info = MockOverdriveAPI.process_checkout_data(
+            format_locked_in, self.collection
+        )
         delivery = loan_info.locked_to
         assert Representation.EPUB_MEDIA_TYPE == delivery.content_type
         assert DeliveryMechanism.ADOBE_DRM == delivery.drm_scheme
@@ -1707,8 +1792,12 @@ class TestExtractData(OverdriveAPITest):
         # EPUB has not yet been made, but as far as we're concerned,
         # Adobe EPUB is the only *usable* format, so it's effectively
         # locked.
-        data, no_format_locked_in = self.sample_json("checkout_response_no_format_locked_in.json")
-        loan_info = MockOverdriveAPI.process_checkout_data(no_format_locked_in, self.collection)
+        data, no_format_locked_in = self.sample_json(
+            "checkout_response_no_format_locked_in.json"
+        )
+        loan_info = MockOverdriveAPI.process_checkout_data(
+            no_format_locked_in, self.collection
+        )
         assert loan_info != None
         delivery = loan_info.locked_to
         assert Representation.EPUB_MEDIA_TYPE == delivery.content_type
@@ -1718,10 +1807,12 @@ class TestExtractData(OverdriveAPITest):
         # LoanInfo with appropriate FulfillmentInfo. The calling code
         # would then decide whether or not to show the loan.
 
-class TestSyncBookshelf(OverdriveAPITest):
 
+class TestSyncBookshelf(OverdriveAPITest):
     def test_sync_bookshelf_creates_local_loans(self):
-        loans_data, json_loans = self.sample_json("shelf_with_some_checked_out_books.json")
+        loans_data, json_loans = self.sample_json(
+            "shelf_with_some_checked_out_books.json"
+        )
         holds_data, json_holds = self.sample_json("no_holds.json")
 
         self.api.queue_response(200, content=loans_data)
@@ -1736,13 +1827,18 @@ class TestSyncBookshelf(OverdriveAPITest):
 
         # We have created previously unknown LicensePools and
         # Identifiers.
-        identifiers = [loan.license_pool.identifier.identifier
-                       for loan in loans]
-        assert (sorted(['a5a3d737-34d4-4d69-aad8-eba4e46019a3',
-                    '99409f99-45a5-4238-9e10-98d1435cde04',
-                    '993e4b33-823c-40af-8f61-cac54e1cba5d',
-                    'a2ec6f3a-ebfe-4c95-9638-2cb13be8de5a']) ==
-            sorted(identifiers))
+        identifiers = [loan.license_pool.identifier.identifier for loan in loans]
+        assert (
+            sorted(
+                [
+                    "a5a3d737-34d4-4d69-aad8-eba4e46019a3",
+                    "99409f99-45a5-4238-9e10-98d1435cde04",
+                    "993e4b33-823c-40af-8f61-cac54e1cba5d",
+                    "a2ec6f3a-ebfe-4c95-9638-2cb13be8de5a",
+                ]
+            )
+            == sorted(identifiers)
+        )
 
         # We have recorded a new DeliveryMechanism associated with
         # each loan.
@@ -1750,17 +1846,13 @@ class TestSyncBookshelf(OverdriveAPITest):
         for loan in loans:
             if loan.fulfillment:
                 mechanism = loan.fulfillment.delivery_mechanism
-                mechanisms.append(
-                    (mechanism.content_type, mechanism.drm_scheme)
-                )
-        assert (
-            [
-                (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM),
-                (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
-                (Representation.PDF_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
-                (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
-            ] ==
-            mechanisms)
+                mechanisms.append((mechanism.content_type, mechanism.drm_scheme))
+        assert [
+            (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM),
+            (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
+            (Representation.PDF_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
+            (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
+        ] == mechanisms
 
         # There are no holds.
         assert [] == holds
@@ -1774,7 +1866,9 @@ class TestSyncBookshelf(OverdriveAPITest):
         assert loans.sort() == patron.loans.sort()
 
     def test_sync_bookshelf_removes_loans_not_present_on_remote(self):
-        loans_data, json_loans = self.sample_json("shelf_with_some_checked_out_books.json")
+        loans_data, json_loans = self.sample_json(
+            "shelf_with_some_checked_out_books.json"
+        )
         holds_data, json_holds = self.sample_json("no_holds.json")
 
         self.api.queue_response(200, content=loans_data)
@@ -1784,11 +1878,12 @@ class TestSyncBookshelf(OverdriveAPITest):
         patron = self._patron()
         overdrive_edition, new = self._edition(
             data_source_name=DataSource.OVERDRIVE,
-            with_license_pool=True, collection=self.collection
+            with_license_pool=True,
+            collection=self.collection,
         )
         [pool] = overdrive_edition.license_pools
         overdrive_loan, new = pool.loan_to(patron)
-        yesterday = utc_now()- timedelta(days=1)
+        yesterday = utc_now() - timedelta(days=1)
         overdrive_loan.start = yesterday
 
         # Sync with Overdrive, and the loan not present in the sample
@@ -1801,11 +1896,14 @@ class TestSyncBookshelf(OverdriveAPITest):
 
     def test_sync_bookshelf_ignores_loans_from_other_sources(self):
         patron = self._patron()
-        gutenberg, new = self._edition(data_source_name=DataSource.GUTENBERG,
-                                       with_license_pool=True)
+        gutenberg, new = self._edition(
+            data_source_name=DataSource.GUTENBERG, with_license_pool=True
+        )
         [pool] = gutenberg.license_pools
         gutenberg_loan, new = pool.loan_to(patron)
-        loans_data, json_loans = self.sample_json("shelf_with_some_checked_out_books.json")
+        loans_data, json_loans = self.sample_json(
+            "shelf_with_some_checked_out_books.json"
+        )
         holds_data, json_holds = self.sample_json("no_holds.json")
 
         # Overdrive doesn't know about the Gutenberg loan, but it was
@@ -1847,11 +1945,10 @@ class TestSyncBookshelf(OverdriveAPITest):
         overdrive_edition, new = self._edition(
             data_source_name=DataSource.OVERDRIVE,
             with_license_pool=True,
-            collection=self.collection
+            collection=self.collection,
         )
         [pool] = overdrive_edition.license_pools
         overdrive_hold, new = pool.on_hold_to(patron)
-
 
         self.api.queue_response(200, content=loans_data)
         self.api.queue_response(200, content=holds_data)
@@ -1874,7 +1971,7 @@ class TestSyncBookshelf(OverdriveAPITest):
         overdrive, new = self._edition(
             data_source_name=DataSource.OVERDRIVE,
             with_license_pool=True,
-            collection=self._collection()
+            collection=self._collection(),
         )
         [pool] = overdrive.license_pools
         overdrive_hold, new = pool.on_hold_to(patron)
@@ -1890,30 +1987,30 @@ class TestSyncBookshelf(OverdriveAPITest):
 
 
 class TestOverdriveManifestFulfillmentInfo(OverdriveAPITest):
-
     def test_as_response(self):
         # An OverdriveManifestFulfillmentInfo just links the client
         # directly to the manifest file, bypassing normal FulfillmentInfo
         # processing.
         info = OverdriveManifestFulfillmentInfo(
-            self._default_collection, "http://content-link/",
-            "abcd-efgh", "scope string"
+            self._default_collection,
+            "http://content-link/",
+            "abcd-efgh",
+            "scope string",
         )
         response = info.as_response
         assert 302 == response.status_code
         assert "" == response.get_data(as_text=True)
         headers = response.headers
-        assert "text/plain" == headers['Content-Type']
+        assert "text/plain" == headers["Content-Type"]
 
         # These are the important headers; the location of the manifest file
         # and the scope necessary to initiate Patron Authentication for
         # it.
-        assert "scope string" == headers['X-Overdrive-Scope']
-        assert "http://content-link/" == headers['Location']
+        assert "scope string" == headers["X-Overdrive-Scope"]
+        assert "http://content-link/" == headers["Location"]
 
 
 class TestOverdriveCirculationMonitor(OverdriveAPITest):
-
     def test_run(self):
         # An end-to-end test verifying that this Monitor manages its
         # state across multiple runs.
@@ -1938,7 +2035,7 @@ class TestOverdriveCirculationMonitor(OverdriveAPITest):
         #
         # (This isn't how the Overdrive collection is initially
         # populated, BTW -- that's NewTitlesOverdriveCollectionMonitor.)
-        self.time_eq(start, now-monitor.OVERLAP)
+        self.time_eq(start, now - monitor.OVERLAP)
         self.time_eq(cutoff, now)
         timestamp = monitor.timestamp()
         assert start == timestamp.start
@@ -1949,7 +2046,7 @@ class TestOverdriveCirculationMonitor(OverdriveAPITest):
         monitor.run()
         new_start, new_cutoff, new_progress = monitor.catch_up_from_called_with
         now = utc_now()
-        assert new_start == cutoff-monitor.OVERLAP
+        assert new_start == cutoff - monitor.OVERLAP
         self.time_eq(new_cutoff, now)
 
     def test_catch_up_from(self):
@@ -1976,7 +2073,7 @@ class TestOverdriveCirculationMonitor(OverdriveAPITest):
 
         class MockAnalytics(object):
             def __init__(self, _db):
-                self._db= _db
+                self._db = _db
                 self.events = []
 
             def collect_event(self, *args):
@@ -1986,6 +2083,7 @@ class TestOverdriveCirculationMonitor(OverdriveAPITest):
 
             recently_changed_ids_called_with = None
             should_stop_calls = []
+
             def recently_changed_ids(self, start, cutoff):
                 self.recently_changed_ids_called_with = (start, cutoff)
                 return [1, 2, None, 3, 4]
@@ -1999,8 +2097,9 @@ class TestOverdriveCirculationMonitor(OverdriveAPITest):
                     return True
                 return False
 
-        monitor = MockMonitor(self._db, self.collection, api_class=MockAPI,
-                              analytics_class=MockAnalytics)
+        monitor = MockMonitor(
+            self._db, self.collection, api_class=MockAPI, analytics_class=MockAnalytics
+        )
         api = monitor.api
 
         # A MockAnalytics object was created and is ready to receive analytics
@@ -2035,17 +2134,17 @@ class TestOverdriveCirculationMonitor(OverdriveAPITest):
         # update_licensepool on the first three valid 'books'. The
         # mock API delivered the first three LicensePools from the
         # queue.
-        assert [(1, lp1),(2, lp2),(3, lp3)] == api.update_licensepool_calls
+        assert [(1, lp1), (2, lp2), (3, lp3)] == api.update_licensepool_calls
 
         # After each book was processed, should_stop was called, using
         # the LicensePool, the start date, plus information about
         # whether the LicensePool was changed (or created) during
         # update_licensepool().
-        assert (
-            [(start, 1, True),
-             (start, 2, False),
-             (start, 3, True)] ==
-            monitor.should_stop_calls)
+        assert [
+            (start, 1, True),
+            (start, 2, False),
+            (start, 3, True),
+        ] == monitor.should_stop_calls
 
         # should_stop returned True on the third call, and at that
         # point we gave up.
@@ -2074,11 +2173,11 @@ class TestOverdriveCirculationMonitor(OverdriveAPITest):
 
 
 class TestNewTitlesOverdriveCollectionMonitor(OverdriveAPITest):
-
     def test_recently_changed_ids(self):
         class MockAPI(object):
             def __init__(self, *args, **kwargs):
                 pass
+
             def all_ids(self):
                 return "all of the ids"
 
@@ -2103,19 +2202,22 @@ class TestNewTitlesOverdriveCollectionMonitor(OverdriveAPITest):
         # should keep going.
         start = datetime_utc(2018, 1, 1)
         assert False == m(start, {}, object())
-        assert False == m(start, {'date_added': None}, object())
-        assert False == m(start, {'date_added': "Not a date"}, object())
+        assert False == m(start, {"date_added": None}, object())
+        assert False == m(start, {"date_added": "Not a date"}, object())
 
         # Here, we're actually comparing real dates, using the date
         # format found in the Overdrive API. A date that's after the
         # `start` date means we should keep going backwards. A date before
         # the `start` date means we should stop.
-        assert False == m(start, {'date_added': '2019-07-12T11:06:38.157+01:00'}, object())
-        assert True == m(start, {'date_added': '2017-07-12T11:06:38.157-04:00'}, object())
+        assert False == m(
+            start, {"date_added": "2019-07-12T11:06:38.157+01:00"}, object()
+        )
+        assert True == m(
+            start, {"date_added": "2017-07-12T11:06:38.157-04:00"}, object()
+        )
 
 
 class TestNewTitlesOverdriveCollectionMonitor(OverdriveAPITest):
-
     def test_should_stop(self):
         monitor = RecentOverdriveCollectionMonitor(
             self._db, self.collection, api_class=MockOverdriveAPI
@@ -2137,19 +2239,21 @@ class TestNewTitlesOverdriveCollectionMonitor(OverdriveAPITest):
 
         # When we're at the limit, and another book comes along that hasn't
         # been changed, _then_ we decide to stop.
-        monitor.consecutive_unchanged_books = monitor.MAXIMUM_CONSECUTIVE_UNCHANGED_BOOKS
+        monitor.consecutive_unchanged_books = (
+            monitor.MAXIMUM_CONSECUTIVE_UNCHANGED_BOOKS
+        )
         assert True == m(object(), object(), False)
-        assert (monitor.MAXIMUM_CONSECUTIVE_UNCHANGED_BOOKS+1 ==
-            monitor.consecutive_unchanged_books)
+        assert (
+            monitor.MAXIMUM_CONSECUTIVE_UNCHANGED_BOOKS + 1
+            == monitor.consecutive_unchanged_books
+        )
 
 
 class TestOverdriveFormatSweep(OverdriveAPITest):
-
     def test_process_item(self):
         # Validate the standard CollectionMonitor interface.
         monitor = OverdriveFormatSweep(
-            self._db, self.collection,
-            api_class=MockOverdriveAPI
+            self._db, self.collection, api_class=MockOverdriveAPI
         )
         monitor.api.queue_collection_token()
         # We're not testing that the work actually gets done (that's
@@ -2165,13 +2269,11 @@ class TestOverdriveFormatSweep(OverdriveAPITest):
 
         class MockApi(MockOverdriveAPI):
             update_format_calls = 0
+
             def update_formats(self, licensepool):
                 self.update_format_calls += 1
 
-        monitor = OverdriveFormatSweep(
-            self._db, self.collection,
-            api_class=MockApi
-        )
+        monitor = OverdriveFormatSweep(self._db, self.collection, api_class=MockApi)
         monitor.api.queue_collection_token()
         monitor.api.queue_response(404)
 
@@ -2187,10 +2289,8 @@ class TestOverdriveFormatSweep(OverdriveAPITest):
 
 
 class TestReaper(OverdriveAPITest):
-
     def test_instantiate(self):
         # Validate the standard CollectionMonitor interface.
         monitor = OverdriveCollectionReaper(
-            self._db, self.collection,
-            api_class=MockOverdriveAPI
+            self._db, self.collection, api_class=MockOverdriveAPI
         )

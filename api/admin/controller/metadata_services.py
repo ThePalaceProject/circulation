@@ -14,23 +14,25 @@ from core.util.problem_detail import ProblemDetail
 
 from . import SitewideRegistrationController
 
-class MetadataServicesController(SitewideRegistrationController):
 
+class MetadataServicesController(SitewideRegistrationController):
     def __init__(self, manager):
         super(MetadataServicesController, self).__init__(manager)
         self.provider_apis = [
-                            NYTBestSellerAPI,
-                            NoveListAPI,
-                            MetadataWranglerOPDSLookup,
-                        ]
+            NYTBestSellerAPI,
+            NoveListAPI,
+            MetadataWranglerOPDSLookup,
+        ]
 
-        self.protocols = self._get_integration_protocols(self.provider_apis, protocol_name_attr="PROTOCOL")
+        self.protocols = self._get_integration_protocols(
+            self.provider_apis, protocol_name_attr="PROTOCOL"
+        )
         self.goal = ExternalIntegration.METADATA_GOAL
         self.type = _("metadata service")
 
     def process_metadata_services(self):
         self.require_system_admin()
-        if flask.request.method == 'GET':
+        if flask.request.method == "GET":
             return self.process_get()
         else:
             return self.process_post()
@@ -38,9 +40,16 @@ class MetadataServicesController(SitewideRegistrationController):
     def process_get(self):
         metadata_services = self._get_integration_info(self.goal, self.protocols)
         for service in metadata_services:
-            service_object = get_one(self._db, ExternalIntegration, id=service.get("id"), goal=ExternalIntegration.METADATA_GOAL)
+            service_object = get_one(
+                self._db,
+                ExternalIntegration,
+                id=service.get("id"),
+                goal=ExternalIntegration.METADATA_GOAL,
+            )
             protocol_class, tuple = self.find_protocol_class(service_object)
-            service["self_test_results"] = self._get_prior_test_results(service_object, protocol_class, *tuple)
+            service["self_test_results"] = self._get_prior_test_results(
+                service_object, protocol_class, *tuple
+            )
 
         return dict(
             metadata_services=metadata_services,
@@ -51,18 +60,12 @@ class MetadataServicesController(SitewideRegistrationController):
         if integration.protocol == ExternalIntegration.METADATA_WRANGLER:
             return (
                 MetadataWranglerOPDSLookup,
-                (MetadataWranglerOPDSLookup.from_config, self._db)
+                (MetadataWranglerOPDSLookup.from_config, self._db),
             )
         elif integration.protocol == ExternalIntegration.NYT:
-            return (
-                NYTBestSellerAPI,
-                (NYTBestSellerAPI.from_config, self._db)
-            )
+            return (NYTBestSellerAPI, (NYTBestSellerAPI.from_config, self._db))
         elif integration.protocol == ExternalIntegration.NOVELIST:
-            return (
-                NoveListAPI,
-                (NoveListAPI.from_config, self._db)
-            )
+            return (NoveListAPI, (NoveListAPI.from_config, self._db))
         raise NotImplementedError(
             "No metadata self-test class for protocol %s" % integration.protocol
         )
@@ -137,14 +140,13 @@ class MetadataServicesController(SitewideRegistrationController):
     def register_with_metadata_wrangler(self, do_get, do_post, is_new, service):
         """Register this site with the Metadata Wrangler."""
 
-        if ((is_new or not service.password) and
-            service.protocol == ExternalIntegration.METADATA_WRANGLER):
+        if (
+            is_new or not service.password
+        ) and service.protocol == ExternalIntegration.METADATA_WRANGLER:
 
             return self.process_sitewide_registration(
                 integration=service, do_get=do_get, do_post=do_post
             )
 
     def process_delete(self, service_id):
-        return self._delete_integration(
-            service_id, self.goal
-        )
+        return self._delete_integration(service_id, self.goal)

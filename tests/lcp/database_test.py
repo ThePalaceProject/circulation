@@ -11,6 +11,5 @@ class DatabaseTest(BaseDatabaseTest):
         super(DatabaseTest, self).setup_method()
 
         self._integration = self._external_integration(
-            protocol=LCPAPI.NAME,
-            goal=ExternalIntegration.LICENSE_GOAL
+            protocol=LCPAPI.NAME, goal=ExternalIntegration.LICENSE_GOAL
         )

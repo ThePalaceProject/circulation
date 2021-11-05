@@ -47,6 +47,7 @@ from sqlalchemy.sql import (
 from sqlalchemy.orm import aliased
 from core.util.http import HTTP
 
+
 class NoveListAPI(object):
 
     PROTOCOL = ExternalIntegration.NOVELIST
@@ -58,8 +59,8 @@ class NoveListAPI(object):
     AUTHORIZED_IDENTIFIER = "62521fa1-bdbb-4939-84aa-aee2a52c8d59"
 
     SETTINGS = [
-        { "key": ExternalIntegration.USERNAME, "label": _("Profile"), "required": True },
-        { "key": ExternalIntegration.PASSWORD, "label": _("Password"), "required": True },
+        {"key": ExternalIntegration.USERNAME, "label": _("Profile"), "required": True},
+        {"key": ExternalIntegration.PASSWORD, "label": _("Password"), "required": True},
     ]
 
     # Different libraries may have different NoveList integrations
@@ -83,13 +84,13 @@ class NoveListAPI(object):
     )
     COLLECTION_DATA_API = "http://www.noveListcollectiondata.com/api/collections"
     AUTH_PARAMS = "&profile=%(profile)s&password=%(password)s"
-    MAX_REPRESENTATION_AGE = 7*24*60*60      # one week
+    MAX_REPRESENTATION_AGE = 7 * 24 * 60 * 60  # one week
 
     currentQueryIdentifier = None
 
     medium_to_book_format_type_values = {
-        Edition.BOOK_MEDIUM : "EBook",
-        Edition.AUDIO_MEDIUM : "Audiobook",
+        Edition.BOOK_MEDIUM: "EBook",
+        Edition.AUDIO_MEDIUM: "Audiobook",
     }
 
     @classmethod
@@ -97,7 +98,8 @@ class NoveListAPI(object):
         profile, password = cls.values(library)
         if not (profile and password):
             raise CannotLoadConfiguration(
-                "No NoveList integration configured for library (%s)." % library.short_name
+                "No NoveList integration configured for library (%s)."
+                % library.short_name
             )
 
         _db = Session.object_session(library)
@@ -108,8 +110,10 @@ class NoveListAPI(object):
         _db = Session.object_session(library)
 
         integration = ExternalIntegration.lookup(
-            _db, ExternalIntegration.NOVELIST,
-            ExternalIntegration.METADATA_GOAL, library=library
+            _db,
+            ExternalIntegration.NOVELIST,
+            ExternalIntegration.METADATA_GOAL,
+            library=library,
         )
 
         if not integration:
@@ -121,9 +125,7 @@ class NoveListAPI(object):
 
     @classmethod
     def is_configured(cls, library):
-        if (cls.IS_CONFIGURED is None or
-            library.id != cls._configuration_library_id
-        ):
+        if cls.IS_CONFIGURED is None or library.id != cls._configuration_library_id:
             profile, password = cls.values(library)
             cls.IS_CONFIGURED = bool(profile and password)
             cls._configuration_library_id = library.id
@@ -149,16 +151,23 @@ class NoveListAPI(object):
         # Find strong ISBN equivalents.
         isbns = list()
         for license_source in license_sources:
-            isbns += [eq.output for eq in identifier.equivalencies if (
-                eq.data_source==license_source and
-                eq.strength==1 and
-                eq.output.type==Identifier.ISBN
-            )]
+            isbns += [
+                eq.output
+                for eq in identifier.equivalencies
+                if (
+                    eq.data_source == license_source
+                    and eq.strength == 1
+                    and eq.output.type == Identifier.ISBN
+                )
+            ]
 
         if not isbns:
             self.log.warn(
-                ("Identifiers without an ISBN equivalent can't"
-                "be looked up with NoveList: %r"), identifier
+                (
+                    "Identifiers without an ISBN equivalent can't"
+                    "be looked up with NoveList: %r"
+                ),
+                identifier,
             )
             return None
 
@@ -171,8 +180,11 @@ class NoveListAPI(object):
 
         if not lookup_metadata:
             self.log.warn(
-                ("No NoveList metadata found for Identifiers without an ISBN"
-                "equivalent can't be looked up with NoveList: %r"), identifier
+                (
+                    "No NoveList metadata found for Identifiers without an ISBN"
+                    "equivalent can't be looked up with NoveList: %r"
+                ),
+                identifier,
             )
             return None
 
@@ -189,11 +201,10 @@ class NoveListAPI(object):
     def _confirm_same_identifier(self, metadata_objects):
         """Ensures that all metadata objects have the same NoveList ID"""
 
-        novelist_ids = set([
-            metadata.primary_identifier.identifier
-            for metadata in metadata_objects
-        ])
-        return len(novelist_ids)==1
+        novelist_ids = set(
+            [metadata.primary_identifier.identifier for metadata in metadata_objects]
+        )
+        return len(novelist_ids) == 1
 
     def choose_best_metadata(self, metadata_objects, identifier):
         """Chooses the most likely book metadata from a list of Metadata objects
@@ -213,14 +224,17 @@ class NoveListAPI(object):
         for metadata in metadata_objects:
             counter[metadata.primary_identifier] += 1
 
-        [(target_identifier, most_amount),
-        (ignore, secondmost)] = counter.most_common(2)
-        if most_amount==secondmost:
+        [(target_identifier, most_amount), (ignore, secondmost)] = counter.most_common(
+            2
+        )
+        if most_amount == secondmost:
             # The counts are the same, and neither can be trusted.
             self.log.warn(self.NO_ISBN_EQUIVALENCY, identifier)
             return None, None
         confidence = most_amount / float(len(metadata_objects))
-        target_metadata = [m for m in metadata_objects if m.primary_identifier==target_identifier]
+        target_metadata = [
+            m for m in metadata_objects if m.primary_identifier == target_identifier
+        ]
         return target_metadata[0], confidence
 
     def lookup(self, identifier, **kwargs):
@@ -235,13 +249,16 @@ class NoveListAPI(object):
             return self.lookup_equivalent_isbns(identifier)
 
         params = dict(
-            ClientIdentifier=client_identifier, ISBN=identifier.identifier,
-            version=self.version, profile=self.profile, password=self.password
+            ClientIdentifier=client_identifier,
+            ISBN=identifier.identifier,
+            version=self.version,
+            profile=self.profile,
+            password=self.password,
         )
         scrubbed_url = str(self.scrubbed_url(params))
 
         url = self.build_query_url(params)
-        self.log.debug("NoveList lookup: %s",  url)
+        self.log.debug("NoveList lookup: %s", url)
 
         # We want to make an HTTP request for `url` but cache the
         # result under `scrubbed_url`. Define a 'URL normalization'
@@ -250,10 +267,13 @@ class NoveListAPI(object):
             return scrubbed_url
 
         representation, from_cache = Representation.post(
-            _db=self._db, url=str(url), data='',
+            _db=self._db,
+            url=str(url),
+            data="",
             max_age=self.MAX_REPRESENTATION_AGE,
             response_reviewer=self.review_response,
-            url_normalizer=normalized_url, **kwargs
+            url_normalizer=normalized_url,
+            **kwargs
         )
 
         # Commit to the database immediately to reduce the chance
@@ -282,9 +302,9 @@ class NoveListAPI(object):
     def _scrub_subtitle(cls, subtitle):
         """Removes common NoveList subtitle annoyances"""
         if subtitle:
-            subtitle = subtitle.replace('[electronic resource]', '')
+            subtitle = subtitle.replace("[electronic resource]", "")
             # Then get rid of any leading whitespace or punctuation.
-            subtitle = TitleProcessor.extract_subtitle('', subtitle)
+            subtitle = TitleProcessor.extract_subtitle("", subtitle)
         return subtitle
 
     @classmethod
@@ -306,9 +326,9 @@ class NoveListAPI(object):
             return None
 
         lookup_info = json.loads(lookup_representation.content)
-        book_info = lookup_info['TitleInfo']
+        book_info = lookup_info["TitleInfo"]
         if book_info:
-            novelist_identifier = book_info.get('ui')
+            novelist_identifier = book_info.get("ui")
         if not book_info or not novelist_identifier:
             # NoveList didn't know the ISBN.
             return None
@@ -321,28 +341,31 @@ class NoveListAPI(object):
         # Get the equivalent ISBN identifiers.
         metadata.identifiers += self._extract_isbns(book_info)
 
-        author = book_info.get('author')
+        author = book_info.get("author")
         if author:
             metadata.contributors.append(ContributorData(sort_name=author))
 
-        description = book_info.get('description')
+        description = book_info.get("description")
         if description:
-            metadata.links.append(LinkData(
-                rel=Hyperlink.DESCRIPTION, content=description,
-                media_type=Representation.TEXT_PLAIN
-            ))
+            metadata.links.append(
+                LinkData(
+                    rel=Hyperlink.DESCRIPTION,
+                    content=description,
+                    media_type=Representation.TEXT_PLAIN,
+                )
+            )
 
-        audience_level = book_info.get('audience_level')
+        audience_level = book_info.get("audience_level")
         if audience_level:
-            metadata.subjects.append(SubjectData(
-                Subject.FREEFORM_AUDIENCE, audience_level
-            ))
+            metadata.subjects.append(
+                SubjectData(Subject.FREEFORM_AUDIENCE, audience_level)
+            )
 
-        novelist_rating = book_info.get('rating')
+        novelist_rating = book_info.get("rating")
         if novelist_rating:
-            metadata.measurements.append(MeasurementData(
-                Measurement.RATING, novelist_rating
-            ))
+            metadata.measurements.append(
+                MeasurementData(Measurement.RATING, novelist_rating)
+            )
 
         # Extract feature content if it is available.
         series_info = None
@@ -350,20 +373,20 @@ class NoveListAPI(object):
         lexile_info = None
         goodreads_info = None
         recommendations_info = None
-        feature_content = lookup_info.get('FeatureContent')
+        feature_content = lookup_info.get("FeatureContent")
         if feature_content:
-            series_info = feature_content.get('SeriesInfo')
-            appeals_info = feature_content.get('Appeals')
-            lexile_info = feature_content.get('LexileInfo')
-            goodreads_info = feature_content.get('GoodReads')
-            recommendations_info = feature_content.get('SimilarTitles')
+            series_info = feature_content.get("SeriesInfo")
+            appeals_info = feature_content.get("Appeals")
+            lexile_info = feature_content.get("LexileInfo")
+            goodreads_info = feature_content.get("GoodReads")
+            recommendations_info = feature_content.get("SimilarTitles")
 
         metadata, title_key = self.get_series_information(
             metadata, series_info, book_info
         )
         metadata.title = book_info.get(title_key)
         subtitle = TitleProcessor.extract_subtitle(
-            metadata.title, book_info.get('full_title')
+            metadata.title, book_info.get("full_title")
         )
         metadata.subtitle = self._scrub_subtitle(subtitle)
 
@@ -372,32 +395,37 @@ class NoveListAPI(object):
         if appeals_info:
             extracted_genres = False
             for appeal in appeals_info:
-                genres = appeal.get('genres')
+                genres = appeal.get("genres")
                 if genres:
                     for genre in genres:
-                        metadata.subjects.append(SubjectData(
-                            Subject.TAG, genre['Name']
-                        ))
+                        metadata.subjects.append(
+                            SubjectData(Subject.TAG, genre["Name"])
+                        )
                         extracted_genres = True
                 if extracted_genres:
                     break
 
         if lexile_info:
-            metadata.subjects.append(SubjectData(
-                Subject.LEXILE_SCORE, lexile_info['Lexile']
-            ))
+            metadata.subjects.append(
+                SubjectData(Subject.LEXILE_SCORE, lexile_info["Lexile"])
+            )
 
         if goodreads_info:
-            metadata.measurements.append(MeasurementData(
-                Measurement.RATING, goodreads_info['average_rating']
-            ))
+            metadata.measurements.append(
+                MeasurementData(Measurement.RATING, goodreads_info["average_rating"])
+            )
 
         metadata = self.get_recommendations(metadata, recommendations_info)
 
         # If nothing interesting comes from the API, ignore it.
-        if not (metadata.measurements or metadata.series_position or
-            metadata.series or metadata.subjects or metadata.links or
-            metadata.subtitle or metadata.recommendations
+        if not (
+            metadata.measurements
+            or metadata.series_position
+            or metadata.series
+            or metadata.subjects
+            or metadata.links
+            or metadata.subtitle
+            or metadata.recommendations
         ):
             metadata = None
         return metadata
@@ -405,41 +433,47 @@ class NoveListAPI(object):
     def get_series_information(self, metadata, series_info, book_info):
         """Returns metadata object with series info and optimal title key"""
 
-        title_key = 'main_title'
+        title_key = "main_title"
         if series_info:
-            metadata.series = series_info['full_title']
-            series_titles = series_info.get('series_titles')
+            metadata.series = series_info["full_title"]
+            series_titles = series_info.get("series_titles")
             if series_titles:
-                matching_series_volume = [volume for volume in series_titles
-                        if volume.get('full_title')==book_info.get('full_title')]
+                matching_series_volume = [
+                    volume
+                    for volume in series_titles
+                    if volume.get("full_title") == book_info.get("full_title")
+                ]
                 if not matching_series_volume:
                     # If there's no full_title match, try the main_title.
-                    matching_series_volume = [volume for volume in series_titles
-                        if volume.get('main_title')==book_info.get('main_title')]
+                    matching_series_volume = [
+                        volume
+                        for volume in series_titles
+                        if volume.get("main_title") == book_info.get("main_title")
+                    ]
                 if len(matching_series_volume) > 1:
                     # This probably won't happen, but if it does, it will be
                     # difficult to debug without an error.
                     raise ValueError("Multiple matching volumes found.")
-                series_position = matching_series_volume[0].get('volume')
+                series_position = matching_series_volume[0].get("volume")
                 if series_position:
-                    if series_position.endswith('.'):
+                    if series_position.endswith("."):
                         series_position = series_position[:-1]
                     metadata.series_position = int(series_position)
 
                 # Sometimes all of the volumes in a series have the same
                 # main_title so using the full_title is preferred.
                 main_titles = [volume.get(title_key) for volume in series_titles]
-                if len(main_titles) > 1 and len(set(main_titles))==1:
-                    title_key = 'full_title'
+                if len(main_titles) > 1 and len(set(main_titles)) == 1:
+                    title_key = "full_title"
 
         return metadata, title_key
 
     def _extract_isbns(self, book_info):
         isbns = []
 
-        synonymous_ids = book_info.get('manifestations')
+        synonymous_ids = book_info.get("manifestations")
         for synonymous_id in synonymous_ids:
-            isbn = synonymous_id.get('ISBN')
+            isbn = synonymous_id.get("ISBN")
             if isbn:
                 isbn_data = IdentifierData(Identifier.ISBN, isbn)
                 isbns.append(isbn_data)
@@ -450,8 +484,8 @@ class NoveListAPI(object):
         if not recommendations_info:
             return metadata
 
-        related_books = recommendations_info.get('titles')
-        related_books = [b for b in related_books if b.get('is_held_locally')]
+        related_books = recommendations_info.get("titles")
+        related_books = [b for b in related_books if b.get("is_held_locally")]
         if related_books:
             for book_info in related_books:
                 metadata.recommendations += self._extract_isbns(book_info)
@@ -477,29 +511,44 @@ class NoveListAPI(object):
         roles = list(Contributor.AUTHOR_ROLES)
         roles.append(Contributor.NARRATOR_ROLE)
 
-        isbnQuery = select(
-            [i1.identifier, i1.type, i2.identifier,
-            Edition.title, Edition.medium, Edition.published,
-            Contribution.role, Contributor.sort_name,
-            DataSource.name],
-        ).select_from(
-            join(LicensePool, i1, i1.id==LicensePool.identifier_id)
-            .join(Equivalency, i1.id==Equivalency.input_id, LEFT_OUTER_JOIN)
-            .join(i2, Equivalency.output_id==i2.id, LEFT_OUTER_JOIN)
-            .join(
-                Edition,
-                or_(Edition.primary_identifier_id==i1.id, Edition.primary_identifier_id==i2.id)
+        isbnQuery = (
+            select(
+                [
+                    i1.identifier,
+                    i1.type,
+                    i2.identifier,
+                    Edition.title,
+                    Edition.medium,
+                    Edition.published,
+                    Contribution.role,
+                    Contributor.sort_name,
+                    DataSource.name,
+                ],
             )
-            .join(Contribution, Edition.id==Contribution.edition_id)
-            .join(Contributor, Contribution.contributor_id==Contributor.id)
-            .join(DataSource, DataSource.id==LicensePool.data_source_id)
-        ).where(
-            and_(
-                LicensePool.collection_id.in_(collectionList),
-                or_(i1.type=="ISBN", i2.type=="ISBN"),
-                or_(Contribution.role.in_(roles))
+            .select_from(
+                join(LicensePool, i1, i1.id == LicensePool.identifier_id)
+                .join(Equivalency, i1.id == Equivalency.input_id, LEFT_OUTER_JOIN)
+                .join(i2, Equivalency.output_id == i2.id, LEFT_OUTER_JOIN)
+                .join(
+                    Edition,
+                    or_(
+                        Edition.primary_identifier_id == i1.id,
+                        Edition.primary_identifier_id == i2.id,
+                    ),
+                )
+                .join(Contribution, Edition.id == Contribution.edition_id)
+                .join(Contributor, Contribution.contributor_id == Contributor.id)
+                .join(DataSource, DataSource.id == LicensePool.data_source_id)
             )
-        ).order_by(i1.identifier, i2.identifier)
+            .where(
+                and_(
+                    LicensePool.collection_id.in_(collectionList),
+                    or_(i1.type == "ISBN", i2.type == "ISBN"),
+                    or_(Contribution.role.in_(roles)),
+                )
+            )
+            .order_by(i1.identifier, i2.identifier)
+        )
 
         result = self._db.execute(isbnQuery)
 
@@ -515,18 +564,21 @@ class NoveListAPI(object):
         for item in result:
             if newItem:
                 existingItem = newItem
-            (currentIdentifier, existingItem, newItem, addItem) = (
-                self.create_item_object(item, currentIdentifier, existingItem)
-            )
+            (
+                currentIdentifier,
+                existingItem,
+                newItem,
+                addItem,
+            ) = self.create_item_object(item, currentIdentifier, existingItem)
 
             if addItem and existingItem:
                 # The Role property isn't needed in the actual request.
-                del existingItem['role']
+                del existingItem["role"]
                 items.append(existingItem)
 
         # For the case when there's only one item in `result`
         if newItem:
-            del newItem['role']
+            del newItem["role"]
             items.append(newItem)
 
         return items
@@ -551,7 +603,7 @@ class NoveListAPI(object):
         if not object:
             return (None, None, None, False)
 
-        if (object[1] == Identifier.ISBN):
+        if object[1] == Identifier.ISBN:
             isbn = object[0]
         elif object[2] is not None:
             isbn = object[2]
@@ -573,13 +625,13 @@ class NoveListAPI(object):
         # If we encounter an existing ISBN and its role is "Primary Author",
         # then that value overrides the existing Author property.
         if isbn == currentIdentifier and existingItem:
-            if not existingItem.get('author') and role in Contributor.AUTHOR_ROLES:
-                existingItem['author'] = author_or_narrator
-            if not existingItem.get('narrator') and role == Contributor.NARRATOR_ROLE:
-                existingItem['narrator'] = author_or_narrator
+            if not existingItem.get("author") and role in Contributor.AUTHOR_ROLES:
+                existingItem["author"] = author_or_narrator
+            if not existingItem.get("narrator") and role == Contributor.NARRATOR_ROLE:
+                existingItem["narrator"] = author_or_narrator
             if role == Contributor.PRIMARY_AUTHOR_ROLE:
-                existingItem['author'] = author_or_narrator
-            existingItem['role'] = role
+                existingItem["author"] = author_or_narrator
+            existingItem["role"] = role
 
             # Always return False to keep processing the currentIdentifier until
             # we get a new ISBN to process. In that case, return and add all
@@ -595,7 +647,7 @@ class NoveListAPI(object):
                 title=title,
                 mediaType=mediaType,
                 role=role,
-                distributor=distributor
+                distributor=distributor,
             )
 
             publicationDate = object[5]
@@ -608,9 +660,9 @@ class NoveListAPI(object):
             # the current new item for further data aggregation.
             addItem = True if existingItem else False
             if role in Contributor.AUTHOR_ROLES:
-                newItem['author'] = author_or_narrator
+                newItem["author"] = author_or_narrator
             if role == Contributor.NARRATOR_ROLE:
-                newItem['narrator'] = author_or_narrator
+                newItem["narrator"] = author_or_narrator
 
             return (isbn, existingItem, newItem, addItem)
 
@@ -619,25 +671,22 @@ class NoveListAPI(object):
 
         content = None
         if items:
-            data=json.dumps(self.make_novelist_data_object(items))
+            data = json.dumps(self.make_novelist_data_object(items))
             response = self.put(
                 self.COLLECTION_DATA_API,
                 {
                     "AuthorizedIdentifier": self.AUTHORIZED_IDENTIFIER,
-                    "Content-Type": "application/json; charset=utf-8"
+                    "Content-Type": "application/json; charset=utf-8",
                 },
-                data=data
+                data=data,
             )
-            if (response.status_code == 200):
+            if response.status_code == 200:
                 content = json.loads(response.content)
-                logging.info(
-                    "Success from NoveList: %r", response.content
-                )
+                logging.info("Success from NoveList: %r", response.content)
             else:
                 logging.error("Data sent was: %r", data)
                 logging.error(
-                    "Error %s from NoveList: %r", response.status_code,
-                    response.content
+                    "Error %s from NoveList: %r", response.status_code, response.content
                 )
 
         return content
@@ -649,20 +698,17 @@ class NoveListAPI(object):
         }
 
     def put(self, url, headers, **kwargs):
-        data = kwargs.get('data')
-        if 'data' in kwargs:
-            del kwargs['data']
+        data = kwargs.get("data")
+        if "data" in kwargs:
+            del kwargs["data"]
         # This might take a very long time -- disable the normal
         # timeout.
-        kwargs['timeout'] = None
-        response = HTTP.put_with_timeout(
-            url, data, headers=headers, **kwargs
-        )
+        kwargs["timeout"] = None
+        response = HTTP.put_with_timeout(url, data, headers=headers, **kwargs)
         return response
 
 
 class MockNoveListAPI(NoveListAPI):
-
     def __init__(self, _db, *args, **kwargs):
         self._db = _db
         self.responses = []

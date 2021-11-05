@@ -19,12 +19,14 @@ from core.model import (
 )
 from .test_controller import SettingsControllerTest
 
+
 class TestMetadataServices(SettingsControllerTest):
     def create_service(self, name):
         return create(
-            self._db, ExternalIntegration,
+            self._db,
+            ExternalIntegration,
             protocol=ExternalIntegration.__dict__.get(name) or "fake",
-            goal=ExternalIntegration.METADATA_GOAL
+            goal=ExternalIntegration.METADATA_GOAL,
         )[0]
 
     def test_process_metadata_services_dispatches_by_request_method(self):
@@ -47,10 +49,7 @@ class TestMetadataServices(SettingsControllerTest):
         self._db.flush()
 
         with self.request_context_with_admin("/"):
-            pytest.raises(
-                AdminNotAuthorized,
-                controller.process_metadata_services
-            )
+            pytest.raises(AdminNotAuthorized, controller.process_metadata_services)
 
     def test_process_get_with_no_services(self):
         with self.request_context_with_admin("/"):
@@ -100,11 +99,15 @@ class TestMetadataServices(SettingsControllerTest):
             # But we just need to make sure that the response has a self_test_results attribute--for this test,
             # it doesn't matter what it is--so that's fine.
             assert (
-                service.get("self_test_results").get("exception") ==
-                "Exception getting self-test results for metadata service Test: Metadata Wrangler improperly configured.")
+                service.get("self_test_results").get("exception")
+                == "Exception getting self-test results for metadata service Test: Metadata Wrangler improperly configured."
+            )
 
     def test_find_protocol_class(self):
-        [wrangler, nyt, novelist, fake] = [self.create_service(x) for x in ["METADATA_WRANGLER", "NYT", "NOVELIST", "FAKE"]]
+        [wrangler, nyt, novelist, fake] = [
+            self.create_service(x)
+            for x in ["METADATA_WRANGLER", "NYT", "NOVELIST", "FAKE"]
+        ]
         m = self.manager.admin_metadata_services_controller.find_protocol_class
 
         assert m(wrangler)[0] == MetadataWranglerOPDSLookup
@@ -115,10 +118,12 @@ class TestMetadataServices(SettingsControllerTest):
     def test_metadata_services_post_errors(self):
         controller = self.manager.admin_metadata_services_controller
         with self.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict([
-                ("name", "Name"),
-                ("protocol", "Unknown"),
-            ])
+            flask.request.form = MultiDict(
+                [
+                    ("name", "Name"),
+                    ("protocol", "Unknown"),
+                ]
+            )
             response = controller.process_post()
             assert response == UNKNOWN_PROTOCOL
 
@@ -128,18 +133,22 @@ class TestMetadataServices(SettingsControllerTest):
             assert response == INCOMPLETE_CONFIGURATION
 
         with self.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict([
-                ("name", "Name"),
-            ])
+            flask.request.form = MultiDict(
+                [
+                    ("name", "Name"),
+                ]
+            )
             response = controller.process_post()
             assert response == NO_PROTOCOL_FOR_NEW_SERVICE
 
         with self.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict([
-                ("name", "Name"),
-                ("id", "123"),
-                ("protocol", ExternalIntegration.NYT),
-            ])
+            flask.request.form = MultiDict(
+                [
+                    ("name", "Name"),
+                    ("id", "123"),
+                    ("protocol", ExternalIntegration.NYT),
+                ]
+            )
             response = controller.process_post()
             assert response == MISSING_SERVICE
 
@@ -147,63 +156,75 @@ class TestMetadataServices(SettingsControllerTest):
         service.name = "name"
 
         with self.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict([
-                ("name", service.name),
-                ("protocol", ExternalIntegration.NYT),
-            ])
+            flask.request.form = MultiDict(
+                [
+                    ("name", service.name),
+                    ("protocol", ExternalIntegration.NYT),
+                ]
+            )
             response = controller.process_post()
             assert response == INTEGRATION_NAME_ALREADY_IN_USE
 
         with self.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict([
-                ("name", "Name"),
-                ("id", service.id),
-                ("protocol", ExternalIntegration.NYT),
-            ])
+            flask.request.form = MultiDict(
+                [
+                    ("name", "Name"),
+                    ("id", service.id),
+                    ("protocol", ExternalIntegration.NYT),
+                ]
+            )
             response = controller.process_post()
             assert response == CANNOT_CHANGE_PROTOCOL
 
         with self.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict([
-                ("id", service.id),
-                ("protocol", ExternalIntegration.NOVELIST),
-            ])
+            flask.request.form = MultiDict(
+                [
+                    ("id", service.id),
+                    ("protocol", ExternalIntegration.NOVELIST),
+                ]
+            )
             response = controller.process_post()
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
         with self.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict([
-                ("name", "Name"),
-                ("id", service.id),
-                ("protocol", ExternalIntegration.NOVELIST),
-                (ExternalIntegration.USERNAME, "user"),
-                (ExternalIntegration.PASSWORD, "pass"),
-                ("libraries", json.dumps([{"short_name": "not-a-library"}])),
-            ])
+            flask.request.form = MultiDict(
+                [
+                    ("name", "Name"),
+                    ("id", service.id),
+                    ("protocol", ExternalIntegration.NOVELIST),
+                    (ExternalIntegration.USERNAME, "user"),
+                    (ExternalIntegration.PASSWORD, "pass"),
+                    ("libraries", json.dumps([{"short_name": "not-a-library"}])),
+                ]
+            )
             response = controller.process_post()
             assert response.uri == NO_SUCH_LIBRARY.uri
 
     def test_metadata_services_post_create(self):
         controller = self.manager.admin_metadata_services_controller
         library, ignore = create(
-            self._db, Library, name="Library", short_name="L",
+            self._db,
+            Library,
+            name="Library",
+            short_name="L",
         )
         with self.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict([
-                ("name", "Name"),
-                ("protocol", ExternalIntegration.NOVELIST),
-                (ExternalIntegration.USERNAME, "user"),
-                (ExternalIntegration.PASSWORD, "pass"),
-                ("libraries", json.dumps([{"short_name": "L"}])),
-            ])
+            flask.request.form = MultiDict(
+                [
+                    ("name", "Name"),
+                    ("protocol", ExternalIntegration.NOVELIST),
+                    (ExternalIntegration.USERNAME, "user"),
+                    (ExternalIntegration.PASSWORD, "pass"),
+                    ("libraries", json.dumps([{"short_name": "L"}])),
+                ]
+            )
             response = controller.process_post()
             assert response.status_code == 201
 
         # A new ExternalIntegration has been created based on the submitted
         # information.
         service = get_one(
-            self._db, ExternalIntegration,
-            goal=ExternalIntegration.METADATA_GOAL
+            self._db, ExternalIntegration, goal=ExternalIntegration.METADATA_GOAL
         )
         assert service.id == int(response.response[0])
         assert ExternalIntegration.NOVELIST == service.protocol
@@ -213,10 +234,16 @@ class TestMetadataServices(SettingsControllerTest):
 
     def test_metadata_services_post_edit(self):
         l1, ignore = create(
-            self._db, Library, name="Library 1", short_name="L1",
+            self._db,
+            Library,
+            name="Library 1",
+            short_name="L1",
         )
         l2, ignore = create(
-            self._db, Library, name="Library 2", short_name="L2",
+            self._db,
+            Library,
+            name="Library 2",
+            short_name="L2",
         )
         novelist_service = self.create_service("NOVELIST")
         novelist_service.username = "olduser"
@@ -225,14 +252,16 @@ class TestMetadataServices(SettingsControllerTest):
 
         controller = self.manager.admin_metadata_services_controller
         with self.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict([
-                ("name", "Name"),
-                ("id", novelist_service.id),
-                ("protocol", ExternalIntegration.NOVELIST),
-                (ExternalIntegration.USERNAME, "user"),
-                (ExternalIntegration.PASSWORD, "pass"),
-                ("libraries", json.dumps([{"short_name": "L2"}])),
-            ])
+            flask.request.form = MultiDict(
+                [
+                    ("name", "Name"),
+                    ("id", novelist_service.id),
+                    ("protocol", ExternalIntegration.NOVELIST),
+                    (ExternalIntegration.USERNAME, "user"),
+                    (ExternalIntegration.PASSWORD, "pass"),
+                    ("libraries", json.dumps([{"short_name": "L2"}])),
+                ]
+            )
             response = controller.process_post()
             assert response.status_code == 200
 
@@ -240,18 +269,21 @@ class TestMetadataServices(SettingsControllerTest):
         """Verify that process_post() calls register_with_metadata_wrangler
         if the rest of the request is handled successfully.
         """
+
         class Mock(MetadataServicesController):
             RETURN_VALUE = INVALID_URL
             called_with = None
-            def register_with_metadata_wrangler(
-                self, do_get, do_post, is_new, service
-            ):
+
+            def register_with_metadata_wrangler(self, do_get, do_post, is_new, service):
                 self.called_with = (do_get, do_post, is_new, service)
                 return self.RETURN_VALUE
 
         controller = Mock(self.manager)
         library, ignore = create(
-            self._db, Library, name="Library", short_name="L",
+            self._db,
+            Library,
+            name="Library",
+            short_name="L",
         )
         do_get = object()
         do_post = object()
@@ -263,12 +295,14 @@ class TestMetadataServices(SettingsControllerTest):
             # register_with_metadata_wrangler was not called.
             assert None == controller.called_with
 
-        form = MultiDict([
-            ("name", "Name"),
-            ("protocol", ExternalIntegration.NOVELIST),
-            (ExternalIntegration.USERNAME, "user"),
-            (ExternalIntegration.PASSWORD, "pass"),
-        ])
+        form = MultiDict(
+            [
+                ("name", "Name"),
+                ("protocol", ExternalIntegration.NOVELIST),
+                (ExternalIntegration.USERNAME, "user"),
+                (ExternalIntegration.PASSWORD, "pass"),
+            ]
+        )
 
         with self.request_context_with_admin("/", method="POST"):
             flask.request.form = form
@@ -281,8 +315,9 @@ class TestMetadataServices(SettingsControllerTest):
             assert INVALID_URL == response
 
             # We ended up not creating an ExternalIntegration.
-            assert None == get_one(self._db, ExternalIntegration,
-                              goal=ExternalIntegration.METADATA_GOAL)
+            assert None == get_one(
+                self._db, ExternalIntegration, goal=ExternalIntegration.METADATA_GOAL
+            )
 
             # But the ExternalIntegration we _would_ have created was
             # passed in to register_with_metadata_wrangler.
@@ -303,8 +338,7 @@ class TestMetadataServices(SettingsControllerTest):
 
             # This time we successfully created an ExternalIntegration.
             integration = get_one(
-                self._db, ExternalIntegration,
-                goal=ExternalIntegration.METADATA_GOAL
+                self._db, ExternalIntegration, goal=ExternalIntegration.METADATA_GOAL
             )
             assert integration != None
 
@@ -318,11 +352,11 @@ class TestMetadataServices(SettingsControllerTest):
         """Verify that register_with_metadata wrangler calls
         process_sitewide_registration appropriately.
         """
+
         class Mock(MetadataServicesController):
             called_with = None
-            def process_sitewide_registration(
-                    self, integration, do_get, do_post
-            ):
+
+            def process_sitewide_registration(self, integration, do_get, do_post):
                 self.called_with = (integration, do_get, do_post)
 
         controller = Mock(self.manager)
@@ -332,9 +366,7 @@ class TestMetadataServices(SettingsControllerTest):
 
         # If register_with_metadata_wrangler is called on an ExternalIntegration
         # with some other service, nothing happens.
-        integration = self._external_integration(
-            protocol=ExternalIntegration.NOVELIST
-        )
+        integration = self._external_integration(protocol=ExternalIntegration.NOVELIST)
         m(do_get, do_post, True, integration)
         assert None == controller.called_with
 
@@ -343,7 +375,7 @@ class TestMetadataServices(SettingsControllerTest):
         integration = self._external_integration(
             protocol=ExternalIntegration.METADATA_WRANGLER
         )
-        integration.password = 'already done'
+        integration.password = "already done"
         m(do_get, do_post, False, integration)
         assert None == controller.called_with
 
@@ -359,32 +391,36 @@ class TestMetadataServices(SettingsControllerTest):
         result = m(do_get, do_post, False, integration)
 
     def test_check_name_unique(self):
-       kwargs = dict(protocol=ExternalIntegration.NYT,
-                    goal=ExternalIntegration.METADATA_GOAL)
+        kwargs = dict(
+            protocol=ExternalIntegration.NYT, goal=ExternalIntegration.METADATA_GOAL
+        )
 
-       existing_service, ignore = create(self._db, ExternalIntegration, name="existing service", **kwargs)
-       new_service, ignore = create(self._db, ExternalIntegration, name="new service", **kwargs)
+        existing_service, ignore = create(
+            self._db, ExternalIntegration, name="existing service", **kwargs
+        )
+        new_service, ignore = create(
+            self._db, ExternalIntegration, name="new service", **kwargs
+        )
 
-       m = self.manager.admin_metadata_services_controller.check_name_unique
+        m = self.manager.admin_metadata_services_controller.check_name_unique
 
-       # Try to change new service so that it has the same name as existing service
-       # -- this is not allowed.
-       result = m(new_service, existing_service.name)
-       assert result == INTEGRATION_NAME_ALREADY_IN_USE
+        # Try to change new service so that it has the same name as existing service
+        # -- this is not allowed.
+        result = m(new_service, existing_service.name)
+        assert result == INTEGRATION_NAME_ALREADY_IN_USE
 
-       # Try to edit existing service without changing its name -- this is fine.
-       assert (
-           None ==
-           m(existing_service, existing_service.name))
+        # Try to edit existing service without changing its name -- this is fine.
+        assert None == m(existing_service, existing_service.name)
 
-       # Changing the existing service's name is also fine.
-       assert (
-            None ==
-            m(existing_service, "new name"))
+        # Changing the existing service's name is also fine.
+        assert None == m(existing_service, "new name")
 
     def test_metadata_service_delete(self):
         l1, ignore = create(
-            self._db, Library, name="Library 1", short_name="L1",
+            self._db,
+            Library,
+            name="Library 1",
+            short_name="L1",
         )
         novelist_service = self.create_service("NOVELIST")
         novelist_service.username = "olduser"
@@ -393,12 +429,16 @@ class TestMetadataServices(SettingsControllerTest):
 
         with self.request_context_with_admin("/", method="DELETE"):
             self.admin.remove_role(AdminRole.SYSTEM_ADMIN)
-            pytest.raises(AdminNotAuthorized,
-                          self.manager.admin_metadata_services_controller.process_delete,
-                          novelist_service.id)
+            pytest.raises(
+                AdminNotAuthorized,
+                self.manager.admin_metadata_services_controller.process_delete,
+                novelist_service.id,
+            )
 
             self.admin.add_role(AdminRole.SYSTEM_ADMIN)
-            response = self.manager.admin_metadata_services_controller.process_delete(novelist_service.id)
+            response = self.manager.admin_metadata_services_controller.process_delete(
+                novelist_service.id
+            )
             assert response.status_code == 200
 
         service = get_one(self._db, ExternalIntegration, id=novelist_service.id)

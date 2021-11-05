@@ -10,21 +10,22 @@ bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..")
 sys.path.append(os.path.abspath(package_dir))
 
-from core.model import (
-    production_session
-)
+from core.model import production_session
 from api.saml.metadata.federations import incommon
 from api.saml.metadata.federations.model import SAMLFederation
 
 with closing(production_session()) as db:
-    incommon_federation = db.query(SAMLFederation).filter(
-        SAMLFederation.type == incommon.FEDERATION_TYPE).one_or_none()
+    incommon_federation = (
+        db.query(SAMLFederation)
+        .filter(SAMLFederation.type == incommon.FEDERATION_TYPE)
+        .one_or_none()
+    )
 
     if not incommon_federation:
         incommon_federation = SAMLFederation(
             incommon.FEDERATION_TYPE,
             incommon.IDP_METADATA_SERVICE_URL,
-            incommon.CERTIFICATE
+            incommon.CERTIFICATE,
         )
 
         db.add(incommon_federation)

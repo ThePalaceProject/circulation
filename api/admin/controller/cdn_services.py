@@ -11,8 +11,8 @@ from core.util.problem_detail import ProblemDetail
 
 from . import SettingsController
 
-class CDNServicesController(SettingsController):
 
+class CDNServicesController(SettingsController):
     def __init__(self, manager):
         super(CDNServicesController, self).__init__(manager)
         self.protocols = [
@@ -20,8 +20,17 @@ class CDNServicesController(SettingsController):
                 "name": ExternalIntegration.CDN,
                 "sitewide": True,
                 "settings": [
-                    { "key": ExternalIntegration.URL, "label": _("CDN URL"), "required": True, "format": "url" },
-                    { "key": Configuration.CDN_MIRRORED_DOMAIN_KEY, "label": _("Mirrored domain"), "required": True },
+                    {
+                        "key": ExternalIntegration.URL,
+                        "label": _("CDN URL"),
+                        "required": True,
+                        "format": "url",
+                    },
+                    {
+                        "key": Configuration.CDN_MIRRORED_DOMAIN_KEY,
+                        "label": _("Mirrored domain"),
+                        "required": True,
+                    },
                 ],
             }
         ]
@@ -29,11 +38,10 @@ class CDNServicesController(SettingsController):
 
     def process_cdn_services(self):
         self.require_system_admin()
-        if flask.request.method == 'GET':
+        if flask.request.method == "GET":
             return self.process_get()
         else:
             return self.process_post()
-
 
     def process_get(self):
         services = self._get_integration_info(self.goal, self.protocols)
@@ -101,6 +109,4 @@ class CDNServicesController(SettingsController):
                     return wrong_format
 
     def process_delete(self, service_id):
-        return self._delete_integration(
-            service_id, self.goal
-        )
+        return self._delete_integration(service_id, self.goal)

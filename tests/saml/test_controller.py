@@ -224,8 +224,9 @@ class TestSAMLController(ControllerTest):
                 assert result.response == expected_problem.response
             else:
                 assert 302 == result.status_code
-                assert (
-                    expected_authentication_redirect_uri == result.headers.get("Location"))
+                assert expected_authentication_redirect_uri == result.headers.get(
+                    "Location"
+                )
 
                 authentication_manager.start_authentication.assert_called_once_with(
                     self._db, idp_entity_id, expected_relay_state
@@ -427,7 +428,9 @@ class TestSAMLController(ControllerTest):
             else:
                 assert result.status_code == 302
                 assert (
-                    result.headers.get("Location") == expected_authentication_redirect_uri)
+                    result.headers.get("Location")
+                    == expected_authentication_redirect_uri
+                )
 
                 authentication_manager.finish_authentication.assert_called_once_with(
                     self._db, IDENTITY_PROVIDERS[0].entity_id

@@ -40,6 +40,7 @@ from api.coverage import (
     ReaperImporter,
 )
 
+
 class MetadataWranglerCollectionMonitor(CollectionMonitor):
 
     """Abstract base CollectionMonitor with helper methods for interactions
@@ -47,16 +48,16 @@ class MetadataWranglerCollectionMonitor(CollectionMonitor):
     """
 
     def __init__(self, _db, collection, lookup=None):
-        super(MetadataWranglerCollectionMonitor, self).__init__(
-            _db, collection
-        )
+        super(MetadataWranglerCollectionMonitor, self).__init__(_db, collection)
         self.lookup = lookup or MetadataWranglerOPDSLookup.from_config(
             self._db, collection=collection
         )
         self.importer = OPDSImporter(
-            self._db, self.collection,
+            self._db,
+            self.collection,
             data_source_name=DataSource.METADATA_WRANGLER,
-            metadata_client=self.lookup, map_from_collection=True,
+            metadata_client=self.lookup,
+            map_from_collection=True,
         )
 
     def get_response(self, url=None, **kwargs):
@@ -69,8 +70,7 @@ class MetadataWranglerCollectionMonitor(CollectionMonitor):
             return response
         except RemoteIntegrationException as e:
             self.log.error(
-                "Error getting feed for %r: %s",
-                self.collection, e.debug_message
+                "Error getting feed for %r: %s", self.collection, e.debug_message
             )
             raise e
 
@@ -125,8 +125,7 @@ class MWCollectionUpdateMonitor(MetadataWranglerCollectionMonitor):
             total_editions += len(editions)
             achievements = "Editions processed: %s" % total_editions
             if not new_timestamp or (
-                    possible_new_timestamp
-                    and possible_new_timestamp > new_timestamp
+                possible_new_timestamp and possible_new_timestamp > new_timestamp
             ):
                 # We imported an OPDS feed that included an entry with
                 # a certain 'last updated' timestamp (or was empty but
@@ -179,8 +178,9 @@ class MWCollectionUpdateMonitor(MetadataWranglerCollectionMonitor):
 
         # Import the metadata
         raw_feed = response.text
-        (editions, licensepools,
-         works, errors) = self.importer.import_from_feed(raw_feed)
+        (editions, licensepools, works, errors) = self.importer.import_from_feed(
+            raw_feed
+        )
 
         # TODO: this oughtn't be necessary, because import_from_feed
         # already parsed the feed, but there's no way to access the
@@ -198,9 +198,7 @@ class MWCollectionUpdateMonitor(MetadataWranglerCollectionMonitor):
             timestamp = min(update_dates)
         else:
             # Look for a timestamp on the feed level.
-            feed_timestamp = self.importer._datetime(
-                parsed['feed'], 'updated_parsed'
-            )
+            feed_timestamp = self.importer._datetime(parsed["feed"], "updated_parsed")
 
             # Subtract one day from the time to reduce the chance of
             # race conditions. Otherwise, work done but not committed
@@ -229,9 +227,7 @@ class MWAuxiliaryMetadataMonitor(MetadataWranglerCollectionMonitor):
     DEFAULT_START_TIME = CollectionMonitor.NEVER
 
     def __init__(self, _db, collection, lookup=None, provider=None):
-        super(MWAuxiliaryMetadataMonitor, self).__init__(
-            _db, collection, lookup=lookup
-        )
+        super(MWAuxiliaryMetadataMonitor, self).__init__(_db, collection, lookup=lookup)
         self.parser = OPDSXMLParser()
         self.provider = provider or MetadataUploadCoverageProvider(
             collection, lookup_client=lookup
@@ -258,8 +254,9 @@ class MWAuxiliaryMetadataMonitor(MetadataWranglerCollectionMonitor):
             # they have a presentation-ready work. (This prevents creating
             # CoverageRecords for identifiers that don't actually have metadata
             # to send.)
-            identifiers = [i for i in identifiers
-                           if i.work and i.work.simple_opds_entry]
+            identifiers = [
+                i for i in identifiers if i.work and i.work.simple_opds_entry
+            ]
             total_identifiers_processed += len(identifiers)
             self.provider.bulk_register(identifiers)
             self.provider.run_on_specific_identifiers(identifiers)
@@ -384,8 +381,9 @@ class MetadataWranglerCollectionRegistrar(BaseMetadataWranglerCoverageProvider):
 
         # Start with all items in this Collection that have not been
         # registered.
-        uncovered = super(MetadataWranglerCollectionRegistrar, self)\
-            .items_that_need_coverage(identifiers, **kwargs)
+        uncovered = super(
+            MetadataWranglerCollectionRegistrar, self
+        ).items_that_need_coverage(identifiers, **kwargs)
         # Make sure they're actually available through this
         # collection.
         uncovered = uncovered.filter(
@@ -394,30 +392,38 @@ class MetadataWranglerCollectionRegistrar(BaseMetadataWranglerCoverageProvider):
 
         # Exclude items that have been reaped because we stopped
         # having a license.
-        reaper_covered = self._db.query(Identifier)\
-            .join(Identifier.coverage_records)\
+        reaper_covered = (
+            self._db.query(Identifier)
+            .join(Identifier.coverage_records)
             .filter(
-                CoverageRecord.data_source_id==self.data_source.id,
-                CoverageRecord.collection_id==self.collection_id,
-                CoverageRecord.operation==CoverageRecord.REAP_OPERATION
+                CoverageRecord.data_source_id == self.data_source.id,
+                CoverageRecord.collection_id == self.collection_id,
+                CoverageRecord.operation == CoverageRecord.REAP_OPERATION,
             )
+        )
 
         # If any items were reaped earlier but have since been
         # relicensed or otherwise added back to the collection, remove
         # their reaper CoverageRecords. This ensures we get Metadata
         # Wrangler coverage for books that have had their licenses
         # repurchased or extended.
-        relicensed = reaper_covered.join(Identifier.licensed_through).filter(
-                LicensePool.collection_id==self.collection_id,
-                or_(LicensePool.licenses_owned > 0, LicensePool.open_access)
-            ).options(contains_eager(Identifier.coverage_records))
+        relicensed = (
+            reaper_covered.join(Identifier.licensed_through)
+            .filter(
+                LicensePool.collection_id == self.collection_id,
+                or_(LicensePool.licenses_owned > 0, LicensePool.open_access),
+            )
+            .options(contains_eager(Identifier.coverage_records))
+        )
 
         needs_commit = False
         for identifier in relicensed.all():
             for record in identifier.coverage_records:
-                if (record.data_source_id==self.data_source.id and
-                    record.collection_id==self.collection_id and
-                    record.operation==CoverageRecord.REAP_OPERATION):
+                if (
+                    record.data_source_id == self.data_source.id
+                    and record.collection_id == self.collection_id
+                    and record.operation == CoverageRecord.REAP_OPERATION
+                ):
                     # Delete any reaper CoverageRecord for this Identifier
                     # in this Collection.
                     self._db.delete(record)
@@ -446,16 +452,19 @@ class MetadataWranglerCollectionReaper(BaseMetadataWranglerCoverageProvider):
         return self.lookup_client.remove
 
     def items_that_need_coverage(self, identifiers=None, **kwargs):
-        """Retrieves Identifiers that were imported but are no longer licensed.
-        """
-        qu = self._db.query(Identifier).select_from(LicensePool).\
-            join(LicensePool.identifier).join(CoverageRecord).\
-            filter(LicensePool.collection_id==self.collection_id).\
-            filter(LicensePool.licenses_owned==0, LicensePool.open_access!=True).\
-            filter(CoverageRecord.data_source_id==self.data_source.id).\
-            filter(CoverageRecord.operation==CoverageRecord.IMPORT_OPERATION).\
-            filter(CoverageRecord.status==CoverageRecord.SUCCESS).\
-            filter(CoverageRecord.collection==self.collection)
+        """Retrieves Identifiers that were imported but are no longer licensed."""
+        qu = (
+            self._db.query(Identifier)
+            .select_from(LicensePool)
+            .join(LicensePool.identifier)
+            .join(CoverageRecord)
+            .filter(LicensePool.collection_id == self.collection_id)
+            .filter(LicensePool.licenses_owned == 0, LicensePool.open_access != True)
+            .filter(CoverageRecord.data_source_id == self.data_source.id)
+            .filter(CoverageRecord.operation == CoverageRecord.IMPORT_OPERATION)
+            .filter(CoverageRecord.status == CoverageRecord.SUCCESS)
+            .filter(CoverageRecord.collection == self.collection)
+        )
 
         if identifiers:
             qu = qu.filter(Identifier.id.in_([x.id for x in identifiers]))
@@ -471,22 +480,22 @@ class MetadataWranglerCollectionReaper(BaseMetadataWranglerCoverageProvider):
         # 'import' CoverageRecords that have been obviated by a
         # 'reaper' coverage record for the same Identifier.
         reaper_coverage = aliased(CoverageRecord)
-        qu = self._db.query(CoverageRecord).join(
-            reaper_coverage,
-            CoverageRecord.identifier_id==reaper_coverage.identifier_id
-
-        # The CoverageRecords were selecting are 'import' records.
-        ).filter(
-            CoverageRecord.data_source_id==self.data_source.id
-        ).filter(
-            CoverageRecord.operation==CoverageRecord.IMPORT_OPERATION
-
-        # And we're only selecting them if there's also a 'reaper'
-        # coverage record.
-        ).filter(
-            reaper_coverage.data_source_id==self.data_source.id
-        ).filter(
-            reaper_coverage.operation==CoverageRecord.REAP_OPERATION
+        qu = (
+            self._db.query(CoverageRecord)
+            .join(
+                reaper_coverage,
+                CoverageRecord.identifier_id == reaper_coverage.identifier_id
+                # The CoverageRecords were selecting are 'import' records.
+            )
+            .filter(CoverageRecord.data_source_id == self.data_source.id)
+            .filter(
+                CoverageRecord.operation
+                == CoverageRecord.IMPORT_OPERATION
+                # And we're only selecting them if there's also a 'reaper'
+                # coverage record.
+            )
+            .filter(reaper_coverage.data_source_id == self.data_source.id)
+            .filter(reaper_coverage.operation == CoverageRecord.REAP_OPERATION)
         )
 
         # Delete all 'import' CoverageRecords that have been reaped.
@@ -499,13 +508,14 @@ class MetadataUploadCoverageProvider(BaseMetadataWranglerCoverageProvider):
     """Provide coverage for identifiers by uploading OPDS metadata to
     the metadata wrangler.
     """
+
     DEFAULT_BATCH_SIZE = 25
     SERVICE_NAME = "Metadata Upload Coverage Provider"
     OPERATION = CoverageRecord.METADATA_UPLOAD_OPERATION
     DATA_SOURCE_NAME = DataSource.INTERNAL_PROCESSING
 
     def __init__(self, *args, **kwargs):
-        kwargs['registered_only'] = kwargs.get('registered_only', True)
+        kwargs["registered_only"] = kwargs.get("registered_only", True)
         super(MetadataUploadCoverageProvider, self).__init__(*args, **kwargs)
 
     def process_batch(self, batch):

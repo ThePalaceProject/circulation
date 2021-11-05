@@ -5,34 +5,30 @@ from collections import Counter
 import json
 
 from core.config import Configuration as CoreConfiguration
-from core.model import (
-    ConfigurationSetting
-)
+from core.model import ConfigurationSetting
 from core.testing import DatabaseTest
 from api.config import Configuration
 
-class TestConfiguration(DatabaseTest):
 
+class TestConfiguration(DatabaseTest):
     def test_key_pair(self):
         # Test the ability to create, replace, or look up a
         # public/private key pair in a ConfigurationSetting.
-        setting = ConfigurationSetting.sitewide(
-            self._db, Configuration.KEY_PAIR
-        )
+        setting = ConfigurationSetting.sitewide(self._db, Configuration.KEY_PAIR)
         setting.value = "nonsense"
 
         # If you pass in a ConfigurationSetting that is missing its
         # value, or whose value is not a public key pair, a new key
         # pair is created.
         public_key, private_key = Configuration.key_pair(setting)
-        assert 'BEGIN PUBLIC KEY' in public_key
-        assert 'BEGIN RSA PRIVATE KEY' in private_key
+        assert "BEGIN PUBLIC KEY" in public_key
+        assert "BEGIN RSA PRIVATE KEY" in private_key
         assert [public_key, private_key] == setting.json_value
 
         setting.value = None
         public_key, private_key = Configuration.key_pair(setting)
-        assert 'BEGIN PUBLIC KEY' in public_key
-        assert 'BEGIN RSA PRIVATE KEY' in private_key
+        assert "BEGIN PUBLIC KEY" in public_key
+        assert "BEGIN RSA PRIVATE KEY" in private_key
         assert [public_key, private_key] == setting.json_value
 
         # If the setting has a good value already, the key pair is
@@ -66,9 +62,11 @@ class TestConfiguration(DatabaseTest):
         library = self._default_library
 
         # We haven't set any of these values.
-        for key in [C.LARGE_COLLECTION_LANGUAGES,
-                    C.SMALL_COLLECTION_LANGUAGES,
-                    C.TINY_COLLECTION_LANGUAGES]:
+        for key in [
+            C.LARGE_COLLECTION_LANGUAGES,
+            C.SMALL_COLLECTION_LANGUAGES,
+            C.TINY_COLLECTION_LANGUAGES,
+        ]:
             assert None == ConfigurationSetting.for_library(key, library).value
 
         # So how does this happen?
@@ -84,10 +82,18 @@ class TestConfiguration(DatabaseTest):
             C.LARGE_COLLECTION_LANGUAGES, library
         )
         assert ["eng"] == large_setting.json_value
-        assert [] == ConfigurationSetting.for_library(
-            C.SMALL_COLLECTION_LANGUAGES, library).json_value
-        assert [] == ConfigurationSetting.for_library(
-            C.TINY_COLLECTION_LANGUAGES, library).json_value
+        assert (
+            []
+            == ConfigurationSetting.for_library(
+                C.SMALL_COLLECTION_LANGUAGES, library
+            ).json_value
+        )
+        assert (
+            []
+            == ConfigurationSetting.for_library(
+                C.TINY_COLLECTION_LANGUAGES, library
+            ).json_value
+        )
 
         # We can change these values.
         large_setting.value = json.dumps(["spa", "jpn"])
@@ -107,14 +113,13 @@ class TestConfiguration(DatabaseTest):
 
         # We thought we'd have big collections.
         old_settings = {
-            Configuration.LARGE_COLLECTION_LANGUAGES : ["spa", "fre"],
-            Configuration.SMALL_COLLECTION_LANGUAGES : ["chi"],
-            Configuration.TINY_COLLECTION_LANGUAGES : ["rus"],
+            Configuration.LARGE_COLLECTION_LANGUAGES: ["spa", "fre"],
+            Configuration.SMALL_COLLECTION_LANGUAGES: ["chi"],
+            Configuration.TINY_COLLECTION_LANGUAGES: ["rus"],
         }
 
         for key, value in list(old_settings.items()):
-            ConfigurationSetting.for_library(
-                key, library).value = json.dumps(value)
+            ConfigurationSetting.for_library(key, library).value = json.dumps(value)
 
         # But there's nothing in our database, so when we call
         # Configuration.estimate_language_collections_for_library...
@@ -125,13 +130,19 @@ class TestConfiguration(DatabaseTest):
             Configuration.LARGE_COLLECTION_LANGUAGES, library
         ).json_value
 
-        assert [] == ConfigurationSetting.for_library(
-            Configuration.SMALL_COLLECTION_LANGUAGES, library
-        ).json_value
+        assert (
+            []
+            == ConfigurationSetting.for_library(
+                Configuration.SMALL_COLLECTION_LANGUAGES, library
+            ).json_value
+        )
 
-        assert [] == ConfigurationSetting.for_library(
-            Configuration.TINY_COLLECTION_LANGUAGES, library
-        ).json_value
+        assert (
+            []
+            == ConfigurationSetting.for_library(
+                Configuration.TINY_COLLECTION_LANGUAGES, library
+            ).json_value
+        )
 
     def test_classify_holdings(self):
 
@@ -149,10 +160,10 @@ class TestConfiguration(DatabaseTest):
         # Otherwise, the classification of a collection depends on the
         # sheer number of items in that collection. Within a
         # classification, languages are ordered by holding size.
-        different_sizes = Counter(jpn=16000, fre=20000, spa=8000,
-                                  nav=6, ukr=4000, ira=1500)
-        assert ([['fre', 'jpn'], ['spa', 'ukr', 'ira'], ['nav']] ==
-            m(different_sizes))
+        different_sizes = Counter(
+            jpn=16000, fre=20000, spa=8000, nav=6, ukr=4000, ira=1500
+        )
+        assert [["fre", "jpn"], ["spa", "ukr", "ira"], ["nav"]] == m(different_sizes)
 
     def test_max_outstanding_fines(self):
         m = Configuration.max_outstanding_fines
@@ -163,8 +174,7 @@ class TestConfiguration(DatabaseTest):
         # The maximum fine value is determined by this
         # ConfigurationSetting.
         setting = ConfigurationSetting.for_library(
-            Configuration.MAX_OUTSTANDING_FINES,
-            self._default_library
+            Configuration.MAX_OUTSTANDING_FINES, self._default_library
         )
 
         # Any amount of fines is too much.
@@ -180,4 +190,6 @@ class TestConfiguration(DatabaseTest):
     def test_default_opds_format(self):
         # Initializing the Configuration object modifies the corresponding
         # object in core, so that core code will behave appropriately.
-        assert Configuration.DEFAULT_OPDS_FORMAT == CoreConfiguration.DEFAULT_OPDS_FORMAT
+        assert (
+            Configuration.DEFAULT_OPDS_FORMAT == CoreConfiguration.DEFAULT_OPDS_FORMAT
+        )

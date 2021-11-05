@@ -1,5 +1,3 @@
-
-
 import feedparser
 
 from api.admin.opds import AdminAnnotator, AdminFeed
@@ -17,16 +15,19 @@ from core.opds import Annotator
 
 from core.testing import DatabaseTest
 
-class TestOPDS(DatabaseTest):
 
+class TestOPDS(DatabaseTest):
     def links(self, entry, rel=None):
-        if 'feed' in entry:
-            entry = entry['feed']
-        links = sorted(entry['links'], key=lambda x: (x['rel'], x.get('title')))
+        if "feed" in entry:
+            entry = entry["feed"]
+        links = sorted(entry["links"], key=lambda x: (x["rel"], x.get("title")))
         r = []
         for l in links:
-            if (not rel or l['rel'] == rel or
-                (isinstance(rel, list) and l['rel'] in rel)):
+            if (
+                not rel
+                or l["rel"] == rel
+                or (isinstance(rel, list) and l["rel"] in rel)
+            ):
                 r.append(l)
         return r
 
@@ -34,13 +35,21 @@ class TestOPDS(DatabaseTest):
         work = self._work(with_open_access_download=True)
         lp = work.license_pools[0]
         staff_data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
-        lp.identifier.add_measurement(staff_data_source, Measurement.RATING, 3, weight=1000)
+        lp.identifier.add_measurement(
+            staff_data_source, Measurement.RATING, 3, weight=1000
+        )
 
-        feed = AcquisitionFeed(self._db, "test", "url", [work], AdminAnnotator(None, self._default_library, test_mode=True))
-        [entry] = feedparser.parse(str(feed))['entries']
-        rating = entry['schema_rating']
-        assert 3 == float(rating['schema:ratingvalue'])
-        assert Measurement.RATING == rating['additionaltype']
+        feed = AcquisitionFeed(
+            self._db,
+            "test",
+            "url",
+            [work],
+            AdminAnnotator(None, self._default_library, test_mode=True),
+        )
+        [entry] = feedparser.parse(str(feed))["entries"]
+        rating = entry["schema_rating"]
+        assert 3 == float(rating["schema:ratingvalue"])
+        assert Measurement.RATING == rating["additionaltype"]
 
     def test_feed_includes_refresh_link(self):
         work = self._work(with_open_access_download=True)
@@ -49,21 +58,41 @@ class TestOPDS(DatabaseTest):
         self._db.commit()
 
         # If the metadata wrangler isn't configured, the link is left out.
-        feed = AcquisitionFeed(self._db, "test", "url", [work], AdminAnnotator(None, self._default_library, test_mode=True))
-        [entry] = feedparser.parse(str(feed))['entries']
-        assert ([] ==
-            [x for x in entry['links'] if x['rel'] == "http://librarysimplified.org/terms/rel/refresh"])
+        feed = AcquisitionFeed(
+            self._db,
+            "test",
+            "url",
+            [work],
+            AdminAnnotator(None, self._default_library, test_mode=True),
+        )
+        [entry] = feedparser.parse(str(feed))["entries"]
+        assert [] == [
+            x
+            for x in entry["links"]
+            if x["rel"] == "http://librarysimplified.org/terms/rel/refresh"
+        ]
 
         # If we configure a metadata wrangler integration, the link appears.
         integration = self._external_integration(
             ExternalIntegration.METADATA_WRANGLER,
             goal=ExternalIntegration.METADATA_GOAL,
-            settings={ ExternalIntegration.URL: "http://metadata" },
-            password="pw")
+            settings={ExternalIntegration.URL: "http://metadata"},
+            password="pw",
+        )
         integration.collections += [self._default_collection]
-        feed = AcquisitionFeed(self._db, "test", "url", [work], AdminAnnotator(None, self._default_library, test_mode=True))
-        [entry] = feedparser.parse(str(feed))['entries']
-        [refresh_link] = [x for x in entry['links'] if x['rel'] == "http://librarysimplified.org/terms/rel/refresh"]
+        feed = AcquisitionFeed(
+            self._db,
+            "test",
+            "url",
+            [work],
+            AdminAnnotator(None, self._default_library, test_mode=True),
+        )
+        [entry] = feedparser.parse(str(feed))["entries"]
+        [refresh_link] = [
+            x
+            for x in entry["links"]
+            if x["rel"] == "http://librarysimplified.org/terms/rel/refresh"
+        ]
         assert lp.identifier.identifier in refresh_link["href"]
 
     def test_feed_includes_suppress_link(self):
@@ -72,30 +101,64 @@ class TestOPDS(DatabaseTest):
         lp.suppressed = False
         self._db.commit()
 
-        feed = AcquisitionFeed(self._db, "test", "url", [work], AdminAnnotator(None, self._default_library, test_mode=True))
-        [entry] = feedparser.parse(str(feed))['entries']
-        [suppress_link] = [x for x in entry['links'] if x['rel'] == "http://librarysimplified.org/terms/rel/hide"]
+        feed = AcquisitionFeed(
+            self._db,
+            "test",
+            "url",
+            [work],
+            AdminAnnotator(None, self._default_library, test_mode=True),
+        )
+        [entry] = feedparser.parse(str(feed))["entries"]
+        [suppress_link] = [
+            x
+            for x in entry["links"]
+            if x["rel"] == "http://librarysimplified.org/terms/rel/hide"
+        ]
         assert lp.identifier.identifier in suppress_link["href"]
-        unsuppress_links = [x for x in entry['links'] if x['rel'] == "http://librarysimplified.org/terms/rel/restore"]
+        unsuppress_links = [
+            x
+            for x in entry["links"]
+            if x["rel"] == "http://librarysimplified.org/terms/rel/restore"
+        ]
         assert 0 == len(unsuppress_links)
 
         lp.suppressed = True
         self._db.commit()
 
-        feed = AcquisitionFeed(self._db, "test", "url", [work], AdminAnnotator(None, self._default_library, test_mode=True))
-        [entry] = feedparser.parse(str(feed))['entries']
-        [unsuppress_link] = [x for x in entry['links'] if x['rel'] == "http://librarysimplified.org/terms/rel/restore"]
+        feed = AcquisitionFeed(
+            self._db,
+            "test",
+            "url",
+            [work],
+            AdminAnnotator(None, self._default_library, test_mode=True),
+        )
+        [entry] = feedparser.parse(str(feed))["entries"]
+        [unsuppress_link] = [
+            x
+            for x in entry["links"]
+            if x["rel"] == "http://librarysimplified.org/terms/rel/restore"
+        ]
         assert lp.identifier.identifier in unsuppress_link["href"]
-        suppress_links = [x for x in entry['links'] if x['rel'] == "http://librarysimplified.org/terms/rel/hide"]
+        suppress_links = [
+            x
+            for x in entry["links"]
+            if x["rel"] == "http://librarysimplified.org/terms/rel/hide"
+        ]
         assert 0 == len(suppress_links)
 
     def test_feed_includes_edit_link(self):
         work = self._work(with_open_access_download=True)
         lp = work.license_pools[0]
 
-        feed = AcquisitionFeed(self._db, "test", "url", [work], AdminAnnotator(None, self._default_library, test_mode=True))
-        [entry] = feedparser.parse(str(feed))['entries']
-        [edit_link] = [x for x in entry['links'] if x['rel'] == "edit"]
+        feed = AcquisitionFeed(
+            self._db,
+            "test",
+            "url",
+            [work],
+            AdminAnnotator(None, self._default_library, test_mode=True),
+        )
+        [entry] = feedparser.parse(str(feed))["entries"]
+        [edit_link] = [x for x in entry["links"] if x["rel"] == "edit"]
         assert lp.identifier.identifier in edit_link["href"]
 
     def test_feed_includes_change_cover_link(self):
@@ -103,16 +166,28 @@ class TestOPDS(DatabaseTest):
         lp = work.license_pools[0]
         library = self._default_library
 
-        feed = AcquisitionFeed(self._db, "test", "url", [work], AdminAnnotator(None, library, test_mode=True))
-        [entry] = feedparser.parse(str(feed))['entries']
+        feed = AcquisitionFeed(
+            self._db,
+            "test",
+            "url",
+            [work],
+            AdminAnnotator(None, library, test_mode=True),
+        )
+        [entry] = feedparser.parse(str(feed))["entries"]
 
         # Since there's no storage integration, the change cover link isn't included.
-        assert [] == [x for x in entry['links'] if x['rel'] == "http://librarysimplified.org/terms/rel/change_cover"]
+        assert [] == [
+            x
+            for x in entry["links"]
+            if x["rel"] == "http://librarysimplified.org/terms/rel/change_cover"
+        ]
 
         # There is now a covers storage integration that is linked to the external
         # integration for a collection that the work is in. It will use that
         # covers mirror and the change cover link is included.
-        storage = self._external_integration(ExternalIntegration.S3, ExternalIntegration.STORAGE_GOAL)
+        storage = self._external_integration(
+            ExternalIntegration.S3, ExternalIntegration.STORAGE_GOAL
+        )
         storage.username = "user"
         storage.password = "pass"
 
@@ -121,20 +196,29 @@ class TestOPDS(DatabaseTest):
         external_integration_link = self._external_integration_link(
             integration=collection._external_integration,
             other_integration=storage,
-            purpose=purpose
+            purpose=purpose,
         )
         library.collections.append(collection)
         work = self._work(with_open_access_download=True, collection=collection)
         lp = work.license_pools[0]
-        feed = AcquisitionFeed(self._db, "test", "url", [work], AdminAnnotator(None, library, test_mode=True))
-        [entry] = feedparser.parse(str(feed))['entries']
+        feed = AcquisitionFeed(
+            self._db,
+            "test",
+            "url",
+            [work],
+            AdminAnnotator(None, library, test_mode=True),
+        )
+        [entry] = feedparser.parse(str(feed))["entries"]
 
-        [change_cover_link] = [x for x in entry['links'] if x['rel'] == "http://librarysimplified.org/terms/rel/change_cover"]
+        [change_cover_link] = [
+            x
+            for x in entry["links"]
+            if x["rel"] == "http://librarysimplified.org/terms/rel/change_cover"
+        ]
         assert lp.identifier.identifier in change_cover_link["href"]
 
     def test_complaints_feed(self):
-        """Test the ability to show a paginated feed of works with complaints.
-        """
+        """Test the ability to show a paginated feed of works with complaints."""
 
         type = iter(Complaint.VALID_TYPES)
         type1 = next(type)
@@ -144,42 +228,50 @@ class TestOPDS(DatabaseTest):
             "fiction work with complaint",
             language="eng",
             fiction=True,
-            with_open_access_download=True)
+            with_open_access_download=True,
+        )
         work1_complaint1 = self._complaint(
             work1.license_pools[0],
             type1,
             "work1 complaint1 source",
-            "work1 complaint1 detail")
+            "work1 complaint1 detail",
+        )
         work1_complaint2 = self._complaint(
             work1.license_pools[0],
             type1,
             "work1 complaint2 source",
-            "work1 complaint2 detail")
+            "work1 complaint2 detail",
+        )
         work1_complaint3 = self._complaint(
             work1.license_pools[0],
             type2,
             "work1 complaint3 source",
-            "work1 complaint3 detail")
+            "work1 complaint3 detail",
+        )
         work2 = self._work(
             "nonfiction work with complaint",
             language="eng",
             fiction=False,
-            with_open_access_download=True)
+            with_open_access_download=True,
+        )
         work2_complaint1 = self._complaint(
             work2.license_pools[0],
             type2,
             "work2 complaint1 source",
-            "work2 complaint1 detail")
+            "work2 complaint1 detail",
+        )
         work3 = self._work(
             "fiction work without complaint",
             language="eng",
             fiction=True,
-            with_open_access_download=True)
+            with_open_access_download=True,
+        )
         work4 = self._work(
             "nonfiction work without complaint",
             language="eng",
             fiction=False,
-            with_open_access_download=True)
+            with_open_access_download=True,
+        )
 
         facets = Facets.default(self._default_library)
         pagination = Pagination(size=1)
@@ -187,42 +279,50 @@ class TestOPDS(DatabaseTest):
 
         def make_page(pagination):
             return AdminFeed.complaints(
-                library=self._default_library, title="Complaints",
-                url=self._url, annotator=annotator,
-                pagination=pagination
+                library=self._default_library,
+                title="Complaints",
+                url=self._url,
+                annotator=annotator,
+                pagination=pagination,
             )
 
         first_page = make_page(pagination)
         parsed = feedparser.parse(str(first_page))
-        assert 1 == len(parsed['entries'])
-        assert work1.title == parsed['entries'][0]['title']
+        assert 1 == len(parsed["entries"])
+        assert work1.title == parsed["entries"][0]["title"]
         # Verify that the entry has acquisition links.
-        links = parsed['entries'][0]['links']
-        open_access_links = [l for l in links if l['rel'] == "http://opds-spec.org/acquisition/open-access"]
+        links = parsed["entries"][0]["links"]
+        open_access_links = [
+            l
+            for l in links
+            if l["rel"] == "http://opds-spec.org/acquisition/open-access"
+        ]
         assert 1 == len(open_access_links)
 
         # Make sure the links are in place.
-        [start] = self.links(parsed, 'start')
-        assert annotator.groups_url(None) == start['href']
-        assert annotator.top_level_title() == start['title']
+        [start] = self.links(parsed, "start")
+        assert annotator.groups_url(None) == start["href"]
+        assert annotator.top_level_title() == start["title"]
 
-        [up] = self.links(parsed, 'up')
-        assert annotator.groups_url(None) == up['href']
-        assert annotator.top_level_title() == up['title']
+        [up] = self.links(parsed, "up")
+        assert annotator.groups_url(None) == up["href"]
+        assert annotator.top_level_title() == up["title"]
 
-        [next_link] = self.links(parsed, 'next')
-        assert annotator.complaints_url(facets, pagination.next_page) == next_link['href']
+        [next_link] = self.links(parsed, "next")
+        assert (
+            annotator.complaints_url(facets, pagination.next_page) == next_link["href"]
+        )
 
         # This was the first page, so no previous link.
-        assert [] == self.links(parsed, 'previous')
+        assert [] == self.links(parsed, "previous")
 
         # Now get the second page and make sure it has a 'previous' link.
         second_page = make_page(pagination.next_page)
         parsed = feedparser.parse(str(second_page))
-        [previous] = self.links(parsed, 'previous')
-        assert annotator.complaints_url(facets, pagination) == previous['href']
-        assert 1 == len(parsed['entries'])
-        assert work2.title == parsed['entries'][0]['title']
+        [previous] = self.links(parsed, "previous")
+        assert annotator.complaints_url(facets, pagination) == previous["href"]
+        assert 1 == len(parsed["entries"])
+        assert work2.title == parsed["entries"][0]["title"]
 
     def test_suppressed_feed(self):
         # Test the ability to show a paginated feed of suppressed works.
@@ -245,51 +345,52 @@ class TestOPDS(DatabaseTest):
 
         def make_page(pagination):
             return AdminFeed.suppressed(
-                _db=self._db, title="Hidden works",
-                url=self._url, annotator=annotator,
-                pagination=pagination
+                _db=self._db,
+                title="Hidden works",
+                url=self._url,
+                annotator=annotator,
+                pagination=pagination,
             )
 
         first_page = make_page(pagination)
         parsed = feedparser.parse(str(first_page))
-        assert 1 == len(parsed['entries'])
-        assert parsed['entries'][0].title in titles
-        titles.remove(parsed['entries'][0].title)
+        assert 1 == len(parsed["entries"])
+        assert parsed["entries"][0].title in titles
+        titles.remove(parsed["entries"][0].title)
         [remaining_title] = titles
 
         # Make sure the links are in place.
-        [start] = self.links(parsed, 'start')
-        assert annotator.groups_url(None) == start['href']
-        assert annotator.top_level_title() == start['title']
+        [start] = self.links(parsed, "start")
+        assert annotator.groups_url(None) == start["href"]
+        assert annotator.top_level_title() == start["title"]
 
-        [up] = self.links(parsed, 'up')
-        assert annotator.groups_url(None) == up['href']
-        assert annotator.top_level_title() == up['title']
+        [up] = self.links(parsed, "up")
+        assert annotator.groups_url(None) == up["href"]
+        assert annotator.top_level_title() == up["title"]
 
-        [next_link] = self.links(parsed, 'next')
-        assert annotator.suppressed_url(pagination.next_page) == next_link['href']
+        [next_link] = self.links(parsed, "next")
+        assert annotator.suppressed_url(pagination.next_page) == next_link["href"]
 
         # This was the first page, so no previous link.
-        assert [] == self.links(parsed, 'previous')
+        assert [] == self.links(parsed, "previous")
 
         # Now get the second page and make sure it has a 'previous' link.
         second_page = make_page(pagination.next_page)
         parsed = feedparser.parse(str(second_page))
-        [previous] = self.links(parsed, 'previous')
-        assert annotator.suppressed_url(pagination) == previous['href']
-        assert 1 == len(parsed['entries'])
-        assert remaining_title == parsed['entries'][0]['title']
+        [previous] = self.links(parsed, "previous")
+        assert annotator.suppressed_url(pagination) == previous["href"]
+        assert 1 == len(parsed["entries"])
+        assert remaining_title == parsed["entries"][0]["title"]
 
         # The third page is empty.
         third_page = make_page(pagination.next_page.next_page)
         parsed = feedparser.parse(str(third_page))
-        [previous] = self.links(parsed, 'previous')
-        assert annotator.suppressed_url(pagination.next_page) == previous['href']
-        assert 0 == len(parsed['entries'])
+        [previous] = self.links(parsed, "previous")
+        assert annotator.suppressed_url(pagination.next_page) == previous["href"]
+        assert 0 == len(parsed["entries"])
 
 
 class MockAnnotator(AdminAnnotator):
-
     def __init__(self, library):
         super(MockAnnotator, self).__init__(None, library, test_mode=True)
 
@@ -302,21 +403,20 @@ class MockAnnotator(AdminAnnotator):
 
     def complaints_url(self, facets, pagination):
         base = "http://complaints/"
-        sep = '?'
+        sep = "?"
         if facets:
             base += sep + facets.query_string
-            sep = '&'
+            sep = "&"
         if pagination:
             base += sep + pagination.query_string
         return base
 
     def suppressed_url(self, pagination):
         base = "http://complaints/"
-        sep = '?'
+        sep = "?"
         if pagination:
             base += sep + pagination.query_string
         return base
 
     def annotate_feed(self, feed):
         super(MockAnnotator, self).annotate_feed(feed)
-

@@ -1,4 +1,3 @@
-
 from sqlalchemy import and_
 from api.opds import LibraryAnnotator
 from core.opds import VerboseAnnotator
@@ -16,21 +15,32 @@ from core.mirror import MirrorUploader
 from api.metadata_wrangler import MetadataWranglerCollectionRegistrar
 from api.config import CannotLoadConfiguration
 
-class AdminAnnotator(LibraryAnnotator):
 
+class AdminAnnotator(LibraryAnnotator):
     def __init__(self, circulation, library, test_mode=False):
-        super(AdminAnnotator, self).__init__(circulation, None, library, test_mode=test_mode)
+        super(AdminAnnotator, self).__init__(
+            circulation, None, library, test_mode=test_mode
+        )
         self.opds_cache_field = None
 
-    def annotate_work_entry(self, work, active_license_pool, edition, identifier, feed, entry):
+    def annotate_work_entry(
+        self, work, active_license_pool, edition, identifier, feed, entry
+    ):
 
-        super(AdminAnnotator, self).annotate_work_entry(work, active_license_pool, edition, identifier, feed, entry)
+        super(AdminAnnotator, self).annotate_work_entry(
+            work, active_license_pool, edition, identifier, feed, entry
+        )
         VerboseAnnotator.add_ratings(work, entry)
 
         # Find staff rating and add a tag for it.
         for measurement in identifier.measurements:
-            if measurement.data_source.name == DataSource.LIBRARY_STAFF and measurement.is_most_recent:
-                entry.append(self.rating_tag(measurement.quantity_measured, measurement.value))
+            if (
+                measurement.data_source.name == DataSource.LIBRARY_STAFF
+                and measurement.is_most_recent
+            ):
+                entry.append(
+                    self.rating_tag(measurement.quantity_measured, measurement.value)
+                )
 
         try:
             MetadataWranglerCollectionRegistrar(work.license_pools[0].collection)
@@ -40,7 +50,9 @@ class AdminAnnotator(LibraryAnnotator):
                 href=self.url_for(
                     "refresh",
                     identifier_type=identifier.type,
-                    identifier=identifier.identifier, _external=True)
+                    identifier=identifier.identifier,
+                    _external=True,
+                ),
             )
         except CannotLoadConfiguration:
             # Leave out the refresh link if there's no metadata wrangler
@@ -54,7 +66,9 @@ class AdminAnnotator(LibraryAnnotator):
                 href=self.url_for(
                     "unsuppress",
                     identifier_type=identifier.type,
-                    identifier=identifier.identifier, _external=True)
+                    identifier=identifier.identifier,
+                    _external=True,
+                ),
             )
         else:
             feed.add_link_to_entry(
@@ -63,7 +77,9 @@ class AdminAnnotator(LibraryAnnotator):
                 href=self.url_for(
                     "suppress",
                     identifier_type=identifier.type,
-                    identifier=identifier.identifier, _external=True)
+                    identifier=identifier.identifier,
+                    _external=True,
+                ),
             )
 
         feed.add_link_to_entry(
@@ -72,7 +88,9 @@ class AdminAnnotator(LibraryAnnotator):
             href=self.url_for(
                 "edit",
                 identifier_type=identifier.type,
-                identifier=identifier.identifier, _external=True)
+                identifier=identifier.identifier,
+                _external=True,
+            ),
         )
 
         # If there is a storage integration for the collection, changing the cover is allowed.
@@ -86,7 +104,9 @@ class AdminAnnotator(LibraryAnnotator):
                 href=self.url_for(
                     "work_change_book_cover",
                     identifier_type=identifier.type,
-                    identifier=identifier.identifier, _external=True)
+                    identifier=identifier.identifier,
+                    _external=True,
+                ),
             )
 
     def complaints_url(self, facets, pagination):
@@ -100,20 +120,14 @@ class AdminAnnotator(LibraryAnnotator):
 
     def annotate_feed(self, feed):
         # Add a 'search' link.
-        search_url = self.url_for(
-            'lane_search', languages=None,
-            _external=True
-        )
+        search_url = self.url_for("lane_search", languages=None, _external=True)
         search_link = dict(
-            rel="search",
-            type="application/opensearchdescription+xml",
-            href=search_url
+            rel="search", type="application/opensearchdescription+xml", href=search_url
         )
         feed.add_link_to_feed(feed.feed, **search_link)
 
 
 class AdminFeed(AcquisitionFeed):
-
     @classmethod
     def complaints(cls, library, title, url, annotator, pagination=None):
         _db = Session.object_session(library)
@@ -134,21 +148,37 @@ class AdminFeed(AcquisitionFeed):
         # Render a 'start' link
         top_level_title = annotator.top_level_title()
         start_uri = annotator.groups_url(None)
-        AdminFeed.add_link_to_feed(feed.feed, href=start_uri, rel="start", title=top_level_title)
+        AdminFeed.add_link_to_feed(
+            feed.feed, href=start_uri, rel="start", title=top_level_title
+        )
 
         # Render an 'up' link, same as the 'start' link to indicate top-level feed
-        AdminFeed.add_link_to_feed(feed.feed, href=start_uri, rel="up", title=top_level_title)
+        AdminFeed.add_link_to_feed(
+            feed.feed, href=start_uri, rel="up", title=top_level_title
+        )
 
         if len(works) > 0:
             # There are works in this list. Add a 'next' link.
-            AdminFeed.add_link_to_feed(feed.feed, rel="next", href=annotator.complaints_url(facets, pagination.next_page))
+            AdminFeed.add_link_to_feed(
+                feed.feed,
+                rel="next",
+                href=annotator.complaints_url(facets, pagination.next_page),
+            )
 
         if pagination.offset > 0:
-            AdminFeed.add_link_to_feed(feed.feed, rel="first", href=annotator.complaints_url(facets, pagination.first_page))
+            AdminFeed.add_link_to_feed(
+                feed.feed,
+                rel="first",
+                href=annotator.complaints_url(facets, pagination.first_page),
+            )
 
         previous_page = pagination.previous_page
         if previous_page:
-            AdminFeed.add_link_to_feed(feed.feed, rel="previous", href=annotator.complaints_url(facets, previous_page))
+            AdminFeed.add_link_to_feed(
+                feed.feed,
+                rel="previous",
+                href=annotator.complaints_url(facets, previous_page),
+            )
 
         annotator.annotate_feed(feed)
         return str(feed)
@@ -157,13 +187,15 @@ class AdminFeed(AcquisitionFeed):
     def suppressed(cls, _db, title, url, annotator, pagination=None):
         pagination = pagination or Pagination.default()
 
-        q = _db.query(LicensePool).filter(
-            and_(
-                LicensePool.suppressed == True,
-                LicensePool.superceded == False,
+        q = (
+            _db.query(LicensePool)
+            .filter(
+                and_(
+                    LicensePool.suppressed == True,
+                    LicensePool.superceded == False,
+                )
             )
-        ).order_by(
-            LicensePool.id
+            .order_by(LicensePool.id)
         )
         pools = pagination.modify_database_query(_db, q).all()
 
@@ -173,22 +205,35 @@ class AdminFeed(AcquisitionFeed):
         # Render a 'start' link
         top_level_title = annotator.top_level_title()
         start_uri = annotator.groups_url(None)
-        AdminFeed.add_link_to_feed(feed.feed, href=start_uri, rel="start", title=top_level_title)
+        AdminFeed.add_link_to_feed(
+            feed.feed, href=start_uri, rel="start", title=top_level_title
+        )
 
         # Render an 'up' link, same as the 'start' link to indicate top-level feed
-        AdminFeed.add_link_to_feed(feed.feed, href=start_uri, rel="up", title=top_level_title)
+        AdminFeed.add_link_to_feed(
+            feed.feed, href=start_uri, rel="up", title=top_level_title
+        )
 
         if len(works) > 0:
             # There are works in this list. Add a 'next' link.
-            AdminFeed.add_link_to_feed(feed.feed, rel="next", href=annotator.suppressed_url(pagination.next_page))
+            AdminFeed.add_link_to_feed(
+                feed.feed,
+                rel="next",
+                href=annotator.suppressed_url(pagination.next_page),
+            )
 
         if pagination.offset > 0:
-            AdminFeed.add_link_to_feed(feed.feed, rel="first", href=annotator.suppressed_url(pagination.first_page))
+            AdminFeed.add_link_to_feed(
+                feed.feed,
+                rel="first",
+                href=annotator.suppressed_url(pagination.first_page),
+            )
 
         previous_page = pagination.previous_page
         if previous_page:
-            AdminFeed.add_link_to_feed(feed.feed, rel="previous", href=annotator.suppressed_url(previous_page))
+            AdminFeed.add_link_to_feed(
+                feed.feed, rel="previous", href=annotator.suppressed_url(previous_page)
+            )
 
         annotator.annotate_feed(feed)
         return str(feed)
-

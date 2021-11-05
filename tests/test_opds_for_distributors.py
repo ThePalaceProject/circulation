@@ -42,21 +42,23 @@ class BaseOPDSForDistributorsTest(object):
         path = os.path.join(cls.resource_path, filename)
         return open(path).read()
 
-class TestOPDSForDistributorsAPI(DatabaseTest):
 
+class TestOPDSForDistributorsAPI(DatabaseTest):
     def setup_method(self):
         super(TestOPDSForDistributorsAPI, self).setup_method()
         self.collection = MockOPDSForDistributorsAPI.mock_collection(self._db)
         self.api = MockOPDSForDistributorsAPI(self._db, self.collection)
 
     def test_external_integration(self):
-        assert (self.collection.external_integration ==
-            self.api.external_integration(self._db))
+        assert self.collection.external_integration == self.api.external_integration(
+            self._db
+        )
 
     def test__run_self_tests(self):
         """The self-test for OPDSForDistributorsAPI just tries to negotiate
         a fulfillment token.
         """
+
         class Mock(OPDSForDistributorsAPI):
             def __init__(self):
                 pass
@@ -126,15 +128,21 @@ class TestOPDSForDistributorsAPI(DatabaseTest):
         # document and authenticate url.
         feed = '<feed><link rel="http://opds-spec.org/auth/document" href="http://authdoc"/></feed>'
         self.api.queue_response(200, content=feed)
-        auth_doc = json.dumps({
-            "authentication": [{
-                "type": "http://opds-spec.org/auth/oauth/client_credentials",
-                "links": [{
-                    "rel": "authenticate",
-                    "href": "http://authenticate",
-                }]
-            }]
-        })
+        auth_doc = json.dumps(
+            {
+                "authentication": [
+                    {
+                        "type": "http://opds-spec.org/auth/oauth/client_credentials",
+                        "links": [
+                            {
+                                "rel": "authenticate",
+                                "href": "http://authenticate",
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
         self.api.queue_response(200, content=auth_doc)
         token = self._str
         token_response = json.dumps({"access_token": token, "expires_in": 60})
@@ -160,15 +168,21 @@ class TestOPDSForDistributorsAPI(DatabaseTest):
         self.api = MockOPDSForDistributorsAPI(self._db, self.collection)
 
         # This feed requires authentication and returns the auth document.
-        auth_doc = json.dumps({
-            "authentication": [{
-                "type": "http://opds-spec.org/auth/oauth/client_credentials",
-                "links": [{
-                    "rel": "authenticate",
-                    "href": "http://authenticate",
-                }]
-            }]
-        })
+        auth_doc = json.dumps(
+            {
+                "authentication": [
+                    {
+                        "type": "http://opds-spec.org/auth/oauth/client_credentials",
+                        "links": [
+                            {
+                                "rel": "authenticate",
+                                "href": "http://authenticate",
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
         self.api.queue_response(401, content=auth_doc)
         token = self._str
         token_response = json.dumps({"access_token": token, "expires_in": 60})
@@ -177,49 +191,67 @@ class TestOPDSForDistributorsAPI(DatabaseTest):
         assert token == self.api._get_token(self._db).credential
 
     def test_get_token_errors(self):
-        no_auth_document = '<feed></feed>'
+        no_auth_document = "<feed></feed>"
         self.api.queue_response(200, content=no_auth_document)
         with pytest.raises(LibraryAuthorizationFailedException) as excinfo:
             self.api._get_token(self._db)
-        assert "No authentication document link found in http://opds" in str(excinfo.value)
+        assert "No authentication document link found in http://opds" in str(
+            excinfo.value
+        )
 
         feed = '<feed><link rel="http://opds-spec.org/auth/document" href="http://authdoc"/></feed>'
         self.api.queue_response(200, content=feed)
-        auth_doc_without_client_credentials = json.dumps({
-            "authentication": []
-        })
+        auth_doc_without_client_credentials = json.dumps({"authentication": []})
         self.api.queue_response(200, content=auth_doc_without_client_credentials)
         with pytest.raises(LibraryAuthorizationFailedException) as excinfo:
             self.api._get_token(self._db)
-        assert "Could not find any credential-based authentication mechanisms in http://authdoc" in str(excinfo.value)
+        assert (
+            "Could not find any credential-based authentication mechanisms in http://authdoc"
+            in str(excinfo.value)
+        )
 
         self.api.queue_response(200, content=feed)
-        auth_doc_without_links = json.dumps({
-            "authentication": [{
-                "type": "http://opds-spec.org/auth/oauth/client_credentials",
-            }]
-        })
+        auth_doc_without_links = json.dumps(
+            {
+                "authentication": [
+                    {
+                        "type": "http://opds-spec.org/auth/oauth/client_credentials",
+                    }
+                ]
+            }
+        )
         self.api.queue_response(200, content=auth_doc_without_links)
         with pytest.raises(LibraryAuthorizationFailedException) as excinfo:
             self.api._get_token(self._db)
-        assert "Could not find any authentication links in http://authdoc" in str(excinfo.value)
+        assert "Could not find any authentication links in http://authdoc" in str(
+            excinfo.value
+        )
 
         self.api.queue_response(200, content=feed)
-        auth_doc = json.dumps({
-            "authentication": [{
-                "type": "http://opds-spec.org/auth/oauth/client_credentials",
-                "links": [{
-                    "rel": "authenticate",
-                    "href": "http://authenticate",
-                }]
-            }]
-        })
+        auth_doc = json.dumps(
+            {
+                "authentication": [
+                    {
+                        "type": "http://opds-spec.org/auth/oauth/client_credentials",
+                        "links": [
+                            {
+                                "rel": "authenticate",
+                                "href": "http://authenticate",
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
         self.api.queue_response(200, content=auth_doc)
         token_response = json.dumps({"error": "unexpected error"})
         self.api.queue_response(200, content=token_response)
         with pytest.raises(LibraryAuthorizationFailedException) as excinfo:
             self.api._get_token(self._db)
-        assert 'Document retrieved from http://authenticate is not a bearer token: {"error": "unexpected error"}' in str(excinfo.value)
+        assert (
+            'Document retrieved from http://authenticate is not a bearer token: {"error": "unexpected error"}'
+            in str(excinfo.value)
+        )
 
     def test_checkin(self):
         # The patron has two loans, one from this API's collection and
@@ -265,7 +297,9 @@ class TestOPDSForDistributorsAPI(DatabaseTest):
             collection=self.collection,
         )
 
-        loan_info = self.api.checkout(patron, "1234", pool, Representation.EPUB_MEDIA_TYPE)
+        loan_info = self.api.checkout(
+            patron, "1234", pool, Representation.EPUB_MEDIA_TYPE
+        )
         assert self.collection.id == loan_info.collection_id
         assert data_source.name == loan_info.data_source_name
         assert Identifier.URI == loan_info.identifier_type
@@ -290,14 +324,21 @@ class TestOPDSForDistributorsAPI(DatabaseTest):
         )
         # This pool doesn't have an acquisition link, so
         # we can't fulfill it yet.
-        pytest.raises(CannotFulfill, self.api.fulfill,
-                      patron, "1234", pool, Representation.EPUB_MEDIA_TYPE)
+        pytest.raises(
+            CannotFulfill,
+            self.api.fulfill,
+            patron,
+            "1234",
+            pool,
+            Representation.EPUB_MEDIA_TYPE,
+        )
 
         # Set up an epub acquisition link for the pool.
         url = self._url
         link, ignore = pool.identifier.add_link(
             Hyperlink.GENERIC_OPDS_ACQUISITION,
-            url, data_source,
+            url,
+            data_source,
             Representation.EPUB_MEDIA_TYPE,
         )
         pool.set_delivery_mechanism(
@@ -315,7 +356,9 @@ class TestOPDSForDistributorsAPI(DatabaseTest):
         self.api.queue_response(200, content=token_response)
 
         fulfillment_time = utc_now()
-        fulfillment_info = self.api.fulfill(patron, "1234", pool, Representation.EPUB_MEDIA_TYPE)
+        fulfillment_info = self.api.fulfill(
+            patron, "1234", pool, Representation.EPUB_MEDIA_TYPE
+        )
         assert self.collection.id == fulfillment_info.collection_id
         assert data_source.name == fulfillment_info.data_source_name
         assert Identifier.URI == fulfillment_info.identifier_type
@@ -324,23 +367,21 @@ class TestOPDSForDistributorsAPI(DatabaseTest):
 
         assert DeliveryMechanism.BEARER_TOKEN == fulfillment_info.content_type
         bearer_token_document = json.loads(fulfillment_info.content)
-        expires_in = bearer_token_document['expires_in']
+        expires_in = bearer_token_document["expires_in"]
         assert expires_in < 60
-        assert "Bearer" == bearer_token_document['token_type']
-        assert "token" == bearer_token_document['access_token']
-        assert url == bearer_token_document['location']
+        assert "Bearer" == bearer_token_document["token_type"]
+        assert "token" == bearer_token_document["access_token"]
+        assert url == bearer_token_document["location"]
 
         # The FulfillmentInfo's content_expires is approximately the
         # time you get if you add the number of seconds until the
         # bearer token expires to the time at which the title was
         # originally fulfilled.
-        expect_expiration = fulfillment_time + datetime.timedelta(
-            seconds=expires_in
+        expect_expiration = fulfillment_time + datetime.timedelta(seconds=expires_in)
+        assert (
+            abs((fulfillment_info.content_expires - expect_expiration).total_seconds())
+            < 5
         )
-        assert abs(
-            (fulfillment_info.content_expires-expect_expiration).total_seconds()
-        ) < 5
-
 
     def test_patron_activity(self):
         # The patron has two loans from this API's collection and
@@ -378,33 +419,38 @@ class TestOPDSForDistributorsAPI(DatabaseTest):
         [l1, l2] = activity
         assert l1.collection_id == self.collection.id
         assert l2.collection_id == self.collection.id
-        assert (set([l1.identifier, l2.identifier]) ==
-            set([p1.identifier.identifier, p2.identifier.identifier]))
+        assert set([l1.identifier, l2.identifier]) == set(
+            [p1.identifier.identifier, p2.identifier.identifier]
+        )
+
 
 class TestOPDSForDistributorsImporter(DatabaseTest, BaseOPDSForDistributorsTest):
-
     def test_import(self):
         feed = self.get_data("biblioboard_mini_feed.opds")
 
         data_source = DataSource.lookup(self._db, "Biblioboard", autocreate=True)
         collection = MockOPDSForDistributorsAPI.mock_collection(self._db)
         collection.external_integration.set_setting(
-            Collection.DATA_SOURCE_NAME_SETTING,
-            data_source.name
+            Collection.DATA_SOURCE_NAME_SETTING, data_source.name
         )
 
         class MockMetadataClient(object):
             def canonicalize_author_name(self, identifier, working_display_name):
                 return working_display_name
+
         metadata_client = MockMetadataClient()
         importer = OPDSForDistributorsImporter(
-            self._db, collection=collection,
+            self._db,
+            collection=collection,
             metadata_client=metadata_client,
         )
 
-        imported_editions, imported_pools, imported_works, failures = (
-            importer.import_from_feed(feed)
-        )
+        (
+            imported_editions,
+            imported_pools,
+            imported_works,
+            failures,
+        ) = importer.import_from_feed(feed)
 
         # This importer works the same as the base OPDSImporter, except that
         # it adds delivery mechanisms for books with epub acquisition links
@@ -421,26 +467,45 @@ class TestOPDSForDistributorsImporter(DatabaseTest, BaseOPDSForDistributorsTest)
 
         for pool in [camelot_pool, southern_pool]:
             assert False == pool.open_access
-            assert RightsStatus.IN_COPYRIGHT == pool.delivery_mechanisms[0].rights_status.uri
-            assert Representation.EPUB_MEDIA_TYPE == pool.delivery_mechanisms[0].delivery_mechanism.content_type
-            assert DeliveryMechanism.BEARER_TOKEN == pool.delivery_mechanisms[0].delivery_mechanism.drm_scheme
+            assert (
+                RightsStatus.IN_COPYRIGHT
+                == pool.delivery_mechanisms[0].rights_status.uri
+            )
+            assert (
+                Representation.EPUB_MEDIA_TYPE
+                == pool.delivery_mechanisms[0].delivery_mechanism.content_type
+            )
+            assert (
+                DeliveryMechanism.BEARER_TOKEN
+                == pool.delivery_mechanisms[0].delivery_mechanism.drm_scheme
+            )
             assert 1 == pool.licenses_owned
             assert 1 == pool.licenses_available
             assert (pool.work.last_update_time - now).total_seconds() <= 2
 
-        [camelot_acquisition_link] = [l for l in camelot_pool.identifier.links
-                                      if l.rel == Hyperlink.GENERIC_OPDS_ACQUISITION
-                                      and l.resource.representation.media_type == Representation.EPUB_MEDIA_TYPE]
+        [camelot_acquisition_link] = [
+            l
+            for l in camelot_pool.identifier.links
+            if l.rel == Hyperlink.GENERIC_OPDS_ACQUISITION
+            and l.resource.representation.media_type == Representation.EPUB_MEDIA_TYPE
+        ]
         camelot_acquisition_url = camelot_acquisition_link.resource.representation.url
-        assert ("https://library.biblioboard.com/ext/api/media/04377e87-ab69-41c8-a2a4-812d55dc0952/assets/content.epub" ==
-            camelot_acquisition_url)
+        assert (
+            "https://library.biblioboard.com/ext/api/media/04377e87-ab69-41c8-a2a4-812d55dc0952/assets/content.epub"
+            == camelot_acquisition_url
+        )
 
-        [southern_acquisition_link] = [l for l in southern_pool.identifier.links
-                                      if l.rel == Hyperlink.GENERIC_OPDS_ACQUISITION
-                                      and l.resource.representation.media_type == Representation.EPUB_MEDIA_TYPE]
+        [southern_acquisition_link] = [
+            l
+            for l in southern_pool.identifier.links
+            if l.rel == Hyperlink.GENERIC_OPDS_ACQUISITION
+            and l.resource.representation.media_type == Representation.EPUB_MEDIA_TYPE
+        ]
         southern_acquisition_url = southern_acquisition_link.resource.representation.url
-        assert ("https://library.biblioboard.com/ext/api/media/04da95cd-6cfc-4e82-810f-121d418b6963/assets/content.epub" ==
-            southern_acquisition_url)
+        assert (
+            "https://library.biblioboard.com/ext/api/media/04da95cd-6cfc-4e82-810f-121d418b6963/assets/content.epub"
+            == southern_acquisition_url
+        )
 
     def test__add_format_data(self):
 
@@ -485,26 +550,22 @@ class TestOPDSForDistributorsImporter(DatabaseTest, BaseOPDSForDistributorsTest)
 
 
 class TestOPDSForDistributorsReaperMonitor(DatabaseTest, BaseOPDSForDistributorsTest):
-
     def test_reaper(self):
         feed = self.get_data("biblioboard_mini_feed.opds")
 
         class MockOPDSForDistributorsReaperMonitor(OPDSForDistributorsReaperMonitor):
             """An OPDSForDistributorsReaperMonitor that overrides _get."""
+
             def _get(self, url, headers):
-                return (
-                    200, {'content-type': OPDSFeed.ACQUISITION_FEED_TYPE}, feed
-                )
+                return (200, {"content-type": OPDSFeed.ACQUISITION_FEED_TYPE}, feed)
 
         data_source = DataSource.lookup(self._db, "Biblioboard", autocreate=True)
         collection = MockOPDSForDistributorsAPI.mock_collection(self._db)
         collection.external_integration.set_setting(
-            Collection.DATA_SOURCE_NAME_SETTING,
-            data_source.name
+            Collection.DATA_SOURCE_NAME_SETTING, data_source.name
         )
         monitor = MockOPDSForDistributorsReaperMonitor(
-            self._db, collection, OPDSForDistributorsImporter,
-            metadata_client=object()
+            self._db, collection, OPDSForDistributorsImporter, metadata_client=object()
         )
 
         # There's a license pool in the database that isn't in the feed anymore.

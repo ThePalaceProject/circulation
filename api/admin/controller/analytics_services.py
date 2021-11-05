@@ -10,29 +10,30 @@ from core.model import (
 from core.util.problem_detail import ProblemDetail
 from . import SettingsController
 
-class AnalyticsServicesController(SettingsController):
 
+class AnalyticsServicesController(SettingsController):
     def __init__(self, manager):
         super(AnalyticsServicesController, self).__init__(manager)
-        provider_apis = [GoogleAnalyticsProvider,
-                         LocalAnalyticsProvider,
-                        ]
+        provider_apis = [
+            GoogleAnalyticsProvider,
+            LocalAnalyticsProvider,
+        ]
         self.protocols = self._get_integration_protocols(provider_apis)
         self.goal = ExternalIntegration.ANALYTICS_GOAL
 
     def process_analytics_services(self):
-        if flask.request.method == 'GET':
+        if flask.request.method == "GET":
             return self.process_get()
         else:
             return self.process_post()
 
     def process_get(self):
-        if flask.request.method == 'GET':
+        if flask.request.method == "GET":
             services = self._get_integration_info(self.goal, self.protocols)
             # Librarians should be able to see, but not modify local analytics services.
             # Setting the level to 2 will communicate that to the front end.
             for x in services:
-                if (x["protocol"] == 'core.local_analytics_provider'):
+                if x["protocol"] == "core.local_analytics_provider":
                     x["level"] = 2
             return dict(
                 analytics_services=services,
@@ -46,7 +47,7 @@ class AnalyticsServicesController(SettingsController):
         fields = {"name": name, "protocol": protocol, "url": url}
 
         # Don't let librarians create local analytics services.
-        if protocol == 'core.local_analytics_provider':
+        if protocol == "core.local_analytics_provider":
             self.require_higher_than_librarian()
 
         form_field_error = self.validate_form_fields(**fields)
@@ -109,6 +110,4 @@ class AnalyticsServicesController(SettingsController):
             return INCOMPLETE_CONFIGURATION
 
     def process_delete(self, service_id):
-        return self._delete_integration(
-            service_id, self.goal
-        )
+        return self._delete_integration(service_id, self.goal)

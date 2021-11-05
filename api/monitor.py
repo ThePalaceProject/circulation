@@ -51,25 +51,26 @@ class LoanlikeReaperMonitor(ReaperMonitor):
         Subclasses will append extra clauses to this filter.
         """
         source_of_truth = or_(
-            LicensePool.open_access==True,
-            ExternalIntegration.protocol.in_(
-                self.SOURCE_OF_TRUTH_PROTOCOLS
-            )
+            LicensePool.open_access == True,
+            ExternalIntegration.protocol.in_(self.SOURCE_OF_TRUTH_PROTOCOLS),
         )
 
-        source_of_truth_subquery = self._db.query(self.MODEL_CLASS.id).join(
-            self.MODEL_CLASS.license_pool).join(
-                LicensePool.collection).join(
-                    ExternalIntegration,
-                    Collection.external_integration_id==ExternalIntegration.id
-                ).filter(
-                    source_of_truth
-                )
+        source_of_truth_subquery = (
+            self._db.query(self.MODEL_CLASS.id)
+            .join(self.MODEL_CLASS.license_pool)
+            .join(LicensePool.collection)
+            .join(
+                ExternalIntegration,
+                Collection.external_integration_id == ExternalIntegration.id,
+            )
+            .filter(source_of_truth)
+        )
         return ~self.MODEL_CLASS.id.in_(source_of_truth_subquery)
 
 
 class LoanReaper(LoanlikeReaperMonitor):
     """Remove expired and abandoned loans from the database."""
+
     MODEL_CLASS = Loan
     MAX_AGE = 90
 
@@ -84,15 +85,17 @@ class LoanReaper(LoanlikeReaperMonitor):
         now = utc_now()
         expired = end_field < now
         very_old_with_no_clear_end_date = and_(
-            start_field < self.cutoff,
-            end_field == None
+            start_field < self.cutoff, end_field == None
         )
         return and_(superclause, or_(expired, very_old_with_no_clear_end_date))
+
+
 ReaperMonitor.REGISTRY.append(LoanReaper)
 
 
 class HoldReaper(LoanlikeReaperMonitor):
     """Remove seemingly abandoned holds from the database."""
+
     MODEL_CLASS = Hold
     MAX_AGE = 365
 
@@ -109,10 +112,11 @@ class HoldReaper(LoanlikeReaperMonitor):
         superclause = super(HoldReaper, self).where_clause
         end_date_in_past = end_field < utc_now()
         probably_abandoned = and_(
-            start_field < self.cutoff,
-            or_(end_field == None, end_date_in_past)
+            start_field < self.cutoff, or_(end_field == None, end_date_in_past)
         )
         return and_(superclause, probably_abandoned)
+
+
 ReaperMonitor.REGISTRY.append(HoldReaper)
 
 
@@ -120,7 +124,7 @@ class IdlingAnnotationReaper(ReaperMonitor):
     """Remove idling annotations for inactive loans."""
 
     MODEL_CLASS = Annotation
-    TIMESTAMP_FIELD = 'timestamp'
+    TIMESTAMP_FIELD = "timestamp"
     MAX_AGE = 60
 
     @property
@@ -134,22 +138,21 @@ class IdlingAnnotationReaper(ReaperMonitor):
 
         restrictions = []
         for t in Loan, Hold:
-            active_subquery = self._db.query(
-                Annotation.id
-            ).join(
-                t,
-                t.patron_id==Annotation.patron_id
-            ).join(
-                LicensePool,
-                and_(LicensePool.id==t.license_pool_id,
-                     LicensePool.identifier_id==Annotation.identifier_id)
+            active_subquery = (
+                self._db.query(Annotation.id)
+                .join(t, t.patron_id == Annotation.patron_id)
+                .join(
+                    LicensePool,
+                    and_(
+                        LicensePool.id == t.license_pool_id,
+                        LicensePool.identifier_id == Annotation.identifier_id,
+                    ),
+                )
             )
-            restrictions.append(
-                ~Annotation.id.in_(active_subquery)
-            )
+            restrictions.append(~Annotation.id.in_(active_subquery))
         return and_(
-            superclause,
-            Annotation.motivation==Annotation.IDLING,
-            *restrictions
+            superclause, Annotation.motivation == Annotation.IDLING, *restrictions
         )
+
+
 ReaperMonitor.REGISTRY.append(IdlingAnnotationReaper)

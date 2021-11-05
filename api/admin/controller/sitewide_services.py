@@ -16,16 +16,22 @@ from core.log import (
 from core.util.problem_detail import ProblemDetail
 from . import SettingsController
 
-class SitewideServicesController(SettingsController):
 
+class SitewideServicesController(SettingsController):
     def _manage_sitewide_service(
-            self, goal, provider_apis, service_key_name,
-            multiple_sitewide_services_detail, protocol_name_attr='NAME'
+        self,
+        goal,
+        provider_apis,
+        service_key_name,
+        multiple_sitewide_services_detail,
+        protocol_name_attr="NAME",
     ):
-        protocols = self._get_integration_protocols(provider_apis, protocol_name_attr=protocol_name_attr)
+        protocols = self._get_integration_protocols(
+            provider_apis, protocol_name_attr=protocol_name_attr
+        )
 
         self.require_system_admin()
-        if flask.request.method == 'GET':
+        if flask.request.method == "GET":
             return self.process_get(protocols, goal, service_key_name)
         else:
             return self.process_post(protocols, goal, multiple_sitewide_services_detail)
@@ -33,8 +39,8 @@ class SitewideServicesController(SettingsController):
     def process_get(self, protocols, goal, service_key_name):
         services = self._get_integration_info(goal, protocols)
         return {
-            service_key_name : services,
-            'protocols' : protocols,
+            service_key_name: services,
+            "protocols": protocols,
         }
 
     def process_post(self, protocols, goal, multiple_sitewide_services_detail):
@@ -59,8 +65,7 @@ class SitewideServicesController(SettingsController):
         else:
             if protocol:
                 service, is_new = get_one_or_create(
-                    self._db, ExternalIntegration, protocol=protocol,
-                    goal=goal
+                    self._db, ExternalIntegration, protocol=protocol, goal=goal
                 )
                 # There can only be one of each sitewide service.
                 if not is_new:
@@ -104,19 +109,22 @@ class SitewideServicesController(SettingsController):
         if protocol and protocol not in [p.get("name") for p in protocols]:
             return UNKNOWN_PROTOCOL
 
+
 class LoggingServicesController(SitewideServicesController):
     def process_services(self):
-        detail = _("You tried to create a new logging service, but a logging service is already configured.")
+        detail = _(
+            "You tried to create a new logging service, but a logging service is already configured."
+        )
         return self._manage_sitewide_service(
             ExternalIntegration.LOGGING_GOAL,
             [Loggly, SysLogger, CloudwatchLogs],
-            'logging_services', detail
+            "logging_services",
+            detail,
         )
 
     def process_delete(self, service_id):
-        return self._delete_integration(
-            service_id, ExternalIntegration.LOGGING_GOAL
-        )
+        return self._delete_integration(service_id, ExternalIntegration.LOGGING_GOAL)
+
 
 class SearchServicesController(SitewideServicesController):
     def __init__(self, manager):
@@ -124,13 +132,15 @@ class SearchServicesController(SitewideServicesController):
         self.type = _("search service")
 
     def process_services(self):
-        detail = _("You tried to create a new search service, but a search service is already configured.")
+        detail = _(
+            "You tried to create a new search service, but a search service is already configured."
+        )
         return self._manage_sitewide_service(
-            ExternalIntegration.SEARCH_GOAL, [ExternalSearchIndex],
-            'search_services', detail
+            ExternalIntegration.SEARCH_GOAL,
+            [ExternalSearchIndex],
+            "search_services",
+            detail,
         )
 
     def process_delete(self, service_id):
-        return self._delete_integration(
-            service_id, ExternalIntegration.SEARCH_GOAL
-        )
+        return self._delete_integration(service_id, ExternalIntegration.SEARCH_GOAL)

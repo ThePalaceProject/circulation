@@ -40,6 +40,7 @@ from core.util.datetime_helpers import utc_now
 # fields in a way that makes it easy to reliably parse response
 # documents.
 
+
 class fixed(object):
     """A fixed-width field in a SIP2 response."""
 
@@ -58,34 +59,38 @@ class fixed(object):
         :return: The original input string, after the value of this
             field has been removed.
         """
-        value = data[:self.length]
+        value = data[: self.length]
         in_progress[self.internal_name] = value
-        return data[self.length:]
+        return data[self.length :]
 
     @classmethod
     def _add(cls, internal_name, *args, **kwargs):
         obj = cls(internal_name, *args, **kwargs)
         setattr(cls, internal_name, obj)
 
-fixed._add('patron_status', 14)
-fixed._add('language', 3)
-fixed._add('transaction_date', 18)
-fixed._add('hold_items_count', 4)
-fixed._add('overdue_items_count', 4)
-fixed._add('charged_items_count', 4)
-fixed._add('fine_items_count', 4)
-fixed._add('recall_items_count', 4)
-fixed._add('unavailable_holds_count', 4)
-fixed._add('login_ok', 1)
-fixed._add('end_session', 1)
+
+fixed._add("patron_status", 14)
+fixed._add("language", 3)
+fixed._add("transaction_date", 18)
+fixed._add("hold_items_count", 4)
+fixed._add("overdue_items_count", 4)
+fixed._add("charged_items_count", 4)
+fixed._add("fine_items_count", 4)
+fixed._add("recall_items_count", 4)
+fixed._add("unavailable_holds_count", 4)
+fixed._add("login_ok", 1)
+fixed._add("end_session", 1)
+
 
 class named(object):
     """A variable-length field in a SIP2 response."""
-    def __init__(self, internal_name, sip_code, required=False,
-                 length=None, allow_multiple=False):
+
+    def __init__(
+        self, internal_name, sip_code, required=False, length=None, allow_multiple=False
+    ):
         self.sip_code = sip_code
         self.internal_name = internal_name
-        self.req=required
+        self.req = required
         self.length = length
         self.allow_multiple = allow_multiple
 
@@ -100,8 +105,9 @@ class named(object):
         To check whether a specific field actually is required, check
         `field.req`.
         """
-        return named(self.internal_name, self.sip_code, True,
-                     self.length, self.allow_multiple)
+        return named(
+            self.internal_name, self.sip_code, True, self.length, self.allow_multiple
+        )
 
     def consume(self, value, in_progress):
         """Process the given value for this field.
@@ -117,10 +123,12 @@ class named(object):
         if self.length and len(value) != self.length:
             self.log.warn(
                 "Expected string of length %d for field %s, but got %r",
-                self.length, self.sip_code, value
+                self.length,
+                self.sip_code,
+                value,
             )
         if self.allow_multiple:
-            in_progress.setdefault(self.internal_name,[]).append(value)
+            in_progress.setdefault(self.internal_name, []).append(value)
         else:
             in_progress[self.internal_name] = value
 
@@ -128,6 +136,7 @@ class named(object):
     def _add(cls, internal_name, *args, **kwargs):
         obj = cls(internal_name, *args, **kwargs)
         setattr(cls, internal_name, obj)
+
 
 named._add("institution_id", "AO")
 named._add("patron_identifier", "AA")
@@ -158,33 +167,35 @@ named._add("print_line", "AG")
 
 # SIP extensions defined by Georgia Public Library Service's SIP
 # server, used by Evergreen and Koha.
-named._add('sipserver_patron_expiration', 'PA')
-named._add('sipserver_patron_class', 'PC')
-named._add('sipserver_internet_privileges', 'PI')
-named._add('sipserver_internal_id', 'XI')
+named._add("sipserver_patron_expiration", "PA")
+named._add("sipserver_patron_class", "PC")
+named._add("sipserver_internet_privileges", "PI")
+named._add("sipserver_internal_id", "XI")
 
 # SIP extensions defined by Polaris.
-named._add('polaris_patron_birthdate', 'BC')
-named._add('polaris_postal_code', 'PZ')
-named._add('polaris_patron_expiration', 'PX')
-named._add('polaris_patron_expired', 'PY')
+named._add("polaris_patron_birthdate", "BC")
+named._add("polaris_postal_code", "PZ")
+named._add("polaris_patron_expiration", "PX")
+named._add("polaris_patron_expired", "PY")
 
 # A potential problem: Polaris defines PA to refer to something else.
+
 
 class RequestResend(IOError):
     """There was an error transmitting a message and the server has requested
     that it be resent.
     """
 
+
 class Constants(object):
     UNKNOWN_LANGUAGE = "000"
     ENGLISH = "001"
 
     # By default, SIP2 messages are encoded using Code Page 850.
-    DEFAULT_ENCODING = 'cp850'
+    DEFAULT_ENCODING = "cp850"
 
     # SIP2 messages are terminated with the \r character.
-    TERMINATOR_CHAR = '\r'
+    TERMINATOR_CHAR = "\r"
 
 
 class SIPClient(Constants):
@@ -196,20 +207,20 @@ class SIPClient(Constants):
 
     # These are the subfield names associated with the 'patron status'
     # field as specified in the SIP2 spec.
-    CHARGE_PRIVILEGES_DENIED = 'charge privileges denied'
-    RENEWAL_PRIVILEGES_DENIED = 'renewal privileges denied'
-    RECALL_PRIVILEGES_DENIED = 'recall privileges denied'
-    HOLD_PRIVILEGES_DENIED = 'hold privileges denied'
-    CARD_REPORTED_LOST = 'card reported lost'
-    TOO_MANY_ITEMS_CHARGED = 'too many items charged'
-    TOO_MANY_ITEMS_OVERDUE = 'too many items overdue'
-    TOO_MANY_RENEWALS = 'too many renewals'
-    TOO_MANY_RETURN_CLAIMS = 'too many claims of items returned'
-    TOO_MANY_LOST= 'too many items lost'
-    EXCESSIVE_FINES = 'excessive outstanding fines'
-    EXCESSIVE_FEES = 'excessive outstanding fees'
-    RECALL_OVERDUE = 'recall overdue'
-    TOO_MANY_ITEMS_BILLED = 'too many items billed'
+    CHARGE_PRIVILEGES_DENIED = "charge privileges denied"
+    RENEWAL_PRIVILEGES_DENIED = "renewal privileges denied"
+    RECALL_PRIVILEGES_DENIED = "recall privileges denied"
+    HOLD_PRIVILEGES_DENIED = "hold privileges denied"
+    CARD_REPORTED_LOST = "card reported lost"
+    TOO_MANY_ITEMS_CHARGED = "too many items charged"
+    TOO_MANY_ITEMS_OVERDUE = "too many items overdue"
+    TOO_MANY_RENEWALS = "too many renewals"
+    TOO_MANY_RETURN_CLAIMS = "too many claims of items returned"
+    TOO_MANY_LOST = "too many items lost"
+    EXCESSIVE_FINES = "excessive outstanding fines"
+    EXCESSIVE_FEES = "excessive outstanding fees"
+    RECALL_OVERDUE = "recall overdue"
+    TOO_MANY_ITEMS_BILLED = "too many items billed"
 
     # All the flags, in the order they're used in the 'patron status'
     # field.
@@ -227,7 +238,7 @@ class SIPClient(Constants):
         EXCESSIVE_FINES,
         EXCESSIVE_FEES,
         RECALL_OVERDUE,
-        TOO_MANY_ITEMS_BILLED
+        TOO_MANY_ITEMS_BILLED,
     ]
 
     # Some, but not all, of these fields, imply that a patron has lost
@@ -241,13 +252,23 @@ class SIPClient(Constants):
         EXCESSIVE_FINES,
         EXCESSIVE_FEES,
         RECALL_OVERDUE,
-        TOO_MANY_ITEMS_BILLED
+        TOO_MANY_ITEMS_BILLED,
     ]
 
-    def __init__(self, target_server, target_port, login_user_id=None,
-                 login_password=None, location_code=None, institution_id='', separator=None,
-                 use_ssl=False, ssl_cert=None, ssl_key=None,
-                 encoding=Constants.DEFAULT_ENCODING, dialect=GenericILS
+    def __init__(
+        self,
+        target_server,
+        target_port,
+        login_user_id=None,
+        login_password=None,
+        location_code=None,
+        institution_id="",
+        separator=None,
+        use_ssl=False,
+        ssl_cert=None,
+        ssl_key=None,
+        encoding=Constants.DEFAULT_ENCODING,
+        dialect=GenericILS,
     ):
         """Initialize a client for (but do not connect to) a SIP2 server.
 
@@ -268,7 +289,7 @@ class SIPClient(Constants):
             self.target_port = int(target_port)
         self.location_code = location_code
         self.institution_id = institution_id
-        self.separator = separator or '|'
+        self.separator = separator or "|"
 
         self.use_ssl = use_ssl or ssl_cert or ssl_key
         self.ssl_cert = ssl_cert
@@ -277,8 +298,8 @@ class SIPClient(Constants):
 
         # Turn the separator string into a regular expression that splits
         # field name/field value pairs on the separator string.
-        if self.separator in '|.^$*+?{}()[]\\':
-            escaped = '\\' + self.separator
+        if self.separator in "|.^$*+?{}()[]\\":
+            escaped = "\\" + self.separator
         else:
             escaped = self.separator
         self.separator_re = re.compile(escaped + "([A-Z][A-Z])")
@@ -288,7 +309,7 @@ class SIPClient(Constants):
         self.login_user_id = login_user_id
         if login_user_id:
             if not login_password:
-                login_password = ''
+                login_password = ""
             # We need to log in before using this server.
             self.must_log_in = True
         else:
@@ -301,27 +322,33 @@ class SIPClient(Constants):
         """Log in to the SIP server if required."""
         if self.must_log_in:
             response = self.make_request(
-                self.login_message, self.login_response_parser,
-                self.login_user_id, self.login_password, self.location_code
+                self.login_message,
+                self.login_response_parser,
+                self.login_user_id,
+                self.login_password,
+                self.location_code,
             )
-            if response['login_ok'] != '1':
+            if response["login_ok"] != "1":
                 raise IOError("Error logging in: %r" % response)
             return response
 
     def patron_information(self, *args, **kwargs):
-        """Get information about a patron.
-        """
+        """Get information about a patron."""
         return self.make_request(
-            self.patron_information_request, self.patron_information_parser,
-            *args, **kwargs
+            self.patron_information_request,
+            self.patron_information_parser,
+            *args,
+            **kwargs
         )
 
     def end_session(self, *args, **kwargs):
         """Send end session message."""
         if self.dialect.sendEndSession:
             return self.make_request(
-                self.end_session_message, self.end_session_response_parser,
-                *args, **kwargs
+                self.end_session_message,
+                self.end_session_response_parser,
+                *args,
+                **kwargs
             )
         else:
             return None
@@ -341,9 +368,8 @@ class SIPClient(Constants):
             self.connection.connect((self.target_server, self.target_port))
         except socket.error as message:
             raise IOError(
-                "Could not connect to %s:%s - %s" % (
-                    self.target_server, self.target_port, message
-                )
+                "Could not connect to %s:%s - %s"
+                % (self.target_server, self.target_port, message)
             )
 
         # Since this is a new socket connection, reset the message count
@@ -377,8 +403,7 @@ class SIPClient(Constants):
             os.close(fd)
         connection = self.make_insecure_connection()
         connection = ssl.wrap_socket(
-            connection, certfile=tmp_ssl_cert_path,
-            keyfile=tmp_ssl_key_path
+            connection, certfile=tmp_ssl_cert_path, keyfile=tmp_ssl_key_path
         )
 
         # Now that the connection has been established, the temporary
@@ -415,7 +440,7 @@ class SIPClient(Constants):
             if retries >= self.MAXIMUM_RETRIES:
                 # Only retry MAXIMUM_RETRIES times in case we we are sending
                 # a message the ILS doesn't like, so we don't retry forever
-                raise IOError('Maximum SIP retries reached')
+                raise IOError("Maximum SIP retries reached")
             self.send(message_with_checksum)
             response = self.read_message()
             try:
@@ -430,13 +455,24 @@ class SIPClient(Constants):
             retries += 1
         return parsed
 
-    def login_message(self, login_user_id, login_password, location_code="",
-                      uid_algorithm="0",
-                      pwd_algorithm="0"):
+    def login_message(
+        self,
+        login_user_id,
+        login_password,
+        location_code="",
+        uid_algorithm="0",
+        pwd_algorithm="0",
+    ):
         """Generate a message for logging in to a SIP server."""
-        message = ("93" + uid_algorithm + pwd_algorithm
-                   + "CN" + login_user_id + self.separator
-                   + "CO" + login_password
+        message = (
+            "93"
+            + uid_algorithm
+            + pwd_algorithm
+            + "CN"
+            + login_user_id
+            + self.separator
+            + "CO"
+            + login_password
         )
         if location_code:
             message = message + self.separator + "CP" + location_code
@@ -444,15 +480,13 @@ class SIPClient(Constants):
 
     def login_response_parser(self, message):
         """Parse the response from a login message."""
-        return self.parse_response(
-            message,
-            94,
-            fixed.login_ok
-        )
+        return self.parse_response(message, 94, fixed.login_ok)
 
     def end_session_message(
-            self, patron_identifier, patron_password="",
-            terminal_password="",
+        self,
+        patron_identifier,
+        patron_password="",
+        terminal_password="",
     ):
         """
         This message will be sent when a patron has completed all of their
@@ -472,10 +506,17 @@ class SIPClient(Constants):
         code = "35"
         timestamp = self.now()
 
-        message = (code + timestamp +
-                   "AO" + self.institution_id + self.separator +
-                   "AA" + patron_identifier + self.separator +
-                   "AC" + terminal_password
+        message = (
+            code
+            + timestamp
+            + "AO"
+            + self.institution_id
+            + self.separator
+            + "AA"
+            + patron_identifier
+            + self.separator
+            + "AC"
+            + terminal_password
         )
         if patron_password:
             message += self.separator + "AD" + patron_password
@@ -491,13 +532,16 @@ class SIPClient(Constants):
             named.institution_id.required,
             named.patron_identifier.required,
             named.screen_message,
-            named.print_line
+            named.print_line,
         )
 
     def patron_information_request(
-            self, patron_identifier, patron_password="",
-            terminal_password="",
-            language=None, summary=None
+        self,
+        patron_identifier,
+        patron_password="",
+        terminal_password="",
+        language=None,
+        summary=None,
     ):
         """
         A superset of patron status request.
@@ -520,10 +564,19 @@ class SIPClient(Constants):
         timestamp = self.now()
         summary = summary or self.summary()
 
-        message = (code + language + timestamp + summary
-                   + "AO" + self.institution_id + self.separator +
-                   "AA" + patron_identifier + self.separator +
-                   "AC" + terminal_password
+        message = (
+            code
+            + language
+            + timestamp
+            + summary
+            + "AO"
+            + self.institution_id
+            + self.separator
+            + "AA"
+            + patron_identifier
+            + self.separator
+            + "AC"
+            + terminal_password
         )
         if patron_password:
             message += self.separator + "AD" + patron_password
@@ -608,22 +661,21 @@ class SIPClient(Constants):
             named.phone_number,
             named.screen_message,
             named.print_line,
-
             # Add common extension fields.
             named.sipserver_patron_expiration,
             named.polaris_patron_expiration,
             named.sipserver_patron_class,
             named.sipserver_internet_privileges,
-            named.sipserver_internal_id
+            named.sipserver_internal_id,
         )
 
         # As a convenience, parse the patron_status field from a
         # 14-character string into a dictionary of booleans.
         try:
-            parsed = self.parse_patron_status(response.get('patron_status'))
+            parsed = self.parse_patron_status(response.get("patron_status"))
         except ValueError as e:
             parsed = {}
-        response['patron_status_parsed'] = parsed
+        response["patron_status_parsed"] = parsed
         return response
 
     def parse_response(self, data, expect_status_code, *fields):
@@ -678,7 +730,7 @@ class SIPClient(Constants):
         # field object, and process it.
         while i < len(split):
             sip_code = split[i]
-            value = split[i+1]
+            value = split[i + 1]
             if sip_code == named.sequence_number.sip_code:
                 # Sequence number is special in two ways. First, it
                 # indicates the end of the message. Second, it doesn't
@@ -703,8 +755,7 @@ class SIPClient(Constants):
         # If a named field is required and never showed up, sound the alarm.
         for field in required_fields_not_seen:
             self.log.error(
-                "Expected required field %s but did not find it.",
-                field.sip_code
+                "Expected required field %s but did not find it.", field.sip_code
             )
         return parsed
 
@@ -713,14 +764,12 @@ class SIPClient(Constants):
         given response string, and verify that it's as expected.
         """
         status_code = data[:2]
-        in_progress['_status'] = status_code
+        in_progress["_status"] = status_code
         if status_code != expected:
-            if status_code == '96': # Request SC Resend
+            if status_code == "96":  # Request SC Resend
                 raise RequestResend()
             else:
-                raise IOError(
-                    "Unexpected status code %s: %s" % (status_code, data)
-                )
+                raise IOError("Unexpected status code %s: %s" % (status_code, data))
         return data[2:]
 
     @classmethod
@@ -729,15 +778,12 @@ class SIPClient(Constants):
 
         :return: A 14-element dictionary mapping flag names to boolean values.
         """
-        if (not isinstance(status_string, (bytes, str))
-            or len(status_string) != 14):
-            raise ValueError(
-                "Patron status must be a 14-character string."
-            )
+        if not isinstance(status_string, (bytes, str)) or len(status_string) != 14:
+            raise ValueError("Patron status must be a 14-character string.")
         status = {}
         for i, field in enumerate(cls.PATRON_STATUS_FIELDS):
             # ' ' means false, 'Y' means true.
-            value = status_string[i] != ' '
+            value = status_string[i] != " "
             status[field] = value
         return status
 
@@ -746,31 +792,39 @@ class SIPClient(Constants):
         now = utc_now()
         return datetime.datetime.strftime(now, "%Y%m%d0000%H%M%S")
 
-    def summary(self, hold_items=False, overdue_items=False,
-                charged_items=False, fine_items=False, recall_items=False,
-                unavailable_holds=False):
+    def summary(
+        self,
+        hold_items=False,
+        overdue_items=False,
+        charged_items=False,
+        fine_items=False,
+        recall_items=False,
+        unavailable_holds=False,
+    ):
         """Generate the SIP summary field: a 10-character query string for
         requesting detailed information about a patron's relationship
         with items.
         """
         summary = ""
         for item in (
-                hold_items, overdue_items,
-                charged_items, fine_items, recall_items,
-                unavailable_holds
+            hold_items,
+            overdue_items,
+            charged_items,
+            fine_items,
+            recall_items,
+            unavailable_holds,
         ):
             if item:
                 summary += "Y"
             else:
                 summary += " "
         # The last four spaces are always empty.
-        summary += '    '
-        if summary.count('Y') > 1:
+        summary += "    "
+        if summary.count("Y") > 1:
             # This violates the spec but in my tests it seemed to
             # work, so we'll allow it.
             self.log.warn(
-                'Summary requested too many kinds of detailed information: %s' %
-                summary
+                "Summary requested too many kinds of detailed information: %s" % summary
             )
         return summary
 
@@ -786,7 +840,7 @@ class SIPClient(Constants):
         """
         self.connection.send(data)
 
-    def read_message(self, max_size=1024*1024):
+    def read_message(self, max_size=1024 * 1024):
         """Read a SIP2 message from the socket connection.
 
         A SIP2 message ends with a \\r character.
@@ -834,7 +888,7 @@ class SIPClient(Constants):
         check = 0
         for each in text:
             check = check + ord(each)
-        check = check + ord('\0')
+        check = check + ord("\0")
         check = (check ^ 0xFFFF) + 1
 
         checksum = "%4.4X" % (check)
@@ -854,8 +908,8 @@ class MockSIPClient(SIPClient):
     def __init__(self, **kwargs):
         # Override any settings that might cause us to actually
         # make requests.
-        kwargs['target_server'] = None
-        kwargs['target_port'] = None
+        kwargs["target_server"] = None
+        kwargs["target_port"] = None
         super(MockSIPClient, self).__init__(**kwargs)
 
         self.read_count = 0
@@ -882,7 +936,7 @@ class MockSIPClient(SIPClient):
         self.write_count += 1
         self.requests.append(data)
 
-    def read_message(self, max_size=1024*1024):
+    def read_message(self, max_size=1024 * 1024):
         """Read a response message off the queue."""
         self.read_count += 1
         response = self.responses[0]
@@ -901,6 +955,7 @@ class MockSIPClientFactory(object):
     every simulated server interaction, making it impossible to queue
     responses or look at the results.
     """
+
     def __init__(self):
         self.client = None
 

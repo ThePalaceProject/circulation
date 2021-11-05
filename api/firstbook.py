@@ -17,13 +17,16 @@ from core.model import (
     Patron,
 )
 
+
 class FirstBookAuthenticationAPI(BasicAuthenticationProvider):
 
-    NAME = 'First Book (deprecated)'
+    NAME = "First Book (deprecated)"
 
-    DESCRIPTION = _("""
+    DESCRIPTION = _(
+        """
         An authentication service for Open eBooks that authenticates
-        using access codes and PINs. (This is the old version.)""")
+        using access codes and PINs. (This is the old version.)"""
+    )
 
     DISPLAY_NAME = NAME
     DEFAULT_IDENTIFIER_LABEL = _("Access Code")
@@ -31,35 +34,40 @@ class FirstBookAuthenticationAPI(BasicAuthenticationProvider):
 
     # If FirstBook sends this message it means they accepted the
     # patron's credentials.
-    SUCCESS_MESSAGE = 'Valid Code Pin Pair'
+    SUCCESS_MESSAGE = "Valid Code Pin Pair"
 
     # Server-side validation happens before the identifier
     # is converted to uppercase, which means lowercase characters
     # are valid.
-    DEFAULT_IDENTIFIER_REGULAR_EXPRESSION = '^[A-Za-z0-9@]+$'
-    DEFAULT_PASSWORD_REGULAR_EXPRESSION = '^[0-9]+$'
+    DEFAULT_IDENTIFIER_REGULAR_EXPRESSION = "^[A-Za-z0-9@]+$"
+    DEFAULT_PASSWORD_REGULAR_EXPRESSION = "^[0-9]+$"
 
     SETTINGS = [
-        { "key": ExternalIntegration.URL, "format": "url", "label": _("URL"), "required": True },
-        { "key": ExternalIntegration.PASSWORD, "label": _("Key"), "required": True },
+        {
+            "key": ExternalIntegration.URL,
+            "format": "url",
+            "label": _("URL"),
+            "required": True,
+        },
+        {"key": ExternalIntegration.PASSWORD, "label": _("Key"), "required": True},
     ] + BasicAuthenticationProvider.SETTINGS
 
     log = logging.getLogger("First Book authentication API")
 
     def __init__(self, library_id, integration, analytics=None, root=None):
-        super(FirstBookAuthenticationAPI, self).__init__(library_id, integration, analytics)
+        super(FirstBookAuthenticationAPI, self).__init__(
+            library_id, integration, analytics
+        )
         if not root:
             url = integration.url
             key = integration.password
             if not (url and key):
-                raise CannotLoadConfiguration(
-                    "First Book server not configured."
-                )
-            if '?' in url:
-                url += '&'
+                raise CannotLoadConfiguration("First Book server not configured.")
+            if "?" in url:
+                url += "&"
             else:
-                url += '?'
-            root = url + 'key=' + key
+                url += "?"
+            root = url + "key=" + key
         self.root = root
 
     # Begin implementation of BasicAuthenticationProvider abstract
@@ -84,20 +92,18 @@ class FirstBookAuthenticationAPI(BasicAuthenticationProvider):
     # End implementation of BasicAuthenticationProvider abstract methods.
 
     def remote_pin_test(self, barcode, pin):
-        url = self.root + "&accesscode=%s&pin=%s" % tuple(map(
-            urllib.parse.quote, (barcode, pin)
-        ))
+        url = self.root + "&accesscode=%s&pin=%s" % tuple(
+            map(urllib.parse.quote, (barcode, pin))
+        )
         try:
             response = self.request(url)
         except requests.exceptions.ConnectionError as e:
-            raise RemoteInitiatedServerError(
-                str(e),
-                self.NAME
-            )
+            raise RemoteInitiatedServerError(str(e), self.NAME)
         content = response.content.decode("utf8")
         if response.status_code != 200:
             msg = "Got unexpected response code %d. Content: %s" % (
-                response.status_code, content
+                response.status_code,
+                content,
             )
             raise RemoteInitiatedServerError(msg, self.NAME)
         if self.SUCCESS_MESSAGE in content:
@@ -113,7 +119,6 @@ class FirstBookAuthenticationAPI(BasicAuthenticationProvider):
 
 
 class MockFirstBookResponse(object):
-
     def __init__(self, status_code, content):
         self.status_code = status_code
         # Guarantee that the response content is always a bytestring,
@@ -122,13 +127,20 @@ class MockFirstBookResponse(object):
             content = content.encode("utf8")
         self.content = content
 
+
 class MockFirstBookAuthenticationAPI(FirstBookAuthenticationAPI):
 
     SUCCESS = '"Valid Code Pin Pair"'
     FAILURE = '{"code":404,"message":"Access Code Pin Pair not found"}'
 
-    def __init__(self, library, integration, valid={}, bad_connection=False,
-                 failure_status_code=None):
+    def __init__(
+        self,
+        library,
+        integration,
+        valid={},
+        bad_connection=False,
+        failure_status_code=None,
+    ):
         super(MockFirstBookAuthenticationAPI, self).__init__(
             library, integration, root="http://example.com/"
         )
@@ -148,9 +160,9 @@ class MockFirstBookAuthenticationAPI(FirstBookAuthenticationAPI):
                 self.failure_status_code, "Error %s" % self.failure_status_code
             )
         qa = urllib.parse.parse_qs(url)
-        if 'accesscode' in qa and 'pin' in qa:
-            [code] = qa['accesscode']
-            [pin] = qa['pin']
+        if "accesscode" in qa and "pin" in qa:
+            [code] = qa["accesscode"]
+            [pin] = qa["pin"]
             if code in self.valid and self.valid[code] == pin:
                 return MockFirstBookResponse(200, self.SUCCESS)
             else:

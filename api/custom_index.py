@@ -24,6 +24,7 @@ from core.model import (
 from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import OPDSFeed
 
+
 class CustomIndexView(object):
     """A custom view that replaces the default OPDS view for a
     library.
@@ -36,6 +37,7 @@ class CustomIndexView(object):
     should not store any objects obtained from the database without
     disconnecting them from their session.
     """
+
     BY_PROTOCOL = {}
 
     GOAL = "custom_index"
@@ -98,11 +100,13 @@ class COPPAGate(CustomIndexView):
     REQUIREMENT_NOT_MET_LANE = "requirement_not_met_lane"
 
     SETTINGS = [
-        { "key": REQUIREMENT_MET_LANE,
-          "label": _("ID of lane for patrons who are 13 or older"),
+        {
+            "key": REQUIREMENT_MET_LANE,
+            "label": _("ID of lane for patrons who are 13 or older"),
         },
-        { "key": REQUIREMENT_NOT_MET_LANE,
-          "label": _("ID of lane for patrons who are under 13"),
+        {
+            "key": REQUIREMENT_NOT_MET_LANE,
+            "label": _("ID of lane for patrons who are under 13"),
         },
     ]
 
@@ -130,8 +134,8 @@ class COPPAGate(CustomIndexView):
             raise CannotLoadConfiguration("No lane with ID: %s" % lane_id)
         if lane.library != library:
             raise CannotLoadConfiguration(
-                "Lane %d is for the wrong library (%s, I need %s)" %
-                (lane.id, lane.library.name, library.name)
+                "Lane %d is for the wrong library (%s, I need %s)"
+                % (lane.id, lane.library.name, library.name)
             )
         return lane
 
@@ -139,40 +143,34 @@ class COPPAGate(CustomIndexView):
         """Render an OPDS navigation feed that lets the patron choose a root
         lane on their own, without providing any credentials.
         """
-        if not hasattr(self, 'navigation_feed'):
-            self.navigation_feed = self._navigation_feed(
-                library, annotator, url_for
-            )
-        headers = { "Content-Type": OPDSFeed.NAVIGATION_FEED_TYPE }
+        if not hasattr(self, "navigation_feed"):
+            self.navigation_feed = self._navigation_feed(library, annotator, url_for)
+        headers = {"Content-Type": OPDSFeed.NAVIGATION_FEED_TYPE}
         return Response(str(self.navigation_feed), 200, headers)
 
     def _navigation_feed(self, library, annotator, url_for=None):
         """Generate an OPDS feed for navigating the COPPA age gate."""
         url_for = url_for or cdn_url_for
-        base_url = url_for('index', library_short_name=library.short_name)
+        base_url = url_for("index", library_short_name=library.short_name)
 
         # An entry for grown-ups.
         feed = OPDSFeed(title=library.name, url=base_url)
         opds = feed.feed
 
         yes_url = url_for(
-            'acquisition_groups',
+            "acquisition_groups",
             library_short_name=library.short_name,
-            lane_identifier=self.yes_lane_id
+            lane_identifier=self.yes_lane_id,
         )
-        opds.append(
-            self.navigation_entry(yes_url, self.YES_TITLE, self.YES_CONTENT)
-        )
+        opds.append(self.navigation_entry(yes_url, self.YES_TITLE, self.YES_CONTENT))
 
         # An entry for children.
         no_url = url_for(
-            'acquisition_groups',
+            "acquisition_groups",
             library_short_name=library.short_name,
-            lane_identifier=self.no_lane_id
+            lane_identifier=self.no_lane_id,
         )
-        opds.append(
-            self.navigation_entry(no_url, self.NO_TITLE, self.NO_CONTENT)
-        )
+        opds.append(self.navigation_entry(no_url, self.NO_TITLE, self.NO_CONTENT))
 
         # The gate tag is the thing that the SimplyE client actually uses.
         opds.append(self.gate_tag(self.URI, yes_url, no_url))
@@ -197,11 +195,10 @@ class COPPAGate(CustomIndexView):
             E.id(href),
             E.title(str(title)),
             content_tag,
-            E.updated(OPDSFeed._strftime(now))
+            E.updated(OPDSFeed._strftime(now)),
         )
         OPDSFeed.add_link_to_entry(
-            entry, href=href, rel="subsection",
-            type=OPDSFeed.ACQUISITION_FEED_TYPE
+            entry, href=href, rel="subsection", type=OPDSFeed.ACQUISITION_FEED_TYPE
         )
         return entry
 
@@ -211,9 +208,10 @@ class COPPAGate(CustomIndexView):
         the client is faced with.
         """
         tag = OPDSFeed.SIMPLIFIED.gate()
-        tag.attrib['restriction-met'] = met_url
-        tag.attrib['restriction-not-met'] = not_met_url
-        tag.attrib['restriction'] = restriction
+        tag.attrib["restriction-met"] = met_url
+        tag.attrib["restriction-not-met"] = not_met_url
+        tag.attrib["restriction"] = restriction
         return tag
+
 
 CustomIndexView.register(COPPAGate)

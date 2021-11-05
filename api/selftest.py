@@ -45,16 +45,14 @@ class HasSelfTests(CoreHasSelfTests):
             yield self.test_failure(
                 "Acquiring test patron credentials.",
                 "Collection is not associated with any libraries.",
-                "Add the collection to a library that has a patron authentication service."
+                "Add the collection to a library that has a patron authentication service.",
             )
 
         for library in collection.libraries:
             name = library.name
             task = "Acquiring test patron credentials for library %s" % library.name
             try:
-                library_authenticator = LibraryAuthenticator.from_config(
-                    _db, library
-                )
+                library_authenticator = LibraryAuthenticator.from_config(_db, library)
                 patron = password = None
                 auth = library_authenticator.basic_auth_provider
                 if auth:
@@ -64,7 +62,7 @@ class HasSelfTests(CoreHasSelfTests):
                     yield self.test_failure(
                         task,
                         "Library has no test patron configured.",
-                        "You can specify a test patron when you configure the library's patron authentication service."
+                        "You can specify a test patron when you configure the library's patron authentication service.",
                     )
                     continue
 
@@ -128,11 +126,7 @@ class RunSelfTestsScript(LibraryInputScript):
             success = "SUCCESS"
         else:
             success = "FAILURE"
-        self.out.write(
-            "  %s %s (%.1fsec)\n" % (
-                success, result.name, result.duration
-            )
-        )
+        self.out.write("  %s %s (%.1fsec)\n" % (success, result.name, result.duration))
         if isinstance(result.result, (bytes, str)):
             self.out.write("   Result: %s\n" % result.result)
         if result.exception:
@@ -161,9 +155,7 @@ class HasCollectionSelfTests(HasSelfTests):
             else:
                 title = "[title unknown]"
             identifier = lp.identifier.identifier
-            titles.append(
-                "%s (ID: %s)" % (title, identifier)
-            )
+            titles.append("%s (ID: %s)" % (title, identifier))
 
         if titles:
             return titles
@@ -173,5 +165,5 @@ class HasCollectionSelfTests(HasSelfTests):
     def _run_self_tests(self):
         yield self.run_test(
             "Checking for titles that have no delivery mechanisms.",
-            self._no_delivery_mechanisms_test
+            self._no_delivery_mechanisms_test,
         )

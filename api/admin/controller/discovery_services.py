@@ -11,8 +11,8 @@ from core.model import (
 from core.util.problem_detail import ProblemDetail
 from . import SettingsController
 
-class DiscoveryServicesController(SettingsController):
 
+class DiscoveryServicesController(SettingsController):
     def __init__(self, manager):
         super(DiscoveryServicesController, self).__init__(manager)
         self.opds_registration = ExternalIntegration.OPDS_REGISTRATION
@@ -21,7 +21,12 @@ class DiscoveryServicesController(SettingsController):
                 "name": self.opds_registration,
                 "sitewide": True,
                 "settings": [
-                    { "key": ExternalIntegration.URL, "label": _("URL"), "required": True, "format": "url" },
+                    {
+                        "key": ExternalIntegration.URL,
+                        "label": _("URL"),
+                        "required": True,
+                        "format": "url",
+                    },
                 ],
                 "supports_registration": True,
                 "supports_staging": True,
@@ -31,7 +36,7 @@ class DiscoveryServicesController(SettingsController):
 
     def process_discovery_services(self):
         self.require_system_admin()
-        if flask.request.method == 'GET':
+        if flask.request.method == "GET":
             return self.process_get()
         else:
             return self.process_post()
@@ -57,8 +62,10 @@ class DiscoveryServicesController(SettingsController):
         """Set up the default library registry; no other registries exist yet."""
 
         service, is_new = get_one_or_create(
-            self._db, ExternalIntegration, protocol=self.opds_registration,
-            goal=self.goal
+            self._db,
+            ExternalIntegration,
+            protocol=self.opds_registration,
+            goal=self.goal,
         )
         if is_new:
             service.url = RemoteRegistry.DEFAULT_LIBRARY_REGISTRY_URL
@@ -92,9 +99,7 @@ class DiscoveryServicesController(SettingsController):
             return name_error
 
         url = flask.request.form.get("url")
-        url_not_unique = self.check_url_unique(
-            service, url, protocol, self.goal
-        )
+        url_not_unique = self.check_url_unique(service, url, protocol, self.goal)
         if url_not_unique:
             self._db.rollback()
             return url_not_unique
@@ -143,6 +148,4 @@ class DiscoveryServicesController(SettingsController):
         return service
 
     def process_delete(self, service_id):
-        return self._delete_integration(
-            service_id, ExternalIntegration.DISCOVERY_GOAL
-        )
+        return self._delete_integration(service_id, ExternalIntegration.DISCOVERY_GOAL)

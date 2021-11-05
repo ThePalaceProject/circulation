@@ -641,9 +641,7 @@ class TestProQuestOPDS2Importer(DatabaseTest):
 
         # Arrange
         proquest_token = "1234567890"
-        proquest_token_expires_in = utc_now() + datetime.timedelta(
-            hours=1
-        )
+        proquest_token_expires_in = utc_now() + datetime.timedelta(hours=1)
         proquest_credential = Credential(
             credential=proquest_token, expires=proquest_token_expires_in
         )
@@ -956,16 +954,12 @@ class TestProQuestOPDS2Importer(DatabaseTest):
         # Arrange
         affiliation_id = "12345"
         expired_proquest_token = "1234567890"
-        expired_proquest_token_expired_in = (
-            utc_now() - datetime.timedelta(minutes=1)
-        )
+        expired_proquest_token_expired_in = utc_now() - datetime.timedelta(minutes=1)
         expired_proquest_token_credential = Credential(
             credential=expired_proquest_token, expires=expired_proquest_token_expired_in
         )
         new_proquest_token = "1234567890_"
-        new_proquest_token_expires_in = utc_now() + datetime.timedelta(
-            hours=1
-        )
+        new_proquest_token_expires_in = utc_now() + datetime.timedelta(hours=1)
         new_proquest_token_credential = Credential(
             credential=new_proquest_token, expires=new_proquest_token_expires_in
         )
@@ -1176,7 +1170,9 @@ class TestProQuestOPDS2ImportMonitor(DatabaseTest):
             ProQuestOPDS2Importer,
             RWPMManifestParser(OPDS2FeedParserFactory()),
         )
-        monitor._get_feeds = MagicMock(return_value=list(zip([None] * len(feeds), feeds)))
+        monitor._get_feeds = MagicMock(
+            return_value=list(zip([None] * len(feeds), feeds))
+        )
         monitor.import_one_feed = MagicMock(return_value=([], []))
 
         # Act
@@ -1428,7 +1424,9 @@ class TestProQuestOPDS2ImportMonitor(DatabaseTest):
             ProQuestOPDS2Importer,
             RWPMManifestParser(OPDS2FeedParserFactory()),
         )
-        monitor._get_feeds = MagicMock(return_value=list(zip([None] * len(feeds), feeds)))
+        monitor._get_feeds = MagicMock(
+            return_value=list(zip([None] * len(feeds), feeds))
+        )
         monitor.import_one_feed = MagicMock(return_value=([], []))
 
         # Act

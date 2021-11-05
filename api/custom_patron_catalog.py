@@ -18,6 +18,7 @@ from core.model import (
 )
 from core.util.opds_writer import OPDSFeed
 
+
 class CustomPatronCatalog(object):
     """An annotator for a library's authentication document.
 
@@ -30,6 +31,7 @@ class CustomPatronCatalog(object):
     any objects obtained from the database without disconnecting them
     from their session.
     """
+
     BY_PROTOCOL = {}
 
     GOAL = "custom_patron_catalog"
@@ -93,8 +95,8 @@ class CustomPatronCatalog(object):
             raise CannotLoadConfiguration("No lane with ID: %s" % lane_id)
         if lane.library != library:
             raise CannotLoadConfiguration(
-                "Lane %d is for the wrong library (%s, I need %s)" %
-                (lane.id, lane.library.name, library.name)
+                "Lane %d is for the wrong library (%s, I need %s)"
+                % (lane.id, lane.library.name, library.name)
             )
         return lane
 
@@ -108,21 +110,23 @@ class CustomPatronCatalog(object):
         :param kwargs: Add a new link with these attributes.
         :return: A modified authentication document.
         """
-        links = [x for x in doc['links'] if x['rel'] != rel]
+        links = [x for x in doc["links"] if x["rel"] != rel]
         links.append(dict(rel=rel, **kwargs))
-        doc['links'] = links
+        doc["links"] = links
         return doc
 
 
 class CustomRootLane(CustomPatronCatalog):
     """Send library patrons to a lane other than the root lane."""
+
     PROTOCOL = "Custom Root Lane"
 
     LANE = "lane"
 
     SETTINGS = [
-        { "key": LANE,
-          "label": _("Send patrons to the lane with this ID."),
+        {
+            "key": LANE,
+            "label": _("Send patrons to the lane with this ID."),
         },
     ]
 
@@ -140,13 +144,17 @@ class CustomRootLane(CustomPatronCatalog):
     def annotate_authentication_document(self, library, doc, url_for):
         """Replace the 'start' link with a link to the configured Lane."""
         root_url = url_for(
-            "acquisition_groups", library_short_name=library.short_name,
-            lane_identifier=self.lane_id, _external=True
+            "acquisition_groups",
+            library_short_name=library.short_name,
+            lane_identifier=self.lane_id,
+            _external=True,
         )
         self.replace_link(
-            doc, 'start', href=root_url, type=OPDSFeed.ACQUISITION_FEED_TYPE
+            doc, "start", href=root_url, type=OPDSFeed.ACQUISITION_FEED_TYPE
         )
         return doc
+
+
 CustomPatronCatalog.register(CustomRootLane)
 
 
@@ -155,18 +163,24 @@ class COPPAGate(CustomPatronCatalog):
     PROTOCOL = "COPPA Age Gate"
 
     AUTHENTICATION_TYPE = "http://librarysimplified.org/terms/authentication/gate/coppa"
-    AUTHENTICATION_YES_REL = "http://librarysimplified.org/terms/rel/authentication/restriction-met"
-    AUTHENTICATION_NO_REL = "http://librarysimplified.org/terms/rel/authentication/restriction-not-met"
+    AUTHENTICATION_YES_REL = (
+        "http://librarysimplified.org/terms/rel/authentication/restriction-met"
+    )
+    AUTHENTICATION_NO_REL = (
+        "http://librarysimplified.org/terms/rel/authentication/restriction-not-met"
+    )
 
     REQUIREMENT_MET_LANE = "requirement_met_lane"
     REQUIREMENT_NOT_MET_LANE = "requirement_not_met_lane"
 
     SETTINGS = [
-        { "key": REQUIREMENT_MET_LANE,
-          "label": _("ID of lane for patrons who are 13 or older"),
+        {
+            "key": REQUIREMENT_MET_LANE,
+            "label": _("ID of lane for patrons who are 13 or older"),
         },
-        { "key": REQUIREMENT_NOT_MET_LANE,
-          "label": _("ID of lane for patrons who are under 13"),
+        {
+            "key": REQUIREMENT_NOT_MET_LANE,
+            "label": _("ID of lane for patrons who are under 13"),
         },
     ]
 
@@ -191,40 +205,40 @@ class COPPAGate(CustomPatronCatalog):
 
         # A lane for grown-ups.
         yes_url = url_for(
-            'acquisition_groups', library_short_name=library.short_name,
-            lane_identifier=self.yes_lane_id, _external=True
+            "acquisition_groups",
+            library_short_name=library.short_name,
+            lane_identifier=self.yes_lane_id,
+            _external=True,
         )
 
         # A lane for children.
         no_url = url_for(
-            'acquisition_groups', library_short_name=library.short_name,
-            lane_identifier=self.no_lane_id, _external=True
+            "acquisition_groups",
+            library_short_name=library.short_name,
+            lane_identifier=self.no_lane_id,
+            _external=True,
         )
 
         # Replace the 'start' link with the childrens link. Any client
         # that doesn't understand the extensions will be safe from
         # grown-up content.
         feed = OPDSFeed.ACQUISITION_FEED_TYPE
-        self.replace_link(doc, 'start', href=no_url, type=feed)
+        self.replace_link(doc, "start", href=no_url, type=feed)
 
         # Add a custom authentication technique that
         # explains the COPPA gate.
         links = [
-            dict(rel=self.AUTHENTICATION_YES_REL, href=yes_url,
-                 type=feed),
-            dict(rel=self.AUTHENTICATION_NO_REL, href=no_url,
-                 type=feed),
+            dict(rel=self.AUTHENTICATION_YES_REL, href=yes_url, type=feed),
+            dict(rel=self.AUTHENTICATION_NO_REL, href=no_url, type=feed),
         ]
 
-        authentication = dict(
-            type=self.AUTHENTICATION_TYPE,
-            links=links
-        )
+        authentication = dict(type=self.AUTHENTICATION_TYPE, links=links)
 
         # It's an academic question whether this is replacing the existing
         # auth mechanisms or just adding another one, but for the moment
         # let's go with "adding another one".
-        doc.setdefault('authentication', []).append(authentication)
+        doc.setdefault("authentication", []).append(authentication)
         return doc
-CustomPatronCatalog.register(COPPAGate)
 
+
+CustomPatronCatalog.register(COPPAGate)

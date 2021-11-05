@@ -13,14 +13,16 @@ ADMIN_AUTH_MECHANISM_NOT_CONFIGURED = pd(
     "http://librarysimplified.org/terms/problem/admin-auth-mechanism-not-configured",
     400,
     _("Admin auth mechanism not configured"),
-    _("This circulation manager has not been configured to authenticate admins with the mechanism you used"),
+    _(
+        "This circulation manager has not been configured to authenticate admins with the mechanism you used"
+    ),
 )
 
 INVALID_ADMIN_CREDENTIALS = pd(
-      "http://librarysimplified.org/terms/problem/admin-credentials-invalid",
-      401,
-      _("Invalid admin credentials"),
-      _("Valid library staff credentials are required."),
+    "http://librarysimplified.org/terms/problem/admin-credentials-invalid",
+    401,
+    _("Invalid admin credentials"),
+    _("Valid library staff credentials are required."),
 )
 
 ADMIN_NOT_AUTHORIZED = pd(
@@ -31,38 +33,38 @@ ADMIN_NOT_AUTHORIZED = pd(
 )
 
 GOOGLE_OAUTH_FAILURE = pd(
-      "http://librarysimplified.org/terms/problem/google-oauth-failure",
-      400,
-      _("Google OAuth Error"),
-      _("There was an error connecting with Google OAuth."),
+    "http://librarysimplified.org/terms/problem/google-oauth-failure",
+    400,
+    _("Google OAuth Error"),
+    _("There was an error connecting with Google OAuth."),
 )
 
 INVALID_CSRF_TOKEN = pd(
-      "http://librarysimplified.org/terms/problem/invalid-csrf-token",
-      400,
-      _("Invalid CSRF token"),
-      _("There was an error saving your changes."),
+    "http://librarysimplified.org/terms/problem/invalid-csrf-token",
+    400,
+    _("Invalid CSRF token"),
+    _("There was an error saving your changes."),
 )
 
 INVALID_EDIT = pd(
-      "http://librarysimplified.org/terms/problem/invalid-edit",
-      400,
-      _("Invalid edit"),
-      _("There was a problem with the edited metadata."),
+    "http://librarysimplified.org/terms/problem/invalid-edit",
+    400,
+    _("Invalid edit"),
+    _("There was a problem with the edited metadata."),
 )
 
 METADATA_REFRESH_PENDING = pd(
-      "http://librarysimplified.org/terms/problem/metadata-refresh-pending",
-      201,
-      _("Metadata refresh pending."),
-      _("The Metadata Wrangler is looking for new data. Check back later."),
+    "http://librarysimplified.org/terms/problem/metadata-refresh-pending",
+    201,
+    _("Metadata refresh pending."),
+    _("The Metadata Wrangler is looking for new data. Check back later."),
 )
 
 METADATA_REFRESH_FAILURE = pd(
-      "http://librarysimplified.org/terms/problem/metadata-refresh-failure",
-      400,
-      _("Metadata could not be refreshed."),
-      _("Metadata could not be refreshed."),
+    "http://librarysimplified.org/terms/problem/metadata-refresh-failure",
+    400,
+    _("Metadata could not be refreshed."),
+    _("Metadata could not be refreshed."),
 )
 
 UNRECOGNIZED_COMPLAINT = pd(
@@ -125,7 +127,7 @@ UNKNOWN_LOCATION = pd(
     "http://librarysimplified.org/terms/problem/unknown-location",
     status_code=400,
     title=_("Unknown location."),
-    detail=_("The submitted geographic location cannot be found.")
+    detail=_("The submitted geographic location cannot be found."),
 )
 
 UNKNOWN_ROLE = pd(
@@ -167,7 +169,9 @@ LIBRARY_SHORT_NAME_ALREADY_IN_USE = pd(
     "http://librarysimplified.org/terms/problem/library-short-name-already-in-use",
     status_code=400,
     title=_("Library short name already in use"),
-    detail=_("The library short name must be unique, and there's already a library with the specified short name."),
+    detail=_(
+        "The library short name must be unique, and there's already a library with the specified short name."
+    ),
 )
 
 MISSING_COLLECTION = pd(
@@ -195,21 +199,27 @@ COLLECTION_NAME_ALREADY_IN_USE = pd(
     "http://librarysimplified.org/terms/problem/collection-name-already-in-use",
     status_code=400,
     title=_("Collection name already in use"),
-    detail=_("The collection name must be unique, and there's already a collection with the specified name."),
+    detail=_(
+        "The collection name must be unique, and there's already a collection with the specified name."
+    ),
 )
 
 CANNOT_DELETE_COLLECTION_WITH_CHILDREN = pd(
     "http://librarysimplified.org/terms/problem/cannot-delete-collection-with-children",
     status_code=400,
     title=_("Cannot delete collection with children"),
-    detail=_("The collection is the parent of at least one other collection, so it can't be deleted."),
+    detail=_(
+        "The collection is the parent of at least one other collection, so it can't be deleted."
+    ),
 )
 
 NO_PROTOCOL_FOR_NEW_SERVICE = pd(
     "http://librarysimplified.org/terms/problem/no-protocol-for-new-service",
     status_code=400,
     title=_("No protocol for new service"),
-    detail=_("The specified service doesn't exist. You can create it, but you must specify a protocol."),
+    detail=_(
+        "The specified service doesn't exist. You can create it, but you must specify a protocol."
+    ),
 )
 
 UNKNOWN_PROTOCOL = pd(
@@ -230,7 +240,9 @@ PROTOCOL_DOES_NOT_SUPPORT_PARENTS = pd(
     "http://librarysimplified.org/terms/problem/protocol-does-not-support-parents",
     status_code=400,
     title=_("Protocol does not support parents"),
-    detail=_("You attempted to add a parent but the protocol does not support parents."),
+    detail=_(
+        "You attempted to add a parent but the protocol does not support parents."
+    ),
 )
 
 MISSING_PARENT = pd(
@@ -258,14 +270,16 @@ DUPLICATE_INTEGRATION = pd(
     "http://librarysimplified.org/terms/problem/duplicate-integration",
     status_code=400,
     title=_("Duplicate integration"),
-    detail=_("A given site can only support one integration of this type.")
+    detail=_("A given site can only support one integration of this type."),
 )
 
 INTEGRATION_NAME_ALREADY_IN_USE = pd(
     "http://librarysimplified.org/terms/problem/integration-name-already-in-use",
     status_code=400,
     title=_("Integration name already in use"),
-    detail=_("The integration name must be unique, and there's already an integration with the specified name."),
+    detail=_(
+        "The integration name must be unique, and there's already an integration with the specified name."
+    ),
 )
 
 INTEGRATION_URL_ALREADY_IN_USE = pd(
@@ -279,7 +293,9 @@ INTEGRATION_GOAL_CONFLICT = pd(
     "http://librarysimplified.org/terms/problem/integration-goal-conflict",
     status_code=409,
     title=_("Incompatible use of integration"),
-    detail=_("You tried to use an integration in a way incompatible with the goal of that integration"),
+    detail=_(
+        "You tried to use an integration in a way incompatible with the goal of that integration"
+    ),
 )
 
 MISSING_INTEGRATION = pd(
@@ -293,7 +309,9 @@ MISSING_PGCRYPTO_EXTENSION = pd(
     "http://librarysimplified.org/terms/problem/missing-pgcrypto-extension",
     status_code=500,
     title=_("Missing pgcrypto database extension"),
-    detail=_("You tried to store a password for an individual admin, but the database does not have the pgcrypto extension installed."),
+    detail=_(
+        "You tried to store a password for an individual admin, but the database does not have the pgcrypto extension installed."
+    ),
 )
 
 MISSING_ADMIN = pd(
@@ -349,21 +367,27 @@ INVALID_LIBRARY_IDENTIFIER_RESTRICTION_REGULAR_EXPRESSION = pd(
     "http://librarysimplified.org/terms/problem/invalid-library-identifier-restriction-regular-expression",
     status_code=400,
     title=_("Invalid library identifier restriction regular expression"),
-    detail=_("The specified library identifier restriction regular expression does not compile."),
+    detail=_(
+        "The specified library identifier restriction regular expression does not compile."
+    ),
 )
 
 MULTIPLE_BASIC_AUTH_SERVICES = pd(
     "http://librarysimplified.org/terms/problem/multiple-basic-auth-services",
     status_code=400,
     title=_("Multiple basic authentication services"),
-    detail=_("Each library can only have one patron authentication service using basic auth."),
+    detail=_(
+        "Each library can only have one patron authentication service using basic auth."
+    ),
 )
 
 NO_SUCH_PATRON = pd(
     "http://librarysimplified.org/terms/problem/no-such-patron",
     status_code=404,
     title=_("No such patron"),
-    detail=_("The specified patron doesn't exist, or is associated with a different library."),
+    detail=_(
+        "The specified patron doesn't exist, or is associated with a different library."
+    ),
 )
 
 MISSING_SITEWIDE_SETTING_KEY = pd(
@@ -384,7 +408,9 @@ MULTIPLE_SITEWIDE_SERVICES = pd(
     "http://librarysimplified.org/terms/problem/multiple-search-services",
     status_code=400,
     title=_("Multiple sitewide services"),
-    detail=_("You tried to create a new sitewide service, but a sitewide service of the same type is already configured."),
+    detail=_(
+        "You tried to create a new sitewide service, but a sitewide service of the same type is already configured."
+    ),
 )
 
 MULTIPLE_SERVICES_FOR_LIBRARY = pd(
@@ -419,14 +445,18 @@ COLLECTION_NOT_ASSOCIATED_WITH_LIBRARY = pd(
     "http://librarysimplified.org/terms/problem/collection-not-associated-with-library",
     status_code=400,
     title=_("Collection not associated with library"),
-    detail=_("You can't add a collection to a list unless it is associated with the list's library."),
+    detail=_(
+        "You can't add a collection to a list unless it is associated with the list's library."
+    ),
 )
 
 MISSING_LANE = pd(
     "http://librarysimplified.org/terms/problem/missing-lane",
     status_code=404,
     title=_("Missing lane"),
-    detail=_("The specified lane doesn't exist, or is associated with a different library."),
+    detail=_(
+        "The specified lane doesn't exist, or is associated with a different library."
+    ),
 )
 
 CANNOT_EDIT_DEFAULT_LANE = pd(
@@ -454,7 +484,9 @@ LANE_WITH_PARENT_AND_DISPLAY_NAME_ALREADY_EXISTS = pd(
     "http://librarysimplified.org/terms/problem/lane-with-parent-and-display-name-already-exists",
     status_code=400,
     title=_("Lane with parent and display name already exists"),
-    detail=_("You cannot create a lane with the same parent and display name as an existing lane."),
+    detail=_(
+        "You cannot create a lane with the same parent and display name as an existing lane."
+    ),
 )
 
 CANNOT_SHOW_LANE_WITH_HIDDEN_PARENT = pd(
@@ -475,12 +507,12 @@ FAILED_TO_RUN_SELF_TESTS = pd(
     "http://librarysimplified.org/terms/problem/failed-to-run-self-tests",
     status_code=400,
     title=_("Failed to run self tests."),
-    detail=_("Failed to run self tests.")
+    detail=_("Failed to run self tests."),
 )
 
 MISSING_IDENTIFIER = pd(
     "http://librarysimplified.org/terms/problem/missing-identifier",
     status_code=400,
     title=_("Missing identifier"),
-    detail=_("No identifier was used.")
+    detail=_("No identifier was used."),
 )

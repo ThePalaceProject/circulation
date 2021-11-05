@@ -220,8 +220,9 @@ class TestSAMLAuthenticationManager(ControllerTest):
 
             acs_binding = saml_request_dom.get("ProtocolBinding")
             assert (
-                acs_binding ==
-                SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS.acs_service.binding.value)
+                acs_binding
+                == SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS.acs_service.binding.value
+            )
 
             sso_url = saml_request_dom.get("Destination")
             assert sso_url == IDENTITY_PROVIDERS[0].sso_service.url
@@ -236,7 +237,9 @@ class TestSAMLAuthenticationManager(ControllerTest):
             name_id_policy_node = name_id_policy_nodes[0]
             name_id_format = name_id_policy_node.get("Format")
 
-            assert name_id_format == SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS.name_id_format
+            assert (
+                name_id_format == SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS.name_id_format
+            )
 
     @parameterized.expand(
         [

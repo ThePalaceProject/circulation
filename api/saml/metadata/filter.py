@@ -34,7 +34,11 @@ class SAMLSubjectFilter(object):
         :type dsl_evaluator: core.python_expression_dsl.evaluator.DSLEvaluator
         """
         if not isinstance(dsl_evaluator, DSLEvaluator):
-            raise ValueError("Argument 'dsl_evaluator' must be an instance of {0} class".format(DSLEvaluator))
+            raise ValueError(
+                "Argument 'dsl_evaluator' must be an instance of {0} class".format(
+                    DSLEvaluator
+                )
+            )
 
         self._dsl_evaluator = dsl_evaluator
         self._logger = logging.getLogger(__name__)

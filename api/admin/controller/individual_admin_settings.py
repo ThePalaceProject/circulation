@@ -15,10 +15,10 @@ from api.admin.exceptions import *
 from api.admin.problem_details import *
 from api.admin.validator import Validator
 
-class IndividualAdminSettingsController(SettingsController):
 
+class IndividualAdminSettingsController(SettingsController):
     def process_individual_admins(self):
-        if flask.request.method == 'GET':
+        if flask.request.method == "GET":
             return self.process_get()
         else:
             return self.process_post()
@@ -29,7 +29,9 @@ class IndividualAdminSettingsController(SettingsController):
             roles = []
             for role in admin.roles:
                 if role.library:
-                    if not flask.request.admin or not flask.request.admin.is_librarian(role.library):
+                    if not flask.request.admin or not flask.request.admin.is_librarian(
+                        role.library
+                    ):
                         continue
                     roles.append(dict(role=role.role, library=role.library.short_name))
                 else:
@@ -48,9 +50,11 @@ class IndividualAdminSettingsController(SettingsController):
             return error
 
         # If there are no admins yet, anyone can create the first system admin.
-        settingUp = (self._db.query(Admin).count() == 0)
+        settingUp = self._db.query(Admin).count() == 0
         if settingUp and not flask.request.form.get("password"):
-            return INCOMPLETE_CONFIGURATION.detailed(_("The password field cannot be blank."))
+            return INCOMPLETE_CONFIGURATION.detailed(
+                _("The password field cannot be blank.")
+            )
 
         admin, is_new = get_one_or_create(self._db, Admin, email=email)
 
@@ -73,11 +77,11 @@ class IndividualAdminSettingsController(SettingsController):
 
     def check_permissions(self, admin, settingUp):
         """Before going any further, check that the user actually has permission
-         to create/edit this type of admin"""
+        to create/edit this type of admin"""
 
-         # For readability: the person who is submitting the form is referred to as "user"
-         # rather than as something that could be confused with "admin" (the admin
-         # which the user is submitting the form in order to create/edit.)
+        # For readability: the person who is submitting the form is referred to as "user"
+        # rather than as something that could be confused with "admin" (the admin
+        # which the user is submitting the form in order to create/edit.)
 
         if not settingUp:
             user = flask.request.admin
@@ -120,7 +124,12 @@ class IndividualAdminSettingsController(SettingsController):
         if library_short_name:
             library = Library.lookup(self._db, library_short_name)
             if not library:
-                return LIBRARY_NOT_FOUND.detailed(_("Library \"%(short_name)s\" does not exist.", short_name=library_short_name))
+                return LIBRARY_NOT_FOUND.detailed(
+                    _(
+                        'Library "%(short_name)s" does not exist.',
+                        short_name=library_short_name,
+                    )
+                )
         return library
 
     def handle_roles(self, admin, roles, settingUp):
@@ -148,7 +157,7 @@ class IndividualAdminSettingsController(SettingsController):
                 return library
 
             if (role.get("role"), library) in old_roles_set:
-               # The admin already has this role.
+                # The admin already has this role.
                 continue
 
             if library:

@@ -8,25 +8,31 @@ from core.model import (
 )
 from core.util.problem_detail import ProblemDetail
 from . import SettingsController
-from api.admin.google_oauth_admin_authentication_provider import GoogleOAuthAdminAuthenticationProvider
+from api.admin.google_oauth_admin_authentication_provider import (
+    GoogleOAuthAdminAuthenticationProvider,
+)
 from api.admin.problem_details import *
 
-class AdminAuthServicesController(SettingsController):
 
+class AdminAuthServicesController(SettingsController):
     def __init__(self, manager):
         super(AdminAuthServicesController, self).__init__(manager)
         provider_apis = [GoogleOAuthAdminAuthenticationProvider]
-        self.protocols = self._get_integration_protocols(provider_apis, protocol_name_attr="NAME")
+        self.protocols = self._get_integration_protocols(
+            provider_apis, protocol_name_attr="NAME"
+        )
 
     def process_admin_auth_services(self):
         self.require_system_admin()
-        if flask.request.method == 'GET':
+        if flask.request.method == "GET":
             return self.process_get()
         else:
             return self.process_post()
 
     def process_get(self):
-        auth_services = self._get_integration_info(ExternalIntegration.ADMIN_AUTH_GOAL, self.protocols)
+        auth_services = self._get_integration_info(
+            ExternalIntegration.ADMIN_AUTH_GOAL, self.protocols
+        )
         return dict(
             admin_auth_services=auth_services,
             protocols=self.protocols,
@@ -46,8 +52,10 @@ class AdminAuthServicesController(SettingsController):
         if not auth_service:
             if protocol:
                 auth_service, is_new = get_one_or_create(
-                    self._db, ExternalIntegration, protocol=protocol,
-                    goal=ExternalIntegration.ADMIN_AUTH_GOAL
+                    self._db,
+                    ExternalIntegration,
+                    protocol=protocol,
+                    goal=ExternalIntegration.ADMIN_AUTH_GOAL,
                 )
             else:
                 return NO_PROTOCOL_FOR_NEW_SERVICE
@@ -92,7 +100,12 @@ class AdminAuthServicesController(SettingsController):
 
     def process_delete(self, protocol):
         self.require_system_admin()
-        service = get_one(self._db, ExternalIntegration, protocol=protocol, goal=ExternalIntegration.ADMIN_AUTH_GOAL)
+        service = get_one(
+            self._db,
+            ExternalIntegration,
+            protocol=protocol,
+            goal=ExternalIntegration.ADMIN_AUTH_GOAL,
+        )
         if not service:
             return MISSING_SERVICE
         self._db.delete(service)

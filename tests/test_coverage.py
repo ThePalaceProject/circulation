@@ -38,6 +38,7 @@ from api.coverage import (
     RegistrarImporter,
 )
 
+
 class TestImporterSubclasses(DatabaseTest):
     """Test the subclasses of OPDSImporter."""
 
@@ -50,7 +51,6 @@ class TestImporterSubclasses(DatabaseTest):
 
 
 class TestOPDSImportCoverageProvider(DatabaseTest):
-
     def _provider(self):
         """Create a generic MockOPDSImportCoverageProvider for testing purposes."""
         return MockOPDSImportCoverageProvider(self._default_collection)
@@ -62,7 +62,9 @@ class TestOPDSImportCoverageProvider(DatabaseTest):
         provider = self._provider()
         provider.lookup_client = MockSimplifiedOPDSLookup(self._url)
 
-        response = MockRequestsResponse(200, {"content-type" : "text/plain"}, "Some data")
+        response = MockRequestsResponse(
+            200, {"content-type": "text/plain"}, "Some data"
+        )
         provider.lookup_client.queue_response(response)
         with pytest.raises(BadResponseException) as excinfo:
             provider.import_feed_response(response, None)
@@ -89,7 +91,8 @@ class TestOPDSImportCoverageProvider(DatabaseTest):
         # And create an ExternalIntegration for the metadata_client object.
         self._external_integration(
             ExternalIntegration.METADATA_WRANGLER,
-            goal=ExternalIntegration.METADATA_GOAL, url=self._url
+            goal=ExternalIntegration.METADATA_GOAL,
+            url=self._url,
         )
 
         self._default_collection.external_integration.set_setting(
@@ -101,10 +104,13 @@ class TestOPDSImportCoverageProvider(DatabaseTest):
         # foreign data source knows the book as id2.
         id1 = self._identifier()
         id2 = self._identifier()
-        provider.mapping = { id2 : id1 }
+        provider.mapping = {id2: id1}
 
-        feed = "<feed><entry><id>%s</id><title>Here's your title!</title></entry></feed>" % id2.urn
-        headers = {"content-type" : OPDSFeed.ACQUISITION_FEED_TYPE}
+        feed = (
+            "<feed><entry><id>%s</id><title>Here's your title!</title></entry></feed>"
+            % id2.urn
+        )
+        headers = {"content-type": OPDSFeed.ACQUISITION_FEED_TYPE}
         lookup.queue_response(200, headers=headers, content=feed)
         [identifier] = provider.process_batch([id1])
 
@@ -127,8 +133,11 @@ class TestOPDSImportCoverageProvider(DatabaseTest):
 
         license_source = DataSource.lookup(self._db, DataSource.GUTENBERG)
         pool, is_new = LicensePool.for_foreign_id(
-            self._db, license_source, identifier.type, identifier.identifier,
-            collection=self._default_collection
+            self._db,
+            license_source,
+            identifier.type,
+            identifier.identifier,
+            collection=self._default_collection,
         )
         assert None == pool.work
 
@@ -144,26 +153,26 @@ class TestOPDSImportCoverageProvider(DatabaseTest):
         error_identifier = self._identifier()
         not_an_error_identifier = self._identifier()
         messages_by_id = {
-            error_identifier.urn : CoverageFailure(
+            error_identifier.urn: CoverageFailure(
                 error_identifier, "500: internal error"
             ),
-            not_an_error_identifier.urn : not_an_error_identifier,
+            not_an_error_identifier.urn: not_an_error_identifier,
         }
 
         # When we call CoverageProvider.process_batch(), it's going to
         # return the information we just set up: a matched
         # Edition/LicensePool pair, a mismatched LicensePool, and an
         # error message.
-        provider.queue_import_results(
-            [edition], [pool, pool2], [], messages_by_id
-        )
+        provider.queue_import_results([edition], [pool, pool2], [], messages_by_id)
 
         # Make the CoverageProvider do its thing.
         fake_batch = [object()]
-        (success_import, failure_mismatched, failure_message,
-         success_message) = provider.process_batch(
-            fake_batch
-        )
+        (
+            success_import,
+            failure_mismatched,
+            failure_message,
+            success_message,
+        ) = provider.process_batch(fake_batch)
 
         # The fake batch was provided to lookup_and_import_batch.
         assert [fake_batch] == provider.batches
@@ -178,8 +187,10 @@ class TestOPDSImportCoverageProvider(DatabaseTest):
         # The mismatched LicensePool turned into a CoverageFailure
         # object.
         assert isinstance(failure_mismatched, CoverageFailure)
-        assert ('OPDS import operation imported LicensePool, but no Edition.' ==
-            failure_mismatched.exception)
+        assert (
+            "OPDS import operation imported LicensePool, but no Edition."
+            == failure_mismatched.exception
+        )
         assert pool2.identifier == failure_mismatched.obj
         assert True == failure_mismatched.transient
 
@@ -238,8 +249,10 @@ class TestOPDSImportCoverageProvider(DatabaseTest):
                 right values.
                 """
                 return (
-                    text, self.collection,
-                    self.identifier_mapping, self.data_source_name
+                    text,
+                    self.collection,
+                    self.identifier_mapping,
+                    self.data_source_name,
                 )
 
         class MockProvider(MockOPDSImportCoverageProvider):
@@ -249,11 +262,12 @@ class TestOPDSImportCoverageProvider(DatabaseTest):
         provider.lookup_client = MockSimplifiedOPDSLookup(self._url)
 
         response = MockRequestsResponse(
-            200, {'content-type': OPDSFeed.ACQUISITION_FEED_TYPE}, "some data"
+            200, {"content-type": OPDSFeed.ACQUISITION_FEED_TYPE}, "some data"
         )
         id_mapping = object()
-        (text, collection, mapping,
-         data_source_name) = provider.import_feed_response(response, id_mapping)
+        (text, collection, mapping, data_source_name) = provider.import_feed_response(
+            response, id_mapping
+        )
         assert "some data" == text
         assert provider.collection == collection
         assert id_mapping == mapping

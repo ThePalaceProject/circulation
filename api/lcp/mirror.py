@@ -10,21 +10,25 @@ from api.lcp.server import LCPServer
 from core.lcp.credential import LCPCredentialFactory
 from core.mirror import MirrorUploader
 from core.model import ExternalIntegration, Collection
-from core.model.collection import HasExternalIntegrationPerCollection, CollectionConfigurationStorage
-from core.model.configuration import ConfigurationAttributeType, \
-    ConfigurationMetadata, ConfigurationFactory
+from core.model.collection import (
+    HasExternalIntegrationPerCollection,
+    CollectionConfigurationStorage,
+)
+from core.model.configuration import (
+    ConfigurationAttributeType,
+    ConfigurationMetadata,
+    ConfigurationFactory,
+)
 from core.s3 import MinIOUploader, S3UploaderConfiguration, MinIOUploaderConfiguration
 
 
 class LCPMirrorConfiguration(S3UploaderConfiguration):
     endpoint_url = ConfigurationMetadata(
         key=MinIOUploaderConfiguration.endpoint_url.key,
-        label=_('Endpoint URL'),
-        description=_(
-            'S3 endpoint URL'
-        ),
+        label=_("Endpoint URL"),
+        description=_("S3 endpoint URL"),
         type=ConfigurationAttributeType.TEXT,
-        required=False
+        required=False,
     )
 
 
@@ -44,7 +48,7 @@ class LCPMirror(MinIOUploader, HasExternalIntegrationPerCollection):
         S3UploaderConfiguration.s3_addressing_style.to_settings(),
         S3UploaderConfiguration.s3_presigned_url_expiration.to_settings(),
         S3UploaderConfiguration.url_template.to_settings(),
-        LCPMirrorConfiguration.endpoint_url.to_settings()
+        LCPMirrorConfiguration.endpoint_url.to_settings(),
     ]
 
     def __init__(self, integration):
@@ -71,7 +75,12 @@ class LCPMirror(MinIOUploader, HasExternalIntegrationPerCollection):
         hasher_factory = HasherFactory()
         credential_factory = LCPCredentialFactory()
         lcp_encryptor = LCPEncryptor(configuration_storage, configuration_factory)
-        lcp_server = LCPServer(configuration_storage, configuration_factory, hasher_factory, credential_factory)
+        lcp_server = LCPServer(
+            configuration_storage,
+            configuration_factory,
+            hasher_factory,
+            credential_factory,
+        )
         lcp_importer = LCPImporter(lcp_encryptor, lcp_server)
 
         return lcp_importer
@@ -86,13 +95,12 @@ class LCPMirror(MinIOUploader, HasExternalIntegrationPerCollection):
         :rtype: core.model.configuration.ExternalIntegration
         """
         db = Session.object_session(collection)
-        external_integration = db \
-            .query(ExternalIntegration) \
-            .join(Collection) \
-            .filter(
-                Collection.id == collection.id
-            ) \
+        external_integration = (
+            db.query(ExternalIntegration)
+            .join(Collection)
+            .filter(Collection.id == collection.id)
             .one()
+        )
 
         return external_integration
 
@@ -102,11 +110,20 @@ class LCPMirror(MinIOUploader, HasExternalIntegrationPerCollection):
     def marc_file_root(self, bucket, library):
         raise NotImplementedError()
 
-    def book_url(self, identifier, extension='.epub', open_access=False, data_source=None, title=None):
+    def book_url(
+        self,
+        identifier,
+        extension=".epub",
+        open_access=False,
+        data_source=None,
+        title=None,
+    ):
         """Returns the path to the hosted EPUB file for the given identifier."""
         bucket = self.get_bucket(
-            S3UploaderConfiguration.OA_CONTENT_BUCKET_KEY if open_access
-            else S3UploaderConfiguration.PROTECTED_CONTENT_BUCKET_KEY)
+            S3UploaderConfiguration.OA_CONTENT_BUCKET_KEY
+            if open_access
+            else S3UploaderConfiguration.PROTECTED_CONTENT_BUCKET_KEY
+        )
         root = self.content_root(bucket)
         book_url = root + self.key_join([identifier.identifier])
 
@@ -133,11 +150,13 @@ class LCPMirror(MinIOUploader, HasExternalIntegrationPerCollection):
         db = Session.object_session(representation)
         bucket = self.get_bucket(S3UploaderConfiguration.PROTECTED_CONTENT_BUCKET_KEY)
         content_root = self.content_root(bucket)
-        identifier = mirror_to.replace(content_root, '')
+        identifier = mirror_to.replace(content_root, "")
         lcp_importer = self._create_lcp_importer(collection)
 
         # First, we need to copy unencrypted book's content to a temporary file
-        with tempfile.NamedTemporaryFile(suffix=representation.extension(representation.media_type)) as temporary_file:
+        with tempfile.NamedTemporaryFile(
+            suffix=representation.extension(representation.media_type)
+        ) as temporary_file:
             temporary_file.write(representation.content_fh().read())
             temporary_file.flush()
 
