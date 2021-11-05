@@ -2,35 +2,26 @@
 import base64
 import datetime
 import json
-import isbnlib
 import logging
+
+import isbnlib
+from flask_babel import lazy_gettext as _
 from sqlalchemy.orm.session import Session
 
-from flask_babel import lazy_gettext as _
-
-from .circulation import (
-    LoanInfo,
-    HoldInfo,
-    FulfillmentInfo,
-    BaseCirculationAPI,
+from core.analytics import Analytics
+from core.config import CannotLoadConfiguration
+from core.coverage import BibliographicCoverageProvider
+from core.metadata_layer import (
+    CirculationData,
+    ContributorData,
+    FormatData,
+    IdentifierData,
+    LinkData,
+    Metadata,
+    ReplacementPolicy,
+    SubjectData,
 )
-
-from core.model import Credential, DataSource, ExternalIntegration, Identifier
-
-from .selftest import (
-    HasSelfTests,
-    SelfTestResult,
-)
-from core.monitor import (
-    CollectionMonitor,
-    TimelineMonitor,
-)
-from core.util.http import HTTP
-
-from .circulation_exceptions import *
-
 from core.model import (
-    get_one_or_create,
     Classification,
     Collection,
     Contributor,
@@ -43,44 +34,17 @@ from core.model import (
     Identifier,
     Representation,
     Subject,
+    get_one_or_create,
 )
-
-from core.analytics import Analytics
-
-from core.metadata_layer import (
-    CirculationData,
-    ContributorData,
-    FormatData,
-    IdentifierData,
-    Metadata,
-    LinkData,
-    ReplacementPolicy,
-    SubjectData,
-)
-
-from core.coverage import (
-    BibliographicCoverageProvider,
-)
-
-from core.config import (
-    CannotLoadConfiguration,
-)
-
-from core.testing import DatabaseTest
-
-from core.util.datetime_helpers import (
-    from_timestamp,
-    strptime_utc,
-    utc_now,
-)
-from core.util.http import (
-    HTTP,
-    BadResponseException,
-)
-
+from core.monitor import CollectionMonitor, TimelineMonitor
+from core.testing import DatabaseTest, MockRequestsResponse
+from core.util.datetime_helpers import from_timestamp, strptime_utc, utc_now
+from core.util.http import HTTP, BadResponseException
 from core.util.personal_names import sort_name_to_display_name
 
-from core.testing import MockRequestsResponse
+from .circulation import BaseCirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
+from .circulation_exceptions import *
+from .selftest import HasSelfTests, SelfTestResult
 
 
 class OdiloRepresentationExtractor(object):

@@ -2,13 +2,14 @@ import flask
 from flask import Response
 
 from api.admin.problem_details import *
-from core.mirror import MirrorUploader
-from core.model import ExternalIntegration, get_one
-from core.util.problem_detail import ProblemDetail
-from . import SettingsController
 
 # NOTE: We need to import it explicitly to initialize MirrorUploader.IMPLEMENTATION_REGISTRY
 from api.lcp import mirror
+from core.mirror import MirrorUploader
+from core.model import ExternalIntegration, get_one
+from core.util.problem_detail import ProblemDetail
+
+from . import SettingsController
 
 
 class StorageServicesController(SettingsController):

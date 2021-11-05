@@ -1,17 +1,16 @@
 import json
 import logging
-import urllib.request, urllib.parse, urllib.error
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections import Counter
-from flask_babel import lazy_gettext as _
 
-from core.config import (
-    CannotLoadConfiguration,
-    Configuration,
-)
-from core.coverage import (
-    CoverageFailure,
-    IdentifierCoverageProvider,
-)
+from flask_babel import lazy_gettext as _
+from sqlalchemy.orm import aliased
+from sqlalchemy.sql import and_, join, or_, select
+
+from core.config import CannotLoadConfiguration, Configuration
+from core.coverage import CoverageFailure, IdentifierCoverageProvider
 from core.metadata_layer import (
     ContributorData,
     IdentifierData,
@@ -21,30 +20,23 @@ from core.metadata_layer import (
     SubjectData,
 )
 from core.model import (
+    Collection,
+    Contribution,
+    Contributor,
     DataSource,
+    Edition,
+    Equivalency,
     ExternalIntegration,
     Hyperlink,
     Identifier,
+    LicensePool,
     Measurement,
     Representation,
     Session,
     Subject,
     get_one,
-    Equivalency,
-    LicensePool,
-    Collection,
-    Edition,
-    Contributor,
-    Contribution,
 )
 from core.util import TitleProcessor
-from sqlalchemy.sql import (
-    select,
-    join,
-    and_,
-    or_,
-)
-from sqlalchemy.orm import aliased
 from core.util.http import HTTP
 
 

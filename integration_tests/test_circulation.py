@@ -1,27 +1,26 @@
 #!/usr/bin/env python
-import random
-import sys
 import os
+import random
 import sys
 
 bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..")
 sys.path.append(os.path.abspath(package_dir))
 
+from axis import Axis360API
+from circulation_exceptions import *
+from overdrive import OverdriveAPI
+from threem import ThreeMAPI
+
+from circulation import CirculationAPI
 from core.model import (
-    get_one_or_create,
-    production_session,
     DataSource,
     Identifier,
     LicensePool,
     Patron,
+    get_one_or_create,
+    production_session,
 )
-from threem import ThreeMAPI
-from overdrive import OverdriveAPI
-from axis import Axis360API
-
-from circulation import CirculationAPI
-from circulation_exceptions import *
 
 barcode, pin, borrow_urn, hold_urn = sys.argv[1:5]
 email = os.environ.get(

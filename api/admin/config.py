@@ -1,5 +1,5 @@
-from enum import Enum
 import os
+from enum import Enum
 from urllib.parse import urljoin
 
 

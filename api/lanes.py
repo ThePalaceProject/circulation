@@ -1,39 +1,24 @@
-from sqlalchemy import (
-    and_,
-    func,
-    or_,
-)
-from sqlalchemy.orm import aliased
-from flask_babel import lazy_gettext as _
-import elasticsearch
 import logging
 
-import core.classifier as genres
-from .config import (
-    CannotLoadConfiguration,
-    Configuration,
-)
-from core.classifier import (
-    Classifier,
-    fiction_genres,
-    nonfiction_genres,
-    GenreData,
-)
-from core import classifier
+import elasticsearch
+from flask_babel import lazy_gettext as _
+from sqlalchemy import and_, func, or_
+from sqlalchemy.orm import aliased
 
+import core.classifier as genres
+from core import classifier
+from core.classifier import Classifier, GenreData, fiction_genres, nonfiction_genres
 from core.lane import (
     BaseFacets,
     DatabaseBackedWorkList,
     DefaultSortOrderFacets,
     Facets,
     FacetsWithEntryPoint,
-    Pagination,
     Lane,
+    Pagination,
     WorkList,
 )
 from core.model import (
-    get_one,
-    create,
     CachedFeed,
     Contribution,
     Contributor,
@@ -44,9 +29,12 @@ from core.model import (
     LicensePool,
     Session,
     Work,
+    create,
+    get_one,
 )
-
 from core.util import LanguageCodes
+
+from .config import CannotLoadConfiguration, Configuration
 from .novelist import NoveListAPI
 
 

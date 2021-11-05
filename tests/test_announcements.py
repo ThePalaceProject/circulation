@@ -1,8 +1,8 @@
 import json
 
-from api.testing import AnnouncementTest
 from api.admin.announcement_list_validator import AnnouncementListValidator
-from api.announcements import Announcements, Announcement
+from api.announcements import Announcement, Announcements
+from api.testing import AnnouncementTest
 from core.testing import DatabaseTest
 
 

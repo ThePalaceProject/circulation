@@ -1,25 +1,21 @@
-import pytest
+import json
 
 import flask
-import json
+import pytest
 from werkzeug.datastructures import MultiDict
+
 from api.admin.exceptions import *
-from api.registry import (
-    RemoteRegistry,
-    Registration,
-)
+from api.registry import Registration, RemoteRegistry
 from core.model import (
     AdminRole,
     ConfigurationSetting,
-    create,
     ExternalIntegration,
     Library,
+    create,
 )
-from core.testing import (
-    DummyHTTPClient,
-    MockRequestsResponse,
-)
+from core.testing import DummyHTTPClient, MockRequestsResponse
 from core.util.http import HTTP
+
 from .test_controller import SettingsControllerTest
 
 

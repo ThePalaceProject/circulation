@@ -1,15 +1,12 @@
+import urllib.error
+import urllib.parse
+import urllib.request
+
 from pymarc import Field
-import urllib.request, urllib.parse, urllib.error
 
 from core.config import Configuration
-from core.marc import (
-    Annotator,
-    MARCExporter,
-)
-from core.model import (
-    ConfigurationSetting,
-    Session,
-)
+from core.marc import Annotator, MARCExporter
+from core.model import ConfigurationSetting, Session
 
 
 class LibraryAnnotator(Annotator):

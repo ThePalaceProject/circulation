@@ -1,20 +1,13 @@
-import pytest
-
 import flask
+import pytest
 from werkzeug.datastructures import MultiDict
+
 from api.admin.exceptions import *
 from api.odl import SharedODLAPI
-from api.registry import (
-    Registration,
-    RemoteRegistry,
-)
-from core.model import (
-    AdminRole,
-    ConfigurationSetting,
-    create,
-    Library,
-)
+from api.registry import Registration, RemoteRegistry
+from core.model import AdminRole, ConfigurationSetting, Library, create
 from core.util.http import HTTP
+
 from .test_controller import SettingsControllerTest
 
 

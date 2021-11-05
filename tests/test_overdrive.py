@@ -1,11 +1,15 @@
 # encoding: utf-8
-import pytest
-import pkgutil
 import json
-from datetime import (
-    timedelta,
-)
+import pkgutil
 import random
+from datetime import timedelta
+
+import pytest
+
+from api.authenticator import BasicAuthenticationProvider
+from api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
+from api.circulation_exceptions import *
+from api.config import Configuration, temp_config
 from api.overdrive import (
     MockOverdriveAPI,
     NewTitlesOverdriveCollectionMonitor,
@@ -16,28 +20,10 @@ from api.overdrive import (
     OverdriveManifestFulfillmentInfo,
     RecentOverdriveCollectionMonitor,
 )
-
-from api.authenticator import BasicAuthenticationProvider
-from api.circulation import (
-    CirculationAPI,
-    FulfillmentInfo,
-    HoldInfo,
-    LoanInfo,
-)
-from api.circulation_exceptions import *
-from api.config import Configuration
-
-from core.testing import DatabaseTest
-from core.util.datetime_helpers import (
-    datetime_utc,
-    utc_now,
-)
-from . import sample_data
-
 from core.metadata_layer import TimestampData
 from core.model import (
-    Collection,
     CirculationEvent,
+    Collection,
     ConfigurationSetting,
     DataSource,
     DeliveryMechanism,
@@ -49,12 +35,10 @@ from core.model import (
     Representation,
     RightsStatus,
 )
-from core.testing import (
-    DummyHTTPClient,
-    MockRequestsResponse,
-)
+from core.testing import DatabaseTest, DummyHTTPClient, MockRequestsResponse
+from core.util.datetime_helpers import datetime_utc, utc_now
 
-from api.config import temp_config
+from . import sample_data
 
 
 class OverdriveAPITest(DatabaseTest):

@@ -9,17 +9,17 @@ from api.lcp.importer import LCPImporter
 from api.lcp.server import LCPServer
 from core.lcp.credential import LCPCredentialFactory
 from core.mirror import MirrorUploader
-from core.model import ExternalIntegration, Collection
+from core.model import Collection, ExternalIntegration
 from core.model.collection import (
-    HasExternalIntegrationPerCollection,
     CollectionConfigurationStorage,
+    HasExternalIntegrationPerCollection,
 )
 from core.model.configuration import (
     ConfigurationAttributeType,
-    ConfigurationMetadata,
     ConfigurationFactory,
+    ConfigurationMetadata,
 )
-from core.s3 import MinIOUploader, S3UploaderConfiguration, MinIOUploaderConfiguration
+from core.s3 import MinIOUploader, MinIOUploaderConfiguration, S3UploaderConfiguration
 
 
 class LCPMirrorConfiguration(S3UploaderConfiguration):

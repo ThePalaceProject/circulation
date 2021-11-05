@@ -1,20 +1,44 @@
 """Test the base authentication framework: that is, the classes that
 don't interact with any particular source of truth.
 """
-import pytest
-from flask_babel import lazy_gettext as _
 import datetime
-from decimal import Decimal
 import json
 import os
-from money import Money
 import re
-import urllib.request, urllib.parse, urllib.error
+import urllib.error
 import urllib.parse
+import urllib.request
+from decimal import Decimal
+
 import flask
-from flask import url_for, Flask
-from core.opds import OPDSFeed
-from core.user_profile import ProfileController
+import pytest
+from flask import Flask, url_for
+from flask_babel import lazy_gettext as _
+from money import Money
+
+from api.annotations import AnnotationWriter
+from api.announcements import Announcements
+from api.authenticator import (
+    AuthenticationProvider,
+    Authenticator,
+    BasicAuthenticationProvider,
+    CirculationPatronProfileStorage,
+    LibraryAuthenticator,
+    OAuthAuthenticationProvider,
+    OAuthController,
+    PatronData,
+)
+from api.clever import CleverAuthenticationAPI
+from api.config import CannotLoadConfiguration, Configuration, temp_config
+from api.firstbook import FirstBookAuthenticationAPI
+from api.millenium_patron import MilleniumPatronAPI
+from api.opds import LibraryAnnotator
+from api.problem_details import *
+from api.problem_details import PATRON_OF_ANOTHER_LIBRARY
+from api.simple_authentication import SimpleAuthenticationProvider
+from api.testing import VendorIDTest
+from api.util.patron import PatronUtility
+from core.mock_analytics_provider import MockAnalyticsProvider
 from core.model import (
     CirculationEvent,
     ConfigurationSetting,
@@ -23,51 +47,17 @@ from core.model import (
     ExternalIntegration,
     Library,
     Patron,
-    create,
     Session,
+    create,
 )
-
-from core.util.datetime_helpers import utc_now
-from core.util.problem_detail import (
-    ProblemDetail,
-)
-from core.util.authentication_for_opds import (
-    AuthenticationForOPDSDocument,
-)
-from core.util.http import IntegrationException
-from core.mock_analytics_provider import MockAnalyticsProvider
-
-from api.announcements import Announcements
-from api.millenium_patron import MilleniumPatronAPI
-from api.firstbook import FirstBookAuthenticationAPI
-from api.clever import CleverAuthenticationAPI
-from api.util.patron import PatronUtility
-from api.annotations import AnnotationWriter
-from api.authenticator import (
-    Authenticator,
-    CirculationPatronProfileStorage,
-    LibraryAuthenticator,
-    AuthenticationProvider,
-    BasicAuthenticationProvider,
-    OAuthController,
-    OAuthAuthenticationProvider,
-    PatronData,
-)
-from api.problem_details import PATRON_OF_ANOTHER_LIBRARY
-from api.simple_authentication import SimpleAuthenticationProvider
-from api.millenium_patron import MilleniumPatronAPI
-from api.opds import LibraryAnnotator
-
-from api.config import (
-    CannotLoadConfiguration,
-    Configuration,
-    temp_config,
-)
-
-from api.problem_details import *
-from api.testing import VendorIDTest
-
+from core.opds import OPDSFeed
 from core.testing import DatabaseTest
+from core.user_profile import ProfileController
+from core.util.authentication_for_opds import AuthenticationForOPDSDocument
+from core.util.datetime_helpers import utc_now
+from core.util.http import IntegrationException
+from core.util.problem_detail import ProblemDetail
+
 from .test_controller import ControllerTest
 
 

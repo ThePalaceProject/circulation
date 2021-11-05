@@ -2,24 +2,18 @@
 import datetime
 from io import StringIO
 
-from core.testing import DatabaseTest
-from core.model import (
-    ExternalIntegration,
-)
-from core.opds_import import (
-    OPDSImportMonitor,
-)
 from api.authenticator import BasicAuthenticationProvider
 from api.circulation import CirculationAPI
+from api.feedbooks import FeedbooksImportMonitor
 from api.selftest import (
     HasCollectionSelfTests,
     HasSelfTests,
     RunSelfTestsScript,
     SelfTestResult,
 )
-from api.feedbooks import (
-    FeedbooksImportMonitor,
-)
+from core.model import ExternalIntegration
+from core.opds_import import OPDSImportMonitor
+from core.testing import DatabaseTest
 
 
 class TestHasSelfTests(DatabaseTest):

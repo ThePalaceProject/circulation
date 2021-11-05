@@ -1,10 +1,8 @@
 from flask import url_for
 
+from core.model import Admin, Session
+
 from .admin_authentication_provider import AdminAuthenticationProvider
-from core.model import (
-    Admin,
-    Session,
-)
 from .problem_details import *
 from .template_styles import *
 

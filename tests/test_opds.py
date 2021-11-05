@@ -1,25 +1,37 @@
-from collections import defaultdict
 import contextlib
 import datetime
-import dateutil
+import json
 import os
 import re
-import json
+from collections import defaultdict
+from pdb import set_trace
+
+import dateutil
+import feedparser
+import jwt
 import pytest
 from lxml import etree
 from mock import create_autospec
-import feedparser
-from core.testing import DatabaseTest
-from pdb import set_trace
-from core.analytics import Analytics
-from core.lane import (
-    FacetsWithEntryPoint,
-    Lane,
-    WorkList,
+
+from api.adobe_vendor_id import AuthdataUtility
+from api.circulation import BaseCirculationAPI, CirculationAPI, FulfillmentInfo
+from api.config import Configuration, temp_config
+from api.lanes import ContributorLane, CrawlableCustomListBasedLane
+from api.novelist import NoveListAPI
+from api.opds import (
+    CirculationManagerAnnotator,
+    LibraryAnnotator,
+    LibraryLoanAndHoldAnnotator,
+    SharedCollectionAnnotator,
+    SharedCollectionLoanAndHoldAnnotator,
 )
+from api.testing import VendorIDTest
+from core.analytics import Analytics
+from core.classifier import Classifier, Fantasy, Urban_Fantasy
+from core.entrypoint import AudiobooksEntryPoint, EverythingEntryPoint
+from core.external_search import MockExternalSearchIndex, WorkSearchResult
+from core.lane import FacetsWithEntryPoint, Lane, WorkList
 from core.model import (
-    create,
-    get_one_or_create,
     CirculationEvent,
     ConfigurationSetting,
     Contributor,
@@ -33,61 +45,16 @@ from core.model import (
     RightsStatus,
     SessionManager,
     Work,
+    create,
+    get_one_or_create,
 )
-
-from core.classifier import Classifier, Fantasy, Urban_Fantasy
-
-from core.entrypoint import (
-    AudiobooksEntryPoint,
-    EverythingEntryPoint,
-)
-from core.external_search import (
-    MockExternalSearchIndex,
-    WorkSearchResult,
-)
-from core.util.datetime_helpers import (
-    datetime_utc,
-    utc_now,
-)
-from core.util.opds_writer import (
-    AtomFeed,
-    OPDSFeed,
-)
-
-from core.opds import (
-    AcquisitionFeed,
-    TestAnnotator,
-    UnfulfillableWork,
-)
-
+from core.opds import AcquisitionFeed, TestAnnotator, UnfulfillableWork
 from core.opds_import import OPDSXMLParser
-from core.util.flask_util import (
-    OPDSEntryResponse,
-    OPDSFeedResponse,
-)
+from core.testing import DatabaseTest
+from core.util.datetime_helpers import datetime_utc, utc_now
+from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
+from core.util.opds_writer import AtomFeed, OPDSFeed
 from core.util.string_helpers import base64
-from api.circulation import (
-    BaseCirculationAPI,
-    CirculationAPI,
-    FulfillmentInfo,
-)
-from api.config import (
-    Configuration,
-    temp_config,
-)
-from api.opds import (
-    CirculationManagerAnnotator,
-    LibraryAnnotator,
-    SharedCollectionAnnotator,
-    LibraryLoanAndHoldAnnotator,
-    SharedCollectionLoanAndHoldAnnotator,
-)
-
-from api.testing import VendorIDTest
-from api.adobe_vendor_id import AuthdataUtility
-from api.novelist import NoveListAPI
-from api.lanes import ContributorLane, CrawlableCustomListBasedLane
-import jwt
 
 _strftime = AtomFeed._strftime
 

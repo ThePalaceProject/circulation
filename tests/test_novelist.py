@@ -2,27 +2,23 @@ import datetime
 import json
 
 import pytest
-from core.testing import DatabaseTest
-from . import sample_data
 
+from api.config import CannotLoadConfiguration
+from api.novelist import MockNoveListAPI, NoveListAPI
 from core.metadata_layer import Metadata
 from core.model import (
-    get_one,
-    get_one_or_create,
     DataSource,
     Edition,
     ExternalIntegration,
     Identifier,
     Representation,
+    get_one,
+    get_one_or_create,
 )
-from core.testing import DummyHTTPClient
-from api.config import CannotLoadConfiguration
-from api.novelist import (
-    MockNoveListAPI,
-    NoveListAPI,
-)
+from core.testing import DatabaseTest, DummyHTTPClient, MockRequestsResponse
 from core.util.http import HTTP
-from core.testing import MockRequestsResponse
+
+from . import sample_data
 
 
 class TestNoveListAPI(DatabaseTest):

@@ -1,17 +1,21 @@
-from api.problem_details import *
+import json
+import os
+import re
+import urllib.error
+import urllib.parse
+import urllib.request
+
+import uszipcode
+from flask_babel import lazy_gettext as _
+from pypostalcode import PostalCodeDatabase
+
 from api.admin.exceptions import *
 from api.admin.validator import Validator
+from api.problem_details import *
 from api.registry import RemoteRegistry
 from core.model import ExternalIntegration, Representation
 from core.util.http import HTTP
 from core.util.problem_detail import ProblemDetail
-from flask_babel import lazy_gettext as _
-import json
-from pypostalcode import PostalCodeDatabase
-import re
-import urllib.request, urllib.parse, urllib.error
-import uszipcode
-import os
 
 
 class GeographicValidator(Validator):

@@ -1,16 +1,14 @@
-from .config import CannotLoadConfiguration
-import uuid
+import re
 import unicodedata
 import urllib.parse
-import re
+import uuid
+
 from flask_babel import lazy_gettext as _
+
+from core.model import ConfigurationSetting, ExternalIntegration, Session, get_one
 from core.util.http import HTTP
-from core.model import (
-    ConfigurationSetting,
-    ExternalIntegration,
-    Session,
-    get_one,
-)
+
+from .config import CannotLoadConfiguration
 
 
 class GoogleAnalyticsProvider(object):

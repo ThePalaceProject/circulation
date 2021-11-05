@@ -1,19 +1,14 @@
 from sqlalchemy import and_
-from api.opds import LibraryAnnotator
-from core.opds import VerboseAnnotator
-from core.lane import Facets, Pagination
-from core.model import (
-    DataSource,
-    LicensePool,
-    Measurement,
-    Session,
-)
-from core.model.configuration import ExternalIntegrationLink
-from core.opds import AcquisitionFeed
-from core.util.opds_writer import AtomFeed
-from core.mirror import MirrorUploader
-from api.metadata_wrangler import MetadataWranglerCollectionRegistrar
+
 from api.config import CannotLoadConfiguration
+from api.metadata_wrangler import MetadataWranglerCollectionRegistrar
+from api.opds import LibraryAnnotator
+from core.lane import Facets, Pagination
+from core.mirror import MirrorUploader
+from core.model import DataSource, LicensePool, Measurement, Session
+from core.model.configuration import ExternalIntegrationLink
+from core.opds import AcquisitionFeed, VerboseAnnotator
+from core.util.opds_writer import AtomFeed
 
 
 class AdminAnnotator(LibraryAnnotator):

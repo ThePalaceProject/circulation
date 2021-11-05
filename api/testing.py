@@ -4,33 +4,21 @@ import json
 import logging
 from collections import defaultdict
 
-from core.testing import DatabaseTest
-
+from api.adobe_vendor_id import AuthdataUtility
+from api.circulation import BaseCirculationAPI, CirculationAPI, HoldInfo, LoanInfo
+from api.config import Configuration, temp_config
+from api.shared_collection import SharedCollectionAPI
 from core.model import (
     ConfigurationSetting,
     DataSource,
     ExternalIntegration,
+    Hold,
     Identifier,
     Library,
     Loan,
-    Hold,
     Session,
 )
-from api.circulation import (
-    BaseCirculationAPI,
-    CirculationAPI,
-    LoanInfo,
-    HoldInfo,
-)
-from api.shared_collection import (
-    SharedCollectionAPI,
-)
-from api.config import (
-    Configuration,
-    temp_config,
-)
-
-from api.adobe_vendor_id import AuthdataUtility
+from core.testing import DatabaseTest
 
 
 class VendorIDTest(DatabaseTest):

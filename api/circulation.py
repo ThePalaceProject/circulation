@@ -7,29 +7,30 @@ from threading import Thread
 import flask
 from flask_babel import lazy_gettext as _
 
-from .circulation_exceptions import *
-from .config import Configuration
 from core.cdn import cdnify
 from core.config import CannotLoadConfiguration
 from core.mirror import MirrorUploader
 from core.model import (
-    get_one,
     CirculationEvent,
     Collection,
     ConfigurationSetting,
     DeliveryMechanism,
     ExternalIntegration,
-    Library,
-    LicensePoolDeliveryMechanism,
-    LicensePool,
-    Loan,
+    ExternalIntegrationLink,
     Hold,
+    Library,
+    LicensePool,
+    LicensePoolDeliveryMechanism,
+    Loan,
     Patron,
     RightsStatus,
     Session,
-    ExternalIntegrationLink,
+    get_one,
 )
 from core.util.datetime_helpers import utc_now
+
+from .circulation_exceptions import *
+from .config import Configuration
 from .util.patron import PatronUtility
 
 
@@ -474,16 +475,17 @@ class CirculationAPI(object):
         """When you see a Collection that implements protocol X, instantiate
         API class Y to handle that collection.
         """
-        from .overdrive import OverdriveAPI
-        from .odilo import OdiloAPI
-        from .bibliotheca import BibliothecaAPI
-        from .axis import Axis360API
-        from .enki import EnkiAPI
-        from .opds_for_distributors import OPDSForDistributorsAPI
-        from .odl import ODLAPI, SharedODLAPI
-        from .odl2 import ODL2API
         from api.lcp.collection import LCPAPI
         from api.proquest.importer import ProQuestOPDS2Importer
+
+        from .axis import Axis360API
+        from .bibliotheca import BibliothecaAPI
+        from .enki import EnkiAPI
+        from .odilo import OdiloAPI
+        from .odl import ODLAPI, SharedODLAPI
+        from .odl2 import ODL2API
+        from .opds_for_distributors import OPDSForDistributorsAPI
+        from .overdrive import OverdriveAPI
 
         return {
             ExternalIntegration.OVERDRIVE: OverdriveAPI,

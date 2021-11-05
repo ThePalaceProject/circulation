@@ -1,14 +1,12 @@
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
+
 from api.admin.problem_details import *
-from api.nyt import NYTBestSellerAPI
 from api.novelist import NoveListAPI
+from api.nyt import NYTBestSellerAPI
+from core.model import ExternalIntegration, get_one
 from core.opds_import import MetadataWranglerOPDSLookup
-from core.model import (
-    ExternalIntegration,
-    get_one,
-)
 from core.util.http import HTTP
 from core.util.problem_detail import ProblemDetail
 

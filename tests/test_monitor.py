@@ -1,9 +1,14 @@
 import datetime
 import random
-from core.testing import (
-    DatabaseTest,
-)
 
+from api.monitor import (
+    HoldReaper,
+    IdlingAnnotationReaper,
+    LoanlikeReaperMonitor,
+    LoanReaper,
+)
+from api.odl import ODLAPI, SharedODLAPI
+from api.testing import MonitorTest
 from core.metadata_layer import TimestampData
 from core.model import (
     Annotation,
@@ -13,20 +18,8 @@ from core.model import (
     ExternalIntegration,
     Identifier,
 )
+from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
-
-from api.monitor import (
-    HoldReaper,
-    IdlingAnnotationReaper,
-    LoanlikeReaperMonitor,
-    LoanReaper,
-)
-
-from api.odl import (
-    ODLAPI,
-    SharedODLAPI,
-)
-from api.testing import MonitorTest
 
 
 class TestLoanlikeReaperMonitor(DatabaseTest):

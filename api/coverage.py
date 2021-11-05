@@ -5,11 +5,13 @@ service that needs coverage -- overdrive.py, metadata_wrangler.py, and
 so on.
 """
 import logging
-from lxml import etree
 from io import StringIO
+
+from lxml import etree
+
 from core.coverage import (
-    CoverageFailure,
     CollectionCoverageProvider,
+    CoverageFailure,
     WorkCoverageProvider,
 )
 from core.model import (
@@ -23,7 +25,6 @@ from core.model import (
     LicensePool,
     WorkCoverageRecord,
 )
-from core.util.opds_writer import OPDSFeed
 from core.opds_import import (
     AccessNotAuthenticated,
     MetadataWranglerOPDSLookup,
@@ -31,9 +32,8 @@ from core.opds_import import (
     OPDSXMLParser,
     SimplifiedOPDSLookup,
 )
-from core.util.http import (
-    RemoteIntegrationException,
-)
+from core.util.http import RemoteIntegrationException
+from core.util.opds_writer import OPDSFeed
 
 
 class RegistrarImporter(OPDSImporter):

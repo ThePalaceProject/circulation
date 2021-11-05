@@ -3,17 +3,12 @@ import os
 
 from flask_babel import lazy_gettext as lgt
 
-from api.authenticator import (
-    OAuthAuthenticationProvider,
-    OAuthController,
-    PatronData,
-)
+from api.authenticator import OAuthAuthenticationProvider, OAuthController, PatronData
+from api.problem_details import INVALID_CREDENTIALS
 from core.model import ExternalIntegration
 from core.util.http import HTTP
 from core.util.problem_detail import ProblemDetail
 from core.util.string_helpers import base64
-from api.problem_details import INVALID_CREDENTIALS
-
 
 UNSUPPORTED_CLEVER_USER_TYPE = ProblemDetail(
     "http://librarysimplified.org/terms/problem/unsupported-clever-user-type",

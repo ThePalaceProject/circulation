@@ -1,20 +1,20 @@
-import os
 import datetime
+import os
 
 from flask import request, url_for
 
 from api.clever import (
-    CleverAuthenticationAPI,
-    UNSUPPORTED_CLEVER_USER_TYPE,
     CLEVER_NOT_ELIGIBLE,
     CLEVER_UNKNOWN_SCHOOL,
+    UNSUPPORTED_CLEVER_USER_TYPE,
+    CleverAuthenticationAPI,
     external_type_from_clever_grade,
 )
 from api.problem_details import INVALID_CREDENTIALS
 from core.model import ExternalIntegration
+from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
 from core.util.problem_detail import ProblemDetail
-from core.testing import DatabaseTest
 
 
 class MockAPI(CleverAuthenticationAPI):

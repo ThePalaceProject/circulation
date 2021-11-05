@@ -1,21 +1,15 @@
-import json
 import datetime
+import json
+
 from pyld import jsonld
 
+from api.annotations import AnnotationParser, AnnotationWriter
+from api.problem_details import *
+from core.model import Annotation, create
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
+
 from .test_controller import ControllerTest
-
-from core.model import (
-    Annotation,
-    create,
-)
-
-from api.annotations import (
-    AnnotationWriter,
-    AnnotationParser,
-)
-from api.problem_details import *
 
 
 class AnnotationTest(DatabaseTest):

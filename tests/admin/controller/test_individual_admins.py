@@ -1,17 +1,13 @@
-import pytest
+import json
 
 import flask
+import pytest
 from flask_babel import lazy_gettext as _
-import json
 from werkzeug.datastructures import MultiDict
+
 from api.admin.exceptions import *
 from api.admin.problem_details import *
-from core.model import (
-    Admin,
-    AdminRole,
-    create,
-    get_one,
-)
+from core.model import Admin, AdminRole, create, get_one
 
 from .test_controller import SettingsControllerTest
 

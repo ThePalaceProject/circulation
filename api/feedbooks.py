@@ -1,26 +1,23 @@
 import datetime
-import feedparser
+import os
 from io import BytesIO
 from zipfile import ZipFile
-from lxml import etree
-import os
-from flask_babel import lazy_gettext as _
 
-from core.opds import OPDSFeed
-from core.opds_import import (
-    OPDSImporter,
-    OPDSImportMonitor,
-    OPDSXMLParser,
-)
+import feedparser
+from flask_babel import lazy_gettext as _
+from lxml import etree
+
 from core.model import (
     Collection,
     DataSource,
     ExternalIntegration,
     Hyperlink,
-    Resource,
     Representation,
+    Resource,
     RightsStatus,
 )
+from core.opds import OPDSFeed
+from core.opds_import import OPDSImporter, OPDSImportMonitor, OPDSXMLParser
 from core.util.epub import EpubAccessor
 
 

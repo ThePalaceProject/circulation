@@ -1,22 +1,18 @@
-import pytest
+import json
 
 import flask
-import json
+import pytest
 from werkzeug.datastructures import MultiDict
-from core.util.http import HTTP
-from api.nyt import NYTBestSellerAPI
+
+from api.admin.controller.metadata_services import MetadataServicesController
 from api.admin.exceptions import *
 from api.admin.problem_details import INVALID_URL
 from api.novelist import NoveListAPI
-from api.admin.controller.metadata_services import MetadataServicesController
+from api.nyt import NYTBestSellerAPI
+from core.model import AdminRole, ExternalIntegration, Library, create, get_one
 from core.opds_import import MetadataWranglerOPDSLookup
-from core.model import (
-    AdminRole,
-    create,
-    ExternalIntegration,
-    get_one,
-    Library,
-)
+from core.util.http import HTTP
+
 from .test_controller import SettingsControllerTest
 
 

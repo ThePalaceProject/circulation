@@ -1,27 +1,26 @@
-import pytest
-
-from api.admin.exceptions import *
-from api.admin.problem_details import *
-import feedparser
-from werkzeug.datastructures import ImmutableMultiDict, MultiDict
 import base64
-import flask
 import json
 import math
 import operator
 import os
-from PIL import Image
+from functools import reduce
 from io import BytesIO
-from tests.admin.controller.test_controller import AdminControllerTest
-from tests.test_controller import CirculationControllerTest
-from core.classifier import genres, SimplifiedGenreClassifier
+
+import feedparser
+import flask
+import pytest
+from PIL import Image
+from werkzeug.datastructures import ImmutableMultiDict, MultiDict
+
+from api.admin.exceptions import *
+from api.admin.problem_details import *
+from core.classifier import SimplifiedGenreClassifier, genres
 from core.model import (
     AdminRole,
     Classification,
-    Contributor,
     Complaint,
+    Contributor,
     CoverageRecord,
-    create,
     CustomList,
     DataSource,
     Edition,
@@ -33,16 +32,18 @@ from core.model import (
     RightsStatus,
     SessionManager,
     Subject,
+    create,
 )
 from core.model.configuration import ExternalIntegrationLink
 from core.s3 import MockS3Uploader
 from core.testing import (
     AlwaysSuccessfulCoverageProvider,
-    NeverSuccessfulCoverageProvider,
     MockRequestsResponse,
+    NeverSuccessfulCoverageProvider,
 )
 from core.util.datetime_helpers import datetime_utc
-from functools import reduce
+from tests.admin.controller.test_controller import AdminControllerTest
+from tests.test_controller import CirculationControllerTest
 
 
 class TestWorkController(AdminControllerTest):

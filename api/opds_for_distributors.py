@@ -1,12 +1,10 @@
 import datetime
-import feedparser
 import json
+
+import feedparser
 from flask_babel import lazy_gettext as _
 
-from core.opds_import import (
-    OPDSImporter,
-    OPDSImportMonitor,
-)
+from core.metadata_layer import FormatData, TimestampData
 from core.model import (
     Collection,
     Credential,
@@ -22,25 +20,16 @@ from core.model import (
     get_one,
     get_one_or_create,
 )
-from core.metadata_layer import (
-    FormatData,
-    TimestampData,
-)
+from core.opds_import import OPDSImporter, OPDSImportMonitor
 from core.selftest import HasSelfTests
-from .circulation import (
-    BaseCirculationAPI,
-    LoanInfo,
-    FulfillmentInfo,
-)
+from core.testing import DatabaseTest, MockRequestsResponse
 from core.util.datetime_helpers import utc_now
 from core.util.http import HTTP
 from core.util.string_helpers import base64
-from core.testing import (
-    DatabaseTest,
-    MockRequestsResponse,
-)
-from .config import IntegrationException
+
+from .circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
 from .circulation_exceptions import *
+from .config import IntegrationException
 
 
 class OPDSForDistributorsAPI(BaseCirculationAPI, HasSelfTests):

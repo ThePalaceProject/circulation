@@ -1,21 +1,14 @@
-from flask_babel import lazy_gettext as _
-import requests
 import logging
-from .authenticator import (
-    BasicAuthenticationProvider,
-    PatronData,
-)
-from .config import (
-    Configuration,
-    CannotLoadConfiguration,
-)
-from .circulation_exceptions import RemoteInitiatedServerError
 import urllib.parse
-from core.model import (
-    get_one_or_create,
-    ExternalIntegration,
-    Patron,
-)
+
+import requests
+from flask_babel import lazy_gettext as _
+
+from core.model import ExternalIntegration, Patron, get_one_or_create
+
+from .authenticator import BasicAuthenticationProvider, PatronData
+from .circulation_exceptions import RemoteInitiatedServerError
+from .config import CannotLoadConfiguration, Configuration
 
 
 class FirstBookAuthenticationAPI(BasicAuthenticationProvider):

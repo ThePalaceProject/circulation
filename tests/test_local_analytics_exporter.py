@@ -1,14 +1,9 @@
-from datetime import datetime, timedelta, date
 import csv
+from datetime import date, datetime, timedelta
 
-from core.testing import DatabaseTest
-from core.model import (
-    get_one_or_create,
-    CirculationEvent,
-    Genre,
-    WorkGenre,
-)
 from api.local_analytics_exporter import LocalAnalyticsExporter
+from core.model import CirculationEvent, Genre, WorkGenre, get_one_or_create
+from core.testing import DatabaseTest
 
 
 class TestLocalAnalyticsExporter(DatabaseTest):

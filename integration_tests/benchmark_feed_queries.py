@@ -1,12 +1,11 @@
 # encoding: utf-8
-from pdb import set_trace
 import random
 import time
-import numpy
+from pdb import set_trace
 from threading import Thread
-from urllib.parse import urlencode, quote
+from urllib.parse import quote, urlencode
 
-import random
+import numpy
 import requests
 
 

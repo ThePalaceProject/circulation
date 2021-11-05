@@ -2,17 +2,17 @@ import datetime
 import json
 
 from freezegun import freeze_time
-from mock import create_autospec, MagicMock, patch
+from mock import MagicMock, create_autospec, patch
 
 from api.lcp.collection import LCPAPI, LCPFulfilmentInfo
 from api.lcp.encrypt import LCPEncryptionConfiguration
-from api.lcp.server import LCPServerConfiguration, LCPServer
-from core.model import ExternalIntegration, DataSource
+from api.lcp.server import LCPServer, LCPServerConfiguration
+from core.model import DataSource, ExternalIntegration
 from core.model.configuration import (
-    HasExternalIntegration,
-    ConfigurationStorage,
     ConfigurationAttribute,
     ConfigurationFactory,
+    ConfigurationStorage,
+    HasExternalIntegration,
 )
 from core.util.datetime_helpers import utc_now
 from tests.lcp import fixtures

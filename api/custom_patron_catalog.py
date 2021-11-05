@@ -4,19 +4,13 @@ document to describe an unusual setup.
 
 from flask import Response
 from flask_babel import lazy_gettext as _
-
 from sqlalchemy.orm.session import Session
 
-from .config import CannotLoadConfiguration
-from core.model import (
-    get_one,
-)
 from core.lane import Lane
-from core.model import (
-    ConfigurationSetting,
-    ExternalIntegration,
-)
+from core.model import ConfigurationSetting, ExternalIntegration, get_one
 from core.util.opds_writer import OPDSFeed
+
+from .config import CannotLoadConfiguration
 
 
 class CustomPatronCatalog(object):

@@ -1,34 +1,22 @@
 import argparse
+import base64
+import datetime
 import json
 import logging
-import uuid
-import base64
 import os
-import datetime
-import jwt
-from jwt.algorithms import HMACAlgorithm
 import sys
+import uuid
+
 import flask
+import jwt
 from flask import Response
 from flask_babel import lazy_gettext as _
-from .config import (
-    CannotLoadConfiguration,
-    Configuration,
-)
+from jwt.algorithms import HMACAlgorithm
+from sqlalchemy.orm.session import Session
 
 from api.base_controller import BaseCirculationManagerController
-from .problem_details import *
-from sqlalchemy.orm.session import Session
-from core.util.datetime_helpers import (
-    datetime_utc,
-    utc_now,
-)
-from core.util.xmlparser import XMLParser
-from core.util.problem_detail import ProblemDetail
 from core.app_server import url_for
 from core.model import (
-    create,
-    get_one,
     ConfigurationSetting,
     Credential,
     DataSource,
@@ -36,8 +24,16 @@ from core.model import (
     ExternalIntegration,
     Library,
     Patron,
+    create,
+    get_one,
 )
 from core.scripts import Script
+from core.util.datetime_helpers import datetime_utc, utc_now
+from core.util.problem_detail import ProblemDetail
+from core.util.xmlparser import XMLParser
+
+from .config import CannotLoadConfiguration, Configuration
+from .problem_details import *
 
 
 class AdobeVendorIDController(object):

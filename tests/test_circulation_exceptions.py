@@ -1,9 +1,10 @@
 from flask_babel import lazy_gettext as _
-from core.util.problem_detail import ProblemDetail
-from api.config import Configuration
+
 from api.circulation_exceptions import *
+from api.config import Configuration
 from api.problem_details import *
 from core.testing import DatabaseTest
+from core.util.problem_detail import ProblemDetail
 
 
 class TestCirculationExceptions(object):

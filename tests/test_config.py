@@ -1,13 +1,13 @@
-from Crypto.PublicKey import RSA
-from Crypto.Cipher import PKCS1_OAEP
-
-from collections import Counter
 import json
+from collections import Counter
 
+from Crypto.Cipher import PKCS1_OAEP
+from Crypto.PublicKey import RSA
+
+from api.config import Configuration
 from core.config import Configuration as CoreConfiguration
 from core.model import ConfigurationSetting
 from core.testing import DatabaseTest
-from api.config import Configuration
 
 
 class TestConfiguration(DatabaseTest):

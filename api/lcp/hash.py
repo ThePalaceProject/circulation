@@ -1,6 +1,5 @@
 import hashlib
 from abc import ABCMeta, abstractmethod
-
 from enum import Enum
 
 from core.exceptions import BaseError

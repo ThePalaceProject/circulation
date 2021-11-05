@@ -1,21 +1,19 @@
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
+
+from api.admin.controller.patron_auth_services import PatronAuthServicesController
+from api.admin.controller.self_tests import SelfTestsController
 from api.admin.problem_details import *
-from api.simple_authentication import SimpleAuthenticationProvider
-from api.millenium_patron import MilleniumPatronAPI
-from api.sip import SIP2AuthenticationProvider
+from api.clever import CleverAuthenticationAPI
 from api.firstbook import FirstBookAuthenticationAPI as OldFirstBookAuthenticationAPI
 from api.firstbook2 import FirstBookAuthenticationAPI
-from api.clever import CleverAuthenticationAPI
-from core.model import (
-    get_one,
-    ExternalIntegration,
-)
+from api.millenium_patron import MilleniumPatronAPI
+from api.simple_authentication import SimpleAuthenticationProvider
+from api.sip import SIP2AuthenticationProvider
+from core.model import ExternalIntegration, get_one
 from core.selftest import HasSelfTests
 from core.util.problem_detail import ProblemDetail
-from api.admin.controller.self_tests import SelfTestsController
-from api.admin.controller.patron_auth_services import PatronAuthServicesController
 
 
 class PatronAuthServiceSelfTestsController(

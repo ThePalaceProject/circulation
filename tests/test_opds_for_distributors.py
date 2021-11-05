@@ -1,21 +1,17 @@
-import pytest
 import datetime
-import os
 import json
+import os
 
+import pytest
+
+from api.circulation_exceptions import *
 from api.opds_for_distributors import (
+    MockOPDSForDistributorsAPI,
     OPDSForDistributorsAPI,
     OPDSForDistributorsImporter,
     OPDSForDistributorsReaperMonitor,
-    MockOPDSForDistributorsAPI,
 )
-from api.circulation_exceptions import *
-from core.testing import DatabaseTest
-from core.metadata_layer import (
-    CirculationData,
-    LinkData,
-    TimestampData,
-)
+from core.metadata_layer import CirculationData, LinkData, TimestampData
 from core.model import (
     Collection,
     Credential,
@@ -29,6 +25,7 @@ from core.model import (
     Representation,
     RightsStatus,
 )
+from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import OPDSFeed
 

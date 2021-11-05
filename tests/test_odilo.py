@@ -1,34 +1,20 @@
 # encoding: utf-8
 import json
+import os
 
 import pytest
 
-import os
-
-from core.util.http import (
-    BadResponseException,
-)
-
 from api.authenticator import BasicAuthenticationProvider
-
+from api.circulation import CirculationAPI
+from api.circulation_exceptions import *
 from api.odilo import (
-    OdiloAPI,
     MockOdiloAPI,
-    OdiloRepresentationExtractor,
+    OdiloAPI,
     OdiloBibliographicCoverageProvider,
     OdiloCirculationMonitor,
+    OdiloRepresentationExtractor,
 )
-
-from api.circulation import (
-    CirculationAPI,
-)
-
-from api.circulation_exceptions import *
-
-from . import sample_data
-
 from core.metadata_layer import TimestampData
-
 from core.model import (
     Classification,
     Contributor,
@@ -40,15 +26,11 @@ from core.model import (
     Identifier,
     Representation,
 )
+from core.testing import DatabaseTest, MockRequestsResponse
+from core.util.datetime_helpers import datetime_utc, utc_now
+from core.util.http import BadResponseException
 
-from core.testing import (
-    DatabaseTest,
-    MockRequestsResponse,
-)
-from core.util.datetime_helpers import (
-    datetime_utc,
-    utc_now,
-)
+from . import sample_data
 
 
 class OdiloAPITest(DatabaseTest):

@@ -1,15 +1,11 @@
-import pytest
-
 import flask
+import pytest
 from werkzeug.datastructures import MultiDict
+
 from api.admin.exceptions import *
 from core.external_search import ExternalSearchIndex
-from core.model import (
-    AdminRole,
-    create,
-    get_one,
-    ExternalIntegration,
-)
+from core.model import AdminRole, ExternalIntegration, create, get_one
+
 from .test_controller import SettingsControllerTest
 
 

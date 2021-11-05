@@ -1,17 +1,18 @@
-import binascii
 import base64
-import flask
+import binascii
 import json
-import jwt
 import os
+
+import flask
+import jwt
 from werkzeug.datastructures import MultiDict
+
 from api.admin.problem_details import *
 from api.config import Configuration
-from core.model import (
-    ExternalIntegration,
-)
+from core.model import ExternalIntegration
 from core.testing import MockRequestsResponse
 from core.util.problem_detail import ProblemDetail
+
 from .test_controller import SettingsControllerTest
 
 

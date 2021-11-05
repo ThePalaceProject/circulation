@@ -1,16 +1,12 @@
 # encoding: utf-8
-import pytest
-
 import os
 from io import BytesIO
 from zipfile import ZipFile
-from core.testing import DatabaseTest
-from . import sample_data
-from api.feedbooks import (
-    FeedbooksOPDSImporter,
-    FeedbooksImportMonitor,
-    RehostingPolicy,
-)
+
+import pytest
+
+from api.feedbooks import FeedbooksImportMonitor, FeedbooksOPDSImporter, RehostingPolicy
+from core.metadata_layer import LinkData, Metadata
 from core.model import (
     Collection,
     DataSource,
@@ -20,16 +16,11 @@ from core.model import (
     RightsStatus,
 )
 from core.model.configuration import ExternalIntegrationLink
-from core.metadata_layer import (
-    Metadata,
-    LinkData,
-)
 from core.opds import OPDSFeed
 from core.s3 import MockS3Uploader
-from core.testing import (
-    DummyHTTPClient,
-    DummyMetadataClient,
-)
+from core.testing import DatabaseTest, DummyHTTPClient, DummyMetadataClient
+
+from . import sample_data
 
 LIFE_PLUS_70 = "This work is available for countries where copyright is Life+70."
 

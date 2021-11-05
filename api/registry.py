@@ -1,30 +1,28 @@
+import base64
+import json
+import logging
+
 import feedparser
 from flask_babel import lazy_gettext as _
 from html_sanitizer import Sanitizer
-import json
-import logging
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
-
-from core.model import (
-    create,
-    get_one,
-    get_one_or_create,
-    ConfigurationSetting,
-    ExternalIntegration,
-)
-from core.scripts import LibraryInputScript
-from core.util.http import HTTP
-from core.util.problem_detail import (
-    ProblemDetail,
-    JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE,
-)
-import base64
 
 from api.adobe_vendor_id import AuthdataUtility
 from api.config import Configuration
 from api.controller import CirculationManager
 from api.problem_details import *
+from core.model import (
+    ConfigurationSetting,
+    ExternalIntegration,
+    create,
+    get_one,
+    get_one_or_create,
+)
+from core.scripts import LibraryInputScript
+from core.util.http import HTTP
+from core.util.problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
+from core.util.problem_detail import ProblemDetail
 
 
 class RemoteRegistry(object):

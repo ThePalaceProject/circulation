@@ -1,9 +1,9 @@
-from mock import create_autospec, patch, ANY
+from mock import ANY, create_autospec, patch
 
 from api.lcp.importer import LCPImporter
 from api.lcp.mirror import LCPMirror
-from core.model import ExternalIntegration, Identifier, DataSource, Representation
-from core.s3 import S3UploaderConfiguration, MinIOUploaderConfiguration
+from core.model import DataSource, ExternalIntegration, Identifier, Representation
+from core.s3 import MinIOUploaderConfiguration, S3UploaderConfiguration
 from tests.lcp.database_test import DatabaseTest
 
 

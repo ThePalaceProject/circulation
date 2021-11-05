@@ -10,9 +10,9 @@ from api.lcp import utils
 from api.lcp.encrypt import LCPEncryptionResult, LCPEncryptorResultJSONEncoder
 from api.lcp.hash import HashingAlgorithm
 from core.model.configuration import (
+    ConfigurationAttributeType,
     ConfigurationGrouping,
     ConfigurationMetadata,
-    ConfigurationAttributeType,
     ConfigurationOption,
 )
 

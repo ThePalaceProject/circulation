@@ -1,10 +1,11 @@
 """Self-tests for metadata integrations."""
 from flask_babel import lazy_gettext as _
-from core.opds_import import MetadataWranglerOPDSLookup
-from core.model import ExternalIntegration
-from api.nyt import NYTBestSellerAPI
-from api.admin.controller.self_tests import SelfTestsController
+
 from api.admin.controller.metadata_services import MetadataServicesController
+from api.admin.controller.self_tests import SelfTestsController
+from api.nyt import NYTBestSellerAPI
+from core.model import ExternalIntegration
+from core.opds_import import MetadataWranglerOPDSLookup
 
 
 class MetadataServiceSelfTestsController(

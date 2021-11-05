@@ -1,19 +1,18 @@
+import json
 import pkgutil
 from datetime import date, timedelta
 from decimal import Decimal
-import json
 from urllib import parse
 
 import pytest
-from api.config import (
-    CannotLoadConfiguration,
-    Configuration,
-)
-from core.model import ConfigurationSetting
+
 from api.authenticator import PatronData
+from api.config import CannotLoadConfiguration, Configuration
 from api.millenium_patron import MilleniumPatronAPI
+from core.model import ConfigurationSetting
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
+
 from . import sample_data
 
 

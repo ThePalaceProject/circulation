@@ -1,15 +1,13 @@
-import pytest
+import json
 
 import flask
+import pytest
 from flask_babel import lazy_gettext as _
-import json
 from werkzeug.datastructures import MultiDict
+
 from api.admin.controller.patron_auth_services import PatronAuthServicesController
 from api.admin.exceptions import *
-from api.authenticator import (
-    AuthenticationProvider,
-    BasicAuthenticationProvider,
-)
+from api.authenticator import AuthenticationProvider, BasicAuthenticationProvider
 from api.clever import CleverAuthenticationAPI
 from api.firstbook import FirstBookAuthenticationAPI
 from api.millenium_patron import MilleniumPatronAPI
@@ -19,12 +17,13 @@ from api.simple_authentication import SimpleAuthenticationProvider
 from api.sip import SIP2AuthenticationProvider
 from core.model import (
     AdminRole,
-    create,
     ConfigurationSetting,
     ExternalIntegration,
-    get_one,
     Library,
+    create,
+    get_one,
 )
+
 from .test_controller import SettingsControllerTest
 
 

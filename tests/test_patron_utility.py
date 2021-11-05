@@ -1,19 +1,17 @@
 import datetime
-import dateutil
 from decimal import Decimal
 
+import dateutil
 import pytest
-from core.testing import (
-    DatabaseTest,
-)
 
-from api.config import Configuration, temp_config
 from api.authenticator import PatronData
-from api.util.patron import PatronUtility
 from api.circulation_exceptions import *
-from core.util.datetime_helpers import utc_now
+from api.config import Configuration, temp_config
+from api.util.patron import PatronUtility
 from core.model import ConfigurationSetting
+from core.testing import DatabaseTest
 from core.util import MoneyUtility
+from core.util.datetime_helpers import utc_now
 
 
 class TestPatronUtility(DatabaseTest):

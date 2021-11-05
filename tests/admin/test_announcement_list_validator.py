@@ -1,15 +1,11 @@
-from datetime import (
-    date,
-    datetime,
-    timedelta,
-)
 import json
+from datetime import date, datetime, timedelta
 
+from api.admin.announcement_list_validator import AnnouncementListValidator
+from api.announcements import Announcement
+from api.testing import AnnouncementTest
 from core.problem_details import INVALID_INPUT
 from core.util.problem_detail import ProblemDetail
-from api.announcements import Announcement
-from api.admin.announcement_list_validator import AnnouncementListValidator
-from api.testing import AnnouncementTest
 
 
 class TestAnnouncementListValidator(AnnouncementTest):

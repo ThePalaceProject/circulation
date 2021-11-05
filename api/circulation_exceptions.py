@@ -2,10 +2,8 @@ from flask_babel import lazy_gettext as _
 
 from api.config import Configuration
 from core.config import IntegrationException
-from core.problem_details import (
-    INTEGRATION_ERROR,
-    INTERNAL_SERVER_ERROR,
-)
+from core.problem_details import INTEGRATION_ERROR, INTERNAL_SERVER_ERROR
+
 from .problem_details import *
 
 

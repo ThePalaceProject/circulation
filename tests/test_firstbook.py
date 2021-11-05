@@ -1,24 +1,13 @@
-import pytest
 import os
 
-from api.authenticator import (
-    PatronData,
-)
+import pytest
 
-from api.config import (
-    Configuration,
-    temp_config,
-)
-
-from api.firstbook import (
-    FirstBookAuthenticationAPI,
-    MockFirstBookAuthenticationAPI,
-)
-
+from api.authenticator import PatronData
 from api.circulation_exceptions import RemoteInitiatedServerError
-
-from core.testing import DatabaseTest
+from api.config import Configuration, temp_config
+from api.firstbook import FirstBookAuthenticationAPI, MockFirstBookAuthenticationAPI
 from core.model import ExternalIntegration
+from core.testing import DatabaseTest
 
 
 class TestFirstBook(DatabaseTest):

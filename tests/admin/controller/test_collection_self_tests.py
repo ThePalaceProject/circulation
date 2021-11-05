@@ -1,8 +1,10 @@
 from flask_babel import lazy_gettext as _
+
 from api.admin.problem_details import *
 from api.axis import Axis360API, MockAxis360API
 from core.opds_import import OPDSImporter, OPDSImportMonitor
 from core.selftest import HasSelfTests
+
 from .test_controller import SettingsControllerTest
 
 

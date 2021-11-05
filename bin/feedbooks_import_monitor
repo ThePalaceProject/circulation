@@ -3,15 +3,14 @@
 Feedbooks collections."""
 import os
 import sys
+
 bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..")
 sys.path.append(os.path.abspath(package_dir))
-from core.scripts import OPDSImportScript
+from api.feedbooks import FeedbooksImportMonitor, FeedbooksOPDSImporter
 from core.model import ExternalIntegration
-from api.feedbooks import (
-    FeedbooksOPDSImporter,
-    FeedbooksImportMonitor
-)
+from core.scripts import OPDSImportScript
+
 OPDSImportScript(
     importer_class=FeedbooksOPDSImporter,
     monitor_class=FeedbooksImportMonitor, 

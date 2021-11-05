@@ -3,7 +3,9 @@ import importlib
 import json
 import logging
 import re
-import urllib.request, urllib.parse, urllib.error
+import urllib.error
+import urllib.parse
+import urllib.request
 from abc import ABCMeta
 
 import flask
@@ -22,14 +24,7 @@ from api.announcements import Announcements
 from api.custom_patron_catalog import CustomPatronCatalog
 from api.opds import LibraryAnnotator
 from api.saml.configuration.model import SAMLSettings
-from .config import (
-    Configuration,
-    CannotLoadConfiguration,
-    IntegrationException,
-)
 from core.model import (
-    get_one,
-    get_one_or_create,
     CirculationEvent,
     ConfigurationSetting,
     Credential,
@@ -39,11 +34,11 @@ from core.model import (
     Patron,
     PatronProfileStorage,
     Session,
+    get_one,
+    get_one_or_create,
 )
 from core.opds import OPDSFeed
-from core.selftest import (
-    HasSelfTests,
-)
+from core.selftest import HasSelfTests
 from core.user_profile import ProfileController
 from core.util.authentication_for_opds import (
     AuthenticationForOPDSDocument,
@@ -51,10 +46,10 @@ from core.util.authentication_for_opds import (
 )
 from core.util.datetime_helpers import utc_now
 from core.util.http import RemoteIntegrationException
-from core.util.problem_detail import (
-    ProblemDetail,
-    json as pd_json,
-)
+from core.util.problem_detail import ProblemDetail
+from core.util.problem_detail import json as pd_json
+
+from .config import CannotLoadConfiguration, Configuration, IntegrationException
 from .problem_details import *
 from .util.patron import PatronUtility
 

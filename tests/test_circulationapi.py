@@ -39,6 +39,7 @@ from core.model import (
 )
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
+
 from . import sample_data
 
 

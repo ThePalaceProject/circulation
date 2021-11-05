@@ -1,17 +1,12 @@
 from flask_babel import lazy_gettext as _
-from core.selftest import (
-    HasSelfTests,
-    SelfTestResult,
-)
-from .test_controller import SettingsControllerTest
-from core.model import (
-    create,
-    ExternalIntegration,
-)
-from core.opds_import import MetadataWranglerOPDSLookup
 
 from api.admin.problem_details import *
 from api.nyt import NYTBestSellerAPI
+from core.model import ExternalIntegration, create
+from core.opds_import import MetadataWranglerOPDSLookup
+from core.selftest import HasSelfTests, SelfTestResult
+
+from .test_controller import SettingsControllerTest
 
 
 class TestMetadataServiceSelfTests(SettingsControllerTest):

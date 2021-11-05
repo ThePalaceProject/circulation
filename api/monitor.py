@@ -2,15 +2,8 @@ import logging
 import os
 import sys
 
-from sqlalchemy import (
-    and_,
-    or_,
-)
+from sqlalchemy import and_, or_
 
-from core.monitor import (
-    EditionSweepMonitor,
-    ReaperMonitor,
-)
 from core.model import (
     Annotation,
     Collection,
@@ -22,11 +15,10 @@ from core.model import (
     LicensePool,
     Loan,
 )
+from core.monitor import EditionSweepMonitor, ReaperMonitor
 from core.util.datetime_helpers import utc_now
-from .odl import (
-    ODLAPI,
-    SharedODLAPI,
-)
+
+from .odl import ODLAPI, SharedODLAPI
 
 
 class LoanlikeReaperMonitor(ReaperMonitor):

@@ -1,9 +1,10 @@
-import pytest
 import contextlib
 import datetime
-import flask
 import json
 from io import StringIO
+
+import flask
+import pytest
 
 from api.adobe_vendor_id import (
     AdobeVendorIDModel,
@@ -11,33 +12,13 @@ from api.adobe_vendor_id import (
     ShortClientTokenLibraryConfigurationScript,
 )
 from api.authenticator import BasicAuthenticationProvider
-
-from api.config import (
-    temp_config,
-    Configuration,
-)
-
+from api.config import Configuration, temp_config
+from api.marc import LibraryAnnotator as MARCLibraryAnnotator
 from api.novelist import NoveListAPI
-
-from core.entrypoint import (
-    AudiobooksEntryPoint,
-    EbooksEntryPoint,
-    EntryPoint,
-)
-
-from core.external_search import (
-    MockExternalSearchIndex,
-    mock_search_index,
-)
-
-from core.lane import (
-    Lane,
-    Facets,
-    FeaturedFacets,
-    Pagination,
-    WorkList,
-)
-
+from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EntryPoint
+from core.external_search import MockExternalSearchIndex, mock_search_index
+from core.lane import Facets, FeaturedFacets, Lane, Pagination, WorkList
+from core.marc import MARCExporter
 from core.metadata_layer import (
     CirculationData,
     IdentifierData,
@@ -45,58 +26,45 @@ from core.metadata_layer import (
     Metadata,
     ReplacementPolicy,
 )
-
+from core.mirror import MirrorUploader
 from core.model import (
     CachedFeed,
     CachedMARCFile,
     ConfigurationSetting,
-    create,
     Credential,
     DataSource,
     DeliveryMechanism,
+    EditionConstants,
     ExternalIntegration,
-    get_one,
     Hyperlink,
     Identifier,
     LicensePool,
     Representation,
     RightsStatus,
     Timestamp,
-    EditionConstants,
+    create,
+    get_one,
 )
 from core.model.configuration import ExternalIntegrationLink
-
 from core.opds import AcquisitionFeed
-
 from core.s3 import MockS3Uploader
-
-from core.mirror import MirrorUploader
-
-from core.marc import MARCExporter
 from core.scripts import CollectionType
-
-from core.util.flask_util import Response, OPDSFeedResponse
-
-from api.marc import LibraryAnnotator as MARCLibraryAnnotator
-
-from core.testing import (
-    DatabaseTest,
-)
-
+from core.testing import DatabaseTest
+from core.util.datetime_helpers import datetime_utc, utc_now
+from core.util.flask_util import OPDSFeedResponse, Response
 from scripts import (
     AdobeAccountIDResetScript,
-    CacheRepresentationPerLane,
     CacheFacetListsPerLane,
-    CacheOPDSGroupFeedPerLane,
     CacheMARCFiles,
+    CacheOPDSGroupFeedPerLane,
+    CacheRepresentationPerLane,
     DirectoryImportScript,
     GenerateShortTokenScript,
     InstanceInitializationScript,
     LanguageListScript,
-    NovelistSnapshotScript,
     LocalAnalyticsExportScript,
+    NovelistSnapshotScript,
 )
-from core.util.datetime_helpers import datetime_utc, utc_now
 
 
 class TestAdobeAccountIDResetScript(DatabaseTest):

@@ -1,27 +1,27 @@
 import logging
+from enum import Enum
 
 import dateutil.parser
-from enum import Enum
 from lxml import etree
 
 from core.classifier import Classifier
 from core.metadata_layer import (
-    Metadata,
-    IdentifierData,
-    SubjectData,
-    ContributorData,
-    LinkData,
     CirculationData,
+    ContributorData,
+    IdentifierData,
+    LinkData,
+    Metadata,
+    SubjectData,
 )
 from core.model import (
     Classification,
-    Identifier,
     Contributor,
+    EditionConstants,
     Hyperlink,
+    Identifier,
+    LicensePool,
     Representation,
     Subject,
-    LicensePool,
-    EditionConstants,
 )
 from core.util.datetime_helpers import to_utc
 from core.util.xmlparser import XMLParser

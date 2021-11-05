@@ -1,8 +1,10 @@
-from api.kansas_patron import KansasAuthenticationAPI
-from core.testing import DatabaseTest
-from . import sample_data
 from lxml import etree
+
+from api.kansas_patron import KansasAuthenticationAPI
 from core.model import ExternalIntegration
+from core.testing import DatabaseTest
+
+from . import sample_data
 
 
 class MockResponse(object):

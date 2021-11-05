@@ -1,7 +1,7 @@
 import json
 
 from flask import request
-from mock import MagicMock, create_autospec, patch, call
+from mock import MagicMock, call, create_autospec, patch
 
 from api.controller import CirculationManager
 from api.lcp.collection import LCPAPI

@@ -1,19 +1,21 @@
-import pytest
+import json
 
 import flask
-import json
+import pytest
 from werkzeug.datastructures import MultiDict
+
 from api.admin.exceptions import *
 from api.google_analytics_provider import GoogleAnalyticsProvider
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.model import (
     AdminRole,
     ConfigurationSetting,
-    create,
     ExternalIntegration,
-    get_one,
     Library,
+    create,
+    get_one,
 )
+
 from .test_controller import SettingsControllerTest
 
 

@@ -4,7 +4,7 @@ import os
 import urllib.parse
 
 import requests_mock
-from mock import create_autospec, MagicMock
+from mock import MagicMock, create_autospec
 from parameterized import parameterized
 
 from api.lcp import utils
@@ -13,10 +13,10 @@ from api.lcp.hash import HasherFactory
 from api.lcp.server import LCPServer, LCPServerConfiguration
 from core.lcp.credential import LCPCredentialFactory
 from core.model.configuration import (
-    HasExternalIntegration,
-    ConfigurationStorage,
     ConfigurationFactory,
+    ConfigurationStorage,
     ExternalIntegration,
+    HasExternalIntegration,
 )
 from tests.lcp import fixtures
 from tests.lcp.database_test import DatabaseTest

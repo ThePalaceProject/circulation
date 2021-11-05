@@ -1,19 +1,22 @@
-from . import SettingsController
+import json
+
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
-import json
+
 from api.admin.problem_details import *
 from core.model import (
     Collection,
     ConfigurationSetting,
     ExternalIntegration,
+    Library,
     get_one,
     get_one_or_create,
-    Library,
 )
-from core.util.problem_detail import ProblemDetail
 from core.model.configuration import ExternalIntegrationLink
+from core.util.problem_detail import ProblemDetail
+
+from . import SettingsController
 
 
 class CollectionSettingsController(SettingsController):

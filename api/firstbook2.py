@@ -1,25 +1,17 @@
-from flask_babel import lazy_gettext as _
-import jwt
-from jwt.algorithms import HMACAlgorithm
-import requests
 import logging
 import time
-
-from .authenticator import (
-    BasicAuthenticationProvider,
-    PatronData,
-)
-from .config import (
-    Configuration,
-    CannotLoadConfiguration,
-)
-from .circulation_exceptions import RemoteInitiatedServerError
 import urllib.parse
-from core.model import (
-    get_one_or_create,
-    ExternalIntegration,
-    Patron,
-)
+
+import jwt
+import requests
+from flask_babel import lazy_gettext as _
+from jwt.algorithms import HMACAlgorithm
+
+from core.model import ExternalIntegration, Patron, get_one_or_create
+
+from .authenticator import BasicAuthenticationProvider, PatronData
+from .circulation_exceptions import RemoteInitiatedServerError
+from .config import CannotLoadConfiguration, Configuration
 
 
 class FirstBookAuthenticationAPI(BasicAuthenticationProvider):

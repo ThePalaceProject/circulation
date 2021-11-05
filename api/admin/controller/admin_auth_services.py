@@ -1,17 +1,15 @@
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
-from core.model import (
-    ExternalIntegration,
-    get_one,
-    get_one_or_create,
-)
-from core.util.problem_detail import ProblemDetail
-from . import SettingsController
+
 from api.admin.google_oauth_admin_authentication_provider import (
     GoogleOAuthAdminAuthenticationProvider,
 )
 from api.admin.problem_details import *
+from core.model import ExternalIntegration, get_one, get_one_or_create
+from core.util.problem_detail import ProblemDetail
+
+from . import SettingsController
 
 
 class AdminAuthServicesController(SettingsController):

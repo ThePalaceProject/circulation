@@ -1,14 +1,9 @@
-from functools import wraps, update_wrapper
 import logging
 import os
+from functools import update_wrapper, wraps
 
 import flask
-from flask import (
-    Response,
-    redirect,
-    request,
-    make_response,
-)
+from flask import Response, make_response, redirect, request
 from flask_cors.core import get_cors_options, set_cors_headers
 from werkzeug.exceptions import HTTPException
 
@@ -18,17 +13,15 @@ from .app import app, babel
 # we never want werkzeug's merge_slashes feature.
 app.url_map.merge_slashes = False
 
-from .config import Configuration
-from core.app_server import (
-    ErrorHandler,
-    compressible,
-    returns_problem_detail,
-)
+from flask_babel import lazy_gettext as _
+
+from core.app_server import ErrorHandler, compressible, returns_problem_detail
 from core.model import ConfigurationSetting
 from core.util.problem_detail import ProblemDetail
+
+from .config import Configuration
 from .controller import CirculationManager
 from .problem_details import REMOTE_INTEGRATION_FAILED
-from flask_babel import lazy_gettext as _
 
 
 @app.before_first_request

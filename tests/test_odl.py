@@ -7,6 +7,11 @@ from typing import List, Optional, Tuple
 
 import dateutil
 import pytest
+from freezegun import freeze_time
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+from mock import MagicMock, PropertyMock, patch
+from parameterized import parameterized
+
 from api.circulation_exceptions import *
 from api.odl import (
     ODLAPI,
@@ -18,11 +23,6 @@ from api.odl import (
     SharedODLAPI,
     SharedODLImporter,
 )
-from freezegun import freeze_time
-from jinja2 import Environment, FileSystemLoader, select_autoescape
-from mock import MagicMock, PropertyMock, patch
-from parameterized import parameterized
-
 from core.model import (
     Collection,
     ConfigurationSetting,

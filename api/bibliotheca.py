@@ -8,10 +8,7 @@ import re
 import time
 import urllib.parse
 from datetime import datetime, timedelta
-from io import (
-    BytesIO,
-    StringIO,
-)
+from io import BytesIO, StringIO
 
 import dateutil.parser
 from flask_babel import lazy_gettext as _
@@ -19,18 +16,16 @@ from lxml import etree
 from pymarc import parse_xml_to_array
 
 from core.analytics import Analytics
-from core.config import (
-    CannotLoadConfiguration,
-)
+from core.config import CannotLoadConfiguration
 from core.coverage import BibliographicCoverageProvider
 from core.metadata_layer import (
-    ContributorData,
     CirculationData,
-    Metadata,
-    LinkData,
-    IdentifierData,
+    ContributorData,
     FormatData,
+    IdentifierData,
+    LinkData,
     MeasurementData,
+    Metadata,
     ReplacementPolicy,
     SubjectData,
 )
@@ -43,8 +38,6 @@ from core.model import (
     DeliveryMechanism,
     Edition,
     ExternalIntegration,
-    get_one,
-    get_one_or_create,
     Hyperlink,
     Identifier,
     LicensePool,
@@ -53,38 +46,21 @@ from core.model import (
     Session,
     Subject,
     Timestamp,
+    get_one,
+    get_one_or_create,
 )
-from core.monitor import (
-    CollectionMonitor,
-    IdentifierSweepMonitor,
-    TimelineMonitor,
-)
+from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
 from core.scripts import RunCollectionMonitorScript
 from core.testing import DatabaseTest
-from core.util.datetime_helpers import (
-    datetime_utc,
-    strptime_utc,
-    to_utc,
-    utc_now,
-)
+from core.util.datetime_helpers import datetime_utc, strptime_utc, to_utc, utc_now
 from core.util.http import HTTP
 from core.util.string_helpers import base64
 from core.util.xmlparser import XMLParser
-from .circulation import (
-    FulfillmentInfo,
-    HoldInfo,
-    LoanInfo,
-    BaseCirculationAPI,
-)
+
+from .circulation import BaseCirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
 from .circulation_exceptions import *
-from .selftest import (
-    HasSelfTests,
-    SelfTestResult,
-)
-from .web_publication_manifest import (
-    FindawayManifest,
-    SpineItem,
-)
+from .selftest import HasSelfTests, SelfTestResult
+from .web_publication_manifest import FindawayManifest, SpineItem
 
 
 class BibliothecaAPI(BaseCirculationAPI, HasSelfTests):

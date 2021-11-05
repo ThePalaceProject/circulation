@@ -1,15 +1,10 @@
-import pytest
-
 import flask
+import pytest
 from werkzeug.datastructures import MultiDict
+
 from api.admin.exceptions import *
-from core.model import (
-    AdminRole,
-    Configuration,
-    create,
-    ExternalIntegration,
-    get_one,
-)
+from core.model import AdminRole, Configuration, ExternalIntegration, create, get_one
+
 from .test_controller import SettingsControllerTest
 
 

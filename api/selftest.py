@@ -1,26 +1,17 @@
 import sys
+
 from sqlalchemy.orm.session import Session
+
+from core.config import IntegrationException
+from core.model import ExternalIntegration, LicensePool
+from core.opds_import import OPDSImporter, OPDSImportMonitor
+from core.scripts import LibraryInputScript
+from core.selftest import HasSelfTests as CoreHasSelfTests
+from core.selftest import SelfTestResult
 
 from .authenticator import LibraryAuthenticator
 from .circulation import CirculationAPI
-from .feedbooks import (
-    FeedbooksOPDSImporter,
-    FeedbooksImportMonitor,
-)
-from core.config import IntegrationException
-from core.model import (
-    ExternalIntegration,
-    LicensePool,
-)
-from core.opds_import import (
-    OPDSImporter,
-    OPDSImportMonitor,
-)
-from core.scripts import LibraryInputScript
-from core.selftest import (
-    HasSelfTests as CoreHasSelfTests,
-    SelfTestResult,
-)
+from .feedbooks import FeedbooksImportMonitor, FeedbooksOPDSImporter
 
 
 class HasSelfTests(CoreHasSelfTests):

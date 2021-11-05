@@ -1,27 +1,27 @@
-import urllib.request, urllib.parse, urllib.error
 import copy
 import logging
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
+from collections import defaultdict
+
 from flask import url_for
 from lxml import etree
-from collections import defaultdict
-import uuid
 from sqlalchemy.orm import lazyload
 
+from api.lanes import (
+    CrawlableCollectionBasedLane,
+    CrawlableCustomListBasedLane,
+    DynamicLane,
+)
+from core.analytics import Analytics
+from core.app_server import cdn_url_for
 from core.cdn import cdnify
 from core.classifier import Classifier
-from core.entrypoint import (
-    EverythingEntryPoint,
-)
+from core.entrypoint import EverythingEntryPoint
 from core.external_search import WorkSearchResult
-from core.opds import (
-    Annotator,
-    AcquisitionFeed,
-    UnfulfillableWork,
-)
-from core.util.flask_util import OPDSFeedResponse
-from core.util.opds_writer import (
-    OPDSFeed,
-)
+from core.lane import Lane, WorkList
 from core.model import (
     CirculationEvent,
     ConfigurationSetting,
@@ -29,6 +29,7 @@ from core.model import (
     CustomList,
     DataSource,
     DeliveryMechanism,
+    Edition,
     Hold,
     Identifier,
     LicensePool,
@@ -37,29 +38,17 @@ from core.model import (
     Patron,
     Session,
     Work,
-    Edition,
 )
-from core.lane import (
-    Lane,
-    WorkList,
-)
+from core.opds import AcquisitionFeed, Annotator, UnfulfillableWork
 from core.util.datetime_helpers import from_timestamp
-from api.lanes import (
-    DynamicLane,
-    CrawlableCustomListBasedLane,
-    CrawlableCollectionBasedLane,
-)
-from core.app_server import cdn_url_for
+from core.util.flask_util import OPDSFeedResponse
+from core.util.opds_writer import OPDSFeed
 
 from .adobe_vendor_id import AuthdataUtility
 from .annotations import AnnotationWriter
 from .circulation import BaseCirculationAPI
-from .config import (
-    CannotLoadConfiguration,
-    Configuration,
-)
+from .config import CannotLoadConfiguration, Configuration
 from .novelist import NoveListAPI
-from core.analytics import Analytics
 
 
 class CirculationManagerAnnotator(Annotator):

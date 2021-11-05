@@ -1,33 +1,31 @@
 import base64
 import datetime
-from io import BytesIO
 import json
+from io import BytesIO
 
 import flask
-from PIL import Image
 import pytest
+from PIL import Image
 from werkzeug.datastructures import MultiDict
 
-from .test_controller import SettingsControllerTest
 from api.admin.announcement_list_validator import AnnouncementListValidator
 from api.admin.controller.library_settings import LibrarySettingsController
 from api.admin.exceptions import *
 from api.admin.geographic_validator import GeographicValidator
-from api.announcements import (
-    Announcements,
-    Announcement,
-)
+from api.announcements import Announcement, Announcements
 from api.config import Configuration
 from api.testing import AnnouncementTest
 from core.facets import FacetConstants
 from core.model import (
     AdminRole,
     ConfigurationSetting,
+    Library,
     get_one,
     get_one_or_create,
-    Library,
 )
 from core.util.problem_detail import ProblemDetail
+
+from .test_controller import SettingsControllerTest
 
 
 class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):

@@ -10,9 +10,9 @@ from flask_babel import lazy_gettext as _
 from api.lcp import utils
 from core.exceptions import BaseError
 from core.model.configuration import (
+    ConfigurationAttributeType,
     ConfigurationGrouping,
     ConfigurationMetadata,
-    ConfigurationAttributeType,
 )
 
 

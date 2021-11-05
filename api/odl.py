@@ -15,18 +15,12 @@ from flask import url_for
 from flask_babel import lazy_gettext as _
 from lxml import etree
 from sqlalchemy.sql.expression import or_
-from typing import Optional
 from uritemplate import URITemplate
 
 from core import util
 from core.analytics import Analytics
 from core.lcp.credential import LCPCredentialFactory
-from core.metadata_layer import (
-    CirculationData,
-    FormatData,
-    LicenseData,
-    TimestampData,
-)
+from core.metadata_layer import CirculationData, FormatData, LicenseData, TimestampData
 from core.model import (
     Collection,
     ConfigurationSetting,
@@ -37,6 +31,7 @@ from core.model import (
     Hold,
     Hyperlink,
     LicensePool,
+    LicensePoolDeliveryMechanism,
     Loan,
     MediaTypes,
     Representation,
@@ -44,27 +39,15 @@ from core.model import (
     Session,
     get_one,
     get_one_or_create,
-    Representation,
-    LicensePoolDeliveryMechanism,
 )
 from core.model.configuration import (
+    ConfigurationAttributeType,
     ConfigurationFactory,
-    ConfigurationStorage,
-    HasExternalIntegration,
     ConfigurationGrouping,
     ConfigurationMetadata,
-    ConfigurationAttributeType,
     ConfigurationOption,
-)
-from core.monitor import CollectionMonitor, IdentifierSweepMonitor
-from core.opds_import import (
-    OPDSXMLParser,
-    OPDSImporter,
-    OPDSImportMonitor,
-)
-from core.testing import (
-    DatabaseTest,
-    MockRequestsResponse,
+    ConfigurationStorage,
+    HasExternalIntegration,
 )
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor
 from core.opds_import import OPDSImporter, OPDSImportMonitor, OPDSXMLParser
@@ -75,7 +58,7 @@ from core.util.string_helpers import base64
 
 from .circulation import BaseCirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
 from .circulation_exceptions import *
-from .lcp.hash import HasherFactory, Hasher, HashingAlgorithm
+from .lcp.hash import Hasher, HasherFactory, HashingAlgorithm
 from .shared_collection import BaseSharedCollectionAPI
 
 

@@ -2,22 +2,21 @@ import csv
 import datetime
 import json
 import re
-from io import StringIO
 from contextlib import contextmanager
 from datetime import timedelta
+from io import StringIO
 
 import feedparser
 import flask
 import pytest
-
 from werkzeug.datastructures import MultiDict
 from werkzeug.http import dump_cookie
 
 from api.admin.controller import (
-    setup_admin_controllers,
     AdminAnnotator,
-    SettingsController,
     PatronController,
+    SettingsController,
+    setup_admin_controllers,
 )
 from api.admin.exceptions import *
 from api.admin.google_oauth_admin_authentication_provider import (
@@ -29,15 +28,10 @@ from api.admin.password_admin_authentication_provider import (
 from api.admin.problem_details import *
 from api.admin.routes import setup_admin
 from api.admin.validator import Validator
-from api.adobe_vendor_id import AdobeVendorIDModel
-from api.adobe_vendor_id import AuthdataUtility
-from api.authenticator import (
-    PatronData,
-)
+from api.adobe_vendor_id import AdobeVendorIDModel, AuthdataUtility
+from api.authenticator import PatronData
 from api.axis import Axis360API, MockAxis360API
-from api.config import (
-    Configuration,
-)
+from api.config import Configuration
 from core.classifier import genres
 from core.lane import Lane
 from core.model import (
@@ -48,23 +42,21 @@ from core.model import (
     ConfigurationSetting,
     CustomList,
     CustomListEntry,
-    create,
     DataSource,
     Edition,
     ExternalIntegration,
     Genre,
-    get_one,
-    get_one_or_create,
     Library,
     Timestamp,
     WorkGenre,
+    create,
+    get_one,
+    get_one_or_create,
 )
 from core.opds_import import OPDSImporter, OPDSImportMonitor
 from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
-from core.util.datetime_helpers import (
-    utc_now,
-)
+from core.util.datetime_helpers import utc_now
 from core.util.http import HTTP
 from tests.test_controller import CirculationControllerTest
 

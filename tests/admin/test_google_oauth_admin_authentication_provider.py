@@ -1,12 +1,10 @@
 import json
+
 from oauth2client import client as GoogleClient
 
-from core.testing import DatabaseTest
-from core.util.problem_detail import ProblemDetail
-
 from api.admin.google_oauth_admin_authentication_provider import (
-    GoogleOAuthAdminAuthenticationProvider,
     DummyGoogleClient,
+    GoogleOAuthAdminAuthenticationProvider,
 )
 from api.admin.problem_details import INVALID_ADMIN_CREDENTIALS
 from core.model import (
@@ -16,6 +14,8 @@ from core.model import (
     ExternalIntegration,
     create,
 )
+from core.testing import DatabaseTest
+from core.util.problem_detail import ProblemDetail
 
 
 class TestGoogleOAuthAdminAuthenticationProvider(DatabaseTest):

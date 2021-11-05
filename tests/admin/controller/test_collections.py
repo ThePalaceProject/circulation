@@ -2,7 +2,6 @@ import json
 
 import flask
 import pytest
-
 from werkzeug.datastructures import MultiDict
 
 from api.admin.exceptions import *
@@ -11,14 +10,15 @@ from core.model import (
     AdminRole,
     Collection,
     ConfigurationSetting,
-    create,
     ExternalIntegration,
-    get_one,
     Library,
+    create,
+    get_one,
 )
 from core.model.configuration import ExternalIntegrationLink
 from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
+
 from .test_controller import SettingsControllerTest
 
 

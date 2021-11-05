@@ -6,6 +6,7 @@ import json
 import os
 import random
 import time
+import urllib.parse
 from contextlib import contextmanager
 from decimal import Decimal
 from time import mktime
@@ -13,7 +14,6 @@ from wsgiref.handlers import format_date_time
 
 import feedparser
 import flask
-import urllib.parse
 import pytest
 from flask import Response as FlaskResponse
 from flask import url_for
@@ -128,11 +128,7 @@ from core.problem_details import *
 from core.testing import DummyHTTPClient, MockRequestsResponse
 from core.user_profile import ProfileController, ProfileStorage
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
-from core.util.datetime_helpers import (
-    datetime_utc,
-    from_timestamp,
-    utc_now,
-)
+from core.util.datetime_helpers import datetime_utc, from_timestamp, utc_now
 from core.util.flask_util import Response
 from core.util.http import RemoteIntegrationException
 from core.util.opds_writer import OPDSFeed

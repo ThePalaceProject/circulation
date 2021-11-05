@@ -1,25 +1,22 @@
+import contextlib
 import json
 import re
-import contextlib
 from copy import deepcopy
 
-from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_OAEP
-
+from Crypto.PublicKey import RSA
 from flask_babel import lazy_gettext as _
 
-from .announcements import Announcements
-
-from core.config import (
-    Configuration as CoreConfiguration,
-    CannotLoadConfiguration,
-    IntegrationException,
-    empty_config as core_empty_config,
-    temp_config as core_temp_config,
-)
-from core.util import MoneyUtility
+from core.config import CannotLoadConfiguration
+from core.config import Configuration as CoreConfiguration
+from core.config import IntegrationException
+from core.config import empty_config as core_empty_config
+from core.config import temp_config as core_temp_config
 from core.lane import Facets
 from core.model import ConfigurationSetting
+from core.util import MoneyUtility
+
+from .announcements import Announcements
 
 
 class Configuration(CoreConfiguration):

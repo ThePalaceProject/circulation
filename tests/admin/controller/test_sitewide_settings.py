@@ -1,12 +1,13 @@
+import flask
 import pytest
+from werkzeug.datastructures import ImmutableMultiDict, MultiDict
 
 from api.admin.exceptions import *
 from api.config import Configuration
-from core.opds import AcquisitionFeed
 from core.model import AdminRole, ConfigurationSetting
+from core.opds import AcquisitionFeed
+
 from .test_controller import SettingsControllerTest
-from werkzeug.datastructures import ImmutableMultiDict, MultiDict
-import flask
 
 
 class TestSitewideSettings(SettingsControllerTest):

@@ -1,20 +1,14 @@
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
+
 from api.admin.problem_details import *
 from api.odl import SharedODLAPI
-from api.registry import (
-    Registration,
-    RemoteRegistry,
-)
-from core.model import (
-    Collection,
-    ConfigurationSetting,
-    get_one,
-    Library,
-)
+from api.registry import Registration, RemoteRegistry
+from core.model import Collection, ConfigurationSetting, Library, get_one
 from core.util.http import HTTP
 from core.util.problem_detail import ProblemDetail
+
 from . import SettingsController
 
 

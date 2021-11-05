@@ -16,11 +16,7 @@ from api.millenium_patron import MilleniumPatronAPI
 from api.saml.provider import SAMLWebSSOAuthenticationProvider
 from api.simple_authentication import SimpleAuthenticationProvider
 from api.sip import SIP2AuthenticationProvider
-from core.model import (
-    ConfigurationSetting,
-    ExternalIntegration,
-    get_one,
-)
+from core.model import ConfigurationSetting, ExternalIntegration, get_one
 from core.util.problem_detail import ProblemDetail
 
 

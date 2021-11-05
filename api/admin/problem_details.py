@@ -1,6 +1,7 @@
-from core.util.problem_detail import ProblemDetail as pd
-from api.problem_details import *
 from flask_babel import lazy_gettext as _
+
+from api.problem_details import *
+from core.util.problem_detail import ProblemDetail as pd
 
 ADMIN_AUTH_NOT_CONFIGURED = pd(
     "http://librarysimplified.org/terms/problem/admin-auth-not-configured",

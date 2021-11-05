@@ -1,30 +1,28 @@
 import contextlib
 import logging
+import os
+
 import flask
 from flask import Response
 from werkzeug.exceptions import MethodNotAllowed
-import os
-
-from core.app_server import ErrorHandler
-from core.model import Admin, ConfigurationSetting, get_one_or_create
 
 from api import app
 from api import routes as api_routes
+from api.admin import routes
+from api.admin.controller import AdminController, setup_admin_controllers
+from api.admin.problem_details import *
 from api.config import Configuration
 from api.controller import CirculationManager
-from api.admin.controller import AdminController
-from api.admin.controller import setup_admin_controllers
-from api.admin.problem_details import *
-from api.routes import (
-    exception_handler,
-    h as error_handler_object,
-)
-from api.admin import routes
+from api.routes import exception_handler
+from api.routes import h as error_handler_object
+from core.app_server import ErrorHandler
+from core.model import Admin, ConfigurationSetting, get_one_or_create
+
 from ..test_controller import ControllerTest
 from ..test_routes import (
     MockApp,
-    MockManager,
     MockController,
+    MockManager,
     RouteTest,
     RouteTestFixtures,
 )

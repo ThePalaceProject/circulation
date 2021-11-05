@@ -1,29 +1,25 @@
 import base64
-from io import BytesIO
 import json
-from typing import Any, Dict, Optional
 import uuid
+from io import BytesIO
+from typing import Any, Dict, Optional
 
 import flask
+import wcag_contrast_ratio
 from flask import Response
 from flask_babel import lazy_gettext as _
 from PIL import Image
-import wcag_contrast_ratio
 
-from . import SettingsController
 from api.admin.announcement_list_validator import AnnouncementListValidator
-from api.config import Configuration
-from api.lanes import create_default_lanes
 from api.admin.geographic_validator import GeographicValidator
 from api.admin.problem_details import *
-from core.model import (
-    ConfigurationSetting,
-    create,
-    get_one,
-    Library,
-)
-from core.util.problem_detail import ProblemDetail
+from api.config import Configuration
+from api.lanes import create_default_lanes
+from core.model import ConfigurationSetting, Library, create, get_one
 from core.util import LanguageCodes
+from core.util.problem_detail import ProblemDetail
+
+from . import SettingsController
 
 
 class LibrarySettingsController(SettingsController):

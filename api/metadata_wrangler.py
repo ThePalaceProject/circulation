@@ -1,17 +1,14 @@
 # Code relating to the interaction between the circulation manager
 # and the metadata wrangler.
 import datetime
-import feedparser
 from io import StringIO
+
+import feedparser
 from lxml import etree
-
 from sqlalchemy import and_, func, or_
-from sqlalchemy.orm import (
-    aliased,
-    contains_eager,
-)
+from sqlalchemy.orm import aliased, contains_eager
 
-from .config import CannotLoadConfiguration
+from api.coverage import OPDSImportCoverageProvider, ReaperImporter, RegistrarImporter
 from core.coverage import CoverageFailure
 from core.metadata_layer import TimestampData
 from core.model import (
@@ -22,23 +19,12 @@ from core.model import (
     Session,
     Timestamp,
 )
-from core.monitor import (
-    CollectionMonitor,
-)
+from core.monitor import CollectionMonitor
 from core.opds import AcquisitionFeed
-from core.opds_import import (
-    MetadataWranglerOPDSLookup,
-    OPDSImporter,
-    OPDSXMLParser,
-)
-
+from core.opds_import import MetadataWranglerOPDSLookup, OPDSImporter, OPDSXMLParser
 from core.util.http import RemoteIntegrationException
 
-from api.coverage import (
-    OPDSImportCoverageProvider,
-    RegistrarImporter,
-    ReaperImporter,
-)
+from .config import CannotLoadConfiguration
 
 
 class MetadataWranglerCollectionMonitor(CollectionMonitor):

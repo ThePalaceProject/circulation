@@ -1,15 +1,19 @@
+import json
+import urllib.error
+import urllib.parse
+import urllib.request
+
+import pypostalcode
+import uszipcode
+
 from api.admin.controller.library_settings import LibrarySettingsController
 from api.admin.geographic_validator import GeographicValidator
 from api.admin.problem_details import *
 from api.config import Configuration
 from api.registry import RemoteRegistry
-from core.model import create, ExternalIntegration
+from core.model import ExternalIntegration, create
 from core.testing import MockRequestsResponse
-import json
-import pypostalcode
 from tests.admin.controller.test_controller import SettingsControllerTest
-import urllib.request, urllib.parse, urllib.error
-import uszipcode
 
 
 class TestGeographicValidator(SettingsControllerTest):

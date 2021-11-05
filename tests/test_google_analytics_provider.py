@@ -1,24 +1,24 @@
+import datetime
+import unicodedata
+import urllib.parse
+
 import pytest
-from api.config import (
-    CannotLoadConfiguration,
-)
-from core.analytics import Analytics
+from psycopg2.extras import NumericRange
+
+from api.config import CannotLoadConfiguration
 from api.google_analytics_provider import GoogleAnalyticsProvider
-from core.testing import DatabaseTest
+from core.analytics import Analytics
 from core.model import (
-    get_one_or_create,
-    create,
     CirculationEvent,
     ConfigurationSetting,
     DataSource,
     EditionConstants,
     ExternalIntegration,
     LicensePool,
+    create,
+    get_one_or_create,
 )
-import unicodedata
-import urllib.parse
-import datetime
-from psycopg2.extras import NumericRange
+from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
 
 

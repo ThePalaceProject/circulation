@@ -1,7 +1,7 @@
 from api.lcp.hash import HasherFactory
 from api.lcp.server import LCPServer
 from core.lcp.credential import LCPCredentialFactory
-from core.model.configuration import ConfigurationStorage, ConfigurationFactory
+from core.model.configuration import ConfigurationFactory, ConfigurationStorage
 
 
 class LCPServerFactory(object):

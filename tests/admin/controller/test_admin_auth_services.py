@@ -1,17 +1,19 @@
-import pytest
+import json
 
 import flask
-import json
+import pytest
 from werkzeug.datastructures import MultiDict
+
 from api.admin.exceptions import *
 from api.app import initialize_database
 from core.model import (
     AdminRole,
     ConfigurationSetting,
-    create,
     ExternalIntegration,
+    create,
     get_one,
 )
+
 from .test_controller import SettingsControllerTest
 
 

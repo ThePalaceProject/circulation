@@ -1,16 +1,10 @@
-from pyld import jsonld
 import json
 import os
 
-from core.model import (
-    Annotation,
-    Identifier,
-    get_one_or_create,
-)
+from pyld import jsonld
 
-from core.app_server import (
-    url_for,
-)
+from core.app_server import url_for
+from core.model import Annotation, Identifier, get_one_or_create
 from core.util.datetime_helpers import utc_now
 
 from .problem_details import *

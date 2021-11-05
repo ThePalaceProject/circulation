@@ -1,8 +1,10 @@
 import datetime
+
 import dateutil
 from money import Money
-from api.config import Configuration
+
 from api.circulation_exceptions import *
+from api.config import Configuration
 from core.model.patron import Patron
 from core.util import MoneyUtility
 from core.util.datetime_helpers import utc_now

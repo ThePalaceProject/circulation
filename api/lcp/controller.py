@@ -7,7 +7,7 @@ from api.admin.problem_details import MISSING_COLLECTION
 from api.controller import CirculationManagerController
 from api.lcp.factory import LCPServerFactory
 from core.lcp.credential import LCPCredentialFactory
-from core.model import Session, ExternalIntegration, Collection
+from core.model import Collection, ExternalIntegration, Session
 from core.util.problem_detail import ProblemDetail
 
 

@@ -1,16 +1,16 @@
-import pytest
+import base64
 import json
-import flask
-from Crypto.PublicKey import RSA
-from Crypto.Cipher import PKCS1_OAEP
 
+import flask
+import pytest
+from Crypto.Cipher import PKCS1_OAEP
+from Crypto.PublicKey import RSA
+
+from api.circulation import FulfillmentInfo
 from api.circulation_exceptions import *
-from api.shared_collection import (
-    SharedCollectionAPI,
-    BaseSharedCollectionAPI,
-)
-from core.config import CannotLoadConfiguration
 from api.odl import ODLAPI
+from api.shared_collection import BaseSharedCollectionAPI, SharedCollectionAPI
+from core.config import CannotLoadConfiguration
 from core.model import (
     ConfigurationSetting,
     Hold,
@@ -19,11 +19,7 @@ from core.model import (
     create,
     get_one,
 )
-import base64
-from api.circulation import FulfillmentInfo
-
-from core.testing import DatabaseTest
-from core.testing import MockRequestsResponse
+from core.testing import DatabaseTest, MockRequestsResponse
 
 
 class MockAPI(BaseSharedCollectionAPI):

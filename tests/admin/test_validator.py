@@ -1,10 +1,9 @@
 from io import StringIO
 
-
 from parameterized import parameterized
 from werkzeug.datastructures import MultiDict
 
-from api.admin.validator import Validator, PatronAuthenticationValidatorFactory
+from api.admin.validator import PatronAuthenticationValidatorFactory, Validator
 from api.config import Configuration
 from api.shared_collection import BaseSharedCollectionAPI
 from tests.admin.fixtures.dummy_validator import DummyAuthenticationProviderValidator

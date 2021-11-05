@@ -1,16 +1,15 @@
-from pymarc import Record
-import urllib.request, urllib.parse, urllib.error
+import urllib.error
+import urllib.parse
+import urllib.request
 
-from core.testing import DatabaseTest
-from core.config import Configuration
-from core.model import (
-    ConfigurationSetting,
-    ExternalIntegration,
-)
+from pymarc import Record
 
 from api.marc import LibraryAnnotator
-from core.marc import MARCExporter
 from api.registry import Registration
+from core.config import Configuration
+from core.marc import MARCExporter
+from core.model import ConfigurationSetting, ExternalIntegration
+from core.testing import DatabaseTest
 
 
 class TestLibraryAnnotator(DatabaseTest):

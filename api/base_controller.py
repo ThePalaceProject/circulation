@@ -4,14 +4,10 @@ import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
 
-from .circulation_exceptions import *
-from core.model import (
-    Library,
-    Loan,
-    Patron,
-    get_one,
-)
+from core.model import Library, Loan, Patron, get_one
 from core.util.problem_detail import ProblemDetail
+
+from .circulation_exceptions import *
 from .problem_details import *
 
 

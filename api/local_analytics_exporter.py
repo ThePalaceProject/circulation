@@ -1,18 +1,9 @@
 import logging
-import unicodecsv as csv
 from io import BytesIO
 
-from sqlalchemy.sql import (
-    func,
-    select,
-)
-from sqlalchemy.sql.expression import (
-    and_,
-    case,
-    literal_column,
-    join,
-    or_,
-)
+import unicodecsv as csv
+from sqlalchemy.sql import func, select
+from sqlalchemy.sql.expression import and_, case, join, literal_column, or_
 
 from core.model import (
     CirculationEvent,

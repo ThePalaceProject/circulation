@@ -1,15 +1,14 @@
-from datetime import datetime
-from flask_babel import lazy_gettext as _
-from api.authenticator import (
-    BasicAuthenticationProvider,
-    PatronData,
-)
-from api.sip.client import SIPClient
-from core.util.http import RemoteIntegrationException
-from core.util import MoneyUtility
-from core.model import ExternalIntegration
 import json
+from datetime import datetime
+
+from flask_babel import lazy_gettext as _
+
+from api.authenticator import BasicAuthenticationProvider, PatronData
+from api.sip.client import SIPClient
 from api.sip.dialect import Dialect as Sip2Dialect
+from core.model import ExternalIntegration
+from core.util import MoneyUtility
+from core.util.http import RemoteIntegrationException
 
 
 class SIP2AuthenticationProvider(BasicAuthenticationProvider):

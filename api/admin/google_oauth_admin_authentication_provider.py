@@ -1,11 +1,10 @@
 import json
 from collections import defaultdict
 
-from api.admin.template_styles import *
-from .admin_authentication_provider import AdminAuthenticationProvider
-from .problem_details import GOOGLE_OAUTH_FAILURE, INVALID_ADMIN_CREDENTIALS
-from oauth2client import client as GoogleClient
 from flask_babel import lazy_gettext as _
+from oauth2client import client as GoogleClient
+
+from api.admin.template_styles import *
 from core.model import (
     Admin,
     AdminRole,
@@ -14,6 +13,9 @@ from core.model import (
     Session,
     get_one,
 )
+
+from .admin_authentication_provider import AdminAuthenticationProvider
+from .problem_details import GOOGLE_OAUTH_FAILURE, INVALID_ADMIN_CREDENTIALS
 
 
 class GoogleOAuthAdminAuthenticationProvider(AdminAuthenticationProvider):

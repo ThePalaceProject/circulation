@@ -1,13 +1,13 @@
-from flask_babel import lazy_gettext as _
 import logging
-from .authenticator import (
-    BasicAuthenticationProvider,
-    PatronData,
-)
-from .config import CannotLoadConfiguration
-from core.model import ExternalIntegration
+
+from flask_babel import lazy_gettext as _
 from lxml import etree
+
+from core.model import ExternalIntegration
 from core.util.http import HTTP
+
+from .authenticator import BasicAuthenticationProvider, PatronData
+from .config import CannotLoadConfiguration
 
 
 class KansasAuthenticationAPI(BasicAuthenticationProvider):

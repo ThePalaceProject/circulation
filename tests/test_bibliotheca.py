@@ -1,29 +1,37 @@
 # encoding: utf-8
-import pytest
-
-from datetime import datetime, timedelta
 import json
 import os
 import pkgutil
-import mock
-from mock import MagicMock
 import random
-from io import (
-    BytesIO,
-    StringIO,
-)
+from datetime import datetime, timedelta
+from io import BytesIO, StringIO
 
+import mock
+import pytest
+import pytz
+from mock import MagicMock
 from pymarc import parse_xml_to_array
 from pymarc.record import Record
-import pytz
 
-from core.testing import DatabaseTest
-from . import sample_data
-
-from core.metadata_layer import (
-    ReplacementPolicy,
-    TimestampData,
+from api.authenticator import BasicAuthenticationProvider
+from api.bibliotheca import (
+    BibliothecaAPI,
+    BibliothecaBibliographicCoverageProvider,
+    BibliothecaCirculationSweep,
+    BibliothecaEventMonitor,
+    BibliothecaParser,
+    BibliothecaPurchaseMonitor,
+    CheckoutResponseParser,
+    ErrorParser,
+    EventParser,
+    ItemListParser,
+    MockBibliothecaAPI,
+    PatronCirculationParser,
 )
+from api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
+from api.circulation_exceptions import *
+from api.web_publication_manifest import FindawayManifest
+from core.metadata_layer import ReplacementPolicy, TimestampData
 from core.mock_analytics_provider import MockAnalyticsProvider
 from core.model import (
     CirculationEvent,
@@ -39,47 +47,21 @@ from core.model import (
     LicensePool,
     Loan,
     Measurement,
-    Resource,
     Representation,
+    Resource,
     Subject,
     Timestamp,
     Work,
     WorkCoverageRecord,
     create,
 )
-from core.util.datetime_helpers import (
-    datetime_utc,
-    utc_now,
-)
-from core.util.http import (
-    BadResponseException,
-)
-from core.util.web_publication_manifest import AudiobookManifest
 from core.scripts import RunCollectionCoverageProviderScript
+from core.testing import DatabaseTest
+from core.util.datetime_helpers import datetime_utc, utc_now
+from core.util.http import BadResponseException
+from core.util.web_publication_manifest import AudiobookManifest
 
-from api.authenticator import BasicAuthenticationProvider
-from api.circulation import (
-    CirculationAPI,
-    FulfillmentInfo,
-    HoldInfo,
-    LoanInfo,
-)
-from api.circulation_exceptions import *
-from api.bibliotheca import (
-    BibliothecaCirculationSweep,
-    CheckoutResponseParser,
-    ErrorParser,
-    EventParser,
-    MockBibliothecaAPI,
-    PatronCirculationParser,
-    BibliothecaAPI,
-    BibliothecaEventMonitor,
-    BibliothecaParser,
-    BibliothecaPurchaseMonitor,
-    ItemListParser,
-    BibliothecaBibliographicCoverageProvider,
-)
-from api.web_publication_manifest import FindawayManifest
+from . import sample_data
 
 
 class BibliothecaAPITest(DatabaseTest):

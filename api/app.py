@@ -1,24 +1,18 @@
-import os
 import logging
+import os
 import urllib.parse
 
 import flask
-from flask import (
-    Flask,
-    Response,
-    redirect,
-)
+from flask import Flask, Response, redirect
+from flask_babel import Babel
 from flask_sqlalchemy_session import flask_scoped_session
 from sqlalchemy.orm import sessionmaker
-from .config import Configuration
-from core.model import (
-    ConfigurationSetting,
-    SessionManager,
-)
-from core.log import LogConfiguration
-from core.util import LanguageCodes
-from flask_babel import Babel
 
+from core.log import LogConfiguration
+from core.model import ConfigurationSetting, SessionManager
+from core.util import LanguageCodes
+
+from .config import Configuration
 
 app = Flask(__name__)
 app._db = None

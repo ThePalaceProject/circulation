@@ -1,29 +1,22 @@
-import time
 import datetime
-import os
 import json
 import logging
+import os
+import time
+
 from flask_babel import lazy_gettext as _
 
-from .config import (
-    CannotLoadConfiguration,
+from core.analytics import Analytics
+from core.metadata_layer import (
+    CirculationData,
+    ContributorData,
+    FormatData,
+    IdentifierData,
+    LinkData,
+    Metadata,
+    ReplacementPolicy,
+    SubjectData,
 )
-
-from .circulation import LoanInfo, FulfillmentInfo, BaseCirculationAPI
-
-from .circulation_exceptions import *
-
-from .selftest import (
-    HasSelfTests,
-    SelfTestResult,
-)
-
-from core.util.http import (
-    HTTP,
-    RemoteIntegrationException,
-    RequestTimedOut,
-)
-
 from core.model import (
     CirculationEvent,
     Classification,
@@ -40,32 +33,20 @@ from core.model import (
     Session,
     Subject,
 )
-
-from core.metadata_layer import (
-    CirculationData,
-    ContributorData,
-    FormatData,
-    IdentifierData,
-    LinkData,
-    Metadata,
-    ReplacementPolicy,
-    SubjectData,
-)
-
 from core.monitor import (
-    Monitor,
-    IdentifierSweepMonitor,
     CollectionMonitor,
+    IdentifierSweepMonitor,
+    Monitor,
     TimelineMonitor,
 )
-
-from core.analytics import Analytics
 from core.testing import DatabaseTest
-from core.util.datetime_helpers import (
-    from_timestamp,
-    strptime_utc,
-    utc_now,
-)
+from core.util.datetime_helpers import from_timestamp, strptime_utc, utc_now
+from core.util.http import HTTP, RemoteIntegrationException, RequestTimedOut
+
+from .circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
+from .circulation_exceptions import *
+from .config import CannotLoadConfiguration
+from .selftest import HasSelfTests, SelfTestResult
 
 
 class EnkiAPI(BaseCirculationAPI, HasSelfTests):

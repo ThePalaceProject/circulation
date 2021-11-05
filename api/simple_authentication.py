@@ -1,15 +1,9 @@
 from flask_babel import lazy_gettext as _
 
-from .authenticator import (
-    BasicAuthenticationProvider,
-    PatronData,
-)
-
-from .config import (
-    CannotLoadConfiguration,
-)
-
 from core.model import Patron
+
+from .authenticator import BasicAuthenticationProvider, PatronData
+from .config import CannotLoadConfiguration
 
 
 class SimpleAuthenticationProvider(BasicAuthenticationProvider):

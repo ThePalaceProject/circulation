@@ -1,19 +1,19 @@
 import pytest
-from mock import patch, create_autospec, MagicMock
+from mock import MagicMock, create_autospec, patch
 from parameterized import parameterized
 from pyfakefs.fake_filesystem_unittest import Patcher
 
 from api.lcp.encrypt import (
-    LCPEncryptor,
-    LCPEncryptionException,
     LCPEncryptionConfiguration,
+    LCPEncryptionException,
     LCPEncryptionResult,
+    LCPEncryptor,
 )
 from core.model import Identifier
 from core.model.configuration import (
-    HasExternalIntegration,
-    ConfigurationStorage,
     ConfigurationFactory,
+    ConfigurationStorage,
+    HasExternalIntegration,
 )
 from tests.lcp import fixtures
 from tests.lcp.database_test import DatabaseTest

@@ -1,16 +1,10 @@
-import pytest
 import json
 
+import pytest
+
 from api.authenticator import PatronData
-
-from api.simple_authentication import (
-    SimpleAuthenticationProvider,
-)
-
-from api.config import (
-    CannotLoadConfiguration,
-)
-
+from api.config import CannotLoadConfiguration
+from api.simple_authentication import SimpleAuthenticationProvider
 from core.testing import DatabaseTest
 
 

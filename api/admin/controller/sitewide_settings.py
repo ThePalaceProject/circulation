@@ -1,10 +1,12 @@
-from core.model import ConfigurationSetting
-from . import SettingsController
-from api.config import Configuration
-from flask import Response
-from api.admin.problem_details import *
 import flask
+from flask import Response
 from flask_babel import lazy_gettext as _
+
+from api.admin.problem_details import *
+from api.config import Configuration
+from core.model import ConfigurationSetting
+
+from . import SettingsController
 
 
 class SitewideConfigurationSettingsController(SettingsController):

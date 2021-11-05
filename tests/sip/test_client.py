@@ -1,13 +1,12 @@
 """Standalone tests of the SIP2 client."""
-import pytest
 import os
 import socket
 import ssl
-from api.sip.client import (
-    MockSIPClient,
-    SIPClient,
-)
-from api.sip.dialect import GenericILS, AutoGraphicsVerso
+
+import pytest
+
+from api.sip.client import MockSIPClient, SIPClient
+from api.sip.dialect import AutoGraphicsVerso, GenericILS
 
 
 class MockSocket(object):

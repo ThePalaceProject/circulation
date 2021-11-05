@@ -1,16 +1,13 @@
 import pytest
 
-from core.testing import (
-    DatabaseTest,
+from api.coverage import (
+    MockOPDSImportCoverageProvider,
+    OPDSImportCoverageProvider,
+    ReaperImporter,
+    RegistrarImporter,
 )
-
-from core.testing import MockRequestsResponse
-
-from core.config import (
-    CannotLoadConfiguration,
-    Configuration,
-    temp_config,
-)
+from core.config import CannotLoadConfiguration, Configuration, temp_config
+from core.coverage import CoverageFailure
 from core.model import (
     Collection,
     DataSource,
@@ -18,25 +15,10 @@ from core.model import (
     Identifier,
     LicensePool,
 )
-from core.util.opds_writer import (
-    OPDSFeed,
-)
-from core.opds_import import (
-    MockSimplifiedOPDSLookup,
-    OPDSImporter,
-)
-from core.coverage import (
-    CoverageFailure,
-)
-
+from core.opds_import import MockSimplifiedOPDSLookup, OPDSImporter
+from core.testing import DatabaseTest, MockRequestsResponse
 from core.util.http import BadResponseException
-
-from api.coverage import (
-    MockOPDSImportCoverageProvider,
-    OPDSImportCoverageProvider,
-    ReaperImporter,
-    RegistrarImporter,
-)
+from core.util.opds_writer import OPDSFeed
 
 
 class TestImporterSubclasses(DatabaseTest):

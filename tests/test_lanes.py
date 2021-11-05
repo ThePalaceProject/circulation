@@ -1,61 +1,18 @@
 # encoding: utf-8
+import datetime
+import json
 from collections import Counter
 
 import pytest
-import json
-import datetime
 from mock import MagicMock
 
-from core.testing import (
-    DatabaseTest,
-)
-
-from core.classifier import Classifier
-from core.entrypoint import AudiobooksEntryPoint
-from core.external_search import Filter
-from core.lane import (
-    DatabaseBackedFacets,
-    DefaultSortOrderFacets,
-    Facets,
-    FeaturedFacets,
-    Lane,
-    WorkList,
-)
-from core.metadata_layer import (
-    ContributorData,
-    Metadata,
-)
-from core.lane import FacetsWithEntryPoint
-from core.model import (
-    create,
-    CachedFeed,
-    Contribution,
-    Contributor,
-    Edition,
-    SessionManager,
-    DataSource,
-    ExternalIntegration,
-    Library,
-)
-
-from api.config import (
-    Configuration,
-    CannotLoadConfiguration,
-    temp_config,
-)
+from api.config import CannotLoadConfiguration, Configuration, temp_config
 from api.lanes import (
-    create_default_lanes,
-    create_lanes_for_large_collection,
-    create_lane_for_small_collection,
-    create_lane_for_tiny_collection,
-    create_world_languages_lane,
-    _lane_configuration_from_collection_sizes,
-    load_lanes,
     ContributorFacets,
     ContributorLane,
     CrawlableCollectionBasedLane,
-    CrawlableFacets,
     CrawlableCustomListBasedLane,
+    CrawlableFacets,
     HasSeriesFacets,
     JackpotFacets,
     JackpotWorkList,
@@ -65,8 +22,40 @@ from api.lanes import (
     SeriesFacets,
     SeriesLane,
     WorkBasedLane,
+    _lane_configuration_from_collection_sizes,
+    create_default_lanes,
+    create_lane_for_small_collection,
+    create_lane_for_tiny_collection,
+    create_lanes_for_large_collection,
+    create_world_languages_lane,
+    load_lanes,
 )
 from api.novelist import MockNoveListAPI
+from core.classifier import Classifier
+from core.entrypoint import AudiobooksEntryPoint
+from core.external_search import Filter
+from core.lane import (
+    DatabaseBackedFacets,
+    DefaultSortOrderFacets,
+    Facets,
+    FacetsWithEntryPoint,
+    FeaturedFacets,
+    Lane,
+    WorkList,
+)
+from core.metadata_layer import ContributorData, Metadata
+from core.model import (
+    CachedFeed,
+    Contribution,
+    Contributor,
+    DataSource,
+    Edition,
+    ExternalIntegration,
+    Library,
+    SessionManager,
+    create,
+)
+from core.testing import DatabaseTest
 
 
 class TestLaneCreation(DatabaseTest):

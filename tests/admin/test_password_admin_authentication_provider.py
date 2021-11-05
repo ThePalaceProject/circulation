@@ -1,12 +1,9 @@
-from core.testing import DatabaseTest
-from api.admin.problem_details import *
 from api.admin.password_admin_authentication_provider import (
     PasswordAdminAuthenticationProvider,
 )
-from core.model import (
-    Admin,
-    create,
-)
+from api.admin.problem_details import *
+from core.model import Admin, create
+from core.testing import DatabaseTest
 
 
 class TestPasswordAdminAuthenticationProvider(DatabaseTest):

@@ -1,20 +1,12 @@
 import pytest
-
+from flask import Response
 from lxml import etree
 
-from flask import Response
-
-from core.model import ConfigurationSetting
-
-from core.util.opds_writer import OPDSFeed
-
 from api.config import CannotLoadConfiguration
-from api.custom_index import (
-    CustomIndexView,
-    COPPAGate,
-)
-
+from api.custom_index import COPPAGate, CustomIndexView
+from core.model import ConfigurationSetting
 from core.testing import DatabaseTest
+from core.util.opds_writer import OPDSFeed
 
 
 class TestCustomIndexView(DatabaseTest):

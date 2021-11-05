@@ -1,10 +1,7 @@
 """Vendor-specific variants of the standard Web Publication Manifest classes.
 """
 
-from core.model import (
-    DeliveryMechanism,
-    Representation,
-)
+from core.model import DeliveryMechanism, Representation
 from core.util.web_publication_manifest import AudiobookManifest
 
 

@@ -1,21 +1,17 @@
 import contextlib
 import logging
 
-import pytest
 import flask
+import pytest
 from flask import Response
 from werkzeug.exceptions import MethodNotAllowed
 
-from core.app_server import ErrorHandler
-
-from api import app
-from api import routes
-from api.opds import CirculationManagerAnnotator
+from api import app, routes
 from api.controller import CirculationManager
-from api.routes import (
-    exception_handler,
-    h as error_handler_object,
-)
+from api.opds import CirculationManagerAnnotator
+from api.routes import exception_handler
+from api.routes import h as error_handler_object
+from core.app_server import ErrorHandler
 
 from .test_controller import ControllerTest
 

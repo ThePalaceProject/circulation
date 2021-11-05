@@ -1,41 +1,31 @@
 """Interface to the New York Times APIs."""
-from collections import Counter
-from datetime import datetime, timedelta
-import dateutil
-import isbnlib
-import os
 import json
 import logging
-from sqlalchemy.orm.session import Session
-from sqlalchemy.orm.exc import (
-    NoResultFound,
-)
+import os
+from collections import Counter
+from datetime import datetime, timedelta
+
+import dateutil
+import isbnlib
 from flask_babel import lazy_gettext as _
+from sqlalchemy.orm.exc import NoResultFound
+from sqlalchemy.orm.session import Session
 
-from .config import (
-    CannotLoadConfiguration,
-    IntegrationException,
-)
-
-from core.selftest import (
-    HasSelfTests,
-)
-from core.opds_import import MetadataWranglerOPDSLookup
-from core.metadata_layer import (
-    Metadata,
-    IdentifierData,
-    ContributorData,
-)
+from core.external_list import TitleFromExternalList
+from core.metadata_layer import ContributorData, IdentifierData, Metadata
 from core.model import (
-    get_one_or_create,
     CustomList,
     DataSource,
     Edition,
     ExternalIntegration,
     Identifier,
     Representation,
+    get_one_or_create,
 )
-from core.external_list import TitleFromExternalList
+from core.opds_import import MetadataWranglerOPDSLookup
+from core.selftest import HasSelfTests
+
+from .config import CannotLoadConfiguration, IntegrationException
 
 
 class NYTAPI(object):

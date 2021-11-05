@@ -1,6 +1,7 @@
-from urllib.request import urlopen
-import feedparser
 import os
+from urllib.request import urlopen
+
+import feedparser
 
 from . import CirculationIntegrationTest
 

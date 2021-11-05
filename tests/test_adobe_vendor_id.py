@@ -1,26 +1,26 @@
+import base64
+import datetime
 import json
-
-import pytest
+import re
 
 import jwt
+import pytest
 from jwt.exceptions import DecodeError, ExpiredSignatureError, InvalidIssuedAtError
-import re
-import datetime
 
-from api.problem_details import *
 from api.adobe_vendor_id import (
-    AdobeSignInRequestParser,
     AdobeAccountInfoRequestParser,
+    AdobeSignInRequestParser,
     AdobeVendorIDController,
-    AdobeVendorIDRequestHandler,
     AdobeVendorIDModel,
+    AdobeVendorIDRequestHandler,
     AuthdataUtility,
     DeviceManagementRequestHandler,
 )
-
+from api.config import CannotLoadConfiguration, Configuration, temp_config
 from api.opds import CirculationManagerAnnotator
+from api.problem_details import *
+from api.simple_authentication import SimpleAuthenticationProvider
 from api.testing import VendorIDTest
-
 from core.model import (
     ConfigurationSetting,
     Credential,
@@ -29,20 +29,8 @@ from core.model import (
     ExternalIntegration,
     Library,
 )
-from core.util.datetime_helpers import (
-    datetime_utc,
-    utc_now,
-)
+from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.problem_detail import ProblemDetail
-import base64
-
-from api.config import (
-    CannotLoadConfiguration,
-    Configuration,
-    temp_config,
-)
-
-from api.simple_authentication import SimpleAuthenticationProvider
 
 
 class TestVendorIDModel(VendorIDTest):

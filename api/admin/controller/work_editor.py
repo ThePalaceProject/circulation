@@ -1,31 +1,29 @@
+import base64
+import json
+import os
+import textwrap
+import urllib.error
+import urllib.parse
+import urllib.request
+from collections import Counter
+from io import BytesIO
+
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
-from . import AdminCirculationManagerController
-from collections import Counter
-from core.opds import AcquisitionFeed
+from PIL import Image, ImageDraw, ImageFont
+
 from api.admin.opds import AdminAnnotator, AdminFeed
 from api.admin.problem_details import *
-from api.config import Configuration, CannotLoadConfiguration
-from api.metadata_wrangler import MetadataWranglerCollectionRegistrar
 from api.admin.validator import Validator
-from core.app_server import (
-    load_pagination_from_request,
-)
-from core.classifier import genres, SimplifiedGenreClassifier, NO_NUMBER, NO_VALUE
-from core.mirror import MirrorUploader
-from core.util.problem_detail import ProblemDetail
-from core.util import LanguageCodes
-from core.metadata_layer import (
-    Metadata,
-    LinkData,
-    ReplacementPolicy,
-)
+from api.config import CannotLoadConfiguration, Configuration
+from api.metadata_wrangler import MetadataWranglerCollectionRegistrar
+from core.app_server import load_pagination_from_request
+from core.classifier import NO_NUMBER, NO_VALUE, SimplifiedGenreClassifier, genres
 from core.lane import Lane, WorkList
+from core.metadata_layer import LinkData, Metadata, ReplacementPolicy
+from core.mirror import MirrorUploader
 from core.model import (
-    create,
-    get_one,
-    get_one_or_create,
     Classification,
     Collection,
     Complaint,
@@ -41,19 +39,17 @@ from core.model import (
     RightsStatus,
     Subject,
     Work,
+    create,
+    get_one,
+    get_one_or_create,
 )
 from core.model.configuration import ExternalIntegrationLink
-from core.util.datetime_helpers import (
-    strptime_utc,
-    utc_now,
-)
-import base64
-import json
-import os
-from PIL import Image, ImageDraw, ImageFont
-from io import BytesIO
-import textwrap
-import urllib.request, urllib.parse, urllib.error
+from core.opds import AcquisitionFeed
+from core.util import LanguageCodes
+from core.util.datetime_helpers import strptime_utc, utc_now
+from core.util.problem_detail import ProblemDetail
+
+from . import AdminCirculationManagerController
 
 
 class WorkController(AdminCirculationManagerController):

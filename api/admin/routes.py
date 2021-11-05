@@ -2,7 +2,7 @@ from datetime import timedelta
 from functools import wraps
 
 import flask
-from flask import make_response, redirect, Response
+from flask import Response, make_response, redirect
 
 from api.admin.config import Configuration as AdminClientConfig
 from api.app import app
@@ -10,16 +10,11 @@ from api.config import Configuration
 from api.routes import allows_library, has_library, library_route
 from core.app_server import returns_problem_detail
 from core.local_analytics_provider import LocalAnalyticsProvider
-from core.model import (
-    ConfigurationSetting,
-)
+from core.model import ConfigurationSetting
 from core.util.problem_detail import ProblemDetail
-from .controller import (
-    setup_admin_controllers,
-)
-from .templates import (
-    admin_sign_in_again as sign_in_again_template,
-)
+
+from .controller import setup_admin_controllers
+from .templates import admin_sign_in_again as sign_in_again_template
 
 # An admin's session will expire after this amount of time and
 # the admin will have to log in again.

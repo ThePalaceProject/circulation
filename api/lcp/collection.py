@@ -5,28 +5,26 @@ from io import BytesIO
 from flask import send_file
 from sqlalchemy import or_
 
-from api.circulation import FulfillmentInfo, BaseCirculationAPI, LoanInfo
+from api.circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
 from api.lcp.encrypt import LCPEncryptionConfiguration
 from api.lcp.hash import HasherFactory
-from api.lcp.server import LCPServerConfiguration, LCPServer
+from api.lcp.server import LCPServer, LCPServerConfiguration
 from core.lcp.credential import LCPCredentialFactory
 from core.model import (
-    ExternalIntegration,
-    LicensePoolDeliveryMechanism,
-    get_one,
-    Loan,
     Collection,
-    LicensePool,
     DeliveryMechanism,
+    ExternalIntegration,
+    LicensePool,
+    LicensePoolDeliveryMechanism,
+    Loan,
+    get_one,
 )
 from core.model.configuration import (
-    HasExternalIntegration,
-    ConfigurationStorage,
     ConfigurationFactory,
+    ConfigurationStorage,
+    HasExternalIntegration,
 )
-from core.util.datetime_helpers import (
-    utc_now,
-)
+from core.util.datetime_helpers import utc_now
 
 
 class LCPFulfilmentInfo(FulfillmentInfo):

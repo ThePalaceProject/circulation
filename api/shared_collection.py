@@ -1,19 +1,16 @@
-import logging
-import flask
+import base64
 import json
+import logging
+
+import flask
 from flask_babel import lazy_gettext as _
 
-from core.model import (
-    Collection,
-    ConfigurationSetting,
-    IntegrationClient,
-    get_one,
-)
+from core.config import CannotLoadConfiguration
+from core.model import Collection, ConfigurationSetting, IntegrationClient, get_one
+from core.util.http import HTTP
+
 from .circulation_exceptions import *
 from .config import Configuration
-from core.config import CannotLoadConfiguration
-from core.util.http import HTTP
-import base64
 
 
 class SharedCollectionAPI(object):

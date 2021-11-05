@@ -6,9 +6,8 @@ import dateutil
 from flask_babel import lazy_gettext as _
 
 from api.admin.validator import Validator
-
-from core.util.problem_detail import ProblemDetail
 from core.problem_details import *
+from core.util.problem_detail import ProblemDetail
 
 
 class AnnouncementListValidator(Validator):

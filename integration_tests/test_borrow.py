@@ -1,7 +1,8 @@
+import os
+
+import feedparser
 import requests
 from requests.auth import HTTPBasicAuth
-import feedparser
-import os
 
 from . import CirculationIntegrationTest
 

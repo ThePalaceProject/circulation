@@ -5,26 +5,16 @@ import logging
 import os
 import sys
 import time
-from io import StringIO
-from datetime import (
-    datetime,
-    timedelta,
-)
-
+from datetime import datetime, timedelta
 from enum import Enum
-from sqlalchemy import (
-    or_,
-)
+from io import StringIO
 
-from api.adobe_vendor_id import (
-    AuthdataUtility,
-)
+from sqlalchemy import or_
+
+from api.adobe_vendor_id import AuthdataUtility
 from api.authenticator import LibraryAuthenticator
 from api.bibliotheca import BibliothecaCirculationSweep
-from api.config import (
-    CannotLoadConfiguration,
-    Configuration,
-)
+from api.config import CannotLoadConfiguration, Configuration
 from api.controller import CirculationManager
 from api.lanes import create_default_lanes
 from api.local_analytics_exporter import LocalAnalyticsExporter
@@ -43,26 +33,19 @@ from api.opds_for_distributors import (
     OPDSForDistributorsImportMonitor,
     OPDSForDistributorsReaperMonitor,
 )
-from api.overdrive import (
-    OverdriveAPI,
-)
+from api.overdrive import OverdriveAPI
 from core.entrypoint import EntryPoint
 from core.external_list import CustomListFromCSV
 from core.external_search import ExternalSearchIndex
-from core.lane import Lane
-from core.lane import (
-    Pagination,
-    Facets,
-    FeaturedFacets,
-)
+from core.lane import Facets, FeaturedFacets, Lane, Pagination
 from core.marc import MARCExporter
 from core.metadata_layer import (
     CirculationData,
     FormatData,
-    ReplacementPolicy,
     LinkData,
+    MARCExtractor,
+    ReplacementPolicy,
 )
-from core.metadata_layer import MARCExtractor
 from core.mirror import MirrorUploader
 from core.model import (
     CachedMARCFile,
@@ -74,8 +57,8 @@ from core.model import (
     DataSource,
     DeliveryMechanism,
     Edition,
+    EditionConstants,
     ExternalIntegration,
-    get_one,
     Hold,
     Hyperlink,
     Identifier,
@@ -88,31 +71,25 @@ from core.model import (
     Subject,
     Timestamp,
     Work,
-    EditionConstants,
+    get_one,
 )
 from core.model.configuration import ExternalIntegrationLink
-from core.opds import (
-    AcquisitionFeed,
-)
-from core.opds_import import (
-    MetadataWranglerOPDSLookup,
-    OPDSImporter,
-)
-from core.scripts import OPDSImportScript, CollectionType
+from core.opds import AcquisitionFeed
+from core.opds_import import MetadataWranglerOPDSLookup, OPDSImporter
 from core.scripts import (
-    Script as CoreScript,
+    CollectionType,
     DatabaseMigrationInitializationScript,
     IdentifierInputScript,
     LaneSweeperScript,
     LibraryInputScript,
+    OPDSImportScript,
     PatronInputScript,
-    TimestampScript,
 )
+from core.scripts import Script as CoreScript
+from core.scripts import TimestampScript
 from core.util import LanguageCodes
-from core.util.opds_writer import (
-    OPDSFeed,
-)
 from core.util.datetime_helpers import utc_now
+from core.util.opds_writer import OPDSFeed
 
 
 class Script(CoreScript):

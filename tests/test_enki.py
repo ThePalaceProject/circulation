@@ -1,8 +1,22 @@
-import pytest
 import datetime
+import json
 import os
 import pkgutil
-import json
+
+import pytest
+
+from api.authenticator import BasicAuthenticationProvider
+from api.circulation import FulfillmentInfo, LoanInfo
+from api.circulation_exceptions import *
+from api.config import CannotLoadConfiguration
+from api.enki import (
+    BibliographicParser,
+    EnkiAPI,
+    EnkiCollectionReaper,
+    EnkiImport,
+    MockEnkiAPI,
+)
+from core.metadata_layer import CirculationData, Metadata, TimestampData
 from core.model import (
     CirculationEvent,
     ConfigurationSetting,
@@ -20,37 +34,14 @@ from core.model import (
     Subject,
     Work,
 )
-from core.testing import DatabaseTest
-from api.authenticator import BasicAuthenticationProvider
-from api.circulation import (
-    FulfillmentInfo,
-    LoanInfo,
-)
-from api.circulation_exceptions import *
-from api.config import CannotLoadConfiguration
-from api.enki import (
-    BibliographicParser,
-    EnkiAPI,
-    EnkiCollectionReaper,
-    EnkiImport,
-    MockEnkiAPI,
-)
-from core.metadata_layer import (
-    CirculationData,
-    Metadata,
-    TimestampData,
-)
 from core.scripts import RunCollectionCoverageProviderScript
-from core.util.datetime_helpers import (
-    datetime_utc,
-    utc_now,
-)
+from core.testing import DatabaseTest, MockRequestsResponse
+from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.http import (
     BadResponseException,
     RemoteIntegrationException,
     RequestTimedOut,
 )
-from core.testing import MockRequestsResponse
 
 
 class BaseEnkiTest(DatabaseTest):

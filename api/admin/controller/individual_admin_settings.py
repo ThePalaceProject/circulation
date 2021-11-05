@@ -1,19 +1,16 @@
-from . import SettingsController
+import json
+
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
-import json
-from core.model import (
-    Admin,
-    AdminRole,
-    Library,
-    get_one,
-    get_one_or_create,
-)
-from core.util.problem_detail import ProblemDetail
+
 from api.admin.exceptions import *
 from api.admin.problem_details import *
 from api.admin.validator import Validator
+from core.model import Admin, AdminRole, Library, get_one, get_one_or_create
+from core.util.problem_detail import ProblemDetail
+
+from . import SettingsController
 
 
 class IndividualAdminSettingsController(SettingsController):

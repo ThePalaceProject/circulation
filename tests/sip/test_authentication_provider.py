@@ -1,18 +1,14 @@
+import json
 from datetime import datetime
 
 import pytest
-from api.sip.client import (
-    MockSIPClient,
-    MockSIPClientFactory,
-)
 
-from api.sip import SIP2AuthenticationProvider
-from core.util.http import RemoteIntegrationException
 from api.authenticator import PatronData
-import json
+from api.sip import SIP2AuthenticationProvider
+from api.sip.client import MockSIPClient, MockSIPClientFactory
 from core.config import CannotLoadConfiguration
-
 from core.testing import DatabaseTest
+from core.util.http import RemoteIntegrationException
 
 
 class TestSIP2AuthenticationProvider(DatabaseTest):

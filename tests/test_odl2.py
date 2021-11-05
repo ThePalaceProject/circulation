@@ -3,8 +3,6 @@ import json
 import os
 
 import requests_mock
-from api.odl import ODLImporter
-from api.odl2 import ODL2API, ODL2APIConfiguration, ODL2ExpiredItemsReaper, ODL2Importer
 from freezegun import freeze_time
 from mock import MagicMock
 from webpub_manifest_parser.core.ast import PresentationMetadata
@@ -14,6 +12,8 @@ from webpub_manifest_parser.odl.semantic import (
     ODL_PUBLICATION_MUST_CONTAIN_EITHER_LICENSES_OR_OA_ACQUISITION_LINK_ERROR,
 )
 
+from api.odl import ODLImporter
+from api.odl2 import ODL2API, ODL2APIConfiguration, ODL2ExpiredItemsReaper, ODL2Importer
 from core.coverage import CoverageFailure
 from core.model import (
     Contribution,

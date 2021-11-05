@@ -1,15 +1,11 @@
 from flask_babel import lazy_gettext as _
+
 from api.admin.problem_details import *
-from core.selftest import (
-    HasSelfTests,
-    SelfTestResult,
-)
 from api.simple_authentication import SimpleAuthenticationProvider
+from core.model import ExternalIntegration, create
+from core.selftest import HasSelfTests, SelfTestResult
+
 from .test_controller import SettingsControllerTest
-from core.model import (
-    create,
-    ExternalIntegration,
-)
 
 
 class TestPatronAuthSelfTests(SettingsControllerTest):

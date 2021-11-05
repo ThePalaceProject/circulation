@@ -5,15 +5,11 @@ import logging
 import os
 import sys
 import urllib.parse
-from datetime import (
-    date,
-    datetime,
-    timedelta,
-)
+from datetime import date, datetime, timedelta
 
 import flask
 import jwt
-from flask import redirect, Response
+from flask import Response, redirect
 from flask_babel import lazy_gettext as _
 from sqlalchemy.sql import func
 from sqlalchemy.sql.expression import and_, desc, distinct, join, nullslast, select
@@ -23,10 +19,7 @@ from api.admin.exceptions import *
 from api.admin.google_oauth_admin_authentication_provider import (
     GoogleOAuthAdminAuthenticationProvider,
 )
-from api.admin.opds import (
-    AdminAnnotator,
-    AdminFeed,
-)
+from api.admin.opds import AdminAnnotator, AdminFeed
 from api.admin.password_admin_authentication_provider import (
     PasswordAdminAuthenticationProvider,
 )
@@ -45,23 +38,15 @@ from api.lanes import create_default_lanes
 from api.lcp.collection import LCPAPI
 from api.local_analytics_exporter import LocalAnalyticsExporter
 from api.odilo import OdiloAPI
-from api.odl import (
-    ODLAPI,
-    SharedODLAPI,
-)
+from api.odl import ODLAPI, SharedODLAPI
 from api.odl2 import ODL2API
 from api.opds_for_distributors import OPDSForDistributorsAPI
 from api.overdrive import OverdriveAPI
 from api.proquest.importer import ProQuestOPDS2Importer
-from core.app_server import (
-    load_pagination_from_request,
-)
+from core.app_server import load_pagination_from_request
 from core.classifier import genres
 from core.external_search import ExternalSearchIndex
-from core.lane import (
-    Lane,
-    WorkList,
-)
+from core.lane import Lane, WorkList
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.model import (
     Admin,
@@ -69,13 +54,10 @@ from core.model import (
     CirculationEvent,
     Collection,
     ConfigurationSetting,
-    create,
     CustomList,
     CustomListEntry,
     DataSource,
     ExternalIntegration,
-    get_one,
-    get_one_or_create,
     Hold,
     Identifier,
     Library,
@@ -84,6 +66,9 @@ from core.model import (
     Patron,
     Timestamp,
     Work,
+    create,
+    get_one,
+    get_one_or_create,
 )
 from core.model.configuration import ExternalIntegrationLink
 from core.opds import AcquisitionFeed
@@ -140,10 +125,10 @@ def setup_admin_controllers(manager):
     from api.admin.controller.metadata_services import MetadataServicesController
 
     manager.admin_metadata_services_controller = MetadataServicesController(manager)
-    from api.admin.controller.patron_auth_services import PatronAuthServicesController
     from api.admin.controller.metadata_service_self_tests import (
         MetadataServiceSelfTestsController,
     )
+    from api.admin.controller.patron_auth_services import PatronAuthServicesController
 
     manager.admin_metadata_service_self_tests_controller = (
         MetadataServiceSelfTestsController(manager)
@@ -194,9 +179,9 @@ def setup_admin_controllers(manager):
         IndividualAdminSettingsController(manager)
     )
     from api.admin.controller.sitewide_services import (
-        SitewideServicesController,
         LoggingServicesController,
         SearchServicesController,
+        SitewideServicesController,
     )
 
     manager.admin_sitewide_services_controller = SitewideServicesController(manager)

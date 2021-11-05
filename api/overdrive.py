@@ -1,33 +1,17 @@
 import datetime
-import dateutil
 import json
-import pytz
 import re
-import requests
-import flask
 import urllib.parse
-from flask_babel import lazy_gettext as _
 
+import dateutil
+import flask
+import pytz
+import requests
+from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import contains_eager
 
-from .circulation import (
-    DeliveryMechanismInfo,
-    LoanInfo,
-    HoldInfo,
-    FulfillmentInfo,
-    BaseCirculationAPI,
-)
-from .selftest import (
-    HasSelfTests,
-    SelfTestResult,
-)
-from core.overdrive import (
-    OverdriveAPI as BaseOverdriveAPI,
-    OverdriveRepresentationExtractor,
-    OverdriveBibliographicCoverageProvider,
-    MockOverdriveAPI as BaseMockOverdriveAPI,
-)
-
+from core.analytics import Analytics
+from core.metadata_layer import ReplacementPolicy
 from core.model import (
     CirculationEvent,
     Collection,
@@ -44,19 +28,26 @@ from core.model import (
     Representation,
     Session,
 )
-
-from core.monitor import (
-    CollectionMonitor,
-    IdentifierSweepMonitor,
-    TimelineMonitor,
+from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
+from core.overdrive import MockOverdriveAPI as BaseMockOverdriveAPI
+from core.overdrive import OverdriveAPI as BaseOverdriveAPI
+from core.overdrive import (
+    OverdriveBibliographicCoverageProvider,
+    OverdriveRepresentationExtractor,
 )
+from core.scripts import Script
 from core.util.datetime_helpers import strptime_utc
 from core.util.http import HTTP
-from core.metadata_layer import ReplacementPolicy
-from core.scripts import Script
 
+from .circulation import (
+    BaseCirculationAPI,
+    DeliveryMechanismInfo,
+    FulfillmentInfo,
+    HoldInfo,
+    LoanInfo,
+)
 from .circulation_exceptions import *
-from core.analytics import Analytics
+from .selftest import HasSelfTests, SelfTestResult
 
 
 class OverdriveAPIConstants(object):
