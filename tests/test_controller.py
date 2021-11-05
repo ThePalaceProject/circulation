@@ -5803,7 +5803,7 @@ class TestScopedSession(ControllerTest):
             # When the index controller runs in the request context,
             # it doesn't store anything that's associated with the
             # scoped session.
-            flask.request.library = self._default_library
+            flask.request.library = self.library
             response = self.app.manager.index_controller()
             assert 302 == response.status_code
 
@@ -5832,7 +5832,7 @@ class TestScopedSession(ControllerTest):
             # The controller still works in the new request context -
             # nothing it needs is associated with the previous scoped
             # session.
-            flask.request.library = self._default_library
+            flask.request.library = self.library
             response = self.app.manager.index_controller()
             assert 302 == response.status_code
 
