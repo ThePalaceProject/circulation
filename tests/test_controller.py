@@ -54,7 +54,7 @@ from api.lanes import (
     create_default_lanes,
 )
 from api.novelist import MockNoveListAPI
-from api.odl import ODLAPI, MockODLAPI
+from api.odl import ODLAPI
 from api.odl2 import ODL2API
 from api.opds import (
     CirculationManagerAnnotator,
@@ -136,6 +136,7 @@ from core.util.http import RemoteIntegrationException
 from core.util.opds_writer import OPDSFeed
 from core.util.problem_detail import ProblemDetail
 from core.util.string_helpers import base64
+from tests.test_odl import BaseODLTest
 
 
 class ControllerTest(VendorIDTest):
@@ -4789,7 +4790,7 @@ class TestCrawlableFeed(CirculationControllerTest):
         # A specific annotator _is_ created for an ODL collection:
         # A SharedCollectionAnnotator that knows about the Collection
         # _and_ the WorkList.
-        collection.protocol = MockODLAPI.NAME
+        collection.protocol = ODLAPI.NAME
         with self.app.test_request_context("/"):
             with self.mock_crawlable_feed():
                 response = controller.crawlable_collection_feed(
@@ -5341,17 +5342,19 @@ class TestDeviceManagementProtocolController(ControllerTest):
             assert "Only DELETE is supported." == response.detail
 
 
-class TestODLNotificationController(ControllerTest):
+class TestODLNotificationController(ControllerTest, BaseODLTest):
     """Test that an ODL distributor can notify the circulation manager
     when a loan's status changes."""
 
-    @parameterized.expand(
-        [("ODL 1.x collection", ODLAPI.NAME), ("ODL 2.x collection", ODL2API.NAME)]
+    @pytest.mark.parametrize(
+        "protocol",
+        [
+            pytest.param(ODLAPI.NAME, id="ODL 1.x collection"),
+            pytest.param(ODL2API.NAME, id="ODL 2.x collection"),
+        ],
     )
-    def test_notify_success(self, _, protocol: str) -> None:
-        collection = MockODLAPI.mock_collection(self._db, protocol)
-        patron = self._patron()
-        pool = self._licensepool(None, collection=collection)
+    def test_notify_success(self, collection, patron, pool, protocol):
+        collection.external_integration.protocol = protocol
         pool.licenses_owned = 10
         pool.licenses_available = 5
         loan, ignore = pool.loan_to(patron)

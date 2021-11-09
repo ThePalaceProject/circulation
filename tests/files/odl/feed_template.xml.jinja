@@ -48,7 +48,7 @@
 
         {% for license in licenses %}
             <odl:license>
-                <dcterms:identifier xsi:type="dcterms:URI">urn:uuid:{{ license.identifier }}</dcterms:identifier>
+                <dcterms:identifier xsi:type="dcterms:URI">{{ license.identifier }}</dcterms:identifier>
                 <dcterms:format>application/epub+zip</dcterms:format>
                 <dcterms:format>text/html</dcterms:format>
                 <dcterms:source>http://www.cantook.net/</dcterms:source>
@@ -56,16 +56,16 @@
                 <dcterms:source>cant-2461538-24501117858552614-libraries</dcterms:source>
                 <created>2020-03-02T20:20:17+01:00</created>
                 <odl:terms>
-                    {% if license.total_checkouts is not none %}
-                        <odl:total_checkouts>{{ license.total_checkouts }}</odl:total_checkouts>
+                    {% if license.checkouts is not none %}
+                        <odl:total_checkouts>{{ license.checkouts }}</odl:total_checkouts>
                     {% endif %}
 
-                    {% if license.concurrent_checkouts is not none %}
-                        <odl:concurrent_checkouts>{{ license.concurrent_checkouts }}</odl:concurrent_checkouts>
+                    {% if license.concurrency is not none %}
+                        <odl:concurrent_checkouts>{{ license.concurrency }}</odl:concurrent_checkouts>
                     {% endif %}
 
                     {% if license.expires is not none %}
-                        <odl:expires>{{ license.expires.isoformat() }}</odl:expires>
+                        <odl:expires>{{ license.expires }}</odl:expires>
                     {% endif %}
 
                     <odl:maximum_checkout_length>5097600</odl:maximum_checkout_length>
