@@ -174,7 +174,11 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
             skipped_license_formats = configuration.skipped_license_formats
 
             if skipped_license_formats:
-                skipped_license_formats = set(json.loads(skipped_license_formats))
+                skipped_license_formats = (
+                    set(json.loads(skipped_license_formats))
+                    if isinstance(skipped_license_formats, str)
+                    else set(skipped_license_formats)
+                )
 
         if publication.licenses:
             for license in publication.licenses:
