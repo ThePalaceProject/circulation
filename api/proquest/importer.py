@@ -87,10 +87,10 @@ class ProQuestOPDS2ImporterConfiguration(ConfigurationGrouping):
 
     DEFAULT_TOKEN_EXPIRATION_TIMEOUT_SECONDS = 60 * 60
     TEST_AFFILIATION_ID = 1
-    DEFAULT_AFFILIATION_ATTRIBUTES = (
+    DEFAULT_AFFILIATION_ATTRIBUTES = [
         SAMLAttributeType.eduPersonPrincipalName.name,
         SAMLAttributeType.eduPersonScopedAffiliation.name,
-    )
+    ]
 
     data_source_name = ConfigurationMetadata(
         key=Collection.DATA_SOURCE_NAME_SETTING,
