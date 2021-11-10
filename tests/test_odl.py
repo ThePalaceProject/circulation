@@ -21,7 +21,7 @@ from api.odl import (
     ODLHoldReaper,
     ODLImporter,
     SharedODLAPI,
-    SharedODLImporter,
+    SharedODLImporter, ODLAPIConfiguration,
 )
 from core.model import (
     Collection,
@@ -76,6 +76,12 @@ class TestODLAPI(DatabaseTest, BaseODLTest):
         self.client = self._integration_client()
 
     def test_get_license_status_document_success(self):
+        self.license = self._license(
+            self.pool,
+            checkout_url="https://loan.feedbooks.net/loan/get/{?id,checkout_id,expires,patron_id,notification_url,hint,hint_url}",
+            concurrent_checkouts=1,
+        )
+
         # With a new loan.
         loan, ignore = self.license.loan_to(self.patron)
         self.api.queue_response(200, content=json.dumps(dict(status="ready")))
@@ -86,6 +92,9 @@ class TestODLAPI(DatabaseTest, BaseODLTest):
         assert "https" == parsed.scheme
         assert "loan.feedbooks.net" == parsed.netloc
         params = urllib.parse.parse_qs(parsed.query)
+
+        assert ODLAPIConfiguration.passphrase_hint.default == params.get("hint")[0]
+        assert ODLAPIConfiguration.passphrase_hint_url.default == params.get("hint_url")[0]
 
         assert self.license.identifier == params.get("id")[0]
 
