@@ -1,19 +1,23 @@
-from . import SettingsController
+import json
+
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
-import json
+
 from api.admin.problem_details import *
 from core.model import (
     Collection,
     ConfigurationSetting,
     ExternalIntegration,
+    Library,
     get_one,
     get_one_or_create,
-    Library,
 )
-from core.util.problem_detail import ProblemDetail
 from core.model.configuration import ExternalIntegrationLink
+from core.util.problem_detail import ProblemDetail
+
+from . import SettingsController
+
 
 class CollectionSettingsController(SettingsController):
     def __init__(self, manager):
@@ -21,17 +25,19 @@ class CollectionSettingsController(SettingsController):
         self.type = _("collection")
 
     def _get_collection_protocols(self):
-        protocols = super(CollectionSettingsController, self)._get_collection_protocols(self.PROVIDER_APIS)
+        protocols = super(CollectionSettingsController, self)._get_collection_protocols(
+            self.PROVIDER_APIS
+        )
         # If there are storage integrations, add a mirror integration
         # setting to every protocol's 'settings' block.
         mirror_integration_settings = self._mirror_integration_settings()
         if mirror_integration_settings:
             for protocol in protocols:
-                protocol['settings'] += mirror_integration_settings
+                protocol["settings"] += mirror_integration_settings
         return protocols
 
     def process_collections(self):
-        if flask.request.method == 'GET':
+        if flask.request.method == "GET":
             return self.process_get()
         else:
             return self.process_post()
@@ -42,22 +48,34 @@ class CollectionSettingsController(SettingsController):
         user = flask.request.admin
         collections = []
         protocolClass = None
-        for collection_object in self._db.query(Collection).order_by(Collection.name).all():
+        for collection_object in (
+            self._db.query(Collection).order_by(Collection.name).all()
+        ):
             if not user or not user.can_see_collection(collection_object):
                 continue
 
             collection_dict = self.collection_to_dict(collection_object)
 
             if collection_object.protocol in [p.get("name") for p in protocols]:
-                [protocol] = [p for p in protocols if p.get("name") == collection_object.protocol]
+                [protocol] = [
+                    p for p in protocols if p.get("name") == collection_object.protocol
+                ]
                 libraries = self.load_libraries(collection_object, user, protocol)
-                collection_dict['libraries'] = libraries
-                settings = self.load_settings(protocol.get("settings"), collection_object, collection_dict.get("settings"))
-                collection_dict['settings'] = settings
+                collection_dict["libraries"] = libraries
+                settings = self.load_settings(
+                    protocol.get("settings"),
+                    collection_object,
+                    collection_dict.get("settings"),
+                )
+                collection_dict["settings"] = settings
                 protocolClass = self.find_protocol_class(collection_object)
 
-            collection_dict["self_test_results"] = self._get_prior_test_results(collection_object, protocolClass)
-            collection_dict["marked_for_deletion"] = collection_object.marked_for_deletion
+            collection_dict["self_test_results"] = self._get_prior_test_results(
+                collection_object, protocolClass
+            )
+            collection_dict[
+                "marked_for_deletion"
+            ] = collection_object.marked_for_deletion
 
             collections.append(collection_dict)
 
@@ -82,8 +100,11 @@ class CollectionSettingsController(SettingsController):
         for library in collection_object.libraries:
             if not user or not user.is_librarian(library):
                 continue
-            libraries.append(self._get_integration_library_info(
-                    collection_object.external_integration, library, protocol))
+            libraries.append(
+                self._get_integration_library_info(
+                    collection_object.external_integration, library, protocol
+                )
+            )
 
         return libraries
 
@@ -97,19 +118,22 @@ class CollectionSettingsController(SettingsController):
                 continue
             key = protocol_setting.get("key")
             if not collection_settings or key not in collection_settings:
-                if key.endswith('mirror_integration_id'):
+                if key.endswith("mirror_integration_id"):
                     storage_integration = get_one(
-                        self._db, ExternalIntegrationLink,
+                        self._db,
+                        ExternalIntegrationLink,
                         external_integration_id=collection_object.external_integration_id,
                         # either 'books_mirror' or 'covers_mirror'
-                        purpose=key.rsplit('_', 2)[0]
+                        purpose=key.rsplit("_", 2)[0],
                     )
                     if storage_integration:
                         value = str(storage_integration.other_integration_id)
                     else:
                         value = self.NO_MIRROR_INTEGRATION
                 elif protocol_setting.get("type") in ("list", "menu"):
-                    value = collection_object.external_integration.setting(key).json_value
+                    value = collection_object.external_integration.setting(
+                        key
+                    ).json_value
                 else:
                     value = collection_object.external_integration.setting(key).value
                 settings[key] = value
@@ -120,7 +144,9 @@ class CollectionSettingsController(SettingsController):
         """Figure out which class this collection's protocol belongs to, from the list
         of possible protocols defined in PROVIDER_APIS (in SettingsController)"""
 
-        protocolClassFound = [p for p in self.PROVIDER_APIS if p.NAME == collection_object.protocol]
+        protocolClassFound = [
+            p for p in self.PROVIDER_APIS if p.NAME == collection_object.protocol
+        ]
         if len(protocolClassFound) == 1:
             return protocolClassFound[0]
 
@@ -189,7 +215,9 @@ class CollectionSettingsController(SettingsController):
             if fields.get("protocol") not in [p.get("name") for p in protocols]:
                 return UNKNOWN_PROTOCOL
             else:
-                [protocol] = [p for p in protocols if p.get("name") == fields.get("protocol")]
+                [protocol] = [
+                    p for p in protocols if p.get("name") == fields.get("protocol")
+                ]
                 wrong_format = self.validate_formats(protocol.get("settings"))
                 if wrong_format:
                     return wrong_format
@@ -202,7 +230,9 @@ class CollectionSettingsController(SettingsController):
         if fields.get("protocol") != fields.get("collection").protocol:
             return CANNOT_CHANGE_PROTOCOL
         if fields.get("name") != fields.get("collection").name:
-            collection_with_name = get_one(self._db, Collection, name=fields.get("name"))
+            collection_with_name = get_one(
+                self._db, Collection, name=fields.get("name")
+            )
             if collection_with_name:
                 return COLLECTION_NAME_ALREADY_IN_USE
 
@@ -233,8 +263,11 @@ class CollectionSettingsController(SettingsController):
         if not value and not setting.get("optional"):
             # Roll back any changes to the collection that have already been made.
             return INCOMPLETE_CONFIGURATION.detailed(
-                _("The collection configuration is missing a required setting: %(setting)s",
-                  setting=setting.get("label")))
+                _(
+                    "The collection configuration is missing a required setting: %(setting)s",
+                    setting=setting.get("label"),
+                )
+            )
 
     def process_settings(self, settings, collection):
         """Go through the settings that the user has just submitted for this collection,
@@ -249,39 +282,48 @@ class CollectionSettingsController(SettingsController):
                 if error:
                     return error
                 collection.external_account_id = value
-            elif key.endswith('mirror_integration_id') and value:
+            elif key.endswith("mirror_integration_id") and value:
                 external_integration_link = self._set_external_integration_link(
-                    self._db, key, value, collection,
+                    self._db,
+                    key,
+                    value,
+                    collection,
                 )
 
                 if isinstance(external_integration_link, ProblemDetail):
                     return external_integration_link
             else:
-                result = self._set_integration_setting(collection.external_integration, setting)
+                result = self._set_integration_setting(
+                    collection.external_integration, setting
+                )
                 if isinstance(result, ProblemDetail):
                     return result
 
     def _set_external_integration_link(
-            self, _db, key, value, collection,
+        self,
+        _db,
+        key,
+        value,
+        collection,
     ):
         """Find or create a ExternalIntegrationLink and either delete it
         or update the other external integration it links to.
         """
 
         collection_service = get_one(
-            _db, ExternalIntegration,
-            id=collection.external_integration_id
+            _db, ExternalIntegration, id=collection.external_integration_id
         )
 
         storage_service = None
         other_integration_id = None
 
-        purpose = key.rsplit('_', 2)[0]
+        purpose = key.rsplit("_", 2)[0]
         external_integration_link, ignore = get_one_or_create(
-            _db, ExternalIntegrationLink,
+            _db,
+            ExternalIntegrationLink,
             library_id=None,
             external_integration_id=collection_service.id,
-            purpose=purpose
+            purpose=purpose,
         )
         if not external_integration_link:
             return MISSING_INTEGRATION
@@ -289,10 +331,7 @@ class CollectionSettingsController(SettingsController):
         if value == self.NO_MIRROR_INTEGRATION:
             _db.delete(external_integration_link)
         else:
-            storage_service = get_one(
-                _db, ExternalIntegration,
-                id=value
-            )
+            storage_service = get_one(_db, ExternalIntegration, id=value)
             if storage_service:
                 if storage_service.goal != ExternalIntegration.STORAGE_GOAL:
                     return INTEGRATION_GOAL_CONFLICT
@@ -315,12 +354,21 @@ class CollectionSettingsController(SettingsController):
             libraries = json.loads(flask.request.form.get("libraries"))
 
         for library_info in libraries:
-            library = get_one(self._db, Library, short_name=library_info.get("short_name"))
+            library = get_one(
+                self._db, Library, short_name=library_info.get("short_name")
+            )
             if not library:
-                return NO_SUCH_LIBRARY.detailed(_("You attempted to add the collection to %(library_short_name)s, but the library does not exist.", library_short_name=library_info.get("short_name")))
+                return NO_SUCH_LIBRARY.detailed(
+                    _(
+                        "You attempted to add the collection to %(library_short_name)s, but the library does not exist.",
+                        library_short_name=library_info.get("short_name"),
+                    )
+                )
             if collection not in library.collections:
                 library.collections.append(collection)
-            result = self._set_integration_library(collection.external_integration, library_info, protocol)
+            result = self._set_integration_library(
+                collection.external_integration, library_info, protocol
+            )
             if isinstance(result, ProblemDetail):
                 return result
         for library in collection.libraries:

@@ -5,32 +5,42 @@ from io import BytesIO
 from flask import send_file
 from sqlalchemy import or_
 
-from api.circulation import FulfillmentInfo, BaseCirculationAPI, LoanInfo
+from api.circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
 from api.lcp.encrypt import LCPEncryptionConfiguration
 from api.lcp.hash import HasherFactory
-from api.lcp.server import LCPServerConfiguration, LCPServer
+from api.lcp.server import LCPServer, LCPServerConfiguration
 from core.lcp.credential import LCPCredentialFactory
-from core.model import ExternalIntegration, LicensePoolDeliveryMechanism, get_one, Loan, Collection, LicensePool, \
-    DeliveryMechanism
-from core.model.configuration import HasExternalIntegration, ConfigurationStorage, ConfigurationFactory
-from core.util.datetime_helpers import (
-    utc_now,
+from core.model import (
+    Collection,
+    DeliveryMechanism,
+    ExternalIntegration,
+    LicensePool,
+    LicensePoolDeliveryMechanism,
+    Loan,
+    get_one,
 )
+from core.model.configuration import (
+    ConfigurationFactory,
+    ConfigurationStorage,
+    HasExternalIntegration,
+)
+from core.util.datetime_helpers import utc_now
 
 
 class LCPFulfilmentInfo(FulfillmentInfo):
     """Sends LCP licenses as fulfilment info"""
 
     def __init__(
-            self,
-            identifier,
-            collection,
-            data_source_name,
-            identifier_type,
-            content_link=None,
-            content_type=None,
-            content=None,
-            content_expires=None):
+        self,
+        identifier,
+        collection,
+        data_source_name,
+        identifier_type,
+        content_link=None,
+        content_type=None,
+        content=None,
+        content_expires=None,
+    ):
         """Initializes a new instance of LCPFulfilmentInfo class
 
         :param identifier: Identifier
@@ -65,7 +75,7 @@ class LCPFulfilmentInfo(FulfillmentInfo):
             content_link,
             content_type,
             content,
-            content_expires
+            content_expires,
         )
 
     @property
@@ -79,7 +89,7 @@ class LCPFulfilmentInfo(FulfillmentInfo):
             BytesIO(json.dumps(self.content)),
             mimetype=DeliveryMechanism.LCP_DRM,
             as_attachment=True,
-            attachment_filename='{0}.lcpl'.format(self.identifier)
+            attachment_filename="{0}.lcpl".format(self.identifier),
         )
 
 
@@ -87,10 +97,12 @@ class LCPAPI(BaseCirculationAPI, HasExternalIntegration):
     """Implements LCP workflow"""
 
     NAME = ExternalIntegration.LCP
-    SERVICE_NAME = 'LCP'
-    DESCRIPTION = 'Manually imported collection protected using Readium LCP DRM'
+    SERVICE_NAME = "LCP"
+    DESCRIPTION = "Manually imported collection protected using Readium LCP DRM"
 
-    SETTINGS = LCPServerConfiguration.to_settings() + LCPEncryptionConfiguration.to_settings()
+    SETTINGS = (
+        LCPServerConfiguration.to_settings() + LCPEncryptionConfiguration.to_settings()
+    )
 
     def __init__(self, db, collection):
         """Initializes a new instance of LCPAPI class
@@ -103,7 +115,9 @@ class LCPAPI(BaseCirculationAPI, HasExternalIntegration):
         """
         if collection.protocol != ExternalIntegration.LCP:
             raise ValueError(
-                'Collection protocol is {0} but must be LCPAPI'.format(collection.protocol)
+                "Collection protocol is {0} but must be LCPAPI".format(
+                    collection.protocol
+                )
             )
 
         self._db = db
@@ -149,7 +163,12 @@ class LCPAPI(BaseCirculationAPI, HasExternalIntegration):
         configuration_factory = ConfigurationFactory()
         hasher_factory = HasherFactory()
         credential_factory = LCPCredentialFactory()
-        lcp_server = LCPServer(configuration_storage, configuration_factory, hasher_factory, credential_factory)
+        lcp_server = LCPServer(
+            configuration_storage,
+            configuration_factory,
+            hasher_factory,
+            credential_factory,
+        )
 
         return lcp_server
 
@@ -186,17 +205,21 @@ class LCPAPI(BaseCirculationAPI, HasExternalIntegration):
         days = self.collection.default_loan_period(patron.library)
         today = utc_now()
         expires = today + datetime.timedelta(days=days)
-        loan = get_one(self._db, Loan, patron=patron, license_pool=licensepool, on_multiple='interchangeable')
+        loan = get_one(
+            self._db,
+            Loan,
+            patron=patron,
+            license_pool=licensepool,
+            on_multiple="interchangeable",
+        )
 
         if loan:
-            license = self._lcp_server.get_license(self._db, loan.external_identifier, patron)
+            license = self._lcp_server.get_license(
+                self._db, loan.external_identifier, patron
+            )
         else:
             license = self._lcp_server.generate_license(
-                self._db,
-                licensepool.identifier.identifier,
-                patron,
-                today,
-                expires
+                self._db, licensepool.identifier.identifier, patron, today, expires
             )
 
         loan = LoanInfo(
@@ -207,12 +230,20 @@ class LCPAPI(BaseCirculationAPI, HasExternalIntegration):
             start_date=today,
             end_date=expires,
             fulfillment_info=None,
-            external_identifier=license['id']
+            external_identifier=license["id"],
         )
 
         return loan
 
-    def fulfill(self, patron, pin, licensepool, internal_format=None, part=None, fulfill_part_url=None):
+    def fulfill(
+        self,
+        patron,
+        pin,
+        licensepool,
+        internal_format=None,
+        part=None,
+        fulfill_part_url=None,
+    ):
         """Get the actual resource file to the patron.
 
         :param patron: A Patron object for the patron who wants to check out the book
@@ -240,8 +271,16 @@ class LCPAPI(BaseCirculationAPI, HasExternalIntegration):
         :return: a FulfillmentInfo object
         :rtype: FulfillmentInfo
         """
-        loan = get_one(self._db, Loan, patron=patron, license_pool=licensepool, on_multiple='interchangeable')
-        license = self._lcp_server.get_license(self._db, loan.external_identifier, patron)
+        loan = get_one(
+            self._db,
+            Loan,
+            patron=patron,
+            license_pool=licensepool,
+            on_multiple="interchangeable",
+        )
+        license = self._lcp_server.get_license(
+            self._db, loan.external_identifier, patron
+        )
         fulfillment_info = LCPFulfilmentInfo(
             licensepool.identifier.identifier,
             licensepool.collection,
@@ -268,38 +307,35 @@ class LCPAPI(BaseCirculationAPI, HasExternalIntegration):
         :rtype: List[LoanInfo]
         """
         now = utc_now()
-        loans = self._db\
-            .query(Loan)\
-            .join(LicensePool)\
-            .join(Collection)\
+        loans = (
+            self._db.query(Loan)
+            .join(LicensePool)
+            .join(Collection)
             .filter(
                 Collection.id == self._collection_id,
                 Loan.patron == patron,
-                or_(
-                    Loan.start is None,
-                    Loan.start <= now
-                ),
-                or_(
-                    Loan.end is None,
-                    Loan.end > now
-                )
+                or_(Loan.start is None, Loan.start <= now),
+                or_(Loan.end is None, Loan.end > now),
             )
+        )
 
         loan_info_objects = []
 
         for loan in loans:
             licensepool = get_one(self._db, LicensePool, id=loan.license_pool_id)
 
-            loan_info_objects.append(LoanInfo(
-                collection=self.collection,
-                data_source_name=licensepool.data_source.name,
-                identifier_type=licensepool.identifier.type,
-                identifier=licensepool.identifier.identifier,
-                start_date=loan.start,
-                end_date=loan.end,
-                fulfillment_info=None,
-                external_identifier=loan.external_identifier
-            ))
+            loan_info_objects.append(
+                LoanInfo(
+                    collection=self.collection,
+                    data_source_name=licensepool.data_source.name,
+                    identifier_type=licensepool.identifier.type,
+                    identifier=licensepool.identifier.identifier,
+                    start_date=loan.start,
+                    end_date=loan.end,
+                    fulfillment_info=None,
+                    external_identifier=loan.external_identifier,
+                )
+            )
 
         return loan_info_objects
 

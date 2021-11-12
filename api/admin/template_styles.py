@@ -15,9 +15,12 @@ label_style = """
     font-weight: 700;
 """
 
-error_style = body_style + """
+error_style = (
+    body_style
+    + """
     border-color: #D0343A;
 """
+)
 input_style = """
     border-radius: .25em;
     display: block;
@@ -65,10 +68,13 @@ link_style = """
     margin: 2vh auto;
 """
 
-small_link_style = link_style + """
+small_link_style = (
+    link_style
+    + """
     width: 5vw;
     margin-bottom: 0;
 """
+)
 
 hr_style = """
     width: 10vw;

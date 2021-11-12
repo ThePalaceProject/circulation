@@ -9,7 +9,7 @@ package_dir = os.path.join(bin_dir, "..", "..")
 sys.path.append(os.path.abspath(package_dir))
 
 from api.authenticator import LibraryAuthenticator, PatronData  # noqa: E402
-from core.scripts import LibraryInputScript                     # noqa: E402
+from core.scripts import LibraryInputScript  # noqa: E402
 
 
 class PatronInformationScript(LibraryInputScript):

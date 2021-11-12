@@ -1,28 +1,26 @@
 import contextlib
 import logging
 
-import pytest
 import flask
+import pytest
 from flask import Response
 from werkzeug.exceptions import MethodNotAllowed
 
+from api import app, routes
+from api.controller import CirculationManager
+from api.opds import CirculationManagerAnnotator
+from api.routes import exception_handler
+from api.routes import h as error_handler_object
 from core.app_server import ErrorHandler
 
-from api import app
-from api import routes
-from api.opds import CirculationManagerAnnotator
-from api.controller import CirculationManager
-from api.routes import (
-    exception_handler,
-    h as error_handler_object,
-)
-
 from .test_controller import ControllerTest
+
 
 class MockApp(object):
     """Pretends to be a Flask application with a configured
     CirculationManager.
     """
+
     def __init__(self):
         self.manager = MockManager()
 
@@ -37,12 +35,12 @@ class MockManager(object):
         self.patron_web_domains = set(["http://patron/web"])
 
     def __getattr__(self, controller_name):
-        return self._cache.setdefault(
-            controller_name, MockController(controller_name)
-        )
+        return self._cache.setdefault(controller_name, MockController(controller_name))
+
 
 class MockControllerMethod(object):
     """Pretends to be one of the methods of a controller class."""
+
     def __init__(self, controller, name):
         """Constructor.
 
@@ -66,9 +64,8 @@ class MockControllerMethod(object):
         return response
 
     def __repr__(self):
-        return "<MockControllerMethod %s.%s>" % (
-            self.controller.name, self.name
-        )
+        return "<MockControllerMethod %s.%s>" % (self.controller.name, self.name)
+
 
 class MockController(MockControllerMethod):
     """Pretends to be a controller.
@@ -76,6 +73,7 @@ class MockController(MockControllerMethod):
     A controller has methods, but it may also be called _as_ a method,
     so this class subclasses MockControllerMethod.
     """
+
     AUTHENTICATED_PATRON = "i am a mock patron"
 
     def __init__(self, name):
@@ -87,7 +85,7 @@ class MockController(MockControllerMethod):
 
         # If this controller were to be called as a method, the method
         # name would be __call__, not the name of the controller.
-        self.callable_name = '__call__'
+        self.callable_name = "__call__"
 
         self._cache = {}
         self.authenticated = False
@@ -101,8 +99,7 @@ class MockController(MockControllerMethod):
             return self.AUTHENTICATED_PATRON
         else:
             return Response(
-                "authenticated_patron_from_request called without authorizing",
-                401
+                "authenticated_patron_from_request called without authorizing", 401
             )
 
     def __getattr__(self, method_name):
@@ -116,7 +113,7 @@ class MockController(MockControllerMethod):
 
 
 class RouteTestFixtures(object):
-    def request(self, url, method='GET'):
+    def request(self, url, method="GET"):
         """Simulate a request to a URL without triggering any code outside
         routes.py.
         """
@@ -135,7 +132,7 @@ class RouteTestFixtures(object):
         the given controller `method` was called with the
         given `args` and `kwargs`.
         """
-        http_method = kwargs.pop('http_method', 'GET')
+        http_method = kwargs.pop("http_method", "GET")
         response = self.request(url, http_method)
         assert response.method == method
         assert response.method.args == args
@@ -153,7 +150,9 @@ class RouteTestFixtures(object):
             # the mock method. This might remove the need to call the
             # mock method at all.
 
-    def assert_request_calls_method_using_identifier(self, url, method, *args, **kwargs):
+    def assert_request_calls_method_using_identifier(
+        self, url, method, *args, **kwargs
+    ):
         # Call an assertion method several times, using different
         # types of identifier in the URL, to make sure the identifier
         # is always passed through correctly.
@@ -161,22 +160,23 @@ class RouteTestFixtures(object):
         # The url must contain the string '<identifier>' standing in
         # for the place where an identifier should be plugged in, and
         # the *args list must include the string '<identifier>'.
-        authenticated = kwargs.pop('authenticated', False)
+        authenticated = kwargs.pop("authenticated", False)
         if authenticated:
             assertion_method = self.assert_authenticated_request_calls
         else:
             assertion_method = self.assert_request_calls
-        assert '<identifier>' in url
+        assert "<identifier>" in url
         args = list(args)
-        identifier_index = args.index('<identifier>')
+        identifier_index = args.index("<identifier>")
         for identifier in (
-            '<identifier>', 'an/identifier/', 'http://an-identifier/', 'http://an-identifier',
+            "<identifier>",
+            "an/identifier/",
+            "http://an-identifier/",
+            "http://an-identifier",
         ):
-            modified_url = url.replace('<identifier>', identifier)
+            modified_url = url.replace("<identifier>", identifier)
             args[identifier_index] = identifier
-            assertion_method(
-                modified_url, method, *args, **kwargs
-            )
+            assertion_method(modified_url, method, *args, **kwargs)
 
     def assert_authenticated_request_calls(self, url, method, *args, **kwargs):
         """First verify that an unauthenticated request fails. Then make an
@@ -185,12 +185,14 @@ class RouteTestFixtures(object):
         """
         authentication_required = kwargs.pop("authentication_required", True)
 
-        http_method = kwargs.pop('http_method', 'GET')
+        http_method = kwargs.pop("http_method", "GET")
         response = self.request(url, http_method)
         if authentication_required:
             assert 401 == response.status_code
-            assert ("authenticated_patron_from_request called without authorizing" ==
-                response.get_data(as_text=True))
+            assert (
+                "authenticated_patron_from_request called without authorizing"
+                == response.get_data(as_text=True)
+            )
         else:
             assert 200 == response.status_code
 
@@ -198,7 +200,7 @@ class RouteTestFixtures(object):
         # will succeed, and try again.
         self.manager.index_controller.authenticated = True
         try:
-            kwargs['http_method'] = http_method
+            kwargs["http_method"] = http_method
             self.assert_request_calls(url, method, *args, **kwargs)
         finally:
             # Un-set authentication for the benefit of future
@@ -212,12 +214,12 @@ class RouteTestFixtures(object):
         # The simplest way to do this seems to be to try each of the
         # other potential methods and verify that MethodNotAllowed is
         # raised each time.
-        check = set(['GET', 'POST', 'PUT', 'DELETE']) - set(methods)
+        check = set(["GET", "POST", "PUT", "DELETE"]) - set(methods)
         # Treat HEAD specially. Any controller that supports GET
         # automatically supports HEAD. So we only assert that HEAD
         # fails if the method supports neither GET nor HEAD.
-        if 'GET' not in methods and 'HEAD' not in methods:
-            check.add('HEAD')
+        if "GET" not in methods and "HEAD" not in methods:
+            check.add("HEAD")
         for method in check:
             logging.debug("MethodNotAllowed should be raised on %s", method)
             pytest.raises(MethodNotAllowed, self.request, url, method)
@@ -260,11 +262,11 @@ class RouteTest(ControllerTest, RouteTestFixtures):
         self.routes = routes
         self.manager = app.manager
         self.original_app = self.routes.app
-        self.resolver = self.original_app.url_map.bind('', '/')
+        self.resolver = self.original_app.url_map.bind("", "/")
 
         # For convenience, set self.controller to a specific controller
         # whose routes are being tested.
-        controller_name = getattr(self, 'CONTROLLER_NAME', None)
+        controller_name = getattr(self, "CONTROLLER_NAME", None)
         if controller_name:
             self.controller = getattr(self.manager, controller_name)
 
@@ -295,21 +297,21 @@ class TestIndex(RouteTest):
     CONTROLLER_NAME = "index_controller"
 
     def test_index(self):
-        for url in '/', '':
+        for url in "/", "":
             self.assert_request_calls(url, self.controller)
 
     def test_authentication_document(self):
-        url = '/authentication_document'
+        url = "/authentication_document"
         self.assert_request_calls(url, self.controller.authentication_document)
 
     def test_public_key_document(self):
-        url = '/public_key_document'
+        url = "/public_key_document"
         self.assert_request_calls(url, self.controller.public_key_document)
 
 
 class TestOPDSFeed(RouteTest):
 
-    CONTROLLER_NAME = 'opds_feeds'
+    CONTROLLER_NAME = "opds_feeds"
 
     def test_acquisition_groups(self):
         # An incoming lane identifier is passed in to the groups()
@@ -317,143 +319,137 @@ class TestOPDSFeed(RouteTest):
         method = self.controller.groups
         self.assert_request_calls("/groups", method, None)
         self.assert_request_calls(
-            "/groups/<lane_identifier>", method, '<lane_identifier>'
+            "/groups/<lane_identifier>", method, "<lane_identifier>"
         )
 
     def test_feed(self):
         # An incoming lane identifier is passed in to the feed()
         # method.
-        url = '/feed'
+        url = "/feed"
         self.assert_request_calls(url, self.controller.feed, None)
-        url = '/feed/<lane_identifier>'
-        self.assert_request_calls(
-            url, self.controller.feed, '<lane_identifier>'
-        )
+        url = "/feed/<lane_identifier>"
+        self.assert_request_calls(url, self.controller.feed, "<lane_identifier>")
 
     def test_navigation_feed(self):
         # An incoming lane identifier is passed in to the navigation_feed()
         # method.
-        url = '/navigation'
+        url = "/navigation"
         self.assert_request_calls(url, self.controller.navigation, None)
-        url = '/navigation/<lane_identifier>'
-        self.assert_request_calls(
-            url, self.controller.navigation, '<lane_identifier>'
-        )
+        url = "/navigation/<lane_identifier>"
+        self.assert_request_calls(url, self.controller.navigation, "<lane_identifier>")
 
     def test_crawlable_library_feed(self):
-        url = '/crawlable'
+        url = "/crawlable"
         self.assert_request_calls(url, self.controller.crawlable_library_feed)
 
     def test_crawlable_list_feed(self):
-        url = '/lists/<list_name>/crawlable'
+        url = "/lists/<list_name>/crawlable"
         self.assert_request_calls(
-            url, self.controller.crawlable_list_feed, '<list_name>'
+            url, self.controller.crawlable_list_feed, "<list_name>"
         )
 
     def test_crawlable_collection_feed(self):
-        url = '/collections/<collection_name>/crawlable'
+        url = "/collections/<collection_name>/crawlable"
         self.assert_request_calls(
-            url, self.manager.opds_feeds.crawlable_collection_feed,
-            '<collection_name>'
+            url, self.manager.opds_feeds.crawlable_collection_feed, "<collection_name>"
         )
 
     def test_lane_search(self):
-        url = '/search'
+        url = "/search"
         self.assert_request_calls(url, self.controller.search, None)
 
-        url = '/search/<lane_identifier>'
-        self.assert_request_calls(
-            url, self.controller.search, "<lane_identifier>"
-        )
+        url = "/search/<lane_identifier>"
+        self.assert_request_calls(url, self.controller.search, "<lane_identifier>")
 
     def test_qa_feed(self):
-        url = '/feed/qa'
+        url = "/feed/qa"
         self.assert_authenticated_request_calls(url, self.controller.qa_feed)
 
     def test_qa_series_feed(self):
-        url = '/feed/qa/series'
+        url = "/feed/qa/series"
         self.assert_authenticated_request_calls(url, self.controller.qa_series_feed)
 
 
 class TestMARCRecord(RouteTest):
-    CONTROLLER_NAME = 'marc_records'
+    CONTROLLER_NAME = "marc_records"
 
     def test_marc_page(self):
         url = "/marc"
         self.assert_request_calls(url, self.controller.download_page)
 
+
 class TestSharedCollection(RouteTest):
 
-    CONTROLLER_NAME = 'shared_collection_controller'
+    CONTROLLER_NAME = "shared_collection_controller"
 
     def test_shared_collection_info(self):
-        url = '/collections/<collection_name>'
-        self.assert_request_calls(
-            url, self.controller.info, '<collection_name>'
-        )
+        url = "/collections/<collection_name>"
+        self.assert_request_calls(url, self.controller.info, "<collection_name>")
 
     def test_shared_collection_register(self):
-        url = '/collections/<collection_name>/register'
+        url = "/collections/<collection_name>/register"
         self.assert_request_calls(
-            url, self.controller.register, '<collection_name>',
-            http_method='POST'
+            url, self.controller.register, "<collection_name>", http_method="POST"
         )
-        self.assert_supported_methods(url, 'POST')
+        self.assert_supported_methods(url, "POST")
 
     def test_shared_collection_borrow_identifier(self):
-        url = '/collections/<collection_name>/<identifier_type>/<identifier>/borrow'
+        url = "/collections/<collection_name>/<identifier_type>/<identifier>/borrow"
         self.assert_request_calls_method_using_identifier(
-            url, self.controller.borrow, '<collection_name>',
-            '<identifier_type>', "<identifier>", None
+            url,
+            self.controller.borrow,
+            "<collection_name>",
+            "<identifier_type>",
+            "<identifier>",
+            None,
         )
-        self.assert_supported_methods(url, 'GET', 'POST')
+        self.assert_supported_methods(url, "GET", "POST")
 
     def test_shared_collection_borrow_hold_id(self):
-        url = '/collections/<collection_name>/holds/<hold_id>/borrow'
+        url = "/collections/<collection_name>/holds/<hold_id>/borrow"
         self.assert_request_calls(
-            url, self.controller.borrow, '<collection_name>', None, None,
-            '<hold_id>'
+            url, self.controller.borrow, "<collection_name>", None, None, "<hold_id>"
         )
-        self.assert_supported_methods(url, 'GET', 'POST')
+        self.assert_supported_methods(url, "GET", "POST")
 
     def test_shared_collection_loan_info(self):
-        url = '/collections/<collection_name>/loans/<loan_id>'
+        url = "/collections/<collection_name>/loans/<loan_id>"
         self.assert_request_calls(
-            url, self.controller.loan_info, '<collection_name>', '<loan_id>'
+            url, self.controller.loan_info, "<collection_name>", "<loan_id>"
         )
 
     def test_shared_collection_revoke_loan(self):
-        url = '/collections/<collection_name>/loans/<loan_id>/revoke'
+        url = "/collections/<collection_name>/loans/<loan_id>/revoke"
         self.assert_request_calls(
-            url, self.controller.revoke_loan, '<collection_name>', '<loan_id>'
+            url, self.controller.revoke_loan, "<collection_name>", "<loan_id>"
         )
 
     def test_shared_collection_fulfill_no_mechanism(self):
-        url = '/collections/<collection_name>/loans/<loan_id>/fulfill'
+        url = "/collections/<collection_name>/loans/<loan_id>/fulfill"
         self.assert_request_calls(
-            url, self.controller.fulfill, '<collection_name>', '<loan_id>',
-            None
+            url, self.controller.fulfill, "<collection_name>", "<loan_id>", None
         )
 
     def test_shared_collection_fulfill_with_mechanism(self):
-        url = '/collections/<collection_name>/loans/<loan_id>/fulfill/<mechanism_id>'
+        url = "/collections/<collection_name>/loans/<loan_id>/fulfill/<mechanism_id>"
         self.assert_request_calls(
-            url, self.controller.fulfill, '<collection_name>', '<loan_id>',
-            '<mechanism_id>'
+            url,
+            self.controller.fulfill,
+            "<collection_name>",
+            "<loan_id>",
+            "<mechanism_id>",
         )
 
     def test_shared_collection_hold_info(self):
-        url = '/collections/<collection_name>/holds/<hold_id>'
+        url = "/collections/<collection_name>/holds/<hold_id>"
         self.assert_request_calls(
-            url, self.controller.hold_info, '<collection_name>',
-            '<hold_id>'
+            url, self.controller.hold_info, "<collection_name>", "<hold_id>"
         )
 
     def test_shared_collection_revoke_hold(self):
-        url = '/collections/<collection_name>/holds/<hold_id>/revoke'
+        url = "/collections/<collection_name>/holds/<hold_id>/revoke"
         self.assert_request_calls(
-            url, self.controller.revoke_hold, '<collection_name>',
-            '<hold_id>'
+            url, self.controller.revoke_hold, "<collection_name>", "<hold_id>"
         )
 
 
@@ -462,9 +458,10 @@ class TestProfileController(RouteTest):
     CONTROLLER_NAME = "profiles"
 
     def test_patron_profile(self):
-        url = '/patrons/me'
+        url = "/patrons/me"
         self.assert_authenticated_request_calls(
-            url, self.controller.protocol,
+            url,
+            self.controller.protocol,
         )
 
 
@@ -473,69 +470,81 @@ class TestLoansController(RouteTest):
     CONTROLLER_NAME = "loans"
 
     def test_active_loans(self):
-        url = '/loans'
+        url = "/loans"
         self.assert_authenticated_request_calls(
-            url, self.controller.sync,
+            url,
+            self.controller.sync,
         )
-        self.assert_supported_methods(url, 'GET', 'HEAD')
+        self.assert_supported_methods(url, "GET", "HEAD")
 
     def test_borrow(self):
-        url = '/works/<identifier_type>/<identifier>/borrow'
+        url = "/works/<identifier_type>/<identifier>/borrow"
         self.assert_request_calls_method_using_identifier(
-            url, self.controller.borrow,
-            "<identifier_type>", "<identifier>", None,
-            authenticated=True
+            url,
+            self.controller.borrow,
+            "<identifier_type>",
+            "<identifier>",
+            None,
+            authenticated=True,
         )
-        self.assert_supported_methods(url, 'GET', 'PUT')
+        self.assert_supported_methods(url, "GET", "PUT")
 
-        url = '/works/<identifier_type>/<identifier>/borrow/<mechanism_id>'
+        url = "/works/<identifier_type>/<identifier>/borrow/<mechanism_id>"
         self.assert_request_calls_method_using_identifier(
-            url, self.controller.borrow,
-            "<identifier_type>", "<identifier>", "<mechanism_id>",
-            authenticated=True
+            url,
+            self.controller.borrow,
+            "<identifier_type>",
+            "<identifier>",
+            "<mechanism_id>",
+            authenticated=True,
         )
-        self.assert_supported_methods(url, 'GET', 'PUT')
+        self.assert_supported_methods(url, "GET", "PUT")
 
     def test_fulfill(self):
         # fulfill does *not* require authentication, because this
         # controller is how a no-authentication library fulfills
         # open-access titles.
-        url = '/works/<license_pool_id>/fulfill'
+        url = "/works/<license_pool_id>/fulfill"
         self.assert_request_calls(
             url, self.controller.fulfill, "<license_pool_id>", None, None
         )
 
-        url = '/works/<license_pool_id>/fulfill/<mechanism_id>'
+        url = "/works/<license_pool_id>/fulfill/<mechanism_id>"
         self.assert_request_calls(
-            url, self.controller.fulfill, "<license_pool_id>",
-            "<mechanism_id>", None
+            url, self.controller.fulfill, "<license_pool_id>", "<mechanism_id>", None
         )
 
-        url = '/works/<license_pool_id>/fulfill/<mechanism_id>/<part>'
+        url = "/works/<license_pool_id>/fulfill/<mechanism_id>/<part>"
         self.assert_request_calls(
-            url, self.controller.fulfill, "<license_pool_id>",
-            "<mechanism_id>", "<part>"
+            url,
+            self.controller.fulfill,
+            "<license_pool_id>",
+            "<mechanism_id>",
+            "<part>",
         )
 
     def test_revoke_loan_or_hold(self):
-        url = '/loans/<license_pool_id>/revoke'
+        url = "/loans/<license_pool_id>/revoke"
         self.assert_authenticated_request_calls(
-            url, self.controller.revoke, '<license_pool_id>'
+            url, self.controller.revoke, "<license_pool_id>"
         )
 
         # TODO: DELETE shouldn't be in here, but "DELETE
         # /loans/<license_pool_id>/revoke" is interpreted as an attempt
         # to match /loans/<identifier_type>/<path:identifier>, the
         # method tested directly below, which does support DELETE.
-        self.assert_supported_methods(url, 'GET', 'PUT', 'DELETE')
+        self.assert_supported_methods(url, "GET", "PUT", "DELETE")
 
     def test_loan_or_hold_detail(self):
-        url = '/loans/<identifier_type>/<identifier>'
+        url = "/loans/<identifier_type>/<identifier>"
         self.assert_request_calls_method_using_identifier(
-            url, self.controller.detail,
-            "<identifier_type>", "<identifier>", authenticated=True
+            url,
+            self.controller.detail,
+            "<identifier_type>",
+            "<identifier>",
+            authenticated=True,
         )
-        self.assert_supported_methods(url, 'GET', 'DELETE')
+        self.assert_supported_methods(url, "GET", "DELETE")
 
 
 class TestAnnotationsController(RouteTest):
@@ -543,27 +552,27 @@ class TestAnnotationsController(RouteTest):
     CONTROLLER_NAME = "annotations"
 
     def test_annotations(self):
-        url = '/annotations/'
-        self.assert_authenticated_request_calls(
-            url, self.controller.container
-        )
-        self.assert_supported_methods(url, 'HEAD', 'GET', 'POST')
+        url = "/annotations/"
+        self.assert_authenticated_request_calls(url, self.controller.container)
+        self.assert_supported_methods(url, "HEAD", "GET", "POST")
 
     def test_annotation_detail(self):
-        url = '/annotations/<annotation_id>'
+        url = "/annotations/<annotation_id>"
         self.assert_authenticated_request_calls(
-            url, self.controller.detail, '<annotation_id>'
+            url, self.controller.detail, "<annotation_id>"
         )
-        self.assert_supported_methods(url, 'HEAD', 'GET', 'DELETE')
+        self.assert_supported_methods(url, "HEAD", "GET", "DELETE")
 
     def test_annotations_for_work(self):
-        url = '/annotations/<identifier_type>/<identifier>'
+        url = "/annotations/<identifier_type>/<identifier>"
         self.assert_request_calls_method_using_identifier(
-            url, self.controller.container_for_work,
-            '<identifier_type>', "<identifier>",
-            authenticated=True
+            url,
+            self.controller.container_for_work,
+            "<identifier_type>",
+            "<identifier>",
+            authenticated=True,
         )
-        self.assert_supported_methods(url, 'GET')
+        self.assert_supported_methods(url, "GET")
 
 
 class TestURNLookupController(RouteTest):
@@ -571,8 +580,8 @@ class TestURNLookupController(RouteTest):
     CONTROLLER_NAME = "urn_lookup"
 
     def test_work(self):
-        url = '/works'
-        self.assert_request_calls(url, self.controller.work_lookup, 'work')
+        url = "/works"
+        self.assert_request_calls(url, self.controller.work_lookup, "work")
 
 
 class TestWorkController(RouteTest):
@@ -580,86 +589,90 @@ class TestWorkController(RouteTest):
     CONTROLLER_NAME = "work_controller"
 
     def test_contributor(self):
-        url = '/works/contributor/<contributor_name>'
+        url = "/works/contributor/<contributor_name>"
         self.assert_request_calls(
             url, self.controller.contributor, "<contributor_name>", None, None
         )
 
     def test_contributor_language(self):
-        url = '/works/contributor/<contributor_name>/<languages>'
+        url = "/works/contributor/<contributor_name>/<languages>"
         self.assert_request_calls(
-            url, self.controller.contributor,
-            "<contributor_name>", "<languages>", None
+            url, self.controller.contributor, "<contributor_name>", "<languages>", None
         )
 
     def test_contributor_language_audience(self):
-        url = '/works/contributor/<contributor_name>/<languages>/<audiences>'
+        url = "/works/contributor/<contributor_name>/<languages>/<audiences>"
         self.assert_request_calls(
-            url, self.controller.contributor,
-            "<contributor_name>", "<languages>", "<audiences>"
+            url,
+            self.controller.contributor,
+            "<contributor_name>",
+            "<languages>",
+            "<audiences>",
         )
 
     def test_series(self):
-        url = '/works/series/<series_name>'
+        url = "/works/series/<series_name>"
         self.assert_request_calls(
             url, self.controller.series, "<series_name>", None, None
         )
 
     def test_series_language(self):
-        url = '/works/series/<series_name>/<languages>'
+        url = "/works/series/<series_name>/<languages>"
         self.assert_request_calls(
             url, self.controller.series, "<series_name>", "<languages>", None
         )
 
     def test_series_language_audience(self):
-        url = '/works/series/<series_name>/<languages>/<audiences>'
+        url = "/works/series/<series_name>/<languages>/<audiences>"
         self.assert_request_calls(
-            url, self.controller.series, "<series_name>", "<languages>",
-            "<audiences>"
+            url, self.controller.series, "<series_name>", "<languages>", "<audiences>"
         )
 
     def test_permalink(self):
-        url = '/works/<identifier_type>/<identifier>'
+        url = "/works/<identifier_type>/<identifier>"
         self.assert_request_calls_method_using_identifier(
-            url, self.controller.permalink,
-            "<identifier_type>", "<identifier>"
+            url, self.controller.permalink, "<identifier_type>", "<identifier>"
         )
 
     def test_recommendations(self):
-        url = '/works/<identifier_type>/<identifier>/recommendations'
+        url = "/works/<identifier_type>/<identifier>/recommendations"
         self.assert_request_calls_method_using_identifier(
-            url, self.controller.recommendations,
-            "<identifier_type>", "<identifier>"
+            url, self.controller.recommendations, "<identifier_type>", "<identifier>"
         )
 
     def test_related_books(self):
-        url = '/works/<identifier_type>/<identifier>/related_books'
+        url = "/works/<identifier_type>/<identifier>/related_books"
         self.assert_request_calls_method_using_identifier(
             url, self.controller.related, "<identifier_type>", "<identifier>"
         )
 
     def test_report(self):
-        url = '/works/<identifier_type>/<identifier>/report'
+        url = "/works/<identifier_type>/<identifier>/report"
         self.assert_request_calls_method_using_identifier(
-            url, self.controller.report,
-            "<identifier_type>", "<identifier>",
+            url,
+            self.controller.report,
+            "<identifier_type>",
+            "<identifier>",
         )
-        self.assert_supported_methods(url, 'GET', 'POST')
+        self.assert_supported_methods(url, "GET", "POST")
 
 
 class TestAnalyticsController(RouteTest):
     CONTROLLER_NAME = "analytics_controller"
 
     def test_track_analytics_event(self):
-        url = '/analytics/<identifier_type>/<identifier>/<event_type>'
+        url = "/analytics/<identifier_type>/<identifier>/<event_type>"
 
         # This controller can be called either authenticated or
         # unauthenticated.
         self.assert_request_calls_method_using_identifier(
-            url, self.controller.track_event,
-            "<identifier_type>", "<identifier>", "<event_type>",
+            url,
+            self.controller.track_event,
+            "<identifier_type>",
+            "<identifier>",
+            "<event_type>",
             authenticated=True,
-            authentication_required=False
+            authentication_required=False,
         )
 
 
@@ -668,31 +681,33 @@ class TestAdobeVendorID(RouteTest):
     CONTROLLER_NAME = "adobe_vendor_id"
 
     def test_adobe_vendor_id_get_token(self):
-        url = '/AdobeAuth/authdata'
+        url = "/AdobeAuth/authdata"
         self.assert_authenticated_request_calls(
-            url, self.controller.create_authdata_handler,
-            self.controller.AUTHENTICATED_PATRON
+            url,
+            self.controller.create_authdata_handler,
+            self.controller.AUTHENTICATED_PATRON,
         )
         # TODO: test what happens when vendor ID is not configured.
 
     def test_adobe_vendor_id_signin(self):
-        url = '/AdobeAuth/SignIn'
+        url = "/AdobeAuth/SignIn"
         self.assert_request_calls(
-            url, self.controller.signin_handler, http_method='POST'
+            url, self.controller.signin_handler, http_method="POST"
         )
-        self.assert_supported_methods(url, 'POST')
+        self.assert_supported_methods(url, "POST")
 
     def test_adobe_vendor_id_accountinfo(self):
-        url = '/AdobeAuth/AccountInfo'
+        url = "/AdobeAuth/AccountInfo"
         self.assert_request_calls(
-            url, self.controller.userinfo_handler, http_method='POST'
+            url, self.controller.userinfo_handler, http_method="POST"
         )
-        self.assert_supported_methods(url, 'POST')
+        self.assert_supported_methods(url, "POST")
 
     def test_adobe_vendor_id_status(self):
-        url = '/AdobeAuth/Status'
+        url = "/AdobeAuth/Status"
         self.assert_request_calls(
-            url, self.controller.status_handler,
+            url,
+            self.controller.status_handler,
         )
 
 
@@ -700,19 +715,18 @@ class TestAdobeDeviceManagement(RouteTest):
     CONTROLLER_NAME = "adobe_device_management"
 
     def test_adobe_drm_devices(self):
-        url = '/AdobeAuth/devices'
+        url = "/AdobeAuth/devices"
         self.assert_authenticated_request_calls(
             url, self.controller.device_id_list_handler
         )
-        self.assert_supported_methods(url, 'GET', 'POST')
+        self.assert_supported_methods(url, "GET", "POST")
 
     def test_adobe_drm_device(self):
-        url = '/AdobeAuth/devices/<device_id>'
+        url = "/AdobeAuth/devices/<device_id>"
         self.assert_authenticated_request_calls(
-            url, self.controller.device_id_handler, "<device_id>",
-            http_method='DELETE'
+            url, self.controller.device_id_handler, "<device_id>", http_method="DELETE"
         )
-        self.assert_supported_methods(url, 'DELETE')
+        self.assert_supported_methods(url, "DELETE")
 
 
 class TestOAuthController(RouteTest):
@@ -722,14 +736,14 @@ class TestOAuthController(RouteTest):
     CONTROLLER_NAME = "oauth_controller"
 
     def test_oauth_authenticate(self):
-        url = '/oauth_authenticate'
+        url = "/oauth_authenticate"
         _db = self.manager._db
         self.assert_request_calls(
             url, self.controller.oauth_authentication_redirect, {}, _db
         )
 
     def test_oauth_callback(self):
-        url = '/oauth_callback'
+        url = "/oauth_callback"
         _db = self.manager._db
         self.assert_request_calls(
             url, self.controller.oauth_authentication_callback, _db, {}
@@ -740,18 +754,16 @@ class TestODLNotificationController(RouteTest):
     CONTROLLER_NAME = "odl_notification_controller"
 
     def test_odl_notify(self):
-        url = '/odl_notify/<loan_id>'
-        self.assert_request_calls(
-            url, self.controller.notify, "<loan_id>"
-        )
-        self.assert_supported_methods(url, 'GET', 'POST')
+        url = "/odl_notify/<loan_id>"
+        self.assert_request_calls(url, self.controller.notify, "<loan_id>")
+        self.assert_supported_methods(url, "GET", "POST")
 
 
 class TestHeartbeatController(RouteTest):
     CONTROLLER_NAME = "heartbeat"
 
     def test_heartbeat(self):
-        url = '/heartbeat'
+        url = "/heartbeat"
         self.assert_request_calls(url, self.controller.heartbeat)
 
 
@@ -769,7 +781,6 @@ class TestHealthCheck(RouteTest):
 
 
 class TestExceptionHandler(RouteTest):
-
     def test_exception_handling(self):
         # The exception handler deals with most exceptions by running them
         # through ErrorHandler.handle()
@@ -782,6 +793,7 @@ class TestExceptionHandler(RouteTest):
             def handle(self, exception):
                 self.handled = exception
                 return Response("handled it", 500)
+
         routes.h = MockErrorHandler()
 
         # Simulate a request that causes an unhandled exception.

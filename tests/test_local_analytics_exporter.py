@@ -1,14 +1,10 @@
-from datetime import datetime, timedelta, date
 import csv
+from datetime import date, datetime, timedelta
 
-from core.testing import DatabaseTest
-from core.model import (
-    get_one_or_create,
-    CirculationEvent,
-    Genre,
-    WorkGenre,
-)
 from api.local_analytics_exporter import LocalAnalyticsExporter
+from core.model import CirculationEvent, Genre, WorkGenre, get_one_or_create
+from core.testing import DatabaseTest
+
 
 class TestLocalAnalyticsExporter(DatabaseTest):
     """Tests the local analytics exporter."""
@@ -41,7 +37,7 @@ class TestLocalAnalyticsExporter(DatabaseTest):
             CirculationEvent.DISTRIBUTOR_CHECKOUT,
             CirculationEvent.DISTRIBUTOR_HOLD_PLACE,
             CirculationEvent.DISTRIBUTOR_HOLD_RELEASE,
-            CirculationEvent.DISTRIBUTOR_TITLE_ADD
+            CirculationEvent.DISTRIBUTOR_TITLE_ADD,
         ]
         num = len(types)
         time = datetime.now() - timedelta(minutes=len(types))
@@ -51,24 +47,34 @@ class TestLocalAnalyticsExporter(DatabaseTest):
         # all with the same .location.
         for type in types:
             get_one_or_create(
-                self._db, CirculationEvent,
-                license_pool=lp1, type=type, start=time, end=time,
-                location=location
+                self._db,
+                CirculationEvent,
+                license_pool=lp1,
+                type=type,
+                start=time,
+                end=time,
+                location=location,
             )
             time += timedelta(minutes=1)
 
         # Create a circulation event for a different book,
         # with no .location.
         get_one_or_create(
-            self._db, CirculationEvent,
-            license_pool=lp2, type=types[3], start=time, end=time
+            self._db,
+            CirculationEvent,
+            license_pool=lp2,
+            type=types[3],
+            start=time,
+            end=time,
         )
 
         # Run a query that excludes the last event created.
         today = date.today() - timedelta(days=1)
         output = exporter.export(self._db, today, time)
-        reader = csv.reader([row for row in output.split("\r\n") if row], dialect=csv.excel)
-        rows = [row for row in reader][1::] # skip header row
+        reader = csv.reader(
+            [row for row in output.split("\r\n") if row], dialect=csv.excel
+        )
+        rows = [row for row in reader][1::]  # skip header row
         assert num == len(rows)
 
         # We've got one circulation event for each type.
@@ -79,11 +85,18 @@ class TestLocalAnalyticsExporter(DatabaseTest):
         # data to verify that circulation events for w1 look like we'd
         # expect.
         constant = [
-            identifier1.identifier, identifier1.type,
-            edition1.title, edition1.author, "fiction", w1.audience,
-            edition1.publisher or '', edition1.imprint or '',
-            edition1.language, w1.target_age_string or '',
-            ordered_genre_string, location
+            identifier1.identifier,
+            identifier1.type,
+            edition1.title,
+            edition1.author,
+            "fiction",
+            w1.audience,
+            edition1.publisher or "",
+            edition1.imprint or "",
+            edition1.language,
+            w1.target_age_string or "",
+            ordered_genre_string,
+            location,
         ]
         for row in rows:
             assert 14 == len(row)
@@ -91,8 +104,10 @@ class TestLocalAnalyticsExporter(DatabaseTest):
 
         # Now run a query that includes the last event created.
         output = exporter.export(self._db, today, time + timedelta(minutes=1))
-        reader = csv.reader([row for row in output.split("\r\n") if row], dialect=csv.excel)
-        rows = [row for row in reader][1::] # skip header row
+        reader = csv.reader(
+            [row for row in output.split("\r\n") if row], dialect=csv.excel
+        )
+        rows = [row for row in reader][1::]  # skip header row
         assert num + 1 == len(rows)
         assert types + [types[3]] == [row[1] for row in rows]
 
@@ -105,21 +120,28 @@ class TestLocalAnalyticsExporter(DatabaseTest):
 
         # Now let's look at the last row. It's got metadata from a
         # different book, and notably, there is no location.
-        no_location = ''
-        assert (
-            [
-                types[3], identifier2.identifier, identifier2.type,
-                edition2.title, edition2.author, "fiction",
-                w2.audience, edition2.publisher or '',
-                edition2.imprint or '', edition2.language,
-                w2.target_age_string or '', genres[1].name,
-                no_location
-            ] ==
-            rows[-1][1:])
+        no_location = ""
+        assert [
+            types[3],
+            identifier2.identifier,
+            identifier2.type,
+            edition2.title,
+            edition2.author,
+            "fiction",
+            w2.audience,
+            edition2.publisher or "",
+            edition2.imprint or "",
+            edition2.language,
+            w2.target_age_string or "",
+            genres[1].name,
+            no_location,
+        ] == rows[-1][1:]
 
         output = exporter.export(self._db, today, today)
-        reader = csv.reader([row for row in output.split("\r\n") if row], dialect=csv.excel)
-        rows = [row for row in reader][1::] # skip header row
+        reader = csv.reader(
+            [row for row in output.split("\r\n") if row], dialect=csv.excel
+        )
+        rows = [row for row in reader][1::]  # skip header row
         assert 0 == len(rows)
 
         # Gather events by library - these events have an associated library id
@@ -129,16 +151,23 @@ class TestLocalAnalyticsExporter(DatabaseTest):
         time = datetime.now() - timedelta(minutes=num)
         for type in types:
             get_one_or_create(
-                self._db, CirculationEvent,
-                license_pool=lp1, type=type, start=time, end=time,
-                library=library, location=location
+                self._db,
+                CirculationEvent,
+                license_pool=lp1,
+                type=type,
+                start=time,
+                end=time,
+                library=library,
+                location=location,
             )
             time += timedelta(minutes=1)
 
         today = date.today() - timedelta(days=1)
         output = exporter.export(self._db, today, time)
-        reader = csv.reader([row for row in output.split("\r\n") if row], dialect=csv.excel)
-        rows = [row for row in reader][1::] # skip header row
+        reader = csv.reader(
+            [row for row in output.split("\r\n") if row], dialect=csv.excel
+        )
+        rows = [row for row in reader][1::]  # skip header row
 
         # There have been a total of 11 events so far. No library ID was passed
         # so all events are returned.
@@ -147,8 +176,10 @@ class TestLocalAnalyticsExporter(DatabaseTest):
         # Pass in the library ID.
         today = date.today() - timedelta(days=1)
         output = exporter.export(self._db, today, time, library=library)
-        reader = csv.reader([row for row in output.split("\r\n") if row], dialect=csv.excel)
-        rows = [row for row in reader][1::] # skip header row
+        reader = csv.reader(
+            [row for row in output.split("\r\n") if row], dialect=csv.excel
+        )
+        rows = [row for row in reader][1::]  # skip header row
 
         # There are five events with a library ID.
         assert num == len(rows)
@@ -162,11 +193,12 @@ class TestLocalAnalyticsExporter(DatabaseTest):
         time = datetime.now() - timedelta(minutes=num)
         today = date.today() - timedelta(days=1)
         output = exporter.export(self._db, today, time, library=library2)
-        reader = csv.reader([row for row in output.split("\r\n") if row], dialect=csv.excel)
-        rows = [row for row in reader][1::] # skip header row
+        reader = csv.reader(
+            [row for row in output.split("\r\n") if row], dialect=csv.excel
+        )
+        rows = [row for row in reader][1::]  # skip header row
 
         assert 0 == len(rows)
-
 
         # Add example events that will be used to report by location
         user_added_locations = "11377,10018,11378"
@@ -185,39 +217,68 @@ class TestLocalAnalyticsExporter(DatabaseTest):
         time = datetime.now() - timedelta(minutes=num)
         for type in new_types:
             get_one_or_create(
-                self._db, CirculationEvent,
-                license_pool=lp1, type=type, start=time, end=time)
+                self._db,
+                CirculationEvent,
+                license_pool=lp1,
+                type=type,
+                start=time,
+                end=time,
+            )
             time += timedelta(minutes=1)
 
-        output = exporter.export(self._db, today, time + timedelta(minutes=1), user_added_locations)
-        reader = csv.reader([row for row in output.split("\r\n") if row], dialect=csv.excel)
-        rows = [row for row in reader][1::] # skip header row
+        output = exporter.export(
+            self._db, today, time + timedelta(minutes=1), user_added_locations
+        )
+        reader = csv.reader(
+            [row for row in output.split("\r\n") if row], dialect=csv.excel
+        )
+        rows = [row for row in reader][1::]  # skip header row
 
         # No location was associated with each event so none will be returned
         assert 0 == len(rows)
 
         for type in new_types:
             get_one_or_create(
-                self._db, CirculationEvent,
-                license_pool=lp1, type=type, start=time, end=time, location="10001")
+                self._db,
+                CirculationEvent,
+                license_pool=lp1,
+                type=type,
+                start=time,
+                end=time,
+                location="10001",
+            )
             time += timedelta(minutes=1)
 
-        output = exporter.export(self._db, today, time + timedelta(minutes=1), user_added_locations)
-        reader = csv.reader([row for row in output.split("\r\n") if row], dialect=csv.excel)
-        rows = [row for row in reader][1::] # skip header row
+        output = exporter.export(
+            self._db, today, time + timedelta(minutes=1), user_added_locations
+        )
+        reader = csv.reader(
+            [row for row in output.split("\r\n") if row], dialect=csv.excel
+        )
+        rows = [row for row in reader][1::]  # skip header row
 
         # Some events have a location but not in the list of locations that was passed
         assert 0 == len(rows)
 
         for type in new_types:
             get_one_or_create(
-                self._db, CirculationEvent,
-                license_pool=lp1, type=type, start=time, end=time, location="11377")
+                self._db,
+                CirculationEvent,
+                license_pool=lp1,
+                type=type,
+                start=time,
+                end=time,
+                location="11377",
+            )
             time += timedelta(minutes=1)
 
-        output = exporter.export(self._db, today, time + timedelta(minutes=1), user_added_locations)
-        reader = csv.reader([row for row in output.split("\r\n") if row], dialect=csv.excel)
-        rows = [row for row in reader][1::] # skip header row
+        output = exporter.export(
+            self._db, today, time + timedelta(minutes=1), user_added_locations
+        )
+        reader = csv.reader(
+            [row for row in output.split("\r\n") if row], dialect=csv.excel
+        )
+        rows = [row for row in reader][1::]  # skip header row
 
         # These events have a location that is in the list of acceptable
         # locations. The CM_HOLD_PLACE event is not in the list of event types

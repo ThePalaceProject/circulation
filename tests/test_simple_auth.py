@@ -1,20 +1,14 @@
-import pytest
 import json
 
+import pytest
+
 from api.authenticator import PatronData
-
-from api.simple_authentication import (
-    SimpleAuthenticationProvider,
-)
-
-from api.config import (
-    CannotLoadConfiguration,
-)
-
+from api.config import CannotLoadConfiguration
+from api.simple_authentication import SimpleAuthenticationProvider
 from core.testing import DatabaseTest
 
-class TestSimpleAuth(DatabaseTest):
 
+class TestSimpleAuth(DatabaseTest):
     def test_simple(self):
         p = SimpleAuthenticationProvider
         integration = self._external_integration(self._str)
@@ -61,7 +55,7 @@ class TestSimpleAuth(DatabaseTest):
         user = provider.remote_authenticate("barcode", None)
         assert isinstance(user, PatronData)
 
-        user2 =  provider.remote_authenticate("barcode", '')
+        user2 = provider.remote_authenticate("barcode", "")
         assert user2.authorization_identifier == user.authorization_identifier
 
         # If you provide any password, you're out.
@@ -77,7 +71,9 @@ class TestSimpleAuth(DatabaseTest):
 
         integration.setting(p.TEST_IDENTIFIER).value = "barcode"
         integration.setting(p.TEST_PASSWORD).value = "pass"
-        integration.setting(p.ADDITIONAL_TEST_IDENTIFIERS).value = json.dumps(["a", "b", "c"])
+        integration.setting(p.ADDITIONAL_TEST_IDENTIFIERS).value = json.dumps(
+            ["a", "b", "c"]
+        )
         provider = p(self._default_library, integration)
 
         assert None == provider.remote_authenticate("a", None)
@@ -110,20 +106,20 @@ class TestSimpleAuth(DatabaseTest):
 
         m = SimpleAuthenticationProvider.generate_patrondata
 
-        #Pass in numeric barcode as identifier
+        # Pass in numeric barcode as identifier
         result = m("1234")
         assert result.permanent_id == "1234_id"
-        assert result.authorization_identifier == '1234'
+        assert result.authorization_identifier == "1234"
         assert result.personal_name == "PersonalName1234"
-        assert result.username == '1234_username'
+        assert result.username == "1234_username"
         assert result.neighborhood == None
 
-        #Pass in username as identifier
+        # Pass in username as identifier
         result = m("1234_username")
         assert result.permanent_id == "1234_id"
-        assert result.authorization_identifier == '1234'
+        assert result.authorization_identifier == "1234"
         assert result.personal_name == "PersonalName1234"
-        assert result.username == '1234_username'
+        assert result.username == "1234_username"
         assert result.neighborhood == None
 
         # Pass in a neighborhood.
@@ -141,18 +137,18 @@ class TestSimpleAuth(DatabaseTest):
         patron = self._patron()
         patron.authorization_identifier = "barcode"
 
-        #Returns None if nothing is passed in
+        # Returns None if nothing is passed in
         assert provider._remote_patron_lookup(None) == None
 
-        #Returns a patron if a patron is passed in and something is found
+        # Returns a patron if a patron is passed in and something is found
         result = provider._remote_patron_lookup(patron)
         assert result.permanent_id == "barcode_id"
 
-        #Returns None if no patron is found
+        # Returns None if no patron is found
         patron.authorization_identifier = "wrong barcode"
         result = provider._remote_patron_lookup(patron)
         assert result == None
 
-        #Returns a patron if a PatronData object is passed in and something is found
+        # Returns a patron if a PatronData object is passed in and something is found
         result = provider._remote_patron_lookup(patron_data)
         assert result.permanent_id == "barcode_id"

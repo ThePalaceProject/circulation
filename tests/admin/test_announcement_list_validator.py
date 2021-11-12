@@ -1,18 +1,14 @@
-from datetime import (
-    date,
-    datetime,
-    timedelta,
-)
 import json
+from datetime import date, datetime, timedelta
 
+from api.admin.announcement_list_validator import AnnouncementListValidator
+from api.announcements import Announcement
+from api.testing import AnnouncementTest
 from core.problem_details import INVALID_INPUT
 from core.util.problem_detail import ProblemDetail
-from api.announcements import Announcement
-from api.admin.announcement_list_validator import AnnouncementListValidator
-from api.testing import AnnouncementTest
+
 
 class TestAnnouncementListValidator(AnnouncementTest):
-
     def assert_invalid(self, x, detail):
         assert isinstance(x, ProblemDetail)
         assert INVALID_INPUT.uri == x.uri
@@ -31,7 +27,7 @@ class TestAnnouncementListValidator(AnnouncementTest):
 
         class AlwaysAcceptValidator(AnnouncementListValidator):
             def validate_announcement(self, announcement):
-                announcement['validated'] = True
+                announcement["validated"] = True
                 return announcement
 
         validator = AlwaysAcceptValidator(maximum_announcements=2)
@@ -61,9 +57,8 @@ class TestAnnouncementListValidator(AnnouncementTest):
         for invalid in dict(), json.dumps(dict()), "non-json string":
             self.assert_invalid(
                 m(invalid),
-                "Invalid announcement list format: %(announcements)r" % dict(
-                    announcements=invalid
-                )
+                "Invalid announcement list format: %(announcements)r"
+                % dict(announcements=invalid),
             )
 
         # validate_announcements runs some checks on the list of announcements.
@@ -93,8 +88,7 @@ class TestAnnouncementListValidator(AnnouncementTest):
 
         validator = AlwaysRejectValidator()
         self.assert_invalid(
-            validator.validate_announcements(["an announcement"]),
-            "Rejected!"
+            validator.validate_announcements(["an announcement"]), "Rejected!"
         )
 
     def test_validate_announcement_success(self):
@@ -106,25 +100,25 @@ class TestAnnouncementListValidator(AnnouncementTest):
         today = date.today()
         in_a_week = today + timedelta(days=7)
         valid = dict(
-            start=today.strftime('%Y-%m-%d'),
-            finish=in_a_week.strftime('%Y-%m-%d'),
-            content="This is a test of announcement validation."
+            start=today.strftime("%Y-%m-%d"),
+            finish=in_a_week.strftime("%Y-%m-%d"),
+            content="This is a test of announcement validation.",
         )
 
         validated = m(valid)
 
         # A UUID has been added in the 'id' field.
-        id = validated.pop('id')
+        id = validated.pop("id")
         assert 36 == len(id)
         for position in 8, 13, 18, 23:
-            assert '-' == id[position]
+            assert "-" == id[position]
 
         # Date strings have been converted to date objects.
-        assert today == validated['start']
-        assert in_a_week == validated['finish']
-        
+        assert today == validated["start"]
+        assert in_a_week == validated["finish"]
+
         # Now simulate an edit, where an ID is provided.
-        validated['id'] = 'an existing id'
+        validated["id"] = "an existing id"
 
         # Now the incoming data is validated but not changed at all.
         assert validated == m(validated)
@@ -132,14 +126,12 @@ class TestAnnouncementListValidator(AnnouncementTest):
         # If no start date is specified, today's date is used. If no
         # finish date is specified, a default associated with the
         # validator is used.
-        no_finish_date = dict(
-            content="This is a test of announcment validation"
-        )
+        no_finish_date = dict(content="This is a test of announcment validation")
         validated = m(no_finish_date)
-        assert today == validated['start']
+        assert today == validated["start"]
         assert (
-            today + timedelta(days=validator.default_duration_days) ==
-            validated['finish']
+            today + timedelta(days=validator.default_duration_days)
+            == validated["finish"]
         )
 
     def test_validate_announcement_failure(self):
@@ -151,8 +143,9 @@ class TestAnnouncementListValidator(AnnouncementTest):
         # Totally bogus format
         for invalid in '{"a": "string"}', ["a list"]:
             self.assert_invalid(
-                m(invalid), 
-                "Invalid announcement format: %(announcement)r" % dict(announcement=invalid)
+                m(invalid),
+                "Invalid announcement format: %(announcement)r"
+                % dict(announcement=invalid),
             )
 
         # Some baseline valid value to use in tests where _some_ of the data is valid.
@@ -163,19 +156,17 @@ class TestAnnouncementListValidator(AnnouncementTest):
         # Missing a required field
         no_content = dict(start=today)
         self.assert_invalid(m(no_content), "Missing required field: content")
-        
+
         # Bad content -- tested at greater length in another test.
         bad_content = dict(start=today, content="short")
         self.assert_invalid(
-            m(bad_content),
-            "Value too short (5 versus 15 characters): short"
+            m(bad_content), "Value too short (5 versus 15 characters): short"
         )
 
         # Bad start date -- tested at greater length in another test.
         bad_start_date = dict(start="not-a-date", content=message)
         self.assert_invalid(
-            m(bad_start_date),
-            "Value for start is not a date: not-a-date"
+            m(bad_start_date), "Value for start is not a date: not-a-date"
         )
 
         # Bad finish date.
@@ -184,11 +175,9 @@ class TestAnnouncementListValidator(AnnouncementTest):
             bad_data = dict(start=today, finish=bad_finish_date, content=message)
             self.assert_invalid(
                 m(bad_data),
-                "Value for finish must be no earlier than %s" % (
-                    tomorrow.strftime(validator.DATE_FORMAT)
-                )
+                "Value for finish must be no earlier than %s"
+                % (tomorrow.strftime(validator.DATE_FORMAT)),
             )
-
 
     def test_validate_length(self):
         # Test the validate_length helper method in more detail than
@@ -196,15 +185,13 @@ class TestAnnouncementListValidator(AnnouncementTest):
         m = AnnouncementListValidator.validate_length
         value = "four"
         assert value == m(value, 3, 5)
-        
+
         self.assert_invalid(
-            m(value, 10, 20),
-            "Value too short (4 versus 10 characters): four"
+            m(value, 10, 20), "Value too short (4 versus 10 characters): four"
         )
 
         self.assert_invalid(
-            m(value, 1, 3),
-            "Value too long (4 versus 3 characters): four"
+            m(value, 1, 3), "Value too long (4 versus 3 characters): four"
         )
 
     def test_validate_date(self):
@@ -220,14 +207,14 @@ class TestAnnouncementListValidator(AnnouncementTest):
         assert february_1 == m("somedate", february_1)
         assert february_1 == m("somedate", datetime(2020, 2, 1))
 
-        # But if a string is used, it must be in a specific format.        
+        # But if a string is used, it must be in a specific format.
         self.assert_invalid(
             m("somedate", "not-a-date"), "Value for somedate is not a date: not-a-date"
         )
 
         # If a minimum (date or datetime) is provided, the selection
         # must be on or after that date.
-        
+
         january_1 = date(2020, 1, 1)
         january_1_datetime = datetime(2020, 1, 1)
         assert february_1 == m("somedate", february_1, minimum=january_1)
@@ -257,5 +244,3 @@ class TestAnnouncementListValidator(AnnouncementTest):
         # Announcement objects and then back to dictionaries using
         # Announcement.json_ready.
         assert [Announcement(**x).json_ready for x in announcements] == as_list
-
-        

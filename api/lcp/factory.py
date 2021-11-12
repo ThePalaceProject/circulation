@@ -1,7 +1,7 @@
 from api.lcp.hash import HasherFactory
 from api.lcp.server import LCPServer
 from core.lcp.credential import LCPCredentialFactory
-from core.model.configuration import ConfigurationStorage, ConfigurationFactory
+from core.model.configuration import ConfigurationFactory, ConfigurationStorage
 
 
 class LCPServerFactory(object):
@@ -20,6 +20,11 @@ class LCPServerFactory(object):
         configuration_factory = ConfigurationFactory()
         hasher_factory = HasherFactory()
         credential_factory = LCPCredentialFactory()
-        lcp_server = LCPServer(configuration_storage, configuration_factory, hasher_factory, credential_factory)
+        lcp_server = LCPServer(
+            configuration_storage,
+            configuration_factory,
+            hasher_factory,
+            credential_factory,
+        )
 
         return lcp_server

@@ -25,6 +25,7 @@ from core.model.configuration import (
 
 cgi.escape = html.escape
 
+
 class SAMLConfigurationError(BaseError):
     """Raised in the case of any configuration errors."""
 
@@ -79,8 +80,8 @@ class SAMLConfiguration(ConfigurationGrouping):
         default="true",
         options=[
             ConfigurationOption("true", "Use SAML NameID"),
-            ConfigurationOption("false", "Do NOT use SAML NameID")
-        ]
+            ConfigurationOption("false", "Do NOT use SAML NameID"),
+        ],
     )
 
     patron_id_attributes = ConfigurationMetadata(

@@ -1,12 +1,10 @@
 import json
 
-from api.testing import AnnouncementTest
 from api.admin.announcement_list_validator import AnnouncementListValidator
-from api.announcements import (
-    Announcements,
-    Announcement
-)
+from api.announcements import Announcement, Announcements
+from api.testing import AnnouncementTest
 from core.testing import DatabaseTest
+
 
 class TestAnnouncements(AnnouncementTest, DatabaseTest):
     """Test the Announcements object."""
@@ -35,8 +33,8 @@ class TestAnnouncements(AnnouncementTest, DatabaseTest):
         # treated as an empty list. In real life this would only
         # happen due to a bug or a bad bit of manually entered SQL.
         invalid = dict(self.active)
-        invalid['id'] = 'Another ID'
-        invalid['finish'] = 'Not a date'
+        invalid["id"] = "Another ID"
+        invalid["finish"] = "Not a date"
         setting.value = json.dumps([self.active, invalid, self.expired])
         assert [] == Announcements.for_library(l).announcements
 
@@ -57,7 +55,7 @@ class TestAnnouncements(AnnouncementTest, DatabaseTest):
 
         # An announcement that ends today is still active.
         expires_today = dict(self.active)
-        expires_today['finish'] = self.today
+        expires_today["finish"] = self.today
         assert True == Announcement(**self.active).is_active
 
     def test_for_authentication_document(self):
@@ -66,8 +64,10 @@ class TestAnnouncements(AnnouncementTest, DatabaseTest):
         # 'start' and 'finish' will be ignored, as will the extra value
         # that has no meaning within Announcement.
         announcement = Announcement(extra="extra value", **self.active)
-        assert (dict(id="active", content="A sample announcement.") ==
-            announcement.for_authentication_document)
+        assert (
+            dict(id="active", content="A sample announcement.")
+            == announcement.for_authentication_document
+        )
 
     def test_json_ready(self):
         # Demonstrate the form of an Announcement used to store in the database.
@@ -79,7 +79,12 @@ class TestAnnouncements(AnnouncementTest, DatabaseTest):
             dict(
                 id="active",
                 content="A sample announcement.",
-                start=announcement.start.strftime(AnnouncementListValidator.DATE_FORMAT),
-                finish=announcement.finish.strftime(AnnouncementListValidator.DATE_FORMAT),
-            ) ==
-            announcement.json_ready)
+                start=announcement.start.strftime(
+                    AnnouncementListValidator.DATE_FORMAT
+                ),
+                finish=announcement.finish.strftime(
+                    AnnouncementListValidator.DATE_FORMAT
+                ),
+            )
+            == announcement.json_ready
+        )

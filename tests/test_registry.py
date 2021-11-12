@@ -1,38 +1,24 @@
-import pytest
-
-import json
-from Crypto.PublicKey import RSA
-from Crypto.Cipher import PKCS1_OAEP
-import os
-from core.testing import (
-    DatabaseTest
-)
-from core.testing import (
-    DummyHTTPClient,
-    MockRequestsResponse,
-)
-from core.util.http import HTTP
-from core.util.problem_detail import (
-    ProblemDetail,
-    JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE,
-)
-from core.model import (
-    ConfigurationSetting,
-    ExternalIntegration,
-)
-from pdb import set_trace
 import base64
+import json
+import os
+from pdb import set_trace
+
+import pytest
+from Crypto.Cipher import PKCS1_OAEP
+from Crypto.PublicKey import RSA
+
 from api.adobe_vendor_id import AuthdataUtility
 from api.config import Configuration
 from api.problem_details import *
-from api.registry import (
-    RemoteRegistry,
-    Registration,
-    LibraryRegistrationScript,
-)
+from api.registry import LibraryRegistrationScript, Registration, RemoteRegistry
+from core.model import ConfigurationSetting, ExternalIntegration
+from core.testing import DatabaseTest, DummyHTTPClient, MockRequestsResponse
+from core.util.http import HTTP
+from core.util.problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
+from core.util.problem_detail import ProblemDetail
+
 
 class TestRemoteRegistry(DatabaseTest):
-
     def setup_method(self):
         super(TestRemoteRegistry, self).setup_method()
 
@@ -52,9 +38,7 @@ class TestRemoteRegistry(DatabaseTest):
         """
         m = RemoteRegistry.for_integration_id
 
-        registry = m(
-            self._db, self.integration.id, ExternalIntegration.DISCOVERY_GOAL
-        )
+        registry = m(self._db, self.integration.id, ExternalIntegration.DISCOVERY_GOAL)
         assert isinstance(registry, RemoteRegistry)
         assert self.integration == registry.integration
 
@@ -148,17 +132,16 @@ class TestRemoteRegistry(DatabaseTest):
         # method is the return value of fetch_catalog.
         client.queue_requests_response(200, content="A root catalog")
         [queued] = client.responses
-        assert ("Essential information" ==
-            registry.fetch_catalog("custom catalog URL", do_get=client.do_get))
+        assert "Essential information" == registry.fetch_catalog(
+            "custom catalog URL", do_get=client.do_get
+        )
         assert "custom catalog URL" == client.requests.pop()
 
     def test__extract_catalog_information(self):
         # Test our ability to extract a registration link and an
         # Adobe Vendor ID from an OPDS 1 or OPDS 2 catalog.
         def extract(document, type=RemoteRegistry.OPDS_2_TYPE):
-            response = MockRequestsResponse(
-                200, { "Content-Type" : type }, document
-            )
+            response = MockRequestsResponse(200, {"Content-Type": type}, document)
             return RemoteRegistry._extract_catalog_information(response)
 
         def assert_no_link(*args, **kwargs):
@@ -167,12 +150,14 @@ class TestRemoteRegistry(DatabaseTest):
             """
             result = extract(*args, **kwargs)
             assert REMOTE_INTEGRATION_FAILED.uri == result.uri
-            assert ("The service at http://url/ did not provide a register link." ==
-                result.detail)
+            assert (
+                "The service at http://url/ did not provide a register link."
+                == result.detail
+            )
 
         # OPDS 2 feed with link and Adobe Vendor ID.
-        link = { 'rel': 'register', 'href': 'register url' }
-        metadata = { 'adobe_vendor_id': 'vendorid' }
+        link = {"rel": "register", "href": "register url"}
+        metadata = {"adobe_vendor_id": "vendorid"}
         feed = json.dumps(dict(links=[link], metadata=metadata))
         assert ("register url", "vendorid") == extract(feed)
 
@@ -186,18 +171,18 @@ class TestRemoteRegistry(DatabaseTest):
 
         # OPDS 1 feed with link.
         feed = '<feed><link rel="register" href="register url"/></feed>'
-        assert (("register url", None) ==
-            extract(feed, RemoteRegistry.OPDS_1_PREFIX + ";foo"))
+        assert ("register url", None) == extract(
+            feed, RemoteRegistry.OPDS_1_PREFIX + ";foo"
+        )
 
         # OPDS 1 feed with no link.
-        feed = '<feed></feed>'
+        feed = "<feed></feed>"
         assert_no_link(feed, RemoteRegistry.OPDS_1_PREFIX + ";foo")
 
         # Non-OPDS document.
         result = extract("plain text here", "text/plain")
         assert REMOTE_INTEGRATION_FAILED.uri == result.uri
-        assert ("The service at http://url/ did not return OPDS." ==
-            result.detail)
+        assert "The service at http://url/ did not return OPDS." == result.detail
 
     def test_fetch_registration_document(self):
         # Test our ability to retrieve terms-of-service information
@@ -227,6 +212,7 @@ class TestRemoteRegistry(DatabaseTest):
         # get the registration document.
         client = DummyHTTPClient()
         client.responses.append(REMOTE_INTEGRATION_FAILED)
+
         class Mock(RemoteRegistry):
             def fetch_catalog(self, do_get):
                 return "http://register-here/", "vendor id"
@@ -272,8 +258,7 @@ class TestRemoteRegistry(DatabaseTest):
         def data_link(data, type="text/html"):
             encoded = base64.b64encode(data.encode("utf-8")).decode("utf-8")
             return dict(
-                rel="terms-of-service",
-                href="data:%s;base64,%s" % (type, encoded)
+                rel="terms-of-service", href="data:%s;base64,%s" % (type, encoded)
             )
 
         class Mock(RemoteRegistry):
@@ -285,22 +270,21 @@ class TestRemoteRegistry(DatabaseTest):
         def extract(document, type=RemoteRegistry.OPDS_2_TYPE):
             if type == RemoteRegistry.OPDS_2_TYPE:
                 document = json.dumps(dict(links=document))
-            response = MockRequestsResponse(
-                200, { "Content-Type" : type }, document
-            )
+            response = MockRequestsResponse(200, {"Content-Type": type}, document)
             return Mock._extract_registration_information(response)
 
         # OPDS 2 feed with TOS in http: and data: links.
-        tos_link = dict(rel='terms-of-service', href='http://tos/')
+        tos_link = dict(rel="terms-of-service", href="http://tos/")
         tos_data = data_link("<p>Some HTML</p>")
-        assert (("http://tos/", "Decoded: <p>Some HTML</p>") ==
-            extract([tos_link, tos_data]))
+        assert ("http://tos/", "Decoded: <p>Some HTML</p>") == extract(
+            [tos_link, tos_data]
+        )
 
         # At this point it's clear that the data: URL found in
         # `tos_data` was run through `_decode_data()`. This gives us
         # permission to test all the fiddly bits of `_decode_data` in
         # isolation, below.
-        assert tos_data['href'] == Mock.decoded
+        assert tos_data["href"] == Mock.decoded
 
         # OPDS 2 feed with http: link only.
         assert ("http://tos/", None) == extract([tos_link])
@@ -313,18 +297,19 @@ class TestRemoteRegistry(DatabaseTest):
 
         # OPDS 1 feed with link.
         feed = '<feed><link rel="terms-of-service" href="http://tos/"/></feed>'
-        assert (("http://tos/", None) ==
-            extract(feed, RemoteRegistry.OPDS_1_PREFIX + ";foo"))
+        assert ("http://tos/", None) == extract(
+            feed, RemoteRegistry.OPDS_1_PREFIX + ";foo"
+        )
 
         # OPDS 1 feed with no link.
-        feed = '<feed></feed>'
+        feed = "<feed></feed>"
         assert (None, None) == extract(feed, RemoteRegistry.OPDS_1_PREFIX + ";foo")
 
         # Non-OPDS document.
         assert (None, None) == extract("plain text here", "text/plain")
 
         # Unrecognized URI schemes are ignored.
-        ftp_link = dict(rel='terms-of-service', href='ftp://tos/')
+        ftp_link = dict(rel="terms-of-service", href="ftp://tos/")
         assert (None, None) == extract([ftp_link])
 
     def test__decode_data_url(self):
@@ -378,7 +363,6 @@ class TestRemoteRegistry(DatabaseTest):
 
 
 class TestRegistration(DatabaseTest):
-
     def setup_method(self):
         super(TestRegistration, self).setup_method()
 
@@ -396,10 +380,10 @@ class TestRegistration(DatabaseTest):
         assert self.registry == reg.registry
         assert self._default_library == reg.library
 
-        settings = [x for x in reg.integration.settings
-                    if x.library is not None]
-        assert (set([reg.status_field, reg.stage_field, reg.web_client_field]) ==
-            set(settings))
+        settings = [x for x in reg.integration.settings if x.library is not None]
+        assert set([reg.status_field, reg.stage_field, reg.web_client_field]) == set(
+            settings
+        )
         assert Registration.FAILURE_STATUS == reg.status_field.value
         assert Registration.TESTING_STAGE == reg.stage_field.value
         assert None == reg.web_client_field.value
@@ -429,8 +413,9 @@ class TestRegistration(DatabaseTest):
             store the default value.
             """
             values = [
-                x for x in self.registration.integration.settings
-                if x.library and x.key==key
+                x
+                for x in self.registration.integration.settings
+                if x.library and x.key == key
             ]
             if len(values) == 1:
                 return values[0]
@@ -458,7 +443,6 @@ class TestRegistration(DatabaseTest):
         # Test the other methods orchestrated by the push() method.
 
         class MockRegistry(RemoteRegistry):
-
             def fetch_catalog(self, catalog_url, do_get):
                 # Pretend to fetch a root catalog and extract a
                 # registration URL from it.
@@ -466,7 +450,6 @@ class TestRegistration(DatabaseTest):
                 return "register_url", "vendor_id"
 
         class MockRegistration(Registration):
-
             def _create_registration_payload(self, url_for, stage):
                 self.payload_ingredients = (url_for, stage)
                 return dict(payload="this is it")
@@ -476,18 +459,21 @@ class TestRegistration(DatabaseTest):
                 return dict(Header="Value")
 
             def _send_registration_request(
-                    self, register_url, headers, payload, do_post
+                self, register_url, headers, payload, do_post
             ):
                 self._send_registration_request_called_with = (
-                    register_url, headers, payload, do_post
+                    register_url,
+                    headers,
+                    payload,
+                    do_post,
                 )
-                return MockRequestsResponse(
-                    200, content=json.dumps("you did it!")
-                )
+                return MockRequestsResponse(200, content=json.dumps("you did it!"))
 
             def _process_registration_result(self, catalog, encryptor, stage):
                 self._process_registration_result_called_with = (
-                    catalog, encryptor, stage
+                    catalog,
+                    encryptor,
+                    stage,
                 )
                 return "all done!"
 
@@ -503,10 +489,9 @@ class TestRegistration(DatabaseTest):
         catalog_url = "http://catalog/"
         do_get = object()
         do_post = object()
+
         def push():
-            return registration.push(
-                stage, url_for, catalog_url, do_get, do_post
-            )
+            return registration.push(stage, url_for, catalog_url, do_get, do_post)
 
         result = push()
         expect = "Library %s has no key pair set." % library.short_name
@@ -533,10 +518,11 @@ class TestRegistration(DatabaseTest):
         # The vendor ID was set as a ConfigurationSetting on
         # the ExternalIntegration associated with this registry.
         assert (
-            "vendor_id" ==
-            ConfigurationSetting.for_externalintegration(
+            "vendor_id"
+            == ConfigurationSetting.for_externalintegration(
                 AuthdataUtility.VENDOR_ID_KEY, self.integration
-            ).value)
+            ).value
+        )
 
         # _create_registration_payload was called to create the body
         # of the registration request.
@@ -550,9 +536,11 @@ class TestRegistration(DatabaseTest):
         # payload to "register_url", the registration URL we got earlier.
         results = registration._send_registration_request_called_with
         assert (
-            ("register_url", {"Header": "Value"}, dict(payload="this is it"),
-             do_post) ==
-            results)
+            "register_url",
+            {"Header": "Value"},
+            dict(payload="this is it"),
+            do_post,
+        ) == results
 
         # Finally, the return value of that method was loaded as JSON
         # and passed into _process_registration_result, along with
@@ -570,8 +558,7 @@ class TestRegistration(DatabaseTest):
             "no such stage", url_for, catalog_url, do_get, do_post
         )
         assert INVALID_INPUT.uri == result.uri
-        assert ("'no such stage' is not a valid registration stage" ==
-            result.detail)
+        assert "'no such stage' is not a valid registration stage" == result.detail
 
         # Now in reverse order, let's replace the mocked methods so
         # that they return ProblemDetail documents. This tests that if
@@ -585,14 +572,14 @@ class TestRegistration(DatabaseTest):
             return INVALID_REGISTRATION.detailed(
                 "could not process registration result"
             )
+
         registration._process_registration_result = fail
         problem = cause_problem()
         assert "could not process registration result" == problem.detail
 
         def fail(*args, **kwargs):
-            return INVALID_REGISTRATION.detailed(
-                "could not send registration request"
-            )
+            return INVALID_REGISTRATION.detailed("could not send registration request")
+
         registration._send_registration_request = fail
         problem = cause_problem()
         assert "could not send registration request" == problem.detail
@@ -601,12 +588,14 @@ class TestRegistration(DatabaseTest):
             return INVALID_REGISTRATION.detailed(
                 "could not create registration payload"
             )
+
         registration._create_registration_payload = fail
         problem = cause_problem()
         assert "could not create registration payload" == problem.detail
 
         def fail(*args, **kwargs):
             return INVALID_REGISTRATION.detailed("could not fetch catalog")
+
         registry.fetch_catalog = fail
         problem = cause_problem()
         assert "could not fetch catalog" == problem.detail
@@ -632,8 +621,8 @@ class TestRegistration(DatabaseTest):
         ConfigurationSetting.for_library(
             Configuration.CONFIGURATION_CONTACT_EMAIL,
             self.registration.library,
-        ).value=contact
-        expect_payload['contact'] = contact
+        ).value = contact
+        expect_payload["contact"] = contact
         assert expect_payload == m(url_for, stage)
 
     def test_create_registration_headers(self):
@@ -645,10 +634,12 @@ class TestRegistration(DatabaseTest):
         # If a shared secret is configured, it shows up as part of
         # the Authorization header.
         setting = ConfigurationSetting.for_library_and_externalintegration(
-            self._db, ExternalIntegration.PASSWORD, self.registration.library,
-            self.registration.registry.integration
-        ).value="a secret"
-        expect_headers['Authorization'] = 'Bearer a secret'
+            self._db,
+            ExternalIntegration.PASSWORD,
+            self.registration.library,
+            self.registration.registry.integration,
+        ).value = "a secret"
+        expect_headers["Authorization"] = "Bearer a secret"
         assert expect_headers == m()
 
     def test__send_registration_request(self):
@@ -670,14 +661,15 @@ class TestRegistration(DatabaseTest):
         result = m(url, headers, payload, mock.do_post)
         assert mock.response == result
         called_with = mock.called_with
-        assert (called_with ==
-            (url, payload,
-             dict(
-                 headers=headers,
-                 timeout=60,
-                 allowed_response_codes=["2xx", "3xx", "400", "401"]
-             )
-            ))
+        assert called_with == (
+            url,
+            payload,
+            dict(
+                headers=headers,
+                timeout=60,
+                allowed_response_codes=["2xx", "3xx", "400", "401"],
+            ),
+        )
 
         # Most error handling is expected to be handled by do_post
         # raising an exception, but certain responses get special
@@ -686,21 +678,20 @@ class TestRegistration(DatabaseTest):
         # The remote sends a 401 response with a problem detail.
         mock = Mock(
             MockRequestsResponse(
-                401, { "Content-Type": PROBLEM_DETAIL_JSON_MEDIA_TYPE },
-                content=json.dumps(dict(detail="this is a problem detail"))
+                401,
+                {"Content-Type": PROBLEM_DETAIL_JSON_MEDIA_TYPE},
+                content=json.dumps(dict(detail="this is a problem detail")),
             )
         )
         result = m(url, headers, payload, mock.do_post)
         assert isinstance(result, ProblemDetail)
         assert REMOTE_INTEGRATION_FAILED.uri == result.uri
-        assert ('Remote service returned: "this is a problem detail"' ==
-            result.detail)
+        assert 'Remote service returned: "this is a problem detail"' == result.detail
 
         # The remote sends some other kind of 401 response.
         mock = Mock(
             MockRequestsResponse(
-                401, { "Content-Type": "text/html" },
-                content="log in why don't you"
+                401, {"Content-Type": "text/html"}, content="log in why don't you"
             )
         )
         result = m(url, headers, payload, mock.do_post)
@@ -738,7 +729,10 @@ class TestRegistration(DatabaseTest):
         # Result must be a dictionary.
         result = m("not a dictionary", None, None)
         assert INTEGRATION_ERROR.uri == result.uri
-        assert "Remote service served 'not a dictionary', which I can't make sense of as an OPDS document." == result.detail
+        assert (
+            "Remote service served 'not a dictionary', which I can't make sense of as an OPDS document."
+            == result.detail
+        )
 
         # When the result is empty, the registration is marked as successful.
         new_stage = "new stage"
@@ -776,7 +770,10 @@ class TestRegistration(DatabaseTest):
         assert "👉 cleartext 👈" == reg.setting(ExternalIntegration.PASSWORD).value
 
         # Web client URL is set.
-        assert "http://web/library" == reg.setting(reg.LIBRARY_REGISTRATION_WEB_CLIENT).value
+        assert (
+            "http://web/library"
+            == reg.setting(reg.LIBRARY_REGISTRATION_WEB_CLIENT).value
+        )
 
         assert "another new stage" == reg.stage_field.value
 
@@ -784,6 +781,7 @@ class TestRegistration(DatabaseTest):
         class Mock(Registration):
             def _decrypt_shared_secret(self, encryptor, shared_secret):
                 return SHARED_SECRET_DECRYPTION_ERROR
+
         reg = Mock(self.registry, self._default_library)
         result = reg._process_registration_result(
             catalog, encryptor, "another new stage"
@@ -792,15 +790,14 @@ class TestRegistration(DatabaseTest):
 
 
 class TestLibraryRegistrationScript(DatabaseTest):
-
     def setup_method(self):
         """Make sure there's a base URL for url_for to use."""
         super(TestLibraryRegistrationScript, self).setup_method()
 
     def test_do_run(self):
-
         class Mock(LibraryRegistrationScript):
             processed = []
+
             def process_library(self, *args):
                 self.processed.append(args)
 
@@ -809,13 +806,16 @@ class TestLibraryRegistrationScript(DatabaseTest):
         base_url_setting = ConfigurationSetting.sitewide(
             self._db, Configuration.BASE_URL_KEY
         )
-        base_url_setting.value = 'http://test-circulation-manager/'
+        base_url_setting.value = "http://test-circulation-manager/"
 
         library = self._default_library
         library2 = self._library()
 
-        cmd_args = [library.short_name, "--stage=testing",
-                    "--registry-url=http://registry/"]
+        cmd_args = [
+            library.short_name,
+            "--stage=testing",
+            "--registry-url=http://registry/",
+        ]
         app = script.do_run(cmd_args=cmd_args, in_unit_test=True)
 
         # One library was processed.
@@ -842,8 +842,7 @@ class TestLibraryRegistrationScript(DatabaseTest):
         app = script.do_run(cmd_args=[], in_unit_test=True)
 
         # Every library was processed.
-        assert (set([library, library2]) ==
-            set([x[0].library for x in script.processed]))
+        assert set([library, library2]) == set([x[0].library for x in script.processed])
 
         for i in script.processed:
             # Since no stage was provided, each library was registered
@@ -852,9 +851,7 @@ class TestLibraryRegistrationScript(DatabaseTest):
 
             # Every library was registered with the default
             # library registry.
-            assert (
-                RemoteRegistry.DEFAULT_LIBRARY_REGISTRY_URL ==
-                i[0].integration.url)
+            assert RemoteRegistry.DEFAULT_LIBRARY_REGISTRY_URL == i[0].integration.url
 
     def test_process_library(self):
         """Test the things that might happen when process_library is called."""
@@ -870,6 +867,7 @@ class TestLibraryRegistrationScript(DatabaseTest):
             def push(self, stage, url_for):
                 self.pushed = (stage, url_for)
                 return True
+
         registration = Success(registry, library)
 
         stage = object()
@@ -897,6 +895,7 @@ class TestLibraryRegistrationScript(DatabaseTest):
         class FailsWithProblemDetail(Registration):
             def push(self, stage, url_for):
                 return INVALID_INPUT.detailed("oops")
+
         registration = FailsWithProblemDetail(registry, library)
         result = script.process_library(registration, stage, url_for)
 
@@ -905,4 +904,3 @@ class TestLibraryRegistrationScript(DatabaseTest):
         # actually running the script will see it.
         assert INVALID_INPUT.uri == result.uri
         assert "oops" == result.detail
-

@@ -1,34 +1,31 @@
-import os
 import logging
+import os
 import urllib.parse
 
 import flask
-from flask import (
-    Flask,
-    Response,
-    redirect,
-)
+from flask import Flask, Response, redirect
+from flask_babel import Babel
 from flask_sqlalchemy_session import flask_scoped_session
 from sqlalchemy.orm import sessionmaker
-from .config import Configuration
-from core.model import (
-    ConfigurationSetting,
-    SessionManager,
-)
-from core.log import LogConfiguration
-from core.util import LanguageCodes
-from flask_babel import Babel
 
+from core.log import LogConfiguration
+from core.model import ConfigurationSetting, SessionManager
+from core.util import LanguageCodes
+
+from .config import Configuration
 
 app = Flask(__name__)
 app._db = None
-app.config['BABEL_DEFAULT_LOCALE'] = LanguageCodes.three_to_two[Configuration.localization_languages()[0]]
-app.config['BABEL_TRANSLATION_DIRECTORIES'] = "../translations"
+app.config["BABEL_DEFAULT_LOCALE"] = LanguageCodes.three_to_two[
+    Configuration.localization_languages()[0]
+]
+app.config["BABEL_TRANSLATION_DIRECTORIES"] = "../translations"
 babel = Babel(app)
+
 
 @app.before_first_request
 def initialize_database(autoinitialize=True):
-    testing = 'TESTING' in os.environ
+    testing = "TESTING" in os.environ
 
     db_url = Configuration.database_url()
     if autoinitialize:
@@ -38,27 +35,29 @@ def initialize_database(autoinitialize=True):
     app._db = _db
 
     log_level = LogConfiguration.initialize(_db, testing=testing)
-    debug = log_level == 'DEBUG'
-    app.config['DEBUG'] = debug
+    debug = log_level == "DEBUG"
+    app.config["DEBUG"] = debug
     app.debug = debug
     _db.commit()
     logging.getLogger().info("Application debug mode==%r" % app.debug)
 
+
 from . import routes
 from .admin import routes
 
+
 def run(url=None):
-    base_url = url or 'http://localhost:6500/'
+    base_url = url or "http://localhost:6500/"
     scheme, netloc, path, parameters, query, fragment = urllib.parse.urlparse(base_url)
-    if ':' in netloc:
-        host, port = netloc.split(':')
+    if ":" in netloc:
+        host, port = netloc.split(":")
         port = int(port)
     else:
         host = netloc
         port = 80
 
     # Required for subdomain support.
-    app.config['SERVER_NAME'] = netloc
+    app.config["SERVER_NAME"] = netloc
 
     debug = True
 
@@ -66,8 +65,9 @@ def run(url=None):
     # running in debug mode with the global socket timeout set by isbnlib
     if debug:
         import socket
+
         socket.setdefaulttimeout(None)
 
     logging.info("Starting app on %s:%s", host, port)
-    sslContext = 'adhoc' if scheme == 'https' else None
+    sslContext = "adhoc" if scheme == "https" else None
     app.run(debug=debug, host=host, port=port, threaded=True, ssl_context=sslContext)

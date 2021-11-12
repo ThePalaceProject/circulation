@@ -344,7 +344,8 @@ class TestProQuestAPIClient(DatabaseTest):
 """
         download_link = "https://proquest.com/fulfill?documentID=12345"
         expected_acsm_book = ProQuestBook(
-            content=acsm_file_content.encode("utf-8"), content_type=DeliveryMechanism.ADOBE_DRM
+            content=acsm_file_content.encode("utf-8"),
+            content_type=DeliveryMechanism.ADOBE_DRM,
         )
 
         first_response_arguments = {

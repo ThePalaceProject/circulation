@@ -1,9 +1,14 @@
 import datetime
 import random
-from core.testing import (
-    DatabaseTest,
-)
 
+from api.monitor import (
+    HoldReaper,
+    IdlingAnnotationReaper,
+    LoanlikeReaperMonitor,
+    LoanReaper,
+)
+from api.odl import ODLAPI, SharedODLAPI
+from api.testing import MonitorTest
 from core.metadata_layer import TimestampData
 from core.model import (
     Annotation,
@@ -13,20 +18,8 @@ from core.model import (
     ExternalIntegration,
     Identifier,
 )
+from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
-
-from api.monitor import (
-    HoldReaper,
-    IdlingAnnotationReaper,
-    LoanlikeReaperMonitor,
-    LoanReaper,
-)
-
-from api.odl import (
-    ODLAPI,
-    SharedODLAPI,
-)
-from api.testing import MonitorTest
 
 
 class TestLoanlikeReaperMonitor(DatabaseTest):
@@ -37,12 +30,11 @@ class TestLoanlikeReaperMonitor(DatabaseTest):
         will be exempt from the reaper.
         """
         for i in (
-                ODLAPI.NAME,
-                SharedODLAPI.NAME,
-                ExternalIntegration.OPDS_FOR_DISTRIBUTORS,
+            ODLAPI.NAME,
+            SharedODLAPI.NAME,
+            ExternalIntegration.OPDS_FOR_DISTRIBUTORS,
         ):
             assert i in LoanlikeReaperMonitor.SOURCE_OF_TRUTH_PROTOCOLS
-
 
     def test_reaping(self):
         # This patron stopped using the circulation manager a long time
@@ -54,37 +46,44 @@ class TestLoanlikeReaperMonitor(DatabaseTest):
 
         # We're going to give these patrons some loans and holds.
         edition, open_access = self._edition(
-            with_license_pool=True, with_open_access_download=True)
+            with_license_pool=True, with_open_access_download=True
+        )
 
-        not_open_access_1 = self._licensepool(edition,
-            open_access=False, data_source_name=DataSource.OVERDRIVE)
-        not_open_access_2 = self._licensepool(edition,
-            open_access=False, data_source_name=DataSource.BIBLIOTHECA)
-        not_open_access_3 = self._licensepool(edition,
-            open_access=False, data_source_name=DataSource.AXIS_360)
-        not_open_access_4 = self._licensepool(edition,
-            open_access=False, data_source_name=DataSource.ODILO)
+        not_open_access_1 = self._licensepool(
+            edition, open_access=False, data_source_name=DataSource.OVERDRIVE
+        )
+        not_open_access_2 = self._licensepool(
+            edition, open_access=False, data_source_name=DataSource.BIBLIOTHECA
+        )
+        not_open_access_3 = self._licensepool(
+            edition, open_access=False, data_source_name=DataSource.AXIS_360
+        )
+        not_open_access_4 = self._licensepool(
+            edition, open_access=False, data_source_name=DataSource.ODILO
+        )
 
         # Here's a collection that is the source of truth for its
         # loans and holds, rather than mirroring loan and hold information
         # from some remote source.
         sot_collection = self._collection(
             "Source of Truth",
-            protocol=random.choice(LoanReaper.SOURCE_OF_TRUTH_PROTOCOLS)
+            protocol=random.choice(LoanReaper.SOURCE_OF_TRUTH_PROTOCOLS),
         )
 
         edition2 = self._edition(with_license_pool=False)
 
         sot_lp1 = self._licensepool(
-            edition2, open_access=False,
+            edition2,
+            open_access=False,
             data_source_name=DataSource.OVERDRIVE,
-            collection=sot_collection
+            collection=sot_collection,
         )
 
         sot_lp2 = self._licensepool(
-            edition2, open_access=False,
+            edition2,
+            open_access=False,
             data_source_name=DataSource.BIBLIOTHECA,
-            collection=sot_collection
+            collection=sot_collection,
         )
 
         now = utc_now()
@@ -100,45 +99,41 @@ class TestLoanlikeReaperMonitor(DatabaseTest):
 
         # This hold expired without ever becoming a loan (that we saw).
         not_open_access_2.on_hold_to(
-            inactive_patron,
-            start=even_longer,
-            end=a_long_time_ago
+            inactive_patron, start=even_longer, end=a_long_time_ago
         )
 
         # This hold has no end date and is older than a year.
         not_open_access_3.on_hold_to(
-            inactive_patron, start=a_long_time_ago, end=None,
+            inactive_patron,
+            start=a_long_time_ago,
+            end=None,
         )
 
         # This loan has no end date and is older than 90 days.
         not_open_access_4.loan_to(
-            inactive_patron, start=a_long_time_ago, end=None,
+            inactive_patron,
+            start=a_long_time_ago,
+            end=None,
         )
 
         # This loan has no end date, but it's for an open-access work.
         open_access_loan, ignore = open_access.loan_to(
-            inactive_patron, start=a_long_time_ago, end=None,
+            inactive_patron,
+            start=a_long_time_ago,
+            end=None,
         )
 
         # This loan has not expired yet.
-        not_open_access_1.loan_to(
-            current_patron, start=now, end=the_future
-        )
+        not_open_access_1.loan_to(current_patron, start=now, end=the_future)
 
         # This hold has not expired yet.
-        not_open_access_2.on_hold_to(
-            current_patron, start=now, end=the_future
-        )
+        not_open_access_2.on_hold_to(current_patron, start=now, end=the_future)
 
         # This loan has no end date but is pretty recent.
-        not_open_access_3.loan_to(
-            current_patron, start=not_very_long_ago, end=None
-        )
+        not_open_access_3.loan_to(current_patron, start=not_very_long_ago, end=None)
 
         # This hold has no end date but is pretty recent.
-        not_open_access_4.on_hold_to(
-            current_patron, start=not_very_long_ago, end=None
-        )
+        not_open_access_4.on_hold_to(current_patron, start=not_very_long_ago, end=None)
 
         # Reapers will not touch loans or holds from the
         # source-of-truth collection, even ones that have 'obviously'
@@ -188,7 +183,6 @@ class TestLoanlikeReaperMonitor(DatabaseTest):
 
 
 class TestIdlingAnnotationReaper(DatabaseTest):
-
     def test_where_clause(self):
 
         # Two books.
@@ -204,8 +198,9 @@ class TestIdlingAnnotationReaper(DatabaseTest):
         not_that_old = now - datetime.timedelta(days=59)
         very_old = now - datetime.timedelta(days=61)
 
-        def _annotation(patron, pool, content, motivation=Annotation.IDLING,
-                        timestamp=very_old):
+        def _annotation(
+            patron, pool, content, motivation=Annotation.IDLING, timestamp=very_old
+        ):
             annotation, ignore = Annotation.get_one_or_create(
                 self._db,
                 patron=patron,
@@ -240,9 +235,7 @@ class TestIdlingAnnotationReaper(DatabaseTest):
         # The second patron has a non-old idling annotation for the
         # second book, which will not be reaped (even though there is
         # no active loan or hold) because it's not old enough.
-        new_idling = _annotation(
-            p2, lp2, "recent", timestamp=not_that_old
-        )
+        new_idling = _annotation(p2, lp2, "recent", timestamp=not_that_old)
         reaper = IdlingAnnotationReaper(self._db)
         qu = self._db.query(Annotation).filter(reaper.where_clause)
         assert [reapable] == qu.all()

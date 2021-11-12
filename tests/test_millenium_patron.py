@@ -1,37 +1,35 @@
+import json
 import pkgutil
 from datetime import date, timedelta
 from decimal import Decimal
-import json
 from urllib import parse
 
 import pytest
-from api.config import (
-    CannotLoadConfiguration,
-    Configuration,
-)
-from core.model import ConfigurationSetting
+
 from api.authenticator import PatronData
+from api.config import CannotLoadConfiguration, Configuration
 from api.millenium_patron import MilleniumPatronAPI
+from core.model import ConfigurationSetting
 from core.testing import DatabaseTest
-from core.util.datetime_helpers import (
-    utc_now
-)
+from core.util.datetime_helpers import utc_now
+
 from . import sample_data
+
 
 class MockResponse(object):
     def __init__(self, content):
         self.status_code = 200
         self.content = content
 
-class MockAPI(MilleniumPatronAPI):
 
+class MockAPI(MilleniumPatronAPI):
     def __init__(self, library_id, integration):
         super(MockAPI, self).__init__(library_id, integration)
         self.queue = []
         self.requests_made = []
 
     def sample_data(self, filename):
-        return sample_data(filename, 'millenium_patron')
+        return sample_data(filename, "millenium_patron")
 
     def enqueue(self, filename):
         data = self.sample_data(filename)
@@ -45,29 +43,47 @@ class MockAPI(MilleniumPatronAPI):
 
 
 class TestMilleniumPatronAPI(DatabaseTest):
-
-    def mock_api(self, url="http://url/", blacklist=[], auth_mode=None, verify_certificate=True,
-                 block_types=None, password_keyboard=None, library_identifier_field=None,
-                 neighborhood_mode=None
+    def mock_api(
+        self,
+        url="http://url/",
+        blacklist=[],
+        auth_mode=None,
+        verify_certificate=True,
+        block_types=None,
+        password_keyboard=None,
+        library_identifier_field=None,
+        neighborhood_mode=None,
     ):
         integration = self._external_integration(self._str)
         integration.url = url
-        integration.setting(MilleniumPatronAPI.IDENTIFIER_BLACKLIST).value = json.dumps(blacklist)
-        integration.setting(MilleniumPatronAPI.VERIFY_CERTIFICATE).value = json.dumps(verify_certificate)
+        integration.setting(MilleniumPatronAPI.IDENTIFIER_BLACKLIST).value = json.dumps(
+            blacklist
+        )
+        integration.setting(MilleniumPatronAPI.VERIFY_CERTIFICATE).value = json.dumps(
+            verify_certificate
+        )
         if block_types:
             integration.setting(MilleniumPatronAPI.BLOCK_TYPES).value = block_types
 
         if auth_mode:
-            integration.setting(MilleniumPatronAPI.AUTHENTICATION_MODE).value = auth_mode
+            integration.setting(
+                MilleniumPatronAPI.AUTHENTICATION_MODE
+            ).value = auth_mode
         if neighborhood_mode:
-            integration.setting(MilleniumPatronAPI.NEIGHBORHOOD_MODE).value = neighborhood_mode
+            integration.setting(
+                MilleniumPatronAPI.NEIGHBORHOOD_MODE
+            ).value = neighborhood_mode
         if password_keyboard:
-            integration.setting(MilleniumPatronAPI.PASSWORD_KEYBOARD).value = password_keyboard
+            integration.setting(
+                MilleniumPatronAPI.PASSWORD_KEYBOARD
+            ).value = password_keyboard
 
         if library_identifier_field:
             ConfigurationSetting.for_library_and_externalintegration(
-                self._db, MilleniumPatronAPI.LIBRARY_IDENTIFIER_FIELD,
-                self._default_library, integration
+                self._db,
+                MilleniumPatronAPI.LIBRARY_IDENTIFIER_FIELD,
+                self._default_library,
+                integration,
             ).value = library_identifier_field
 
         return MockAPI(self._default_library, integration)
@@ -83,7 +99,9 @@ class TestMilleniumPatronAPI(DatabaseTest):
 
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             self.mock_api(neighborhood_mode="nope")
-        assert "Unrecognized Millenium Patron API neighborhood mode: nope." in str(excinfo.value)
+        assert "Unrecognized Millenium Patron API neighborhood mode: nope." in str(
+            excinfo.value
+        )
 
     def test__remote_patron_lookup_no_such_patron(self):
         self.api.enqueue("dump.no such barcode.html")
@@ -113,7 +131,10 @@ class TestMilleniumPatronAPI(DatabaseTest):
         patrondata = PatronData(authorization_identifier="44444444444447")
         patrondata = self.api._remote_patron_lookup(patrondata)
         assert "44444444444447" == patrondata.authorization_identifier
-        assert ["44444444444447", "4 444 4444 44444 7"] == patrondata.authorization_identifiers
+        assert [
+            "44444444444447",
+            "4 444 4444 44444 7",
+        ] == patrondata.authorization_identifiers
 
     def test__remote_patron_lookup_block_rules(self):
         """This patron has a value of "m" in MBLOCK[56], which generally
@@ -127,7 +148,7 @@ class TestMilleniumPatronAPI(DatabaseTest):
 
         # If we set custom block types that say 'm' doesn't really
         # mean the patron is blocked, they're not blocked.
-        api = self.mock_api(block_types='abcde')
+        api = self.mock_api(block_types="abcde")
         api.enqueue("dump.blocked.html")
         patrondata = PatronData(authorization_identifier="good barcode")
         patrondata = api._remote_patron_lookup(patrondata)
@@ -135,7 +156,7 @@ class TestMilleniumPatronAPI(DatabaseTest):
 
         # If we set custom block types that include 'm', the patron
         # is blocked.
-        api = self.mock_api(block_types='lmn')
+        api = self.mock_api(block_types="lmn")
         api.enqueue("dump.blocked.html")
         patrondata = PatronData(authorization_identifier="good barcode")
         patrondata = api._remote_patron_lookup(patrondata)
@@ -167,9 +188,7 @@ class TestMilleniumPatronAPI(DatabaseTest):
         assert "SECOND-barcode" == patrondata.authorization_identifier
 
         # Let's say they authenticate with a username.
-        patrondata = self.api.patron_dump_to_patrondata(
-            "username", dump
-        )
+        patrondata = self.api.patron_dump_to_patrondata("username", dump)
         # Their Patron record will suggest the second barcode as
         # authorization identifier, because it's likely to be the most
         # recently added one.
@@ -196,11 +215,11 @@ class TestMilleniumPatronAPI(DatabaseTest):
         [args, kwargs] = self.api.requests_made.pop()
         [url] = args
         assert kwargs == {}
-        assert url == 'http://url/%s/%s/pintest' % (barcode, parse.quote(pin, safe=''))
+        assert url == "http://url/%s/%s/pintest" % (barcode, parse.quote(pin, safe=""))
 
         # In particular, verify that the slash character in the PIN was encoded;
         # by default, parse.quote leaves it alone.
-        assert '%2F' in url
+        assert "%2F" in url
 
     def test_authentication_updates_patron_authorization_identifier(self):
         """Verify that Patron.authorization_identifier is updated when
@@ -297,9 +316,7 @@ class TestMilleniumPatronAPI(DatabaseTest):
         # Patron is valid, but not in our database yet
         self.api.enqueue("pintest.good.html")
         self.api.enqueue("dump.success.html")
-        alice = self.api.authenticate(
-            self._db, dict(username="alice", password="4444")
-        )
+        alice = self.api.authenticate(self._db, dict(username="alice", password="4444"))
         assert "44444444444447" == alice.authorization_identifier
         assert "alice" == alice.username
 
@@ -307,19 +324,23 @@ class TestMilleniumPatronAPI(DatabaseTest):
         # to verify that our authentication mechanism chooses the right patron
         # and doesn't look up whoever happens to be in the database.
         p = self._patron()
-        p.username = 'notalice'
-        p.authorization_identifier='111111111111'
+        p.username = "notalice"
+        p.authorization_identifier = "111111111111"
         self._db.commit()
 
         # Patron is in the db, now authenticate with barcode
         self.api.enqueue("pintest.good.html")
-        alice = self.api.authenticated_patron(self._db, dict(username="44444444444447", password="4444"))
+        alice = self.api.authenticated_patron(
+            self._db, dict(username="44444444444447", password="4444")
+        )
         assert "44444444444447" == alice.authorization_identifier
         assert "alice" == alice.username
 
         # Authenticate with username again
         self.api.enqueue("pintest.good.html")
-        alice = self.api.authenticated_patron(self._db, dict(username="alice", password="4444"))
+        alice = self.api.authenticated_patron(
+            self._db, dict(username="alice", password="4444")
+        )
         assert "44444444444447" == alice.authorization_identifier
         assert "alice" == alice.username
 
@@ -386,7 +407,7 @@ class TestMilleniumPatronAPI(DatabaseTest):
 
     def test_patron_dump_to_patrondata(self):
         content = self.api.sample_data("dump.success.html")
-        patrondata = self.api.patron_dump_to_patrondata('alice', content)
+        patrondata = self.api.patron_dump_to_patrondata("alice", content)
         assert "44444444444447" == patrondata.authorization_identifier
         assert "alice" == patrondata.username
         assert None == patrondata.library_identifier
@@ -394,11 +415,11 @@ class TestMilleniumPatronAPI(DatabaseTest):
     def test_patron_dump_to_patrondata_restriction_field(self):
         api = self.mock_api(library_identifier_field="HOME LIBR[p53]")
         content = api.sample_data("dump.success.html")
-        patrondata = api.patron_dump_to_patrondata('alice', content)
+        patrondata = api.patron_dump_to_patrondata("alice", content)
         assert "mm" == patrondata.library_identifier
         api = self.mock_api(library_identifier_field="P TYPE[p47]")
         content = api.sample_data("dump.success.html")
-        patrondata = api.patron_dump_to_patrondata('alice', content)
+        patrondata = api.patron_dump_to_patrondata("alice", content)
         assert "10" == patrondata.library_identifier
 
     def test_neighborhood(self):
@@ -407,20 +428,23 @@ class TestMilleniumPatronAPI(DatabaseTest):
         # Default behavior is not to gather neighborhood information at all.
         api = self.mock_api()
         content = api.sample_data("dump.success.html")
-        patrondata = api.patron_dump_to_patrondata('alice', content)
+        patrondata = api.patron_dump_to_patrondata("alice", content)
         assert PatronData.NO_VALUE == patrondata.neighborhood
 
         # Patron neighborhood may be the identifier of their home library branch.
-        api = self.mock_api(neighborhood_mode=MilleniumPatronAPI.HOME_BRANCH_NEIGHBORHOOD_MODE)
+        api = self.mock_api(
+            neighborhood_mode=MilleniumPatronAPI.HOME_BRANCH_NEIGHBORHOOD_MODE
+        )
         content = api.sample_data("dump.success.html")
-        patrondata = api.patron_dump_to_patrondata('alice', content)
+        patrondata = api.patron_dump_to_patrondata("alice", content)
         assert "mm" == patrondata.neighborhood
 
         # Or it may be the ZIP code of their home address.
-        api = self.mock_api(neighborhood_mode=MilleniumPatronAPI.POSTAL_CODE_NEIGHBORHOOD_MODE)
-        patrondata = api.patron_dump_to_patrondata('alice', content)
+        api = self.mock_api(
+            neighborhood_mode=MilleniumPatronAPI.POSTAL_CODE_NEIGHBORHOOD_MODE
+        )
+        patrondata = api.patron_dump_to_patrondata("alice", content)
         assert "10001" == patrondata.neighborhood
-
 
     def test_authorization_identifier_blacklist(self):
         """A patron has two authorization identifiers. Ordinarily the second
@@ -428,11 +452,11 @@ class TestMilleniumPatronAPI(DatabaseTest):
         blacklisted string, so the first takes precedence.
         """
         content = self.api.sample_data("dump.two_barcodes.html")
-        patrondata = self.api.patron_dump_to_patrondata('alice', content)
+        patrondata = self.api.patron_dump_to_patrondata("alice", content)
         assert "SECOND-barcode" == patrondata.authorization_identifier
 
         api = self.mock_api(blacklist=["second"])
-        patrondata = api.patron_dump_to_patrondata('alice', content)
+        patrondata = api.patron_dump_to_patrondata("alice", content)
         assert "FIRST-barcode" == patrondata.authorization_identifier
 
     def test_blacklist_may_remove_every_authorization_identifier(self):
@@ -441,7 +465,7 @@ class TestMilleniumPatronAPI(DatabaseTest):
         """
         api = self.mock_api(blacklist=["barcode"])
         content = api.sample_data("dump.two_barcodes.html")
-        patrondata = api.patron_dump_to_patrondata('alice', content)
+        patrondata = api.patron_dump_to_patrondata("alice", content)
         assert patrondata.NO_VALUE == patrondata.authorization_identifier
         assert [] == patrondata.authorization_identifiers
 
@@ -458,9 +482,9 @@ class TestMilleniumPatronAPI(DatabaseTest):
         # Test that the value of verify_certificate becomes the
         # 'verify' argument when _modify_request_kwargs() is called.
         kwargs = dict(verify=False)
-        api = self.mock_api(verify_certificate = "yes please")
+        api = self.mock_api(verify_certificate="yes please")
         api._update_request_kwargs(kwargs)
-        assert "yes please" == kwargs['verify']
+        assert "yes please" == kwargs["verify"]
 
         # NOTE: We can't automatically test that request() actually
         # calls _modify_request_kwargs() because request() is the
@@ -500,23 +524,22 @@ class TestMilleniumPatronAPI(DatabaseTest):
 
     def test_misconfigured_authentication_mode(self):
         with pytest.raises(CannotLoadConfiguration) as excinfo:
-            self.mock_api(auth_mode = 'nosuchauthmode')
-        assert "Unrecognized Millenium Patron API authentication mode: nosuchauthmode." in str(excinfo.value)
+            self.mock_api(auth_mode="nosuchauthmode")
+        assert (
+            "Unrecognized Millenium Patron API authentication mode: nosuchauthmode."
+            in str(excinfo.value)
+        )
 
     def test_authorization_without_password(self):
         """Test authorization when no password is required, only
         patron identifier.
         """
-        self.api = self.mock_api(
-            password_keyboard=MilleniumPatronAPI.NULL_KEYBOARD
-        )
+        self.api = self.mock_api(password_keyboard=MilleniumPatronAPI.NULL_KEYBOARD)
         assert False == self.api.collects_password
         # If the patron lookup succeeds, the user is authenticated
         # as that patron.
         self.api.enqueue("dump.success.html")
-        patrondata = self.api.remote_authenticate(
-            "44444444444447", None
-        )
+        patrondata = self.api.remote_authenticate("44444444444447", None)
         assert "44444444444447" == patrondata.authorization_identifier
 
         # If it fails, the user is not authenticated.
@@ -528,11 +551,9 @@ class TestMilleniumPatronAPI(DatabaseTest):
         """Test authenticating against the patron's family name, given the
         correct name (case insensitive)
         """
-        self.api = self.mock_api(auth_mode = "family_name")
+        self.api = self.mock_api(auth_mode="family_name")
         self.api.enqueue("dump.success.html")
-        patrondata = self.api.remote_authenticate(
-            "44444444444447", "Sheldon"
-        )
+        patrondata = self.api.remote_authenticate("44444444444447", "Sheldon")
         assert "44444444444447" == patrondata.authorization_identifier
 
         # Since we got a full patron dump, the PatronData we get back
@@ -543,7 +564,7 @@ class TestMilleniumPatronAPI(DatabaseTest):
         """Test authenticating against the patron's family name, given the
         incorrect name
         """
-        self.api = self.mock_api(auth_mode = "family_name")
+        self.api = self.mock_api(auth_mode="family_name")
         self.api.enqueue("dump.success.html")
         assert False == self.api.remote_authenticate("44444444444447", "wrong name")
 
@@ -551,7 +572,7 @@ class TestMilleniumPatronAPI(DatabaseTest):
         """If no patron is found, authorization based on family name cannot
         proceed.
         """
-        self.api = self.mock_api(auth_mode = "family_name")
+        self.api = self.mock_api(auth_mode="family_name")
         self.api.enqueue("dump.no such barcode.html")
         assert False == self.api.remote_authenticate("44444444444447", "somebody")
 
@@ -565,11 +586,13 @@ class TestMilleniumPatronAPI(DatabaseTest):
         assert "93203" == m("10145-6789 Main Street$Arvin CA 93203-1234")
         assert "93203" == m("10145-6789 Main Street$Arvin CA 93203-1234 (old address)")
         assert "93203" == m("10145-6789 Main Street$Arvin CA 93203 (old address)")
-        assert "93203" == m("10145-6789 Main Street Apartment #12345$Arvin CA 93203 (old address)")
+        assert "93203" == m(
+            "10145-6789 Main Street Apartment #12345$Arvin CA 93203 (old address)"
+        )
 
         assert None == m("10145 Main Street Apartment 123456$Arvin CA")
         assert None == m("10145 Main Street$Arvin CA")
         assert None == m("123 Main Street")
 
         # Some cases where we incorrectly detect a ZIP code where there is none.
-        assert '12345' == m("10145 Main Street, Apartment #12345$Arvin CA")
+        assert "12345" == m("10145 Main Street, Apartment #12345$Arvin CA")

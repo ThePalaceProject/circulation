@@ -5,17 +5,13 @@ from parameterized import parameterized
 from api.onix import ONIXExtractor
 from core.classifier import Classifier
 from core.metadata_layer import CirculationData
-from core.model import (
-    Classification,
-    Edition,
-    Identifier,
-    LicensePool)
+from core.model import Classification, Edition, Identifier, LicensePool
 from core.util.datetime_helpers import datetime_utc
+
 from . import sample_data
 
 
 class TestONIXExtractor(object):
-
     def sample_data(self, filename):
         return sample_data(filename, "onix")
 
@@ -50,36 +46,41 @@ class TestONIXExtractor(object):
         assert 2017 == record.issued.year
 
         assert 1 == len(record.links)
-        assert "the essential democratic values of diversity and free expression" in record.links[0].content
+        assert (
+            "the essential democratic values of diversity and free expression"
+            in record.links[0].content
+        )
 
         record = metadata_records[1]
         assert Edition.AUDIO_MEDIUM == record.medium
         assert "The Test Corporation" == record.contributors[0].display_name
         assert "Test Corporation, The" == record.contributors[0].sort_name
 
-    @parameterized.expand([
-        (
-                'limited_usage_status',
-                'onix_3_usage_constraints_example.xml',
-                20
-        ),
-        (
-                'unlimited_usage_status',
-                'onix_3_usage_constraints_with_unlimited_usage_status.xml',
-                LicensePool.UNLIMITED_ACCESS
-        ),
-        (
-                'wrong_usage_unit',
-                'onix_3_usage_constraints_example_with_day_usage_unit.xml',
-                LicensePool.UNLIMITED_ACCESS
-        )
-    ])
-    def test_parse_parses_correctly_onix_3_usage_constraints(self, _, file_name, licenses_number):
+    @parameterized.expand(
+        [
+            ("limited_usage_status", "onix_3_usage_constraints_example.xml", 20),
+            (
+                "unlimited_usage_status",
+                "onix_3_usage_constraints_with_unlimited_usage_status.xml",
+                LicensePool.UNLIMITED_ACCESS,
+            ),
+            (
+                "wrong_usage_unit",
+                "onix_3_usage_constraints_example_with_day_usage_unit.xml",
+                LicensePool.UNLIMITED_ACCESS,
+            ),
+        ]
+    )
+    def test_parse_parses_correctly_onix_3_usage_constraints(
+        self, _, file_name, licenses_number
+    ):
         # Arrange
         file = self.sample_data(file_name)
 
         # Act
-        metadata_records = ONIXExtractor().parse(BytesIO(file), 'ONIX 3 Usage Constraints Example')
+        metadata_records = ONIXExtractor().parse(
+            BytesIO(file), "ONIX 3 Usage Constraints Example"
+        )
 
         # Assert
         assert len(metadata_records) == 1

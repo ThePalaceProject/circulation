@@ -140,10 +140,14 @@ class TestSAMLConfiguration(DatabaseTest):
             # Assert
             assert 2 == len(identity_providers)
 
-            assert True == isinstance(identity_providers[0], SAMLIdentityProviderMetadata)
+            assert True == isinstance(
+                identity_providers[0], SAMLIdentityProviderMetadata
+            )
             assert fixtures.IDP_1_ENTITY_ID == identity_providers[0].entity_id
 
-            assert True == isinstance(identity_providers[1], SAMLIdentityProviderMetadata)
+            assert True == isinstance(
+                identity_providers[1], SAMLIdentityProviderMetadata
+            )
             assert fixtures.IDP_2_ENTITY_ID == identity_providers[1].entity_id
 
             configuration_storage.load.assert_has_calls(
@@ -202,10 +206,14 @@ class TestSAMLConfiguration(DatabaseTest):
 
             # Assert
             assert 2 == len(identity_providers)
-            assert True == isinstance(identity_providers[0], SAMLIdentityProviderMetadata)
+            assert True == isinstance(
+                identity_providers[0], SAMLIdentityProviderMetadata
+            )
             assert fixtures.IDP_1_ENTITY_ID == identity_providers[0].entity_id
 
-            assert True == isinstance(identity_providers[1], SAMLIdentityProviderMetadata)
+            assert True == isinstance(
+                identity_providers[1], SAMLIdentityProviderMetadata
+            )
             assert fixtures.IDP_2_ENTITY_ID == identity_providers[1].entity_id
 
             configuration_storage.load.assert_has_calls(
@@ -273,16 +281,24 @@ class TestSAMLConfiguration(DatabaseTest):
 
             # Assert
             assert 4 == len(identity_providers)
-            assert True == isinstance(identity_providers[0], SAMLIdentityProviderMetadata)
+            assert True == isinstance(
+                identity_providers[0], SAMLIdentityProviderMetadata
+            )
             assert fixtures.IDP_1_ENTITY_ID == identity_providers[0].entity_id
 
-            assert True == isinstance(identity_providers[1], SAMLIdentityProviderMetadata)
+            assert True == isinstance(
+                identity_providers[1], SAMLIdentityProviderMetadata
+            )
             assert fixtures.IDP_2_ENTITY_ID == identity_providers[1].entity_id
 
-            assert True == isinstance(identity_providers[2], SAMLIdentityProviderMetadata)
+            assert True == isinstance(
+                identity_providers[2], SAMLIdentityProviderMetadata
+            )
             assert fixtures.IDP_1_ENTITY_ID == identity_providers[2].entity_id
 
-            assert True == isinstance(identity_providers[3], SAMLIdentityProviderMetadata)
+            assert True == isinstance(
+                identity_providers[3], SAMLIdentityProviderMetadata
+            )
             assert fixtures.IDP_2_ENTITY_ID == identity_providers[3].entity_id
 
             configuration_storage.load.assert_has_calls(
@@ -515,7 +531,7 @@ class TestSAMLOneLoginConfiguration(object):
                 "wantAssertionsEncrypted": False,
                 "nameIdEncrypted": False,
                 "signatureAlgorithm": "http://www.w3.org/2000/09/xmldsig#rsa-sha1",
-                "allowRepeatAttributeName": False
+                "allowRepeatAttributeName": False,
             },
         }
         db = create_autospec(spec=sqlalchemy.orm.session.Session)

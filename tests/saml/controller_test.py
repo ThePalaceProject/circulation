@@ -4,7 +4,6 @@ from tests.test_controller import ControllerTest as BaseControllerTest
 
 
 class ControllerTest(BaseControllerTest):
-
     def setup_method(self):
         self._integration = None
         super(ControllerTest, self).setup_method()

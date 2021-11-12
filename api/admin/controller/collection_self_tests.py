@@ -1,17 +1,16 @@
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
+
+from api.admin.controller.self_tests import SelfTestsController
 from api.admin.problem_details import *
-from core.opds_import import (OPDSImporter, OPDSImportMonitor)
-from core.model import (
-    Collection
-)
+from core.model import Collection
+from core.opds_import import OPDSImporter, OPDSImportMonitor
 from core.selftest import HasSelfTests
 from core.util.problem_detail import ProblemDetail
-from api.admin.controller.self_tests import SelfTestsController
+
 
 class CollectionSelfTestsController(SelfTestsController):
-
     def __init__(self, manager):
         super(CollectionSelfTestsController, self).__init__(manager)
         self.type = _("collection")
@@ -46,7 +45,9 @@ class CollectionSelfTestsController(SelfTestsController):
     def _find_protocol_class(self, collection):
         """Figure out which protocol is providing books to this collection"""
         if collection.protocol in [p.get("name") for p in self.protocols]:
-            protocol_class_found = [p for p in self.PROVIDER_APIS if p.NAME == collection.protocol]
+            protocol_class_found = [
+                p for p in self.PROVIDER_APIS if p.NAME == collection.protocol
+            ]
             if len(protocol_class_found) == 1:
                 return protocol_class_found[0]
 
@@ -55,10 +56,14 @@ class CollectionSelfTestsController(SelfTestsController):
 
         if self.protocol_class:
             value = None
-            if (collection_protocol == OPDSImportMonitor.PROTOCOL):
+            if collection_protocol == OPDSImportMonitor.PROTOCOL:
                 self.protocol_class = OPDSImportMonitor
-                value, results = self.protocol_class.run_self_tests(self._db, self.protocol_class, self._db, collection, OPDSImporter)
+                value, results = self.protocol_class.run_self_tests(
+                    self._db, self.protocol_class, self._db, collection, OPDSImporter
+                )
             elif issubclass(self.protocol_class, HasSelfTests):
-                value, results = self.protocol_class.run_self_tests(self._db, self.protocol_class, self._db, collection)
+                value, results = self.protocol_class.run_self_tests(
+                    self._db, self.protocol_class, self._db, collection
+                )
 
             return value

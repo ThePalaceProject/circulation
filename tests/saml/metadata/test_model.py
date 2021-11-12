@@ -27,18 +27,19 @@ class TestAttributeStatement(object):
         # Assert
         assert True == (SAMLAttributeType.uid.name in attribute_statement.attributes)
         assert (
-            attributes[0].values ==
-            attribute_statement.attributes[SAMLAttributeType.uid.name].values)
+            attributes[0].values
+            == attribute_statement.attributes[SAMLAttributeType.uid.name].values
+        )
 
+        assert True == (
+            SAMLAttributeType.eduPersonTargetedID.name in attribute_statement.attributes
+        )
         assert (
-            True ==
-            (SAMLAttributeType.eduPersonTargetedID.name
-            in attribute_statement.attributes))
-        assert (
-            attributes[1].values ==
-            attribute_statement.attributes[
+            attributes[1].values
+            == attribute_statement.attributes[
                 SAMLAttributeType.eduPersonTargetedID.name
-            ].values)
+            ].values
+        )
 
 
 class TestSAMLSubjectPatronIDExtractor(object):

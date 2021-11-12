@@ -1,11 +1,10 @@
 import json
 
-from migartion_scripts import RandomSortOptionRemover
-
 from core.facets import FacetConstants
 from core.lane import Facets
 from core.model import Library
 from core.testing import DatabaseTest
+from migartion_scripts import RandomSortOptionRemover
 
 
 class TestRandomSortOptionRemover(DatabaseTest):

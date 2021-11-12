@@ -1,19 +1,14 @@
-from pyld import jsonld
 import json
 import os
 
-from core.model import (
-    Annotation,
-    Identifier,
-    get_one_or_create,
-)
+from pyld import jsonld
 
-from core.app_server import (
-    url_for,
-)
+from core.app_server import url_for
+from core.model import Annotation, Identifier, get_one_or_create
 from core.util.datetime_helpers import utc_now
 
 from .problem_details import *
+
 
 def load_document(url):
     """Retrieves JSON-LD for the given URL from a local
@@ -21,22 +16,20 @@ def load_document(url):
     """
     files = {
         AnnotationWriter.JSONLD_CONTEXT: "anno.jsonld",
-        AnnotationWriter.LDP_CONTEXT: "ldp.jsonld"
+        AnnotationWriter.LDP_CONTEXT: "ldp.jsonld",
     }
     if url in files:
-        base_path = os.path.join(os.path.split(__file__)[0], 'jsonld')
+        base_path = os.path.join(os.path.split(__file__)[0], "jsonld")
         jsonld_file = os.path.join(base_path, files[url])
         data = open(jsonld_file).read()
-        doc = {
-            "contextUrl": None,
-            "documentUrl": url,
-            "document": data
-        }
+        doc = {"contextUrl": None, "documentUrl": url, "document": data}
         return doc
     else:
         return jsonld.load_document(url)
 
+
 jsonld.set_document_loader(load_document)
+
 
 class AnnotationWriter(object):
 
@@ -47,21 +40,33 @@ class AnnotationWriter(object):
 
     @classmethod
     def annotations_for(cls, patron, identifier=None):
-        annotations = [annotation for annotation in patron.annotations if annotation.active]
+        annotations = [
+            annotation for annotation in patron.annotations if annotation.active
+        ]
         if identifier:
-            annotations = [annotation for annotation in annotations if annotation.identifier == identifier]
+            annotations = [
+                annotation
+                for annotation in annotations
+                if annotation.identifier == identifier
+            ]
         return annotations
 
     @classmethod
     def annotation_container_for(cls, patron, identifier=None):
         if identifier:
-            url = url_for('annotations_for_work',
-                          identifier_type=identifier.type,
-                          identifier=identifier.identifier,
-                          library_short_name=patron.library.short_name,
-                          _external=True)
+            url = url_for(
+                "annotations_for_work",
+                identifier_type=identifier.type,
+                identifier=identifier.identifier,
+                library_short_name=patron.library.short_name,
+                _external=True,
+            )
         else:
-            url = url_for("annotations", library_short_name=patron.library.short_name, _external=True)
+            url = url_for(
+                "annotations",
+                library_short_name=patron.library.short_name,
+                _external=True,
+            )
         annotations = cls.annotations_for(patron, identifier=identifier)
 
         latest_timestamp = None
@@ -75,22 +80,32 @@ class AnnotationWriter(object):
         container["id"] = url
         container["type"] = ["BasicContainer", "AnnotationCollection"]
         container["total"] = len(annotations)
-        container["first"] = cls.annotation_page_for(patron, identifier=identifier, with_context=False)
+        container["first"] = cls.annotation_page_for(
+            patron, identifier=identifier, with_context=False
+        )
         return container, latest_timestamp
-
 
     @classmethod
     def annotation_page_for(cls, patron, identifier=None, with_context=True):
         if identifier:
-            url = url_for('annotations_for_work',
-                          identifier_type=identifier.type,
-                          identifier=identifier.identifier,
-                          library_short_name=patron.library.short_name,
-                          _external=True)
+            url = url_for(
+                "annotations_for_work",
+                identifier_type=identifier.type,
+                identifier=identifier.identifier,
+                library_short_name=patron.library.short_name,
+                _external=True,
+            )
         else:
-            url = url_for("annotations", library_short_name=patron.library.short_name, _external=True)
+            url = url_for(
+                "annotations",
+                library_short_name=patron.library.short_name,
+                _external=True,
+            )
         annotations = cls.annotations_for(patron, identifier=identifier)
-        details = [cls.detail(annotation, with_context=with_context) for annotation in annotations]
+        details = [
+            cls.detail(annotation, with_context=with_context)
+            for annotation in annotations
+        ]
 
         page = dict()
         if with_context:
@@ -105,9 +120,12 @@ class AnnotationWriter(object):
         item = dict()
         if with_context:
             item["@context"] = cls.JSONLD_CONTEXT
-        item["id"] = url_for("annotation_detail", annotation_id=annotation.id,
-                             library_short_name=annotation.patron.library.short_name,
-                             _external=True)
+        item["id"] = url_for(
+            "annotation_detail",
+            annotation_id=annotation.id,
+            library_short_name=annotation.patron.library.short_name,
+            _external=True,
+        )
         item["type"] = "Annotation"
         item["motivation"] = annotation.motivation
         item["body"] = annotation.content
@@ -124,8 +142,8 @@ class AnnotationWriter(object):
 
         return item
 
-class AnnotationParser(object):
 
+class AnnotationParser(object):
     @classmethod
     def parse(cls, _db, data, patron):
         if patron.synchronize_annotations != True:
@@ -133,8 +151,8 @@ class AnnotationParser(object):
 
         try:
             data = json.loads(data)
-            if 'id' in data and data['id'] is None:
-                del data['id']
+            if "id" in data and data["id"] is None:
+                del data["id"]
             data = jsonld.expand(data)
         except ValueError as e:
             return INVALID_ANNOTATION_FORMAT
@@ -152,7 +170,7 @@ class AnnotationParser(object):
 
         if not source or not len(source) == 1:
             return INVALID_ANNOTATION_TARGET
-        source = source[0].get('@id')
+        source = source[0].get("@id")
 
         try:
             identifier, ignore = Identifier.parse_urn(_db, source)
@@ -162,7 +180,7 @@ class AnnotationParser(object):
         motivation = data.get("http://www.w3.org/ns/oa#motivatedBy")
         if not motivation or not len(motivation) == 1:
             return INVALID_ANNOTATION_MOTIVATION
-        motivation = motivation[0].get('@id')
+        motivation = motivation[0].get("@id")
         if motivation not in Annotation.MOTIVATIONS:
             return INVALID_ANNOTATION_MOTIVATION
 
@@ -185,11 +203,14 @@ class AnnotationParser(object):
         elif motivation == Annotation.BOOKMARKING:
             # A given book can only have one 'bookmarking' annotation
             # per target.
-            extra_kwargs['target'] = target
+            extra_kwargs["target"] = target
 
         annotation, ignore = Annotation.get_one_or_create(
-            _db, patron=patron, identifier=identifier,
-            motivation=motivation, on_multiple='interchangeable',
+            _db,
+            patron=patron,
+            identifier=identifier,
+            motivation=motivation,
+            on_multiple="interchangeable",
             **extra_kwargs
         )
         annotation.target = target

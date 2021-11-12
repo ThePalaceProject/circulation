@@ -1,34 +1,34 @@
 #!/usr/bin/env python
+import os
 import random
 import sys
-import os
-import sys
+
 bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..")
 sys.path.append(os.path.abspath(package_dir))
 
-from core.model import (
-    get_one_or_create,
-    production_session,
-    DataSource,
-    Identifier,
-
-    LicensePool,
-    Patron,
-    )
-from threem import ThreeMAPI
-from overdrive import OverdriveAPI
 from axis import Axis360API
+from circulation_exceptions import *
+from overdrive import OverdriveAPI
+from threem import ThreeMAPI
 
 from circulation import CirculationAPI
-from circulation_exceptions import *
+from core.model import (
+    DataSource,
+    Identifier,
+    LicensePool,
+    Patron,
+    get_one_or_create,
+    production_session,
+)
 
 barcode, pin, borrow_urn, hold_urn = sys.argv[1:5]
-email = os.environ.get('DEFAULT_NOTIFICATION_EMAIL_ADDRESS', 'test@librarysimplified.org')
+email = os.environ.get(
+    "DEFAULT_NOTIFICATION_EMAIL_ADDRESS", "test@librarysimplified.org"
+)
 
 _db = production_session()
-patron, ignore = get_one_or_create(
-    _db, Patron, authorization_identifier=barcode)
+patron, ignore = get_one_or_create(_db, Patron, authorization_identifier=barcode)
 
 borrow_identifier = Identifier.parse_urn(_db, borrow_urn, True)[0]
 hold_identifier = Identifier.parse_urn(_db, hold_urn, True)[0]
@@ -50,14 +50,13 @@ if any(x.type == Identifier.AXIS_360_ID for x in [borrow_identifier, hold_identi
 else:
     axis = None
 
-circulation = CirculationAPI(_db, overdrive=overdrive, threem=threem,
-                             axis=axis)
+circulation = CirculationAPI(_db, overdrive=overdrive, threem=threem, axis=axis)
 
 activity = circulation.patron_activity(patron, pin)
-print('-' * 80)
+print("-" * 80)
 for i in activity:
     print(i)
-print('-' * 80)
+print("-" * 80)
 
 licensepool = borrow_pool
 mechanism = licensepool.delivery_mechanisms[0]
@@ -100,10 +99,10 @@ except NoActiveLoan as e:
     print(" Exception as expected")
 
 activity = circulation.patron_activity(patron, pin)
-print('-' * 80)
+print("-" * 80)
 for i in activity:
     print(i)
-print('-' * 80)
+print("-" * 80)
 
 print("Revoke loan")
 print(circulation.revoke_loan(patron, pin, licensepool))
@@ -114,4 +113,3 @@ print("Release hold.")
 print(circulation.release_hold(patron, pin, licensepool))
 print("Release nonexistent hold.")
 print(circulation.release_hold(patron, pin, licensepool))
-

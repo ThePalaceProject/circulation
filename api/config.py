@@ -1,25 +1,23 @@
+import contextlib
 import json
 import re
-import contextlib
 from copy import deepcopy
 
-from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_OAEP
-
+from Crypto.PublicKey import RSA
 from flask_babel import lazy_gettext as _
+
+from core.config import CannotLoadConfiguration
+from core.config import Configuration as CoreConfiguration
+from core.config import IntegrationException
+from core.config import empty_config as core_empty_config
+from core.config import temp_config as core_temp_config
+from core.lane import Facets
+from core.model import ConfigurationSetting
+from core.util import MoneyUtility
 
 from .announcements import Announcements
 
-from core.config import (
-    Configuration as CoreConfiguration,
-    CannotLoadConfiguration,
-    IntegrationException,
-    empty_config as core_empty_config,
-    temp_config as core_temp_config,
-)
-from core.util import MoneyUtility
-from core.lane import Facets
-from core.model import ConfigurationSetting
 
 class Configuration(CoreConfiguration):
 
@@ -56,11 +54,13 @@ class Configuration(CoreConfiguration):
 
     # Custom text for the link defined in CUSTOM_TOS_LINK.
     CUSTOM_TOS_TEXT = "tos_text"
-    DEFAULT_TOS_TEXT = "Terms of Service for presenting content through the Palace client applications"
+    DEFAULT_TOS_TEXT = (
+        "Terms of Service for presenting content through the Palace client applications"
+    )
 
     # A short description of the library, used in its Authentication
     # for OPDS document.
-    LIBRARY_DESCRIPTION = 'library_description'
+    LIBRARY_DESCRIPTION = "library_description"
 
     # The name of the per-library setting that sets the maximum amount
     # of fines a patron can have before losing lending privileges.
@@ -85,7 +85,9 @@ class Configuration(CoreConfiguration):
     COPYRIGHT_DESIGNATED_AGENT_EMAIL = "copyright_designated_agent_email_address"
 
     # This is the link relation used to indicate
-    COPYRIGHT_DESIGNATED_AGENT_REL = "http://librarysimplified.org/rel/designated-agent/copyright"
+    COPYRIGHT_DESIGNATED_AGENT_REL = (
+        "http://librarysimplified.org/rel/designated-agent/copyright"
+    )
 
     # The name of the per-library setting that sets the contact address
     # for problems with the library configuration itself.
@@ -101,7 +103,9 @@ class Configuration(CoreConfiguration):
     SMALL_COLLECTION_LANGUAGES = "small_collections"
     TINY_COLLECTION_LANGUAGES = "tiny_collections"
 
-    LANGUAGE_DESCRIPTION = _('Each value can be either the full name of a language or an <a href="https://www.loc.gov/standards/iso639-2/php/code_list.php" target="_blank">ISO-639-2</a> language code.')
+    LANGUAGE_DESCRIPTION = _(
+        'Each value can be either the full name of a language or an <a href="https://www.loc.gov/standards/iso639-2/php/code_list.php" target="_blank">ISO-639-2</a> language code.'
+    )
 
     HIDDEN_CONTENT_TYPES = "hidden_content_types"
 
@@ -144,12 +148,12 @@ class Configuration(CoreConfiguration):
     )
 
     # Names of the library-wide link settings.
-    TERMS_OF_SERVICE = 'terms-of-service'
-    PRIVACY_POLICY = 'privacy-policy'
-    COPYRIGHT = 'copyright'
-    ABOUT = 'about'
-    LICENSE = 'license'
-    REGISTER = 'register'
+    TERMS_OF_SERVICE = "terms-of-service"
+    PRIVACY_POLICY = "privacy-policy"
+    COPYRIGHT = "copyright"
+    ABOUT = "about"
+    LICENSE = "license"
+    REGISTER = "register"
 
     # A library with this many titles in a given language will be given
     # a large, detailed lane configuration for that language.
@@ -162,13 +166,13 @@ class Configuration(CoreConfiguration):
 
     # These are link relations that are valid in Authentication for
     # OPDS documents but are not registered with IANA.
-    AUTHENTICATION_FOR_OPDS_LINKS = ['register']
+    AUTHENTICATION_FOR_OPDS_LINKS = ["register"]
 
     # We support three different ways of integrating help processes.
     # All three of these will be sent out as links with rel='help'
-    HELP_EMAIL = 'help-email'
-    HELP_WEB = 'help-web'
-    HELP_URI = 'help-uri'
+    HELP_EMAIL = "help-email"
+    HELP_WEB = "help-web"
+    HELP_URI = "help-uri"
     HELP_LINKS = [HELP_EMAIL, HELP_WEB, HELP_URI]
 
     # Features of an OPDS client which a library may want to enable or
@@ -196,11 +200,15 @@ class Configuration(CoreConfiguration):
             "key": PATRON_WEB_HOSTNAMES,
             "label": _("Hostnames for web application access"),
             "required": True,
-            "description": _("Only web applications from these hosts can access this circulation manager. This can be a single hostname (http://catalog.library.org) or a pipe-separated list of hostnames (http://catalog.library.org|https://beta.library.org). You must include the scheme part of the URI (http:// or https://). You can also set this to '*' to allow access from any host, but you must not do this in a production environment -- only during development.")
+            "description": _(
+                "Only web applications from these hosts can access this circulation manager. This can be a single hostname (http://catalog.library.org) or a pipe-separated list of hostnames (http://catalog.library.org|https://beta.library.org). You must include the scheme part of the URI (http:// or https://). You can also set this to '*' to allow access from any host, but you must not do this in a production environment -- only during development."
+            ),
         },
         {
             "key": STATIC_FILE_CACHE_TIME,
-            "label": _("Cache time for static images and JS and CSS files (in seconds)"),
+            "label": _(
+                "Cache time for static images and JS and CSS files (in seconds)"
+            ),
             "required": True,
             "type": "number",
         },
@@ -216,15 +224,19 @@ class Configuration(CoreConfiguration):
             "label": _("Custom Terms of Service link"),
             "required": False,
             "default": DEFAULT_TOS_HREF,
-            "description": _("If your inclusion in the SimplyE mobile app is governed by terms other than the default, put the URL to those terms in this link so that librarians will have access to them. This URL will be used for all libraries on this circulation manager.")
+            "description": _(
+                "If your inclusion in the SimplyE mobile app is governed by terms other than the default, put the URL to those terms in this link so that librarians will have access to them. This URL will be used for all libraries on this circulation manager."
+            ),
         },
         {
             "key": CUSTOM_TOS_TEXT,
             "label": _("Custom Terms of Service link text"),
             "required": False,
             "default": DEFAULT_TOS_TEXT,
-            "description": _("Custom text for the Terms of Service link in the footer of these administrative interface pages. This is primarily useful if you're not connecting this circulation manager to the SimplyE mobile app. This text will be used for all libraries on this circulation manager.")
-        }
+            "description": _(
+                "Custom text for the Terms of Service link in the footer of these administrative interface pages. This is primarily useful if you're not connecting this circulation manager to the SimplyE mobile app. This text will be used for all libraries on this circulation manager."
+            ),
+        },
     ]
 
     # The "level" property determines which admins will be able to modify the setting.  Level 1 settings can be modified by anyone.
@@ -235,25 +247,31 @@ class Configuration(CoreConfiguration):
         {
             "key": LIBRARY_DESCRIPTION,
             "label": _("A short description of this library"),
-            "description": _("This will be shown to people who aren't sure they've chosen the right library."),
+            "description": _(
+                "This will be shown to people who aren't sure they've chosen the right library."
+            ),
             "category": "Basic Information",
-            "level": CoreConfiguration.SYS_ADMIN_ONLY
+            "level": CoreConfiguration.SYS_ADMIN_ONLY,
         },
         {
             "key": Announcements.SETTING_NAME,
             "label": _("Scheduled announcements"),
-            "description": _("Announcements will be displayed to authenticated patrons."),
+            "description": _(
+                "Announcements will be displayed to authenticated patrons."
+            ),
             "category": "Announcements",
             "type": "announcements",
-            "level": CoreConfiguration.ALL_ACCESS
+            "level": CoreConfiguration.ALL_ACCESS,
         },
         {
             "key": HELP_EMAIL,
             "label": _("Patron support email address"),
-            "description": _("An email address a patron can use if they need help, e.g. 'simplyehelp@yourlibrary.org'."),
+            "description": _(
+                "An email address a patron can use if they need help, e.g. 'simplyehelp@yourlibrary.org'."
+            ),
             "required": True,
             "format": "email",
-            "level": CoreConfiguration.SYS_ADMIN_ONLY
+            "level": CoreConfiguration.SYS_ADMIN_ONLY,
         },
         {
             "key": HELP_WEB,
@@ -261,44 +279,56 @@ class Configuration(CoreConfiguration):
             "description": _("A URL for patrons to get help."),
             "format": "url",
             "category": "Patron Support",
-            "level": CoreConfiguration.ALL_ACCESS
+            "level": CoreConfiguration.ALL_ACCESS,
         },
         {
             "key": HELP_URI,
             "label": _("Patron support custom integration URI"),
-            "description": _("A custom help integration like Helpstack, e.g. 'helpstack:nypl.desk.com'."),
+            "description": _(
+                "A custom help integration like Helpstack, e.g. 'helpstack:nypl.desk.com'."
+            ),
             "category": "Patron Support",
-            "level": CoreConfiguration.SYS_ADMIN_ONLY
+            "level": CoreConfiguration.SYS_ADMIN_ONLY,
         },
         {
             "key": COPYRIGHT_DESIGNATED_AGENT_EMAIL,
             "label": _("Copyright designated agent email"),
-            "description": _("Patrons of this library should use this email address to send a DMCA notification (or other copyright complaint) to the library.<br/>If no value is specified here, the general patron support address will be used."),
+            "description": _(
+                "Patrons of this library should use this email address to send a DMCA notification (or other copyright complaint) to the library.<br/>If no value is specified here, the general patron support address will be used."
+            ),
             "format": "email",
             "category": "Patron Support",
-            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER
+            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
         },
         {
             "key": CONFIGURATION_CONTACT_EMAIL,
-            "label": _("A point of contact for the organization reponsible for configuring this library"),
-            "description": _("This email address will be shared as part of integrations that you set up through this interface. It will not be shared with the general public. This gives the administrator of the remote integration a way to contact you about problems with this library's use of that integration.<br/>If no value is specified here, the general patron support address will be used."),
+            "label": _(
+                "A point of contact for the organization reponsible for configuring this library"
+            ),
+            "description": _(
+                "This email address will be shared as part of integrations that you set up through this interface. It will not be shared with the general public. This gives the administrator of the remote integration a way to contact you about problems with this library's use of that integration.<br/>If no value is specified here, the general patron support address will be used."
+            ),
             "format": "email",
             "category": "Patron Support",
-            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER
+            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
         },
         {
             "key": DEFAULT_NOTIFICATION_EMAIL_ADDRESS,
             "label": _("Write-only email address for vendor hold notifications"),
-            "description": _('This address must trash all email sent to it. Vendor hold notifications contain sensitive patron information, but <a href="https://confluence.nypl.org/display/SIM/About+Hold+Notifications" target="_blank">cannot be forwarded to patrons</a> because they contain vendor-specific instructions.<br/>The default address will work, but for greater security, set up your own address that trashes all incoming email.'),
+            "description": _(
+                'This address must trash all email sent to it. Vendor hold notifications contain sensitive patron information, but <a href="https://confluence.nypl.org/display/SIM/About+Hold+Notifications" target="_blank">cannot be forwarded to patrons</a> because they contain vendor-specific instructions.<br/>The default address will work, but for greater security, set up your own address that trashes all incoming email.'
+            ),
             "default": STANDARD_NOREPLY_EMAIL_ADDRESS,
             "required": True,
             "format": "email",
-            "level": CoreConfiguration.SYS_ADMIN_ONLY
+            "level": CoreConfiguration.SYS_ADMIN_ONLY,
         },
         {
             "key": COLOR_SCHEME,
             "label": _("Mobile color scheme"),
-            "description": _("This tells mobile applications what color scheme to use when rendering this library's OPDS feed."),
+            "description": _(
+                "This tells mobile applications what color scheme to use when rendering this library's OPDS feed."
+            ),
             "options": [
                 dict(key="amber", label=_("Amber")),
                 dict(key="black", label=_("Black")),
@@ -321,41 +351,49 @@ class Configuration(CoreConfiguration):
             "type": "select",
             "default": DEFAULT_COLOR_SCHEME,
             "category": "Client Interface Customization",
-            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER
+            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
         },
         {
             "key": WEB_PRIMARY_COLOR,
             "label": _("Web primary color"),
-            "description": _("This is the brand primary color for the web application. Must have sufficient contrast with white."),
+            "description": _(
+                "This is the brand primary color for the web application. Must have sufficient contrast with white."
+            ),
             "type": "color-picker",
             "default": DEFAULT_WEB_PRIMARY_COLOR,
             "category": "Client Interface Customization",
-            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER
+            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
         },
         {
             "key": WEB_SECONDARY_COLOR,
             "label": _("Web secondary color"),
-            "description": _("This is the brand secondary color for the web application. Must have sufficient contrast with white."),
+            "description": _(
+                "This is the brand secondary color for the web application. Must have sufficient contrast with white."
+            ),
             "type": "color-picker",
             "default": DEFAULT_WEB_SECONDARY_COLOR,
             "category": "Client Interface Customization",
-            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER
+            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
         },
         {
             "key": WEB_CSS_FILE,
             "label": _("Custom CSS file for web"),
-            "description": _("Give web applications a CSS file to customize the catalog display."),
+            "description": _(
+                "Give web applications a CSS file to customize the catalog display."
+            ),
             "format": "url",
             "category": "Client Interface Customization",
-            "level": CoreConfiguration.SYS_ADMIN_ONLY
+            "level": CoreConfiguration.SYS_ADMIN_ONLY,
         },
         {
             "key": WEB_HEADER_LINKS,
             "label": _("Web header links"),
-            "description": _("This gives web applications a list of links to display in the header. Specify labels for each link in the same order under 'Web header labels'."),
+            "description": _(
+                "This gives web applications a list of links to display in the header. Specify labels for each link in the same order under 'Web header labels'."
+            ),
             "type": "list",
             "category": "Client Interface Customization",
-            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER
+            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
         },
         {
             "key": WEB_HEADER_LABELS,
@@ -363,7 +401,7 @@ class Configuration(CoreConfiguration):
             "description": _("Labels for each link under 'Web header links'."),
             "type": "list",
             "category": "Client Interface Customization",
-            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER
+            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
         },
         {
             "key": LOGO,
@@ -377,124 +415,142 @@ class Configuration(CoreConfiguration):
                 f"the longest dimension does not excede {LOGO_MAX_DIMENSION} pixels."
             ),
             "category": "Client Interface Customization",
-            "level": CoreConfiguration.ALL_ACCESS
+            "level": CoreConfiguration.ALL_ACCESS,
         },
         {
             "key": HIDDEN_CONTENT_TYPES,
             "label": _("Hidden content types"),
             "type": "text",
-            "description": _('A list of content types to hide from all clients, e.g. <code>["application/pdf"]</code>. This can be left blank except to solve specific problems.'),
+            "description": _(
+                'A list of content types to hide from all clients, e.g. <code>["application/pdf"]</code>. This can be left blank except to solve specific problems.'
+            ),
             "category": "Client Interface Customization",
-            "level": CoreConfiguration.SYS_ADMIN_ONLY
+            "level": CoreConfiguration.SYS_ADMIN_ONLY,
         },
         {
             "key": LIBRARY_FOCUS_AREA,
             "label": _("Focus area"),
             "type": "list",
-            "description": _("The library focuses on serving patrons in this geographic area. In most cases this will be a city name like <code>Springfield, OR</code>."),
+            "description": _(
+                "The library focuses on serving patrons in this geographic area. In most cases this will be a city name like <code>Springfield, OR</code>."
+            ),
             "category": "Geographic Areas",
             "format": "geographic",
             "instructions": AREA_INPUT_INSTRUCTIONS,
             "capitalize": True,
-            "level": CoreConfiguration.ALL_ACCESS
+            "level": CoreConfiguration.ALL_ACCESS,
         },
         {
             "key": LIBRARY_SERVICE_AREA,
             "label": _("Service area"),
             "type": "list",
-            "description": _("The full geographic area served by this library. In most cases this is the same as the focus area and can be left blank, but it may be a larger area such as a US state (which should be indicated by its abbreviation, like <code>OR</code>)."),
+            "description": _(
+                "The full geographic area served by this library. In most cases this is the same as the focus area and can be left blank, but it may be a larger area such as a US state (which should be indicated by its abbreviation, like <code>OR</code>)."
+            ),
             "category": "Geographic Areas",
             "format": "geographic",
             "instructions": AREA_INPUT_INSTRUCTIONS,
             "capitalize": True,
-            "level": CoreConfiguration.ALL_ACCESS
+            "level": CoreConfiguration.ALL_ACCESS,
         },
         {
             "key": MAX_OUTSTANDING_FINES,
-            "label": _("Maximum amount in fines a patron can have before losing lending privileges"),
+            "label": _(
+                "Maximum amount in fines a patron can have before losing lending privileges"
+            ),
             "type": "number",
             "category": "Loans, Holds, & Fines",
-            "level": CoreConfiguration.ALL_ACCESS
+            "level": CoreConfiguration.ALL_ACCESS,
         },
         {
             "key": LOAN_LIMIT,
             "label": _("Maximum number of books a patron can have on loan at once"),
-            "description": _("(Note: depending on distributor settings, a patron may be able to exceed the limit by checking out books directly from a distributor's app. They may also get a limit exceeded error before they reach these limits if a distributor has a smaller limit.)"),
+            "description": _(
+                "(Note: depending on distributor settings, a patron may be able to exceed the limit by checking out books directly from a distributor's app. They may also get a limit exceeded error before they reach these limits if a distributor has a smaller limit.)"
+            ),
             "type": "number",
             "category": "Loans, Holds, & Fines",
-            "level": CoreConfiguration.ALL_ACCESS
+            "level": CoreConfiguration.ALL_ACCESS,
         },
         {
             "key": HOLD_LIMIT,
             "label": _("Maximum number of books a patron can have on hold at once"),
-            "description": _("(Note: depending on distributor settings, a patron may be able to exceed the limit by checking out books directly from a distributor's app. They may also get a limit exceeded error before they reach these limits if a distributor has a smaller limit.)"),
+            "description": _(
+                "(Note: depending on distributor settings, a patron may be able to exceed the limit by checking out books directly from a distributor's app. They may also get a limit exceeded error before they reach these limits if a distributor has a smaller limit.)"
+            ),
             "type": "number",
             "category": "Loans, Holds, & Fines",
-            "level": CoreConfiguration.ALL_ACCESS
+            "level": CoreConfiguration.ALL_ACCESS,
         },
         {
             "key": TERMS_OF_SERVICE,
             "label": _("Terms of Service URL"),
             "format": "url",
             "category": "Links",
-            "level": CoreConfiguration.ALL_ACCESS
+            "level": CoreConfiguration.ALL_ACCESS,
         },
         {
             "key": PRIVACY_POLICY,
             "label": _("Privacy Policy URL"),
             "format": "url",
             "category": "Links",
-            "level": CoreConfiguration.ALL_ACCESS
+            "level": CoreConfiguration.ALL_ACCESS,
         },
         {
             "key": COPYRIGHT,
             "label": _("Copyright URL"),
             "format": "url",
             "category": "Links",
-            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER
+            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
         },
         {
             "key": ABOUT,
             "label": _("About URL"),
             "format": "url",
             "category": "Links",
-            "level": CoreConfiguration.ALL_ACCESS
+            "level": CoreConfiguration.ALL_ACCESS,
         },
         {
             "key": LICENSE,
             "label": _("License URL"),
             "format": "url",
             "category": "Links",
-            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER
+            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
         },
         {
             "key": REGISTER,
             "label": _("Patron registration URL"),
-            "description": _("A URL where someone who doesn't have a library card yet can sign up for one."),
+            "description": _(
+                "A URL where someone who doesn't have a library card yet can sign up for one."
+            ),
             "format": "url",
             "category": "Patron Support",
             "allowed": ["nypl.card-creator:https://patrons.librarysimplified.org/"],
-            "level": CoreConfiguration.ALL_ACCESS
+            "level": CoreConfiguration.ALL_ACCESS,
         },
         {
             "key": LARGE_COLLECTION_LANGUAGES,
-            "label": _("The primary languages represented in this library's collection"),
+            "label": _(
+                "The primary languages represented in this library's collection"
+            ),
             "type": "list",
             "format": "language-code",
             "description": LANGUAGE_DESCRIPTION,
             "optional": True,
             "category": "Languages",
-            "level": CoreConfiguration.ALL_ACCESS
+            "level": CoreConfiguration.ALL_ACCESS,
         },
         {
             "key": SMALL_COLLECTION_LANGUAGES,
-            "label": _("Other major languages represented in this library's collection"),
+            "label": _(
+                "Other major languages represented in this library's collection"
+            ),
             "type": "list",
             "format": "language-code",
             "description": LANGUAGE_DESCRIPTION,
             "optional": True,
             "category": "Languages",
-            "level": CoreConfiguration.ALL_ACCESS
+            "level": CoreConfiguration.ALL_ACCESS,
         },
         {
             "key": TINY_COLLECTION_LANGUAGES,
@@ -504,7 +560,7 @@ class Configuration(CoreConfiguration):
             "description": LANGUAGE_DESCRIPTION,
             "optional": True,
             "category": "Languages",
-            "level": CoreConfiguration.ALL_ACCESS
+            "level": CoreConfiguration.ALL_ACCESS,
         },
     ]
 
@@ -536,27 +592,19 @@ class Configuration(CoreConfiguration):
 
     @classmethod
     def large_collection_languages(cls, library):
-        return cls._collection_languages(
-            library, cls.LARGE_COLLECTION_LANGUAGES
-        )
+        return cls._collection_languages(library, cls.LARGE_COLLECTION_LANGUAGES)
 
     @classmethod
     def small_collection_languages(cls, library):
-        return cls._collection_languages(
-            library, cls.SMALL_COLLECTION_LANGUAGES
-        )
+        return cls._collection_languages(library, cls.SMALL_COLLECTION_LANGUAGES)
 
     @classmethod
     def tiny_collection_languages(cls, library):
-        return cls._collection_languages(
-            library, cls.TINY_COLLECTION_LANGUAGES
-        )
+        return cls._collection_languages(library, cls.TINY_COLLECTION_LANGUAGES)
 
     @classmethod
     def max_outstanding_fines(cls, library):
-        max_fines = ConfigurationSetting.for_library(
-            cls.MAX_OUTSTANDING_FINES, library
-        )
+        max_fines = ConfigurationSetting.for_library(cls.MAX_OUTSTANDING_FINES, library)
         if max_fines.value is None:
             return None
         return MoneyUtility.parse(max_fines.value)
@@ -577,12 +625,11 @@ class Configuration(CoreConfiguration):
         holdings = library.estimated_holdings_by_language()
         large, small, tiny = cls.classify_holdings(holdings)
         for setting, value in (
-                (cls.LARGE_COLLECTION_LANGUAGES, large),
-                (cls.SMALL_COLLECTION_LANGUAGES, small),
-                (cls.TINY_COLLECTION_LANGUAGES, tiny),
+            (cls.LARGE_COLLECTION_LANGUAGES, large),
+            (cls.SMALL_COLLECTION_LANGUAGES, small),
+            (cls.TINY_COLLECTION_LANGUAGES, tiny),
         ):
-            ConfigurationSetting.for_library(
-                setting, library).value = json.dumps(value)
+            ConfigurationSetting.for_library(setting, library).value = json.dumps(value)
 
     @classmethod
     def classify_holdings(cls, works_by_language):
@@ -604,7 +651,7 @@ class Configuration(CoreConfiguration):
         if not works_by_language:
             # In the absence of any information, assume we have an
             # English collection and nothing else.
-            large.append('eng')
+            large.append("eng")
             return result
 
         # The single most common language always gets a large
@@ -650,7 +697,7 @@ class Configuration(CoreConfiguration):
             if name == cls.HELP_EMAIL:
                 value = cls._as_mailto(value)
             if name == cls.HELP_WEB:
-                type = 'text/html'
+                type = "text/html"
             yield type, value
 
     @classmethod
@@ -722,6 +769,7 @@ class Configuration(CoreConfiguration):
         """
         return PKCS1_OAEP.new(RSA.import_key(key))
 
+
 # We changed Configuration.DEFAULT_OPDS_FORMAT, but the Configuration
 # class from core still has the old value. Change that one to match,
 # so that core code that checks this constant will get the right
@@ -732,10 +780,12 @@ class Configuration(CoreConfiguration):
 # appropriate one in any situation. This is a source of subtle bugs.
 CoreConfiguration.DEFAULT_OPDS_FORMAT = Configuration.DEFAULT_OPDS_FORMAT
 
+
 @contextlib.contextmanager
 def empty_config():
     with core_empty_config({}, [CoreConfiguration, Configuration]) as i:
         yield i
+
 
 @contextlib.contextmanager
 def temp_config(new_config=None, replacement_classes=None):

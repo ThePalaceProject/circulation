@@ -1,30 +1,28 @@
+import base64
+import json
+import logging
+
 import feedparser
 from flask_babel import lazy_gettext as _
 from html_sanitizer import Sanitizer
-import json
-import logging
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
-
-from core.model import (
-    create,
-    get_one,
-    get_one_or_create,
-    ConfigurationSetting,
-    ExternalIntegration,
-)
-from core.scripts import LibraryInputScript
-from core.util.http import HTTP
-from core.util.problem_detail import (
-    ProblemDetail,
-    JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE,
-)
-import base64
 
 from api.adobe_vendor_id import AuthdataUtility
 from api.config import Configuration
 from api.controller import CirculationManager
 from api.problem_details import *
+from core.model import (
+    ConfigurationSetting,
+    ExternalIntegration,
+    create,
+    get_one,
+    get_one_or_create,
+)
+from core.scripts import LibraryInputScript
+from core.util.http import HTTP
+from core.util.problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
+from core.util.problem_detail import ProblemDetail
 
 
 class RemoteRegistry(object):
@@ -37,6 +35,7 @@ class RemoteRegistry(object):
     DISCOVERY_GOAL and wants to help patrons find their libraries) or
     it may be a shared ODL collection (which has LICENSE_GOAL).
     """
+
     DEFAULT_LIBRARY_REGISTRY_URL = "https://registry.thepalaceproject.org"
     DEFAULT_LIBRARY_REGISTRY_NAME = "Palace Library Registry"
 
@@ -54,9 +53,7 @@ class RemoteRegistry(object):
 
         :param goal: The ExternalIntegration's .goal must be this goal.
         """
-        integration = get_one(_db, ExternalIntegration,
-                              goal=goal,
-                              id=integration_id)
+        integration = get_one(_db, ExternalIntegration, goal=goal, id=integration_id)
         if not integration:
             return None
         return cls(integration)
@@ -65,8 +62,8 @@ class RemoteRegistry(object):
     def for_protocol_and_goal(cls, _db, protocol, goal):
         """Find all LibraryRegistry objects with the given protocol and goal."""
         for i in _db.query(ExternalIntegration).filter(
-            ExternalIntegration.goal==goal,
-            ExternalIntegration.protocol==protocol,
+            ExternalIntegration.goal == goal,
+            ExternalIntegration.protocol == protocol,
         ):
             yield cls(i)
 
@@ -136,7 +133,12 @@ class RemoteRegistry(object):
                 register_url = link.get("href")
                 break
         if not register_url:
-            return REMOTE_INTEGRATION_FAILED.detailed(_("The service at %(url)s did not provide a register link.", url=response.url))
+            return REMOTE_INTEGRATION_FAILED.detailed(
+                _(
+                    "The service at %(url)s did not provide a register link.",
+                    url=response.url,
+                )
+            )
         return register_url, vendor_id
 
     def fetch_registration_document(self, do_get=HTTP.debuggable_get):
@@ -157,9 +159,10 @@ class RemoteRegistry(object):
         response = do_get(registration_url)
         if isinstance(response, ProblemDetail):
             return response
-        terms_of_service_link, terms_of_service_html = (
-            self._extract_registration_information(response)
-        )
+        (
+            terms_of_service_link,
+            terms_of_service_html,
+        ) = self._extract_registration_information(response)
         return terms_of_service_link, terms_of_service_html
 
     @classmethod
@@ -187,10 +190,9 @@ class RemoteRegistry(object):
         for link in links:
             if link.get("rel") != "terms-of-service":
                 continue
-            url = link.get('href')
+            url = link.get("href")
             is_http = any(
-                [url.startswith(protocol + "://")
-                 for protocol in ("http", "https")]
+                [url.startswith(protocol + "://") for protocol in ("http", "https")]
             )
             if is_http and not tos_link:
                 tos_link = url
@@ -221,7 +223,9 @@ class RemoteRegistry(object):
             links = feed.get("feed", {}).get("links", [])
             catalog = None
         else:
-            return REMOTE_INTEGRATION_FAILED.detailed(_("The service at %(url)s did not return OPDS.", url=response.url))
+            return REMOTE_INTEGRATION_FAILED.detailed(
+                _("The service at %(url)s did not return OPDS.", url=response.url)
+            )
         return catalog, links
 
     @classmethod
@@ -240,13 +244,9 @@ class RemoteRegistry(object):
         header, encoded = parts
         if not header.endswith(";base64"):
             raise ValueError("data: URL not base64-encoded: %s" % url)
-        media_type = header[len("data:"):-len(";base64")]
-        if not any(
-                media_type.startswith(x) for x in ("text/html", "text/plain")
-        ):
-            raise ValueError(
-                "Unsupported media type in data: URL: %s" % media_type
-            )
+        media_type = header[len("data:") : -len(";base64")]
+        if not any(media_type.startswith(x) for x in ("text/html", "text/plain")):
+            raise ValueError("Unsupported media type in data: URL: %s" % media_type)
         html = base64.b64decode(encoded.encode("utf-8")).decode("utf-8")
         return Sanitizer().sanitize(html)
 
@@ -327,8 +327,14 @@ class Registration(object):
             setting.value = default_value
         return setting
 
-    def push(self, stage, url_for, catalog_url=None, do_get=HTTP.debuggable_get,
-             do_post=HTTP.debuggable_post):
+    def push(
+        self,
+        stage,
+        url_for,
+        catalog_url=None,
+        do_get=HTTP.debuggable_get,
+        do_post=HTTP.debuggable_post,
+    ):
         """Attempt to register a library with a RemoteRegistry.
 
         NOTE: This method is designed to be used in a
@@ -371,14 +377,17 @@ class Registration(object):
         # needs to be committed to the database _before_ the push
         # attempt starts.
         key_pair = ConfigurationSetting.for_library(
-            Configuration.KEY_PAIR, self.library).json_value
+            Configuration.KEY_PAIR, self.library
+        ).json_value
         if not key_pair:
             # TODO: We could create the key pair _here_. The database
             # session will be committed at the end of this request,
             # so the push attempt would succeed if repeated.
             return SHARED_SECRET_DECRYPTION_ERROR.detailed(
-                _("Library %(library)s has no key pair set.",
-                  library=self.library.short_name)
+                _(
+                    "Library %(library)s has no key pair set.",
+                    library=self.library.short_name,
+                )
             )
         public_key, private_key = key_pair
         cipher = Configuration.cipher(private_key)
@@ -430,8 +439,7 @@ class Registration(object):
         :return: A dictionary suitable for passing into requests.post.
         """
         auth_document_url = url_for(
-            "authentication_document",
-            library_short_name=self.library.short_name
+            "authentication_document", library_short_name=self.library.short_name
         )
         payload = dict(url=auth_document_url, stage=stage)
 
@@ -439,14 +447,14 @@ class Registration(object):
         # a problem with the way the library is using an integration.
         contact = Configuration.configuration_contact_uri(self.library)
         if contact:
-            payload['contact'] = contact
+            payload["contact"] = contact
         return payload
 
     def _create_registration_headers(self):
         shared_secret = self.setting(ExternalIntegration.PASSWORD).value
         headers = {}
         if shared_secret:
-            headers['Authorization'] = "Bearer %s" % shared_secret
+            headers["Authorization"] = "Bearer %s" % shared_secret
         return headers
 
     @classmethod
@@ -458,17 +466,28 @@ class Registration(object):
         """
         # Allow 400 and 401 so we can provide a more useful error message.
         response = do_post(
-            register_url, headers=headers, payload=payload, timeout=60,
+            register_url,
+            headers=headers,
+            payload=payload,
+            timeout=60,
             allowed_response_codes=["2xx", "3xx", "400", "401"],
         )
         if response.status_code in [400, 401]:
             if response.headers.get("Content-Type") == PROBLEM_DETAIL_JSON_MEDIA_TYPE:
                 problem = json.loads(response.content)
                 return INTEGRATION_ERROR.detailed(
-                    _("Remote service returned: \"%(problem)s\"", problem=problem.get("detail")))
+                    _(
+                        'Remote service returned: "%(problem)s"',
+                        problem=problem.get("detail"),
+                    )
+                )
             else:
                 return INTEGRATION_ERROR.detailed(
-                    _("Remote service returned: \"%(problem)s\"", problem=response.content.decode("utf-8")))
+                    _(
+                        'Remote service returned: "%(problem)s"',
+                        problem=response.content.decode("utf-8"),
+                    )
+                )
         return response
 
     @classmethod
@@ -476,7 +495,7 @@ class Registration(object):
         """Attempt to decrypt an encrypted shared secret.
 
         :param cipher: A Cipher object.
-        
+
         :param shared_secret: A byte string.
 
         :return: The decrypted shared secret, as a bytestring, or
@@ -506,7 +525,10 @@ class Registration(object):
         # requests.
         if not isinstance(catalog, dict):
             return INTEGRATION_ERROR.detailed(
-                _("Remote service served %(representation)r, which I can't make sense of as an OPDS document.", representation=catalog)
+                _(
+                    "Remote service served %(representation)r, which I can't make sense of as an OPDS document.",
+                    representation=catalog,
+                )
             )
         metadata = catalog.get("metadata", {})
         short_name = metadata.get("short_name")
@@ -520,12 +542,10 @@ class Registration(object):
                 break
 
         if short_name:
-             setting = self.setting(ExternalIntegration.USERNAME)
-             setting.value = short_name
+            setting = self.setting(ExternalIntegration.USERNAME)
+            setting.value = short_name
         if shared_secret:
-            shared_secret = self._decrypt_shared_secret(
-                cipher, shared_secret
-            )
+            shared_secret = self._decrypt_shared_secret(cipher, shared_secret)
             if isinstance(shared_secret, ProblemDetail):
                 return shared_secret
 
@@ -562,14 +582,14 @@ class LibraryRegistrationScript(LibraryInputScript):
     def arg_parser(cls, _db):
         parser = LibraryInputScript.arg_parser(_db)
         parser.add_argument(
-            '--registry-url',
+            "--registry-url",
             help="Register libraries with the given registry.",
-            default=RemoteRegistry.DEFAULT_LIBRARY_REGISTRY_URL
+            default=RemoteRegistry.DEFAULT_LIBRARY_REGISTRY_URL,
         )
         parser.add_argument(
-            '--stage',
+            "--stage",
             help="Register these libraries in the 'testing' stage or the 'production' stage.",
-            choices=(Registration.TESTING_STAGE, Registration.PRODUCTION_STAGE)
+            choices=(Registration.TESTING_STAGE, Registration.PRODUCTION_STAGE),
         )
         return parser
 
@@ -585,6 +605,7 @@ class LibraryRegistrationScript(LibraryInputScript):
 
         # Set up an application context so we have access to url_for.
         from api.app import app
+
         app.manager = CirculationManager(self._db, testing=in_unit_test)
         base_url = ConfigurationSetting.sitewide(
             self._db, Configuration.BASE_URL_KEY
@@ -594,9 +615,7 @@ class LibraryRegistrationScript(LibraryInputScript):
         for library in parsed.libraries:
             registration = Registration(registry, library)
             library_stage = stage or registration.stage_field.value
-            self.process_library(
-                registration, library_stage, app.manager.url_for
-            )
+            self.process_library(registration, library_stage, app.manager.url_for)
         ctx.pop()
 
         # For testing purposes, return the application object that was
@@ -610,8 +629,7 @@ class LibraryRegistrationScript(LibraryInputScript):
             "Registration of library %r" % registration.library.short_name
         )
         logger.info(
-            "Registering with %s as %s",
-            registration.registry.integration.url, stage
+            "Registering with %s as %s", registration.registry.integration.url, stage
         )
         try:
             result = registration.push(stage, url_for)

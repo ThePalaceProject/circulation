@@ -107,7 +107,12 @@ class TestSAMLSettingsValidator(ControllerTest):
         ]
     )
     def test_validate(
-        self, _, sp_xml_metadata, idp_xml_metadata, patron_id_regular_expression, expected_validation_result
+        self,
+        _,
+        sp_xml_metadata,
+        idp_xml_metadata,
+        patron_id_regular_expression,
+        expected_validation_result,
     ):
         """Ensure that SAMLSettingsValidator correctly validates the input data.
 

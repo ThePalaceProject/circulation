@@ -7,7 +7,7 @@ from api.admin.problem_details import MISSING_COLLECTION
 from api.controller import CirculationManagerController
 from api.lcp.factory import LCPServerFactory
 from core.lcp.credential import LCPCredentialFactory
-from core.model import Session, ExternalIntegration, Collection
+from core.model import Collection, ExternalIntegration, Session
 from core.util.problem_detail import ProblemDetail
 
 
@@ -32,11 +32,17 @@ class LCPController(CirculationManagerController):
         :return: Patron associated with the request (if any)
         :rtype: core.model.patron.Patron
         """
-        self._logger.info('Started fetching an authenticated patron associated with the request')
+        self._logger.info(
+            "Started fetching an authenticated patron associated with the request"
+        )
 
         patron = self.authenticated_patron_from_request()
 
-        self._logger.info('Finished fetching an authenticated patron associated with the request: {0}'.format(patron))
+        self._logger.info(
+            "Finished fetching an authenticated patron associated with the request: {0}".format(
+                patron
+            )
+        )
 
         return patron
 
@@ -48,11 +54,13 @@ class LCPController(CirculationManagerController):
         """
         db = Session.object_session(patron)
 
-        self._logger.info('Started fetching a patron\'s LCP passphrase')
+        self._logger.info("Started fetching a patron's LCP passphrase")
 
         lcp_passphrase = self._credential_factory.get_patron_passphrase(db, patron)
 
-        self._logger.info('Finished fetching a patron\'s LCP passphrase: {0}'.format(lcp_passphrase))
+        self._logger.info(
+            "Finished fetching a patron's LCP passphrase: {0}".format(lcp_passphrase)
+        )
 
         return lcp_passphrase
 
@@ -70,7 +78,9 @@ class LCPController(CirculationManagerController):
         :rtype: core.model.collection.Collection
         """
         db = Session.object_session(patron)
-        lcp_collection, _ = Collection.by_name_and_protocol(db, collection_name, ExternalIntegration.LCP)
+        lcp_collection, _ = Collection.by_name_and_protocol(
+            db, collection_name, ExternalIntegration.LCP
+        )
 
         if not lcp_collection or lcp_collection not in patron.library.collections:
             return MISSING_COLLECTION
@@ -83,16 +93,16 @@ class LCPController(CirculationManagerController):
         :return: Flask response containing the LCP passphrase for the authenticated patron
         :rtype: Response
         """
-        self._logger.info('Started fetching a patron\'s LCP passphrase')
+        self._logger.info("Started fetching a patron's LCP passphrase")
 
         patron = self._get_patron()
         lcp_passphrase = self._get_lcp_passphrase(patron)
 
-        self._logger.info('Finished fetching a patron\'s LCP passphrase: {0}'.format(lcp_passphrase))
+        self._logger.info(
+            "Finished fetching a patron's LCP passphrase: {0}".format(lcp_passphrase)
+        )
 
-        response = flask.jsonify({
-            'passphrase': lcp_passphrase
-        })
+        response = flask.jsonify({"passphrase": lcp_passphrase})
 
         return response
 
@@ -108,7 +118,7 @@ class LCPController(CirculationManagerController):
         :return: Flask response containing the LCP license with the specified ID
         :rtype: string
         """
-        self._logger.info('Started fetching license # {0}'.format(license_id))
+        self._logger.info("Started fetching license # {0}".format(license_id))
 
         patron = self._get_patron()
         lcp_collection = self._get_lcp_collection(patron, collection_name)
@@ -122,6 +132,8 @@ class LCPController(CirculationManagerController):
         db = Session.object_session(patron)
         lcp_license = lcp_server.get_license(db, license_id, patron)
 
-        self._logger.info('Finished fetching license # {0}: {1}'.format(license_id, lcp_license))
+        self._logger.info(
+            "Finished fetching license # {0}: {1}".format(license_id, lcp_license)
+        )
 
         return flask.jsonify(lcp_license)

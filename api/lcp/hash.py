@@ -1,14 +1,13 @@
 import hashlib
 from abc import ABCMeta, abstractmethod
-
 from enum import Enum
 
 from core.exceptions import BaseError
 
 
 class HashingAlgorithm(Enum):
-    SHA256 = 'http://www.w3.org/2001/04/xmlenc#sha256'
-    SHA512 = 'http://www.w3.org/2001/04/xmlenc#sha512'
+    SHA256 = "http://www.w3.org/2001/04/xmlenc#sha256"
+    SHA512 = "http://www.w3.org/2001/04/xmlenc#sha512"
 
 
 class HashingError(BaseError):
@@ -33,12 +32,20 @@ class Hasher(object, metaclass=ABCMeta):
 
 class UniversalHasher(Hasher):
     def hash(self, value):
-        if self._hashing_algorithm in [HashingAlgorithm.SHA256, HashingAlgorithm.SHA256.value]:
+        if self._hashing_algorithm in [
+            HashingAlgorithm.SHA256,
+            HashingAlgorithm.SHA256.value,
+        ]:
             return hashlib.sha256(value.encode("utf-8")).hexdigest()
-        elif self._hashing_algorithm in [HashingAlgorithm.SHA512, HashingAlgorithm.SHA512.value]:
+        elif self._hashing_algorithm in [
+            HashingAlgorithm.SHA512,
+            HashingAlgorithm.SHA512.value,
+        ]:
             return hashlib.sha512(value.encode("utf-8")).hexdigest()
         else:
-            raise HashingError('Unknown hashing algorithm {0}'.format(self._hashing_algorithm))
+            raise HashingError(
+                "Unknown hashing algorithm {0}".format(self._hashing_algorithm)
+            )
 
 
 class HasherFactory(object):

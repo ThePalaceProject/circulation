@@ -1,9 +1,10 @@
 from flask_babel import lazy_gettext as _
-from core.util.problem_detail import ProblemDetail
-from api.config import Configuration
+
 from api.circulation_exceptions import *
+from api.config import Configuration
 from api.problem_details import *
 from core.testing import DatabaseTest
+from core.util.problem_detail import ProblemDetail
 
 
 class TestCirculationExceptions(object):
@@ -35,13 +36,10 @@ class TestLimitReached(DatabaseTest):
     """
 
     def test_as_problem_detail_document(self):
-        generic_message = _("You exceeded the limit, but I don't know what the limit was.")
-        pd = ProblemDetail(
-            "http://uri/",
-            403,
-            _("Limit exceeded."),
-            generic_message
+        generic_message = _(
+            "You exceeded the limit, but I don't know what the limit was."
         )
+        pd = ProblemDetail("http://uri/", 403, _("Limit exceeded."), generic_message)
         setting = "some setting"
 
         class Mock(LimitReached):
@@ -75,10 +73,14 @@ class TestLimitReached(DatabaseTest):
 
         library.setting(Configuration.LOAN_LIMIT).value = 2
         pd = PatronLoanLimitReached(library=library).as_problem_detail_document()
-        assert ("You have reached your loan limit of 2. You cannot borrow anything further until you return something." ==
-            pd.detail)
+        assert (
+            "You have reached your loan limit of 2. You cannot borrow anything further until you return something."
+            == pd.detail
+        )
 
         library.setting(Configuration.HOLD_LIMIT).value = 3
         pd = PatronHoldLimitReached(library=library).as_problem_detail_document()
-        assert ("You have reached your hold limit of 3. You cannot place another item on hold until you borrow something or remove a hold." ==
-            pd.detail)
+        assert (
+            "You have reached your hold limit of 3. You cannot place another item on hold until you borrow something or remove a hold."
+            == pd.detail
+        )

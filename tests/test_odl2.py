@@ -3,8 +3,6 @@ import json
 import os
 
 import requests_mock
-from api.odl import ODLImporter
-from api.odl2 import ODL2API, ODL2APIConfiguration, ODL2ExpiredItemsReaper, ODL2Importer
 from freezegun import freeze_time
 from mock import MagicMock
 from webpub_manifest_parser.core.ast import PresentationMetadata
@@ -14,6 +12,8 @@ from webpub_manifest_parser.odl.semantic import (
     ODL_PUBLICATION_MUST_CONTAIN_EITHER_LICENSES_OR_OA_ACQUISITION_LINK_ERROR,
 )
 
+from api.odl import ODLImporter
+from api.odl2 import ODL2API, ODL2APIConfiguration, ODL2ExpiredItemsReaper, ODL2Importer
 from core.coverage import CoverageFailure
 from core.model import (
     Contribution,
@@ -223,8 +223,10 @@ class TestODL2Importer(OPDS2Test):
             == moby_dick_license.checkout_url
         )
         assert "http://www.example.com/status/294024" == moby_dick_license.status_url
-        assert datetime.datetime(2016, 4, 25, 10, 25, 21, tzinfo=datetime.timezone.utc) \
-               == moby_dick_license.expires
+        assert (
+            datetime.datetime(2016, 4, 25, 10, 25, 21, tzinfo=datetime.timezone.utc)
+            == moby_dick_license.expires
+        )
         assert 10 == moby_dick_license.remaining_checkouts
         assert 10 == moby_dick_license.concurrent_checkouts
 
@@ -249,11 +251,13 @@ class TestODL2Importer(OPDS2Test):
         assert isinstance(huck_finn_failure, CoverageFailure)
         assert "9781234567897" == huck_finn_failure.obj.identifier
 
-        huck_finn_semantic_error = ODL_PUBLICATION_MUST_CONTAIN_EITHER_LICENSES_OR_OA_ACQUISITION_LINK_ERROR(
-            node=ODLPublication(
-                metadata=PresentationMetadata(identifier="urn:isbn:9781234567897")
-            ),
-            node_property=None,
+        huck_finn_semantic_error = (
+            ODL_PUBLICATION_MUST_CONTAIN_EITHER_LICENSES_OR_OA_ACQUISITION_LINK_ERROR(
+                node=ODLPublication(
+                    metadata=PresentationMetadata(identifier="urn:isbn:9781234567897")
+                ),
+                node_property=None,
+            )
         )
         assert str(huck_finn_semantic_error) == huck_finn_failure.exception
 
@@ -262,7 +266,9 @@ class TestODL2ExpiredItemsReaper(TestODLExpiredItemsReaper):
     """Base class for all ODL 2.x reaper tests."""
 
     ODL_PROTOCOL = ODL2API.NAME
-    ODL_TEMPLATE_DIR = os.path.join(TestODLExpiredItemsReaper.base_path, "files", "odl2")
+    ODL_TEMPLATE_DIR = os.path.join(
+        TestODLExpiredItemsReaper.base_path, "files", "odl2"
+    )
     ODL_TEMPLATE_FILENAME = "feed_template.json.jinja"
     ODL_REAPER_CLASS = ODL2ExpiredItemsReaper
 
@@ -290,9 +296,13 @@ class TestODL2ExpiredItemsReaper(TestODLExpiredItemsReaper):
         return importer
 
 
-class TestODL2ExpiredItemsReaperSingleLicense(TestODL2ExpiredItemsReaper, TestODLExpiredItemsReaperSingleLicense):
+class TestODL2ExpiredItemsReaperSingleLicense(
+    TestODL2ExpiredItemsReaper, TestODLExpiredItemsReaperSingleLicense
+):
     """Class testing that the ODL 2.x reaper correctly processes publications with a single license."""
 
 
-class TestODL2ExpiredItemsReaperMultipleLicense(TestODL2ExpiredItemsReaper, TestODLExpiredItemsReaperMultipleLicense):
+class TestODL2ExpiredItemsReaperMultipleLicense(
+    TestODL2ExpiredItemsReaper, TestODLExpiredItemsReaperMultipleLicense
+):
     """Class testing that the ODL 2.x reaper correctly processes publications with multiple licenses."""

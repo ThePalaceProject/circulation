@@ -68,45 +68,39 @@ from . import sample_data
 
 
 class Axis360Test(DatabaseTest):
-
     def setup_method(self):
-        super(Axis360Test,self).setup_method()
+        super(Axis360Test, self).setup_method()
         self.collection = MockAxis360API.mock_collection(self._db)
         self.api = MockAxis360API(self._db, self.collection)
 
     @classmethod
     def sample_data(cls, filename):
-        return sample_data(filename, 'axis')
+        return sample_data(filename, "axis")
 
     # Sample bibliographic and availability data you can use in a test
     # without having to parse it from an XML file.
     BIBLIOGRAPHIC_DATA = Metadata(
         DataSource.AXIS_360,
-        publisher='Random House Inc',
-        language='eng',
-        title='Faith of My Fathers : A Family Memoir',
-        imprint='Random House Inc2',
+        publisher="Random House Inc",
+        language="eng",
+        title="Faith of My Fathers : A Family Memoir",
+        imprint="Random House Inc2",
         published=datetime_utc(2000, 3, 7, 0, 0),
         primary_identifier=IdentifierData(
-            type=Identifier.AXIS_360_ID,
-            identifier='0003642860'
+            type=Identifier.AXIS_360_ID, identifier="0003642860"
         ),
-        identifiers = [
-            IdentifierData(type=Identifier.ISBN, identifier='9780375504587')
+        identifiers=[IdentifierData(type=Identifier.ISBN, identifier="9780375504587")],
+        contributors=[
+            ContributorData(
+                sort_name="McCain, John", roles=[Contributor.PRIMARY_AUTHOR_ROLE]
+            ),
+            ContributorData(sort_name="Salter, Mark", roles=[Contributor.AUTHOR_ROLE]),
         ],
-        contributors = [
-            ContributorData(sort_name="McCain, John",
-                            roles=[Contributor.PRIMARY_AUTHOR_ROLE]
-                        ),
-            ContributorData(sort_name="Salter, Mark",
-                            roles=[Contributor.AUTHOR_ROLE]
-                        ),
-        ],
-        subjects = [
-            SubjectData(type=Subject.BISAC,
-                        identifier='BIOGRAPHY & AUTOBIOGRAPHY / Political'),
-            SubjectData(type=Subject.FREEFORM_AUDIENCE,
-                        identifier='Adult'),
+        subjects=[
+            SubjectData(
+                type=Subject.BISAC, identifier="BIOGRAPHY & AUTOBIOGRAPHY / Political"
+            ),
+            SubjectData(type=Subject.FREEFORM_AUDIENCE, identifier="Adult"),
         ],
     )
 
@@ -122,11 +116,10 @@ class Axis360Test(DatabaseTest):
 
 
 class TestAxis360API(Axis360Test):
-
     def test_external_integration(self):
-        assert (
-            self.collection.external_integration ==
-            self.api.external_integration(object()))
+        assert self.collection.external_integration == self.api.external_integration(
+            object()
+        )
 
     def test__run_self_tests(self):
         # Verify that Axis360API._run_self_tests() calls the right
@@ -143,7 +136,7 @@ class TestAxis360API(Axis360Test):
             # give minutes.
             def recent_activity(self, since):
                 self.recent_activity_called_with = since
-                return [(1,"a"),(2, "b"), (3, "c")]
+                return [(1, "a"), (2, "b"), (3, "c")]
 
             # Then we will count the loans and holds for the default
             # patron.
@@ -161,7 +154,7 @@ class TestAxis360API(Axis360Test):
         integration = self._external_integration(
             "api.simple_authentication",
             ExternalIntegration.PATRON_AUTH_GOAL,
-            libraries=[with_default_patron]
+            libraries=[with_default_patron],
         )
         p = BasicAuthenticationProvider
         integration.setting(p.TEST_IDENTIFIER).value = "username1"
@@ -170,42 +163,56 @@ class TestAxis360API(Axis360Test):
         # Now that everything is set up, run the self-test.
         api = Mock(self._db, self.collection)
         now = utc_now()
-        [no_patron_credential, recent_circulation_events, patron_activity,
-         pools_without_delivery, refresh_bearer_token] = sorted(
-            api._run_self_tests(self._db), key=lambda x: x.name
-        )
+        [
+            no_patron_credential,
+            recent_circulation_events,
+            patron_activity,
+            pools_without_delivery,
+            refresh_bearer_token,
+        ] = sorted(api._run_self_tests(self._db), key=lambda x: x.name)
         assert "Refreshing bearer token" == refresh_bearer_token.name
         assert True == refresh_bearer_token.success
         assert "the new token" == refresh_bearer_token.result
 
         assert (
-            "Acquiring test patron credentials for library %s" % no_default_patron.name ==
-            no_patron_credential.name)
+            "Acquiring test patron credentials for library %s" % no_default_patron.name
+            == no_patron_credential.name
+        )
         assert False == no_patron_credential.success
-        assert ("Library has no test patron configured." ==
-            str(no_patron_credential.exception))
+        assert "Library has no test patron configured." == str(
+            no_patron_credential.exception
+        )
 
-        assert ("Asking for circulation events for the last five minutes" ==
-            recent_circulation_events.name)
+        assert (
+            "Asking for circulation events for the last five minutes"
+            == recent_circulation_events.name
+        )
         assert True == recent_circulation_events.success
         assert "Found 3 event(s)" == recent_circulation_events.result
         since = api.recent_activity_called_with
         five_minutes_ago = utc_now() - datetime.timedelta(minutes=5)
-        assert (five_minutes_ago-since).total_seconds() < 5
+        assert (five_minutes_ago - since).total_seconds() < 5
 
-        assert ("Checking activity for test patron for library %s" % with_default_patron.name ==
-            patron_activity.name)
+        assert (
+            "Checking activity for test patron for library %s"
+            % with_default_patron.name
+            == patron_activity.name
+        )
         assert True == patron_activity.success
         assert "Found 2 loans/holds" == patron_activity.result
         patron, pin = api.patron_activity_called_with
         assert "username1" == patron.authorization_identifier
         assert "password1" == pin
 
-        assert ("Checking for titles that have no delivery mechanisms." ==
-            pools_without_delivery.name)
+        assert (
+            "Checking for titles that have no delivery mechanisms."
+            == pools_without_delivery.name
+        )
         assert True == pools_without_delivery.success
-        assert ("All titles in this collection have delivery mechanisms." ==
-            pools_without_delivery.result)
+        assert (
+            "All titles in this collection have delivery mechanisms."
+            == pools_without_delivery.result
+        )
 
     def test__run_self_tests_short_circuit(self):
         # If we can't refresh the bearer token, the rest of the
@@ -236,7 +243,7 @@ class TestAxis360API(Axis360Test):
         self.api.availability()
         request = self.api.requests.pop()
         kwargs = request[-1]
-        assert None == kwargs['timeout']
+        assert None == kwargs["timeout"]
 
     def test_availability_exception(self):
 
@@ -244,16 +251,17 @@ class TestAxis360API(Axis360Test):
 
         with pytest.raises(RemoteIntegrationException) as excinfo:
             self.api.availability()
-        assert "Bad response from http://axis.test/availability/v2: Got status code 500 from external server, cannot continue." in str(excinfo.value)
+        assert (
+            "Bad response from http://axis.test/availability/v2: Got status code 500 from external server, cannot continue."
+            in str(excinfo.value)
+        )
 
     def test_refresh_bearer_token_after_401(self):
         # If we get a 401, we will fetch a new bearer token and try the
         # request again.
 
         self.api.queue_response(401)
-        self.api.queue_response(
-            200, content=json.dumps(dict(access_token="foo"))
-        )
+        self.api.queue_response(200, content=json.dumps(dict(access_token="foo")))
         self.api.queue_response(200, content="The data")
         response = self.api.request("http://url/")
         assert b"The data" == response.content
@@ -266,23 +274,26 @@ class TestAxis360API(Axis360Test):
         api.queue_response(412)
         with pytest.raises(RemoteIntegrationException) as excinfo:
             api.refresh_bearer_token()
-        assert "Bad response from http://axis.test/accesstoken: Got status code 412 from external server, but can only continue on: 200." in str(excinfo.value)
+        assert (
+            "Bad response from http://axis.test/accesstoken: Got status code 412 from external server, but can only continue on: 200."
+            in str(excinfo.value)
+        )
 
     def test_exception_after_401_with_fresh_token(self):
         # If we get a 401 immediately after refreshing the token, we will
         # raise an exception.
 
         self.api.queue_response(401)
-        self.api.queue_response(
-            200, content=json.dumps(dict(access_token="foo"))
-        )
+        self.api.queue_response(200, content=json.dumps(dict(access_token="foo")))
         self.api.queue_response(401)
 
         self.api.queue_response(301)
 
         with pytest.raises(RemoteIntegrationException) as excinfo:
             self.api.request("http://url/")
-        assert "Got status code 401 from external server, cannot continue." in str(excinfo.value)
+        assert "Got status code 401 from external server, cannot continue." in str(
+            excinfo.value
+        )
 
         # The fourth request never got made.
         assert [301] == [x.status_code for x in self.api.responses]
@@ -296,7 +307,7 @@ class TestAxis360API(Axis360Test):
             identifier_type=Identifier.AXIS_360_ID,
             data_source_name=DataSource.AXIS_360,
             with_license_pool=True,
-            collection=self.collection
+            collection=self.collection,
         )
 
         # We have never checked the circulation information for this
@@ -332,25 +343,24 @@ class TestAxis360API(Axis360Test):
         edition, pool = self._edition(
             identifier_type=Identifier.AXIS_360_ID,
             data_source_name=DataSource.AXIS_360,
-            with_license_pool=True
+            with_license_pool=True,
         )
         data = self.sample_data("checkin_success.xml")
         self.api.queue_response(200, content=data)
         patron = self._patron()
         barcode = self._str
         patron.authorization_identifier = barcode
-        response = self.api.checkin(patron, 'pin', pool)
+        response = self.api.checkin(patron, "pin", pool)
         assert response == True
 
         # Verify the format of the HTTP request that was made.
         [request] = self.api.requests
         [url, args, kwargs] = request
-        data = kwargs.pop('data')
-        assert kwargs['method'] == 'GET'
-        expect = (
-            '/EarlyCheckInTitle/v3?itemID=%s&patronID=%s' % (
-                pool.identifier.identifier, barcode
-            )
+        data = kwargs.pop("data")
+        assert kwargs["method"] == "GET"
+        expect = "/EarlyCheckInTitle/v3?itemID=%s&patronID=%s" % (
+            pool.identifier.identifier,
+            barcode,
         )
         assert expect in url
 
@@ -360,43 +370,41 @@ class TestAxis360API(Axis360Test):
         edition, pool = self._edition(
             identifier_type=Identifier.AXIS_360_ID,
             data_source_name=DataSource.AXIS_360,
-            with_license_pool=True
+            with_license_pool=True,
         )
         data = self.sample_data("checkin_failure.xml")
         self.api.queue_response(200, content=data)
         patron = self._patron()
         patron.authorization_identifier = self._str
-        pytest.raises(
-            NotFoundOnRemote, self.api.checkin, patron, 'pin', pool
-        )
+        pytest.raises(NotFoundOnRemote, self.api.checkin, patron, "pin", pool)
 
     def test_place_hold(self):
         edition, pool = self._edition(
             identifier_type=Identifier.AXIS_360_ID,
             data_source_name=DataSource.AXIS_360,
-            with_license_pool=True
+            with_license_pool=True,
         )
         data = self.sample_data("place_hold_success.xml")
         self.api.queue_response(200, content=data)
         patron = self._patron()
         ConfigurationSetting.for_library(
-            Configuration.DEFAULT_NOTIFICATION_EMAIL_ADDRESS,
-            self._default_library).value = "notifications@example.com"
-        response = self.api.place_hold(patron, 'pin', pool, None)
+            Configuration.DEFAULT_NOTIFICATION_EMAIL_ADDRESS, self._default_library
+        ).value = "notifications@example.com"
+        response = self.api.place_hold(patron, "pin", pool, None)
         assert 1 == response.hold_position
         assert response.identifier_type == pool.identifier.type
         assert response.identifier == pool.identifier.identifier
         [request] = self.api.requests
-        params = request[-1]['params']
-        assert 'notifications@example.com' == params['email']
+        params = request[-1]["params"]
+        assert "notifications@example.com" == params["email"]
 
     def test_fulfill(self):
         # Test our ability to fulfill an Axis 360 title.
         edition, pool = self._edition(
             identifier_type=Identifier.AXIS_360_ID,
-            identifier_id='0015176429',
+            identifier_id="0015176429",
             data_source_name=DataSource.AXIS_360,
-            with_license_pool=True
+            with_license_pool=True,
         )
 
         patron = self._patron()
@@ -404,8 +412,7 @@ class TestAxis360API(Axis360Test):
 
         def fulfill(internal_format="not AxisNow"):
             return self.api.fulfill(
-                patron, "pin", licensepool=pool,
-                internal_format=internal_format
+                patron, "pin", licensepool=pool, internal_format=internal_format
             )
 
         # If Axis 360 says a patron does not have a title checked out,
@@ -440,7 +447,7 @@ class TestAxis360API(Axis360Test):
 
         # If the title is checked out but Axis provides no fulfillment
         # info, the exception is CannotFulfill.
-        pool.identifier.identifier = '0015176429'
+        pool.identifier.identifier = "0015176429"
         data = self.sample_data("availability_without_fulfillment.xml")
         self.api.queue_response(200, content=data)
         pytest.raises(CannotFulfill, fulfill)
@@ -471,22 +478,20 @@ class TestAxis360API(Axis360Test):
         # We made a request that included the authorization identifier
         # of the patron in question.
         [url, args, kwargs] = self.api.requests.pop()
-        assert patron.authorization_identifier == kwargs['params']['patronId']
+        assert patron.authorization_identifier == kwargs["params"]["patronId"]
 
         # We got three results -- two holds and one loan.
-        [hold1, loan, hold2] = sorted(
-            results, key=lambda x: x.identifier
-        )
+        [hold1, loan, hold2] = sorted(results, key=lambda x: x.identifier)
         assert isinstance(hold1, HoldInfo)
         assert isinstance(hold2, HoldInfo)
         assert isinstance(loan, LoanInfo)
 
     def test_update_licensepools_for_identifiers(self):
-
         class Mock(MockAxis360API):
             """Simulates an Axis 360 API that knows about some
             books but not others.
             """
+
             updated = []
             reaped = []
 
@@ -495,18 +500,17 @@ class TestAxis360API(Axis360Test):
                     # The first identifer in the list is still
                     # available.
                     identifier_data = IdentifierData(
-                        type=identifier.type,
-                        identifier=identifier.identifier
+                        type=identifier.type, identifier=identifier.identifier
                     )
                     metadata = Metadata(
                         data_source=DataSource.AXIS_360,
-                        primary_identifier=identifier_data
+                        primary_identifier=identifier_data,
                     )
                     availability = CirculationData(
                         data_source=DataSource.AXIS_360,
                         primary_identifier=identifier_data,
                         licenses_owned=7,
-                        licenses_available=6
+                        licenses_available=6,
                     )
                     yield metadata, availability
 
@@ -517,9 +521,7 @@ class TestAxis360API(Axis360Test):
                 self.reaped.append(identifier)
 
         api = Mock(self._db, self.collection)
-        still_in_collection = self._identifier(
-            identifier_type=Identifier.AXIS_360_ID
-        )
+        still_in_collection = self._identifier(identifier_type=Identifier.AXIS_360_ID)
         no_longer_in_collection = self._identifier(
             identifier_type=Identifier.AXIS_360_ID
         )
@@ -551,12 +553,15 @@ class TestAxis360API(Axis360Test):
         # We asked for information on two identifiers.
         [request] = self.api.requests
         kwargs = request[-1]
-        assert {'titleIds': '2001,2002'} == kwargs['params']
+        assert {"titleIds": "2001,2002"} == kwargs["params"]
 
         # We got information on only one.
         [(metadata, circulation)] = results
         assert (id1, False) == metadata.primary_identifier.load(self._db)
-        assert 'El caso de la gracia : Un periodista explora las evidencias de unas vidas transformadas' == metadata.title
+        assert (
+            "El caso de la gracia : Un periodista explora las evidencias de unas vidas transformadas"
+            == metadata.title
+        )
         assert 2 == circulation.licenses_owned
 
     def test_reap(self):
@@ -574,8 +579,10 @@ class TestAxis360API(Axis360Test):
         # it's already been reaped, so nothing happens.
         edition, pool, = self._edition(
             data_source_name=DataSource.AXIS_360,
-            identifier_type=id1.type, identifier_id=id1.identifier,
-            with_license_pool=True, collection=self.collection
+            identifier_type=id1.type,
+            identifier_id=id1.identifier,
+            with_license_pool=True,
+            collection=self.collection,
         )
 
         # This LicensePool has licenses, but it's not in a different
@@ -584,8 +591,10 @@ class TestAxis360API(Axis360Test):
         collection2 = self._collection()
         edition2, pool2, = self._edition(
             data_source_name=DataSource.AXIS_360,
-            identifier_type=id1.type, identifier_id=id1.identifier,
-            with_license_pool=True, collection=collection2
+            identifier_type=id1.type,
+            identifier_id=id1.identifier,
+            with_license_pool=True,
+            collection=collection2,
         )
 
         pool.licenses_owned = 0
@@ -626,8 +635,8 @@ class TestAxis360API(Axis360Test):
         # with the right keyword arguments and the right HTTP method.
         url, args, kwargs = api.requests.pop()
         assert url.endswith(api.fulfillment_endpoint)
-        assert 'POST' == kwargs['method']
-        assert 'transaction ID' == kwargs['params']['TransactionID']
+        assert "POST" == kwargs["method"]
+        assert "transaction ID" == kwargs["params"]["TransactionID"]
 
     def test_get_audiobook_metadata(self):
         # Test the get_audiobook_metadata method, which makes an API request.
@@ -643,8 +652,8 @@ class TestAxis360API(Axis360Test):
         # with the right keyword arguments and the right HTTP method.
         url, args, kwargs = api.requests.pop()
         assert url.endswith(api.audiobook_metadata_endpoint)
-        assert 'POST' == kwargs['method']
-        assert 'Findaway content ID' == kwargs['params']['fndcontentid']
+        assert "POST" == kwargs["method"]
+        assert "Findaway content ID" == kwargs["params"]["fndcontentid"]
 
     def test_update_book(self):
         # Verify that the update_book method takes a Metadata and a
@@ -654,8 +663,7 @@ class TestAxis360API(Axis360Test):
         analytics = MockAnalyticsProvider()
         api = MockAxis360API(self._db, self.collection)
         e, e_new, lp, lp_new = api.update_book(
-            self.BIBLIOGRAPHIC_DATA, self.AVAILABILITY_DATA,
-            analytics=analytics
+            self.BIBLIOGRAPHIC_DATA, self.AVAILABILITY_DATA, analytics=analytics
         )
         # A new LicensePool and Edition were created.
         assert True == lp_new
@@ -670,7 +678,7 @@ class TestAxis360API(Axis360Test):
         assert e == lp.work.presentation_edition
 
         # The Edition reflects what it said in BIBLIOGRAPHIC_DATA
-        assert 'Faith of My Fathers : A Family Memoir' == e.title
+        assert "Faith of My Fathers : A Family Memoir" == e.title
 
         # Three analytics events were sent out.
         #
@@ -689,8 +697,7 @@ class TestAxis360API(Axis360Test):
         )
 
         e2, e_new, lp2, lp_new = api.update_book(
-            self.BIBLIOGRAPHIC_DATA, new_circulation,
-            analytics=analytics
+            self.BIBLIOGRAPHIC_DATA, new_circulation, analytics=analytics
         )
 
         # The same LicensePool and Edition are returned -- no new ones
@@ -716,9 +723,11 @@ class TestAxis360API(Axis360Test):
             (Axis360API.VERIFY_SSL, None, "verify_certificate", True),
             (Axis360API.VERIFY_SSL, "True", "verify_certificate", True),
             (Axis360API.VERIFY_SSL, "False", "verify_certificate", False),
-        ]
+        ],
     )
-    def test_integration_settings(self, setting, setting_value, attribute, attribute_value):
+    def test_integration_settings(
+        self, setting, setting_value, attribute, attribute_value
+    ):
         external_integration = self.collection.external_integration
         if setting_value is not None:
             external_integration.setting(setting).value = setting_value
@@ -727,11 +736,11 @@ class TestAxis360API(Axis360Test):
 
 
 class TestCirculationMonitor(Axis360Test):
-
     def test_run(self):
         class Mock(Axis360CirculationMonitor):
             def catch_up_from(self, start, cutoff, progress):
                 self.called_with = (start, cutoff, progress)
+
         monitor = Mock(self._db, self.collection, api_class=MockAxis360API)
 
         # The first time run() is called, catch_up_from() is asked to
@@ -756,10 +765,11 @@ class TestCirculationMonitor(Axis360Test):
         class MockAPI(MockAxis360API):
             def recent_activity(self, since):
                 self.recent_activity_called_with = since
-                return [(1,"a"),(2, "b")]
+                return [(1, "a"), (2, "b")]
 
         class MockMonitor(Axis360CirculationMonitor):
             processed = []
+
             def process_book(self, bibliographic, circulation):
                 self.processed.append((bibliographic, circulation))
 
@@ -773,7 +783,7 @@ class TestCirculationMonitor(Axis360Test):
         assert "start" == monitor.api.recent_activity_called_with
 
         # process_book was called on each item returned by recent_activity.
-        assert [(1,"a"),(2, "b")] == monitor.processed
+        assert [(1, "a"), (2, "b")] == monitor.processed
 
         # The number of books processed was stored in
         # TimestampData.achievements.
@@ -781,38 +791,48 @@ class TestCirculationMonitor(Axis360Test):
 
     def test_process_book(self):
         integration, ignore = create(
-            self._db, ExternalIntegration,
+            self._db,
+            ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol="core.local_analytics_provider",
         )
 
         monitor = Axis360CirculationMonitor(
-            self._db, self.collection, api_class=MockAxis360API,
+            self._db,
+            self.collection,
+            api_class=MockAxis360API,
         )
         edition, license_pool = monitor.process_book(
-            self.BIBLIOGRAPHIC_DATA, self.AVAILABILITY_DATA)
-        assert 'Faith of My Fathers : A Family Memoir' == edition.title
-        assert 'eng' == edition.language
-        assert 'Random House Inc' == edition.publisher
-        assert 'Random House Inc2' == edition.imprint
+            self.BIBLIOGRAPHIC_DATA, self.AVAILABILITY_DATA
+        )
+        assert "Faith of My Fathers : A Family Memoir" == edition.title
+        assert "eng" == edition.language
+        assert "Random House Inc" == edition.publisher
+        assert "Random House Inc2" == edition.imprint
 
         assert Identifier.AXIS_360_ID == edition.primary_identifier.type
-        assert '0003642860' == edition.primary_identifier.identifier
+        assert "0003642860" == edition.primary_identifier.identifier
 
-        [isbn] = [x for x in edition.equivalent_identifiers()
-                  if x is not edition.primary_identifier]
+        [isbn] = [
+            x
+            for x in edition.equivalent_identifiers()
+            if x is not edition.primary_identifier
+        ]
         assert Identifier.ISBN == isbn.type
-        assert '9780375504587' == isbn.identifier
+        assert "9780375504587" == isbn.identifier
 
-        assert (["McCain, John", "Salter, Mark"] ==
-            sorted([x.sort_name for x in edition.contributors]))
+        assert ["McCain, John", "Salter, Mark"] == sorted(
+            [x.sort_name for x in edition.contributors]
+        )
 
         subs = sorted(
             (x.subject.type, x.subject.identifier)
             for x in edition.primary_identifier.classifications
         )
-        assert [(Subject.BISAC, 'BIOGRAPHY & AUTOBIOGRAPHY / Political'),
-             (Subject.FREEFORM_AUDIENCE, 'Adult')] == subs
+        assert [
+            (Subject.BISAC, "BIOGRAPHY & AUTOBIOGRAPHY / Political"),
+            (Subject.FREEFORM_AUDIENCE, "Adult"),
+        ] == subs
 
         assert 9 == license_pool.licenses_owned
         assert 8 == license_pool.licenses_available
@@ -822,8 +842,11 @@ class TestCirculationMonitor(Axis360Test):
         # Three circulation events were created, backdated to the
         # last_checked date of the license pool.
         events = license_pool.circulation_events
-        assert (['distributor_title_add', 'distributor_check_in', 'distributor_license_add'] ==
-            [x.type for x in events])
+        assert [
+            "distributor_title_add",
+            "distributor_check_in",
+            "distributor_license_add",
+        ] == [x.type for x in events]
         for e in events:
             assert e.start == license_pool.last_checked
 
@@ -836,18 +859,23 @@ class TestCirculationMonitor(Axis360Test):
         # 360 bibliographic coverage provider, so that in the future
         # it doesn't have to make a separate API request to ask about
         # this book.
-        records = [x for x in license_pool.identifier.coverage_records
-                   if x.data_source.name == DataSource.AXIS_360
-                   and x.operation is None]
+        records = [
+            x
+            for x in license_pool.identifier.coverage_records
+            if x.data_source.name == DataSource.AXIS_360 and x.operation is None
+        ]
         assert 1 == len(records)
 
         # Now, another collection with the same book shows up.
         collection2 = MockAxis360API.mock_collection(self._db, "coll2")
         monitor = Axis360CirculationMonitor(
-            self._db, collection2, api_class=MockAxis360API,
+            self._db,
+            collection2,
+            api_class=MockAxis360API,
         )
         edition2, license_pool2 = monitor.process_book(
-            self.BIBLIOGRAPHIC_DATA, self.AVAILABILITY_DATA)
+            self.BIBLIOGRAPHIC_DATA, self.AVAILABILITY_DATA
+        )
 
         # Both license pools have the same Work and the same presentation
         # edition.
@@ -859,8 +887,9 @@ class TestCirculationMonitor(Axis360Test):
         updates it.
         """
         edition, licensepool = self._edition(
-            with_license_pool=True, identifier_type=Identifier.AXIS_360_ID,
-            identifier_id='0003642860'
+            with_license_pool=True,
+            identifier_type=Identifier.AXIS_360_ID,
+            identifier_id="0003642860",
         )
         # We start off with availability information based on the
         # default for test data.
@@ -868,50 +897,47 @@ class TestCirculationMonitor(Axis360Test):
 
         identifier = IdentifierData(
             type=licensepool.identifier.type,
-            identifier=licensepool.identifier.identifier
+            identifier=licensepool.identifier.identifier,
         )
         metadata = Metadata(DataSource.AXIS_360, primary_identifier=identifier)
         monitor = Axis360CirculationMonitor(
-            self._db, self.collection, api_class=MockAxis360API,
+            self._db,
+            self.collection,
+            api_class=MockAxis360API,
         )
-        edition, licensepool = monitor.process_book(
-            metadata, self.AVAILABILITY_DATA
-        )
+        edition, licensepool = monitor.process_book(metadata, self.AVAILABILITY_DATA)
 
         # Now we have information based on the CirculationData.
         assert 9 == licensepool.licenses_owned
 
 
 class TestReaper(Axis360Test):
-
     def test_instantiate(self):
         # Validate the standard CollectionMonitor interface.
         monitor = AxisCollectionReaper(
-            self._db, self.collection,
-            api_class=MockAxis360API
+            self._db, self.collection, api_class=MockAxis360API
         )
 
-class TestParsers(Axis360Test):
 
+class TestParsers(Axis360Test):
     def test_bibliographic_parser(self):
         # Make sure the bibliographic information gets properly
         # collated in preparation for creating Edition objects.
 
         data = self.sample_data("tiny_collection.xml")
 
-        [bib1, av1], [bib2, av2] = BibliographicParser(
-            False, True).process_all(data)
+        [bib1, av1], [bib2, av2] = BibliographicParser(False, True).process_all(data)
 
         # We didn't ask for availability information, so none was provided.
         assert None == av1
         assert None == av2
 
-        assert 'Faith of My Fathers : A Family Memoir' == bib1.title
-        assert 'eng' == bib1.language
+        assert "Faith of My Fathers : A Family Memoir" == bib1.title
+        assert "eng" == bib1.language
         assert datetime_utc(2000, 3, 7, 0, 0) == bib1.published
 
-        assert 'Simon & Schuster' == bib2.publisher
-        assert 'Pocket Books' == bib2.imprint
+        assert "Simon & Schuster" == bib2.publisher
+        assert "Pocket Books" == bib2.imprint
 
         assert Edition.BOOK_MEDIUM == bib1.medium
 
@@ -923,24 +949,25 @@ class TestParsers(Axis360Test):
         [description, cover] = bib1.links
         assert Hyperlink.DESCRIPTION == description.rel
         assert Representation.TEXT_PLAIN == description.media_type
-        assert description.content.startswith(
-            "John McCain's deeply moving memoir"
-        )
+        assert description.content.startswith("John McCain's deeply moving memoir")
 
         # The cover image simulates the current state of the B&T cover
         # service, where we get a thumbnail-sized image URL in the
         # Axis 360 API response and we can hack the URL to get the
         # full-sized image URL.
         assert LinkRelations.IMAGE == cover.rel
-        assert ("http://contentcafecloud.baker-taylor.com/Jacket.svc/D65D0665-050A-487B-9908-16E6D8FF5C3E/9780375504587/Large/Empty" ==
-            cover.href)
+        assert (
+            "http://contentcafecloud.baker-taylor.com/Jacket.svc/D65D0665-050A-487B-9908-16E6D8FF5C3E/9780375504587/Large/Empty"
+            == cover.href
+        )
         assert MediaTypes.JPEG_MEDIA_TYPE == cover.media_type
 
         assert LinkRelations.THUMBNAIL_IMAGE == cover.thumbnail.rel
-        assert ("http://contentcafecloud.baker-taylor.com/Jacket.svc/D65D0665-050A-487B-9908-16E6D8FF5C3E/9780375504587/Medium/Empty" ==
-            cover.thumbnail.href)
+        assert (
+            "http://contentcafecloud.baker-taylor.com/Jacket.svc/D65D0665-050A-487B-9908-16E6D8FF5C3E/9780375504587/Medium/Empty"
+            == cover.thumbnail.href
+        )
         assert MediaTypes.JPEG_MEDIA_TYPE == cover.thumbnail.media_type
-
 
         # Book #1 has a primary author, another author and a narrator.
         #
@@ -963,23 +990,29 @@ class TestParsers(Axis360Test):
         assert [Contributor.PRIMARY_AUTHOR_ROLE] == cont.roles
 
         axis_id, isbn = sorted(bib1.identifiers, key=lambda x: x.identifier)
-        assert '0003642860' == axis_id.identifier
-        assert '9780375504587' == isbn.identifier
+        assert "0003642860" == axis_id.identifier
+        assert "9780375504587" == isbn.identifier
 
         # Check the subjects for #2 because it includes an audience,
         # unlike #1.
-        subjects = sorted(bib2.subjects, key = lambda x: x.identifier or "")
-        assert [Subject.BISAC, Subject.BISAC, Subject.BISAC,
-             Subject.AXIS_360_AUDIENCE] == [x.type for x in subjects]
-        general_fiction, women_sleuths, romantic_suspense = sorted([
-            x.name for x in subjects if x.type==Subject.BISAC])
-        assert 'FICTION / General' == general_fiction
-        assert 'FICTION / Mystery & Detective / Women Sleuths' == women_sleuths
-        assert 'FICTION / Romance / Suspense' == romantic_suspense
+        subjects = sorted(bib2.subjects, key=lambda x: x.identifier or "")
+        assert [
+            Subject.BISAC,
+            Subject.BISAC,
+            Subject.BISAC,
+            Subject.AXIS_360_AUDIENCE,
+        ] == [x.type for x in subjects]
+        general_fiction, women_sleuths, romantic_suspense = sorted(
+            [x.name for x in subjects if x.type == Subject.BISAC]
+        )
+        assert "FICTION / General" == general_fiction
+        assert "FICTION / Mystery & Detective / Women Sleuths" == women_sleuths
+        assert "FICTION / Romance / Suspense" == romantic_suspense
 
-        [adult] = [x.identifier for x in subjects
-                   if x.type==Subject.AXIS_360_AUDIENCE]
-        assert 'General Adult' == adult
+        [adult] = [
+            x.identifier for x in subjects if x.type == Subject.AXIS_360_AUDIENCE
+        ]
+        assert "General Adult" == adult
 
         # The second book has a cover image simulating some possible
         # future case, where B&T change their cover service so that
@@ -1028,13 +1061,13 @@ class TestParsers(Axis360Test):
         # Although the audiobook is also available in the "AxisNow"
         # format, no second delivery mechanism was created for it, the
         # way it would have been for an ebook.
-        assert b'<formatName>AxisNow</formatName>' in data
+        assert b"<formatName>AxisNow</formatName>" in data
 
     def test_bibliographic_parser_blio_format(self):
         # This book is available as 'Blio' but not 'AxisNow'.
         data = self.sample_data("availability_with_audiobook_fulfillment.xml")
-        data = data.replace(b'Acoustik', b'Blio')
-        data = data.replace(b'AxisNow', b'No Such Format')
+        data = data.replace(b"Acoustik", b"Blio")
+        data = data.replace(b"AxisNow", b"No Such Format")
 
         [[bib, av]] = BibliographicParser(False, True).process_all(data)
 
@@ -1047,7 +1080,7 @@ class TestParsers(Axis360Test):
     def test_bibliographic_parser_blio_and_axisnow_format(self):
         # This book is available as both 'Blio' and 'AxisNow'.
         data = self.sample_data("availability_with_audiobook_fulfillment.xml")
-        data = data.replace(b'Acoustik', b'Blio')
+        data = data.replace(b"Acoustik", b"Blio")
 
         [[bib, av]] = BibliographicParser(False, True).process_all(data)
 
@@ -1059,8 +1092,8 @@ class TestParsers(Axis360Test):
 
     def test_bibliographic_parser_unsupported_format(self):
         data = self.sample_data("availability_with_audiobook_fulfillment.xml")
-        data = data.replace(b'Acoustik', b'No Such Format 1')
-        data = data.replace(b'AxisNow', b'No Such Format 2')
+        data = data.replace(b"Acoustik", b"No Such Format 1")
+        data = data.replace(b"AxisNow", b"No Such Format 2")
 
         [[bib, av]] = BibliographicParser(False, True).process_all(data)
 
@@ -1094,10 +1127,10 @@ class TestParsers(Axis360Test):
         # force_role overwrites whatever other role might be
         # assigned.
         author = "Bob, Inc. (COR)"
-        c = parse(author, primary_author_found=False,
-                  force_role=Contributor.NARRATOR_ROLE)
+        c = parse(
+            author, primary_author_found=False, force_role=Contributor.NARRATOR_ROLE
+        )
         assert [Contributor.NARRATOR_ROLE] == c.roles
-
 
     def test_availability_parser(self):
         """Make sure the availability information gets properly
@@ -1106,8 +1139,7 @@ class TestParsers(Axis360Test):
 
         data = self.sample_data("tiny_collection.xml")
 
-        [bib1, av1], [bib2, av2] = BibliographicParser(
-            True, False).process_all(data)
+        [bib1, av1], [bib2, av2] = BibliographicParser(True, False).process_all(data)
 
         # We didn't ask for bibliographic information, so none was provided.
         assert None == bib1
@@ -1120,14 +1152,12 @@ class TestParsers(Axis360Test):
 
 
 class BaseParserTest(object):
-
     @classmethod
     def sample_data(cls, filename):
-        return sample_data(filename, 'axis')
+        return sample_data(filename, "axis")
 
 
 class TestResponseParser(BaseParserTest):
-
     def setup_method(self):
         # We don't need an actual Collection object to test most of
         # these classes, but we do need to test that whatever object
@@ -1135,11 +1165,12 @@ class TestResponseParser(BaseParserTest):
         # right spot of HoldInfo and LoanInfo objects.
         class MockCollection(object):
             pass
+
         self._default_collection = MockCollection()
         self._default_collection.id = object()
 
-class TestRaiseExceptionOnError(TestResponseParser):
 
+class TestRaiseExceptionOnError(TestResponseParser):
     def test_internal_server_error(self):
         data = self.sample_data("internal_server_error.xml")
         parser = HoldReleaseResponseParser(None)
@@ -1147,18 +1178,17 @@ class TestRaiseExceptionOnError(TestResponseParser):
             parser.process_all(data)
         assert "Internal Server Error" in str(excinfo.value)
 
-
     def test_ignore_error_codes(self):
         # A parser subclass can decide not to raise exceptions
         # when encountering specific error codes.
         data = self.sample_data("internal_server_error.xml")
         retval = object()
+
         class IgnoreISE(HoldReleaseResponseParser):
             def process_one(self, e, namespaces):
-                self.raise_exception_on_error(
-                    e, namespaces, ignore_error_codes = [5000]
-                )
+                self.raise_exception_on_error(e, namespaces, ignore_error_codes=[5000])
                 return retval
+
         # Unlike in test_internal_server_error, no exception is
         # raised, because we told the parser to ignore this particular
         # error code.
@@ -1181,16 +1211,12 @@ class TestRaiseExceptionOnError(TestResponseParser):
 
 
 class TestCheckinResponseParser(TestResponseParser):
-
     def test_parse_checkin_success(self):
         # The response parser raises an exception if there's a problem,
         # and returne True otherwise.
         #
         # "Book is not on loan" is not treated as a problem.
-        for filename in (
-            "checkin_success.xml",
-            "checkin_not_checked_out.xml"
-        ):
+        for filename in ("checkin_success.xml", "checkin_not_checked_out.xml"):
             data = self.sample_data(filename)
             parser = CheckinResponseParser(self._default_collection)
             parsed = parser.process_all(data)
@@ -1203,7 +1229,6 @@ class TestCheckinResponseParser(TestResponseParser):
 
 
 class TestCheckoutResponseParser(TestResponseParser):
-
     def test_parse_checkout_success(self):
         data = self.sample_data("checkout_success.xml")
         parser = CheckoutResponseParser(self._default_collection)
@@ -1212,8 +1237,7 @@ class TestCheckoutResponseParser(TestResponseParser):
         assert self._default_collection.id == parsed.collection_id
         assert DataSource.AXIS_360 == parsed.data_source_name
         assert Identifier.AXIS_360_ID == parsed.identifier_type
-        assert (datetime_utc(2015, 8, 11, 18, 57, 42) ==
-            parsed.end_date)
+        assert datetime_utc(2015, 8, 11, 18, 57, 42) == parsed.end_date
 
         # There is no FulfillmentInfo associated with the LoanInfo,
         # because we don't need it (checkout and fulfillment are
@@ -1230,8 +1254,8 @@ class TestCheckoutResponseParser(TestResponseParser):
         parser = CheckoutResponseParser(None)
         pytest.raises(NotFoundOnRemote, parser.process_all, data)
 
-class TestHoldResponseParser(TestResponseParser):
 
+class TestHoldResponseParser(TestResponseParser):
     def test_parse_hold_success(self):
         data = self.sample_data("place_hold_success.xml")
         parser = HoldResponseParser(self._default_collection)
@@ -1248,8 +1272,8 @@ class TestHoldResponseParser(TestResponseParser):
         parser = HoldResponseParser(None)
         pytest.raises(AlreadyOnHold, parser.process_all, data)
 
-class TestHoldReleaseResponseParser(TestResponseParser):
 
+class TestHoldReleaseResponseParser(TestResponseParser):
     def test_success(self):
         data = self.sample_data("release_hold_success.xml")
         parser = HoldReleaseResponseParser(None)
@@ -1259,6 +1283,7 @@ class TestHoldReleaseResponseParser(TestResponseParser):
         data = self.sample_data("release_hold_failure.xml")
         parser = HoldReleaseResponseParser(None)
         pytest.raises(NotOnHold, parser.process_all, data)
+
 
 class TestAvailabilityResponseParser(Axis360Test, BaseParserTest):
     """Unlike other response parser tests, this one needs
@@ -1328,7 +1353,10 @@ class TestAvailabilityResponseParser(Axis360Test, BaseParserTest):
         # as its content_link.
         assert isinstance(fulfillment, FulfillmentInfo)
         assert not isinstance(fulfillment, Axis360FulfillmentInfo)
-        assert "http://adobe.acsm/?src=library&transactionId=2a34598b-12af-41e4-a926-af5e42da7fe5&isbn=9780763654573&format=F2" == fulfillment.content_link
+        assert (
+            "http://adobe.acsm/?src=library&transactionId=2a34598b-12af-41e4-a926-af5e42da7fe5&isbn=9780763654573&format=F2"
+            == fulfillment.content_link
+        )
 
         # Next ask for AxisNow -- this will be more like
         # test_parse_audiobook_availability, since it requires an
@@ -1346,7 +1374,6 @@ class TestAvailabilityResponseParser(Axis360Test, BaseParserTest):
 
 
 class TestJSONResponseParser(object):
-
     def test__required_key(self):
         m = JSONResponseParser._required_key
         parsed = dict(key="value")
@@ -1357,7 +1384,10 @@ class TestJSONResponseParser(object):
         # If not, it raises a RemoteInitiatedServerError.
         with pytest.raises(RemoteInitiatedServerError) as excinfo:
             m("absent", parsed)
-        assert "Required key absent not present in Axis 360 fulfillment document: {'key': 'value'}" in str(excinfo.value)
+        assert (
+            "Required key absent not present in Axis 360 fulfillment document: {'key': 'value'}"
+            in str(excinfo.value)
+        )
 
     def test_verify_status_code(self):
         success = dict(Status=dict(Code=0000))
@@ -1379,12 +1409,13 @@ class TestJSONResponseParser(object):
         # raised.
         with pytest.raises(RemoteInitiatedServerError) as excinfo:
             m(missing)
-        assert "Required key Status not present in Axis 360 fulfillment document" in str(excinfo.value)
+        assert (
+            "Required key Status not present in Axis 360 fulfillment document"
+            in str(excinfo.value)
+        )
 
     def test_parse(self):
-
         class Mock(JSONResponseParser):
-
             def _parse(self, parsed, *args, **kwargs):
                 self.called_with = parsed, args, kwargs
                 return "success"
@@ -1398,24 +1429,22 @@ class TestJSONResponseParser(object):
         # arguments to parse() will be passed through to _parse().
         result = parser.parse(json.dumps(doc), "value1", arg2="value2")
         assert "success" == result
-        assert (
-            (doc, ("value1",), dict(arg2="value2")) ==
-            parser.called_with)
+        assert (doc, ("value1",), dict(arg2="value2")) == parser.called_with
 
         # It also works if the JSON was already parsed.
         result = parser.parse(doc, "new_value")
-        assert (
-            (doc, ("new_value",), {}) == parser.called_with)
+        assert (doc, ("new_value",), {}) == parser.called_with
 
         # Non-JSON input causes an error.
         with pytest.raises(RemoteInitiatedServerError) as excinfo:
             parser.parse("I'm not JSON")
-        assert "Invalid response from Axis 360 (was expecting JSON): I'm not JSON" in str(excinfo.value)
-
+        assert (
+            "Invalid response from Axis 360 (was expecting JSON): I'm not JSON"
+            in str(excinfo.value)
+        )
 
 
 class TestAxis360FulfillmentInfoResponseParser(Axis360Test):
-
     def test__parse_findaway(self):
         # _parse will create a valid FindawayManifest given a
         # complete document.
@@ -1424,12 +1453,11 @@ class TestAxis360FulfillmentInfoResponseParser(Axis360Test):
         m = parser._parse
 
         edition, pool = self._edition(with_license_pool=True)
+
         def get_data():
             # We'll be modifying this document to simulate failures,
             # so make it easy to load a fresh copy.
-            return json.loads(
-                self.sample_data("audiobook_fulfillment_info.json")
-            )
+            return json.loads(self.sample_data("audiobook_fulfillment_info.json"))
 
         # This is the data we just got from a call to Axis 360's
         # getfulfillmentInfo endpoint.
@@ -1449,21 +1477,21 @@ class TestAxis360FulfillmentInfoResponseParser(Axis360Test):
 
         # The manifest contains information from the LicensePool's presentation
         # edition
-        assert edition.title == metadata['title']
+        assert edition.title == metadata["title"]
 
         # It contains DRM licensing information from Findaway via the
         # Axis 360 API.
-        encrypted = metadata['encrypted']
+        encrypted = metadata["encrypted"]
         assert (
-            '0f547af1-38c1-4b1c-8a1a-169d353065d0' ==
-            encrypted['findaway:sessionKey'])
-        assert '5babb89b16a4ed7d8238f498' == encrypted['findaway:checkoutId']
-        assert '04960' == encrypted['findaway:fulfillmentId']
-        assert '58ee81c6d3d8eb3b05597cdc' == encrypted['findaway:licenseId']
+            "0f547af1-38c1-4b1c-8a1a-169d353065d0" == encrypted["findaway:sessionKey"]
+        )
+        assert "5babb89b16a4ed7d8238f498" == encrypted["findaway:checkoutId"]
+        assert "04960" == encrypted["findaway:fulfillmentId"]
+        assert "58ee81c6d3d8eb3b05597cdc" == encrypted["findaway:licenseId"]
 
         # The spine items and duration have been filled in by the call to
         # the getaudiobookmetadata endpoint.
-        assert 8150.87 == metadata['duration']
+        assert 8150.87 == metadata["duration"]
         assert 5 == len(manifest.readingOrder)
 
         # We also know when the licensing document expires.
@@ -1473,8 +1501,10 @@ class TestAxis360FulfillmentInfoResponseParser(Axis360Test):
         # document and verify that extraction fails.
         #
         for field in (
-                'FNDContentID', 'FNDLicenseID', 'FNDSessionKey',
-                'ExpirationDate',
+            "FNDContentID",
+            "FNDLicenseID",
+            "FNDSessionKey",
+            "ExpirationDate",
         ):
             missing_field = get_data()
             del missing_field[field]
@@ -1484,7 +1514,7 @@ class TestAxis360FulfillmentInfoResponseParser(Axis360Test):
 
         # Try with a bad expiration date.
         bad_date = get_data()
-        bad_date['ExpirationDate'] = 'not-a-date'
+        bad_date["ExpirationDate"] = "not-a-date"
         with pytest.raises(RemoteInitiatedServerError) as excinfo:
             m(bad_date, pool)
         assert "Could not parse expiration date: not-a-date" in str(excinfo.value)
@@ -1497,12 +1527,11 @@ class TestAxis360FulfillmentInfoResponseParser(Axis360Test):
         m = parser._parse
 
         edition, pool = self._edition(with_license_pool=True)
+
         def get_data():
             # We'll be modifying this document to simulate failures,
             # so make it easy to load a fresh copy.
-            return json.loads(
-                self.sample_data("ebook_fulfillment_info.json")
-            )
+            return json.loads(self.sample_data("ebook_fulfillment_info.json"))
 
         # This is the data we just got from a call to Axis 360's
         # getfulfillmentInfo endpoint.
@@ -1514,19 +1543,20 @@ class TestAxis360FulfillmentInfoResponseParser(Axis360Test):
         manifest, expires = m(data, pool)
 
         assert isinstance(manifest, AxisNowManifest)
-        assert ({"book_vault_uuid": "1c11c31f-81c2-41bb-9179-491114c3f121", "isbn": "9780547351551"} ==
-            json.loads(str(manifest)))
+        assert {
+            "book_vault_uuid": "1c11c31f-81c2-41bb-9179-491114c3f121",
+            "isbn": "9780547351551",
+        } == json.loads(str(manifest))
 
         # Try with a bad expiration date.
         bad_date = get_data()
-        bad_date['ExpirationDate'] = 'not-a-date'
+        bad_date["ExpirationDate"] = "not-a-date"
         with pytest.raises(RemoteInitiatedServerError) as excinfo:
             m(bad_date, pool)
         assert "Could not parse expiration date: not-a-date" in str(excinfo.value)
 
 
 class TestAudiobookMetadataParser(Axis360Test):
-
     def test__parse(self):
         # _parse will find the Findaway account ID and
         # the spine items.
@@ -1536,15 +1566,12 @@ class TestAudiobookMetadataParser(Axis360Test):
                 return part + " (extracted)"
 
         metadata = dict(
-            fndaccountid="An account ID",
-            readingOrder=["Spine item 1", "Spine item 2"]
+            fndaccountid="An account ID", readingOrder=["Spine item 1", "Spine item 2"]
         )
         account_id, spine_items = Mock(None)._parse(metadata)
 
         assert "An account ID" == account_id
-        assert (["Spine item 1 (extracted)",
-             "Spine item 2 (extracted)"] ==
-            spine_items)
+        assert ["Spine item 1 (extracted)", "Spine item 2 (extracted)"] == spine_items
 
         # No data? Nothing will be parsed.
         account_id, spine_items = Mock(None)._parse({})
@@ -1556,9 +1583,7 @@ class TestAudiobookMetadataParser(Axis360Test):
         # a SpineItem object.
         m = AudiobookMetadataParser._extract_spine_item
         item = m(
-            dict(duration=100.4, fndpart=2, fndsequence=3,
-                 title="The Gathering Storm"
-            )
+            dict(duration=100.4, fndpart=2, fndsequence=3, title="The Gathering Storm")
         )
         assert isinstance(item, SpineItem)
         assert "The Gathering Storm" == item.title
@@ -1598,8 +1623,11 @@ class TestAxis360FulfillmentInfo(Axis360Test):
         edition, pool = self._edition(with_license_pool=True)
         identifier = pool.identifier
         fulfillment = Axis360FulfillmentInfo(
-            self.api, pool.data_source.name,
-            identifier.type, identifier.identifier, 'transaction_id'
+            self.api,
+            pool.data_source.name,
+            identifier.type,
+            identifier.identifier,
+            "transaction_id",
         )
         assert None == fulfillment._content_type
 
@@ -1621,8 +1649,7 @@ class TestAxis360FulfillmentInfo(Axis360Test):
 
         # The content expiration date also comes from the fulfillment
         # document.
-        assert (
-            datetime_utc(2018, 9, 29, 18, 34) == fulfillment.content_expires)
+        assert datetime_utc(2018, 9, 29, 18, 34) == fulfillment.content_expires
 
     def test_fetch_ebook(self):
         # When no Findaway information is present in the response from
@@ -1636,8 +1663,11 @@ class TestAxis360FulfillmentInfo(Axis360Test):
         edition, pool = self._edition(with_license_pool=True)
         identifier = pool.identifier
         fulfillment = Axis360FulfillmentInfo(
-            self.api, pool.data_source.name,
-            identifier.type, identifier.identifier, 'transaction_id'
+            self.api,
+            pool.data_source.name,
+            identifier.type,
+            identifier.identifier,
+            "transaction_id",
         )
         assert None == fulfillment._content_type
 
@@ -1648,13 +1678,13 @@ class TestAxis360FulfillmentInfo(Axis360Test):
         # document derived from the fulfillment document.
         assert DeliveryMechanism.AXISNOW_DRM == fulfillment.content_type
         assert (
-            '{"book_vault_uuid": "1c11c31f-81c2-41bb-9179-491114c3f121", "isbn": "9780547351551"}' ==
-            fulfillment.content)
+            '{"book_vault_uuid": "1c11c31f-81c2-41bb-9179-491114c3f121", "isbn": "9780547351551"}'
+            == fulfillment.content
+        )
 
         # The content expiration date also comes from the fulfillment
         # document.
-        assert (
-            datetime_utc(2018, 9, 29, 18, 34) == fulfillment.content_expires)
+        assert datetime_utc(2018, 9, 29, 18, 34) == fulfillment.content_expires
 
 
 class TestAxisNowManifest(object):
@@ -1663,9 +1693,7 @@ class TestAxisNowManifest(object):
 
     def test_unicode(self):
         manifest = AxisNowManifest("A UUID", "An ISBN")
-        assert (
-            '{"book_vault_uuid": "A UUID", "isbn": "An ISBN"}' ==
-            str(manifest))
+        assert '{"book_vault_uuid": "A UUID", "isbn": "An ISBN"}' == str(manifest)
         assert DeliveryMechanism.AXISNOW_DRM == manifest.MEDIA_TYPE
 
 
@@ -1684,8 +1712,7 @@ class TestAxis360BibliographicCoverageProvider(Axis360Test):
         the coverage provider.
         """
         script = RunCollectionCoverageProviderScript(
-            Axis360BibliographicCoverageProvider, self._db,
-            api_class=MockAxis360API
+            Axis360BibliographicCoverageProvider, self._db, api_class=MockAxis360API
         )
         [provider] = script.providers
         assert isinstance(provider, Axis360BibliographicCoverageProvider)
@@ -1700,7 +1727,7 @@ class TestAxis360BibliographicCoverageProvider(Axis360Test):
 
         # Here's the book mentioned in single_item.xml.
         identifier = self._identifier(identifier_type=Identifier.AXIS_360_ID)
-        identifier.identifier = '0003642860'
+        identifier.identifier = "0003642860"
 
         # This book has no LicensePool.
         assert [] == identifier.licensed_through
@@ -1714,11 +1741,13 @@ class TestAxis360BibliographicCoverageProvider(Axis360Test):
         [pool] = identifier.licensed_through
         assert 9 == pool.licenses_owned
         [lpdm] = pool.delivery_mechanisms
-        assert ('application/epub+zip (application/vnd.adobe.adept+xml)' ==
-            lpdm.delivery_mechanism.name)
+        assert (
+            "application/epub+zip (application/vnd.adobe.adept+xml)"
+            == lpdm.delivery_mechanism.name
+        )
 
         # A Work was created and made presentation ready.
-        assert 'Faith of My Fathers : A Family Memoir' == pool.work.title
+        assert "Faith of My Fathers : A Family Memoir" == pool.work.title
         assert True == pool.work.presentation_ready
 
     def test_transient_failure_if_requested_book_not_mentioned(self):
@@ -1727,7 +1756,7 @@ class TestAxis360BibliographicCoverageProvider(Axis360Test):
         """
         # We're going to ask about abcdef
         identifier = self._identifier(identifier_type=Identifier.AXIS_360_ID)
-        identifier.identifier = 'abcdef'
+        identifier.identifier = "abcdef"
 
         # But we're going to get told about 0003642860.
         data = self.sample_data("single_item.xml")
@@ -1772,7 +1801,7 @@ class TestAxis360AcsFulfillmentInfo:
             "identifier_type": None,
             "identifier": None,
             "verify": None,
-            "content_link": "https://fake.url"
+            "content_link": "https://fake.url",
         }
         return partial(Axis360AcsFulfillmentInfo, **params)
 
@@ -1782,19 +1811,26 @@ class TestAxis360AcsFulfillmentInfo:
         # this function.
         def patch_urlopen(mock):
             monkeypatch.setattr(urllib.request, "urlopen", mock)
+
         return patch_urlopen
 
-    def test_url_encoding_not_capitalized(self, patch_urllib_urlopen, mock_request, fulfillment_info):
+    def test_url_encoding_not_capitalized(
+        self, patch_urllib_urlopen, mock_request, fulfillment_info
+    ):
         # Mock the urllopen function to make sure that the URL is not actually requested
         # then make sure that when the request is built the %3a character encoded in the
         # string is not uppercased to be %3A.
         called_url = None
+
         def mock_urlopen(url, **kwargs):
             nonlocal called_url
             called_url = url
             return mock_request
+
         patch_urllib_urlopen(mock_urlopen)
-        fulfillment = fulfillment_info(content_link="https://test.com/?param=%3atest123")
+        fulfillment = fulfillment_info(
+            content_link="https://test.com/?param=%3atest123"
+        )
         response = fulfillment.as_response
         assert called_url is not None
         assert called_url.selector == "/?param=%3atest123"
@@ -1802,8 +1838,8 @@ class TestAxis360AcsFulfillmentInfo:
         assert type(response) == Response
         mock_request.__enter__.assert_called()
         mock_request.__enter__.return_value.read.assert_called()
-        assert 'status' in dir(mock_request.__enter__.return_value)
-        assert 'headers' in dir(mock_request.__enter__.return_value)
+        assert "status" in dir(mock_request.__enter__.return_value)
+        assert "headers" in dir(mock_request.__enter__.return_value)
         mock_request.__exit__.assert_called()
 
     @pytest.mark.parametrize(
@@ -1812,11 +1848,13 @@ class TestAxis360AcsFulfillmentInfo:
             urllib.error.HTTPError(url="", code=301, msg="", hdrs={}, fp=Mock()),
             socket.timeout(),
             urllib.error.URLError(reason=""),
-            ssl.SSLError()
+            ssl.SSLError(),
         ],
-        ids=lambda val: val.__class__.__name__
+        ids=lambda val: val.__class__.__name__,
     )
-    def test_exception_returns_problem_detail(self, patch_urllib_urlopen, fulfillment_info, exception):
+    def test_exception_returns_problem_detail(
+        self, patch_urllib_urlopen, fulfillment_info, exception
+    ):
         # Check that when the urlopen function throws an exception, we catch the exception and
         # we turn it into a problem detail to be returned to the client. This mimics the behavior
         # of the http utils function that we are bypassing with this fulfillment method.
@@ -1827,12 +1865,16 @@ class TestAxis360AcsFulfillmentInfo:
 
     @pytest.mark.parametrize(
         ("verify", "verify_mode", "check_hostname"),
-        [
-            (True, ssl.CERT_REQUIRED, True),
-            (False, ssl.CERT_NONE, False)
-        ]
+        [(True, ssl.CERT_REQUIRED, True), (False, ssl.CERT_NONE, False)],
     )
-    def test_verify_ssl(self, patch_urllib_urlopen, fulfillment_info, verify, verify_mode, check_hostname):
+    def test_verify_ssl(
+        self,
+        patch_urllib_urlopen,
+        fulfillment_info,
+        verify,
+        verify_mode,
+        check_hostname,
+    ):
         # Make sure that when the verify parameter of the fulfillment method is set we use the
         # correct SSL context to either verify or not verify the ssl certificate for the
         # URL we are fetching.
@@ -1841,7 +1883,7 @@ class TestAxis360AcsFulfillmentInfo:
         response = fulfillment.as_response
         mock = urllib.request.urlopen
         mock.assert_called()
-        assert 'context' in mock.call_args[1]
-        context = mock.call_args[1]['context']
+        assert "context" in mock.call_args[1]
+        context = mock.call_args[1]["context"]
         assert context.verify_mode == verify_mode
         assert context.check_hostname == check_hostname

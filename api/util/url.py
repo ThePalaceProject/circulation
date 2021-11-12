@@ -1,4 +1,4 @@
-from urllib.parse import urlparse, ParseResult, urlencode
+from urllib.parse import ParseResult, urlencode, urlparse
 
 
 class URLUtility(object):
@@ -24,7 +24,7 @@ class URLUtility(object):
             result.path,
             result.params,
             urlencode(query_parameters),
-            result.fragment
+            result.fragment,
         )
 
         return result.geturl()
