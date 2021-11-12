@@ -1,2 +1,0 @@
-ALTER TYPE medium ADD VALUE IF NOT EXISTS 'Image' AFTER 'Video';
-ALTER TYPE medium ADD VALUE IF NOT EXISTS 'Courseware' AFTER 'Image';

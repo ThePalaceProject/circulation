@@ -1,1 +1,0 @@
-ALTER TABLE licensepools ADD COLUMN license_exception varchar;
