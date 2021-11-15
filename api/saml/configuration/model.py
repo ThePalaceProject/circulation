@@ -242,15 +242,11 @@ class SAMLConfiguration(ConfigurationGrouping):
         if not self.federated_identity_provider_entity_ids:
             return []
 
-        federated_identity_provider_entity_ids = json.loads(
-            self.federated_identity_provider_entity_ids
-        )
-
         return (
             db.query(SAMLFederatedIdentityProvider)
             .filter(
                 SAMLFederatedIdentityProvider.entity_id.in_(
-                    federated_identity_provider_entity_ids
+                    self.federated_identity_provider_entity_ids
                 )
             )
             .all()
