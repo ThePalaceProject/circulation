@@ -1171,7 +1171,30 @@ class ConfigurationMetadata(object):
                 "owner must be an instance of ConfigurationSettingsMetadataOwner type"
             )
 
-        return owner_instance.get_setting_value(self._key)
+        setting_value = owner_instance.get_setting_value(self._key)
+
+        if setting_value is None:
+            setting_value = self.default
+        else:
+            # LIST and MENU configuration settings are stored as JSON-serialized lists in the database.
+            # We need to deserialize them to get actual values.
+            if self.type in (
+                ConfigurationAttributeType.LIST,
+                ConfigurationAttributeType.MENU,
+            ):
+                if isinstance(setting_value, str):
+                    setting_value = json.loads(setting_value)
+                else:
+                    # We assume that LIST and MENU values can be either JSON or empty.
+                    if setting_value is not None:
+                        raise ValueError(
+                            f"{self._type} configuration setting '{self._key}' has an incorrect format. "
+                            f"Expected JSON-serialized list but got {setting_value}."
+                        )
+
+                    setting_value = []
+
+        return setting_value
 
     def __set__(self, owner_instance, value):
         """Updates the setting's value

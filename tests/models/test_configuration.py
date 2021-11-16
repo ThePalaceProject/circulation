@@ -1,4 +1,5 @@
 # encoding: utf-8
+import json
 from enum import Enum
 
 import pytest
@@ -762,10 +763,33 @@ SETTING2_OPTIONS = [
 ]
 SETTING2_CATEGORY = "Settings"
 
+SETTING3_KEY = "setting3"
+SETTING3_LABEL = "Setting 3's label"
+SETTING3_DESCRIPTION = "Setting 3's description"
+SETTING3_TYPE = ConfigurationAttributeType.MENU
+SETTING3_REQUIRED = False
+SETTING3_OPTIONS = [
+    ConfigurationOption("key1", "value1"),
+    ConfigurationOption("key2", "value2"),
+    ConfigurationOption("key3", "value3"),
+]
+SETTING3_DEFAULT = [SETTING3_OPTIONS[0].key, SETTING3_OPTIONS[1].key]
+SETTING3_CATEGORY = "Settings"
+
+
+SETTING4_KEY = "setting4"
+SETTING4_LABEL = "Setting 4's label"
+SETTING4_DESCRIPTION = "Setting 4's description"
+SETTING4_TYPE = ConfigurationAttributeType.LIST
+SETTING4_REQUIRED = False
+SETTING4_OPTIONS = None
+SETTING4_DEFAULT = None
+SETTING4_CATEGORY = "Settings"
+
 
 class TestConfiguration(ConfigurationGrouping):
     setting1 = ConfigurationMetadata(
-        key="setting1",
+        key=SETTING1_KEY,
         label=SETTING1_LABEL,
         description=SETTING1_DESCRIPTION,
         type=SETTING1_TYPE,
@@ -775,7 +799,7 @@ class TestConfiguration(ConfigurationGrouping):
     )
 
     setting2 = ConfigurationMetadata(
-        key="setting2",
+        key=SETTING2_KEY,
         label=SETTING2_LABEL,
         description=SETTING2_DESCRIPTION,
         type=SETTING2_TYPE,
@@ -783,6 +807,28 @@ class TestConfiguration(ConfigurationGrouping):
         default=SETTING2_DEFAULT,
         options=SETTING2_OPTIONS,
         category=SETTING2_CATEGORY,
+    )
+
+    setting3 = ConfigurationMetadata(
+        key=SETTING3_KEY,
+        label=SETTING3_LABEL,
+        description=SETTING3_DESCRIPTION,
+        type=SETTING3_TYPE,
+        required=SETTING3_REQUIRED,
+        default=SETTING3_DEFAULT,
+        options=SETTING3_OPTIONS,
+        category=SETTING3_CATEGORY,
+    )
+
+    setting4 = ConfigurationMetadata(
+        key=SETTING4_KEY,
+        label=SETTING4_LABEL,
+        description=SETTING4_DESCRIPTION,
+        type=SETTING4_TYPE,
+        required=SETTING4_REQUIRED,
+        default=SETTING4_DEFAULT,
+        options=SETTING4_OPTIONS,
+        category=SETTING4_CATEGORY,
     )
 
 
@@ -875,6 +921,69 @@ class TestConfigurationGrouping(object):
         configuration_storage.load.assert_called_once_with(db, setting_name)
 
     @parameterized.expand(
+        [
+            (
+                "default_menu_value",
+                TestConfiguration.setting3.key,
+                None,
+                TestConfiguration.setting3.default,
+            ),
+            (
+                "menu_value",
+                TestConfiguration.setting3.key,
+                json.dumps(
+                    [
+                        TestConfiguration.setting3.options[0].key,
+                        TestConfiguration.setting3.options[1].key,
+                    ]
+                ),
+                [
+                    TestConfiguration.setting3.options[0].key,
+                    TestConfiguration.setting3.options[1].key,
+                ],
+            ),
+            (
+                "default_list_value",
+                TestConfiguration.setting4.key,
+                None,
+                TestConfiguration.setting4.default,
+            ),
+            (
+                "menu_value",
+                TestConfiguration.setting4.key,
+                json.dumps(["value1", "value2"]),
+                ["value1", "value2"],
+            ),
+        ]
+    )
+    def test_menu_and_list_getters(self, _, setting_name, db_value, expected_value):
+        # Arrange
+        configuration_storage = create_autospec(spec=ConfigurationStorage)
+        configuration_storage.load = MagicMock(return_value=db_value)
+        db = create_autospec(spec=sqlalchemy.orm.session.Session)
+        configuration = TestConfiguration(configuration_storage, db)
+
+        # Act
+        setting_value = getattr(configuration, setting_name)
+
+        # Assert
+        assert setting_value == expected_value
+        configuration_storage.load.assert_called_once_with(db, setting_name)
+
+    def test_getter_return_default_value(self):
+        # Arrange
+        configuration_storage = create_autospec(spec=ConfigurationStorage)
+        configuration_storage.load = MagicMock(return_value=None)
+        db = create_autospec(spec=sqlalchemy.orm.session.Session)
+        configuration = TestConfiguration(configuration_storage, db)
+
+        # Act
+        setting_value = configuration.setting1
+
+        # Assert
+        assert SETTING1_DEFAULT == setting_value
+
+    @parameterized.expand(
         [("setting1", "setting1", 12345), ("setting2", "setting2", "12345")]
     )
     def test_setters(self, _, setting_name, expected_value):
@@ -897,7 +1006,7 @@ class TestConfigurationGrouping(object):
         settings = TestConfiguration.to_settings()
 
         # Assert
-        assert len(settings) == 2
+        assert len(settings) == 4
 
         assert settings[0][ConfigurationAttribute.KEY.value] == SETTING1_KEY
         assert settings[0][ConfigurationAttribute.LABEL.value] == SETTING1_LABEL
@@ -923,6 +1032,31 @@ class TestConfigurationGrouping(object):
             option.to_settings() for option in SETTING2_OPTIONS
         ]
         assert settings[1][ConfigurationAttribute.CATEGORY.value] == SETTING2_CATEGORY
+
+        assert settings[2][ConfigurationAttribute.KEY.value] == SETTING3_KEY
+        assert settings[2][ConfigurationAttribute.LABEL.value] == SETTING3_LABEL
+        assert (
+            settings[2][ConfigurationAttribute.DESCRIPTION.value]
+            == SETTING3_DESCRIPTION
+        )
+        assert settings[2][ConfigurationAttribute.TYPE.value] == SETTING3_TYPE.value
+        assert settings[2][ConfigurationAttribute.REQUIRED.value] == SETTING3_REQUIRED
+        assert settings[2][ConfigurationAttribute.DEFAULT.value] == SETTING3_DEFAULT
+        assert settings[2][ConfigurationAttribute.OPTIONS.value] == [
+            option.to_settings() for option in SETTING3_OPTIONS
+        ]
+        assert settings[2][ConfigurationAttribute.CATEGORY.value] == SETTING3_CATEGORY
+
+        assert settings[3][ConfigurationAttribute.KEY.value] == SETTING4_KEY
+        assert settings[3][ConfigurationAttribute.LABEL.value] == SETTING4_LABEL
+        assert (
+            settings[3][ConfigurationAttribute.DESCRIPTION.value]
+            == SETTING4_DESCRIPTION
+        )
+        assert settings[3][ConfigurationAttribute.TYPE.value] == SETTING4_TYPE.value
+        assert settings[3][ConfigurationAttribute.REQUIRED.value] == SETTING4_REQUIRED
+        assert settings[3][ConfigurationAttribute.DEFAULT.value] == SETTING4_DEFAULT
+        assert settings[3][ConfigurationAttribute.CATEGORY.value] == SETTING4_CATEGORY
 
     def test_to_settings_considers_explicit_indices(self):
         # Act
