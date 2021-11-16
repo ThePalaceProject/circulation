@@ -5346,16 +5346,7 @@ class TestODLNotificationController(ControllerTest):
     when a loan's status changes."""
 
     @parameterized.expand(
-        [
-            (
-                "ODL 1.x collection",
-                ODLAPI.NAME
-            ),
-            (
-                "ODL 2.x collection",
-                ODL2API.NAME
-            )
-        ]
+        [("ODL 1.x collection", ODLAPI.NAME), ("ODL 2.x collection", ODL2API.NAME)]
     )
     def test_notify_success(self, _, protocol: str) -> None:
         collection = MockODLAPI.mock_collection(self._db, protocol)

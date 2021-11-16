@@ -85,7 +85,9 @@ class SAMLWebSSOAuthenticationProvider(
                 configuration.patron_id_use_name_id
             )
             self._patron_id_attributes = configuration.patron_id_attributes
-            self._patron_id_regular_expression = configuration.patron_id_regular_expression
+            self._patron_id_regular_expression = (
+                configuration.patron_id_regular_expression
+            )
 
     def _authentication_flow_document(self, db):
         """Creates a Authentication Flow object for use in an Authentication for OPDS document.

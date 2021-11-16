@@ -120,7 +120,7 @@ class ODLAPIConfiguration(ConfigurationGrouping):
         ),
         type=ConfigurationAttributeType.TEXT,
         required=True,
-        default=DEFAULT_PASSPHRASE_HINT
+        default=DEFAULT_PASSPHRASE_HINT,
     )
 
     passphrase_hint_url = ConfigurationMetadata(
@@ -132,7 +132,7 @@ class ODLAPIConfiguration(ConfigurationGrouping):
         type=ConfigurationAttributeType.TEXT,
         required=True,
         default=DEFAULT_PASSPHRASE_HINT_URL,
-        format="url"
+        format="url",
     )
 
     encryption_algorithm = ConfigurationMetadata(

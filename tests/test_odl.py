@@ -95,7 +95,9 @@ class TestODLAPI(DatabaseTest, BaseODLTest):
         params = urllib.parse.parse_qs(parsed.query)
 
         assert ODLAPIConfiguration.passphrase_hint.default == params.get("hint")[0]
-        assert ODLAPIConfiguration.passphrase_hint_url.default == params.get("hint_url")[0]
+        assert (
+            ODLAPIConfiguration.passphrase_hint_url.default == params.get("hint_url")[0]
+        )
 
         assert self.license.identifier == params.get("id")[0]
 
