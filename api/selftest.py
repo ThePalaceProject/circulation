@@ -16,26 +16,25 @@ from .circulation import CirculationAPI
 from .feedbooks import FeedbooksImportMonitor, FeedbooksOPDSImporter
 
 
-class _NoValidLibrarySelfTestPatron(Exception):
-    """Exception raised when no valid self-test patron found for library.
-
-    Attributes:
-        message -- primary error message.
-        detail (optional) -- additional explanation of the error
-    """
-
-    def __init__(self, message: str, detail: str = None):
-        super().__init__(message, detail)
-        self.message = message
-        self.detail = detail
-
-
 class HasSelfTests(CoreHasSelfTests):
     """Circulation-specific enhancements for HasSelfTests.
 
     Circulation self-tests frequently need to test the ability to act
     on behalf of a specific patron.
     """
+
+    class _NoValidLibrarySelfTestPatron(Exception):
+        """Exception raised when no valid self-test patron found for library.
+
+        Attributes:
+            message -- primary error message.
+            detail (optional) -- additional explanation of the error
+        """
+
+        def __init__(self, message: str, detail: str = None):
+            super().__init__(message, detail)
+            self.message = message
+            self.detail = detail
 
     def default_patrons(
         self, collection: Collection
@@ -63,9 +62,9 @@ class HasSelfTests(CoreHasSelfTests):
         for library in collection.libraries:
             task = "Acquiring test patron credentials for library %s" % library.name
             try:
-                patron, password = _determine_self_test_patron(library, _db=_db)
+                patron, password = self._determine_self_test_patron(library, _db=_db)
                 yield library, patron, password
-            except _NoValidLibrarySelfTestPatron as e:
+            except self._NoValidLibrarySelfTestPatron as e:
                 yield self.test_failure(task, e.message, e.detail)
             except IntegrationException as e:
                 yield self.test_failure(task, e)
@@ -74,36 +73,36 @@ class HasSelfTests(CoreHasSelfTests):
                     task, "Exception getting default patron: %r" % e
                 )
 
+    @classmethod
+    def _determine_self_test_patron(
+        cls, library: Library, _db=None
+    ) -> Tuple[Patron, Optional[str]]:
+        """Obtain the test Patron and optional password for a library's self-tests.
 
-def _determine_self_test_patron(
-    library: Library, _db=None
-) -> Tuple[Patron, Optional[str]]:
-    """Obtain the test Patron and optional password for a library's self-tests.
+        :param library: The library being tested.
+        :param _db: Database session object.
+        :return: A 2-tuple with either (1) a patron and optional password.
+        :raise: _NoValidLibrarySelfTestPatron when a valid patron is not found.
+        """
+        _db = _db or Session.object_session(library)
+        library_authenticator = LibraryAuthenticator.from_config(_db, library)
+        auth = library_authenticator.basic_auth_provider
+        patron, password = auth.testing_patron(_db) if auth else (None, None)
+        if isinstance(patron, Patron):
+            return patron, password
 
-    :param library: The library being tested.
-    :param _db: Database session object.
-    :return: A 2-tuple with either (1) a patron and optional password.
-    :raise: _NoValidLibrarySelfTestPatron when a valid patron is not found.
-    """
-    _db = _db or Session.object_session(library)
-    library_authenticator = LibraryAuthenticator.from_config(_db, library)
-    auth = library_authenticator.basic_auth_provider
-    patron, password = auth.testing_patron(_db) if auth else (None, None)
-    if isinstance(patron, Patron):
-        return patron, password
-
-    # If we get here, then we have failed to find a valid test patron
-    # and will raise an exception.
-    if patron is None:
-        message = "Library has no test patron configured."
-        detail = "You can specify a test patron when you configure the library's patron authentication service."
-    elif isinstance(patron, ProblemDetail):
-        message = patron.detail
-        detail = patron.debug_message
-    else:
-        message = f"Authentication provider returned unexpected type ({type(patron)}) instead of patron."
-        detail = None
-    raise _NoValidLibrarySelfTestPatron(message, detail=detail)
+        # If we get here, then we have failed to find a valid test patron
+        # and will raise an exception.
+        if patron is None:
+            message = "Library has no test patron configured."
+            detail = "You can specify a test patron when you configure the library's patron authentication service."
+        elif isinstance(patron, ProblemDetail):
+            message = patron.detail
+            detail = patron.debug_message
+        else:
+            message = f"Authentication provider returned unexpected type ({type(patron)}) instead of patron."
+            detail = None
+        raise cls._NoValidLibrarySelfTestPatron(message, detail=detail)
 
 
 class RunSelfTestsScript(LibraryInputScript):

@@ -13,8 +13,6 @@ from api.selftest import (
     HasSelfTests,
     RunSelfTestsScript,
     SelfTestResult,
-    _determine_self_test_patron,
-    _NoValidLibrarySelfTestPatron,
 )
 from core.model import ExternalIntegration, Patron
 from core.opds_import import OPDSImportMonitor
@@ -24,12 +22,20 @@ from core.util.problem_detail import ProblemDetail
 
 class TestHasSelfTests(DatabaseTest):
     def test__determine_self_test_patron(self):
-        """Test per-library default patron lookup for self-tests."""
+        """Test per-library default patron lookup for self-tests.
+
+        Ensure that the tested method either:
+        - returns a 2-tuple of (patron, password) or
+        - raises the expected _NoValidLibrarySelfTestPatron exception.
+        """
+
+        test_patron_lookup_method = HasSelfTests._determine_self_test_patron
+        test_patron_lookup_exception = HasSelfTests._NoValidLibrarySelfTestPatron
 
         # This library has no patron authentication integration configured.
         library_without_default_patron = self._library()
-        with pytest.raises(_NoValidLibrarySelfTestPatron) as excinfo:
-            _determine_self_test_patron(library_without_default_patron)
+        with pytest.raises(test_patron_lookup_exception) as excinfo:
+            test_patron_lookup_method(library_without_default_patron)
         assert "Library has no test patron configured." == excinfo.value.message
         assert (
             "You can specify a test patron when you configure the library's patron authentication service."
@@ -44,8 +50,8 @@ class TestHasSelfTests(DatabaseTest):
         )
 
         # # No default patron set up in the patron authentication integration.
-        with pytest.raises(_NoValidLibrarySelfTestPatron) as excinfo:
-            _determine_self_test_patron(library_without_default_patron)
+        with pytest.raises(test_patron_lookup_exception) as excinfo:
+            test_patron_lookup_method(library_without_default_patron)
         assert "Library has no test patron configured." == excinfo.value.message
         assert (
             "You can specify a test patron when you configure the library's patron authentication service."
@@ -59,7 +65,7 @@ class TestHasSelfTests(DatabaseTest):
 
         # This library's patron authentication integration has a default
         # patron (for this library).
-        patron, password = _determine_self_test_patron(self._default_library)
+        patron, password = test_patron_lookup_method(self._default_library)
         assert isinstance(patron, Patron)
         assert "username1" == patron.authorization_identifier
         assert "password1" == password
@@ -78,8 +84,8 @@ class TestHasSelfTests(DatabaseTest):
             BasicAuthenticationProvider, "testing_patron"
         ) as testing_patron:
             testing_patron.return_value = (result_patron, result_password)
-            with pytest.raises(_NoValidLibrarySelfTestPatron) as excinfo:
-                _determine_self_test_patron(self._default_library)
+            with pytest.raises(test_patron_lookup_exception) as excinfo:
+                test_patron_lookup_method(self._default_library)
         assert expected_message == excinfo.value.message
         assert expected_detail == excinfo.value.detail
 
@@ -92,8 +98,8 @@ class TestHasSelfTests(DatabaseTest):
             BasicAuthenticationProvider, "testing_patron"
         ) as testing_patron:
             testing_patron.return_value = (result_patron, None)
-            with pytest.raises(_NoValidLibrarySelfTestPatron) as excinfo:
-                _determine_self_test_patron(self._default_library)
+            with pytest.raises(test_patron_lookup_exception) as excinfo:
+                test_patron_lookup_method(self._default_library)
         assert not isinstance(result_patron, (Patron, ProblemDetail))
         assert expected_message == excinfo.value.message
         assert excinfo.value.detail is None
