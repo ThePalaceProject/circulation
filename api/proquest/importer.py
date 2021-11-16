@@ -87,10 +87,10 @@ class ProQuestOPDS2ImporterConfiguration(ConfigurationGrouping):
 
     DEFAULT_TOKEN_EXPIRATION_TIMEOUT_SECONDS = 60 * 60
     TEST_AFFILIATION_ID = 1
-    DEFAULT_AFFILIATION_ATTRIBUTES = (
+    DEFAULT_AFFILIATION_ATTRIBUTES = [
         SAMLAttributeType.eduPersonPrincipalName.name,
         SAMLAttributeType.eduPersonScopedAffiliation.name,
-    )
+    ]
 
     data_source_name = ConfigurationMetadata(
         key=Collection.DATA_SOURCE_NAME_SETTING,
@@ -266,44 +266,6 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         ) as configuration:
             yield configuration
 
-    @staticmethod
-    def _get_affiliation_attributes(configuration):
-        """Return a configured list of SAML attributes which can contain affiliation ID.
-
-        :param configuration: Configuration object
-        :type configuration: ProQuestOPDS2ImporterConfiguration
-
-        :return: Configured list of SAML attributes which can contain affiliation ID
-        :rtype: List[str]
-        """
-        affiliation_attributes = (
-            ProQuestOPDS2ImporterConfiguration.DEFAULT_AFFILIATION_ATTRIBUTES
-        )
-
-        if configuration.affiliation_attributes:
-            if isinstance(configuration.affiliation_attributes, list):
-                affiliation_attributes = configuration.affiliation_attributes
-            elif isinstance(configuration.affiliation_attributes, str):
-                affiliation_attributes = tuple(
-                    map(
-                        str.strip,
-                        str(configuration.affiliation_attributes)
-                        .replace("[", "")
-                        .replace("]", "")
-                        .replace("(", "")
-                        .replace(")", "")
-                        .replace("'", "")
-                        .replace('"', "")
-                        .split(","),
-                    )
-                )
-            else:
-                raise ValueError(
-                    "Configuration setting 'affiliation_attributes' has an incorrect format"
-                )
-
-        return affiliation_attributes
-
     def _get_patron_affiliation_id(self, patron, configuration):
         """Get a patron's affiliation ID.
 
@@ -316,9 +278,8 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         :return: Patron's affiliation ID
         :rtype: Optional[str]
         """
-        affiliation_attributes = self._get_affiliation_attributes(configuration)
         affiliation_id = self._credential_manager.lookup_patron_affiliation_id(
-            self._db, patron, affiliation_attributes
+            self._db, patron, configuration.affiliation_attributes
         )
 
         self._logger.info(

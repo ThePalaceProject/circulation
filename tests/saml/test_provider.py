@@ -377,15 +377,6 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
                 "false",
             ),
             (
-                "subject_has_unique_name_id_but_use_of_name_id_is_switched_off_using_none",
-                SAMLSubject(
-                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED, "", "", "12345"),
-                    SAMLAttributeStatement([]),
-                ),
-                SAML_INVALID_SUBJECT.detailed("Subject does not have a unique ID"),
-                None,
-            ),
-            (
                 "subject_has_unique_name_id_and_use_of_name_id_is_switched_on_using_string_literal_true",
                 SAMLSubject(
                     SAMLNameID(SAMLNameIDFormat.UNSPECIFIED, "", "", "12345"),

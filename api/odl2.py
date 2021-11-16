@@ -1,4 +1,3 @@
-import json
 import logging
 
 from contextlib2 import contextmanager
@@ -174,7 +173,7 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
             skipped_license_formats = configuration.skipped_license_formats
 
             if skipped_license_formats:
-                skipped_license_formats = set(json.loads(skipped_license_formats))
+                skipped_license_formats = set(skipped_license_formats)
 
         if publication.licenses:
             for license in publication.licenses:

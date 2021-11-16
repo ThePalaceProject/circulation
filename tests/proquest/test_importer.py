@@ -265,27 +265,6 @@ class TestProQuestOPDS2Importer(DatabaseTest):
     @parameterized.expand(
         [
             (
-                "tuple",
-                (
-                    SAMLAttributeType.mail.name,
-                    SAMLAttributeType.uid.name,
-                ),
-            ),
-            (
-                "list",
-                [
-                    SAMLAttributeType.mail.name,
-                    SAMLAttributeType.uid.name,
-                ],
-            ),
-            (
-                "tuple_string",
-                "({0}, {1})".format(
-                    SAMLAttributeType.mail.name,
-                    SAMLAttributeType.uid.name,
-                ),
-            ),
-            (
                 "list_string",
                 json.dumps(
                     [
@@ -310,10 +289,10 @@ class TestProQuestOPDS2Importer(DatabaseTest):
         affiliation_id = "12345"
         proquest_token = "1234567890"
 
-        expected_affiliation_attributes = (
+        expected_affiliation_attributes = [
             SAMLAttributeType.mail.name,
             SAMLAttributeType.uid.name,
-        )
+        ]
 
         saml_subject = SAMLSubject(
             None,

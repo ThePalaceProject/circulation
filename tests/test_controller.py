@@ -19,6 +19,7 @@ from flask import Response as FlaskResponse
 from flask import url_for
 from flask_sqlalchemy_session import current_session
 from mock import MagicMock, patch
+from parameterized import parameterized
 from werkzeug.datastructures import ImmutableMultiDict
 from werkzeug.exceptions import NotFound
 
@@ -53,7 +54,8 @@ from api.lanes import (
     create_default_lanes,
 )
 from api.novelist import MockNoveListAPI
-from api.odl import MockODLAPI
+from api.odl import ODLAPI, MockODLAPI
+from api.odl2 import ODL2API
 from api.opds import (
     CirculationManagerAnnotator,
     LibraryAnnotator,
@@ -5343,8 +5345,11 @@ class TestODLNotificationController(ControllerTest):
     """Test that an ODL distributor can notify the circulation manager
     when a loan's status changes."""
 
-    def test_notify_success(self):
-        collection = MockODLAPI.mock_collection(self._db)
+    @parameterized.expand(
+        [("ODL 1.x collection", ODLAPI.NAME), ("ODL 2.x collection", ODL2API.NAME)]
+    )
+    def test_notify_success(self, _, protocol: str) -> None:
+        collection = MockODLAPI.mock_collection(self._db, protocol)
         patron = self._patron()
         pool = self._licensepool(None, collection=collection)
         pool.licenses_owned = 10

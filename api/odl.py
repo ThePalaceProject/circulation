@@ -1,6 +1,5 @@
 import binascii
 import datetime
-import hashlib
 import json
 import logging
 import uuid
@@ -65,7 +64,8 @@ from .shared_collection import BaseSharedCollectionAPI
 class ODLAPIConfiguration(ConfigurationGrouping):
     """Contains LCP License Server's settings"""
 
-    DEFAULT_PASSPHRASE_HINT = "Look in the Palace app."
+    DEFAULT_PASSPHRASE_HINT = "View the help page for more information."
+    DEFAULT_PASSPHRASE_HINT_URL = "https://lyrasis.zendesk.com/"
     DEFAULT_ENCRYPTION_ALGORITHM = HashingAlgorithm.SHA256.value
 
     feed_url = ConfigurationMetadata(
@@ -119,7 +119,7 @@ class ODLAPIConfiguration(ConfigurationGrouping):
             "Hint displayed to the user when opening an LCP protected publication."
         ),
         type=ConfigurationAttributeType.TEXT,
-        required=False,
+        required=True,
         default=DEFAULT_PASSPHRASE_HINT,
     )
 
@@ -130,7 +130,8 @@ class ODLAPIConfiguration(ConfigurationGrouping):
             "Hint URL available to the user when opening an LCP protected publication."
         ),
         type=ConfigurationAttributeType.TEXT,
-        required=False,
+        required=True,
+        default=DEFAULT_PASSPHRASE_HINT_URL,
         format="url",
     )
 
