@@ -2,6 +2,9 @@
 import datetime
 from io import StringIO
 
+import mock
+import pytest
+
 from api.authenticator import BasicAuthenticationProvider
 from api.circulation import CirculationAPI
 from api.feedbooks import FeedbooksImportMonitor
@@ -11,12 +14,96 @@ from api.selftest import (
     RunSelfTestsScript,
     SelfTestResult,
 )
-from core.model import ExternalIntegration
+from core.model import ExternalIntegration, Patron
 from core.opds_import import OPDSImportMonitor
 from core.testing import DatabaseTest
+from core.util.problem_detail import ProblemDetail
 
 
 class TestHasSelfTests(DatabaseTest):
+    def test__determine_self_test_patron(self):
+        """Test per-library default patron lookup for self-tests.
+
+        Ensure that the tested method either:
+        - returns a 2-tuple of (patron, password) or
+        - raises the expected _NoValidLibrarySelfTestPatron exception.
+        """
+
+        test_patron_lookup_method = HasSelfTests._determine_self_test_patron
+        test_patron_lookup_exception = HasSelfTests._NoValidLibrarySelfTestPatron
+
+        # This library has no patron authentication integration configured.
+        library_without_default_patron = self._library()
+        with pytest.raises(test_patron_lookup_exception) as excinfo:
+            test_patron_lookup_method(library_without_default_patron)
+        assert "Library has no test patron configured." == excinfo.value.message
+        assert (
+            "You can specify a test patron when you configure the library's patron authentication service."
+            == excinfo.value.detail
+        )
+
+        # Add a patron authentication integration, but don't set the patron.
+        integration = self._external_integration(
+            "api.simple_authentication",
+            ExternalIntegration.PATRON_AUTH_GOAL,
+            libraries=[self._default_library],
+        )
+
+        # # No default patron set up in the patron authentication integration.
+        with pytest.raises(test_patron_lookup_exception) as excinfo:
+            test_patron_lookup_method(library_without_default_patron)
+        assert "Library has no test patron configured." == excinfo.value.message
+        assert (
+            "You can specify a test patron when you configure the library's patron authentication service."
+            == excinfo.value.detail
+        )
+
+        # Set the patron / password on this integration.
+        p = BasicAuthenticationProvider
+        integration.setting(p.TEST_IDENTIFIER).value = "username1"
+        integration.setting(p.TEST_PASSWORD).value = "password1"
+
+        # This library's patron authentication integration has a default
+        # patron (for this library).
+        patron, password = test_patron_lookup_method(self._default_library)
+        assert isinstance(patron, Patron)
+        assert "username1" == patron.authorization_identifier
+        assert "password1" == password
+
+        # Patron authentication integration returns a problem detail.
+        expected_message = "fake-pd-1 detail"
+        expected_detail = "fake-pd-1 debug message"
+        result_patron = ProblemDetail(
+            "https://example.com/fake-problemdetail-1",
+            title="fake-pd-1",
+            detail=expected_message,
+            debug_message=expected_detail,
+        )
+        result_password = None
+        with mock.patch.object(
+            BasicAuthenticationProvider, "testing_patron"
+        ) as testing_patron:
+            testing_patron.return_value = (result_patron, result_password)
+            with pytest.raises(test_patron_lookup_exception) as excinfo:
+                test_patron_lookup_method(self._default_library)
+        assert expected_message == excinfo.value.message
+        assert expected_detail == excinfo.value.detail
+
+        # Patron authentication integration returns something that is neither
+        # a Patron nor a ProblemDetail.
+        result_patron = ()
+        result_patron_type = type(result_patron)
+        expected_message = f"Authentication provider returned unexpected type ({result_patron_type}) instead of patron."
+        with mock.patch.object(
+            BasicAuthenticationProvider, "testing_patron"
+        ) as testing_patron:
+            testing_patron.return_value = (result_patron, None)
+            with pytest.raises(test_patron_lookup_exception) as excinfo:
+                test_patron_lookup_method(self._default_library)
+        assert not isinstance(result_patron, (Patron, ProblemDetail))
+        assert expected_message == excinfo.value.message
+        assert excinfo.value.detail is None
+
     def test_default_patrons(self):
         """Some self-tests must run with a patron's credentials.  The
         default_patrons() method finds the default Patron for every
@@ -45,7 +132,7 @@ class TestHasSelfTests(DatabaseTest):
         no_default_patron = self._library()
         collection.libraries.append(no_default_patron)
 
-        # This library has a default patorn set up.
+        # This library has a default patron set up.
         integration = self._external_integration(
             "api.simple_authentication",
             ExternalIntegration.PATRON_AUTH_GOAL,
@@ -56,17 +143,16 @@ class TestHasSelfTests(DatabaseTest):
         integration.setting(p.TEST_PASSWORD).value = "password1"
 
         # Calling default_patrons on the Collection returns one result for
-        # each Library that uses that Collection.
+        # each Library associated with that Collection.
 
         results = list(h.default_patrons(collection))
         assert 2 == len(results)
         [failure] = [x for x in results if isinstance(x, SelfTestResult)]
         [success] = [x for x in results if x != failure]
 
-        # A SelfTestResult indicating failure was returned for the
-        # library without a test patron, since the test cannot proceed with
-        # a test patron.
-        assert False == failure.success
+        # A SelfTestResult indicating failure was returned for the library
+        # without a test patron, since the test cannot proceed without one.
+        assert failure.success is False
         assert (
             "Acquiring test patron credentials for library %s" % no_default_patron.name
             == failure.name
