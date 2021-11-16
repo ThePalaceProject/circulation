@@ -54,7 +54,7 @@ from api.lanes import (
     create_default_lanes,
 )
 from api.novelist import MockNoveListAPI
-from api.odl import MockODLAPI, ODLAPI
+from api.odl import ODLAPI, MockODLAPI
 from api.odl2 import ODL2API
 from api.opds import (
     CirculationManagerAnnotator,
