@@ -4,6 +4,7 @@ from typing import Iterable, List, Optional, Tuple, Union
 from sqlalchemy.orm.session import Session
 
 from core.config import IntegrationException
+from core.exceptions import BaseError
 from core.model import Collection, ExternalIntegration, Library, LicensePool, Patron
 from core.opds_import import OPDSImporter, OPDSImportMonitor
 from core.scripts import LibraryInputScript
@@ -23,7 +24,7 @@ class HasSelfTests(CoreHasSelfTests):
     on behalf of a specific patron.
     """
 
-    class _NoValidLibrarySelfTestPatron(Exception):
+    class _NoValidLibrarySelfTestPatron(BaseError):
         """Exception raised when no valid self-test patron found for library.
 
         Attributes:
@@ -31,8 +32,8 @@ class HasSelfTests(CoreHasSelfTests):
             detail (optional) -- additional explanation of the error
         """
 
-        def __init__(self, message: str, detail: str = None):
-            super().__init__(message, detail)
+        def __init__(self, message: str, *, detail: str = None):
+            super().__init__(message=message)
             self.message = message
             self.detail = detail
 
