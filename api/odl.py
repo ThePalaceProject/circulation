@@ -1143,6 +1143,12 @@ class ODLImportMonitor(OPDSImportMonitor):
     PROTOCOL = ODLImporter.NAME
     SERVICE_NAME = "ODL Import Monitor"
 
+    def __init__(self, _db, collection, import_class, **import_class_kwargs):
+        # Always force reimport ODL collections to get up to date license information
+        super().__init__(
+            _db, collection, import_class, force_reimport=True, **import_class_kwargs
+        )
+
 
 class ODLHoldReaper(CollectionMonitor):
     """Check for holds that have expired and delete them, and update
