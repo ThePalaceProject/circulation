@@ -331,7 +331,11 @@ class Work(Base):
             Work.id == WorkCoverageRecord.work_id,
             WorkCoverageRecord.operation == operation,
         )
-        q = _db.query(Work).outerjoin(WorkCoverageRecord, clause).order_by(Work.id)
+        q = (
+            _db.query(Work)
+            .outerjoin(WorkCoverageRecord, clause)
+            .order_by(Work.id, WorkCoverageRecord.id)
+        )
 
         missing = WorkCoverageRecord.not_covered(
             count_as_covered, count_as_missing_before
