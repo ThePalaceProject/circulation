@@ -116,6 +116,8 @@ class TestODL2Importer(TestODLImporter):
 
         [moby_dick_edition] = imported_editions
         assert isinstance(moby_dick_edition, Edition)
+        assert moby_dick_edition.primary_identifier.identifier == "978-3-16-148410-0"
+        assert moby_dick_edition.primary_identifier.type == "ISBN"
 
         assert u"Moby-Dick" == moby_dick_edition.title
         assert u"eng" == moby_dick_edition.language
@@ -153,6 +155,8 @@ class TestODL2Importer(TestODLImporter):
 
         [moby_dick_license_pool] = pools
         assert isinstance(moby_dick_license_pool, LicensePool)
+        assert moby_dick_license_pool.identifier.identifier == "978-3-16-148410-0"
+        assert moby_dick_license_pool.identifier.type == "ISBN"
         assert not moby_dick_license_pool.open_access
         assert 30 == moby_dick_license_pool.licenses_owned
         assert 10 == moby_dick_license_pool.licenses_available
