@@ -1835,7 +1835,7 @@ class TestODLImporter(DatabaseTest, BaseODLTest):
         assert RightsStatus.IN_COPYRIGHT == lpdm.rights_status.uri
         assert (
             41 == canadianity_pool.licenses_owned
-        )  # 40 remaining checkouts in the License Info Document
+        )  # 40 remaining checkouts + 1 perpetual license in the License Info Documents
         assert 11 == canadianity_pool.licenses_available
         [license1, license2] = sorted(
             canadianity_pool.licenses, key=lambda x: x.identifier
@@ -1983,7 +1983,7 @@ class TestODLImporter(DatabaseTest, BaseODLTest):
             )
         ]
 
-        # First import the license when its not expired
+        # First import the license when it is not expired
         with freeze_time(license_expiry - datetime.timedelta(days=1)):
 
             # Import the test feed.

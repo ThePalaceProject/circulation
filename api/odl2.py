@@ -237,27 +237,19 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
                 )
 
                 if not license_info_document_link:
-                    continue
+                    parsed_license = None
+                else:
+                    parsed_license = ODLImporter.get_license_data(
+                        license_info_document_link,
+                        checkout_link,
+                        identifier,
+                        expires,
+                        concurrency,
+                        self.http_get,
+                    )
 
-                license_info_document = ODLImporter.fetch_license_info(
-                    license_info_document_link, self.http_get
-                )
-
-                if not license_info_document:
-                    continue
-
-                parsed_license = ODLImporter.parse_license_info(
-                    license_info_document, license_info_document_link, checkout_link
-                )
-
-                if not parsed_license:
-                    continue
-
-                assert parsed_license.identifier == identifier
-                assert parsed_license.expires == expires
-                assert parsed_license.terms_concurrency == concurrency
-
-                licenses.append(parsed_license)
+                if parsed_license is not None:
+                    licenses.append(parsed_license)
 
         metadata.circulation.licenses = licenses
         metadata.circulation.licenses_owned = None

@@ -1012,6 +1012,60 @@ class ODLImporter(OPDSImporter):
         )
 
     @classmethod
+    def get_license_data(
+        cls,
+        license_info_link: str,
+        checkout_link: str,
+        feed_license_identifier: str,
+        feed_license_expires: str,
+        feed_concurrency: int,
+        do_get: Callable,
+    ) -> Optional[LicenseData]:
+        license_info_document = cls.fetch_license_info(license_info_link, do_get)
+
+        if not license_info_document:
+            return None
+
+        parsed_license = cls.parse_license_info(
+            license_info_document, license_info_link, checkout_link
+        )
+
+        if not parsed_license:
+            return None
+
+        if parsed_license.identifier != feed_license_identifier:
+            # There is a mismatch between the license info document and
+            # the feed we are importing. Since we don't know which to believe
+            # we log an error and continue.
+            logging.error(
+                f"Mismatch between license identifier in the feed ({feed_license_identifier}) "
+                f"and the identifier in the license info document "
+                f"({parsed_license.identifier}) ignoring license completely."
+            )
+            return None
+
+        if parsed_license.expires != feed_license_expires:
+            logging.error(
+                f"License identifier {feed_license_identifier}. Mismatch between license "
+                f"expiry in the feed ({feed_license_expires}) and the expiry in the license "
+                f"info document ({parsed_license.expires}) setting license status "
+                f"to unavailable."
+            )
+            parsed_license.status = LicenseStatus.unavailable
+
+        if parsed_license.terms_concurrency != feed_concurrency:
+            logging.error(
+                f"License identifier {feed_license_identifier}. Mismatch between license "
+                f"concurrency in the feed ({feed_concurrency}) and the "
+                f"concurrency in the license info document ("
+                f"{parsed_license.terms_concurrency}) setting license status "
+                f"to unavailable."
+            )
+            parsed_license.status = LicenseStatus.unavailable
+
+        return parsed_license
+
+    @classmethod
     def _detail_for_elementtree_entry(
         cls, parser, entry_tag, feed_url=None, do_get=None
     ):
@@ -1101,25 +1155,19 @@ class ODLImporter(OPDSImporter):
                 expires = to_utc(dateutil.parser.parse(expires))
 
             if not odl_status_link:
-                continue
+                parsed_license = None
+            else:
+                parsed_license = cls.get_license_data(
+                    odl_status_link,
+                    checkout_link,
+                    identifier,
+                    expires,
+                    concurrent_checkouts,
+                    do_get,
+                )
 
-            license_info_document = cls.fetch_license_info(odl_status_link, do_get)
-
-            if not license_info_document:
-                continue
-
-            parsed_license = cls.parse_license_info(
-                license_info_document, odl_status_link, checkout_link
-            )
-
-            if not parsed_license:
-                continue
-
-            assert parsed_license.identifier == identifier
-            assert parsed_license.expires == expires
-            assert parsed_license.terms_concurrency == concurrent_checkouts
-
-            licenses.append(parsed_license)
+            if parsed_license is not None:
+                licenses.append(parsed_license)
 
         if not data.get("circulation"):
             data["circulation"] = dict()
