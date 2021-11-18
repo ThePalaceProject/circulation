@@ -1928,15 +1928,6 @@ class NovelistSnapshotScript(TimestampScript, LibraryInputScript):
                     output.write(result)
 
 
-class ODLImportScript(OPDSImportScript):
-    """Import information from the feed associated
-    with an ODL collection."""
-
-    IMPORTER_CLASS = ODLImporter
-    MONITOR_CLASS = ODLImportMonitor
-    PROTOCOL = ODLImporter.NAME
-
-
 class SharedODLImportScript(OPDSImportScript):
     IMPORTER_CLASS = SharedODLImporter
     MONITOR_CLASS = SharedODLImportMonitor

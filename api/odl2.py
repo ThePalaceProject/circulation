@@ -5,7 +5,7 @@ from flask_babel import lazy_gettext as _
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
-from api.odl import ODLAPI, ODLExpiredItemsReaper, ODLImporter
+from api.odl import ODLAPI, ODLImporter
 from core.metadata_layer import FormatData
 from core.model import DeliveryMechanism, Edition, MediaTypes, RightsStatus
 from core.model.configuration import (
@@ -19,6 +19,7 @@ from core.model.configuration import (
 )
 from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, RWPMManifestParser
 from core.util import first_or_default
+from core.util.datetime_helpers import to_utc
 
 
 class ODL2APIConfiguration(ConfigurationGrouping):
@@ -165,8 +166,6 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
         )
         formats = []
         licenses = []
-        licenses_owned = 0
-        licenses_available = 0
         medium = None
 
         with self._get_configuration(self._db) as configuration:
@@ -176,10 +175,10 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
                 skipped_license_formats = set(skipped_license_formats)
 
         if publication.licenses:
-            for license in publication.licenses:
-                identifier = license.metadata.identifier
+            for odl_license in publication.licenses:
+                identifier = odl_license.metadata.identifier
 
-                for license_format in license.metadata.formats:
+                for license_format in odl_license.metadata.formats:
                     if (
                         skipped_license_formats
                         and license_format in skipped_license_formats
@@ -190,8 +189,8 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
                         medium = Edition.medium_from_media_type(license_format)
 
                     drm_schemes = (
-                        license.metadata.protection.formats
-                        if license.metadata.protection
+                        odl_license.metadata.protection.formats
+                        if odl_license.metadata.protection
                         else []
                     )
 
@@ -215,47 +214,48 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
                         )
 
                 checkout_link = first_or_default(
-                    license.links.get_by_rel(OPDS2LinkRelationsRegistry.BORROW.key)
+                    odl_license.links.get_by_rel(OPDS2LinkRelationsRegistry.BORROW.key)
                 )
                 if checkout_link:
                     checkout_link = checkout_link.href
 
-                odl_status_link = first_or_default(
-                    license.links.get_by_rel(OPDS2LinkRelationsRegistry.SELF.key)
+                license_info_document_link = first_or_default(
+                    odl_license.links.get_by_rel(OPDS2LinkRelationsRegistry.SELF.key)
                 )
-                if odl_status_link:
-                    odl_status_link = odl_status_link.href
+                if license_info_document_link:
+                    license_info_document_link = license_info_document_link.href
 
-                expires = None
-                total_checkouts = None
-                concurrent_checkouts = None
-
-                if license.metadata.terms:
-                    total_checkouts = license.metadata.terms.checkouts
-                    concurrent_checkouts = license.metadata.terms.concurrency
-                    expires = license.metadata.terms.expires
-
-                license = ODLImporter.parse_license(
-                    identifier,
-                    total_checkouts,
-                    concurrent_checkouts,
-                    expires,
-                    checkout_link,
-                    odl_status_link,
-                    self.http_get,
+                expires = (
+                    to_utc(odl_license.metadata.terms.expires)
+                    if odl_license.metadata.terms
+                    else None
+                )
+                concurrency = (
+                    int(odl_license.metadata.terms.concurrency)
+                    if odl_license.metadata.terms
+                    else None
                 )
 
-                if not license:
-                    continue
+                if not license_info_document_link:
+                    parsed_license = None
+                else:
+                    parsed_license = ODLImporter.get_license_data(
+                        license_info_document_link,
+                        checkout_link,
+                        identifier,
+                        expires,
+                        concurrency,
+                        self.http_get,
+                    )
 
-                licenses_owned += int(license.remaining_checkouts or 0)
-                licenses_available += int(license.concurrent_checkouts or 0)
+                if parsed_license is not None:
+                    licenses.append(parsed_license)
 
-                licenses.append(license)
-
-        metadata.circulation.licenses_owned = licenses_owned
-        metadata.circulation.licenses_available = licenses_available
         metadata.circulation.licenses = licenses
+        metadata.circulation.licenses_owned = None
+        metadata.circulation.licenses_available = None
+        metadata.circulation.licenses_reserved = None
+        metadata.circulation.patrons_in_hold_queue = None
         metadata.circulation.formats.extend(formats)
         metadata.medium = medium
 
@@ -271,9 +271,8 @@ class ODL2ImportMonitor(OPDS2ImportMonitor):
     PROTOCOL = ODL2Importer.NAME
     SERVICE_NAME = "ODL 2.x Import Monitor"
 
-
-class ODL2ExpiredItemsReaper(ODLExpiredItemsReaper):
-    """Responsible for removing expired ODL licenses."""
-
-    SERVICE_NAME = "ODL 2 Expired Items Reaper"
-    PROTOCOL = ODL2Importer.NAME
+    def __init__(self, _db, collection, import_class, **import_class_kwargs):
+        # Always force reimport ODL collections to get up to date license information
+        super().__init__(
+            _db, collection, import_class, force_reimport=True, **import_class_kwargs
+        )

@@ -2,23 +2,19 @@ import datetime
 import json
 import os
 
-import requests_mock
+import pytest
 from freezegun import freeze_time
-from mock import MagicMock
 from webpub_manifest_parser.core.ast import PresentationMetadata
-from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.odl.ast import ODLPublication
 from webpub_manifest_parser.odl.semantic import (
     ODL_PUBLICATION_MUST_CONTAIN_EITHER_LICENSES_OR_OA_ACQUISITION_LINK_ERROR,
 )
 
-from api.odl import ODLImporter
-from api.odl2 import ODL2API, ODL2APIConfiguration, ODL2ExpiredItemsReaper, ODL2Importer
+from api.odl2 import ODL2API, ODL2APIConfiguration, ODL2Importer
 from core.coverage import CoverageFailure
 from core.model import (
     Contribution,
     Contributor,
-    DataSource,
     DeliveryMechanism,
     Edition,
     EditionConstants,
@@ -27,16 +23,13 @@ from core.model import (
     Work,
 )
 from core.model.configuration import ConfigurationFactory, ConfigurationStorage
-from core.opds2_import import RWPMManifestParser
-from core.tests.test_opds2_import import OPDS2Test
-from tests.test_odl import (
-    TestODLExpiredItemsReaper,
-    TestODLExpiredItemsReaperMultipleLicense,
-    TestODLExpiredItemsReaperSingleLicense,
-)
+from tests.test_odl import LicenseHelper, LicenseInfoHelper, TestODLImporter
 
 
-class TestODL2Importer(OPDS2Test):
+class TestODL2Importer(TestODLImporter):
+    base_path = os.path.split(__file__)[0]
+    resource_path = os.path.join(base_path, "files", "odl2")
+
     @staticmethod
     def _get_delivery_mechanism_by_drm_scheme_and_content_type(
         delivery_mechanisms, content_type, drm_scheme
@@ -66,48 +59,54 @@ class TestODL2Importer(OPDS2Test):
 
         return None
 
-    def sample_opds(self, filename, file_type="r"):
-        base_path = os.path.split(__file__)[0]
-        resource_path = os.path.join(base_path, "files", "odl2")
-        return open(os.path.join(resource_path, filename)).read()
+    @pytest.fixture
+    def integration_protocol(self):
+        return ODL2API.NAME
+
+    @pytest.fixture()
+    def importer(self, collection, db, mock_get, metadata_client) -> ODL2Importer:
+        return ODL2Importer(
+            db,
+            collection=collection,
+            http_get=mock_get.get,
+            metadata_client=metadata_client,
+        )
+
+    @pytest.fixture()
+    def feed_template(self):
+        return "feed_template.json.jinja"
 
     @freeze_time("2016-01-01T00:00:00+00:00")
-    def test(self):
-        """Ensure that ODL2Importer2 correctly processes and imports the ODL feed encoded using OPDS 1.x.
+    def test_import(self, importer, mock_get, datasource, db):
+        """Ensure that ODL2Importer2 correctly processes and imports the ODL feed encoded using OPDS 2.x.
 
         NOTE: `freeze_time` decorator is required to treat the licenses in the ODL feed as non-expired.
         """
         # Arrange
-        odl_status = {"checkouts": {"left": 10, "available": 10}}
-        collection = self._default_collection
-        data_source = DataSource.lookup(
-            self._db, "ODL 2.0 Data Source", autocreate=True
+        moby_dick_license = LicenseInfoHelper(
+            license=LicenseHelper(
+                identifier="urn:uuid:f7847120-fc6f-11e3-8158-56847afe9799",
+                concurrency=10,
+                checkouts=30,
+                expires="2016-04-25T12:25:21+02:00",
+            ),
+            left=30,
+            available=10,
         )
 
-        collection.data_source = data_source
-
-        importer = ODL2Importer(
-            self._db, collection, RWPMManifestParser(ODLFeedParserFactory())
-        )
-        content_server_feed = self.sample_opds("feed.json")
+        mock_get.add(moby_dick_license)
+        feed = self.get_data("feed.json")
 
         configuration_storage = ConfigurationStorage(importer)
         configuration_factory = ConfigurationFactory()
 
         with configuration_factory.create(
-            configuration_storage, self._db, ODL2APIConfiguration
+            configuration_storage, db, ODL2APIConfiguration
         ) as configuration:
             configuration.skipped_license_formats = json.dumps(["text/html"])
 
         # Act
-        with requests_mock.Mocker() as request_mock:
-            request_mock.get("http://www.example.com/status/294024", json=odl_status)
-
-            imported_editions, pools, works, failures = importer.import_from_feed(
-                content_server_feed
-            )
-
-            self._db.commit()
+        imported_editions, pools, works, failures = importer.import_from_feed(feed)
 
         # Assert
 
@@ -115,10 +114,10 @@ class TestODL2Importer(OPDS2Test):
         assert isinstance(imported_editions, list)
         assert 1 == len(imported_editions)
 
-        moby_dick_edition = self._get_edition_by_identifier(
-            imported_editions, "urn:isbn:978-3-16-148410-0"
-        )
+        [moby_dick_edition] = imported_editions
         assert isinstance(moby_dick_edition, Edition)
+        assert moby_dick_edition.primary_identifier.identifier == "978-3-16-148410-0"
+        assert moby_dick_edition.primary_identifier.type == "ISBN"
 
         assert u"Moby-Dick" == moby_dick_edition.title
         assert u"eng" == moby_dick_edition.language
@@ -139,7 +138,7 @@ class TestODL2Importer(OPDS2Test):
         assert moby_dick_edition == moby_dick_author_author_contribution.edition
         assert Contributor.AUTHOR_ROLE == moby_dick_author_author_contribution.role
 
-        assert data_source == moby_dick_edition.data_source
+        assert datasource == moby_dick_edition.data_source
 
         assert u"Test Publisher" == moby_dick_edition.publisher
         assert datetime.date(2015, 9, 29) == moby_dick_edition.published
@@ -154,16 +153,13 @@ class TestODL2Importer(OPDS2Test):
         assert isinstance(pools, list)
         assert 1 == len(pools)
 
-        moby_dick_license_pool = self._get_license_pool_by_identifier(
-            pools, "urn:isbn:978-3-16-148410-0"
-        )
+        [moby_dick_license_pool] = pools
         assert isinstance(moby_dick_license_pool, LicensePool)
+        assert moby_dick_license_pool.identifier.identifier == "978-3-16-148410-0"
+        assert moby_dick_license_pool.identifier.type == "ISBN"
         assert not moby_dick_license_pool.open_access
-        assert 10 == moby_dick_license_pool.licenses_owned
-        assert (
-            odl_status["checkouts"]["available"]
-            == moby_dick_license_pool.licenses_available
-        )
+        assert 30 == moby_dick_license_pool.licenses_owned
+        assert 10 == moby_dick_license_pool.licenses_available
 
         assert 5 == len(moby_dick_license_pool.delivery_mechanisms)
 
@@ -227,16 +223,14 @@ class TestODL2Importer(OPDS2Test):
             datetime.datetime(2016, 4, 25, 10, 25, 21, tzinfo=datetime.timezone.utc)
             == moby_dick_license.expires
         )
-        assert 10 == moby_dick_license.remaining_checkouts
-        assert 10 == moby_dick_license.concurrent_checkouts
+        assert 30 == moby_dick_license.checkouts_left
+        assert 10 == moby_dick_license.checkouts_available
 
         # 3. Make sure that work objects contain all the required metadata
         assert isinstance(works, list)
         assert 1 == len(works)
 
-        moby_dick_work = self._get_work_by_identifier(
-            works, "urn:isbn:978-3-16-148410-0"
-        )
+        [moby_dick_work] = works
         assert isinstance(moby_dick_work, Work)
         assert moby_dick_edition == moby_dick_work.presentation_edition
         assert 1 == len(moby_dick_work.license_pools)
@@ -260,49 +254,3 @@ class TestODL2Importer(OPDS2Test):
             )
         )
         assert str(huck_finn_semantic_error) == huck_finn_failure.exception
-
-
-class TestODL2ExpiredItemsReaper(TestODLExpiredItemsReaper):
-    """Base class for all ODL 2.x reaper tests."""
-
-    ODL_PROTOCOL = ODL2API.NAME
-    ODL_TEMPLATE_DIR = os.path.join(
-        TestODLExpiredItemsReaper.base_path, "files", "odl2"
-    )
-    ODL_TEMPLATE_FILENAME = "feed_template.json.jinja"
-    ODL_REAPER_CLASS = ODL2ExpiredItemsReaper
-
-    def _create_importer(self, collection, http_get):
-        """Create a new ODL importer with the specified parameters.
-
-        :param collection: Collection object
-        :type collection: core.model.collection.Collection
-
-        :param http_get: Use this method to make an HTTP GET request.
-            This can be replaced with a stub method for testing purposes.
-        :type http_get: Callable
-
-        :return: ODLImporter object
-        :rtype: ODLImporter
-        """
-        importer = ODL2Importer(
-            self._db,
-            collection=collection,
-            parser=RWPMManifestParser(ODLFeedParserFactory()),
-            http_get=http_get,
-        )
-        importer._is_identifier_allowed = MagicMock(return_value=True)
-
-        return importer
-
-
-class TestODL2ExpiredItemsReaperSingleLicense(
-    TestODL2ExpiredItemsReaper, TestODLExpiredItemsReaperSingleLicense
-):
-    """Class testing that the ODL 2.x reaper correctly processes publications with a single license."""
-
-
-class TestODL2ExpiredItemsReaperMultipleLicense(
-    TestODL2ExpiredItemsReaper, TestODLExpiredItemsReaperMultipleLicense
-):
-    """Class testing that the ODL 2.x reaper correctly processes publications with multiple licenses."""

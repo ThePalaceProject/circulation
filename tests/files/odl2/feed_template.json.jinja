@@ -63,7 +63,7 @@
         {% for license in licenses %}
             {
               "metadata": {
-                "identifier": "urn:uuid:{{ license.identifier }}",
+                "identifier": "{{ license.identifier }}",
                 "format": [
                   "application/epub+zip",
                   "text/html",
@@ -75,14 +75,14 @@
                 },
                 "created": "2014-04-25T12:25:21+02:00",
                 "terms": {
-                  {% if license.total_checkouts is not none %}
-                    "checkouts": {{ license.total_checkouts }},
+                  {% if license.checkouts is not none %}
+                    "checkouts": {{ license.checkouts }},
                   {% endif %}
-                  {% if license.concurrent_checkouts is not none %}
-                      "concurrency": {{ license.concurrent_checkouts }},
+                  {% if license.concurrency is not none %}
+                      "concurrency": {{ license.concurrency }},
                   {% endif %}
                   {% if license.expires is not none %}
-                    "expires": "{{ license.expires.isoformat() }}",
+                    "expires": "{{ license.expires }}",
                   {% endif %}
                   "length": 5097600
                 },

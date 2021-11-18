@@ -48,10 +48,11 @@ from core.model.configuration import (
     ConfigurationStorage,
     HasExternalIntegration,
 )
+from core.model.licensing import LicenseStatus
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor
 from core.opds_import import OPDSImporter, OPDSImportMonitor, OPDSXMLParser
 from core.testing import DatabaseTest, MockRequestsResponse
-from core.util.datetime_helpers import utc_now
+from core.util.datetime_helpers import to_utc, utc_now
 from core.util.http import HTTP, BadResponseException, RemoteIntegrationException
 from core.util.string_helpers import base64
 
@@ -457,12 +458,11 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
     def _checkout(self, patron_or_client, licensepool, hold=None):
         _db = Session.object_session(patron_or_client)
 
-        unexpired_licenses = (l for l in licensepool.licenses if not l.is_expired)
-        if not any(unexpired_licenses):
+        if not any((l for l in licensepool.licenses if not l.is_inactive)):
             raise NoLicenses()
 
         # Make sure pool info is updated.
-        self.update_hold_queue(licensepool)
+        self.update_licensepool(licensepool)
 
         if hold:
             self._update_hold_end_date(hold)
@@ -513,13 +513,12 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
         loan.external_identifier = external_identifier
 
         # We also need to update the remaining checkouts for the license.
-        if loan.license.remaining_checkouts:
-            loan.license.remaining_checkouts = loan.license.remaining_checkouts - 1
+        loan.license.checkout()
 
         # We have successfully borrowed this book.
         if hold:
             _db.delete(hold)
-        self.update_hold_queue(licensepool)
+        self.update_licensepool(licensepool)
         return loan
 
     def fulfill(self, patron, pin, licensepool, internal_format, **kwargs):
@@ -731,49 +730,13 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
             # Add 1 since position 0 indicates the hold is ready.
             hold.position = holds_count + 1
 
-    def update_hold_queue(self, licensepool):
+    def update_licensepool(self, licensepool: LicensePool):
         # Update the pool and the next holds in the queue when a license is reserved.
-        _db = Session.object_session(licensepool)
-
-        loans_count = (
-            _db.query(Loan)
-            .filter(Loan.license_pool_id == licensepool.id)
-            .filter(or_(Loan.end == None, Loan.end > utc_now()))
-            .count()
-        )
-        remaining_licenses = max(licensepool.licenses_owned - loans_count, 0)
-
-        holds = (
-            _db.query(Hold)
-            .filter(Hold.license_pool_id == licensepool.id)
-            .filter(
-                or_(
-                    Hold.end == None,
-                    Hold.end > utc_now(),
-                    Hold.position > 0,
-                )
-            )
-            .order_by(Hold.start)
-            .all()
-        )
-
-        if len(holds) > remaining_licenses:
-            new_licenses_available = 0
-            new_licenses_reserved = remaining_licenses
-            new_patrons_in_hold_queue = len(holds)
-        else:
-            new_licenses_available = remaining_licenses - len(holds)
-            new_licenses_reserved = len(holds)
-            new_patrons_in_hold_queue = len(holds)
-        licensepool.update_availability(
-            licensepool.licenses_owned,
-            new_licenses_available,
-            new_licenses_reserved,
-            new_patrons_in_hold_queue,
+        licensepool.update_availability_from_licenses(
             analytics=self.analytics,
             as_of=utc_now(),
         )
-
+        holds = licensepool.get_active_holds()
         for hold in holds[: licensepool.licenses_reserved]:
             if hold.position != 0:
                 # This hold just got a reserved license.
@@ -796,7 +759,7 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
         _db = Session.object_session(patron_or_client)
 
         # Make sure pool info is updated.
-        self.update_hold_queue(licensepool)
+        self.update_licensepool(licensepool)
 
         if licensepool.licenses_available > 0:
             raise CurrentlyAvailable()
@@ -835,7 +798,7 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
         _db = Session.object_session(hold)
         licensepool = hold.license_pool
         _db.delete(hold)
-        self.update_hold_queue(licensepool)
+        self.update_licensepool(licensepool)
         return True
 
     def patron_activity(self, patron, pin):
@@ -861,7 +824,7 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
         for hold in holds:
             if hold.end and hold.end < utc_now():
                 _db.delete(hold)
-                self.update_hold_queue(hold.license_pool)
+                self.update_licensepool(hold.license_pool)
             else:
                 self._update_hold_end_date(hold)
                 remaining_holds.append(hold)
@@ -916,9 +879,12 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
             # This loan is no longer active. Update the pool's availability
             # and delete the loan.
 
+            # Update the license
+            loan.license.checkin()
+
             # If there are holds, the license is reserved for the next patron.
             _db.delete(loan)
-            self.update_hold_queue(loan.license_pool)
+            self.update_licensepool(loan.license_pool)
 
     def checkout_to_external_library(self, client, licensepool, hold=None):
         try:
@@ -950,106 +916,154 @@ class ODLImporter(OPDSImporter):
     NAME = ODLAPI.NAME
     PARSER_CLASS = ODLXMLParser
 
-    # The media type for a License Info Docuemnt, used to get information
+    # The media type for a License Info Document, used to get information
     # about the license.
     LICENSE_INFO_DOCUMENT_MEDIA_TYPE = "application/vnd.odl.info+json"
 
     @classmethod
-    def parse_license(
+    def fetch_license_info(cls, document_link: str, do_get: Callable) -> Optional[dict]:
+        status_code, _, response = do_get(document_link, headers={})
+        if status_code in (200, 201):
+            license_info_document = json.loads(response)
+            return license_info_document
+        else:
+            logging.warning(
+                f"License Info Document is not available. "
+                f"Status link {document_link} failed with {status_code} code."
+            )
+            return None
+
+    @classmethod
+    def parse_license_info(
         cls,
-        identifier: str,
-        total_checkouts: Optional[int],
-        concurrent_checkouts: Optional[int],
-        expires: Optional[datetime.datetime],
-        checkout_link: Optional[str],
-        odl_status_link: Optional[str],
-        do_get: Callable,
+        license_info_document: dict,
+        license_info_link: str,
+        checkout_link: str,
     ) -> Optional[LicenseData]:
         """Check the license's attributes passed as parameters:
         - if they're correct, turn them into a LicenseData object
         - otherwise, return a None
 
-        :param identifier: License's identifier
-        :param total_checkouts: Total number of checkouts before the license expires
-        :param concurrent_checkouts: Number of concurrent checkouts allowed for this license
-        :param expires: Date & time until the license is valid
+        :param license_info_document: License Info Document
+        :param license_info_link: Link to fetch License Info Document
         :param checkout_link: License's checkout link
-        :param odl_status_link: License Info Document's link
-        :param do_get: Callback performing HTTP GET method
 
         :return: LicenseData if all the license's attributes are correct, None, otherwise
         """
-        remaining_checkouts = None
-        available_concurrent_checkouts = None
 
-        # This cycle ends in two different cases:
-        # - when at least one of the parameters is invalid; in this case, the method returns None.
-        # - when all the parameters are valid; in this case, the method returns a LicenseData object.
-        while True:
-            if total_checkouts is not None:
-                total_checkouts = int(total_checkouts)
+        identifier = license_info_document.get("identifier")
+        document_status = license_info_document.get("status")
+        document_checkouts = license_info_document.get("checkouts", {})
+        document_left = document_checkouts.get("left")
+        document_available = document_checkouts.get("available")
+        document_terms = license_info_document.get("terms", {})
+        document_expires = document_terms.get("expires")
+        document_concurrency = document_terms.get("concurrency")
 
-                if total_checkouts <= 0:
-                    logging.info(
-                        f"License # {identifier} expired since "
-                        f"the total number of checkouts is {total_checkouts}"
-                    )
-                    break
+        if identifier is None:
+            logging.error("License info document has no identifier.")
+            return None
 
-            if expires:
-                if not isinstance(expires, datetime.datetime):
-                    expires = dateutil.parser.parse(expires)
+        expires = None
+        if document_expires is not None:
+            expires = dateutil.parser.parse(document_expires)
+            expires = util.datetime_helpers.to_utc(expires)
 
-                expires = util.datetime_helpers.to_utc(expires)
-                now = util.datetime_helpers.utc_now()
-
-                if expires <= now:
-                    logging.info(
-                        f"License # {identifier} expired at {expires} (now is {now})"
-                    )
-                    break
-
-            if odl_status_link:
-                status_code, _, response = do_get(odl_status_link, headers={})
-
-                if status_code in (200, 201):
-                    status = json.loads(response)
-                    checkouts = status.get("checkouts", {})
-                    remaining_checkouts = checkouts.get("left")
-                    available_concurrent_checkouts = checkouts.get("available")
-                else:
-                    logging.warning(
-                        f"License # {identifier}'s Info Document is not available. "
-                        f"Status link failed with {status_code} code"
-                    )
-                    break
-
-            if remaining_checkouts is None:
-                remaining_checkouts = total_checkouts
-
-            if remaining_checkouts is not None:
-                remaining_checkouts = int(remaining_checkouts)
-
-                if remaining_checkouts <= 0:
-                    logging.info(
-                        f"License # {identifier} expired since "
-                        f"the remaining number of checkouts is {remaining_checkouts}"
-                    )
-                    break
-
-            if available_concurrent_checkouts is None:
-                available_concurrent_checkouts = concurrent_checkouts
-
-            return LicenseData(
-                identifier=identifier,
-                checkout_url=checkout_link,
-                status_url=odl_status_link,
-                expires=expires,
-                remaining_checkouts=remaining_checkouts,
-                concurrent_checkouts=available_concurrent_checkouts,
+        if document_status is not None:
+            status = LicenseStatus.get(document_status)
+            if status.value != document_status:
+                logging.warning(
+                    f"Identifier # {identifier} unknown status value "
+                    f"{document_status} defaulting to {status.value}."
+                )
+        else:
+            status = LicenseStatus.unavailable
+            logging.warning(
+                f"Identifier # {identifier} license info document does not have "
+                f"required key 'status'."
             )
 
-        return None
+        if document_available is not None:
+            available = int(document_available)
+        else:
+            available = 0
+            logging.warning(
+                f"Identifier # {identifier} license info document does not have "
+                f"required key 'checkouts.available'."
+            )
+
+        left = None
+        if document_left is not None:
+            left = int(document_left)
+
+        concurrency = None
+        if document_concurrency is not None:
+            concurrency = int(document_concurrency)
+
+        return LicenseData(
+            identifier=identifier,
+            checkout_url=checkout_link,
+            status_url=license_info_link,
+            expires=expires,
+            checkouts_left=left,
+            checkouts_available=available,
+            status=status,
+            terms_concurrency=concurrency,
+        )
+
+    @classmethod
+    def get_license_data(
+        cls,
+        license_info_link: str,
+        checkout_link: str,
+        feed_license_identifier: str,
+        feed_license_expires: str,
+        feed_concurrency: int,
+        do_get: Callable,
+    ) -> Optional[LicenseData]:
+        license_info_document = cls.fetch_license_info(license_info_link, do_get)
+
+        if not license_info_document:
+            return None
+
+        parsed_license = cls.parse_license_info(
+            license_info_document, license_info_link, checkout_link
+        )
+
+        if not parsed_license:
+            return None
+
+        if parsed_license.identifier != feed_license_identifier:
+            # There is a mismatch between the license info document and
+            # the feed we are importing. Since we don't know which to believe
+            # we log an error and continue.
+            logging.error(
+                f"Mismatch between license identifier in the feed ({feed_license_identifier}) "
+                f"and the identifier in the license info document "
+                f"({parsed_license.identifier}) ignoring license completely."
+            )
+            return None
+
+        if parsed_license.expires != feed_license_expires:
+            logging.error(
+                f"License identifier {feed_license_identifier}. Mismatch between license "
+                f"expiry in the feed ({feed_license_expires}) and the expiry in the license "
+                f"info document ({parsed_license.expires}) setting license status "
+                f"to unavailable."
+            )
+            parsed_license.status = LicenseStatus.unavailable
+
+        if parsed_license.terms_concurrency != feed_concurrency:
+            logging.error(
+                f"License identifier {feed_license_identifier}. Mismatch between license "
+                f"concurrency in the feed ({feed_concurrency}) and the "
+                f"concurrency in the license info document ("
+                f"{parsed_license.terms_concurrency}) setting license status "
+                f"to unavailable."
+            )
+            parsed_license.status = LicenseStatus.unavailable
+
+        return parsed_license
 
     @classmethod
     def _detail_for_elementtree_entry(
@@ -1063,8 +1077,6 @@ class ODLImporter(OPDSImporter):
         formats = []
         licenses = []
 
-        licenses_owned = 0
-        licenses_available = 0
         odl_license_tags = parser._xpath(entry_tag, "odl:license") or []
         medium = None
         for odl_license_tag in odl_license_tags:
@@ -1133,27 +1145,29 @@ class ODLImporter(OPDSImporter):
 
             terms = parser._xpath(odl_license_tag, "odl:terms")
             if terms:
-                total_checkouts = subtag(terms[0], "odl:total_checkouts")
                 concurrent_checkouts = subtag(terms[0], "odl:concurrent_checkouts")
                 expires = subtag(terms[0], "odl:expires")
 
-            license = cls.parse_license(
-                identifier,
-                total_checkouts,
-                concurrent_checkouts,
-                expires,
-                checkout_link,
-                odl_status_link,
-                do_get,
-            )
+            if concurrent_checkouts is not None:
+                concurrent_checkouts = int(concurrent_checkouts)
 
-            if not license:
-                continue
+            if expires is not None:
+                expires = to_utc(dateutil.parser.parse(expires))
 
-            licenses_owned += int(license.remaining_checkouts or 0)
-            licenses_available += int(license.concurrent_checkouts or 0)
+            if not odl_status_link:
+                parsed_license = None
+            else:
+                parsed_license = cls.get_license_data(
+                    odl_status_link,
+                    checkout_link,
+                    identifier,
+                    expires,
+                    concurrent_checkouts,
+                    do_get,
+                )
 
-            licenses.append(license)
+            if parsed_license is not None:
+                licenses.append(parsed_license)
 
         if not data.get("circulation"):
             data["circulation"] = dict()
@@ -1163,8 +1177,10 @@ class ODLImporter(OPDSImporter):
         if not data["circulation"].get("licenses"):
             data["circulation"]["licenses"] = []
         data["circulation"]["licenses"].extend(licenses)
-        data["circulation"]["licenses_owned"] = licenses_owned
-        data["circulation"]["licenses_available"] = licenses_available
+        data["circulation"]["licenses_owned"] = None
+        data["circulation"]["licenses_available"] = None
+        data["circulation"]["licenses_reserved"] = None
+        data["circulation"]["patrons_in_hold_queue"] = None
         return data
 
 
@@ -1173,6 +1189,12 @@ class ODLImportMonitor(OPDSImportMonitor):
 
     PROTOCOL = ODLImporter.NAME
     SERVICE_NAME = "ODL Import Monitor"
+
+    def __init__(self, _db, collection, import_class, **import_class_kwargs):
+        # Always force reimport ODL collections to get up to date license information
+        super().__init__(
+            _db, collection, import_class, force_reimport=True, **import_class_kwargs
+        )
 
 
 class ODLHoldReaper(CollectionMonitor):
@@ -1204,7 +1226,7 @@ class ODLHoldReaper(CollectionMonitor):
             total_deleted_holds += 1
 
         for pool in changed_pools:
-            self.api.update_hold_queue(pool)
+            self.api.update_licensepool(pool)
 
         message = "Holds deleted: %d. License pools updated: %d" % (
             total_deleted_holds,
@@ -1212,49 +1234,6 @@ class ODLHoldReaper(CollectionMonitor):
         )
         progress = TimestampData(achievements=message)
         return progress
-
-
-class MockODLAPI(ODLAPI):
-    """Mock API for tests that overrides _get and _url_for and tracks requests."""
-
-    @classmethod
-    def mock_collection(cls, _db, protocol=ODLAPI.NAME):
-        """Create a mock ODL collection to use in tests."""
-        library = DatabaseTest.make_default_library(_db)
-        collection, ignore = get_one_or_create(
-            _db,
-            Collection,
-            name="Test ODL Collection",
-            create_method_kwargs=dict(
-                external_account_id="http://odl",
-            ),
-        )
-        integration = collection.create_external_integration(protocol=protocol)
-        integration.username = "a"
-        integration.password = "b"
-        integration.url = "http://metadata"
-        library.collections.append(collection)
-        return collection
-
-    def __init__(self, _db, collection, *args, **kwargs):
-        self.responses = []
-        self.requests = []
-        super(MockODLAPI, self).__init__(_db, collection, *args, **kwargs)
-
-    def queue_response(self, status_code, headers={}, content=None):
-        self.responses.insert(0, MockRequestsResponse(status_code, headers, content))
-
-    def _get(self, url, headers=None):
-        self.requests.append([url, headers])
-        response = self.responses.pop()
-        return HTTP._process_response(url, response)
-
-    def _url_for(self, *args, **kwargs):
-        del kwargs["_external"]
-        return "http://%s?%s" % (
-            "/".join(args),
-            "&".join(["%s=%s" % (key, val) for key, val in list(kwargs.items())]),
-        )
 
 
 class SharedODLAPI(BaseCirculationAPI):
@@ -1861,45 +1840,3 @@ class MockSharedODLAPI(SharedODLAPI):
         return HTTP._process_response(
             url, response, allowed_response_codes=allowed_response_codes
         )
-
-
-class ODLExpiredItemsReaper(IdentifierSweepMonitor):
-    """Responsible for removing expired ODL licenses."""
-
-    SERVICE_NAME = "ODL Expired Items Reaper"
-    PROTOCOL = ODLAPI.NAME
-
-    def __init__(self, _db, collection):
-        super(ODLExpiredItemsReaper, self).__init__(_db, collection)
-
-    def process_item(self, identifier):
-        for licensepool in identifier.licensed_through:
-            remaining_checkouts = (
-                0  # total number of checkouts across all the licenses in the pool
-            )
-            concurrent_checkouts = 0  # number of concurrent checkouts allowed across all the licenses in the pool
-
-            # 0 is a starting point,
-            # we're going through all the valid licenses in the pool and count up available checkouts.
-            for license_pool_license in licensepool.licenses:
-                if not license_pool_license.is_expired:
-                    remaining_checkouts += license_pool_license.remaining_checkouts
-                    concurrent_checkouts += license_pool_license.concurrent_checkouts
-
-            if (
-                remaining_checkouts != licensepool.licenses_owned
-                or concurrent_checkouts != licensepool.licenses_available
-            ):
-                licenses_owned = max(remaining_checkouts, 0)
-                licenses_available = max(concurrent_checkouts, 0)
-
-                circulation_data = CirculationData(
-                    data_source=licensepool.data_source,
-                    primary_identifier=identifier,
-                    licenses_owned=licenses_owned,
-                    licenses_available=licenses_available,
-                    licenses_reserved=licensepool.licenses_reserved,
-                    patrons_in_hold_queue=licensepool.patrons_in_hold_queue,
-                )
-
-                circulation_data.apply(self._db, self.collection)

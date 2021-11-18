@@ -103,17 +103,15 @@ HOME=/var/www/circulation
 # OPDS import from Feedbooks
 1 2 * * 0 root core/bin/run feedbooks_import_monitor >> /var/log/cron.log 2>&1
 
-# ODL import
+# OPDS 1.x + ODL
 #
-0 6 * * * root core/bin/run odl_import_monitor >> /var/log/cron.log 2>&1
+15 * * * * root core/bin/run odl_import_monitor >> /var/log/cron.log 2>&1
 0 */8 * * * root core/bin/run odl_hold_reaper >> /var/log/cron.log 2>&1
-*/15 * * * * root core/bin/run odl_reaper >> /var/log/cron.log 2>&1
 5 */6 * * * root core/bin/run shared_odl_import_monitor >> /var/log/cron.log 2>&1
 
-# ODL2 import
+# OPDS 2.x + ODL import
 #
-30 6 * * * root core/bin/run odl2_import_monitor >> /var/log/cron.log 2>&1
-*/15 * * * * root core/bin/run odl2_reaper >> /var/log/cron.log 2>&1
+45 * * * * root core/bin/run odl2_import_monitor >> /var/log/cron.log 2>&1
 
 # Odilo
 #
