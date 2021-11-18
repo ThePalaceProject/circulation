@@ -2042,8 +2042,8 @@ class TestODLImporter(DatabaseTest, BaseODLTest):
         """Ensure ODLImporter imports expired licenses
         and does not count them in the total number of available licenses."""
 
-        # 1.1. Import the test feed with three expired ODL licenses and two valid licenses.
-        invalid = [
+        # 1.1. Import the test feed with three inactive ODL licenses and two active licenses.
+        inactive = [
             LicenseInfoHelper(
                 # Expired
                 # (expiry date in the past)
@@ -2068,7 +2068,7 @@ class TestODLImporter(DatabaseTest, BaseODLTest):
                 status="unavailable",
             ),
         ]
-        valid = [
+        active = [
             LicenseInfoHelper(
                 # Valid
                 license=LicenseHelper(concurrency=1),
@@ -2082,7 +2082,7 @@ class TestODLImporter(DatabaseTest, BaseODLTest):
             ),
         ]
         imported_editions, imported_pools, imported_works, failures = import_templated(
-            valid + invalid
+            active + inactive
         )
 
         assert failures == {}
@@ -2094,13 +2094,13 @@ class TestODLImporter(DatabaseTest, BaseODLTest):
         # All licenses were imported
         assert len(imported_pool.licenses) == 5
 
-        # Make sure that the license statistics are correct and include only checkouts valid licenses.
+        # Make sure that the license statistics are correct and include only active licenses.
         assert imported_pool.licenses_owned == 41
         assert imported_pool.licenses_available == 6
 
-        # Correct number of expired and unexpired licenses
-        assert sum([not l.is_inactive for l in imported_pool.licenses]) == len(valid)
-        assert sum([l.is_inactive for l in imported_pool.licenses]) == len(invalid)
+        # Correct number of active and inactive licenses
+        assert sum([not l.is_inactive for l in imported_pool.licenses]) == len(active)
+        assert sum([l.is_inactive for l in imported_pool.licenses]) == len(inactive)
 
     def test_odl_importer_reimport_multiple_licenses(self, import_templated):
         """Ensure ODLImporter correctly imports licenses that have already been imported."""
