@@ -11,6 +11,7 @@ import datetime
 import logging
 import re
 from collections import defaultdict
+from typing import Optional
 
 from dateutil.parser import parse
 from pymarc import MARCReader
@@ -48,6 +49,7 @@ from .model import (
     get_one_or_create,
 )
 from .model.configuration import ExternalIntegrationLink
+from .model.licensing import LicenseFunctions, LicenseStatus
 from .util import LanguageCodes
 from .util.datetime_helpers import strptime_utc, to_utc, utc_now
 from .util.http import RemoteIntegrationException
@@ -108,7 +110,7 @@ class ReplacementPolicy(object):
             rights=True,
             formats=True,
             analytics=Analytics(_db),
-            **args
+            **args,
         )
 
     @classmethod
@@ -125,7 +127,7 @@ class ReplacementPolicy(object):
             links=True,
             rights=False,
             formats=False,
-            **args
+            **args,
         )
 
     @classmethod
@@ -141,7 +143,7 @@ class ReplacementPolicy(object):
             links=False,
             rights=False,
             formats=False,
-            **args
+            **args,
         )
 
 
@@ -614,22 +616,37 @@ class FormatData(object):
             self.rights_uri = self.link.rights_uri
 
 
-class LicenseData(object):
+class LicenseData(LicenseFunctions):
     def __init__(
         self,
-        identifier,
-        checkout_url,
-        status_url,
-        expires=None,
-        remaining_checkouts=None,
-        concurrent_checkouts=None,
+        identifier: str,
+        checkout_url: str,
+        status_url: str,
+        status: LicenseStatus,
+        checkouts_available: int,
+        expires: Optional[datetime.datetime] = None,
+        checkouts_left: Optional[int] = None,
+        terms_concurrency: Optional[int] = None,
     ):
         self.identifier = identifier
         self.checkout_url = checkout_url
         self.status_url = status_url
+        self.status = status
         self.expires = expires
-        self.remaining_checkouts = remaining_checkouts
-        self.concurrent_checkouts = concurrent_checkouts
+        self.checkouts_left = checkouts_left
+        self.checkouts_available = checkouts_available
+        self.terms_concurrency = terms_concurrency
+
+    def add_to_pool(self, db: Session, pool: LicensePool):
+        license_obj, _ = get_one_or_create(
+            db,
+            License,
+            identifier=self.identifier,
+            license_pool=pool,
+        )
+        for key, value in vars(self).items():
+            setattr(license_obj, key, value)
+        return license_obj
 
 
 class TimestampData(object):
@@ -1046,8 +1063,10 @@ class CirculationData(MetaToModelUtility):
         self.__links = None
         self.links = links
 
-        # Information about individual terms for each license in a pool.
-        self.licenses = licenses or []
+        # Information about individual terms for each license in a pool. If we are
+        # given licenses then they are used to calculate values for the LicensePool
+        # instead of directly using the values that are given to CirculationData.
+        self.licenses = licenses
 
     @property
     def links(self):
@@ -1055,7 +1074,7 @@ class CirculationData(MetaToModelUtility):
 
     @links.setter
     def links(self, arg_links):
-        """If got passed all links, undiscriminately, filter out to only those relevant to
+        """If got passed all links, indiscriminately, filter out to only those relevant to
         pools (the rights-related links).
         """
         # start by deleting any old links
@@ -1338,52 +1357,37 @@ class CirculationData(MetaToModelUtility):
         new_open_access = any(pool.open_access for pool in pools)
         open_access_status_changed = old_open_access != new_open_access
 
-        old_licenses = new_licenses = []
-        if pool:
-            old_licenses = list(pool.licenses or [])
-
-            for license in self.licenses:
-                license_obj, ignore = get_one_or_create(
-                    _db,
-                    License,
-                    identifier=license.identifier,
-                    license_pool_id=pool.id,
-                )
-                license_obj.checkout_url = license.checkout_url
-                license_obj.status_url = license.status_url
-                license_obj.expires = license.expires
-                license_obj.remaining_checkouts = license.remaining_checkouts
-                license_obj.concurrent_checkouts = license.concurrent_checkouts
-                new_licenses.append(license_obj)
-
-        for license in old_licenses:
-            if license not in new_licenses and license.loans:
-                # TODO: For ODL, I don't think this will happen, but
-                # it seems right not to delete the license if it does.
-                # We have the status URL we can use to check on the license,
-                # and if it is removed from the ODL feed when there are
-                # still loans we'll need it.
-                # But if we track individual licenses for other protocols,
-                # we may need to handle this differently.
-                self.log.warn(
-                    "License %i is no longer available but still has loans."
-                    % license.id
-                )
-
         # Finally, if we have data for a specific Collection's license
         # for this book, find its LicensePool and update it.
         changed_availability = False
         if pool and self._availability_needs_update(pool):
-            # Update availabily information. This may result in
+            # Update availability information. This may result in
             # the issuance of additional circulation events.
-            changed_availability = pool.update_availability(
-                new_licenses_owned=self.licenses_owned,
-                new_licenses_available=self.licenses_available,
-                new_licenses_reserved=self.licenses_reserved,
-                new_patrons_in_hold_queue=self.patrons_in_hold_queue,
-                analytics=analytics,
-                as_of=self.last_checked,
-            )
+            if self.licenses is not None:
+                # If we have licenses set, use those to set our availability
+                old_licenses = list(pool.licenses or [])
+                new_licenses = [
+                    license.add_to_pool(_db, pool) for license in self.licenses
+                ]
+                for license in old_licenses:
+                    if license not in new_licenses:
+                        self.log.warning(
+                            f"License {license.identifier} has been removed from feed."
+                        )
+                changed_availability = pool.update_availability_from_licenses(
+                    analytics=analytics,
+                    as_of=self.last_checked,
+                )
+            else:
+                # Otherwise update the availability directly
+                changed_availability = pool.update_availability(
+                    new_licenses_owned=self.licenses_owned,
+                    new_licenses_available=self.licenses_available,
+                    new_licenses_reserved=self.licenses_reserved,
+                    new_patrons_in_hold_queue=self.patrons_in_hold_queue,
+                    analytics=analytics,
+                    as_of=self.last_checked,
+                )
 
         # If this is the first time we've seen this pool, or we never
         # made a Work for it, make one now.
@@ -1461,7 +1465,7 @@ class Metadata(MetaToModelUtility):
         data_source_last_updated=None,
         # Note: brought back to keep callers of bibliographic extraction process_one() methods simple.
         circulation=None,
-        **kwargs
+        **kwargs,
     ):
         # data_source is where the data comes from (e.g. overdrive, metadata wrangler, admin interface),
         # and not necessarily where the associated Identifier's LicencePool's lending licenses are coming from.
@@ -1567,7 +1571,7 @@ class Metadata(MetaToModelUtility):
             primary_identifier=primary_identifier,
             contributors=contributors,
             links=links,
-            **kwargs
+            **kwargs,
         )
 
     def normalize_contributors(self, metadata_client):

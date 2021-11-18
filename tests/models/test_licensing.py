@@ -23,6 +23,7 @@ from ...model.licensing import (
     License,
     LicensePool,
     LicensePoolDeliveryMechanism,
+    LicenseStatus,
     Loan,
     RightsStatus,
 )
@@ -182,7 +183,6 @@ class TestDeliveryMechanism(DatabaseTest):
         assert False == epub_no_drm.compatible_with(pdf_adobe, True)
 
     def test_uniqueness_constraint(self):
-
         dm = DeliveryMechanism
 
         # You can't create two DeliveryMechanisms with the same values
@@ -236,36 +236,54 @@ class TestLicense(DatabaseTest):
         yesterday = now - datetime.timedelta(days=1)
 
         self.perpetual = self._license(
-            self.pool, expires=None, remaining_checkouts=None, concurrent_checkouts=1
+            self.pool,
+            expires=None,
+            checkouts_left=None,
+            checkouts_available=1,
+            terms_concurrency=2,
         )
 
         self.time_limited = self._license(
             self.pool,
             expires=next_year,
-            remaining_checkouts=None,
-            concurrent_checkouts=1,
+            checkouts_left=None,
+            checkouts_available=1,
+            terms_concurrency=1,
         )
 
         self.loan_limited = self._license(
-            self.pool, expires=None, remaining_checkouts=4, concurrent_checkouts=2
+            self.pool,
+            expires=None,
+            checkouts_left=4,
+            checkouts_available=2,
+            terms_concurrency=3,
         )
 
         self.time_and_loan_limited = self._license(
             self.pool,
             expires=next_year + datetime.timedelta(days=1),
-            remaining_checkouts=52,
-            concurrent_checkouts=1,
+            checkouts_left=52,
+            checkouts_available=1,
+            terms_concurrency=1,
         )
 
         self.expired_time_limited = self._license(
             self.pool,
             expires=yesterday,
-            remaining_checkouts=None,
-            concurrent_checkouts=1,
+            checkouts_left=None,
+            checkouts_available=1,
         )
 
         self.expired_loan_limited = self._license(
-            self.pool, expires=None, remaining_checkouts=0, concurrent_checkouts=1
+            self.pool, expires=None, checkouts_left=0, checkouts_available=1
+        )
+
+        self.unavailable = self._license(
+            self.pool,
+            expires=None,
+            checkouts_left=None,
+            checkouts_available=20,
+            status=LicenseStatus.unavailable,
         )
 
     def test_loan_to(self):
@@ -286,47 +304,128 @@ class TestLicense(DatabaseTest):
         assert pool == loan2.license_pool
         assert False == is_new
 
-    def test_license_types(self):
-        assert True == self.perpetual.is_perpetual
-        assert False == self.perpetual.is_time_limited
-        assert False == self.perpetual.is_loan_limited
-        assert False == self.perpetual.is_expired
+    @pytest.mark.parametrize(
+        (
+            "license_type",
+            "is_perpetual",
+            "is_time_limited",
+            "is_loan_limited",
+            "is_inactive",
+            "total_remaining_loans",
+            "currently_available_loans",
+        ),
+        [
+            ("perpetual", True, False, False, False, 2, 1),
+            ("time_limited", False, True, False, False, 1, 1),
+            ("loan_limited", False, False, True, False, 4, 2),
+            ("time_and_loan_limited", False, True, True, False, 52, 1),
+            ("expired_time_limited", False, True, False, True, 0, 0),
+            ("expired_loan_limited", False, False, True, True, 0, 0),
+            ("unavailable", True, False, False, True, 0, 0),
+        ],
+    )
+    def test_license_types(
+        self,
+        license_type,
+        is_perpetual,
+        is_time_limited,
+        is_loan_limited,
+        is_inactive,
+        total_remaining_loans,
+        currently_available_loans,
+    ):
+        license = getattr(self, license_type)
+        assert is_perpetual == license.is_perpetual
+        assert is_time_limited == license.is_time_limited
+        assert is_loan_limited == license.is_loan_limited
+        assert is_inactive == license.is_inactive
+        assert total_remaining_loans == license.total_remaining_loans
+        assert currently_available_loans == license.currently_available_loans
 
-        assert False == self.time_limited.is_perpetual
-        assert True == self.time_limited.is_time_limited
-        assert False == self.time_limited.is_loan_limited
-        assert False == self.time_limited.is_expired
+    @pytest.mark.parametrize(
+        "license_type,left,available",
+        [
+            ("perpetual", None, 0),
+            ("time_limited", None, 0),
+            ("loan_limited", 3, 1),
+            ("time_and_loan_limited", 51, 0),
+            ("expired_time_limited", None, 1),
+            ("expired_loan_limited", 0, 1),
+            ("unavailable", None, 20),
+        ],
+    )
+    def test_license_checkout(self, license_type, left, available):
+        license = getattr(self, license_type)
+        license.checkout()
+        assert left == license.checkouts_left
+        assert available == license.checkouts_available
 
-        assert False == self.loan_limited.is_perpetual
-        assert False == self.loan_limited.is_time_limited
-        assert True == self.loan_limited.is_loan_limited
-        assert False == self.loan_limited.is_expired
-
-        assert False == self.time_and_loan_limited.is_perpetual
-        assert True == self.time_and_loan_limited.is_time_limited
-        assert True == self.time_and_loan_limited.is_loan_limited
-        assert False == self.time_and_loan_limited.is_expired
-
-        assert False == self.expired_time_limited.is_perpetual
-        assert True == self.expired_time_limited.is_time_limited
-        assert False == self.expired_time_limited.is_loan_limited
-        assert True == self.expired_time_limited.is_expired
-
-        assert False == self.expired_loan_limited.is_perpetual
-        assert False == self.expired_loan_limited.is_time_limited
-        assert True == self.expired_loan_limited.is_loan_limited
-        assert True == self.expired_loan_limited.is_expired
+    @pytest.mark.parametrize(
+        "license_params,left,available",
+        [
+            ({"checkouts_available": 1, "terms_concurrency": 2}, None, 2),
+            ({"checkouts_available": 1, "terms_concurrency": 1}, None, 1),
+            (
+                {
+                    "expires": utc_now() + datetime.timedelta(days=7),
+                    "checkouts_available": 0,
+                    "terms_concurrency": 1,
+                },
+                None,
+                1,
+            ),
+            (
+                {"checkouts_available": 0, "terms_concurrency": 1, "checkouts_left": 4},
+                4,
+                1,
+            ),
+            (
+                {"checkouts_available": 2, "terms_concurrency": 5, "checkouts_left": 2},
+                2,
+                2,
+            ),
+            (
+                {"checkouts_available": 0, "terms_concurrency": 1, "checkouts_left": 0},
+                0,
+                0,
+            ),
+            (
+                {
+                    "expires": utc_now() + datetime.timedelta(days=7),
+                    "checkouts_available": 5,
+                    "terms_concurrency": 6,
+                    "checkouts_left": 40,
+                },
+                40,
+                6,
+            ),
+            (
+                {
+                    "expires": utc_now() - datetime.timedelta(days=7),
+                    "checkouts_available": 4,
+                    "terms_concurrency": 5,
+                },
+                None,
+                4,
+            ),
+        ],
+    )
+    def test_license_checkin(self, license_params, left, available):
+        l = self._license(self.pool, **license_params)
+        l.checkin()
+        assert left == l.checkouts_left
+        assert available == l.checkouts_available
 
     def test_best_available_license(self):
         next_week = utc_now() + datetime.timedelta(days=7)
         time_limited_2 = self._license(
             self.pool,
             expires=next_week,
-            remaining_checkouts=None,
-            concurrent_checkouts=1,
+            checkouts_left=None,
+            checkouts_available=1,
         )
         loan_limited_2 = self._license(
-            self.pool, expires=None, remaining_checkouts=2, concurrent_checkouts=1
+            self.pool, expires=None, checkouts_left=2, checkouts_available=1
         )
 
         # First, we use the time-limited license that's expiring first.
@@ -593,7 +692,6 @@ class TestLicensePool(DatabaseTest):
         assert set([oa1, oa2]) == set(pool.open_access_links)
 
     def test_better_open_access_pool_than(self):
-
         gutenberg_1 = self._licensepool(
             None,
             open_access=True,
@@ -863,7 +961,6 @@ class TestLicensePool(DatabaseTest):
         assert set([jane]) == presentation.contributors
 
     def test_circulation_changelog(self):
-
         edition, pool = self._edition(with_license_pool=True)
         pool.licenses_owned = 10
         pool.licenses_available = 9

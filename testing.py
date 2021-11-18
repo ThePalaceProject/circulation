@@ -69,6 +69,7 @@ from .model import (
 )
 from .model.configuration import ExternalIntegrationLink
 from .model.constants import MediaTypes
+from .model.licensing import LicenseStatus
 from .util.datetime_helpers import datetime_utc, utc_now
 
 
@@ -619,8 +620,10 @@ class DatabaseTest(object):
         checkout_url=None,
         status_url=None,
         expires=None,
-        remaining_checkouts=None,
-        concurrent_checkouts=None,
+        checkouts_left=None,
+        checkouts_available=None,
+        status=LicenseStatus.available,
+        terms_concurrency=None,
     ):
         identifier = identifier or self._str
         checkout_url = checkout_url or self._str
@@ -633,8 +636,10 @@ class DatabaseTest(object):
             checkout_url=checkout_url,
             status_url=status_url,
             expires=expires,
-            remaining_checkouts=remaining_checkouts,
-            concurrent_checkouts=concurrent_checkouts,
+            checkouts_left=checkouts_left,
+            checkouts_available=checkouts_available,
+            status=status,
+            terms_concurrency=terms_concurrency,
         )
         return license
 

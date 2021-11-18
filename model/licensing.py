@@ -1,22 +1,18 @@
 # encoding: utf-8
 # PolicyException LicensePool, LicensePoolDeliveryMechanism, DeliveryMechanism,
 # RightsStatus
+import datetime
 import logging
+from enum import Enum as PythonEnum
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import (
-    Boolean,
-    Column,
-    DateTime,
-    ForeignKey,
-    Index,
-    Integer,
-    String,
-    Unicode,
-    UniqueConstraint,
-)
+from sqlalchemy import Boolean, Column, DateTime
+from sqlalchemy import Enum as AlchemyEnum
+from sqlalchemy import ForeignKey, Index, Integer, String, Unicode, UniqueConstraint
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
+from sqlalchemy.sql.expression import or_
 from sqlalchemy.sql.functions import func
 
 from ..util.datetime_helpers import utc_now
@@ -27,16 +23,85 @@ from .constants import DataSourceConstants, EditionConstants, LinkRelations, Med
 from .hasfulltablecache import HasFullTableCache
 from .patron import Hold, Loan, Patron
 
+if TYPE_CHECKING:
+    # Only import for type checking, since it creates an import cycle
+    from ..analytics import Analytics
+
 
 class PolicyException(Exception):
     pass
 
 
-class License(Base):
+class LicenseStatus(PythonEnum):
+    preorder = "preorder"
+    available = "available"
+    unavailable = "unavailable"
+
+    @classmethod
+    def get(cls, value: str):
+        return cls.__members__.get(value.lower(), cls.unavailable)
+
+
+class LicenseFunctions:
+    identifier: str
+    checkout_url: str
+    status_url: str
+    status: LicenseStatus
+    expires: Optional[datetime.datetime]
+    checkouts_left: Optional[int]
+    checkouts_available: int
+    terms_concurrency: Optional[int]
+
+    @property
+    def is_perpetual(self) -> bool:
+        return (self.expires is None) and (self.checkouts_left is None)
+
+    @property
+    def is_time_limited(self) -> bool:
+        return self.expires is not None
+
+    @property
+    def is_loan_limited(self) -> bool:
+        return self.checkouts_left is not None
+
+    @property
+    def is_inactive(self) -> bool:
+        now = utc_now()
+        return (
+            (self.expires and self.expires <= now)
+            or (self.checkouts_left is not None and self.checkouts_left <= 0)
+            or (self.status != LicenseStatus.available)
+        )
+
+    @property
+    def total_remaining_loans(self) -> int:
+        if self.is_inactive:
+            return 0
+        elif self.is_loan_limited:
+            return self.checkouts_left
+        else:
+            return self.terms_concurrency
+
+    @property
+    def currently_available_loans(self) -> int:
+        if self.is_inactive:
+            return 0
+        else:
+            return self.checkouts_available
+
+
+class License(Base, LicenseFunctions):
     """A single license for a work from a given source.
 
-    TODO: This currently assumes all licenses for a pool have the same
-    delivery mechanisms, which may not always be true.
+    The fields on this license are based on the license information available in the
+    License Info Document used in the ODL specification here:
+    https://drafts.opds.io/odl-1.0.html#4-license-info-document
+
+    This model may have to be changed, if other vendors are tracking individual
+    licenses in the future.
+
+    TODO: This currently assumes all licenses for a pool have the same delivery
+          mechanisms, which may not always be true.
     """
 
     __tablename__ = "licenses"
@@ -45,10 +110,18 @@ class License(Base):
     identifier = Column(Unicode)
     checkout_url = Column(Unicode)
     status_url = Column(Unicode)
+    status = Column(AlchemyEnum(LicenseStatus))
 
     expires = Column(DateTime(timezone=True))
-    remaining_checkouts = Column(Integer)
-    concurrent_checkouts = Column(Integer)
+
+    # License info document checkouts.left field
+    checkouts_left = Column(Integer)
+
+    # License info document checkouts.available field
+    checkouts_available = Column(Integer)
+
+    # License info document terms.concurrency field
+    terms_concurrency = Column(Integer)
 
     # A License belongs to one LicensePool.
     license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
@@ -63,24 +136,29 @@ class License(Base):
         loan.license = self
         return loan, is_new
 
-    @property
-    def is_perpetual(self):
-        return (self.expires is None) and (self.remaining_checkouts is None)
+    def checkout(self):
+        """
+        Update licenses internal accounting when a license is checked out.
+        """
+        if not self.is_inactive:
+            if self.checkouts_left:
+                self.checkouts_left -= 1
+            if self.checkouts_available:
+                self.checkouts_available -= 1
+        else:
+            logging.warning(f"Checking out expired license # {self.identifier}.")
 
-    @property
-    def is_time_limited(self):
-        return self.expires is not None
-
-    @property
-    def is_loan_limited(self):
-        return self.remaining_checkouts is not None
-
-    @property
-    def is_expired(self):
-        now = utc_now()
-        return (self.expires and self.expires <= now) or (
-            self.remaining_checkouts is not None and self.remaining_checkouts <= 0
-        )
+    def checkin(self):
+        """
+        Update a licenses internal accounting when a license is checked in.
+        """
+        if not self.is_inactive:
+            available = [self.checkouts_available + 1, self.terms_concurrency]
+            if self.is_loan_limited:
+                available.append(self.checkouts_left)
+            self.checkouts_available = min(available)
+        else:
+            logging.warning(f"Checking in expired license # {self.identifier}.")
 
 
 class LicensePool(Base):
@@ -567,6 +645,57 @@ class LicensePool(Base):
         age = now - self.last_checked
         return age > maximum_stale_time
 
+    def update_availability_from_licenses(
+        self,
+        analytics: "Analytics" = None,
+        as_of: datetime.datetime = None,
+    ):
+        """
+        Update the LicensePool with new availability information, based on the
+        licenses and holds that are associated with it.
+
+        Log the implied changes with the analytics provider.
+        """
+        _db = Session.object_session(self)
+
+        licenses_owned = sum([l.total_remaining_loans for l in self.licenses])
+        licenses_available = sum([l.currently_available_loans for l in self.licenses])
+
+        holds = self.get_active_holds()
+
+        patrons_in_hold_queue = len(holds)
+        if len(holds) > licenses_available:
+            licenses_reserved = licenses_available
+            licenses_available = 0
+        else:
+            licenses_reserved = len(holds)
+            licenses_available -= licenses_reserved
+
+        return self.update_availability(
+            licenses_owned,
+            licenses_available,
+            licenses_reserved,
+            patrons_in_hold_queue,
+            analytics=analytics,
+            as_of=as_of,
+        )
+
+    def get_active_holds(self):
+        _db = Session.object_session(self)
+        return (
+            _db.query(Hold)
+            .filter(Hold.license_pool_id == self.id)
+            .filter(
+                or_(
+                    Hold.end == None,
+                    Hold.end > utc_now(),
+                    Hold.position > 0,
+                )
+            )
+            .order_by(Hold.start)
+            .all()
+        )
+
     def update_availability(
         self,
         new_licenses_owned,
@@ -580,7 +709,6 @@ class LicensePool(Base):
         Log the implied changes with the analytics provider.
         """
         changes_made = False
-        _db = Session.object_session(self)
         if not as_of:
             as_of = utc_now()
         elif as_of == CirculationEvent.NO_DATE:
@@ -974,13 +1102,13 @@ class LicensePool(Base):
         now = utc_now()
 
         for license in self.licenses:
-            if license.is_expired:
+            if license.is_inactive:
                 continue
 
             active_loan_count = len(
                 [l for l in license.loans if not l.end or l.end > now]
             )
-            if active_loan_count >= license.concurrent_checkouts:
+            if active_loan_count >= license.checkouts_available:
                 continue
 
             if (
@@ -995,7 +1123,7 @@ class LicensePool(Base):
                 or (
                     license.is_loan_limited
                     and best.is_loan_limited
-                    and license.remaining_checkouts > best.remaining_checkouts
+                    and license.checkouts_left > best.checkouts_left
                 )
             ):
                 best = license

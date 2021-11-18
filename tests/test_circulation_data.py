@@ -26,6 +26,7 @@ from ..model import (
     Subject,
 )
 from ..model.configuration import ExternalIntegrationLink
+from ..model.licensing import LicenseStatus
 from ..s3 import MockS3Uploader
 from ..testing import DatabaseTest, DummyHTTPClient
 from ..util.datetime_helpers import utc_now
@@ -225,8 +226,8 @@ class TestCirculationData(DatabaseTest):
         old_license = self._license(
             pool,
             expires=None,
-            remaining_checkouts=2,
-            concurrent_checkouts=3,
+            checkouts_left=2,
+            checkouts_available=3,
         )
 
         # And it has been loaned.
@@ -240,8 +241,10 @@ class TestCirculationData(DatabaseTest):
             checkout_url="https://borrow2",
             status_url="https://status2",
             expires=(utc_now() + datetime.timedelta(days=7)),
-            remaining_checkouts=None,
-            concurrent_checkouts=1,
+            checkouts_left=None,
+            checkouts_available=1,
+            terms_concurrency=1,
+            status=LicenseStatus.available,
         )
 
         circulation_data = CirculationData(
@@ -256,10 +259,101 @@ class TestCirculationData(DatabaseTest):
         self._db.commit()
 
         assert 2 == len(pool.licenses)
-        assert set([old_license.identifier, license_data.identifier]) == set(
-            [license.identifier for license in pool.licenses]
-        )
+        assert {old_license.identifier, license_data.identifier} == {
+            license.identifier for license in pool.licenses
+        }
         assert old_license == loan.license
+
+    def test_apply_updates_existing_licenses(self):
+        edition, pool = self._edition(with_license_pool=True)
+
+        # Start with one license for this pool.
+        old_license = self._license(
+            pool,
+            expires=None,
+            checkouts_left=2,
+            checkouts_available=3,
+        )
+
+        license_data = LicenseData(
+            identifier=old_license.identifier,
+            expires=old_license.expires,
+            checkouts_left=0,
+            checkouts_available=3,
+            status=LicenseStatus.unavailable,
+            checkout_url=old_license.checkout_url,
+            status_url=old_license.status_url,
+        )
+
+        circulation_data = CirculationData(
+            licenses=[license_data],
+            data_source=edition.data_source,
+            primary_identifier=edition.primary_identifier,
+        )
+
+        circulation_data.apply(self._db, pool.collection)
+        self._db.commit()
+
+        assert 1 == len(pool.licenses)
+        new_license = pool.licenses[0]
+        assert new_license.id == old_license.id
+        assert old_license.status == LicenseStatus.unavailable
+
+    def test_apply_with_licenses_overrides_availability(self):
+        edition, pool = self._edition(with_license_pool=True)
+
+        license_data = LicenseData(
+            identifier="8c5fdbfe-c26e-11e8-8706-5254009434c4",
+            checkout_url="https://borrow2",
+            status_url="https://status2",
+            checkouts_available=0,
+            terms_concurrency=1,
+            status=LicenseStatus.available,
+        )
+
+        # If we give CirculationData both availability information
+        # and licenses, it ignores the availability information and
+        # instead uses the licenses to calculate availability.
+        circulation_data = CirculationData(
+            licenses=[license_data],
+            data_source=edition.data_source,
+            primary_identifier=edition.primary_identifier,
+            licenses_owned=999,
+            licenses_available=999,
+            licenses_reserved=999,
+            patrons_in_hold_queue=999,
+        )
+
+        circulation_data.apply(self._db, pool.collection)
+
+        assert len(pool.licenses) == 1
+        assert pool.licenses_available == 0
+        assert pool.licenses_owned == 1
+        assert pool.licenses_reserved == 0
+        assert pool.patrons_in_hold_queue == 0
+
+    def test_apply_without_licenses_sets_availability(self):
+        edition, pool = self._edition(with_license_pool=True)
+
+        # If we give CirculationData availability information without
+        # also giving it licenses it uses the availability information
+        # to set values on the LicensePool.
+        circulation_data = CirculationData(
+            data_source=edition.data_source,
+            primary_identifier=edition.primary_identifier,
+            licenses_owned=999,
+            licenses_available=999,
+            licenses_reserved=999,
+            patrons_in_hold_queue=999,
+        )
+
+        circulation_data.apply(self._db, pool.collection)
+
+        assert len(pool.licenses) == 0
+        assert pool.licenses_available == 999
+        assert pool.licenses_owned == 999
+        assert pool.licenses_reserved == 999
+        assert pool.patrons_in_hold_queue == 999
 
     def test_apply_creates_work_and_presentation_edition_if_needed(self):
         edition = self._edition()

@@ -1763,13 +1763,6 @@ class CollectionInputScript(Script):
             action="append",
             default=[],
         )
-        parser.add_argument(
-            "--collection-type",
-            help="Collection type. Valid values are: OPEN_ACCESS (default), PROTECTED_ACCESS.",
-            type=CollectionType,
-            choices=list(CollectionType),
-            default=CollectionType.OPEN_ACCESS,
-        )
         return parser
 
 
@@ -1879,6 +1872,18 @@ class MirrorResourcesScript(CollectionInputScript):
 
     # This object contains the actual logic of mirroring.
     MIRROR_UTILITY = MetaToModelUtility()
+
+    @classmethod
+    def arg_parser(cls):
+        parser = super().arg_parser()
+        parser.add_argument(
+            "--collection-type",
+            help="Collection type. Valid values are: OPEN_ACCESS (default), PROTECTED_ACCESS.",
+            type=CollectionType,
+            choices=list(CollectionType),
+            default=CollectionType.OPEN_ACCESS,
+        )
+        return parser
 
     def do_run(self, cmd_args=None):
         parsed = self.parse_command_line(self._db, cmd_args=cmd_args)
