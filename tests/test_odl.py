@@ -1972,7 +1972,7 @@ class TestODLImporter(DatabaseTest, BaseODLTest):
 
         # Ensure the license was imported and is expired.
         [imported_license] = imported_pool.licenses
-        assert imported_license.is_expired is True
+        assert imported_license.is_inactive is True
 
     def test_odl_importer_reimport_expired_licenses(self, import_templated):
         license_expiry = dateutil.parser.parse("2021-01-01T00:01:00+00:00")
@@ -2008,7 +2008,7 @@ class TestODLImporter(DatabaseTest, BaseODLTest):
 
             # Ensure the license was imported and is not expired.
             [imported_license] = imported_pool.licenses
-            assert imported_license.is_expired is False
+            assert imported_license.is_inactive is False
 
         # Reimport the license when it is expired
         with freeze_time(license_expiry + datetime.timedelta(days=1)):
@@ -2035,7 +2035,7 @@ class TestODLImporter(DatabaseTest, BaseODLTest):
 
             # Ensure the license was imported and is expired.
             [imported_license] = imported_pool.licenses
-            assert imported_license.is_expired is True
+            assert imported_license.is_inactive is True
 
     @freeze_time("2021-01-01T00:00:00+00:00")
     def test_odl_importer_multiple_expired_licenses(self, import_templated):
@@ -2099,8 +2099,8 @@ class TestODLImporter(DatabaseTest, BaseODLTest):
         assert imported_pool.licenses_available == 6
 
         # Correct number of expired and unexpired licenses
-        assert sum([not l.is_expired for l in imported_pool.licenses]) == len(valid)
-        assert sum([l.is_expired for l in imported_pool.licenses]) == len(invalid)
+        assert sum([not l.is_inactive for l in imported_pool.licenses]) == len(valid)
+        assert sum([l.is_inactive for l in imported_pool.licenses]) == len(invalid)
 
     def test_odl_importer_reimport_multiple_licenses(self, import_templated):
         """Ensure ODLImporter correctly imports licenses that have already been imported."""
@@ -2141,7 +2141,7 @@ class TestODLImporter(DatabaseTest, BaseODLTest):
             assert imported_pool.licenses_owned == 7
 
             # No licenses are expired
-            assert sum([not l.is_expired for l in imported_pool.licenses]) == len(
+            assert sum([not l.is_inactive for l in imported_pool.licenses]) == len(
                 licenses
             )
 
@@ -2174,10 +2174,10 @@ class TestODLImporter(DatabaseTest, BaseODLTest):
             assert imported_pool.licenses_owned == 1
 
             # One license not expired
-            assert sum([not l.is_expired for l in imported_pool.licenses]) == 1
+            assert sum([not l.is_inactive for l in imported_pool.licenses]) == 1
 
             # Two licenses expired
-            assert sum([l.is_expired for l in imported_pool.licenses]) == 2
+            assert sum([l.is_inactive for l in imported_pool.licenses]) == 2
 
 
 class TestODLHoldReaper(DatabaseTest, BaseODLAPITest):
