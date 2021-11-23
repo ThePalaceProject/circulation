@@ -2,9 +2,10 @@ import binascii
 import datetime
 import json
 import logging
+import re
 import uuid
 from io import StringIO
-from typing import Callable, Optional
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import dateutil
 import feedparser
@@ -539,35 +540,57 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
         loan = loan.one()
         return self._fulfill(loan, internal_format)
 
-    def _fulfill(
+    @staticmethod
+    def _is_audiobook(
+        delivery_mechanism: Union[Optional[str], Optional[LicensePoolDeliveryMechanism]]
+    ) -> bool:
+        """Check whether a particular delivery mechanism delivers an audiobook.
+
+        :param delivery_mechanism: Selected delivery mechanism
+
+        :return: Boolean value showing whether a particular delivery mechanism delivers an audiobook
+        """
+        if not delivery_mechanism:
+            return False
+        elif isinstance(delivery_mechanism, str):
+            return delivery_mechanism == MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE
+        elif isinstance(delivery_mechanism, LicensePoolDeliveryMechanism):
+            return (
+                delivery_mechanism.delivery_mechanism.content_type
+                == MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE
+            )
+        else:
+            return False
+
+    def _find_content_link_and_type(
         self,
-        loan: Loan,
-        delivery_mechanism: Optional[LicensePoolDeliveryMechanism] = None,
-    ) -> FulfillmentInfo:
-        licensepool = loan.license_pool
-        doc = self.get_license_status_document(loan)
-        status = doc.get("status")
+        links: List[Dict],
+        delivery_mechanism: Union[
+            Optional[str], Optional[LicensePoolDeliveryMechanism]
+        ],
+        ignore_drm_scheme: bool = False,
+    ) -> Tuple[str, str]:
+        """Find a content link with the type information corresponding to the selected delivery mechanism.
 
-        if status not in [self.READY_STATUS, self.ACTIVE_STATUS]:
-            # This loan isn't available for some reason. It's possible
-            # the distributor revoked it or the patron already returned it
-            # through the DRM system, and we didn't get a notification
-            # from the distributor yet.
-            self.update_loan(loan, doc)
-            raise CannotFulfill()
+        :param links: List of dict-like objects containing information about available links in the LCP license file
+        :param delivery_mechanism: Selected delivery mechanism
 
-        expires = doc.get("potential_rights", {}).get("end")
-        expires = dateutil.parser.parse(expires)
-
-        links = doc.get("links", [])
+        :return: Two-tuple containing a content link and content type
+        """
         content_link = None
         content_type = None
+
         for link in links:
             # Depending on the format being served, the crucial information
             # may be in 'manifest' or in 'license'.
             if link.get("rel") in ("manifest", "license"):
                 candidate_content_link = link.get("href")
                 candidate_content_type = link.get("type")
+
+                if ignore_drm_scheme:
+                    candidate_content_type = re.sub(
+                        r";\s*protection=.+", "", candidate_content_type
+                    )
 
                 if not delivery_mechanism:
                     # If we don't have a LicensePoolDeliveryMechanism instance,
@@ -596,6 +619,45 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
                         content_link = candidate_content_link
                         content_type = candidate_content_type
                         break
+
+        return content_link, content_type
+
+    def _fulfill(
+        self,
+        loan: Loan,
+        delivery_mechanism: Optional[LicensePoolDeliveryMechanism] = None,
+    ) -> FulfillmentInfo:
+        licensepool = loan.license_pool
+        doc = self.get_license_status_document(loan)
+        status = doc.get("status")
+
+        if status not in [self.READY_STATUS, self.ACTIVE_STATUS]:
+            # This loan isn't available for some reason. It's possible
+            # the distributor revoked it or the patron already returned it
+            # through the DRM system, and we didn't get a notification
+            # from the distributor yet.
+            self.update_loan(loan, doc)
+            raise CannotFulfill()
+
+        expires = doc.get("potential_rights", {}).get("end")
+        expires = dateutil.parser.parse(expires)
+
+        links = doc.get("links", [])
+        content_link, content_type = self._find_content_link_and_type(
+            links, delivery_mechanism
+        )
+
+        if (
+            not content_link
+            and not content_type
+            and self._is_audiobook(delivery_mechanism)
+        ):
+            # DPLA's ODL feed doesn't always mention a DRM type of audiobooks.
+            # It means that DPLA audiobooks get imported without any DRM information
+            # and we have to look for them just by the content type.
+            content_link, content_type = self._find_content_link_and_type(
+                links, MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, True
+            )
 
         return FulfillmentInfo(
             licensepool.collection,

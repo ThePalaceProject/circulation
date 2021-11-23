@@ -30,6 +30,7 @@ from core.model import (
     ExternalIntegration,
     Hold,
     Hyperlink,
+    LicensePoolDeliveryMechanism,
     Loan,
     MediaTypes,
     Representation,
@@ -275,6 +276,11 @@ class BaseODLAPITest(BaseODLTest):
 
 
 class TestODLAPI(DatabaseTest, BaseODLAPITest):
+    AUDIO_BOOK_WITH_FEEDBOOKS_DRM = (
+        f"{MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE}; "
+        f"protection=http://www.feedbooks.com/audiobooks/access-restriction"
+    )
+
     def test_get_license_status_document_success(self, license, patron, api, library):
         # With a new loan.
         loan, _ = license.loan_to(patron)
@@ -772,15 +778,52 @@ class TestODLAPI(DatabaseTest, BaseODLAPITest):
         assert "http://acsm" == fulfillment.content_link
         assert DeliveryMechanism.ADOBE_DRM == fulfillment.content_type
 
-    def test_fulfill_success_manifest(
-        self, license, patron, api, checkout, pool, collection, db
+    @pytest.mark.parametrize(
+        "feed_content_type, feed_drm_scheme, type_in_license",
+        [
+            (
+                MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+                DeliveryMechanism.NO_DRM,
+                MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+            ),
+            (
+                MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+                DeliveryMechanism.NO_DRM,
+                AUDIO_BOOK_WITH_FEEDBOOKS_DRM,
+            ),
+            (
+                MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+                DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
+                AUDIO_BOOK_WITH_FEEDBOOKS_DRM,
+            ),
+        ],
+    )
+    def test_fulfill_successfully_fulfills_audiobooks(
+        self,
+        license,
+        patron,
+        api,
+        checkout,
+        pool,
+        collection,
+        db,
+        feed_content_type,
+        feed_drm_scheme,
+        type_in_license,
     ):
         # Fulfill a loan in a way that gives access to a manifest file.
         license.setup(concurrency=1, available=1)
         checkout()
 
-        audiobook = MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE
-
+        data_source = pool.data_source
+        identifier = pool.identifier
+        internal_format = LicensePoolDeliveryMechanism.set(
+            data_source,
+            identifier,
+            feed_content_type,
+            feed_drm_scheme,
+            RightsStatus.IN_COPYRIGHT,
+        )
         lsd = json.dumps(
             {
                 "status": "ready",
@@ -789,21 +832,23 @@ class TestODLAPI(DatabaseTest, BaseODLAPITest):
                     {
                         "rel": "manifest",
                         "href": "http://manifest",
-                        "type": audiobook,
+                        "type": type_in_license,
                     }
                 ],
             }
         )
 
         api.queue_response(200, content=lsd)
-        fulfillment = api.fulfill(patron, "pin", pool, audiobook)
+        fulfillment = api.fulfill(patron, "pin", pool, internal_format)
         assert collection == fulfillment.collection(db)
         assert pool.data_source.name == fulfillment.data_source_name
         assert pool.identifier.type == fulfillment.identifier_type
         assert pool.identifier.identifier == fulfillment.identifier
         assert datetime_utc(2017, 10, 21, 11, 12, 13) == fulfillment.content_expires
         assert "http://manifest" == fulfillment.content_link
-        assert audiobook == fulfillment.content_type
+        assert (
+            internal_format.delivery_mechanism.content_type == fulfillment.content_type
+        )
 
     def test_fulfill_cannot_fulfill(self, license, checkout, db, api, patron, pool):
         license.setup(concurrency=7, available=7)
