@@ -541,29 +541,7 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
         return self._fulfill(loan, internal_format)
 
     @staticmethod
-    def _is_audiobook(
-        delivery_mechanism: Union[Optional[str], Optional[LicensePoolDeliveryMechanism]]
-    ) -> bool:
-        """Check whether a particular delivery mechanism delivers an audiobook.
-
-        :param delivery_mechanism: Selected delivery mechanism
-
-        :return: Boolean value showing whether a particular delivery mechanism delivers an audiobook
-        """
-        if not delivery_mechanism:
-            return False
-        elif isinstance(delivery_mechanism, str):
-            return delivery_mechanism == MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE
-        elif isinstance(delivery_mechanism, LicensePoolDeliveryMechanism):
-            return (
-                delivery_mechanism.delivery_mechanism.content_type
-                == MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE
-            )
-        else:
-            return False
-
     def _find_content_link_and_type(
-        self,
         links: List[Dict],
         delivery_mechanism: Union[
             Optional[str], Optional[LicensePoolDeliveryMechanism]
@@ -650,7 +628,7 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
         if (
             not content_link
             and not content_type
-            and self._is_audiobook(delivery_mechanism)
+            and licensepool.presentation_edition.medium == Edition.AUDIO_MEDIUM
         ):
             # DPLA's ODL feed doesn't always mention a DRM type of audiobooks.
             # It means that DPLA audiobooks get imported without any DRM information

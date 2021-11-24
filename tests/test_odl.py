@@ -811,6 +811,9 @@ class TestODLAPI(DatabaseTest, BaseODLAPITest):
         feed_drm_scheme,
         type_in_license,
     ):
+        # We need to override the medium and set it to 'Audio'.
+        pool.presentation_edition.medium = Edition.AUDIO_MEDIUM
+
         # Fulfill a loan in a way that gives access to a manifest file.
         license.setup(concurrency=1, available=1)
         checkout()
