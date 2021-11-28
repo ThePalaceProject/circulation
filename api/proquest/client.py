@@ -1,5 +1,6 @@
 import logging
 from contextlib import contextmanager
+from typing import Dict
 
 import requests
 from flask_babel import lazy_gettext as _
@@ -12,6 +13,7 @@ from core.model.configuration import (
     ConfigurationFactory,
     ConfigurationGrouping,
     ConfigurationMetadata,
+    ConfigurationOption,
     ConfigurationStorage,
 )
 from core.util import is_session
@@ -459,6 +461,39 @@ class ProQuestAPIClient(object):
 
         return response_json[self.RESPONSE_OPDS_FEED_FIELD]
 
+    @staticmethod
+    def _is_feed_page_empty_or_incorrect(feed: Dict) -> bool:
+        """Determine whether the feed page is correctly structured and contains any publications.
+
+        ProQuest used to throw a 404 or 500 error when we tried to request a non-existent page,
+        but this behavior recently had changed. Instead of throwing an error, they
+        return empty pages, making CM infinitely loop through them.
+
+        NOTE: This method doesn't use a proper OPDS 2.x parser because it'd slow down downloading a big feed.
+        Instead, it uses a number of heuristics we got working with the ProQuest feed.
+        If the structure of the feed changes, this method will stop working and the download process will fail.
+        """
+        # 1. Let's see whether there are any groups.
+        groups = feed.get("groups")
+        if not groups or not isinstance(groups, list):
+            return True
+
+        # 2. Let's try to get the first one. The ProQuest feed usually contains a single group.
+        group = groups[0]
+        if not group or not isinstance(group, dict):
+            return True
+
+        # 3. Then let's see whether there any publications in the group.
+        publications = group.get("publications")
+        if (
+            not publications
+            or not isinstance(publications, list)
+            or len(publications) < 1
+        ):
+            return True
+
+        return False
+
     def download_feed_page(self, db, page, hits_per_page):
         """Download a single page of a paginated OPDS 2.0 feed.
 
@@ -534,6 +569,10 @@ class ProQuestAPIClient(object):
                     feed = self._download_feed_page(
                         configuration, page, configuration.page_size
                     )
+
+                    if self._is_feed_page_empty_or_incorrect(feed):
+                        break
+
                     page += 1
 
                     yield feed
