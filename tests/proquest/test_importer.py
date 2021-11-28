@@ -1414,3 +1414,29 @@ class TestProQuestOPDS2ImportMonitor(DatabaseTest):
         # Assert
         # Make sure that ProQuestOPDS2ImportMonitor.import_one_feed was called only for the page # 1
         monitor.import_one_feed.assert_has_calls(expected_calls)
+
+    def test_monitor_does_not_clean_removed_items_if_downloading_has_not_finished(self):
+        # Arrange
+        client = create_autospec(spec=ProQuestAPIClient)
+
+        # We want to emulate an exception happening during the download process.
+        client.download_all_feed_pages = MagicMock(side_effect=HTTPError)
+
+        client_factory = create_autospec(spec=ProQuestAPIClientFactory)
+        client_factory.create = MagicMock(return_value=client)
+
+        monitor = ProQuestOPDS2ImportMonitor(
+            client_factory,
+            self._db,
+            self._proquest_collection,
+            ProQuestOPDS2Importer,
+            RWPMManifestParser(OPDS2FeedParserFactory()),
+            process_removals=True,
+        )
+        monitor._clean_removed_items = MagicMock()
+
+        # Act
+        monitor.run_once(False)
+
+        # Assert
+        monitor._clean_removed_items.assert_not_called()
