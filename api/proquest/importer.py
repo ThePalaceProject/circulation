@@ -1003,6 +1003,7 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
             self._logger.exception(
                 "An unexpected exception occurred during fetching ProQuest paged OPDS 2.0 feeds"
             )
+            raise
         finally:
             shutil.rmtree(feed_pages_directory)
 
@@ -1011,27 +1012,32 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
     def run_once(self, progress_ignore):
         # This list is used to keep track of all identifiers in the ProQuest feed.
         feed_identifiers = []
-
-        feeds = self._get_feeds()
         total_imported = 0
         total_failures = 0
 
-        for link, feed in feeds:
-            if self._process_removals:
-                self._collect_feed_identifiers(feed, feed_identifiers)
+        try:
+            feeds = self._get_feeds()
 
-            self.log.info("Importing next feed: %s", link)
-            imported_editions, failures = self.import_one_feed(feed)
-            total_imported += len(imported_editions)
-            total_failures += len(failures)
-            self._db.commit()
+            for link, feed in feeds:
+                if self._process_removals:
+                    self._collect_feed_identifiers(feed, feed_identifiers)
+
+                self.log.info("Importing next feed: %s", link)
+                imported_editions, failures = self.import_one_feed(feed)
+                total_imported += len(imported_editions)
+                total_failures += len(failures)
+                self._db.commit()
+
+            if self._process_removals:
+                self._clean_removed_items(feed_identifiers)
+        except Exception:
+            self._logger.exception(
+                "An unexpected error occurred while importing the ProQuest feed"
+            )
 
         achievements = "Items imported: %d. Failures: %d." % (
             total_imported,
             total_failures,
         )
-
-        if self._process_removals:
-            self._clean_removed_items(feed_identifiers)
 
         return TimestampData(achievements=achievements)
