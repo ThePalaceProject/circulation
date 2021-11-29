@@ -92,7 +92,7 @@ class TestODL2Importer(TestODLImporter):
             ),
             left=30,
             available=10,
-            content_types=[ODL2Importer.FEEDBOOKS_AUDIO]
+            content_types=[ODL2Importer.FEEDBOOKS_AUDIO],
         )
 
         mock_get.add(moby_dick_license)

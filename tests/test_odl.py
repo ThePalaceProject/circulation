@@ -111,9 +111,7 @@ class LicenseInfoHelper:
         if self.content_types is not None:
             output["format"] = self.content_types
         if self.drm_schemes is not None:
-            output["protection"] = {
-                "format": self.drm_schemes
-            }
+            output["protection"] = {"format": self.drm_schemes}
         return json.dumps(output)
 
 

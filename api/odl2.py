@@ -235,7 +235,8 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
                     # We want to try to extract that information from the License Info Document it's present there.
                     if (
                         license_format == MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE
-                        and parsed_license and parsed_license.content_types
+                        and parsed_license
+                        and parsed_license.content_types
                     ):
                         for content_type in parsed_license.content_types:
                             if MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE in content_type:

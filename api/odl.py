@@ -1057,7 +1057,7 @@ class ODLImporter(OPDSImporter):
             checkouts_available=available,
             status=status,
             terms_concurrency=concurrency,
-            content_types=content_types
+            content_types=content_types,
         )
 
     @classmethod
