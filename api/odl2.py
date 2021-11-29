@@ -177,42 +177,6 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
         if publication.licenses:
             for odl_license in publication.licenses:
                 identifier = odl_license.metadata.identifier
-
-                for license_format in odl_license.metadata.formats:
-                    if (
-                        skipped_license_formats
-                        and license_format in skipped_license_formats
-                    ):
-                        continue
-
-                    if not medium:
-                        medium = Edition.medium_from_media_type(license_format)
-
-                    drm_schemes = (
-                        odl_license.metadata.protection.formats
-                        if odl_license.metadata.protection
-                        else []
-                    )
-
-                    if license_format in self.LICENSE_FORMATS:
-                        drm_scheme = self.LICENSE_FORMATS[license_format][
-                            self.DRM_SCHEME
-                        ]
-                        license_format = self.LICENSE_FORMATS[license_format][
-                            self.CONTENT_TYPE
-                        ]
-
-                        drm_schemes.append(drm_scheme)
-
-                    for drm_scheme in drm_schemes or [None]:
-                        formats.append(
-                            FormatData(
-                                content_type=license_format,
-                                drm_scheme=drm_scheme,
-                                rights_uri=RightsStatus.IN_COPYRIGHT,
-                            )
-                        )
-
                 checkout_link = first_or_default(
                     odl_license.links.get_by_rel(OPDS2LinkRelationsRegistry.BORROW.key)
                 )
@@ -250,6 +214,51 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
 
                 if parsed_license is not None:
                     licenses.append(parsed_license)
+
+                for license_format in odl_license.metadata.formats:
+                    if (
+                        skipped_license_formats
+                        and license_format in skipped_license_formats
+                    ):
+                        continue
+
+                    if not medium:
+                        medium = Edition.medium_from_media_type(license_format)
+
+                    drm_schemes = (
+                        odl_license.metadata.protection.formats
+                        if odl_license.metadata.protection
+                        else []
+                    )
+
+                    # DPLA feed doesn't have information about a DRM protection used for audiobooks.
+                    # We want to try to extract that information from the License Info Document it's present there.
+                    if (
+                        license_format == MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE
+                        and parsed_license and parsed_license.content_types
+                    ):
+                        for content_type in parsed_license.content_types:
+                            if MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE in content_type:
+                                license_format = content_type
+
+                    if license_format in self.LICENSE_FORMATS:
+                        drm_scheme = self.LICENSE_FORMATS[license_format][
+                            self.DRM_SCHEME
+                        ]
+                        license_format = self.LICENSE_FORMATS[license_format][
+                            self.CONTENT_TYPE
+                        ]
+
+                        drm_schemes.append(drm_scheme)
+
+                    for drm_scheme in drm_schemes or [None]:
+                        formats.append(
+                            FormatData(
+                                content_type=license_format,
+                                drm_scheme=drm_scheme,
+                                rights_uri=RightsStatus.IN_COPYRIGHT,
+                            )
+                        )
 
         metadata.circulation.licenses = licenses
         metadata.circulation.licenses_owned = None

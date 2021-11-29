@@ -81,12 +81,16 @@ class LicenseInfoHelper:
         available: int,
         status: str = "available",
         left: Optional[int] = None,
+        content_types: Optional[Union[str, List[str]]] = None,
+        drm_schemes: Optional[Union[str, List[str]]] = None,
     ) -> None:
         """Initialize a new instance of LicenseInfoHelper class."""
         self.license: LicenseHelper = license
         self.status: str = status
         self.left: int = left
         self.available: int = available
+        self.content_types = content_types
+        self.drm_schemes = drm_schemes
 
     def __str__(self) -> str:
         """Return a JSON representation of a part of the License Info Document."""
@@ -104,6 +108,12 @@ class LicenseInfoHelper:
             output["terms"]["expires"] = self.license.expires
         if self.left is not None:
             output["checkouts"]["left"] = self.left
+        if self.content_types is not None:
+            output["format"] = self.content_types
+        if self.drm_schemes is not None:
+            output["protection"] = {
+                "format": self.drm_schemes
+            }
         return json.dumps(output)
 
 

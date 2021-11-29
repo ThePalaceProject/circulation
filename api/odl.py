@@ -999,6 +999,7 @@ class ODLImporter(OPDSImporter):
         document_terms = license_info_document.get("terms", {})
         document_expires = document_terms.get("expires")
         document_concurrency = document_terms.get("concurrency")
+        document_format = license_info_document.get("format")
 
         if identifier is None:
             logging.error("License info document has no identifier.")
@@ -1040,6 +1041,13 @@ class ODLImporter(OPDSImporter):
         if document_concurrency is not None:
             concurrency = int(document_concurrency)
 
+        content_types = None
+        if document_format is not None:
+            if isinstance(document_format, str):
+                content_types = [document_format]
+            elif isinstance(document_format, list):
+                content_types = document_format
+
         return LicenseData(
             identifier=identifier,
             checkout_url=checkout_link,
@@ -1049,6 +1057,7 @@ class ODLImporter(OPDSImporter):
             checkouts_available=available,
             status=status,
             terms_concurrency=concurrency,
+            content_types=content_types
         )
 
     @classmethod
@@ -1180,7 +1189,6 @@ class ODLImporter(OPDSImporter):
                     break
 
             expires = None
-            total_checkouts = None
             concurrent_checkouts = None
 
             terms = parser._xpath(odl_license_tag, "odl:terms")
