@@ -284,11 +284,6 @@ class BaseODLAPITest(BaseODLTest):
 
 
 class TestODLAPI(DatabaseTest, BaseODLAPITest):
-    AUDIO_BOOK_WITH_FEEDBOOKS_DRM = (
-        f"{MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE}; "
-        f"protection=http://www.feedbooks.com/audiobooks/access-restriction"
-    )
-
     def test_get_license_status_document_success(self, license, patron, api, library):
         # With a new loan.
         loan, _ = license.loan_to(patron)
@@ -796,13 +791,8 @@ class TestODLAPI(DatabaseTest, BaseODLAPITest):
             ),
             (
                 MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-                DeliveryMechanism.NO_DRM,
-                AUDIO_BOOK_WITH_FEEDBOOKS_DRM,
-            ),
-            (
-                MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
                 DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
-                AUDIO_BOOK_WITH_FEEDBOOKS_DRM,
+                ODLImporter.FEEDBOOKS_AUDIO,
             ),
         ],
     )
