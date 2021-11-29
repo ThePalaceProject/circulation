@@ -565,11 +565,6 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
                 candidate_content_link = link.get("href")
                 candidate_content_type = link.get("type")
 
-                if ignore_drm_scheme:
-                    candidate_content_type = re.sub(
-                        r";\s*protection=.+", "", candidate_content_type
-                    )
-
                 if not delivery_mechanism:
                     # If we don't have a LicensePoolDeliveryMechanism instance,
                     # we can't really decide whether the link has the correct content and DRM type,
@@ -588,12 +583,37 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
                 elif isinstance(delivery_mechanism, LicensePoolDeliveryMechanism):
                     # If we have a LicensePoolDeliveryMechanism instance,
                     # then we use it to find a link with the correct content and DRM types.
-                    if (
+
+                    match = False
+
+                    # First, let's check if a content type is compound and contains both type and DRM scheme.
+                    if candidate_content_type in ODLImporter.LICENSE_FORMATS:
+                        drm_scheme = ODLImporter.LICENSE_FORMATS[
+                            candidate_content_type
+                        ][ODLImporter.DRM_SCHEME]
+                        candidate_content_type = ODLImporter.LICENSE_FORMATS[
+                            candidate_content_type
+                        ][ODLImporter.CONTENT_TYPE]
+
+                        if (
+                            drm_scheme
+                            == delivery_mechanism.delivery_mechanism.drm_scheme
+                            and candidate_content_type
+                            == delivery_mechanism.delivery_mechanism.content_type
+                        ):
+                            match = True
+                    # If the content type is not compound, then first compare it with the DRM scheme:
+                    # if the book is DRM protected the content type will actually contain the DRM type.
+                    # Then let's check the type itself.
+                    elif (
                         candidate_content_type
                         == delivery_mechanism.delivery_mechanism.drm_scheme
                         or candidate_content_type
                         == delivery_mechanism.delivery_mechanism.content_type
                     ):
+                        match = True
+
+                    if match:
                         content_link = candidate_content_link
                         content_type = candidate_content_type
                         break
@@ -624,18 +644,6 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
         content_link, content_type = self._find_content_link_and_type(
             links, delivery_mechanism
         )
-
-        if (
-            not content_link
-            and not content_type
-            and licensepool.presentation_edition.medium == Edition.AUDIO_MEDIUM
-        ):
-            # DPLA's ODL feed doesn't always mention a DRM type of audiobooks.
-            # It means that DPLA audiobooks get imported without any DRM information
-            # and we have to look for them just by the content type.
-            content_link, content_type = self._find_content_link_and_type(
-                links, MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, True
-            )
 
         return FulfillmentInfo(
             licensepool.collection,
@@ -960,6 +968,21 @@ class ODLImporter(OPDSImporter):
     # about the license.
     LICENSE_INFO_DOCUMENT_MEDIA_TYPE = "application/vnd.odl.info+json"
 
+    FEEDBOOKS_AUDIO = "{0}; protection={1}".format(
+        MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+        DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
+    )
+
+    CONTENT_TYPE = "content-type"
+    DRM_SCHEME = "drm-scheme"
+
+    LICENSE_FORMATS = {
+        FEEDBOOKS_AUDIO: {
+            CONTENT_TYPE: MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+            DRM_SCHEME: DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
+        }
+    }
+
     @classmethod
     def fetch_license_info(cls, document_link: str, do_get: Callable) -> Optional[dict]:
         status_code, _, response = do_get(document_link, headers={})
@@ -1142,11 +1165,7 @@ class ODLImporter(OPDSImporter):
 
             # But it may instead describe an audiobook protected with
             # the Feedbooks access-control scheme.
-            feedbooks_audio = "%s; protection=%s" % (
-                MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-                DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
-            )
-            if full_content_type == feedbooks_audio:
+            if full_content_type == cls.FEEDBOOKS_AUDIO:
                 content_type = MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE
                 drm_schemes.append(DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM)
 

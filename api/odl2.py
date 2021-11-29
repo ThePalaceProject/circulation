@@ -49,21 +49,6 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
 
     NAME = ODL2API.NAME
 
-    FEEDBOOKS_AUDIO = "{0}; protection={1}".format(
-        MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-        DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
-    )
-
-    CONTENT_TYPE = "content-type"
-    DRM_SCHEME = "drm-scheme"
-
-    LICENSE_FORMATS = {
-        FEEDBOOKS_AUDIO: {
-            CONTENT_TYPE: MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-            DRM_SCHEME: DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
-        }
-    }
-
     def __init__(
         self,
         db,
@@ -242,12 +227,12 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
                             if MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE in content_type:
                                 license_format = content_type
 
-                    if license_format in self.LICENSE_FORMATS:
-                        drm_scheme = self.LICENSE_FORMATS[license_format][
-                            self.DRM_SCHEME
+                    if license_format in ODLImporter.LICENSE_FORMATS:
+                        drm_scheme = ODLImporter.LICENSE_FORMATS[license_format][
+                            ODLImporter.DRM_SCHEME
                         ]
-                        license_format = self.LICENSE_FORMATS[license_format][
-                            self.CONTENT_TYPE
+                        license_format = ODLImporter.LICENSE_FORMATS[license_format][
+                            ODLImporter.CONTENT_TYPE
                         ]
 
                         drm_schemes.append(drm_scheme)
