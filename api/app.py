@@ -2,17 +2,15 @@ import logging
 import os
 import urllib.parse
 
-import flask
-from flask import Flask, Response, redirect
+from flask import Flask
 from flask_babel import Babel
 from flask_sqlalchemy_session import flask_scoped_session
-from sqlalchemy.orm import sessionmaker
 
+from api.config import Configuration
+from api.util.xray import PalaceXrayUtils
 from core.log import LogConfiguration
-from core.model import ConfigurationSetting, SessionManager
+from core.model import SessionManager
 from core.util import LanguageCodes
-
-from .config import Configuration
 
 app = Flask(__name__)
 app._db = None
@@ -21,6 +19,9 @@ app.config["BABEL_DEFAULT_LOCALE"] = LanguageCodes.three_to_two[
 ]
 app.config["BABEL_TRANSLATION_DIRECTORIES"] = "../translations"
 babel = Babel(app)
+
+# Setup AWS XRay for the app
+PalaceXrayUtils.configure_app(app)
 
 
 @app.before_first_request
@@ -42,8 +43,8 @@ def initialize_database(autoinitialize=True):
     logging.getLogger().info("Application debug mode==%r" % app.debug)
 
 
-from . import routes
-from .admin import routes
+from . import routes  # noqa
+from .admin import routes  # noqa
 
 
 def run(url=None):
