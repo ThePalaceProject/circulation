@@ -2,11 +2,13 @@ import logging
 import os
 from typing import Optional
 
-from aws_xray_sdk.core import AWSXRayRecorder, xray_recorder, patch as xray_patch
-from aws_xray_sdk.ext.httplib import add_ignored as httplib_add_ignored
+from aws_xray_sdk.core import AWSXRayRecorder
+from aws_xray_sdk.core import patch as xray_patch
+from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core.models.segment import Segment
 from aws_xray_sdk.ext.flask.middleware import XRayMiddleware
-from flask import Flask, request, Response, session
+from aws_xray_sdk.ext.httplib import add_ignored as httplib_add_ignored
+from flask import Flask, Response, request, session
 
 from core.config import Configuration
 
@@ -17,24 +19,31 @@ class PalaceXrayUtils:
     XRAY_ENV_ANNOTATE = "PALACE_XRAY_ANNOTATE_"
 
     @classmethod
-    def put_annotations(cls, segment: Optional[Segment], seg_type: Optional[str] = None):
+    def put_annotations(
+        cls, segment: Optional[Segment], seg_type: Optional[str] = None
+    ):
         if seg_type is not None:
-            segment.put_annotation('type', seg_type)
+            segment.put_annotation("type", seg_type)
 
         for env, value in os.environ.items():
             if env.startswith(cls.XRAY_ENV_ANNOTATE):
-                name = env.replace(cls.XRAY_ENV_ANNOTATE, '').lower()
+                name = env.replace(cls.XRAY_ENV_ANNOTATE, "").lower()
                 segment.put_annotation(name, value)
 
         if Configuration.app_version() != Configuration.NO_APP_VERSION_FOUND:
-            segment.put_annotation('version', Configuration.app_version())
+            segment.put_annotation("version", Configuration.app_version())
 
     @classmethod
     def setup_xray(cls):
         name = os.environ.get(cls.XRAY_ENV_NAME, "Palace")
-        xray_recorder.configure(service=name, streaming_threshold=5, context_missing='LOG_ERROR', plugins=["EC2Plugin"])
-        xray_patch(('httplib', 'sqlalchemy_core', 'requests'))
-        httplib_add_ignored(hostname='logs.*.amazonaws.com')
+        xray_recorder.configure(
+            service=name,
+            streaming_threshold=5,
+            context_missing="LOG_ERROR",
+            plugins=["EC2Plugin"],
+        )
+        xray_patch(("httplib", "sqlalchemy_core", "requests"))
+        httplib_add_ignored(hostname="logs.*.amazonaws.com")
 
     @classmethod
     def configure_app(cls, app: Flask):
@@ -46,7 +55,6 @@ class PalaceXrayUtils:
 
 
 class PalaceXrayMiddleware(XRayMiddleware):
-
     def __init__(self, app: Flask, recorder: AWSXRayRecorder):
         super().__init__(app, recorder)
 
@@ -73,16 +81,18 @@ class PalaceXrayMiddleware(XRayMiddleware):
 
         segment = self._recorder.current_segment()
         # Add library shortname
-        if hasattr(request, 'library'):
-            segment.put_annotation('library', str(request.library.short_name))
+        if hasattr(request, "library"):
+            segment.put_annotation("library", str(request.library.short_name))
 
         # Add patron data
-        if hasattr(request, 'patron'):
+        if hasattr(request, "patron"):
             segment.set_user(str(request.patron.authorization_identifier))
-            segment.put_annotation('barcode', str(request.patron.authorization_identifier))
+            segment.put_annotation(
+                "barcode", str(request.patron.authorization_identifier)
+            )
 
         # Add admin UI username
-        if 'admin_email' in session:
-            segment.set_user(session['admin_email'])
+        if "admin_email" in session:
+            segment.set_user(session["admin_email"])
 
         return response

@@ -1,4 +1,4 @@
-from unittest.mock import call, MagicMock
+from unittest.mock import MagicMock, call
 
 import aws_xray_sdk
 
@@ -7,7 +7,6 @@ from core.config import Configuration
 
 
 class TestPalaceXrayUtils:
-
     def test_put_annotations_none(self):
         # If no segment is passed in nothing is returned
         value = PalaceXrayUtils.put_annotations(None)
@@ -23,11 +22,16 @@ class TestPalaceXrayUtils:
         # Annotations are made based on environment variables
         segment = MagicMock()
         monkeypatch.setenv(f"{PalaceXrayUtils.XRAY_ENV_ANNOTATE}TEST", "test")
-        monkeypatch.setenv(f"{PalaceXrayUtils.XRAY_ENV_ANNOTATE}ANOTHER_TEST", "test123")
+        monkeypatch.setenv(
+            f"{PalaceXrayUtils.XRAY_ENV_ANNOTATE}ANOTHER_TEST", "test123"
+        )
         PalaceXrayUtils.put_annotations(segment)
         assert segment.put_annotation.called is True
         assert segment.put_annotation.call_count == 2
-        assert segment.put_annotation.call_args_list == [call("test", "test"), call("another_test", "test123")]
+        assert segment.put_annotation.call_args_list == [
+            call("test", "test"),
+            call("another_test", "test123"),
+        ]
 
     def test_put_annotations_version(self, monkeypatch):
         # The version number is added as an annotation
