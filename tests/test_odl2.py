@@ -10,6 +10,7 @@ from webpub_manifest_parser.odl.semantic import (
     ODL_PUBLICATION_MUST_CONTAIN_EITHER_LICENSES_OR_OA_ACQUISITION_LINK_ERROR,
 )
 
+from api.odl import ODLImporter
 from api.odl2 import ODL2API, ODL2APIConfiguration, ODL2Importer
 from core.coverage import CoverageFailure
 from core.model import (
@@ -92,7 +93,7 @@ class TestODL2Importer(TestODLImporter):
             ),
             left=30,
             available=10,
-            content_types=[ODL2Importer.FEEDBOOKS_AUDIO],
+            content_types=[ODLImporter.FEEDBOOKS_AUDIO],
         )
 
         mock_get.add(moby_dick_license)
