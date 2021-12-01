@@ -1,6 +1,5 @@
 # encoding: utf-8
 # BaseCoverageRecord, Timestamp, CoverageRecord, WorkCoverageRecord
-
 from sqlalchemy import (
     Column,
     DateTime,
@@ -661,12 +660,22 @@ class WorkCoverageRecord(Base, BaseCoverageRecord):
         # Make sure that works that previously had a
         # WorkCoverageRecord for this operation have their timestamp
         # and status updated.
+        # We want records to be updated in ascending order in order to avoid deadlocks.
+        # To guarantee lock order, we explicitly acquire locks by using a subquery with FOR UPDATE (with_for_update).
+        # Please refer for my details to this SO article:
+        # https://stackoverflow.com/questions/44660368/postgres-update-with-order-by-how-to-do-it
         update = (
             WorkCoverageRecord.__table__.update()
             .where(
-                and_(
-                    WorkCoverageRecord.work_id.in_(work_ids),
-                    WorkCoverageRecord.operation == operation,
+                WorkCoverageRecord.id.in_(
+                    _db.query(WorkCoverageRecord.id)
+                    .with_for_update()
+                    .filter(
+                        and_(
+                            WorkCoverageRecord.work_id.in_(work_ids),
+                            WorkCoverageRecord.operation == operation,
+                        )
+                    )
                 )
             )
             .values(dict(timestamp=timestamp, status=status, exception=exception))
