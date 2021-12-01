@@ -17,6 +17,7 @@ class PalaceXrayUtils:
     XRAY_ENV_ENABLE = "PALACE_XRAY"
     XRAY_ENV_NAME = "PALACE_XRAY_NAME"
     XRAY_ENV_ANNOTATE = "PALACE_XRAY_ANNOTATE_"
+    XRAY_ENV_PATRON_BARCODE = "PALACE_XRAY_INCLUDE_BARCODE"
 
     @classmethod
     def put_annotations(
@@ -46,12 +47,21 @@ class PalaceXrayUtils:
         httplib_add_ignored(hostname="logs.*.amazonaws.com")
 
     @classmethod
-    def configure_app(cls, app: Flask):
+    def enabled(cls) -> bool:
         enable_xray = os.environ.get(cls.XRAY_ENV_ENABLE)
-        if enable_xray and enable_xray.lower() == "true":
+        return enable_xray and enable_xray.lower() == "true"
+
+    @classmethod
+    def configure_app(cls, app: Flask):
+        if cls.enabled():
             logging.getLogger().info("Configuring app with AWS XRAY.")
             cls.setup_xray()
             PalaceXrayMiddleware(app, xray_recorder)
+
+    @classmethod
+    def include_barcode(cls):
+        include_barcode = os.environ.get(cls.XRAY_ENV_ENABLE, "true")
+        return include_barcode.lower() == "true"
 
 
 class PalaceXrayMiddleware(XRayMiddleware):
@@ -80,12 +90,17 @@ class PalaceXrayMiddleware(XRayMiddleware):
         super()._after_request(response)
 
         segment = self._recorder.current_segment()
+
         # Add library shortname
-        if hasattr(request, "library"):
+        if hasattr(request, "library") and hasattr(request.library, "short_name"):
             segment.put_annotation("library", str(request.library.short_name))
 
         # Add patron data
-        if hasattr(request, "patron"):
+        if (
+            PalaceXrayUtils.include_barcode()
+            and hasattr(request, "patron")
+            and hasattr(request.patron, "authorization_identifier")
+        ):
             segment.set_user(str(request.patron.authorization_identifier))
             segment.put_annotation(
                 "barcode", str(request.patron.authorization_identifier)
