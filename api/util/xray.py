@@ -60,7 +60,7 @@ class PalaceXrayUtils:
 
     @classmethod
     def include_barcode(cls):
-        include_barcode = os.environ.get(cls.XRAY_ENV_ENABLE, "true")
+        include_barcode = os.environ.get(cls.XRAY_ENV_PATRON_BARCODE, "true")
         return include_barcode.lower() == "true"
 
 
