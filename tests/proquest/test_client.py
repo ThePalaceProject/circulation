@@ -143,6 +143,27 @@ class TestProQuestAPIClient(DatabaseTest):
                 "json_document_does_not_contain_opds_feed",
                 {"json": {ProQuestAPIClient.RESPONSE_STATUS_CODE_FIELD: 200}},
             ),
+            (
+                "json_document_contains_incorrect_opds_feed",
+                {
+                    "json": {
+                        ProQuestAPIClient.RESPONSE_STATUS_CODE_FIELD: 200,
+                        "opdsFeed": {"publications": [], "group": {"publications": []}},
+                    }
+                },
+            ),
+            (
+                "json_document_contains_empty_opds_feed",
+                {
+                    "json": {
+                        ProQuestAPIClient.RESPONSE_STATUS_CODE_FIELD: 200,
+                        "opdsFeed": {
+                            "publications": [],
+                            "groups": {"publications": []},
+                        },
+                    }
+                },
+            ),
         ]
     )
     def test_download_all_feed_pages_correctly_stops(
@@ -159,8 +180,14 @@ class TestProQuestAPIClient(DatabaseTest):
         books_catalog_service_url_3 = URLUtility.build_url(
             BOOKS_CATALOG_SERVICE_URL, {"page": 3, "hitsPerPage": page_size}
         )
-        expected_feed_1 = {"metadata": {"title": "Page 1"}}
-        expected_feed_2 = {"metadata": {"title": "Page 2"}}
+        expected_feed_1 = {
+            "metadata": {"title": "Page 1"},
+            "groups": [{"publications": [{"metadata": {"title": "Publication 1"}}]}],
+        }
+        expected_feed_2 = {
+            "metadata": {"title": "Page 2"},
+            "groups": [{"publications": [{"metadata": {"title": "Publication 2"}}]}],
+        }
         expected_response_1 = {
             ProQuestAPIClient.RESPONSE_STATUS_CODE_FIELD: 200,
             ProQuestAPIClient.RESPONSE_OPDS_FEED_FIELD: expected_feed_1,
