@@ -8,7 +8,6 @@ from html_sanitizer import Sanitizer
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 
-from .constants import RegistrationConstants
 from api.adobe_vendor_id import AuthdataUtility
 from api.config import Configuration
 from api.controller import CirculationManager
@@ -24,6 +23,8 @@ from core.scripts import LibraryInputScript
 from core.util.http import HTTP
 from core.util.problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
 from core.util.problem_detail import ProblemDetail
+
+from .constants import RegistrationConstants
 
 
 class RemoteRegistry:

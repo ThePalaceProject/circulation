@@ -83,7 +83,10 @@ class VendorIDTest(DatabaseTest):
                 self._db, ExternalIntegration.PASSWORD, library, self.registry
             ).value = secret
             ConfigurationSetting.for_library_and_externalintegration(
-                self._db, RegistrationConstants.LIBRARY_REGISTRATION_STATUS, library, self.registry
+                self._db,
+                RegistrationConstants.LIBRARY_REGISTRATION_STATUS,
+                library,
+                self.registry,
             ).value = RegistrationConstants.SUCCESS_STATUS
 
             library.setting(Configuration.WEBSITE_URL).value = library_uri

@@ -731,10 +731,18 @@ class AuthdataUtility(object):
             vendor_id = ConfigurationSetting.for_externalintegration(
                 cls.VENDOR_ID_KEY, possible_integration
             ).value
-            registration_status = ConfigurationSetting.for_library_and_externalintegration(
-                _db, RegistrationConstants.LIBRARY_REGISTRATION_STATUS, library, possible_integration
-            ).value
-            if vendor_id and registration_status == RegistrationConstants.SUCCESS_STATUS:
+            registration_status = (
+                ConfigurationSetting.for_library_and_externalintegration(
+                    _db,
+                    RegistrationConstants.LIBRARY_REGISTRATION_STATUS,
+                    library,
+                    possible_integration,
+                ).value
+            )
+            if (
+                vendor_id
+                and registration_status == RegistrationConstants.SUCCESS_STATUS
+            ):
                 integration = possible_integration
                 break
         else:

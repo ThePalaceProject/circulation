@@ -631,9 +631,11 @@ class TestAuthdataUtility(VendorIDTest):
             (RegistrationConstants.SUCCESS_STATUS, AuthdataUtility),
             (RegistrationConstants.FAILURE_STATUS, type(None)),
             (None, type(None)),
-        ]
+        ],
     )
-    def test_eligible_authdata_vendor_id_integrations(self, registration_status, authdata_utility_type):
+    def test_eligible_authdata_vendor_id_integrations(
+        self, registration_status, authdata_utility_type
+    ):
         # Only a discovery integration with a successful registration for
         # a given library is eligible to provide an AuthdataUtility.
         library = self._default_library
@@ -645,7 +647,10 @@ class TestAuthdataUtility(VendorIDTest):
             library=library,
         )
         ConfigurationSetting.for_library_and_externalintegration(
-            self._db, RegistrationConstants.LIBRARY_REGISTRATION_STATUS, library, registry
+            self._db,
+            RegistrationConstants.LIBRARY_REGISTRATION_STATUS,
+            library,
+            registry,
         ).value = registration_status
 
         utility = AuthdataUtility.from_config(library)

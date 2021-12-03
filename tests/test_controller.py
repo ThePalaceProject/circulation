@@ -543,7 +543,10 @@ class TestCirculationManager(CirculationControllerTest):
         registry_integration.set_setting(AuthdataUtility.VENDOR_ID_KEY, "vendorid")
         # Indicate that the library has successfully registered.
         ConfigurationSetting.for_library_and_externalintegration(
-            self._db, RegistrationConstants.LIBRARY_REGISTRATION_STATUS, self.library, registry_integration
+            self._db,
+            RegistrationConstants.LIBRARY_REGISTRATION_STATUS,
+            self.library,
+            registry_integration,
         ).value = RegistrationConstants.SUCCESS_STATUS
 
         # Then try to set up the Adobe Vendor ID configuration for
