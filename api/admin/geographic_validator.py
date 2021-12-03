@@ -12,7 +12,7 @@ from pypostalcode import PostalCodeDatabase
 from api.admin.exceptions import *
 from api.admin.validator import Validator
 from api.problem_details import *
-from api.registry import RemoteRegistry
+from api.registration.registry import RemoteRegistry
 from core.model import ExternalIntegration, Representation
 from core.util.http import HTTP
 from core.util.problem_detail import ProblemDetail

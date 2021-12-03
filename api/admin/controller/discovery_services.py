@@ -2,12 +2,11 @@ import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
 
+from . import SettingsController
 from api.admin.problem_details import *
-from api.registry import RemoteRegistry
+from api.registration.registry import RemoteRegistry
 from core.model import ExternalIntegration, get_one, get_one_or_create
 from core.util.problem_detail import ProblemDetail
-
-from . import SettingsController
 
 
 class DiscoveryServicesController(SettingsController):

@@ -11,7 +11,7 @@ from api.admin.exceptions import (
     UNKNOWN_PROTOCOL,
     AdminNotAuthorized,
 )
-from api.registry import RemoteRegistry
+from api.registration.registry import RemoteRegistry
 from core.model import AdminRole, ExternalIntegration, create, get_one
 
 from .test_controller import SettingsControllerTest

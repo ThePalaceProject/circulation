@@ -5,7 +5,7 @@ import pytest
 from werkzeug.datastructures import MultiDict
 
 from api.admin.exceptions import *
-from api.registry import Registration, RemoteRegistry
+from api.registration.registry import Registration, RemoteRegistry
 from core.model import (
     AdminRole,
     ConfigurationSetting,

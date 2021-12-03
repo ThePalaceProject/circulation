@@ -4,7 +4,7 @@ from flask_babel import lazy_gettext as _
 
 from api.admin.problem_details import *
 from api.odl import SharedODLAPI
-from api.registry import Registration, RemoteRegistry
+from api.registration.registry import Registration, RemoteRegistry
 from core.model import Collection, ConfigurationSetting, Library, get_one
 from core.util.http import HTTP
 from core.util.problem_detail import ProblemDetail

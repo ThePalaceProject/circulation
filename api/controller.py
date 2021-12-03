@@ -278,7 +278,7 @@ class CirculationManager(object):
                 if domain:
                     patron_web_domains.add(domain)
 
-        from .registry import Registration
+        from api.registration.registry import Registration
 
         for setting in self._db.query(ConfigurationSetting).filter(
             ConfigurationSetting.key == Registration.LIBRARY_REGISTRATION_WEB_CLIENT

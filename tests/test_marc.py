@@ -5,7 +5,7 @@ import urllib.request
 from pymarc import Record
 
 from api.marc import LibraryAnnotator
-from api.registry import Registration
+from api.registration.registry import Registration
 from core.config import Configuration
 from core.marc import MARCExporter
 from core.model import ConfigurationSetting, ExternalIntegration

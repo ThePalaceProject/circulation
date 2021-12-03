@@ -10,7 +10,7 @@ from Crypto.PublicKey import RSA
 from api.adobe_vendor_id import AuthdataUtility
 from api.config import Configuration
 from api.problem_details import *
-from api.registry import LibraryRegistrationScript, Registration, RemoteRegistry
+from api.registration.registry import LibraryRegistrationScript, Registration, RemoteRegistry
 from core.model import ConfigurationSetting, ExternalIntegration
 from core.testing import DatabaseTest, DummyHTTPClient, MockRequestsResponse
 from core.util.http import HTTP

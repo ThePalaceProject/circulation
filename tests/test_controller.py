@@ -62,7 +62,7 @@ from api.opds import (
     SharedCollectionAnnotator,
 )
 from api.problem_details import *
-from api.registry import Registration
+from api.registration.registry import Registration
 from api.shared_collection import SharedCollectionAPI
 from api.simple_authentication import SimpleAuthenticationProvider
 from api.testing import VendorIDTest
