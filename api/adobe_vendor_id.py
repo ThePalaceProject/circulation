@@ -15,6 +15,7 @@ from jwt.algorithms import HMACAlgorithm
 from sqlalchemy.orm.session import Session
 
 from api.base_controller import BaseCirculationManagerController
+from api.registration.constants import RegistrationConstants
 from core.app_server import url_for
 from core.model import (
     ConfigurationSetting,
@@ -695,8 +696,12 @@ class AuthdataUtility(object):
     OTHER_LIBRARIES_KEY = "other_libraries"
 
     @classmethod
-    def from_config(cls, library, _db=None):
+    def from_config(cls, library: Library, _db=None):
         """Initialize an AuthdataUtility from site configuration.
+
+        The library must be successfully registered with a discovery
+        integration in order for that integration to be a candidate
+        to provide configuration for the AuthdataUtility.
 
         :return: An AuthdataUtility if one is configured; otherwise None.
 
@@ -722,21 +727,30 @@ class AuthdataUtility(object):
             )
         )
 
-        integration = None
         for possible_integration in integrations:
             vendor_id = ConfigurationSetting.for_externalintegration(
                 cls.VENDOR_ID_KEY, possible_integration
             ).value
-            if vendor_id:
+            registration_status = (
+                ConfigurationSetting.for_library_and_externalintegration(
+                    _db,
+                    RegistrationConstants.LIBRARY_REGISTRATION_STATUS,
+                    library,
+                    possible_integration,
+                ).value
+            )
+            if (
+                vendor_id
+                and registration_status == RegistrationConstants.SUCCESS_STATUS
+            ):
                 integration = possible_integration
                 break
+        else:
+            return None
 
         library_uri = ConfigurationSetting.for_library(
             Configuration.WEBSITE_URL, library
         ).value
-
-        if not integration:
-            return None
 
         vendor_id = integration.setting(cls.VENDOR_ID_KEY).value
         library_short_name = ConfigurationSetting.for_library_and_externalintegration(

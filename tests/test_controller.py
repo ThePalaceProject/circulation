@@ -19,7 +19,6 @@ from flask import Response as FlaskResponse
 from flask import url_for
 from flask_sqlalchemy_session import current_session
 from mock import MagicMock, patch
-from parameterized import parameterized
 from werkzeug.datastructures import ImmutableMultiDict
 from werkzeug.exceptions import NotFound
 
@@ -62,7 +61,7 @@ from api.opds import (
     SharedCollectionAnnotator,
 )
 from api.problem_details import *
-from api.registry import Registration
+from api.registration.registry import Registration, RegistrationConstants
 from api.shared_collection import SharedCollectionAPI
 from api.simple_authentication import SimpleAuthenticationProvider
 from api.testing import VendorIDTest
@@ -542,6 +541,13 @@ class TestCirculationManager(CirculationControllerTest):
         )
         registry_integration.username = "something"
         registry_integration.set_setting(AuthdataUtility.VENDOR_ID_KEY, "vendorid")
+        # Indicate that the library has successfully registered.
+        ConfigurationSetting.for_library_and_externalintegration(
+            self._db,
+            RegistrationConstants.LIBRARY_REGISTRATION_STATUS,
+            self.library,
+            registry_integration,
+        ).value = RegistrationConstants.SUCCESS_STATUS
 
         # Then try to set up the Adobe Vendor ID configuration for
         # that library.
