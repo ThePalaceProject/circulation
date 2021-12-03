@@ -7,6 +7,7 @@ from collections import defaultdict
 from api.adobe_vendor_id import AuthdataUtility
 from api.circulation import BaseCirculationAPI, CirculationAPI, HoldInfo, LoanInfo
 from api.config import Configuration, temp_config
+from api.registration.constants import RegistrationConstants
 from api.shared_collection import SharedCollectionAPI
 from core.model import (
     ConfigurationSetting,
@@ -81,6 +82,9 @@ class VendorIDTest(DatabaseTest):
             ConfigurationSetting.for_library_and_externalintegration(
                 self._db, ExternalIntegration.PASSWORD, library, self.registry
             ).value = secret
+            ConfigurationSetting.for_library_and_externalintegration(
+                self._db, RegistrationConstants.LIBRARY_REGISTRATION_STATUS, library, self.registry
+            ).value = RegistrationConstants.SUCCESS_STATUS
 
             library.setting(Configuration.WEBSITE_URL).value = library_uri
 

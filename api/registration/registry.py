@@ -8,6 +8,7 @@ from html_sanitizer import Sanitizer
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 
+from .constants import RegistrationConstants
 from api.adobe_vendor_id import AuthdataUtility
 from api.config import Configuration
 from api.controller import CirculationManager
@@ -25,7 +26,7 @@ from core.util.problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDI
 from core.util.problem_detail import ProblemDetail
 
 
-class RemoteRegistry(object):
+class RemoteRegistry:
     """A circulation manager's view of a remote service that supports
     the OPDS Directory Registration Protocol:
 
@@ -251,7 +252,7 @@ class RemoteRegistry(object):
         return Sanitizer().sanitize(html)
 
 
-class Registration(object):
+class Registration(RegistrationConstants):
     """A library's registration for a particular registry.
 
     The registration does not correspond to one specific data model
@@ -259,33 +260,6 @@ class Registration(object):
     ExternalIntegration, and a set of ConfigurationSettings that
     configure the relationship between the two.
     """
-
-    # A library may be succesfully registered with a registry, or the
-    # registration may have failed.
-    LIBRARY_REGISTRATION_STATUS = "library-registration-status"
-    SUCCESS_STATUS = "success"
-    FAILURE_STATUS = "failure"
-
-    # A library may be registered in a 'testing' stage or a
-    # 'production' stage. This represents the _library's_ opinion
-    # about whether the integration is ready for production. The
-    # library won't actually be in production (whatever that means for
-    # a given integration) until the _remote_ also thinks it should.
-    #
-    # TODO: Registration through the admin interface always happens in
-    # 'production' because there is no UI for specifying which stage
-    # to use.  When registration happens through a script, the admin gets
-    # to specify 'testing' or 'production'.
-    LIBRARY_REGISTRATION_STAGE = "library-registration-stage"
-    TESTING_STAGE = "testing"
-    PRODUCTION_STAGE = "production"
-    VALID_REGISTRATION_STAGES = [TESTING_STAGE, PRODUCTION_STAGE]
-
-    # A registry may provide access to a web client. If so, we'll store
-    # the URL so we can enable CORS headers in requests from that client,
-    # and use it in MARC records so the library's main catalog can link
-    # to it.
-    LIBRARY_REGISTRATION_WEB_CLIENT = "library-registration-web-client"
 
     def __init__(self, registry, library):
         self.registry = registry

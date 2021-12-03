@@ -15,6 +15,7 @@ from jwt.algorithms import HMACAlgorithm
 from sqlalchemy.orm.session import Session
 
 from api.base_controller import BaseCirculationManagerController
+from api.registration.constants import RegistrationConstants
 from core.app_server import url_for
 from core.model import (
     ConfigurationSetting,
@@ -727,7 +728,10 @@ class AuthdataUtility(object):
             vendor_id = ConfigurationSetting.for_externalintegration(
                 cls.VENDOR_ID_KEY, possible_integration
             ).value
-            if vendor_id:
+            registration_status = ConfigurationSetting.for_library_and_externalintegration(
+                _db, RegistrationConstants.LIBRARY_REGISTRATION_STATUS, library, possible_integration
+            ).value
+            if vendor_id and registration_status == RegistrationConstants.SUCCESS_STATUS:
                 integration = possible_integration
                 break
 
