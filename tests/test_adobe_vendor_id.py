@@ -19,6 +19,7 @@ from api.adobe_vendor_id import (
 from api.config import CannotLoadConfiguration, Configuration, temp_config
 from api.opds import CirculationManagerAnnotator
 from api.problem_details import *
+from api.registration.constants import RegistrationConstants
 from api.simple_authentication import SimpleAuthenticationProvider
 from api.testing import VendorIDTest
 from core.model import (
@@ -623,6 +624,33 @@ class TestAuthdataUtility(VendorIDTest):
                 "http://your-library.org/": ("you", "Your library secret")
             },
         )
+
+    @pytest.mark.parametrize(
+        "registration_status, authdata_utility_type",
+        [
+            (RegistrationConstants.SUCCESS_STATUS, AuthdataUtility),
+            (RegistrationConstants.FAILURE_STATUS, type(None)),
+            (None, type(None)),
+        ]
+    )
+    def test_eligible_authdata_vendor_id_integrations(self, registration_status, authdata_utility_type):
+        # Only a discovery integration with a successful registration for
+        # a given library is eligible to provide an AuthdataUtility.
+        library = self._default_library
+        self.initialize_adobe(library)
+        registry = ExternalIntegration.lookup(
+            self._db,
+            ExternalIntegration.OPDS_REGISTRATION,
+            ExternalIntegration.DISCOVERY_GOAL,
+            library=library,
+        )
+        ConfigurationSetting.for_library_and_externalintegration(
+            self._db, RegistrationConstants.LIBRARY_REGISTRATION_STATUS, library, registry
+        ).value = registration_status
+
+        utility = AuthdataUtility.from_config(library)
+
+        assert isinstance(utility, authdata_utility_type)
 
     def test_from_config(self):
         library = self._default_library
