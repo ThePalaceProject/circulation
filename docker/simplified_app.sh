@@ -64,6 +64,7 @@ set +x && source env/bin/activate && set -x
 python3 -m pip install -U pip setuptools
 # Install the necessary requirements.
 python3 -m pip install -r requirements.txt
+python3 -m pip install ddtrace
 
 # Install NLTK.
 python3 -m textblob.download_corpora
