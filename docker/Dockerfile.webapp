@@ -19,7 +19,7 @@ VOLUME /var/log
 WORKDIR /home/simplified/circulation
 EXPOSE 80
 
-CMD ["/sbin/my_init"]
+CMD ["ddtrace-run", "python3", "/sbin/my_init"]
 
 # # If you launch the container interactively with `docker run -it`,
 # # this is where you'll end up:

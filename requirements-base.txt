@@ -9,6 +9,7 @@ contextlib2==0.6.0.post1
 cryptography==3.3.2
 # docker is used for the LCP feature.
 docker==4.3.1
+ddtrace
 docutils==0.16
 expiringdict==1.2.1
 Flask-Cors==3.0.9
