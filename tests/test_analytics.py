@@ -19,14 +19,14 @@ class TestAnalytics(DatabaseTest):
         # supports multiple analytics providers, site-wide or with libraries
 
         # Two site-wide integrations
-        mock_integration, ignore = create(
+        site_wide_integration1, ignore = create(
             self._db,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol=MOCK_PROTOCOL,
         )
-        mock_integration.url = self._str
-        local_integration, ignore = create(
+        site_wide_integration1.url = self._str
+        site_wide_integration2, ignore = create(
             self._db,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
@@ -64,7 +64,7 @@ class TestAnalytics(DatabaseTest):
         analytics = Analytics(self._db)
         assert 2 == len(analytics.sitewide_providers)
         assert isinstance(analytics.sitewide_providers[0], MockAnalyticsProvider)
-        assert mock_integration.url == analytics.sitewide_providers[0].url
+        assert site_wide_integration1.url == analytics.sitewide_providers[0].url
         assert isinstance(analytics.sitewide_providers[1], LocalAnalyticsProvider)
         assert missing_integration.id in analytics.initialization_exceptions
 
@@ -79,22 +79,31 @@ class TestAnalytics(DatabaseTest):
         # variables with the current state of site analytics.
 
         # We have global analytics enabled.
-        assert True == Analytics.GLOBAL_ENABLED
+        assert Analytics.GLOBAL_ENABLED is True
 
         # We also have analytics enabled for two of the three libraries.
-        assert set([l1.id, l2.id]) == Analytics.LIBRARY_ENABLED
+        assert {l1.id, l2.id} == Analytics.LIBRARY_ENABLED
 
-        # If the analytics situation changes, instantiating an
-        # Analytics object will change the class variables.
-        self._db.delete(mock_integration)
-        self._db.delete(local_integration)
+        # Now we'll change the analytics configuration.
+        self._db.delete(site_wide_integration1)
+        self._db.delete(site_wide_integration2)
         self._db.delete(library_integration1)
 
-        # There are no longer any global analytics providers, and only
-        # one of the libraries has a library-specific provider.
-        analytics = Analytics(self._db)
-        assert False == Analytics.GLOBAL_ENABLED
-        assert set([l2.id]) == Analytics.LIBRARY_ENABLED
+        # But Analytics is a singleton, so if we instantiate a new
+        # Analytics object in the same app instance, it will be the
+        # same as the previous one.
+        analytics2 = Analytics(self._db)
+        assert analytics2 == analytics
+        assert 2 == len(analytics.sitewide_providers)
+        assert 1 == len(analytics.library_providers[l1.id])
+        assert 2 == len(analytics.library_providers[l2.id])
+
+        # If, however, we simulate a configuration refresh ...
+        analytics3 = Analytics(self._db, refresh=True)
+        # ... we will see the updated configuration.
+        assert analytics3 == analytics
+        assert Analytics.GLOBAL_ENABLED is False
+        assert {l2.id} == Analytics.LIBRARY_ENABLED
 
     def test_is_configured(self):
         # If the Analytics constructor has not been called, then
@@ -119,6 +128,9 @@ class TestAnalytics(DatabaseTest):
         assert True == Analytics.is_configured(library)
 
     def test_collect_event(self):
+        # This will be a site-wide integration because it will have no
+        # associated libraries when the Analytics singleton is instantiated.
+        # the first time.
         sitewide_integration, ignore = create(
             self._db,
             ExternalIntegration,
@@ -126,13 +138,15 @@ class TestAnalytics(DatabaseTest):
             protocol=MOCK_PROTOCOL,
         )
 
-        library, ignore = create(self._db, Library, short_name="library")
+        # This will be a per-library integration because it will have at least
+        # one associated library when the Analytics singleton is instantiated.
         library_integration, ignore = create(
             self._db,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol=MOCK_PROTOCOL,
         )
+        library, ignore = create(self._db, Library, short_name="library")
         library_integration.libraries += [library]
 
         work = self._work(title="title", with_license_pool=True)
@@ -166,36 +180,3 @@ class TestAnalytics(DatabaseTest):
         # It's counted as a sitewide event, but not as a library event.
         assert 3 == sitewide_provider.count
         assert 1 == library_provider.count
-
-    def test_initialize(self):
-
-        local_analytics = get_one(
-            self._db,
-            ExternalIntegration,
-            protocol=LocalAnalyticsProvider.__module__,
-            goal=ExternalIntegration.ANALYTICS_GOAL,
-        )
-
-        # There shouldn't exist a local analytics service.
-        assert None == local_analytics
-
-        # So when the Local Analytics provider is initialized, it will
-        # create one with the default name of "Local Analytics".
-        local_analytics = LocalAnalyticsProvider.initialize(self._db)
-
-        assert isinstance(local_analytics, ExternalIntegration)
-        assert local_analytics.name == LocalAnalyticsProvider.NAME
-
-        # When an analytics provider is initialized, retrieving a
-        # local analytics service should return the same one.
-        local_analytics = LocalAnalyticsProvider.initialize(self._db)
-
-        local_analytics_2 = get_one(
-            self._db,
-            ExternalIntegration,
-            protocol=LocalAnalyticsProvider.__module__,
-            goal=ExternalIntegration.ANALYTICS_GOAL,
-        )
-
-        assert local_analytics_2.id == local_analytics.id
-        assert local_analytics_2.name == local_analytics.name

@@ -13,4 +13,5 @@ class MockAnalyticsProvider(object):
         self.time = time
 
 
+# The Analytics class looks for the name "Provider".
 Provider = MockAnalyticsProvider

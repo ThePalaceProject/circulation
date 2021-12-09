@@ -16,6 +16,7 @@ from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm.session import Session
 
 from . import external_search
+from .analytics import Analytics
 from .classifier import Classifier
 from .config import Configuration
 from .coverage import (
@@ -224,6 +225,9 @@ class DatabaseTest(object):
         ExternalIntegration.reset_cache()
         Genre.reset_cache()
         Library.reset_cache()
+
+        # Reset the Analytics singleton between tests.
+        Analytics._reset_singleton_instance()
 
         # Also roll back any record of those changes in the
         # Configuration instance.

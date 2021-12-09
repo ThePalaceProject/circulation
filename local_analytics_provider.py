@@ -111,4 +111,5 @@ class LocalAnalyticsProvider(object):
         return local_analytics
 
 
+# The Analytics class looks for the name "Provider".
 Provider = LocalAnalyticsProvider

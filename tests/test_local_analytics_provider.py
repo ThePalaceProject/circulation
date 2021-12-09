@@ -1,9 +1,44 @@
 import pytest
 
 from ..local_analytics_provider import LocalAnalyticsProvider
-from ..model import CirculationEvent, ExternalIntegration, create
+from ..model import CirculationEvent, ExternalIntegration, create, get_one
 from ..testing import DatabaseTest
-from ..util.datetime_helpers import to_utc, utc_now
+from ..util.datetime_helpers import utc_now
+
+
+class TestInitializeLocalAnalyticsProvider(DatabaseTest):
+    def test_initialize(self):
+
+        local_analytics = get_one(
+            self._db,
+            ExternalIntegration,
+            protocol=LocalAnalyticsProvider.__module__,
+            goal=ExternalIntegration.ANALYTICS_GOAL,
+        )
+
+        # There shouldn't exist a local analytics service.
+        assert local_analytics is None
+
+        # So when the Local Analytics provider is initialized, it will
+        # create one with the default name of "Local Analytics".
+        local_analytics = LocalAnalyticsProvider.initialize(self._db)
+
+        assert isinstance(local_analytics, ExternalIntegration)
+        assert local_analytics.name == LocalAnalyticsProvider.NAME
+
+        # When an analytics provider is initialized, retrieving a
+        # local analytics service should return the same one.
+        local_analytics = LocalAnalyticsProvider.initialize(self._db)
+
+        local_analytics_2 = get_one(
+            self._db,
+            ExternalIntegration,
+            protocol=LocalAnalyticsProvider.__module__,
+            goal=ExternalIntegration.ANALYTICS_GOAL,
+        )
+
+        assert local_analytics_2.id == local_analytics.id
+        assert local_analytics_2.name == local_analytics.name
 
 
 class TestLocalAnalyticsProvider(DatabaseTest):
@@ -103,8 +138,8 @@ class TestLocalAnalyticsProvider(DatabaseTest):
         event, is_new = self.la.collect_event(
             self._default_library, None, "event", utc_now(), neighborhood="Gormenghast"
         )
-        assert True == is_new
-        assert None == event.location
+        assert is_new is True
+        assert event.location is None
 
         # Create another LocalAnalytics object that uses the patron
         # neighborhood as the event location.
@@ -118,7 +153,7 @@ class TestLocalAnalyticsProvider(DatabaseTest):
         event, is_new = la.collect_event(
             self._default_library, None, "event", utc_now(), neighborhood="Gormenghast"
         )
-        assert True == is_new
+        assert is_new is True
         assert "Gormenghast" == event.location
 
         # If no neighborhood is available, the event ends up with no location
@@ -130,5 +165,5 @@ class TestLocalAnalyticsProvider(DatabaseTest):
             utc_now(),
         )
         assert event2 != event
-        assert True == is_new
-        assert None == event2.location
+        assert is_new is True
+        assert event2.location is None
