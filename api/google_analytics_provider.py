@@ -151,4 +151,5 @@ class GoogleAnalyticsProvider(object):
         response = HTTP.post_with_timeout(url, params)
 
 
+# The Analytics class looks for the name "Provider".
 Provider = GoogleAnalyticsProvider

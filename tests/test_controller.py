@@ -5131,7 +5131,10 @@ class TestAnalyticsController(CirculationControllerTest):
         integration.setting(
             LocalAnalyticsProvider.LOCATION_SOURCE
         ).value = LocalAnalyticsProvider.LOCATION_SOURCE_NEIGHBORHOOD
-        self.manager.analytics = Analytics(self._db)
+
+        # The Analytics singleton will have already been instantiated,
+        # so here we simulate a reload of its configuration with `refresh`.
+        self.manager.analytics = Analytics(self._db, refresh=True)
 
         with self.request_context_with_library("/"):
             response = self.manager.analytics_controller.track_event(
