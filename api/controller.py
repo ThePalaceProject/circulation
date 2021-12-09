@@ -212,7 +212,7 @@ class CirculationManager(object):
         interface.
         """
         LogConfiguration.initialize(self._db)
-        self.analytics = Analytics(self._db)
+        self.analytics = Analytics(self._db, refresh=True)
         self.auth = Authenticator(self._db, self.analytics)
 
         self.setup_external_search()
