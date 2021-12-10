@@ -16,7 +16,7 @@ app.url_map.merge_slashes = False
 from flask_babel import lazy_gettext as _
 
 from core.app_server import ErrorHandler, compressible, returns_problem_detail
-from core.model import ConfigurationSetting
+from core.model import ConfigurationSetting, HasFullTableCache
 from core.util.problem_detail import ProblemDetail
 
 from .config import Configuration
@@ -46,6 +46,15 @@ def initialize_circulation_manager():
 def get_locale():
     languages = Configuration.localization_languages()
     return request.accept_languages.best_match(languages)
+
+
+@app.after_request
+def print_cache(response):
+    if hasattr(app, "_db") and HasFullTableCache.CACHE_ATTRIBUTE in app._db.info:
+        log = logging.getLogger("core.model.hasfulltablecache")
+        for cls, cache in g.palace_cache.items():
+            log.debug(f"{cls}: {cache.stats.hits}/{cache.stats.misses} hits/misses")
+    return response
 
 
 @app.teardown_request
@@ -256,7 +265,7 @@ def library_dir_route(path, *args, **kwargs):
             "/<library_short_name>" + path_without_slash + "/",
             strict_slashes=False,
             *args,
-            **kwargs
+            **kwargs,
         )(f)
         prefix_no_slash = app.route(
             "/<library_short_name>" + path_without_slash, *args, **kwargs
@@ -266,7 +275,7 @@ def library_dir_route(path, *args, **kwargs):
             strict_slashes=False,
             subdomain="<library_short_name>",
             *args,
-            **kwargs
+            **kwargs,
         )(prefix_no_slash)
         subdomain_no_slash = app.route(
             path_without_slash, subdomain="<library_short_name>", *args, **kwargs
