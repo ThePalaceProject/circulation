@@ -1,4 +1,3 @@
-import datetime
 import email
 import json
 import logging
@@ -72,8 +71,9 @@ from core.opds import AcquisitionFeed, NavigationFacets, NavigationFeed
 from core.opensearch import OpenSearchDocument
 from core.user_profile import ProfileController as CoreProfileController
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
-from core.util.datetime_helpers import from_timestamp, utc_now
+from core.util.datetime_helpers import utc_now
 from core.util.http import HTTP, RemoteIntegrationException
+from core.util.log import log_elapsed_time
 from core.util.opds_writer import OPDSFeed
 from core.util.problem_detail import ProblemDetail
 from core.util.string_helpers import base64
@@ -90,7 +90,7 @@ from .authenticator import (
     OAuthController,
 )
 from .base_controller import BaseCirculationManagerController
-from .circulation import CirculationAPI, FulfillmentInfo
+from .circulation import CirculationAPI
 from .circulation_exceptions import *
 from .config import CannotLoadConfiguration, Configuration
 from .custom_index import CustomIndexView
@@ -124,9 +124,9 @@ from .testing import MockCirculationAPI, MockSharedCollectionAPI
 
 
 class CirculationManager(object):
-    def __init__(self, _db, testing=False):
+    log = logging.getLogger("api.controller.CirculationManager")
 
-        self.log = logging.getLogger("Circulation manager web app")
+    def __init__(self, _db, testing=False):
         self._db = _db
 
         if not testing:
@@ -202,6 +202,7 @@ class CirculationManager(object):
             self.load_settings()
             self.site_configuration_last_update = last_update
 
+    @log_elapsed_time(log_method=log.debug, message_prefix="load_settings")
     def load_settings(self):
         """Load all necessary configuration settings and external
         integrations from the database.
