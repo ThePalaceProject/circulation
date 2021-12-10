@@ -9,6 +9,7 @@ import wcag_contrast_ratio
 from flask import Response
 from flask_babel import lazy_gettext as _
 from PIL import Image
+from sqlalchemy.orm import joinedload
 
 from api.admin.announcement_list_validator import AnnouncementListValidator
 from api.admin.geographic_validator import GeographicValidator
@@ -31,7 +32,13 @@ class LibrarySettingsController(SettingsController):
 
     def process_get(self):
         libraries = []
-        for library in self._db.query(Library).order_by(Library.name):
+        db_libraries = self._db.query(Library).all()
+        library_ids = [library.id for library in db_libraries]
+        db_configuration_settings = self._db.query(ConfigurationSetting).filter(ConfigurationSetting.id.in_(library_ids)).all()
+
+        ConfigurationSetting.update_cache(db_configuration_settings)
+
+        for library in db_libraries:
             # Only include libraries this admin has librarian access to.
             if not flask.request.admin or not flask.request.admin.is_librarian(library):
                 continue
