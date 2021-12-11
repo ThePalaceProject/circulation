@@ -3,7 +3,7 @@ import os
 from functools import update_wrapper, wraps
 
 import flask
-from flask import Response, make_response, redirect, request
+from flask import g, Response, make_response, redirect, request
 from flask_cors.core import get_cors_options, set_cors_headers
 from werkzeug.exceptions import HTTPException
 
@@ -52,7 +52,7 @@ def get_locale():
 def print_cache(response):
     if hasattr(app, "_db") and HasFullTableCache.CACHE_ATTRIBUTE in app._db.info:
         log = logging.getLogger("core.model.hasfulltablecache")
-        for cls, cache in g.palace_cache.items():
+        for cls, cache in app._db.info[HasFullTableCache.CACHE_ATTRIBUTE].items():
             log.debug(f"{cls}: {cache.stats.hits}/{cache.stats.misses} hits/misses")
     return response
 
