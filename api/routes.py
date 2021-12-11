@@ -3,7 +3,7 @@ import os
 from functools import update_wrapper, wraps
 
 import flask
-from flask import g, Response, make_response, redirect, request
+from flask import Response, g, make_response, redirect, request
 from flask_cors.core import get_cors_options, set_cors_headers
 from werkzeug.exceptions import HTTPException
 
