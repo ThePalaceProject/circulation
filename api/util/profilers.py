@@ -34,7 +34,7 @@ class PalacePyInstrumentProfiler(PalaceProfiler):
     ENVIRONMENT_VARIABLE = "PALACE_PYINSTRUMENT"
 
     @classmethod
-    def configure(cls, app):
+    def configure(cls, app: Flask):
         profile_dir = cls.create_profile_dir()
         if profile_dir is None:
             # We are not configured
@@ -66,7 +66,7 @@ class PalaceCProfileProfiler(PalaceProfiler):
     ENVIRONMENT_VARIABLE = "PALACE_CPROFILE"
 
     @classmethod
-    def configure(cls, app):
+    def configure(cls, app: Flask):
         profile_dir = cls.create_profile_dir()
         if profile_dir is None:
             # We are not configured
@@ -82,7 +82,7 @@ class PalaceXrayProfiler(PalaceProfiler):
     ENVIRONMENT_VARIABLE = "PALACE_XRAY"
 
     @classmethod
-    def configure(cls, app):
+    def configure(cls, app: Flask):
         if not cls.enabled():
             return
 
