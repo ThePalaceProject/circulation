@@ -6,6 +6,7 @@ import sys
 import urllib.parse
 from collections import defaultdict
 from time import mktime
+from typing import List, Optional
 from wsgiref.handlers import format_date_time
 
 import flask
@@ -73,7 +74,7 @@ from core.user_profile import ProfileController as CoreProfileController
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from core.util.datetime_helpers import utc_now
 from core.util.http import HTTP, RemoteIntegrationException
-from core.util.log import log_elapsed_time
+from core.util.log import elapsed_time_logging, log_elapsed_time
 from core.util.opds_writer import OPDSFeed
 from core.util.problem_detail import ProblemDetail
 from core.util.string_helpers import base64
@@ -223,32 +224,37 @@ class CirculationManager(object):
         new_top_level_lanes = {}
         # Create a CirculationAPI for each library.
         new_circulation_apis = {}
-
         # Potentially load a CustomIndexView for each library
         new_custom_index_views = {}
 
         # Make sure there's a site-wide public/private key pair.
         self.sitewide_key_pair
 
-        new_adobe_device_management = None
-        for library in self._db.query(Library):
-            lanes = load_lanes(self._db, library)
+        with elapsed_time_logging(
+            log_method=self.log.info,
+            skip_start=True,
+            message_prefix="load_settings - load libraries",
+        ):
+            libraries = self._db.query(Library)
 
-            new_top_level_lanes[library.id] = lanes
+        with elapsed_time_logging(
+            log_method=self.log.info,
+            message_prefix="load_settings - per-library lanes, custom indexes, api",
+        ):
+            for library in libraries:
+                new_top_level_lanes[library.id] = load_lanes(self._db, library)
+                new_custom_index_views[library.id] = CustomIndexView.for_library(
+                    library
+                )
+                new_circulation_apis[library.id] = self.setup_circulation(
+                    library, self.analytics
+                )
 
-            new_custom_index_views[library.id] = CustomIndexView.for_library(library)
+        with elapsed_time_logging(
+            log_method=self.log.info, message_prefix="Configure device management"
+        ):
+            self.adobe_device_management = self._dev_mgmt_from_libraries(libraries)
 
-            new_circulation_apis[library.id] = self.setup_circulation(
-                library, self.analytics
-            )
-
-            authdata = self.setup_adobe_vendor_id(self._db, library)
-            if authdata and not new_adobe_device_management:
-                # There's at least one library on this system that
-                # wants Vendor IDs. This means we need to advertise support
-                # for the Device Management Protocol.
-                new_adobe_device_management = DeviceManagementProtocolController(self)
-        self.adobe_device_management = new_adobe_device_management
         self.top_level_lanes = new_top_level_lanes
         self.circulation_apis = new_circulation_apis
         self.custom_index_views = new_custom_index_views
@@ -303,6 +309,20 @@ class CirculationManager(object):
             ).bool_value
             or False
         )
+
+    def _dev_mgmt_from_libraries(
+        self, libraries: List[Library]
+    ) -> Optional[DeviceManagementProtocolController]:
+        """Return a DeviceManagementProtocolController in any library uses Adobe Vendor IDs."""
+
+        for library in libraries:
+            authdata = self.setup_adobe_vendor_id(self._db, library)
+            if authdata:
+                device_management = DeviceManagementProtocolController(self)
+                break
+        else:
+            device_management = None
+        return device_management
 
     @property
     def external_search(self):
@@ -429,19 +449,25 @@ class CirculationManager(object):
         self.oauth_controller = OAuthController(self.auth)
         self.saml_controller = SAMLController(self, self.auth)
 
+    @log_elapsed_time(log_method=log.info, message_prefix="setup_adobe_vendor_id")
     def setup_adobe_vendor_id(self, _db, library):
         """If this Library has an Adobe Vendor ID integration,
         configure the controller for it.
 
         :return: An Authdata object for `library`, if one could be created.
         """
-        short_client_token_initialization_exceptions = dict()
-        adobe = ExternalIntegration.lookup(
-            _db,
-            ExternalIntegration.ADOBE_VENDOR_ID,
-            ExternalIntegration.DRM_GOAL,
-            library=library,
-        )
+        short_client_token_initialization_exceptions = {}
+        with elapsed_time_logging(
+            log_method=self.log.info,
+            skip_start=True,
+            message_prefix="Lookup Adobe Vendor ID integrations",
+        ):
+            adobe = ExternalIntegration.lookup(
+                _db,
+                ExternalIntegration.ADOBE_VENDOR_ID,
+                ExternalIntegration.DRM_GOAL,
+                library=library,
+            )
         warning = (
             "Adobe Vendor ID controller is disabled due to missing or"
             " incomplete configuration. This is probably nothing to"
@@ -472,16 +498,26 @@ class CirculationManager(object):
         # setup. We're not setting anything up here, but this is useful
         # information for the calling code to have so it knows
         # whether or not we should support the Device Management Protocol.
-        registry = ExternalIntegration.lookup(
-            _db,
-            ExternalIntegration.OPDS_REGISTRATION,
-            ExternalIntegration.DISCOVERY_GOAL,
-            library=library,
-        )
+        with elapsed_time_logging(
+            log_method=self.log.info,
+            skip_start=True,
+            message_prefix="Lookup registry integrations",
+        ):
+            registry = ExternalIntegration.lookup(
+                _db,
+                ExternalIntegration.OPDS_REGISTRATION,
+                ExternalIntegration.DISCOVERY_GOAL,
+                library=library,
+            )
         authdata = None
         if registry:
             try:
-                authdata = AuthdataUtility.from_config(library, _db)
+                with elapsed_time_logging(
+                    log_method=self.log.info,
+                    skip_start=True,
+                    message_prefix="setup_adobe_vendor_id - fetch authdata utility",
+                ):
+                    authdata = AuthdataUtility.from_config(library, _db)
             except CannotLoadConfiguration as e:
                 short_client_token_initialization_exceptions[library.id] = e
                 self.log.error(
