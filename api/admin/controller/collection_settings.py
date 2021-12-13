@@ -44,13 +44,14 @@ class CollectionSettingsController(SettingsController):
 
     # GET
     def process_get(self):
+        collections_db = self._db.query(Collection).order_by(Collection.name).all()
+        ConfigurationSetting.cache_warm(self._db)
+        Collection.cache_warm(self._db, lambda: collections_db)
         protocols = self._get_collection_protocols()
         user = flask.request.admin
         collections = []
         protocolClass = None
-        for collection_object in (
-            self._db.query(Collection).order_by(Collection.name).all()
-        ):
+        for collection_object in collections_db:
             if not user or not user.can_see_collection(collection_object):
                 continue
 
