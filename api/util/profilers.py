@@ -59,12 +59,10 @@ class PalacePyInstrumentProfiler(PalaceProfiler):
                 elapsed = (time.time() - g.profiler_starttime) * 1000.0
                 request_path = request.path.strip("/").replace("/", ".") or "root"
                 filename = cls.FILENAME_TEMPLATE.format(
-                    {
-                        "time": time.time(),
-                        "method": request.method,
-                        "path": request_path,
-                        "elapsed": elapsed,
-                    }
+                    time=time.time(),
+                    method=request.method,
+                    path=request_path,
+                    elapsed=elapsed,
                 )
                 filename += ".pyisession"
                 session.save(profile_dir / filename)
