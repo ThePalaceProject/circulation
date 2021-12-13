@@ -1599,8 +1599,8 @@ class SettingsController(AdminCirculationManagerController):
         services = []
         settings_query = (
             self._db.query(ConfigurationSetting)
-                .join(ExternalIntegration)
-                .filter(ExternalIntegration.goal == goal)
+            .join(ExternalIntegration)
+            .filter(ExternalIntegration.goal == goal)
         )
         ConfigurationSetting.cache_warm(self._db, settings_query.all)
         for service in self._db.query(ExternalIntegration).filter(
