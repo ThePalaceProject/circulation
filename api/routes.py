@@ -9,7 +9,7 @@ from flask_cors.core import get_cors_options, set_cors_headers
 from werkzeug.exceptions import HTTPException
 
 from core.app_server import ErrorHandler, compressible, returns_problem_detail
-from core.model import HasFullTableCache
+from core.model import HasSessionCache
 from core.util.problem_detail import ProblemDetail
 
 from .app import app, babel
@@ -44,9 +44,9 @@ def get_locale():
 
 @app.after_request
 def print_cache(response):
-    if hasattr(app, "_db") and HasFullTableCache.CACHE_ATTRIBUTE in app._db.info:
-        log = logging.getLogger("core.model.hasfulltablecache")
-        for cls, cache in app._db.info[HasFullTableCache.CACHE_ATTRIBUTE].items():
+    if hasattr(app, "_db") and HasSessionCache.CACHE_ATTRIBUTE in app._db.info:
+        log = logging.getLogger("core.model.hassessioncache")
+        for cls, cache in app._db.info[HasSessionCache.CACHE_ATTRIBUTE].items():
             log.debug(f"{cls}: {cache.stats.hits}/{cache.stats.misses} hits/misses")
     return response
 
