@@ -15,7 +15,7 @@ from api.admin.geographic_validator import GeographicValidator
 from api.admin.problem_details import *
 from api.config import Configuration
 from api.lanes import create_default_lanes
-from core.model import AdminRole, ConfigurationSetting, Library, create, get_one
+from core.model import ConfigurationSetting, Library, create, get_one
 from core.util import LanguageCodes
 from core.util.problem_detail import ProblemDetail
 
