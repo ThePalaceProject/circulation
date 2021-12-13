@@ -215,7 +215,24 @@ class CirculationManager(object):
         """
         LogConfiguration.initialize(self._db)
         self.analytics = Analytics(self._db, refresh=True)
-        self.auth = Authenticator(self._db, self.analytics)
+
+        with elapsed_time_logging(
+            log_method=self.log.debug,
+            skip_start=True,
+            message_prefix="load_settings - load libraries",
+        ):
+            libraries = self._db.query(Library).all()
+
+        with elapsed_time_logging(
+            log_method=self.log.debug,
+            skip_start=True,
+            message_prefix="load_settings - populate caches",
+        ):
+            # Populate caches
+            Library.cache_warm(self._db, lambda: libraries)
+            ConfigurationSetting.cache_warm(self._db)
+
+        self.auth = Authenticator(self._db, libraries, self.analytics)
 
         self.setup_external_search()
 
@@ -229,13 +246,6 @@ class CirculationManager(object):
 
         # Make sure there's a site-wide public/private key pair.
         self.sitewide_key_pair
-
-        with elapsed_time_logging(
-            log_method=self.log.debug,
-            skip_start=True,
-            message_prefix="load_settings - load libraries",
-        ):
-            libraries = self._db.query(Library)
 
         with elapsed_time_logging(
             log_method=self.log.debug,

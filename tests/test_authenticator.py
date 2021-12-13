@@ -12,7 +12,7 @@ from decimal import Decimal
 
 import flask
 import pytest
-from flask import Flask, url_for
+from flask import url_for
 from flask_babel import lazy_gettext as _
 from money import Money
 
@@ -29,14 +29,13 @@ from api.authenticator import (
     PatronData,
 )
 from api.clever import CleverAuthenticationAPI
-from api.config import CannotLoadConfiguration, Configuration, temp_config
+from api.config import CannotLoadConfiguration, Configuration
 from api.firstbook import FirstBookAuthenticationAPI
 from api.millenium_patron import MilleniumPatronAPI
 from api.opds import LibraryAnnotator
 from api.problem_details import *
 from api.problem_details import PATRON_OF_ANOTHER_LIBRARY
 from api.simple_authentication import SimpleAuthenticationProvider
-from api.testing import VendorIDTest
 from api.util.patron import PatronUtility
 from core.mock_analytics_provider import MockAnalyticsProvider
 from core.model import (
@@ -56,7 +55,6 @@ from core.user_profile import ProfileController
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from core.util.datetime_helpers import utc_now
 from core.util.http import IntegrationException
-from core.util.problem_detail import ProblemDetail
 
 from .test_controller import ControllerTest
 
@@ -520,7 +518,7 @@ class TestAuthenticator(ControllerTest):
 
         analytics = MockAnalyticsProvider()
 
-        auth = Authenticator(self._db, analytics)
+        auth = Authenticator(self._db, self._db.query(Library), analytics)
 
         # A LibraryAuthenticator has been created for each Library.
         assert "l1" in auth.library_authenticators
@@ -576,7 +574,7 @@ class TestAuthenticator(ControllerTest):
         l1, ignore = create(self._db, Library, short_name="l1")
         l2, ignore = create(self._db, Library, short_name="l2")
 
-        auth = Authenticator(self._db)
+        auth = Authenticator(self._db, self._db.query(Library))
         auth.library_authenticators["l1"] = MockLibraryAuthenticator("l1")
         auth.library_authenticators["l2"] = MockLibraryAuthenticator("l2")
 

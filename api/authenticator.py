@@ -8,6 +8,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from abc import ABCMeta
+from typing import Iterable, Optional
 
 import flask
 import jwt
@@ -25,6 +26,7 @@ from api.announcements import Announcements
 from api.custom_patron_catalog import CustomPatronCatalog
 from api.opds import LibraryAnnotator
 from api.saml.configuration.model import SAMLSettings
+from core.analytics import Analytics
 from core.model import (
     CirculationEvent,
     ConfigurationSetting,
@@ -535,27 +537,22 @@ class Authenticator(object):
 
     log = logging.getLogger("api.authenticator.Authenticator")
 
-    def __init__(self, _db, analytics=None):
-        # Pre-populate the configuration settings cache with all the settings
-        # we will need to create our authenticators.
-        settings_query = (
-            _db.query(ConfigurationSetting)
-            .join(ExternalIntegration)
-            .filter(ExternalIntegration.goal == ExternalIntegration.PATRON_AUTH_GOAL)
-        )
-        ConfigurationSetting.cache_warm(_db, settings_query.all)
-
+    def __init__(
+        self, _db, libraries: Iterable[Library], analytics: Optional[Analytics] = None
+    ):
         # Create authenticators
         self.library_authenticators = {}
-        self.populate_authenticators(_db, analytics)
+        self.populate_authenticators(_db, libraries, analytics)
 
     @property
     def current_library_short_name(self):
         return flask.request.library.short_name
 
     @log_elapsed_time(log_method=log.debug, message_prefix="populate_authenticators")
-    def populate_authenticators(self, _db, analytics):
-        for library in _db.query(Library):
+    def populate_authenticators(
+        self, _db, libraries: Iterable[Library], analytics: Optional[Analytics]
+    ):
+        for library in libraries:
             self.library_authenticators[
                 library.short_name
             ] = LibraryAuthenticator.from_config(_db, library, analytics)
