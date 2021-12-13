@@ -275,8 +275,8 @@ under the hood to do the profiling.
       from pathlib import Path
       from pstats import SortKey, Stats
         
-      prof_file_path = Path(os.environ.get("PALACE_CPROFILE"))
-      for file in prof_file_path.glob("*.prof"):
+      path = Path(os.environ.get("PALACE_CPROFILE"))
+      for file in path.glob("*.prof"):
           stats = Stats(str(file))
           stats.sort_stats(SortKey.CUMULATIVE, SortKey.CALLS)
           stats.print_stats()
