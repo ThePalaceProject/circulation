@@ -9,6 +9,7 @@ from flask import Flask, g, request
 
 class PalaceProfiler:
     ENVIRONMENT_VARIABLE: str
+    FILENAME_TEMPLATE = "{time:.0f}.{method}.{path}.{elapsed:.0f}ms"
 
     @classmethod
     def enabled(cls) -> bool:
@@ -57,7 +58,15 @@ class PalacePyInstrumentProfiler(PalaceProfiler):
                 session = g.profiler.stop()
                 elapsed = (time.time() - g.profiler_starttime) * 1000.0
                 request_path = request.path.strip("/").replace("/", ".") or "root"
-                filename = f"{time.time():.0f}.{request.method}.{request_path}.{elapsed:.0f}ms.pyisession"
+                filename = cls.FILENAME_TEMPLATE.format(
+                    {
+                        "time": time.time(),
+                        "method": request.method,
+                        "path": request_path,
+                        "elapsed": elapsed,
+                    }
+                )
+                filename += ".pyisession"
                 session.save(profile_dir / filename)
             return response
 
@@ -74,8 +83,11 @@ class PalaceCProfileProfiler(PalaceProfiler):
 
         from werkzeug.middleware.profiler import ProfilerMiddleware
 
+        filename = cls.FILENAME_TEMPLATE + ".prof"
         app.config["PROFILE"] = True
-        app.wsgi_app = ProfilerMiddleware(app.wsgi_app, profile_dir=str(profile_dir))
+        app.wsgi_app = ProfilerMiddleware(
+            app.wsgi_app, profile_dir=str(profile_dir), filename_format=filename
+        )
 
 
 class PalaceXrayProfiler(PalaceProfiler):
