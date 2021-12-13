@@ -531,9 +531,9 @@ class CirculationPatronProfileStorage(PatronProfileStorage):
 
 
 class Authenticator(object):
-    log = logging.getLogger("api.authenticator.Authenticator")
-
     """Route requests to the appropriate LibraryAuthenticator."""
+
+    log = logging.getLogger("api.authenticator.Authenticator")
 
     def __init__(self, _db, analytics=None):
         # Pre-populate the configuration settings cache with all the settings
