@@ -231,14 +231,14 @@ class CirculationManager(object):
         self.sitewide_key_pair
 
         with elapsed_time_logging(
-            log_method=self.log.info,
+            log_method=self.log.debug,
             skip_start=True,
             message_prefix="load_settings - load libraries",
         ):
             libraries = self._db.query(Library)
 
         with elapsed_time_logging(
-            log_method=self.log.info,
+            log_method=self.log.debug,
             message_prefix="load_settings - per-library lanes, custom indexes, api",
         ):
             for library in libraries:
@@ -251,7 +251,7 @@ class CirculationManager(object):
                 )
 
         with elapsed_time_logging(
-            log_method=self.log.info, message_prefix="Configure device management"
+            log_method=self.log.debug, message_prefix="Configure device management"
         ):
             self.adobe_device_management = self._dev_mgmt_from_libraries(libraries)
 
@@ -449,7 +449,7 @@ class CirculationManager(object):
         self.oauth_controller = OAuthController(self.auth)
         self.saml_controller = SAMLController(self, self.auth)
 
-    @log_elapsed_time(log_method=log.info, message_prefix="setup_adobe_vendor_id")
+    @log_elapsed_time(log_method=log.debug, message_prefix="setup_adobe_vendor_id")
     def setup_adobe_vendor_id(self, _db, library):
         """If this Library has an Adobe Vendor ID integration,
         configure the controller for it.
@@ -458,7 +458,7 @@ class CirculationManager(object):
         """
         short_client_token_initialization_exceptions = {}
         with elapsed_time_logging(
-            log_method=self.log.info,
+            log_method=self.log.debug,
             skip_start=True,
             message_prefix="Lookup Adobe Vendor ID integrations",
         ):
@@ -499,7 +499,7 @@ class CirculationManager(object):
         # information for the calling code to have so it knows
         # whether or not we should support the Device Management Protocol.
         with elapsed_time_logging(
-            log_method=self.log.info,
+            log_method=self.log.debug,
             skip_start=True,
             message_prefix="Lookup registry integrations",
         ):
@@ -513,7 +513,7 @@ class CirculationManager(object):
         if registry:
             try:
                 with elapsed_time_logging(
-                    log_method=self.log.info,
+                    log_method=self.log.debug,
                     skip_start=True,
                     message_prefix="setup_adobe_vendor_id - fetch authdata utility",
                 ):

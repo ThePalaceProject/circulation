@@ -553,7 +553,7 @@ class Authenticator(object):
     def current_library_short_name(self):
         return flask.request.library.short_name
 
-    @log_elapsed_time(log_method=log.info, message_prefix="populate_authenticators")
+    @log_elapsed_time(log_method=log.debug, message_prefix="populate_authenticators")
     def populate_authenticators(self, _db, analytics):
         for library in _db.query(Library):
             self.library_authenticators[
