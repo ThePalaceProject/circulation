@@ -7,10 +7,15 @@ from flask_babel import Babel
 from flask_sqlalchemy_session import flask_scoped_session
 
 from api.config import Configuration
-from api.util.xray import PalaceXrayUtils
 from core.log import LogConfiguration
 from core.model import SessionManager
 from core.util import LanguageCodes
+
+from .util.profilers import (
+    PalaceCProfileProfiler,
+    PalacePyInstrumentProfiler,
+    PalaceXrayProfiler,
+)
 
 app = Flask(__name__)
 app._db = None
@@ -24,8 +29,10 @@ babel = Babel(app)
 # we never want werkzeug's merge_slashes feature.
 app.url_map.merge_slashes = False
 
-# Setup AWS XRay for the app
-PalaceXrayUtils.configure_app(app)
+# Optionally setup any profilers that are enabled
+PalacePyInstrumentProfiler.configure(app)
+PalaceCProfileProfiler.configure(app)
+PalaceXrayProfiler.configure(app)
 
 
 @app.before_first_request

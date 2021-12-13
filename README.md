@@ -1,4 +1,4 @@
-# Library Simplified Circulation Manager
+# Palace Manager
 [![Test Circulation & Build Docker Images](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml/badge.svg)](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml)
 
 This is a [The Palace Project](https://thepalaceproject.org) maintained fork of the NYPL [Library Simplified](http://www.librarysimplified.org/) Circulation Manager.
@@ -152,7 +152,8 @@ This project runs all the unit tests through Github Actions for new pull request
 As mentioned above, Github Actions is also used to build and deploy Sphinx documentation to Github Pages. The relevant file can be found in `.github/workflows/docks.yml`.
 
 ## Testing
-The Github Actions CI service runs the unit tests against Python 3.6, 3.7, and 3.8 automatically using [tox](https://tox.readthedocs.io/en/latest/).
+
+The Github Actions CI service runs the unit tests against Python 3.6, 3.7, 3.8 and 3.9 automatically using [tox](https://tox.readthedocs.io/en/latest/).
 
 To run `pytest` unit tests locally, install `tox`.
 
@@ -171,6 +172,7 @@ flag.
 | py36        | Python 3.6     |
 | py37        | Python 3.7     |
 | py38        | Python 3.8     |
+| py39        | Python 3.9     |
 
 All of these environments are tested by default when running tox. To test one specific environment you can use the `-e`
 flag.
@@ -235,3 +237,72 @@ tox -e py36-docker -- tests/test_google_analytics_provider.py
 ## Usage with Docker
 
 Check out the [Docker README](/docker/README.md) in the `/docker` directory for in-depth information on optionally running and developing the Circulation Manager locally with Docker, or for deploying the Circulation Manager with Docker.
+
+## Performance Profiling
+
+There are three different profilers included to help measure the performance of the application. They can each be
+enabled by setting environment variables while starting the application. 
+
+### AWS XRay
+
+*Environment Variables*
+- `PALACE_XRAY`: Set to enable X-Ray tracing on the application.
+- `PALACE_XRAY_NAME`: The name of the service shown in x-ray for these traces.
+- `PALACE_XRAY_ANNOTATE_`: Any environment variable starting with this prefix will be added to to the trace as an 
+  annotation. 
+    - For example setting `PALACE_XRAY_ANNOTATE_KEY=value` will set the annotation `key=value` on all xray traces sent
+      from the application.
+- `PALACE_XRAY_INCLUDE_BARCODE`: If this environment variable is set to `true` then the tracing code will try to include
+  the patrons barcode in the user parameter of the trace, if a barcode is available.
+  
+ 
+Additional environment variables are provided by the [X-Ray Python SDK](https://docs.aws.amazon.com/xray/latest/devguide/xray-sdk-python-configuration.html#xray-sdk-python-configuration-envvars).
+  
+### cProfile
+
+This profiler uses the [werkzeug `ProfilerMiddleware`](https://werkzeug.palletsprojects.com/en/2.0.x/middleware/profiler/)
+to profile the code. This uses the [cProfile](https://docs.python.org/3/library/profile.html#module-cProfile) module 
+under the hood to do the profiling.
+
+*Environment Variables*
+- `PALACE_CPROFILE`: Profiling will the enabled if this variable is set. The saved profile data will be available at
+  path specified in the environment variable. 
+    - The profile data will have the extension `.prof`.
+    - The data can be accessed using the [`pstats.Stats` class](https://docs.python.org/3/library/profile.html#the-stats-class).
+    - Example code to print details of the gathered statistics:
+      ```python
+      import os
+      from pathlib import Path
+      from pstats import SortKey, Stats
+        
+      path = Path(os.environ.get("PALACE_CPROFILE"))
+      for file in path.glob("*.prof"):
+          stats = Stats(str(file))
+          stats.sort_stats(SortKey.CUMULATIVE, SortKey.CALLS)
+          stats.print_stats()
+      ```
+    
+
+### PyInstrument
+
+This profiler uses [PyInstrument](https://pyinstrument.readthedocs.io/en/latest/) to profile the code.
+
+*Environment Variables*
+- `PALACE_PYINSTRUMENT`: Profiling will the enabled if this variable is set. The saved profile data will be available at
+  path specified in the environment variable.
+    - The profile data will have the extension `.pyisession`.
+    - The data can be accessed with the [`pyinstrument.session.Session` class](https://pyinstrument.readthedocs.io/en/latest/reference.html#pyinstrument.session.Session).
+    - Example code to print details of the gathered statistics:
+      ```python
+      import os
+      from pathlib import Path
+        
+      from pyinstrument.renderers import HTMLRenderer
+      from pyinstrument.session import Session
+        
+      path = Path(os.environ.get("PALACE_PYINSTRUMENT"))
+      for file in path.glob("*.pyisession"):
+          session = Session.load(file)
+          renderer = HTMLRenderer()
+          renderer.open_in_browser(session)
+      ```

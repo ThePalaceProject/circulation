@@ -1,10 +1,8 @@
-import logging
 import os
 from typing import Optional
 
 from aws_xray_sdk.core import AWSXRayRecorder
 from aws_xray_sdk.core import patch as xray_patch
-from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.core.models.segment import Segment
 from aws_xray_sdk.ext.flask.middleware import XRayMiddleware
 from aws_xray_sdk.ext.httplib import add_ignored as httplib_add_ignored
@@ -13,8 +11,7 @@ from flask import Flask, Response, request, session
 from core.config import Configuration
 
 
-class PalaceXrayUtils:
-    XRAY_ENV_ENABLE = "PALACE_XRAY"
+class PalaceXrayMiddleware(XRayMiddleware):
     XRAY_ENV_NAME = "PALACE_XRAY_NAME"
     XRAY_ENV_ANNOTATE = "PALACE_XRAY_ANNOTATE_"
     XRAY_ENV_PATRON_BARCODE = "PALACE_XRAY_INCLUDE_BARCODE"
@@ -35,7 +32,7 @@ class PalaceXrayUtils:
             segment.put_annotation("version", Configuration.app_version())
 
     @classmethod
-    def setup_xray(cls):
+    def setup_xray(cls, xray_recorder):
         name = os.environ.get(cls.XRAY_ENV_NAME, "Palace")
         xray_recorder.configure(
             service=name,
@@ -47,24 +44,10 @@ class PalaceXrayUtils:
         httplib_add_ignored(hostname="logs.*.amazonaws.com")
 
     @classmethod
-    def enabled(cls) -> bool:
-        enable_xray = os.environ.get(cls.XRAY_ENV_ENABLE)
-        return enable_xray and enable_xray.lower() == "true"
-
-    @classmethod
-    def configure_app(cls, app: Flask):
-        if cls.enabled():
-            logging.getLogger().info("Configuring app with AWS XRAY.")
-            cls.setup_xray()
-            PalaceXrayMiddleware(app, xray_recorder)
-
-    @classmethod
     def include_barcode(cls):
         include_barcode = os.environ.get(cls.XRAY_ENV_PATRON_BARCODE, "true")
         return include_barcode.lower() == "true"
 
-
-class PalaceXrayMiddleware(XRayMiddleware):
     def __init__(self, app: Flask, recorder: AWSXRayRecorder):
         super().__init__(app, recorder)
 
@@ -84,7 +67,7 @@ class PalaceXrayMiddleware(XRayMiddleware):
             # If we are in the first request this work is already done
             return
         super()._before_request()
-        PalaceXrayUtils.put_annotations(self._recorder.current_segment(), "web")
+        self.put_annotations(self._recorder.current_segment(), "web")
 
     def _after_request(self, response: Response):
         super()._after_request(response)
@@ -97,7 +80,7 @@ class PalaceXrayMiddleware(XRayMiddleware):
 
         # Add patron data
         if (
-            PalaceXrayUtils.include_barcode()
+            self.include_barcode()
             and hasattr(request, "patron")
             and hasattr(request.patron, "authorization_identifier")
         ):
