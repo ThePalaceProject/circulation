@@ -543,7 +543,7 @@ class Authenticator(object):
             .join(ExternalIntegration)
             .filter(ExternalIntegration.goal == ExternalIntegration.PATRON_AUTH_GOAL)
         )
-        ConfigurationSetting.warm_cache(_db, settings_query.all)
+        ConfigurationSetting.cache_warm(_db, settings_query.all)
 
         # Create authenticators
         self.library_authenticators = {}
