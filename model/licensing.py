@@ -20,7 +20,7 @@ from . import Base, create, flush, get_one, get_one_or_create
 from .circulationevent import CirculationEvent
 from .complaint import Complaint
 from .constants import DataSourceConstants, EditionConstants, LinkRelations, MediaTypes
-from .hasfulltablecache import HasFullTableCache
+from .hassessioncache import HasSessionCache
 from .patron import Hold, Loan, Patron
 
 if TYPE_CHECKING:
@@ -1666,7 +1666,7 @@ Index(
 )
 
 
-class DeliveryMechanism(Base, HasFullTableCache):
+class DeliveryMechanism(Base, HasSessionCache):
     """A technique for delivering a book to a patron.
     There are two parts to this: a DRM scheme and a content
     type. Either may be identified with a MIME media type
@@ -1762,9 +1762,6 @@ class DeliveryMechanism(Base, HasFullTableCache):
         "LicensePoolDeliveryMechanism",
         backref="delivery_mechanism",
     )
-
-    _cache = HasFullTableCache.RESET
-    _id_cache = HasFullTableCache.RESET
 
     __table_args__ = (UniqueConstraint("content_type", "drm_scheme"),)
 

@@ -23,7 +23,6 @@ from ...model.coverage import CoverageRecord, WorkCoverageRecord
 from ...model.customlist import CustomList
 from ...model.datasource import DataSource
 from ...model.edition import Edition
-from ...model.hasfulltablecache import HasFullTableCache
 from ...model.identifier import Identifier
 from ...model.licensing import Hold, License, LicensePool, Loan
 from ...model.work import Work
@@ -45,16 +44,20 @@ class TestCollection(DatabaseTest):
         key = (name, protocol)
 
         # Cache is empty.
-        assert HasFullTableCache.RESET == Collection._cache
+        cache = Collection._cache_from_session(self._db)
+        assert len(cache.id) == 0
+        assert len(cache.key) == 0
 
         collection1, is_new = Collection.by_name_and_protocol(
             self._db, name, ExternalIntegration.OVERDRIVE
         )
         assert True == is_new
 
-        # Cache was populated and then reset because we created a new
-        # Collection.
-        assert HasFullTableCache.RESET == Collection._cache
+        # Cache was populated
+        assert len(cache.id) == 1
+        assert len(cache.key) == 1
+        assert cache.stats.hits == 0
+        assert cache.stats.misses == 1
 
         collection2, is_new = Collection.by_name_and_protocol(
             self._db, name, ExternalIntegration.OVERDRIVE
@@ -62,8 +65,12 @@ class TestCollection(DatabaseTest):
         assert collection1 == collection2
         assert False == is_new
 
-        # This time the cache was not reset after being populated.
-        assert collection1 == Collection._cache[key]
+        # Item is in cache
+        assert len(cache.id) == 1
+        assert len(cache.key) == 1
+        assert cache.stats.hits == 1
+        assert cache.stats.misses == 1
+        assert collection1 == cache.key[key]
 
         # You'll get an exception if you look up an existing name
         # but the protocol doesn't match.

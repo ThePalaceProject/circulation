@@ -6,10 +6,10 @@ import warnings
 
 from psycopg2.extensions import adapt as sqlescape
 from psycopg2.extras import NumericRange
-from sqlalchemy import Column, ForeignKey, Integer, Table, create_engine, text
+from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError, SAWarning
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, sessionmaker
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 from sqlalchemy.sql import compiler, select
 from sqlalchemy.sql.expression import literal_column, table
@@ -17,7 +17,6 @@ from sqlalchemy.sql.expression import literal_column, table
 Base = declarative_base()
 
 from .. import classifier
-from ..util.datetime_helpers import utc_now
 from .constants import (
     DataSourceConstants,
     EditionConstants,
@@ -417,9 +416,6 @@ class SessionManager(object):
 
         list(DataSource.well_known_sources(session))
 
-        # Load all existing Genre objects.
-        Genre.populate_cache(session)
-
         # Create any genres not in the database.
         for g in list(classifier.genres.values()):
             # TODO: On the very first startup this is rather expensive
@@ -500,7 +496,7 @@ from .credential import Credential, DelegatedPatronIdentifier, DRMDeviceIdentifi
 from .customlist import CustomList, CustomListEntry
 from .datasource import DataSource
 from .edition import Edition
-from .hasfulltablecache import HasFullTableCache
+from .hassessioncache import HasSessionCache
 from .identifier import Equivalency, Identifier
 from .integrationclient import IntegrationClient
 from .library import Library

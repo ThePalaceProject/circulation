@@ -31,7 +31,7 @@ from .constants import EditionConstants
 from .coverage import CoverageRecord, WorkCoverageRecord
 from .datasource import DataSource
 from .edition import Edition
-from .hasfulltablecache import HasFullTableCache
+from .hassessioncache import HasSessionCache
 from .identifier import Identifier
 from .integrationclient import IntegrationClient
 from .library import Library
@@ -39,7 +39,7 @@ from .licensing import LicensePool, LicensePoolDeliveryMechanism
 from .work import Work
 
 
-class Collection(Base, HasFullTableCache):
+class Collection(Base, HasSessionCache):
 
     """A Collection is a set of LicensePools obtained through some mechanism."""
 
@@ -122,9 +122,6 @@ class Collection(Base, HasFullTableCache):
     customlists = relationship(
         "CustomList", secondary=lambda: collections_customlists, backref="collections"
     )
-
-    _cache = HasFullTableCache.RESET
-    _id_cache = HasFullTableCache.RESET
 
     # Most data sources offer different catalogs to different
     # libraries.  Data sources in this list offer the same catalog to

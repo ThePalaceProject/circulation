@@ -3,6 +3,7 @@ from io import StringIO
 from urllib.parse import quote
 
 import pytest
+from freezegun import freeze_time
 from pymarc import MARCReader, Record
 from sqlalchemy.orm.session import Session
 
@@ -547,11 +548,16 @@ class TestMARCExporter(DatabaseTest):
         record = MARCExporter.create_record(work, annotator, integration=integration)
         assert integration == annotator.integration
 
+    @freeze_time("2020-01-01 00:00:00")
     def test_create_record_roundtrip(self):
         # Create a marc record from a work with special characters
         # in both the title and author name and round-trip it to
         # the DB and back again to make sure we are creating records
         # we can understand.
+        #
+        # We freeze the current time here, because a MARC record has
+        # a timestamp when it was created and we need the created
+        # records to match.
 
         annotator = Annotator()
 

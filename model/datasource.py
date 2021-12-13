@@ -12,11 +12,11 @@ from sqlalchemy.orm import backref, relationship
 
 from . import Base, get_one, get_one_or_create
 from .constants import DataSourceConstants, IdentifierConstants
-from .hasfulltablecache import HasFullTableCache
+from .hassessioncache import HasSessionCache
 from .licensing import LicensePoolDeliveryMechanism
 
 
-class DataSource(Base, HasFullTableCache, DataSourceConstants):
+class DataSource(Base, HasSessionCache, DataSourceConstants):
 
     """A source for information about books, and possibly the books themselves."""
 
@@ -77,9 +77,6 @@ class DataSource(Base, HasFullTableCache, DataSourceConstants):
         backref="data_source",
         foreign_keys=lambda: [LicensePoolDeliveryMechanism.data_source_id],
     )
-
-    _cache = HasFullTableCache.RESET
-    _id_cache = HasFullTableCache.RESET
 
     def __repr__(self):
         return '<DataSource: name="%s">' % (self.name)

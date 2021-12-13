@@ -69,7 +69,20 @@ def _site_configuration_has_changed(_db, cooldown=1):
         # Update the timestamp.
         now = utc_now()
         earlier = now - datetime.timedelta(seconds=cooldown)
-        sql = "UPDATE timestamps SET finish=(:finish at time zone 'utc') WHERE service=:service AND collection_id IS NULL AND finish<=(:earlier at time zone 'utc');"
+
+        # Using SKIP LOCKED here allows us avoid waiting for another process that is
+        # (presumably) already updating the timestamp, only to immediately update it
+        # again ourselves after the wait. It also avoids a possible deadlock for cases
+        # in which a request results in another call into the app server while that
+        # request is still active. For example, during library registration.
+        #
+        # During registration we make requests that look like this:
+        # CM -- POST(register) --> Registry -- GET(authentication_document)--> CM
+        sql = (
+            "UPDATE timestamps SET finish=(:finish at time zone 'utc') WHERE "
+            "id IN (select id from timestamps WHERE service=:service AND collection_id IS NULL "
+            "AND finish<=(:earlier at time zone 'utc') FOR UPDATE SKIP LOCKED);"
+        )
         _db.execute(
             text(sql),
             dict(
@@ -135,90 +148,6 @@ def configuration_relevant_lifecycle_event(mapper, connection, target):
 def configuration_relevant_update(mapper, connection, target):
     if directly_modified(target):
         site_configuration_has_changed(target)
-
-
-@event.listens_for(Admin, "after_insert")
-@event.listens_for(Admin, "after_delete")
-@event.listens_for(Admin, "after_update")
-def refresh_admin_cache(mapper, connection, target):
-    # The next time someone tries to access an Admin,
-    # the cache will be repopulated.
-    Admin.reset_cache()
-
-
-@event.listens_for(AdminRole, "after_insert")
-@event.listens_for(AdminRole, "after_delete")
-@event.listens_for(AdminRole, "after_update")
-def refresh_admin_role_cache(mapper, connection, target):
-    # The next time someone tries to access an AdminRole,
-    # the cache will be repopulated.
-    AdminRole.reset_cache()
-
-
-@event.listens_for(Collection, "after_insert")
-@event.listens_for(Collection, "after_delete")
-@event.listens_for(Collection, "after_update")
-def refresh_collection_cache(mapper, connection, target):
-    # The next time someone tries to access a Collection,
-    # the cache will be repopulated.
-    Collection.reset_cache()
-
-
-@event.listens_for(ConfigurationSetting, "after_insert")
-@event.listens_for(ConfigurationSetting, "after_delete")
-@event.listens_for(ConfigurationSetting, "after_update")
-def refresh_configuration_settings(mapper, connection, target):
-    # The next time someone tries to access a configuration setting,
-    # the cache will be repopulated.
-    ConfigurationSetting.reset_cache()
-
-
-@event.listens_for(DataSource, "after_insert")
-@event.listens_for(DataSource, "after_delete")
-@event.listens_for(DataSource, "after_update")
-def refresh_datasource_cache(mapper, connection, target):
-    # The next time someone tries to access a DataSource,
-    # the cache will be repopulated.
-    DataSource.reset_cache()
-
-
-@event.listens_for(DeliveryMechanism, "after_insert")
-@event.listens_for(DeliveryMechanism, "after_delete")
-@event.listens_for(DeliveryMechanism, "after_update")
-def refresh_datasource_cache(mapper, connection, target):
-    # The next time someone tries to access a DeliveryMechanism,
-    # the cache will be repopulated.
-    DeliveryMechanism.reset_cache()
-
-
-@event.listens_for(ExternalIntegration, "after_insert")
-@event.listens_for(ExternalIntegration, "after_delete")
-@event.listens_for(ExternalIntegration, "after_update")
-def refresh_datasource_cache(mapper, connection, target):
-    # The next time someone tries to access an ExternalIntegration,
-    # the cache will be repopulated.
-    ExternalIntegration.reset_cache()
-
-
-@event.listens_for(Genre, "after_insert")
-@event.listens_for(Genre, "after_delete")
-@event.listens_for(Genre, "after_update")
-def refresh_genre_cache(mapper, connection, target):
-    # The next time someone tries to access a genre,
-    # the cache will be repopulated.
-    #
-    # The only time this should really happen is the very first time a
-    # site is brought up, but just in case.
-    Genre.reset_cache()
-
-
-@event.listens_for(Library, "after_insert")
-@event.listens_for(Library, "after_delete")
-@event.listens_for(Library, "after_update")
-def refresh_library_cache(mapper, connection, target):
-    # The next time someone tries to access a library,
-    # the cache will be repopulated.
-    Library.reset_cache()
 
 
 # When a pool gets a work and a presentation edition for the first time,

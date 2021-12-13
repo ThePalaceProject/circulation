@@ -3202,9 +3202,13 @@ def configuration_relevant_update(mapper, connection, target):
     if directly_modified(target):
         site_configuration_has_changed(target)
 
-        # Some elements of Lane configuration are stored in the
-        # corresponding Library objects for performance reasons.
 
-        # Remove this information whenever the Lane configuration
-        # changes. This will force it to be recalculated.
-        Library._has_root_lane_cache.clear()
+@event.listens_for(Lane.library_id, "set")
+@event.listens_for(Lane.root_for_patron_type, "set")
+def receive_modified(target, value, oldvalue, initiator):
+    # Some elements of Lane configuration are stored in the
+    # corresponding Library objects for performance reasons.
+
+    # Remove this information whenever the Lane configuration
+    # changes. This will force it to be recalculated.
+    Library._has_root_lane_cache.clear()

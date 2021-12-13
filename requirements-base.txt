@@ -22,6 +22,8 @@ feedparser==6.0.2
 Flask==1.1.2
 Flask-Babel==1.0.0
 flask-sqlalchemy-session==1.1
+# freezegun is used for unit tests.
+freezegun<1.2
 funcsigs==1.0.2
 # fuzzywuzzy is for author name manipulations
 fuzzywuzzy==0.18.0
@@ -54,6 +56,7 @@ s3transfer==0.3.3
 singledispatch==3.4.0.3
 SQLAlchemy==1.3.19
 textblob==0.15.3
+typing-extensions<4.1; python_version < '3.8'
 urllib3>=1.26.5,<1.27
 uWSGI==2.0.19.1
 # watchtower is for Cloudwatch logging integration

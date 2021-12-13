@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from enum import Enum
 
 from flask_babel import lazy_gettext as _
-from sqlalchemy import Column, ForeignKey, Index, Integer, Unicode, UniqueConstraint
+from sqlalchemy import Column, ForeignKey, Index, Integer, Unicode
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
@@ -19,11 +19,11 @@ from ..mirror import MirrorUploader
 from ..util.string_helpers import random_string
 from . import Base, get_one, get_one_or_create
 from .constants import DataSourceConstants
-from .hasfulltablecache import HasFullTableCache
+from .hassessioncache import HasSessionCache
 from .library import Library
 
 
-class ExternalIntegrationLink(Base, HasFullTableCache):
+class ExternalIntegrationLink(Base, HasSessionCache):
 
     __tablename__ = "externalintegrationslinks"
 
@@ -104,7 +104,7 @@ class ExternalIntegrationLink(Base, HasFullTableCache):
     COLLECTION_MIRROR_SETTINGS = settings
 
 
-class ExternalIntegration(Base, HasFullTableCache):
+class ExternalIntegration(Base):
 
     """An external integration contains configuration for connecting
     to a third-party API.
@@ -271,9 +271,6 @@ class ExternalIntegration(Base, HasFullTableCache):
     PRIMARY_IDENTIFIER_SOURCE = "primary_identifier_source"
     DCTERMS_IDENTIFIER = "first_dcterms_identifier"
 
-    _cache = HasFullTableCache.RESET
-    _id_cache = HasFullTableCache.RESET
-
     __tablename__ = "externalintegrations"
     id = Column(Integer, primary_key=True)
 
@@ -294,7 +291,6 @@ class ExternalIntegration(Base, HasFullTableCache):
     settings = relationship(
         "ConfigurationSetting",
         backref="external_integration",
-        lazy="joined",
         cascade="all, delete",
     )
 
@@ -327,16 +323,6 @@ class ExternalIntegration(Base, HasFullTableCache):
             len(self.settings),
             self.id,
         )
-
-    def cache_key(self):
-        # TODO: This is not ideal, but the lookup method isn't like
-        # other HasFullTableCache lookup methods, so for now we use
-        # the unique ID as the cache key. This means that
-        # by_cache_key() and by_id() do the same thing.
-        #
-        # This is okay because we need by_id() quite a
-        # bit and by_cache_key() not as much.
-        return self.id
 
     @classmethod
     def for_goal(cls, _db, goal):
@@ -382,14 +368,12 @@ class ExternalIntegration(Base, HasFullTableCache):
     @classmethod
     def lookup(cls, _db, protocol, goal, library=None):
 
-        integrations = (
-            _db.query(cls)
-            .outerjoin(cls.libraries)
-            .filter(cls.protocol == protocol, cls.goal == goal)
-        )
+        integrations = _db.query(cls).filter(cls.protocol == protocol, cls.goal == goal)
 
         if library:
-            integrations = integrations.filter(Library.id == library.id)
+            integrations = integrations.join(cls.libraries).filter(
+                Library.id == library.id
+            )
 
         integrations = integrations.all()
         if len(integrations) > 1:
@@ -560,7 +544,7 @@ class ExternalIntegration(Base, HasFullTableCache):
         return lines
 
 
-class ConfigurationSetting(Base, HasFullTableCache):
+class ConfigurationSetting(Base, HasSessionCache):
     """An extra piece of site configuration.
     A ConfigurationSetting may be associated with an
     ExternalIntegration, a Library, both, or neither.
@@ -627,9 +611,6 @@ class ConfigurationSetting(Base, HasFullTableCache):
             unique=True,
         ),
     )
-
-    _cache = HasFullTableCache.RESET
-    _id_cache = HasFullTableCache.RESET
 
     def __repr__(self):
         return "<ConfigurationSetting: key=%s, ID=%d>" % (self.key, self.id)

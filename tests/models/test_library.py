@@ -2,7 +2,6 @@
 import pytest
 
 from ...model.configuration import ConfigurationSetting
-from ...model.hasfulltablecache import HasFullTableCache
 from ...model.library import Library
 from ...testing import DatabaseTest
 
@@ -31,12 +30,14 @@ class TestLibrary(DatabaseTest):
         assert name == library.cache_key()
 
         # Cache is empty.
-        assert HasFullTableCache.RESET == Library._cache
+        cache = Library._cache_from_session(self._db)
+        assert len(cache.id) == 0
+        assert len(cache.key) == 0
 
         assert library == Library.lookup(self._db, name)
 
         # Cache is populated.
-        assert library == Library._cache[name]
+        assert library == cache.key[name]
 
     def test_default(self):
         # We start off with no libraries.

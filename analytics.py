@@ -21,7 +21,7 @@ class Analytics:
     """
 
     _singleton_instance = None
-    log = logging.getLogger("Analytics manager")
+    log = logging.getLogger("core.analytics.Analytics")
 
     GLOBAL_ENABLED = None
     LIBRARY_ENABLED: Set[int] = set()
@@ -32,7 +32,7 @@ class Analytics:
             refresh = True
             instance = super().__new__(cls)
             cls._singleton_instance = instance
-            cls.log.info("Set singleton instance.")
+            cls.log.debug("Set singleton instance.")
         if refresh:
             instance._initialize_instance(_db)
         return instance
@@ -40,10 +40,10 @@ class Analytics:
     @classmethod
     def _reset_singleton_instance(cls):
         """Reset the singleton instance. Primarily used for tests."""
-        cls.log.info("Resetting singleton instance (should be used only for tests).")
+        cls.log.debug("Resetting singleton instance (should be used only for tests).")
         cls._singleton_instance = None
 
-    @log_elapsed_time(log_method=log.info, message_prefix="Initializing instance")
+    @log_elapsed_time(log_method=log.debug, message_prefix="Initializing instance")
     def _initialize_instance(self, _db):
         """Initialize an instance (usually the singleton) of the class.
 

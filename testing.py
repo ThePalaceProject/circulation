@@ -216,16 +216,6 @@ class DatabaseTest(object):
         # other session.
         self.transaction.rollback()
 
-        # Remove any database objects cached in the model classes but
-        # associated with the now-rolled-back session.
-        Collection.reset_cache()
-        ConfigurationSetting.reset_cache()
-        DataSource.reset_cache()
-        DeliveryMechanism.reset_cache()
-        ExternalIntegration.reset_cache()
-        Genre.reset_cache()
-        Library.reset_cache()
-
         # Reset the Analytics singleton between tests.
         Analytics._reset_singleton_instance()
 

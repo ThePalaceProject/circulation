@@ -145,6 +145,7 @@ class TestSiteConfigurationHasChanged(DatabaseTest):
         self.mock.assert_was_called()
 
         ConfigurationSetting.sitewide(self._db, "setting").value = "value2"
+        self._db.commit()
         self.mock.assert_was_called()
 
     def test_lane_change_updates_configuration(self):

@@ -9,10 +9,10 @@ from sqlalchemy.orm import relationship, validates
 from sqlalchemy.orm.session import Session
 
 from . import Base, get_one, get_one_or_create
-from .hasfulltablecache import HasFullTableCache
+from .hassessioncache import HasSessionCache
 
 
-class Admin(Base, HasFullTableCache):
+class Admin(Base, HasSessionCache):
 
     __tablename__ = "admins"
 
@@ -27,9 +27,6 @@ class Admin(Base, HasFullTableCache):
 
     # An Admin may have many roles.
     roles = relationship("AdminRole", backref="admin", cascade="all, delete-orphan")
-
-    _cache = HasFullTableCache.RESET
-    _id_cache = HasFullTableCache.RESET
 
     def cache_key(self):
         return self.email
@@ -207,7 +204,7 @@ class Admin(Base, HasFullTableCache):
         return "<Admin: email=%s>" % self.email
 
 
-class AdminRole(Base, HasFullTableCache):
+class AdminRole(Base, HasSessionCache):
 
     __tablename__ = "adminroles"
 
@@ -231,9 +228,6 @@ class AdminRole(Base, HasFullTableCache):
         SITEWIDE_LIBRARIAN,
         LIBRARIAN,
     ]
-
-    _cache = HasFullTableCache.RESET
-    _id_cache = HasFullTableCache.RESET
 
     def cache_key(self):
         return (self.admin_id, self.library_id, self.role)
