@@ -1321,6 +1321,11 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         return cached
 
     def lcp_key_retrieval_tags(self, active_loan):
+        # In the case of LCP we have to include a patron's hashed passphrase
+        # inside the acquisition link so client applications can use it to open the LCP license
+        # without having to ask the user to enter their password
+        # https://readium.org/lcp-specs/notes/lcp-key-retrieval.html#including-a-hashed-passphrase-in-an-opds-1-catalog
+
         db = Session.object_session(active_loan)
         lcp_credential_factory = LCPCredentialFactory()
 
