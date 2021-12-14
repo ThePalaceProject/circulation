@@ -31,7 +31,7 @@ class LibrarySettingsController(SettingsController):
 
     def process_get(self):
         response = []
-        libraries = self._db.query(Library).all()
+        libraries = self._db.query(Library).order_by(Library.name).all()
         ConfigurationSetting.cache_warm(self._db)
 
         for library in libraries:
