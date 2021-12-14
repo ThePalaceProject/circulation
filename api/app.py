@@ -25,6 +25,10 @@ app.config["BABEL_DEFAULT_LOCALE"] = LanguageCodes.three_to_two[
 app.config["BABEL_TRANSLATION_DIRECTORIES"] = "../translations"
 babel = Babel(app)
 
+# We use URIs as identifiers throughout the application, meaning that
+# we never want werkzeug's merge_slashes feature.
+app.url_map.merge_slashes = False
+
 # Optionally setup any profilers that are enabled
 PalacePyInstrumentProfiler.configure(app)
 PalaceCProfileProfiler.configure(app)

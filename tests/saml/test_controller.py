@@ -21,7 +21,7 @@ from api.saml.metadata.model import (
     SAMLUIInfo,
 )
 from api.saml.provider import SAML_INVALID_SUBJECT, SAMLWebSSOAuthenticationProvider
-from core.model import Credential
+from core.model import Credential, Library
 from core.util.problem_detail import ProblemDetail
 from tests.saml import fixtures
 from tests.saml.controller_test import ControllerTest
@@ -194,7 +194,7 @@ class TestSAMLController(ControllerTest):
             return_value=authentication_manager
         )
         provider.library = MagicMock(return_value=self._default_library)
-        authenticator = Authenticator(self._db)
+        authenticator = Authenticator(self._db, self._db.query(Library))
 
         authenticator.library_authenticators["default"].register_saml_provider(provider)
 
@@ -383,7 +383,7 @@ class TestSAMLController(ControllerTest):
         )
         provider.library = MagicMock(return_value=self._default_library)
         provider.saml_callback = MagicMock(return_value=saml_callback_result)
-        authenticator = Authenticator(self._db)
+        authenticator = Authenticator(self._db, libraries=self._db.query(Library))
 
         authenticator.library_authenticators["default"].register_saml_provider(provider)
         authenticator.bearer_token_signing_secret = "test"

@@ -3,10 +3,12 @@ import importlib
 import json
 import logging
 import re
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 from abc import ABCMeta
+from typing import Iterable, Optional
 
 import flask
 import jwt
@@ -24,6 +26,7 @@ from api.announcements import Announcements
 from api.custom_patron_catalog import CustomPatronCatalog
 from api.opds import LibraryAnnotator
 from api.saml.configuration.model import SAMLSettings
+from core.analytics import Analytics
 from core.model import (
     CirculationEvent,
     ConfigurationSetting,
@@ -46,6 +49,7 @@ from core.util.authentication_for_opds import (
 )
 from core.util.datetime_helpers import utc_now
 from core.util.http import RemoteIntegrationException
+from core.util.log import log_elapsed_time
 from core.util.problem_detail import ProblemDetail
 from core.util.problem_detail import json as pd_json
 
@@ -531,17 +535,24 @@ class CirculationPatronProfileStorage(PatronProfileStorage):
 class Authenticator(object):
     """Route requests to the appropriate LibraryAuthenticator."""
 
-    def __init__(self, _db, analytics=None):
-        self.library_authenticators = {}
+    log = logging.getLogger("api.authenticator.Authenticator")
 
-        self.populate_authenticators(_db, analytics)
+    def __init__(
+        self, _db, libraries: Iterable[Library], analytics: Optional[Analytics] = None
+    ):
+        # Create authenticators
+        self.library_authenticators = {}
+        self.populate_authenticators(_db, libraries, analytics)
 
     @property
     def current_library_short_name(self):
         return flask.request.library.short_name
 
-    def populate_authenticators(self, _db, analytics):
-        for library in _db.query(Library):
+    @log_elapsed_time(log_method=log.debug, message_prefix="populate_authenticators")
+    def populate_authenticators(
+        self, _db, libraries: Iterable[Library], analytics: Optional[Analytics]
+    ):
+        for library in libraries:
             self.library_authenticators[
                 library.short_name
             ] = LibraryAuthenticator.from_config(_db, library, analytics)
@@ -777,7 +788,10 @@ class LibraryAuthenticator(object):
             raise CannotLoadConfiguration(
                 "Authentication provider configuration does not specify protocol."
             )
-        provider_module = importlib.import_module(module_name)
+        if module_name not in sys.modules:
+            provider_module = importlib.import_module(module_name)
+        else:
+            provider_module = sys.modules[module_name]
         provider_class = getattr(provider_module, "AuthenticationProvider", None)
         if not provider_class:
             raise CannotLoadConfiguration(

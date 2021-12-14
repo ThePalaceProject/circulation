@@ -30,8 +30,11 @@ class LibrarySettingsController(SettingsController):
             return self.process_post()
 
     def process_get(self):
-        libraries = []
-        for library in self._db.query(Library).order_by(Library.name):
+        response = []
+        libraries = self._db.query(Library).all()
+        ConfigurationSetting.cache_warm(self._db)
+
+        for library in libraries:
             # Only include libraries this admin has librarian access to.
             if not flask.request.admin or not flask.request.admin.is_librarian(library):
                 continue
@@ -58,7 +61,7 @@ class LibrarySettingsController(SettingsController):
                 if value:
                     settings[setting.get("key")] = value
 
-            libraries += [
+            response += [
                 dict(
                     uuid=library.uuid,
                     name=library.name,
@@ -66,7 +69,7 @@ class LibrarySettingsController(SettingsController):
                     settings=settings,
                 )
             ]
-        return dict(libraries=libraries, settings=Configuration.LIBRARY_SETTINGS)
+        return dict(libraries=response, settings=Configuration.LIBRARY_SETTINGS)
 
     def process_post(self, validators_by_type=None):
         library = None
