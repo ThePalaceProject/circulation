@@ -9,4 +9,3 @@ sys.path.append(os.path.abspath(package_dir))
 from scripts import AvailabilityRefreshScript
 
 AvailabilityRefreshScript().run()
-

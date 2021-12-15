@@ -11,7 +11,10 @@ from core.model import DataSource
 from core.scripts import CustomListManagementScript
 
 if len(sys.argv) < 6:
-    print "Usage: %s [SHORT_NAME] [HUMAN_READABLE_NAME] [PRIMARY_LANGUAGE] [DESCRIPTION] [SUBJECT] [subject2] ..." % sys.argv[0]
+    print(
+        "Usage: %s [SHORT_NAME] [HUMAN_READABLE_NAME] [PRIMARY_LANGUAGE] [DESCRIPTION] [SUBJECT] [subject2] ..."
+        % sys.argv[0]
+    )
     sys.exit()
 
 list_identifier, list_name, primary_language, description = sys.argv[1:5]
@@ -20,7 +23,10 @@ subjects = sys.argv[5:]
 script = CustomListManagementScript(
     ClassificationBasedMembershipManager,
     DataSource.LIBRARY_STAFF,
-    list_identifier, list_name, primary_language, description,
-    subject_fragments=subjects
+    list_identifier,
+    list_name,
+    primary_language,
+    description,
+    subject_fragments=subjects,
 )
 script.run()

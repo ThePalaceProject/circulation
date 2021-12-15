@@ -9,6 +9,4 @@ sys.path.append(os.path.abspath(package_dir))
 from api.metadata_wrangler import MetadataWranglerCollectionReaper
 from core.scripts import RunCollectionCoverageProviderScript
 
-RunCollectionCoverageProviderScript(
-    MetadataWranglerCollectionReaper
-).run()
+RunCollectionCoverageProviderScript(MetadataWranglerCollectionReaper).run()

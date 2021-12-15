@@ -233,8 +233,8 @@ INCORRECT_XML_WITH_ONE_IDP_METADATA_WITH_SSO_SERVICE_WITH_WRONG_BINDING = """<?x
         </KeyDescriptor>
         <NameIDFormat>{9}</NameIDFormat>
         <NameIDFormat>{10}</NameIDFormat>
-        <SingleSignOnService 
-            Binding="{11}" 
+        <SingleSignOnService
+            Binding="{11}"
             Location="{12}"/>
     </IDPSSODescriptor>
 </EntityDescriptor>
@@ -289,8 +289,8 @@ CORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_DISPLAY_NAMES = """<?xml version="1.0"
         </KeyDescriptor>
         <NameIDFormat>{3}</NameIDFormat>
         <NameIDFormat>{4}</NameIDFormat>
-        <SingleSignOnService 
-            Binding="{5}" 
+        <SingleSignOnService
+            Binding="{5}"
             Location="{6}"/>
     </IDPSSODescriptor>
 </EntityDescriptor>
@@ -350,11 +350,11 @@ CORRECT_XML_WITH_IDP_1 = """<?xml version="1.0" encoding="UTF-8"?>
         </KeyDescriptor>
         <NameIDFormat>{9}</NameIDFormat>
         <NameIDFormat>{10}</NameIDFormat>
-        <SingleSignOnService 
-            Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST-SimpleSign" 
+        <SingleSignOnService
+            Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST-SimpleSign"
             Location="http://idp.hilbertteam.net/idp/profile/SAML2/POST-SimpleSign/SSO"/>
-        <SingleSignOnService 
-            Binding="{11}" 
+        <SingleSignOnService
+            Binding="{11}"
             Location="{12}"/>
     </IDPSSODescriptor>
     <Organization>
@@ -434,11 +434,11 @@ CORRECT_XML_WITH_IDP_2 = """<?xml version="1.0" encoding="UTF-8"?>
         </KeyDescriptor>
         <NameIDFormat>{9}</NameIDFormat>
         <NameIDFormat>{10}</NameIDFormat>
-        <SingleSignOnService 
-            Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST-SimpleSign" 
+        <SingleSignOnService
+            Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST-SimpleSign"
             Location="http://idp.hilbertteam.net/idp/profile/SAML2/POST-SimpleSign/SSO"/>
-        <SingleSignOnService 
-            Binding="{11}" 
+        <SingleSignOnService
+            Binding="{11}"
             Location="{12}"/>
     </IDPSSODescriptor>
     <Organization>
@@ -516,11 +516,11 @@ CORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_NAME_ID_FORMAT = """<?xml version="1.0
                     </ds:X509Data>
             </ds:KeyInfo>
         </KeyDescriptor>
-        <SingleSignOnService 
-            Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST-SimpleSign" 
+        <SingleSignOnService
+            Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST-SimpleSign"
             Location="http://idp.hilbertteam.net/idp/profile/SAML2/POST-SimpleSign/SSO"/>
-        <SingleSignOnService 
-            Binding="{9}" 
+        <SingleSignOnService
+            Binding="{9}"
             Location="{10}"/>
     </IDPSSODescriptor>
     <Organization>
@@ -589,11 +589,11 @@ CORRECT_XML_WITH_ONE_IDP_METADATA_WITH_ONE_CERTIFICATE = """<?xml version="1.0" 
         </KeyDescriptor>
         <NameIDFormat>{8}</NameIDFormat>
         <NameIDFormat>{9}</NameIDFormat>
-        <SingleSignOnService 
-            Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST-SimpleSign" 
+        <SingleSignOnService
+            Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST-SimpleSign"
             Location="http://idp.hilbertteam.net/idp/profile/SAML2/POST-SimpleSign/SSO"/>
-        <SingleSignOnService 
-            Binding="{10}" 
+        <SingleSignOnService
+            Binding="{10}"
             Location="{11}"/>
     </IDPSSODescriptor>
     <Organization>
@@ -634,11 +634,11 @@ CORRECT_XML_WITH_MULTIPLE_IDPS = """<?xml version="1.0" encoding="UTF-8"?>
       This metadata is not dynamic - it will not change as your configuration changes.
 -->
 <EntityDescriptors>
-  <EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" 
-    xmlns:ds="http://www.w3.org/2000/09/xmldsig#" 
-    xmlns:shibmd="urn:mace:shibboleth:metadata:1.0" 
-    xmlns:xml="http://www.w3.org/XML/1998/namespace" 
-    xmlns:mdui="urn:oasis:names:tc:SAML:metadata:ui" 
+  <EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata"
+    xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
+    xmlns:shibmd="urn:mace:shibboleth:metadata:1.0"
+    xmlns:xml="http://www.w3.org/XML/1998/namespace"
+    xmlns:mdui="urn:oasis:names:tc:SAML:metadata:ui"
     entityID="{0}">
     <IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol urn:oasis:names:tc:SAML:1.1:protocol urn:mace:shibboleth:1.0">
       <Extensions>
@@ -668,11 +668,11 @@ CORRECT_XML_WITH_MULTIPLE_IDPS = """<?xml version="1.0" encoding="UTF-8"?>
       </KeyDescriptor>
       <NameIDFormat>{5}</NameIDFormat>
       <NameIDFormat>{6}</NameIDFormat>
-      <SingleSignOnService 
-        Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST-SimpleSign" 
+      <SingleSignOnService
+        Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST-SimpleSign"
         Location="http://idp.hilbertteam.net/idp/profile/SAML2/POST-SimpleSign/SSO"/>
-      <SingleSignOnService 
-        Binding="{7}" 
+      <SingleSignOnService
+        Binding="{7}"
         Location="{8}"/>
     </IDPSSODescriptor>
     <Organization>
@@ -684,11 +684,11 @@ CORRECT_XML_WITH_MULTIPLE_IDPS = """<?xml version="1.0" encoding="UTF-8"?>
       <OrganizationURL xml:lang="es">{14}</OrganizationURL>
     </Organization>
   </EntityDescriptor>
-  <EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" 
-    xmlns:ds="http://www.w3.org/2000/09/xmldsig#" 
-    xmlns:shibmd="urn:mace:shibboleth:metadata:1.0" 
-    xmlns:xml="http://www.w3.org/XML/1998/namespace" 
-    xmlns:mdui="urn:oasis:names:tc:SAML:metadata:ui" 
+  <EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata"
+    xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
+    xmlns:shibmd="urn:mace:shibboleth:metadata:1.0"
+    xmlns:xml="http://www.w3.org/XML/1998/namespace"
+    xmlns:mdui="urn:oasis:names:tc:SAML:metadata:ui"
     entityID="{15}">
     <IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol urn:oasis:names:tc:SAML:1.1:protocol urn:mace:shibboleth:1.0">
       <Extensions>
@@ -718,11 +718,11 @@ CORRECT_XML_WITH_MULTIPLE_IDPS = """<?xml version="1.0" encoding="UTF-8"?>
       </KeyDescriptor>
       <NameIDFormat>{20}</NameIDFormat>
       <NameIDFormat>{21}</NameIDFormat>
-      <SingleSignOnService 
-        Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST-SimpleSign" 
+      <SingleSignOnService
+        Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST-SimpleSign"
         Location="http://idp.hilbertteam.net/idp/profile/SAML2/POST-SimpleSign/SSO"/>
-      <SingleSignOnService 
-        Binding="{22}" 
+      <SingleSignOnService
+        Binding="{22}"
         Location="{23}"/>
     </IDPSSODescriptor>
     <Organization>
@@ -768,7 +768,7 @@ CORRECT_XML_WITH_MULTIPLE_IDPS = """<?xml version="1.0" encoding="UTF-8"?>
     IDP_2_ORGANIZATION_ES_ORGANIZATION_URL,
 )
 
-INCORRECT_XML_WITH_ONE_SP_METADATA_WITHOUT_ACS_SERVICE = """<EntityDescriptor 
+INCORRECT_XML_WITH_ONE_SP_METADATA_WITHOUT_ACS_SERVICE = """<EntityDescriptor
     xmlns="urn:oasis:names:tc:SAML:2.0:metadata"
     xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
     xmlns:shibmd="urn:mace:shibboleth:metadata:1.0"
@@ -800,7 +800,7 @@ INCORRECT_XML_WITH_ONE_SP_METADATA_WITHOUT_ACS_SERVICE = """<EntityDescriptor
     SP_ENTITY_ID, SIGNING_CERTIFICATE
 )
 
-CORRECT_XML_WITH_ONE_SP = """<EntityDescriptor 
+CORRECT_XML_WITH_ONE_SP = """<EntityDescriptor
     xmlns="urn:oasis:names:tc:SAML:2.0:metadata"
     xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
     xmlns:shibmd="urn:mace:shibboleth:metadata:1.0"
@@ -837,13 +837,13 @@ CORRECT_XML_WITH_ONE_SP = """<EntityDescriptor
       <EncryptionMethod Algorithm="http://www.w3.org/2009/xmlenc11#rsa-oaep"/>
       <EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-oaep-mgf1p"/>
     </KeyDescriptor>
-    <AssertionConsumerService 
-        Binding="{8}" 
-        Location="{9}/" 
+    <AssertionConsumerService
+        Binding="{8}"
+        Location="{9}/"
         index="1"/>
-    <AssertionConsumerService 
-        Binding="{8}" 
-        Location="{9}" 
+    <AssertionConsumerService
+        Binding="{8}"
+        Location="{9}"
         index="0"/>
   </SPSSODescriptor>
   <Organization>
@@ -882,9 +882,9 @@ FEDERATED_METADATA_WITHOUT_VALID_UNTIL_ATTRIBUTE = """<?xml version="1.0" encodi
       This metadata is not dynamic - it will not change as your configuration changes.
 -->
 <EntitiesDescriptor
-    xmlns:ds="http://www.w3.org/2000/09/xmldsig#" 
-    xmlns:shibmd="urn:mace:shibboleth:metadata:1.0" 
-    xmlns:xml="http://www.w3.org/XML/1998/namespace" 
+    xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
+    xmlns:shibmd="urn:mace:shibboleth:metadata:1.0"
+    xmlns:xml="http://www.w3.org/XML/1998/namespace"
     xmlns:mdui="urn:oasis:names:tc:SAML:metadata:ui">
 </EntitiesDescriptor>
 """
@@ -899,9 +899,9 @@ FEDERATED_METADATA_WITH_VALID_UNTIL_ATTRIBUTE = """<?xml version="1.0" encoding=
       This metadata is not dynamic - it will not change as your configuration changes.
 -->
 <EntitiesDescriptor
-    xmlns:ds="http://www.w3.org/2000/09/xmldsig#" 
-    xmlns:shibmd="urn:mace:shibboleth:metadata:1.0" 
-    xmlns:xml="http://www.w3.org/XML/1998/namespace" 
+    xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
+    xmlns:shibmd="urn:mace:shibboleth:metadata:1.0"
+    xmlns:xml="http://www.w3.org/XML/1998/namespace"
     xmlns:mdui="urn:oasis:names:tc:SAML:metadata:ui"
     validUntil="{0}">
 </EntitiesDescriptor>
@@ -940,23 +940,23 @@ xk4LnXgjHOT93dBAJhVYJkykDHwyvHUvsBHoP6lfjrt5P8zunK2mdP/AZKik+Rdt
 """
 
 FEDERATED_METADATA_WITH_INVALID_SIGNATURE = """<?xml version="1.0" encoding="UTF-8"?>
-<EntitiesDescriptor 
-  xmlns="urn:oasis:names:tc:SAML:2.0:metadata" 
-  xmlns:alg="urn:oasis:names:tc:SAML:metadata:algsupport" 
-  xmlns:ds="http://www.w3.org/2000/09/xmldsig#" 
-  xmlns:icmd="http://id.incommon.org/metadata" 
-  xmlns:idpdisc="urn:oasis:names:tc:SAML:profiles:SSO:idp-discovery-protocol" 
-  xmlns:init="urn:oasis:names:tc:SAML:profiles:SSO:request-init" 
-  xmlns:mdattr="urn:oasis:names:tc:SAML:metadata:attribute" 
-  xmlns:mdrpi="urn:oasis:names:tc:SAML:metadata:rpi" 
-  xmlns:mdui="urn:oasis:names:tc:SAML:metadata:ui" 
-  xmlns:remd="http://refeds.org/metadata" 
-  xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" 
-  xmlns:shibmd="urn:mace:shibboleth:metadata:1.0" 
-  xmlns:xenc="http://www.w3.org/2001/04/xmlenc#" 
-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
-  ID="INC20201109T195958" 
-  Name="urn:mace:incommon" 
+<EntitiesDescriptor
+  xmlns="urn:oasis:names:tc:SAML:2.0:metadata"
+  xmlns:alg="urn:oasis:names:tc:SAML:metadata:algsupport"
+  xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
+  xmlns:icmd="http://id.incommon.org/metadata"
+  xmlns:idpdisc="urn:oasis:names:tc:SAML:profiles:SSO:idp-discovery-protocol"
+  xmlns:init="urn:oasis:names:tc:SAML:profiles:SSO:request-init"
+  xmlns:mdattr="urn:oasis:names:tc:SAML:metadata:attribute"
+  xmlns:mdrpi="urn:oasis:names:tc:SAML:metadata:rpi"
+  xmlns:mdui="urn:oasis:names:tc:SAML:metadata:ui"
+  xmlns:remd="http://refeds.org/metadata"
+  xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion"
+  xmlns:shibmd="urn:mace:shibboleth:metadata:1.0"
+  xmlns:xenc="http://www.w3.org/2001/04/xmlenc#"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  ID="INC20201109T195958"
+  Name="urn:mace:incommon"
   validUntil="2020-11-23T19:59:58Z">
   <Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
     <SignedInfo><CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
