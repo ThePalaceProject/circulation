@@ -3,18 +3,11 @@ import logging
 import urllib.error
 import urllib.parse
 import urllib.request
-import uuid
 from collections import defaultdict
 
 from flask import url_for
-from lxml import etree
-from sqlalchemy.orm import lazyload
 
-from api.lanes import (
-    CrawlableCollectionBasedLane,
-    CrawlableCustomListBasedLane,
-    DynamicLane,
-)
+from api.lanes import DynamicLane
 from core.analytics import Analytics
 from core.app_server import cdn_url_for
 from core.cdn import cdnify
@@ -22,26 +15,22 @@ from core.classifier import Classifier
 from core.entrypoint import EverythingEntryPoint
 from core.external_search import WorkSearchResult
 from core.lane import Lane, WorkList
+from core.lcp.credential import LCPCredentialFactory
+from core.lcp.exceptions import LCPError
 from core.model import (
     CirculationEvent,
     ConfigurationSetting,
-    Credential,
-    CustomList,
-    DataSource,
     DeliveryMechanism,
     Edition,
     Hold,
-    Identifier,
     LicensePool,
     LicensePoolDeliveryMechanism,
     Loan,
     Patron,
     Session,
-    Work,
 )
 from core.opds import AcquisitionFeed, Annotator, UnfulfillableWork
 from core.util.datetime_helpers import from_timestamp
-from core.util.flask_util import OPDSFeedResponse
 from core.util.opds_writer import OPDSFeed
 
 from .adobe_vendor_id import AuthdataUtility
@@ -1227,10 +1216,10 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         children = AcquisitionFeed.license_tags(license_pool, active_loan, None)
         link_tag.extend(children)
 
-        children = self.drm_device_registration_tags(
+        drm_tags = self.drm_extension_tags(
             license_pool, active_loan, delivery_mechanism
         )
-        link_tag.extend(children)
+        link_tag.extend(drm_tags)
         return link_tag
 
     def open_access_link(self, pool, lpdm):
@@ -1245,9 +1234,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         link_tag.attrib.update(dict(href=fulfill_url))
         return link_tag
 
-    def drm_device_registration_tags(
-        self, license_pool, active_loan, delivery_mechanism
-    ):
+    def drm_extension_tags(self, license_pool, active_loan, delivery_mechanism):
         """Construct OPDS Extensions for DRM tags that explain how to
         register a device with the DRM server that manages this loan.
         :param delivery_mechanism: A DeliveryMechanism
@@ -1258,12 +1245,18 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         if delivery_mechanism.drm_scheme == DeliveryMechanism.ADOBE_DRM:
             # Get an identifier for the patron that will be registered
             # with the DRM server.
-            _db = Session.object_session(active_loan)
             patron = active_loan.patron
 
             # Generate a <drm:licensor> tag that can feed into the
             # Vendor ID service.
             return self.adobe_id_tags(patron)
+
+        if delivery_mechanism.drm_scheme == DeliveryMechanism.LCP_DRM:
+            # Generate a <lcp:hashed_passphrase> tag that can be used for the loan
+            # in the mobile apps.
+
+            return self.lcp_key_retrieval_tags(active_loan)
+
         return []
 
     def adobe_id_tags(self, patron_identifier):
@@ -1326,6 +1319,32 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         else:
             cached = copy.deepcopy(cached)
         return cached
+
+    def lcp_key_retrieval_tags(self, active_loan):
+        # In the case of LCP we have to include a patron's hashed passphrase
+        # inside the acquisition link so client applications can use it to open the LCP license
+        # without having to ask the user to enter their password
+        # https://readium.org/lcp-specs/notes/lcp-key-retrieval.html#including-a-hashed-passphrase-in-an-opds-1-catalog
+
+        db = Session.object_session(active_loan)
+        lcp_credential_factory = LCPCredentialFactory()
+
+        response = []
+
+        try:
+            hashed_passphrase = lcp_credential_factory.get_hashed_passphrase(
+                db, active_loan.patron
+            )
+            hashed_passphrase_element = OPDSFeed.makeelement(
+                "{%s}hashed_passphrase" % OPDSFeed.LCP_NS
+            )
+            hashed_passphrase_element.text = hashed_passphrase
+            response.append(hashed_passphrase_element)
+        except LCPError:
+            # The patron's passphrase wasn't generated yet and not present in the database.
+            pass
+
+        return response
 
     def add_patron(self, feed_obj):
         if not self.identifies_patrons:

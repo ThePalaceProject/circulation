@@ -1,14 +1,10 @@
-import contextlib
 import datetime
 import json
-import os
 import re
 from collections import defaultdict
-from pdb import set_trace
 
 import dateutil
 import feedparser
-import jwt
 import pytest
 from lxml import etree
 from mock import create_autospec
@@ -16,7 +12,7 @@ from mock import create_autospec
 from api.adobe_vendor_id import AuthdataUtility
 from api.circulation import BaseCirculationAPI, CirculationAPI, FulfillmentInfo
 from api.config import Configuration, temp_config
-from api.lanes import ContributorLane, CrawlableCustomListBasedLane
+from api.lanes import ContributorLane
 from api.novelist import NoveListAPI
 from api.opds import (
     CirculationManagerAnnotator,
@@ -30,7 +26,8 @@ from core.analytics import Analytics
 from core.classifier import Classifier, Fantasy, Urban_Fantasy
 from core.entrypoint import AudiobooksEntryPoint, EverythingEntryPoint
 from core.external_search import MockExternalSearchIndex, WorkSearchResult
-from core.lane import FacetsWithEntryPoint, Lane, WorkList
+from core.lane import FacetsWithEntryPoint, WorkList
+from core.lcp.credential import LCPCredentialFactory
 from core.model import (
     CirculationEvent,
     ConfigurationSetting,
@@ -39,14 +36,10 @@ from core.model import (
     DeliveryMechanism,
     ExternalIntegration,
     Hyperlink,
-    Library,
     PresentationCalculationPolicy,
     Representation,
     RightsStatus,
-    SessionManager,
     Work,
-    create,
-    get_one_or_create,
 )
 from core.opds import AcquisitionFeed, TestAnnotator, UnfulfillableWork
 from core.opds_import import OPDSXMLParser
@@ -54,7 +47,6 @@ from core.testing import DatabaseTest
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from core.util.opds_writer import AtomFeed, OPDSFeed
-from core.util.string_helpers import base64
 
 _strftime = AtomFeed._strftime
 
@@ -548,6 +540,36 @@ class TestLibraryAnnotator(VendorIDTest):
         )
         self._db.delete(setting)
         assert [] == self.annotator.adobe_id_tags("new identifier")
+
+    def test_lcp_acquisition_link_contains_hashed_passphrase(self):
+        [pool] = self.work.license_pools
+        identifier = pool.identifier
+        patron = self._patron()
+
+        hashed_password = "hashed password"
+
+        # Setup LCP credentials
+        lcp_credential_factory = LCPCredentialFactory()
+        lcp_credential_factory.set_hashed_passphrase(self._db, patron, hashed_password)
+
+        loan, ignore = pool.loan_to(patron, start=utc_now())
+        lcp_delivery_mechanism, ignore = DeliveryMechanism.lookup(
+            self._db, "text/html", DeliveryMechanism.LCP_DRM
+        )
+        other_delivery_mechanism, ignore = DeliveryMechanism.lookup(
+            self._db, "text/html", DeliveryMechanism.OVERDRIVE_DRM
+        )
+
+        # The fulfill link for non-LCP DRM does not include the hashed_passphrase tag.
+        link = self.annotator.fulfill_link(pool, loan, other_delivery_mechanism)
+        for child in link:
+            assert child.tag != "{%s}hashed_passphrase" % OPDSFeed.LCP_NS
+
+        # The fulfill link for lcp DRM includes hashed_passphrase
+        link = self.annotator.fulfill_link(pool, loan, lcp_delivery_mechanism)
+        hashed_passphrase = link[-1]
+        assert hashed_passphrase.tag == "{%s}hashed_passphrase" % OPDSFeed.LCP_NS
+        assert hashed_passphrase.text == hashed_password
 
     def test_default_lane_url(self):
         default_lane_url = self.annotator.default_lane_url()
