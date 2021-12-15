@@ -546,10 +546,12 @@ class TestLibraryAnnotator(VendorIDTest):
         identifier = pool.identifier
         patron = self._patron()
 
+        hashed_password = "hashed password"
+
         # Setup LCP credentials
         lcp_credential_factory = LCPCredentialFactory()
         lcp_credential_factory.set_hashed_passphrase(
-            self._db, patron, "hashed password"
+            self._db, patron, hashed_password
         )
 
         loan, ignore = pool.loan_to(patron, start=utc_now())
@@ -563,16 +565,16 @@ class TestLibraryAnnotator(VendorIDTest):
         # The fulfill link for non-LCP DRM does not include the hashed_passphrase tag.
         link = self.annotator.fulfill_link(pool, loan, other_delivery_mechanism)
         for child in link:
-            assert child.tag != "{http://readium.org/lcp-specs/ns}hashed_passphrase"
+            assert child.tag != "{%s}hashed_passphrase" % OPDSFeed.LCP_NS
 
         # The fulfill link for lcp DRM includes hashed_passphrase
         link = self.annotator.fulfill_link(pool, loan, lcp_delivery_mechanism)
         hashed_passphrase = link[-1]
         assert (
             hashed_passphrase.tag
-            == "{http://readium.org/lcp-specs/ns}hashed_passphrase"
+            == "{%s}hashed_passphrase" % OPDSFeed.LCP_NS
         )
-        assert hashed_passphrase.text == "hashed password"
+        assert hashed_passphrase.text == hashed_password
 
     def test_default_lane_url(self):
         default_lane_url = self.annotator.default_lane_url()
