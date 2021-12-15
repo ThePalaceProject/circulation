@@ -22,7 +22,7 @@ class IndividualAdminSettingsController(SettingsController):
 
     def process_get(self):
         admins = []
-        for admin in self._db.query(Admin):
+        for admin in self._db.query(Admin).order_by(Admin.email):
             roles = []
             for role in admin.roles:
                 if role.library:
