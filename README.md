@@ -1,5 +1,9 @@
 # Palace Manager
-[![Test Circulation & Build Docker Images](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml/badge.svg)](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml)
+[![Test & Build](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml/badge.svg)](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
+![Python: 3.6,3.7,3.8,3.9](https://img.shields.io/badge/Python-3.6%20%7C%203.7%20%7C%203.8%20%7C%203.9-blue)
 
 This is a [The Palace Project](https://thepalaceproject.org) maintained fork of the NYPL [Library Simplified](http://www.librarysimplified.org/) Circulation Manager.
 
@@ -144,6 +148,45 @@ Code documentation can be generated using Sphinx. The configuration for the docu
 Github Actions handles generating the `.rst` source files, generating the HTML static site, and deploying the build to the `gh-pages` branch.
 
 To view the documentation _locally_, go into the `/docs` directory and run `make html`. This will generate the .rst source files and build the static site in `/docs/build/html`
+
+## Code Style
+
+Code style on this project is linted using [pre-commit](https://pre-commit.com/). This python application is included in our `requirements-dev.txt` file, so if you have
+the applications requirements installed it should be available. pre-commit is run automatically on each push and PR by our [CI System](#continuous-integration).
+
+You can run it manually on all files with the command: `pre-commit run --all-files`.
+
+You can also set it up, so that it runs automatically for you on each commit. Running the command `pre-commit install` will install the pre-commit script in your
+local repositories git hooks folder, so that pre-commit is run automatically on each commit.
+
+### Configuration
+
+The pre-commit configuration file is named [`.pre-commit-config.yaml`](.pre-commit-config.yaml). This file configures the differnet lints that pre-commit runs.
+
+### Linters
+
+#### Built in
+
+Pre-commit ships with a [number of lints](https://pre-commit.com/hooks.html) out of the box, we are configured to use:
+- `trailing-whitespace` - trims trailing whitespace.
+- `end-of-file-fixer` - ensures that a file is either empty, or ends with one newline.
+- `check-yaml` - checks yaml files for parseable syntax.
+- `check-json` - checks json files for parseable syntax.
+- `check-ast` - simply checks whether the files parse as valid python.
+- `check-shebang-scripts-are-executable` - ensures that (non-binary) files with a shebang are executable.
+- `check-merge-conflict` - checks for files that contain merge conflict strings.
+- `check-added-large-files` - prevents giant files from being committed.
+- `mixed-line-ending` - replaces or checks mixed line ending.
+- `requirements-txt-fixer` - sorts entries in requirements.txt.
+
+#### Black
+
+We lint using the [black](https://black.readthedocs.io/en/stable/) code formatter, so that all of our code is formatted consistently.
+
+#### isort
+
+We lint to make sure our imports are sorted and correctly formatted using [isort](https://pycqa.github.io/isort/). Our
+isort configuration is stored in our [tox.ini](tox.ini) which isort automatically detects.
 
 ## Continuous Integration
 
