@@ -1,10 +1,12 @@
 import logging
 from contextlib import contextmanager
-from typing import Dict
+from typing import Dict, Optional, Tuple
 
 import requests
 from flask_babel import lazy_gettext as _
 from requests import HTTPError, Request
+from requests.adapters import HTTPAdapter
+from urllib3 import Retry
 
 from core.exceptions import BaseError
 from core.model import DeliveryMechanism
@@ -363,35 +365,24 @@ class ProQuestAPIClient(object):
 
     def _send_request(
         self,
-        configuration,
-        method,
-        url,
-        query_parameters,
-        token=None,
-        response_must_be_json=False,
-    ):
+        configuration: ProQuestAPIClientConfiguration,
+        method: str,
+        url: str,
+        query_parameters: Dict,
+        token: Optional[str] = None,
+        response_must_be_json: bool = False,
+        retry_strategy: Optional[Retry] = None,
+    ) -> Tuple[requests.models.Response, Optional[Dict]]:
         """Send an HTTP requests, check the result code and return the response.
 
         :param configuration: Configuration object
-        :type configuration: ProQuestAPIClientConfiguration
-
         :param method: HTTP method
-        :type method: str
-
         :param url: Target URL
-        :type url: str
-
         :param query_parameters: Dictionary containing query parameters
-        :type query_parameters: Dict
-
         :param token: Optional JWT token to be put in the Authorization header
-        :type token: Optional[str]
-
         :param response_must_be_json: Boolean value specifying whether the response must contain a valid JSON document
-        :type response_must_be_json: bool
-
+        :param retry_strategy: Optional retry strategy
         :return: 2-tuple containing the response and the JSON document containing in it (if any)
-        :rtype: Tuple[requests.models.Response, Optional[Dict]]
         """
         self._logger.debug(
             "Started sending {0} HTTP request to {1} with the following parameters: {2}".format(
@@ -403,6 +394,11 @@ class ProQuestAPIClient(object):
         proxies = self._get_request_proxies(configuration)
 
         with requests.sessions.Session() as session:
+            if retry_strategy:
+                adapter = HTTPAdapter(max_retries=retry_strategy)
+                session.mount("https://", adapter)
+                session.mount("http://", adapter)
+
             request = session.prepare_request(request)
             response = session.send(request, proxies=proxies)
 
@@ -446,6 +442,7 @@ class ProQuestAPIClient(object):
             configuration.books_catalog_service_url,
             parameters,
             response_must_be_json=True,
+            retry_strategy=Retry(total=3),
         )
 
         self._logger.info(
