@@ -1,0 +1,35 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v3.2.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+      - id: check-ast
+      - id: mixed-line-ending
+      - id: requirements-txt-fixer
+        files: requirements.*\.txt
+
+  - repo: https://github.com/psf/black
+    rev: 21.12b0
+    hooks:
+      - id: black
+        name: Run black
+
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.10.1
+    hooks:
+      - id: isort
+        name: Run isort
+
+  - repo: https://github.com/sirosen/check-jsonschema
+    rev: 0.8.2
+    hooks:
+      - id: check-github-workflows
+
+# Exclude test files, since they may be intentionally malformed
+exclude: ^tests/files/
