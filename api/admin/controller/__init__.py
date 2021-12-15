@@ -1603,8 +1603,10 @@ class SettingsController(AdminCirculationManagerController):
             .filter(ExternalIntegration.goal == goal)
         )
         ConfigurationSetting.cache_warm(self._db, settings_query.all)
-        for service in self._db.query(ExternalIntegration).filter(
-            ExternalIntegration.goal == goal
+        for service in (
+            self._db.query(ExternalIntegration)
+            .filter(ExternalIntegration.goal == goal)
+            .order_by(ExternalIntegration.name)
         ):
             candidates = [p for p in protocols if p.get("name") == service.protocol]
             if not candidates:
