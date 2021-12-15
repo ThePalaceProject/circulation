@@ -18,14 +18,11 @@ from .lane import (
     Pagination,
     SearchFacets,
 )
-from .lcp.credential import LCPCredentialFactory
-from .lcp.exceptions import LCPError
 from .model import (
     CachedFeed,
     Contributor,
     DataSource,
     Edition,
-    ExternalIntegration,
     Hyperlink,
     Identifier,
     Measurement,
@@ -1689,33 +1686,6 @@ class AcquisitionFeed(OPDSFeed):
             indirect_types = []
         link = cls.link(rel, href, initial_type)
         indirect = cls.indirect_acquisition(indirect_types)
-
-        # In the case of LCP we have to include a patron's hashed passphrase
-        # inside the acquisition link so client applications can use it to bypass authentication
-        # and will not ask patrons to enter their passphrases
-        # For more information please look here:
-        # https://readium.org/lcp-specs/notes/lcp-key-retrieval.html#including-a-hashed-passphrase-in-an-opds-1-catalog
-        if active_loan and active_loan.license_pool.collection.protocol in [
-            ExternalIntegration.LCP,
-            ExternalIntegration.ODL,
-            ExternalIntegration.ODL2,
-        ]:
-            db = Session.object_session(active_loan)
-            lcp_credential_factory = LCPCredentialFactory()
-
-            try:
-                hashed_passphrase = lcp_credential_factory.get_hashed_passphrase(
-                    db, active_loan.patron
-                )
-                hashed_passphrase_element = AtomFeed.makeelement(
-                    "{%s}hashed_passphrase" % AtomFeed.LCP_NS
-                )
-                hashed_passphrase_element.text = hashed_passphrase
-
-                link.append(hashed_passphrase_element)
-            except LCPError:
-                # The patron's passphrase wasn't generated yet and not present in the database.
-                pass
 
         if indirect is not None:
             link.append(indirect)

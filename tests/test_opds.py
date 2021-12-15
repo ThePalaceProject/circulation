@@ -1,6 +1,5 @@
 import datetime
 import logging
-import re
 import xml.etree.ElementTree as ET
 from io import StringIO
 
@@ -26,7 +25,6 @@ from ..entrypoint import (
 from ..external_search import MockExternalSearchIndex
 from ..facets import FacetConstants
 from ..lane import Facets, FeaturedFacets, Pagination, SearchFacets, WorkList
-from ..lcp.credential import LCPCredentialFactory
 from ..model import (
     CachedFeed,
     Contributor,
@@ -544,38 +542,6 @@ class TestOPDS(DatabaseTest):
         parsed = feedparser.parse(u)
         entry = parsed["entries"][0]
         assert work.presentation_edition.permanent_work_id == entry["simplified_pwid"]
-
-    def test_lcp_acquisition_link_contains_hashed_passphrase(self):
-        # Arrange
-        lcp_collection = self._collection(protocol=ExternalIntegration.LCP)
-        data_source = DataSource.lookup(self._db, DataSource.LCP, autocreate=True)
-        data_source_name = data_source.name
-        license_pool = self._licensepool(
-            edition=None, data_source_name=data_source_name, collection=lcp_collection
-        )
-        hashed_passphrase = "12345"
-        patron = self._patron()
-        lcp_credential_factory = LCPCredentialFactory()
-        loan, _ = license_pool.loan_to(patron)
-        rel = AcquisitionFeed.ACQUISITION_REL
-        href = self._url
-        types = [DeliveryMechanism.LCP_DRM, Representation.EPUB_MEDIA_TYPE]
-        expected_result = (
-            '<link href="{0}" rel="http://opds-spec.org/acquisition" '
-            'type="application/vnd.readium.lcp.license.v1.0+json">'
-            '<ns0:hashed_passphrase xmlns:ns0="http://readium.org/lcp-specs/ns">{1}</ns0:hashed_passphrase>'
-            '<ns0:indirectAcquisition xmlns:ns0="http://opds-spec.org/2010/catalog" type="application/epub+zip"/>'
-            "</link>"
-        ).format(href, hashed_passphrase)
-
-        # Act
-        lcp_credential_factory.set_hashed_passphrase(
-            self._db, patron, hashed_passphrase
-        )
-        acquisition_link = AcquisitionFeed.acquisition_link(rel, href, types, loan)
-
-        # Assert
-        self._assert_xml_equal(acquisition_link, expected_result)
 
     def test_lane_feed_contains_facet_links(self):
         work = self._work(with_open_access_download=True)
@@ -2261,7 +2227,7 @@ class TestLookupAcquisitionFeed(DatabaseTest):
             "http://whatever.io",
             [],
             annotator=annotator,
-            **kwargs
+            **kwargs,
         )
 
     def entry(self, identifier, work, annotator=VerboseAnnotator, **kwargs):
