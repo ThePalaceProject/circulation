@@ -40,7 +40,7 @@ section_style = """
     align-items: center;
 """
 button_style = """
-    background: #7177C8;
+    background: #242DAB;
     border-color: transparent;
     border-radius: .25em;
     color: #fff;
@@ -54,10 +54,10 @@ button_style = """
 """
 
 link_style = """
-    background: #7177C8;
+    background: #242DAB;
     text-align: center;
     text-decoration: none;
-    border-color: #7177C8;
+    border-color: #242DAB;
     border-radius: .25em;
     color: #fff;
     padding: 10px;
