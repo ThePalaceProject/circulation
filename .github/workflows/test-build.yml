@@ -1,4 +1,4 @@
-name: Test Circulation & Build Docker Images
+name: Test & Build
 on: [push, pull_request]
 env:
   POSTGRES_USER: simplified_test

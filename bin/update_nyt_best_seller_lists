@@ -8,6 +8,6 @@ package_dir = os.path.join(bin_dir, "..")
 sys.path.append(os.path.abspath(package_dir))
 from scripts import NYTBestSellerListsScript
 
-include_history = ('history' in sys.argv)
+include_history = "history" in sys.argv
 
 NYTBestSellerListsScript(include_history).run()

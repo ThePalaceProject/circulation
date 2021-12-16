@@ -13,6 +13,6 @@ from core.scripts import OPDSImportScript
 
 OPDSImportScript(
     importer_class=FeedbooksOPDSImporter,
-    monitor_class=FeedbooksImportMonitor, 
-    protocol=ExternalIntegration.FEEDBOOKS
+    monitor_class=FeedbooksImportMonitor,
+    protocol=ExternalIntegration.FEEDBOOKS,
 ).run()

@@ -7,15 +7,20 @@ import click
 import requests
 
 DEFAULT_REGISTRY_URL = "https://libraryregistry.librarysimplified.org"
-CLIENT_TOKEN_RE = re.compile(r'''
+CLIENT_TOKEN_RE = re.compile(
+    r"""
                                 ^
                                 (?P<library>[^|]+) \|               # Any number of characters up to a pipe
                                 (?P<timestamp>[0-9]+) \|            # Epoch timestamp, any number of digits
                                 (?P<patron_id>[-A-Za-z0-9]{36}) \|  # The patron id is a UUID, 36 characters long
                                 (?P<signature_hash>.*)              # Everything after the third pipe
                                 $
-                             ''', re.IGNORECASE | re.VERBOSE)
-REGISTRY_RESPONSE_RE = re.compile(r'''<user>(?P<user_id>[^<]+?)</user>''', re.IGNORECASE)
+                             """,
+    re.IGNORECASE | re.VERBOSE,
+)
+REGISTRY_RESPONSE_RE = re.compile(
+    r"""<user>(?P<user_id>[^<]+?)</user>""", re.IGNORECASE
+)
 
 
 class InvalidTokenException(Exception):
@@ -31,13 +36,17 @@ def decompose_token(token):
     if not m:
         raise InvalidTokenException(f"Invalid token: {token}")
     else:
-        return m.groups()   # Tuple of library, timestamp, patron_id, signature_hash
+        return m.groups()  # Tuple of library, timestamp, patron_id, signature_hash
 
 
 @click.command()
-@click.argument('token')
-@click.option('--registry-url', default=DEFAULT_REGISTRY_URL, metavar='<URL>',
-              help="URL of the library registry you're testing against")
+@click.argument("token")
+@click.option(
+    "--registry-url",
+    default=DEFAULT_REGISTRY_URL,
+    metavar="<URL>",
+    help="URL of the library registry you're testing against",
+)
 def main(token, registry_url):
     """
     Retrieve an Adobe ID from a Short Client Token.
@@ -61,7 +70,9 @@ def main(token, registry_url):
         click.echo(str(exc))
         sys.exit(1)
 
-    click.echo("\nThe supplied Short Client Token was well formed, and decomposes to:\n")
+    click.echo(
+        "\nThe supplied Short Client Token was well formed, and decomposes to:\n"
+    )
     click.echo(f"  Library code:      {library}")
     click.echo(f"  Timestamp:         {timestamp}")
     click.echo(f"  Patron identifier: {patron_id}")
@@ -89,14 +100,16 @@ def main(token, registry_url):
     response = requests.post(signin_url, data="".join(signin_payload_lines))
 
     click.echo("\nRegistry server responded with:\n")
-    for line in response.content.decode('utf8').split("\n"):
+    for line in response.content.decode("utf8").split("\n"):
         click.echo(f"    {line}")
     click.echo()
 
-    user_id_match = REGISTRY_RESPONSE_RE.search(response.content.decode('utf8'))
+    user_id_match = REGISTRY_RESPONSE_RE.search(response.content.decode("utf8"))
     if user_id_match:
         click.echo(click.style("SUCCESS ", fg="green", bold=True), nl=False)
-        click.echo(f"Adobe ID for this patron is {user_id_match.group('user_id')}", nl=False)
+        click.echo(
+            f"Adobe ID for this patron is {user_id_match.group('user_id')}", nl=False
+        )
         click.echo(click.style(" SUCCESS", fg="green", bold=True))
     else:
         click.echo(click.style("ERROR ", fg="red", bold=True), nl=False)
@@ -104,5 +117,5 @@ def main(token, registry_url):
         click.echo(click.style(" ERROR", fg="red", bold=True))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

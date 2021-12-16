@@ -15,9 +15,15 @@ from core.scripts import Script  # noqa: E402
 class BibliothecaRawPatronStatusScript(Script):
     def run(self):
         for patron_identifier in sys.argv[1:]:
-            patron = self._db.query(Patron).filter(Patron.authorization_identifier == patron_identifier).one()
+            patron = (
+                self._db.query(Patron)
+                .filter(Patron.authorization_identifier == patron_identifier)
+                .one()
+            )
 
-            for collection in Collection.by_protocol(self._db, ExternalIntegration.BIBLIOTHECA):
+            for collection in Collection.by_protocol(
+                self._db, ExternalIntegration.BIBLIOTHECA
+            ):
                 api = BibliothecaAPI(self._db, collection)
                 response = api._patron_activity_request(patron)
                 xml = minidom.parseString(response.content)

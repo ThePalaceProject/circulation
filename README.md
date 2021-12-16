@@ -1,5 +1,9 @@
 # Palace Manager
-[![Test Circulation & Build Docker Images](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml/badge.svg)](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml)
+[![Test & Build](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml/badge.svg)](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
+![Python: 3.6,3.7,3.8,3.9](https://img.shields.io/badge/Python-3.6%20%7C%203.7%20%7C%203.8%20%7C%203.9-blue)
 
 This is a [The Palace Project](https://thepalaceproject.org) maintained fork of the NYPL [Library Simplified](http://www.librarysimplified.org/) Circulation Manager.
 
@@ -145,6 +149,46 @@ Github Actions handles generating the `.rst` source files, generating the HTML s
 
 To view the documentation _locally_, go into the `/docs` directory and run `make html`. This will generate the .rst source files and build the static site in `/docs/build/html`
 
+## Code Style
+
+Code style on this project is linted using [pre-commit](https://pre-commit.com/). This python application is included in our `requirements-dev.txt` file, so if you have
+the applications requirements installed it should be available. pre-commit is run automatically on each push and PR by our [CI System](#continuous-integration).
+
+You can run it manually on all files with the command: `pre-commit run --all-files`.
+
+You can also set it up, so that it runs automatically for you on each commit. Running the command `pre-commit install` will install the pre-commit script in your
+local repositories git hooks folder, so that pre-commit is run automatically on each commit.
+
+### Configuration
+
+The pre-commit configuration file is named [`.pre-commit-config.yaml`](.pre-commit-config.yaml). This file configures the differnet lints that pre-commit runs.
+
+### Linters
+
+#### Built in
+
+Pre-commit ships with a [number of lints](https://pre-commit.com/hooks.html) out of the box, we are configured to use:
+- `trailing-whitespace` - trims trailing whitespace.
+- `end-of-file-fixer` - ensures that a file is either empty, or ends with one newline.
+- `check-yaml` - checks yaml files for parseable syntax.
+- `check-json` - checks json files for parseable syntax.
+- `check-ast` - simply checks whether the files parse as valid python.
+- `check-shebang-scripts-are-executable` - ensures that (non-binary) files with a shebang are executable.
+- `check-executables-have-shebangs` -  ensures that (non-binary) executables have a shebang.
+- `check-merge-conflict` - checks for files that contain merge conflict strings.
+- `check-added-large-files` - prevents giant files from being committed.
+- `mixed-line-ending` - replaces or checks mixed line ending.
+- `requirements-txt-fixer` - sorts entries in requirements.txt.
+
+#### Black
+
+We lint using the [black](https://black.readthedocs.io/en/stable/) code formatter, so that all of our code is formatted consistently.
+
+#### isort
+
+We lint to make sure our imports are sorted and correctly formatted using [isort](https://pycqa.github.io/isort/). Our
+isort configuration is stored in our [tox.ini](tox.ini) which isort automatically detects.
+
 ## Continuous Integration
 
 This project runs all the unit tests through Github Actions for new pull requests and when merging into the default `develop` branch. The relevant file can be found in `.github/workflows/test.yml`. When contributing updates or fixes, it's required for the test Github Action to pass for all python 3 environments. Run the `tox` command locally before pushing changes to make sure you find any failing tests before committing them.
@@ -241,32 +285,32 @@ Check out the [Docker README](/docker/README.md) in the `/docker` directory for 
 ## Performance Profiling
 
 There are three different profilers included to help measure the performance of the application. They can each be
-enabled by setting environment variables while starting the application. 
+enabled by setting environment variables while starting the application.
 
 ### AWS XRay
 
 *Environment Variables*
 - `PALACE_XRAY`: Set to enable X-Ray tracing on the application.
 - `PALACE_XRAY_NAME`: The name of the service shown in x-ray for these traces.
-- `PALACE_XRAY_ANNOTATE_`: Any environment variable starting with this prefix will be added to to the trace as an 
-  annotation. 
+- `PALACE_XRAY_ANNOTATE_`: Any environment variable starting with this prefix will be added to to the trace as an
+  annotation.
     - For example setting `PALACE_XRAY_ANNOTATE_KEY=value` will set the annotation `key=value` on all xray traces sent
       from the application.
 - `PALACE_XRAY_INCLUDE_BARCODE`: If this environment variable is set to `true` then the tracing code will try to include
   the patrons barcode in the user parameter of the trace, if a barcode is available.
-  
- 
+
+
 Additional environment variables are provided by the [X-Ray Python SDK](https://docs.aws.amazon.com/xray/latest/devguide/xray-sdk-python-configuration.html#xray-sdk-python-configuration-envvars).
-  
+
 ### cProfile
 
 This profiler uses the [werkzeug `ProfilerMiddleware`](https://werkzeug.palletsprojects.com/en/2.0.x/middleware/profiler/)
-to profile the code. This uses the [cProfile](https://docs.python.org/3/library/profile.html#module-cProfile) module 
+to profile the code. This uses the [cProfile](https://docs.python.org/3/library/profile.html#module-cProfile) module
 under the hood to do the profiling.
 
 *Environment Variables*
 - `PALACE_CPROFILE`: Profiling will the enabled if this variable is set. The saved profile data will be available at
-  path specified in the environment variable. 
+  path specified in the environment variable.
     - The profile data will have the extension `.prof`.
     - The data can be accessed using the [`pstats.Stats` class](https://docs.python.org/3/library/profile.html#the-stats-class).
     - Example code to print details of the gathered statistics:
@@ -274,14 +318,14 @@ under the hood to do the profiling.
       import os
       from pathlib import Path
       from pstats import SortKey, Stats
-        
+
       path = Path(os.environ.get("PALACE_CPROFILE"))
       for file in path.glob("*.prof"):
           stats = Stats(str(file))
           stats.sort_stats(SortKey.CUMULATIVE, SortKey.CALLS)
           stats.print_stats()
       ```
-    
+
 
 ### PyInstrument
 
@@ -296,10 +340,10 @@ This profiler uses [PyInstrument](https://pyinstrument.readthedocs.io/en/latest/
       ```python
       import os
       from pathlib import Path
-        
+
       from pyinstrument.renderers import HTMLRenderer
       from pyinstrument.session import Session
-        
+
       path = Path(os.environ.get("PALACE_PYINSTRUMENT"))
       for file in path.glob("*.pyisession"):
           session = Session.load(file)
