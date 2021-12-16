@@ -1,36 +1,7 @@
-name: Lint & Test
+name: Test
 on: [push, pull_request]
 
 jobs:
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-
-    # We want to run on external PRs, but not on our own internal PRs as they'll be run
-    # by the push to the branch. This prevents duplicated runs on internal PRs.
-    # Some discussion of this here:
-    # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
-
-    steps:
-      - uses: actions/checkout@v2
-
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.9
-
-      - name: Install Python Packages
-        run: |
-          pip install --upgrade pip
-          pip install tox
-
-      - name: Run isort
-        run: tox -e isort
-
-      - name: Run Black
-        run: tox -e black
-
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -40,7 +11,7 @@ jobs:
         python-version: [3.6, 3.7, 3.8, 3.9]
     # We want to run on external PRs, but not on our own internal PRs as they'll be run
     # by the push to the branch. This prevents duplicated runs on internal PRs.
-    # Some discussion of this here: 
+    # Some discussion of this here:
     # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
 

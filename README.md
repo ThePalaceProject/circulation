@@ -65,7 +65,7 @@ The default branch is `develop` and that's the working branch that should be use
 Python 2 stopped being supported after January 1st, 2020 but there is still a `python2` branch which can be used. As of May 2021, development will be done in the `develop` and `main` branches.
 
 ## Testing
-The Github Actions CI service runs the unit tests against Python 3.6, 3.7, 3.8 and 3.9 automatically using [tox](https://tox.readthedocs.io/en/latest/). 
+The Github Actions CI service runs the unit tests against Python 3.6, 3.7, 3.8 and 3.9 automatically using [tox](https://tox.readthedocs.io/en/latest/).
 
 To run `pytest` unit tests locally, install `tox`.
 
@@ -74,7 +74,7 @@ pip install tox
 ```
 
 Tox has an environment for each python version and an optional `-docker` factor that will automatically use docker to
-deploy service containers used for the tests. You can select the environment you would like to test with the tox `-e` 
+deploy service containers used for the tests. You can select the environment you would like to test with the tox `-e`
 flag.
 
 ### Environments
@@ -87,7 +87,7 @@ flag.
 | py39        | Python 3.9     |
 
 All of these environments are tested by default when running tox. To test one specific environment you can use the `-e`
-flag. 
+flag.
 
 Test Python 3.8
 ```
@@ -101,14 +101,14 @@ You need to have the Python versions you are testing against installed on your l
 ### Docker
 
 If you install `tox-docker` tox will take care of setting up all the service containers necessary to run the unit tests
-and pass the correct environment variables to configure the tests to use these services. Using `tox-docker` is not required, but it is the recommended way to run the tests locally, since it runs the tests in the same way they are run on the Github Actions CI server. 
+and pass the correct environment variables to configure the tests to use these services. Using `tox-docker` is not required, but it is the recommended way to run the tests locally, since it runs the tests in the same way they are run on the Github Actions CI server.
 
 ```
 pip install tox-docker
-``` 
+```
 
 The docker functionality is included in a `docker` factor that can be added to the environment. To run an environment
-with a particular factor you add it to the end of the environment. 
+with a particular factor you add it to the end of the environment.
 
 Test with Python 3.8 using docker containers for the services.
 ```
@@ -142,7 +142,7 @@ tox -e py38
 ### Override `pytest` arguments
 
 If you wish to pass additional arguments to `pytest` you can do so through `tox`. The default argument passed to `pytest`
-is `tests`, however you can override this. Every argument passed after a `--` to the `tox` command line will the passed 
+is `tests`, however you can override this. Every argument passed after a `--` to the `tox` command line will the passed
 to `pytest`, overriding the default.
 
 Only run the `test_cdn` tests with Python 3.6 using docker.

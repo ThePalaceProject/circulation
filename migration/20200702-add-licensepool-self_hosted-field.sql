@@ -1,4 +1,4 @@
-DO $$ 
+DO $$
  BEGIN
   -- Add the 'self_hosted' column
   BEGIN
@@ -8,4 +8,3 @@ DO $$
   END;
  END;
 $$;
-

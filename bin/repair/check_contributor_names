@@ -13,6 +13,7 @@ which generates a report file that lists the contributors affected, and whether 
 were fixed or complained about.
 """
 import startup
+
 from core.scripts import CheckContributorNamesInDB
 
 CheckContributorNamesInDB().run()

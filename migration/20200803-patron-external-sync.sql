@@ -1,4 +1,4 @@
-DO $$ 
+DO $$
  BEGIN
   -- Add the 'last_loan_activity_sync' column
   BEGIN
