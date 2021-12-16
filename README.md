@@ -174,6 +174,7 @@ Pre-commit ships with a [number of lints](https://pre-commit.com/hooks.html) out
 - `check-json` - checks json files for parseable syntax.
 - `check-ast` - simply checks whether the files parse as valid python.
 - `check-shebang-scripts-are-executable` - ensures that (non-binary) files with a shebang are executable.
+- `check-executables-have-shebangs` -  ensures that (non-binary) executables have a shebang.
 - `check-merge-conflict` - checks for files that contain merge conflict strings.
 - `check-added-large-files` - prevents giant files from being committed.
 - `mixed-line-ending` - replaces or checks mixed line ending.
