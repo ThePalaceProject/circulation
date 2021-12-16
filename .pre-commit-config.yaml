@@ -10,6 +10,8 @@ repos:
       - id: check-json
       - id: check-ast
       - id: check-shebang-scripts-are-executable
+      - id: check-executables-have-shebangs
+      - id: check-merge-conflict
       - id: check-added-large-files
       - id: mixed-line-ending
       - id: requirements-txt-fixer
