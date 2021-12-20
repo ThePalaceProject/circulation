@@ -227,3 +227,59 @@ class TestODL2Importer(TestODLImporter):
             )
         )
         assert str(huck_finn_semantic_error) == huck_finn_failure.exception
+
+    @freeze_time("2016-01-01T00:00:00+00:00")
+    def test_import_audiobook(self, importer, mock_get, datasource, db):
+        """Ensure that ODL2Importer2 correctly processes and imports a feed with an audiobook."""
+        license = self.get_data("license-audiobook.json")
+        feed = self.get_data("feed-audiobook.json")
+        mock_get.add(license)
+
+        configuration_storage = ConfigurationStorage(importer)
+        configuration_factory = ConfigurationFactory()
+
+        with configuration_factory.create(
+            configuration_storage, db, ODL2APIConfiguration
+        ) as configuration:
+            configuration.skipped_license_formats = json.dumps(["text/html"])
+
+        imported_editions, pools, works, failures = importer.import_from_feed(feed)
+
+        # Make sure we imported one edition and it is an audiobook
+        assert isinstance(imported_editions, list)
+        assert 1 == len(imported_editions)
+
+        [edition] = imported_editions
+        assert isinstance(edition, Edition)
+        assert edition.primary_identifier.identifier == "9780792766919"
+        assert edition.primary_identifier.type == "ISBN"
+        assert EditionConstants.AUDIO_MEDIUM == edition.medium
+
+        # Make sure that license pools have correct configuration
+        assert isinstance(pools, list)
+        assert 1 == len(pools)
+
+        [license_pool] = pools
+        assert not license_pool.open_access
+        assert 1 == license_pool.licenses_owned
+        assert 1 == license_pool.licenses_available
+
+        assert 2 == len(license_pool.delivery_mechanisms)
+
+        lcp_delivery_mechanism = (
+            self._get_delivery_mechanism_by_drm_scheme_and_content_type(
+                license_pool.delivery_mechanisms,
+                MediaTypes.AUDIOBOOK_PACKAGE_LCP_MEDIA_TYPE,
+                DeliveryMechanism.LCP_DRM,
+            )
+        )
+        assert lcp_delivery_mechanism is not None
+
+        feedbooks_delivery_mechanism = (
+            self._get_delivery_mechanism_by_drm_scheme_and_content_type(
+                license_pool.delivery_mechanisms,
+                MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+                DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
+            )
+        )
+        assert feedbooks_delivery_mechanism is not None
