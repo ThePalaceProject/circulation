@@ -7,7 +7,7 @@ from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
 from api.odl import ODLAPI, ODLImporter
 from core.metadata_layer import FormatData
-from core.model import DeliveryMechanism, Edition, MediaTypes, RightsStatus
+from core.model import Edition, RightsStatus
 from core.model.configuration import (
     ConfigurationAttributeType,
     ConfigurationFactory,

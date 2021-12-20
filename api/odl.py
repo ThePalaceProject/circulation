@@ -2,7 +2,6 @@ import binascii
 import datetime
 import json
 import logging
-import re
 import uuid
 from io import StringIO
 from typing import Callable, Dict, List, Optional, Tuple, Union
@@ -20,7 +19,7 @@ from uritemplate import URITemplate
 from core import util
 from core.analytics import Analytics
 from core.lcp.credential import LCPCredentialFactory
-from core.metadata_layer import CirculationData, FormatData, LicenseData, TimestampData
+from core.metadata_layer import FormatData, LicenseData, TimestampData
 from core.model import (
     Collection,
     ConfigurationSetting,
@@ -50,7 +49,7 @@ from core.model.configuration import (
     HasExternalIntegration,
 )
 from core.model.licensing import LicenseStatus
-from core.monitor import CollectionMonitor, IdentifierSweepMonitor
+from core.monitor import CollectionMonitor
 from core.opds_import import OPDSImporter, OPDSImportMonitor, OPDSXMLParser
 from core.testing import DatabaseTest, MockRequestsResponse
 from core.util.datetime_helpers import to_utc, utc_now
