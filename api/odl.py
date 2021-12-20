@@ -543,87 +543,46 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
     @staticmethod
     def _find_content_link_and_type(
         links: List[Dict],
-        delivery_mechanism: Union[
-            Optional[str], Optional[LicensePoolDeliveryMechanism]
-        ],
-        ignore_drm_scheme: bool = False,
-    ) -> Tuple[str, str]:
+        drm_scheme: Optional[str],
+    ) -> Tuple[Optional[str], Optional[str]]:
         """Find a content link with the type information corresponding to the selected delivery mechanism.
 
         :param links: List of dict-like objects containing information about available links in the LCP license file
-        :param delivery_mechanism: Selected delivery mechanism
+        :param drm_scheme: Selected delivery mechanism DRM scheme
 
         :return: Two-tuple containing a content link and content type
         """
-        content_link = None
-        content_type = None
-
+        candidates = []
         for link in links:
             # Depending on the format being served, the crucial information
             # may be in 'manifest' or in 'license'.
-            if link.get("rel") in ("manifest", "license"):
-                candidate_content_link = link.get("href")
-                candidate_content_type = link.get("type")
+            if link.get("rel") not in ("manifest", "license"):
+                continue
+            href = link.get("href")
+            type = link.get("type")
 
-                if not delivery_mechanism:
-                    # If we don't have a LicensePoolDeliveryMechanism instance,
-                    # we can't really decide whether the link has the correct content and DRM type,
-                    # so we take the first one.
-                    content_link = candidate_content_link
-                    content_type = candidate_content_type
-                    break
-                elif isinstance(delivery_mechanism, str):
-                    # If delivery mechanism is a string,
-                    # then we suppose that it contains the DRM type in the case of the DRM-protected content
-                    # and the content type in the case of OA content.
-                    if delivery_mechanism == candidate_content_type:
-                        content_link = candidate_content_link
-                        content_type = candidate_content_type
-                        break
-                elif isinstance(delivery_mechanism, LicensePoolDeliveryMechanism):
-                    # If we have a LicensePoolDeliveryMechanism instance,
-                    # then we use it to find a link with the correct content and DRM types.
+            # For DeMarque audiobook content, we need to translate the type property
+            # to reflect what we have stored in our delivery mechanisms.
+            if type in ODLImporter.LICENSE_FORMATS:
+                type = ODLImporter.LICENSE_FORMATS[type][ODLImporter.DRM_SCHEME]
 
-                    match = False
+            candidates.append((href, type))
 
-                    # First, let's check if a content type is compound and contains both type and DRM scheme.
-                    if candidate_content_type in ODLImporter.LICENSE_FORMATS:
-                        drm_scheme = ODLImporter.LICENSE_FORMATS[
-                            candidate_content_type
-                        ][ODLImporter.DRM_SCHEME]
-                        candidate_content_type = ODLImporter.LICENSE_FORMATS[
-                            candidate_content_type
-                        ][ODLImporter.CONTENT_TYPE]
+        if len(candidates) == 0:
+            # No candidates
+            return None, None
 
-                        if (
-                            drm_scheme
-                            == delivery_mechanism.delivery_mechanism.drm_scheme
-                            and candidate_content_type
-                            == delivery_mechanism.delivery_mechanism.content_type
-                        ):
-                            match = True
-                    # If the content type is not compound, then first compare it with the DRM scheme:
-                    # if the book is DRM protected the content type will actually contain the DRM type.
-                    # Then let's check the type itself.
-                    elif (
-                        candidate_content_type
-                        == delivery_mechanism.delivery_mechanism.drm_scheme
-                        or candidate_content_type
-                        == delivery_mechanism.delivery_mechanism.content_type
-                    ):
-                        match = True
+        if not drm_scheme:
+            # If we don't have a requested DRM scheme, so we use the first one.
+            # TODO: Can this just be dropped?
+            return next(candidates)
 
-                    if match:
-                        content_link = candidate_content_link
-                        content_type = candidate_content_type
-                        break
-
-        return content_link, content_type
+        return next(filter(lambda x: x[1] == drm_scheme, candidates), (None, None))
 
     def _fulfill(
         self,
         loan: Loan,
-        delivery_mechanism: Optional[LicensePoolDeliveryMechanism] = None,
+        delivery_mechanism: Optional[Union[str, LicensePoolDeliveryMechanism]] = None,
     ) -> FulfillmentInfo:
         licensepool = loan.license_pool
         doc = self.get_license_status_document(loan)
@@ -641,6 +600,9 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
         expires = dateutil.parser.parse(expires)
 
         links = doc.get("links", [])
+        if isinstance(delivery_mechanism, LicensePoolDeliveryMechanism):
+            delivery_mechanism = delivery_mechanism.delivery_mechanism.drm_scheme
+
         content_link, content_type = self._find_content_link_and_type(
             links, delivery_mechanism
         )

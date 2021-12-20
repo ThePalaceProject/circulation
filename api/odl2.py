@@ -200,7 +200,13 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
                 if parsed_license is not None:
                     licenses.append(parsed_license)
 
-                for license_format in odl_license.metadata.formats:
+                # DPLA feed doesn't have information about a DRM protection used for audiobooks.
+                # We want to try to extract that information from the License Info Document it's present there.
+                license_formats = set(odl_license.metadata.formats)
+                if parsed_license and parsed_license.content_types:
+                    license_formats |= set(parsed_license.content_types)
+
+                for license_format in license_formats:
                     if (
                         skipped_license_formats
                         and license_format in skipped_license_formats
@@ -210,32 +216,23 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
                     if not medium:
                         medium = Edition.medium_from_media_type(license_format)
 
-                    drm_schemes = (
-                        odl_license.metadata.protection.formats
-                        if odl_license.metadata.protection
-                        else []
-                    )
-
-                    # DPLA feed doesn't have information about a DRM protection used for audiobooks.
-                    # We want to try to extract that information from the License Info Document it's present there.
-                    if (
-                        license_format == MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE
-                        and parsed_license
-                        and parsed_license.content_types
-                    ):
-                        for content_type in parsed_license.content_types:
-                            if MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE in content_type:
-                                license_format = content_type
-
                     if license_format in ODLImporter.LICENSE_FORMATS:
-                        drm_scheme = ODLImporter.LICENSE_FORMATS[license_format][
-                            ODLImporter.DRM_SCHEME
+                        # Special case to handle DeMarque audiobooks which
+                        # include the protection in the content type
+                        drm_schemes = [
+                            ODLImporter.LICENSE_FORMATS[license_format][
+                                ODLImporter.DRM_SCHEME
+                            ]
                         ]
                         license_format = ODLImporter.LICENSE_FORMATS[license_format][
                             ODLImporter.CONTENT_TYPE
                         ]
-
-                        drm_schemes.append(drm_scheme)
+                    else:
+                        drm_schemes = (
+                            odl_license.metadata.protection.formats
+                            if odl_license.metadata.protection
+                            else []
+                        )
 
                     for drm_scheme in drm_schemes or [None]:
                         formats.append(
