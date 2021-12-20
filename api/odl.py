@@ -575,7 +575,7 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
         if not drm_scheme:
             # If we don't have a requested DRM scheme, so we use the first one.
             # TODO: Can this just be dropped?
-            return next(candidates)
+            return candidates[0]
 
         return next(filter(lambda x: x[1] == drm_scheme, candidates), (None, None))
 

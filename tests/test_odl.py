@@ -30,7 +30,6 @@ from core.model import (
     ExternalIntegration,
     Hold,
     Hyperlink,
-    LicensePoolDeliveryMechanism,
     Loan,
     MediaTypes,
     Representation,
@@ -81,16 +80,12 @@ class LicenseInfoHelper:
         available: int,
         status: str = "available",
         left: Optional[int] = None,
-        content_types: Optional[Union[str, List[str]]] = None,
-        drm_schemes: Optional[Union[str, List[str]]] = None,
     ) -> None:
         """Initialize a new instance of LicenseInfoHelper class."""
         self.license: LicenseHelper = license
         self.status: str = status
         self.left: int = left
         self.available: int = available
-        self.content_types = content_types
-        self.drm_schemes = drm_schemes
 
     def __str__(self) -> str:
         """Return a JSON representation of a part of the License Info Document."""
@@ -108,10 +103,6 @@ class LicenseInfoHelper:
             output["terms"]["expires"] = self.license.expires
         if self.left is not None:
             output["checkouts"]["left"] = self.left
-        if self.content_types is not None:
-            output["format"] = self.content_types
-        if self.drm_schemes is not None:
-            output["protection"] = {"format": self.drm_schemes}
         return json.dumps(output)
 
 
@@ -749,8 +740,61 @@ class TestODLAPI(DatabaseTest, BaseODLAPITest):
 
         assert 0 == db.query(Loan).count()
 
-    def test_fulfill_success_license(
-        self, license, patron, api, checkout, pool, collection, db
+    @pytest.mark.parametrize(
+        "delivery_mechanism, correct_link, links",
+        [
+            (
+                DeliveryMechanism.ADOBE_DRM,
+                "http://acsm",
+                [
+                    {
+                        "rel": "license",
+                        "href": "http://acsm",
+                        "type": DeliveryMechanism.ADOBE_DRM,
+                    }
+                ],
+            ),
+            (
+                MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+                "http://manifest",
+                [
+                    {
+                        "rel": "manifest",
+                        "href": "http://manifest",
+                        "type": MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+                    }
+                ],
+            ),
+            (
+                DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
+                "http://correct",
+                [
+                    {
+                        "rel": "license",
+                        "href": "http://acsm",
+                        "type": DeliveryMechanism.ADOBE_DRM,
+                    },
+                    {
+                        "rel": "manifest",
+                        "href": "http://correct",
+                        "type": ODLImporter.FEEDBOOKS_AUDIO,
+                    },
+                ],
+            ),
+        ],
+    )
+    def test_fulfill_success(
+        self,
+        license,
+        patron,
+        api,
+        checkout,
+        pool,
+        collection,
+        db,
+        delivery_mechanism,
+        correct_link,
+        links,
     ):
         # Fulfill a loan in a way that gives access to a license file.
         license.setup(concurrency=1, available=1)
@@ -760,96 +804,20 @@ class TestODLAPI(DatabaseTest, BaseODLAPITest):
             {
                 "status": "ready",
                 "potential_rights": {"end": "2017-10-21T11:12:13Z"},
-                "links": [
-                    {
-                        "rel": "license",
-                        "href": "http://acsm",
-                        "type": DeliveryMechanism.ADOBE_DRM,
-                    }
-                ],
+                "links": links,
             }
         )
 
         api.queue_response(200, content=lsd)
-        fulfillment = api.fulfill(patron, "pin", pool, DeliveryMechanism.ADOBE_DRM)
+        fulfillment = api.fulfill(patron, "pin", pool, delivery_mechanism)
 
         assert collection == fulfillment.collection(db)
         assert pool.data_source.name == fulfillment.data_source_name
         assert pool.identifier.type == fulfillment.identifier_type
         assert pool.identifier.identifier == fulfillment.identifier
         assert datetime_utc(2017, 10, 21, 11, 12, 13) == fulfillment.content_expires
-        assert "http://acsm" == fulfillment.content_link
-        assert DeliveryMechanism.ADOBE_DRM == fulfillment.content_type
-
-    @pytest.mark.parametrize(
-        "feed_content_type, feed_drm_scheme, type_in_license",
-        [
-            (
-                MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-                DeliveryMechanism.NO_DRM,
-                MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-            ),
-            (
-                MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-                DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
-                ODLImporter.FEEDBOOKS_AUDIO,
-            ),
-        ],
-    )
-    def test_fulfill_successfully_fulfills_audiobooks(
-        self,
-        license,
-        patron,
-        api,
-        checkout,
-        pool,
-        collection,
-        db,
-        feed_content_type,
-        feed_drm_scheme,
-        type_in_license,
-    ):
-        # We need to override the medium and set it to 'Audio'.
-        pool.presentation_edition.medium = Edition.AUDIO_MEDIUM
-
-        # Fulfill a loan in a way that gives access to a manifest file.
-        license.setup(concurrency=1, available=1)
-        checkout()
-
-        data_source = pool.data_source
-        identifier = pool.identifier
-        internal_format = LicensePoolDeliveryMechanism.set(
-            data_source,
-            identifier,
-            feed_content_type,
-            feed_drm_scheme,
-            RightsStatus.IN_COPYRIGHT,
-        )
-        lsd = json.dumps(
-            {
-                "status": "ready",
-                "potential_rights": {"end": "2017-10-21T11:12:13Z"},
-                "links": [
-                    {
-                        "rel": "manifest",
-                        "href": "http://manifest",
-                        "type": type_in_license,
-                    }
-                ],
-            }
-        )
-
-        api.queue_response(200, content=lsd)
-        fulfillment = api.fulfill(patron, "pin", pool, internal_format)
-        assert collection == fulfillment.collection(db)
-        assert pool.data_source.name == fulfillment.data_source_name
-        assert pool.identifier.type == fulfillment.identifier_type
-        assert pool.identifier.identifier == fulfillment.identifier
-        assert datetime_utc(2017, 10, 21, 11, 12, 13) == fulfillment.content_expires
-        assert "http://manifest" == fulfillment.content_link
-        assert (
-            internal_format.delivery_mechanism.content_type == fulfillment.content_type
-        )
+        assert correct_link == fulfillment.content_link
+        assert delivery_mechanism == fulfillment.content_type
 
     def test_fulfill_cannot_fulfill(self, license, checkout, db, api, patron, pool):
         license.setup(concurrency=7, available=7)

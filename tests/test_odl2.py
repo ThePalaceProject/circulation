@@ -10,7 +10,6 @@ from webpub_manifest_parser.odl.semantic import (
     ODL_PUBLICATION_MUST_CONTAIN_EITHER_LICENSES_OR_OA_ACQUISITION_LINK_ERROR,
 )
 
-from api.odl import ODLImporter
 from api.odl2 import ODL2API, ODL2APIConfiguration, ODL2Importer
 from core.coverage import CoverageFailure
 from core.model import (
@@ -93,7 +92,6 @@ class TestODL2Importer(TestODLImporter):
             ),
             left=30,
             available=10,
-            content_types=[ODLImporter.FEEDBOOKS_AUDIO],
         )
 
         mock_get.add(moby_dick_license)
@@ -163,7 +161,7 @@ class TestODL2Importer(TestODLImporter):
         assert 30 == moby_dick_license_pool.licenses_owned
         assert 10 == moby_dick_license_pool.licenses_available
 
-        assert 5 == len(moby_dick_license_pool.delivery_mechanisms)
+        assert 2 == len(moby_dick_license_pool.delivery_mechanisms)
 
         moby_dick_epub_adobe_drm_delivery_mechanism = (
             self._get_delivery_mechanism_by_drm_scheme_and_content_type(
@@ -182,33 +180,6 @@ class TestODL2Importer(TestODLImporter):
             )
         )
         assert moby_dick_epub_lcp_drm_delivery_mechanism is not None
-
-        moby_dick_audio_book_adobe_drm_delivery_mechanism = (
-            self._get_delivery_mechanism_by_drm_scheme_and_content_type(
-                moby_dick_license_pool.delivery_mechanisms,
-                MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-                DeliveryMechanism.ADOBE_DRM,
-            )
-        )
-        assert moby_dick_audio_book_adobe_drm_delivery_mechanism is not None
-
-        moby_dick_audio_book_lcp_drm_delivery_mechanism = (
-            self._get_delivery_mechanism_by_drm_scheme_and_content_type(
-                moby_dick_license_pool.delivery_mechanisms,
-                MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-                DeliveryMechanism.LCP_DRM,
-            )
-        )
-        assert moby_dick_audio_book_lcp_drm_delivery_mechanism is not None
-
-        moby_dick_audio_book_feedbooks_drm_delivery_mechanism = (
-            self._get_delivery_mechanism_by_drm_scheme_and_content_type(
-                moby_dick_license_pool.delivery_mechanisms,
-                MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-                DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
-            )
-        )
-        assert moby_dick_audio_book_feedbooks_drm_delivery_mechanism is not None
 
         assert 1 == len(moby_dick_license_pool.licenses)
         [moby_dick_license] = moby_dick_license_pool.licenses
