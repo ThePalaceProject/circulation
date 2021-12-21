@@ -627,6 +627,7 @@ class LicenseData(LicenseFunctions):
         expires: Optional[datetime.datetime] = None,
         checkouts_left: Optional[int] = None,
         terms_concurrency: Optional[int] = None,
+        content_types: Optional[str] = None,
     ):
         self.identifier = identifier
         self.checkout_url = checkout_url
@@ -636,6 +637,7 @@ class LicenseData(LicenseFunctions):
         self.checkouts_left = checkouts_left
         self.checkouts_available = checkouts_available
         self.terms_concurrency = terms_concurrency
+        self.content_types = content_types
 
     def add_to_pool(self, db: Session, pool: LicensePool):
         license_obj, _ = get_one_or_create(
@@ -645,7 +647,8 @@ class LicenseData(LicenseFunctions):
             license_pool=pool,
         )
         for key, value in vars(self).items():
-            setattr(license_obj, key, value)
+            if key != "content_types":
+                setattr(license_obj, key, value)
         return license_obj
 
 

@@ -51,6 +51,7 @@ class LicenseFunctions:
     checkouts_left: Optional[int]
     checkouts_available: int
     terms_concurrency: Optional[int]
+    content_types: Optional[str]
 
     @property
     def is_perpetual(self) -> bool:

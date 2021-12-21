@@ -65,10 +65,16 @@ def parse_identifier(db, identifier):
     :rtype: Optional[core.model.identifier.Identifier]
     """
     parsed_identifier = None
-    result = Identifier.parse_urn(db, identifier)
 
-    if result is not None:
-        parsed_identifier, _ = result
+    try:
+        result = Identifier.parse_urn(db, identifier)
+
+        if result is not None:
+            parsed_identifier, _ = result
+    except Exception:
+        logging.error(
+            f"An unexpected exception occurred during parsing identifier {identifier}"
+        )
 
     return parsed_identifier
 
@@ -870,6 +876,7 @@ class OPDSImporter(object):
             contributions=True,
             rights=True,
             link_content=True,
+            formats=True,
             even_if_not_apparently_updated=True,
             mirrors=self.mirrors,
             content_modifier=self.content_modifier,

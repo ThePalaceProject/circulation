@@ -257,6 +257,7 @@ class MediaTypes(object):
     TEXT_PLAIN = "text/plain"
     AUDIOBOOK_MANIFEST_MEDIA_TYPE = "application/audiobook+json"
     AUDIOBOOK_PACKAGE_MEDIA_TYPE = "application/audiobook+zip"
+    AUDIOBOOK_PACKAGE_LCP_MEDIA_TYPE = "application/audiobook+lcp"
     MARC_MEDIA_TYPE = "application/marc"
 
     # To distinguish internally between Overdrive's audiobook and
@@ -274,6 +275,7 @@ class MediaTypes(object):
         OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE,
         AUDIOBOOK_MANIFEST_MEDIA_TYPE,
         AUDIOBOOK_PACKAGE_MEDIA_TYPE,
+        AUDIOBOOK_PACKAGE_LCP_MEDIA_TYPE,
     ]
 
     BOOK_MEDIA_TYPES = [
