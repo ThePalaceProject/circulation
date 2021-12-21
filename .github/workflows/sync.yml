@@ -9,12 +9,6 @@ jobs:
   sync_with_nypl:
     runs-on: ubuntu-latest
 
-    env:
-      UPSTREAM_ORG: NYPL-Simplified
-      UPSTREAM_REPO: circulation
-      UPSTREAM_BRANCH: develop
-      ORIGIN_BRANCH: nypl/develop
-
     steps:
       - name: Checkout repo to sync
         uses: actions/checkout@v2
@@ -35,5 +29,18 @@ jobs:
       - name: Install Python requirements
         run: pip install -r ci/sync-requirements.txt
 
-      - name: Sync branch with upstream
+      - name: Sync branch with upstream (circulation)
         run: python ci/sync.py code
+        env:
+          UPSTREAM_ORG: NYPL-Simplified
+          UPSTREAM_REPO: circulation
+          UPSTREAM_BRANCH: develop
+          ORIGIN_BRANCH: nypl/circulation/develop
+
+      - name: Sync branch with upstream (core)
+        run: python ci/sync.py code
+        env:
+          UPSTREAM_ORG: NYPL-Simplified
+          UPSTREAM_REPO: server_core
+          UPSTREAM_BRANCH: develop
+          ORIGIN_BRANCH: nypl/core/develop

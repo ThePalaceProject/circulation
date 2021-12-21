@@ -7,8 +7,6 @@
 
 This is a [The Palace Project](https://thepalaceproject.org) maintained fork of the NYPL [Library Simplified](http://www.librarysimplified.org/) Circulation Manager.
 
-It depends on [Circulation Core](https://github.com/thepalaceproject/circulation-core) as a git submodule.
-
 ## Installation
 
 Docker images created from this code are available at:
@@ -53,14 +51,7 @@ You will need to set up a local virtual environment to install packages and run 
 $ python -m venv env
 ```
 
-As mentioned above, this application depends on [LCirculation Core](https://github.com/thepalaceproject/circulation-core) as a git submodule. To set that up, in the repository, run:
-
-* `$ git submodule init`
-* `$ git submodule update`
-
 ### Elasticsearch Set Up
-
-The circulation manager requires Elasticsearch. If you don't have Elasticsearch, check out instructions in the [Library Simplified wiki](https://github.com/NYPL-Simplified/Simplified/wiki/Deployment-Instructions), or simply read on.
 
 1. Download it [here](https://www.elastic.co/downloads/past-releases/elasticsearch-6-8-6).
 2. `cd` into the `elasticsearch-[version number]` directory.
@@ -191,9 +182,9 @@ isort configuration is stored in our [tox.ini](tox.ini) which isort automaticall
 
 ## Continuous Integration
 
-This project runs all the unit tests through Github Actions for new pull requests and when merging into the default `develop` branch. The relevant file can be found in `.github/workflows/test.yml`. When contributing updates or fixes, it's required for the test Github Action to pass for all python 3 environments. Run the `tox` command locally before pushing changes to make sure you find any failing tests before committing them.
+This project runs all the unit tests through Github Actions for new pull requests and when merging into the default `main` branch. The relevant file can be found in `.github/workflows/test-build.yml`. When contributing updates or fixes, it's required for the test Github Action to pass for all Python 3 environments. Run the `tox` command locally before pushing changes to make sure you find any failing tests before committing them.
 
-As mentioned above, Github Actions is also used to build and deploy Sphinx documentation to Github Pages. The relevant file can be found in `.github/workflows/docks.yml`.
+For each push to a branch, CI also creates a docker image for the code in the branch. These images can be used for testing the branch, or deploying hotfixes.
 
 ## Testing
 
@@ -205,13 +196,18 @@ To run `pytest` unit tests locally, install `tox`.
 pip install tox
 ```
 
-Tox has an environment for each python version and an optional `-docker` factor that will automatically use docker to
+Tox has an environment for each python version, the module being tested, and an optional `-docker` factor that will automatically use docker to
 deploy service containers used for the tests. You can select the environment you would like to test with the tox `-e`
 flag.
 
-### Environments
+### Factors
 
-| Environment | Python Version |
+When running tox without an environment specified, it tests `circulation` and `core` using all supported Python versions
+with service dependencies running in docker containers.
+
+#### Python version
+
+| Factor      | Python Version |
 | ----------- | -------------- |
 | py36        | Python 3.6     |
 | py37        | Python 3.7     |
@@ -230,10 +226,19 @@ You need to have the Python versions you are testing against installed on your l
 
 [Pyenv](https://github.com/pyenv/pyenv) is a useful tool to install multiple Python versions, if you need to install missing Python versions in your system for local testing.
 
-### Docker
+#### Module
+
+| Factor      | Module            |
+| ----------- | ----------------- |
+| core        | core tests        |
+| api         | api tests         |
+
+#### Docker
 
 If you install `tox-docker` tox will take care of setting up all the service containers necessary to run the unit tests
-and pass the correct environment variables to configure the tests to use these services. Using `tox-docker` is not required, but it is the recommended way to run the tests locally, since it runs the tests in the same way they are run on the Github Actions CI server.
+and pass the correct environment variables to configure the tests to use these services. Using `tox-docker` is not
+required, but it is the recommended way to run the tests locally, since it runs the tests in the same way they are run
+on the Github Actions CI server.
 
 ```
 pip install tox-docker
