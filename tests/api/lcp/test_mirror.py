@@ -4,7 +4,7 @@ from api.lcp.importer import LCPImporter
 from api.lcp.mirror import LCPMirror
 from core.model import DataSource, ExternalIntegration, Identifier, Representation
 from core.s3 import MinIOUploaderConfiguration, S3UploaderConfiguration
-from tests.lcp.database_test import DatabaseTest
+from tests.api.lcp.database_test import DatabaseTest
 
 
 class TestLCPMirror(DatabaseTest):

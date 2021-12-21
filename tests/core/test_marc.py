@@ -7,11 +7,11 @@ from freezegun import freeze_time
 from pymarc import MARCReader, Record
 from sqlalchemy.orm.session import Session
 
-from ..config import CannotLoadConfiguration
-from ..external_search import Filter, MockExternalSearchIndex
-from ..lane import WorkList
-from ..marc import Annotator, MARCExporter, MARCExporterFacets
-from ..model import (
+from core.config import CannotLoadConfiguration
+from core.external_search import Filter, MockExternalSearchIndex
+from core.lane import WorkList
+from core.marc import Annotator, MARCExporter, MARCExporterFacets
+from core.model import (
     CachedMARCFile,
     Contributor,
     DataSource,
@@ -26,9 +26,9 @@ from ..model import (
     Work,
     get_one,
 )
-from ..s3 import MockS3Uploader, S3Uploader
-from ..testing import DatabaseTest
-from ..util.datetime_helpers import datetime_utc, utc_now
+from core.s3 import MockS3Uploader, S3Uploader
+from core.testing import DatabaseTest
+from core.util.datetime_helpers import datetime_utc, utc_now
 
 
 class TestAnnotator(DatabaseTest):

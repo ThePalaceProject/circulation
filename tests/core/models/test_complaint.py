@@ -1,9 +1,9 @@
 # encoding: utf-8
 import pytest
 
-from ...model.complaint import Complaint
-from ...testing import DatabaseTest
-from ...util.datetime_helpers import utc_now
+from core.model.complaint import Complaint
+from core.testing import DatabaseTest
+from core.util.datetime_helpers import utc_now
 
 
 class TestComplaint(DatabaseTest):

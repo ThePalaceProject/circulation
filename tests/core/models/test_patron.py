@@ -4,15 +4,15 @@ import datetime
 import pytest
 from mock import MagicMock, call
 
-from ...classifier import Classifier
-from ...model import create, tuple_to_numericrange
-from ...model.credential import Credential
-from ...model.datasource import DataSource
-from ...model.library import Library
-from ...model.licensing import PolicyException
-from ...model.patron import Annotation, Hold, Loan, Patron, PatronProfileStorage
-from ...testing import DatabaseTest
-from ...util.datetime_helpers import datetime_utc, utc_now
+from core.classifier import Classifier
+from core.model import create, tuple_to_numericrange
+from core.model.credential import Credential
+from core.model.datasource import DataSource
+from core.model.library import Library
+from core.model.licensing import PolicyException
+from core.model.patron import Annotation, Hold, Loan, Patron, PatronProfileStorage
+from core.testing import DatabaseTest
+from core.util.datetime_helpers import datetime_utc, utc_now
 
 
 class TestAnnotation(DatabaseTest):

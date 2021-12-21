@@ -1,9 +1,9 @@
 import threading
 from contextlib import contextmanager
 
-from ...model import Identifier, SessionManager
-from ...testing import DatabaseTest
-from ...util.worker_pools import (
+from core.model import Identifier, SessionManager
+from core.testing import DatabaseTest
+from core.util.worker_pools import (
     DatabaseJob,
     DatabasePool,
     DatabaseWorker,

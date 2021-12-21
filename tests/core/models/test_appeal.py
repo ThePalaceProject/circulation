@@ -1,5 +1,5 @@
-from ...model import Work
-from ...testing import DatabaseTest
+from core.model import Work
+from core.testing import DatabaseTest
 
 
 class TestAppealAssignment(DatabaseTest):

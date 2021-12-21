@@ -4,14 +4,14 @@ import datetime
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from ...model.credential import (
+from core.model.credential import (
     Credential,
     DelegatedPatronIdentifier,
     DRMDeviceIdentifier,
 )
-from ...model.datasource import DataSource
-from ...testing import DatabaseTest
-from ...util.datetime_helpers import utc_now
+from core.model.datasource import DataSource
+from core.testing import DatabaseTest
+from core.util.datetime_helpers import utc_now
 
 
 class TestCredentials(DatabaseTest):

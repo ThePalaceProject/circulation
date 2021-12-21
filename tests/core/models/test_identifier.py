@@ -7,14 +7,14 @@ from lxml import etree
 from mock import PropertyMock, create_autospec
 from parameterized import parameterized
 
-from ...model import PresentationCalculationPolicy
-from ...model.datasource import DataSource
-from ...model.edition import Edition
-from ...model.identifier import Identifier
-from ...model.resource import Hyperlink, Representation
-from ...testing import DatabaseTest
-from ...util.datetime_helpers import utc_now
-from ...util.opds_writer import AtomFeed
+from core.model import PresentationCalculationPolicy
+from core.model.datasource import DataSource
+from core.model.edition import Edition
+from core.model.identifier import Identifier
+from core.model.resource import Hyperlink, Representation
+from core.testing import DatabaseTest
+from core.util.datetime_helpers import utc_now
+from core.util.opds_writer import AtomFeed
 
 
 class TestIdentifier(DatabaseTest):

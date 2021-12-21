@@ -5,8 +5,8 @@ import sys
 
 import pytest
 
-from ..config import Configuration
-from ..log import (
+from core.config import Configuration
+from core.log import (
     CannotLoadConfiguration,
     CloudWatchLogHandler,
     CloudwatchLogs,
@@ -18,8 +18,8 @@ from ..log import (
     StringFormatter,
     SysLogger,
 )
-from ..model import ConfigurationSetting, ExternalIntegration
-from ..testing import DatabaseTest
+from core.model import ConfigurationSetting, ExternalIntegration
+from core.testing import DatabaseTest
 
 
 class TestJSONFormatter(object):

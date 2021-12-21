@@ -1,29 +1,18 @@
-import contextlib
-import logging
-import os
+from pathlib import Path
 
 import flask
 from flask import Response
-from werkzeug.exceptions import MethodNotAllowed
 
-from api import app
 from api import routes as api_routes
 from api.admin import routes
 from api.admin.controller import AdminController, setup_admin_controllers
 from api.admin.problem_details import *
-from api.config import Configuration
 from api.controller import CirculationManager
-from api.routes import exception_handler
-from api.routes import h as error_handler_object
-from core.app_server import ErrorHandler
-from core.model import Admin, ConfigurationSetting, get_one_or_create
-
 from ..test_controller import ControllerTest
 from ..test_routes import (
     MockApp,
     MockController,
     MockManager,
-    RouteTest,
     RouteTestFixtures,
 )
 
@@ -865,23 +854,17 @@ class TestAdminStatic(AdminRouteTest):
     CONTROLLER_NAME = "static_files"
 
     def test_static_file(self):
-        url = "/admin/static/circulation-admin.js"
-
         # Go to the back to the root folder to get the right
         # path for the static files.
-        local_path = os.path.abspath(
-            os.path.join(
-                os.path.abspath(os.path.dirname(__file__)),
-                "../..",
-                "api/admin/node_modules/@thepalaceproject/circulation-admin/dist",
-            )
-        )
+        root_path = Path(__file__).parent.parent.parent.parent
+        local_path = root_path / "api/admin/node_modules/@thepalaceproject/circulation-admin/dist"
 
+        url = "/admin/static/circulation-admin.js"
         self.assert_request_calls(
-            url, self.controller.static_file, local_path, "circulation-admin.js"
+            url, self.controller.static_file, str(local_path), "circulation-admin.js"
         )
 
         url = "/admin/static/circulation-admin.css"
         self.assert_request_calls(
-            url, self.controller.static_file, local_path, "circulation-admin.css"
+            url, self.controller.static_file, str(local_path), "circulation-admin.css"
         )

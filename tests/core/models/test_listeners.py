@@ -3,9 +3,9 @@ import functools
 
 from parameterized import parameterized
 
-from ... import lane, model
-from ...config import Configuration
-from ...model import (
+from core import lane, model
+from core.config import Configuration
+from core.model import (
     CachedFeed,
     ConfigurationSetting,
     Timestamp,
@@ -13,8 +13,8 @@ from ...model import (
     create,
     site_configuration_has_changed,
 )
-from ...testing import DatabaseTest
-from ...util.datetime_helpers import utc_now
+from core.testing import DatabaseTest
+from core.util.datetime_helpers import utc_now
 
 
 class TestSiteConfigurationHasChanged(DatabaseTest):

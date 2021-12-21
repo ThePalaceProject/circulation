@@ -1,4 +1,4 @@
-from ..model import (
+from core.model import (
     CirculationEvent,
     DataSource,
     Edition,
@@ -8,7 +8,7 @@ from ..model import (
     Work,
     get_one_or_create,
 )
-from ..testing import DatabaseTest
+from core.testing import DatabaseTest
 
 
 class TestEquivalency(DatabaseTest):

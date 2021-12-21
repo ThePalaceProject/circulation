@@ -5,7 +5,7 @@ import pytz
 from lxml import etree
 from parameterized import parameterized
 
-from ...util.opds_writer import AtomFeed, OPDSMessage
+from core.util.opds_writer import AtomFeed, OPDSMessage
 
 
 class TestOPDSMessage(object):

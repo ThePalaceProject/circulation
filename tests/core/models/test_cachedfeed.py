@@ -3,15 +3,15 @@ import datetime
 
 import pytest
 
-from ...classifier import Classifier
-from ...lane import Facets, Lane, Pagination, WorkList
-from ...model.cachedfeed import CachedFeed
-from ...model.configuration import ConfigurationSetting
-from ...opds import AcquisitionFeed
-from ...testing import DatabaseTest
-from ...util.datetime_helpers import utc_now
-from ...util.flask_util import OPDSFeedResponse
-from ...util.opds_writer import OPDSFeed
+from core.classifier import Classifier
+from core.lane import Facets, Lane, Pagination, WorkList
+from core.model.cachedfeed import CachedFeed
+from core.model.configuration import ConfigurationSetting
+from core.opds import AcquisitionFeed
+from core.testing import DatabaseTest
+from core.util.datetime_helpers import utc_now
+from core.util.flask_util import OPDSFeedResponse
+from core.util.opds_writer import OPDSFeed
 
 
 class MockFeedGenerator(object):
@@ -398,7 +398,7 @@ class TestCachedFeed(DatabaseTest):
         # asked for the opposite.
         from unittest.mock import PropertyMock, patch
 
-        from ...model import Library
+        from core.model import Library
 
         Library._has_root_lane_cache[self._default_library.id] = True
         r = CachedFeed.fetch(self._db, wl, facets, pagination, refresh, private=False)

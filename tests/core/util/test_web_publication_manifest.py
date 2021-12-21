@@ -1,5 +1,5 @@
-from ...testing import DatabaseTest
-from ...util.web_publication_manifest import AudiobookManifest, JSONable, Manifest
+from core.testing import DatabaseTest
+from core.util.web_publication_manifest import AudiobookManifest, JSONable, Manifest
 
 
 class TestJSONable(object):

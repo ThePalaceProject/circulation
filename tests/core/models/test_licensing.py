@@ -6,18 +6,18 @@ from mock import MagicMock, PropertyMock
 from parameterized import parameterized
 from sqlalchemy.exc import IntegrityError
 
-from ...mock_analytics_provider import MockAnalyticsProvider
-from ...model import create
-from ...model.circulationevent import CirculationEvent
-from ...model.collection import CollectionMissing
-from ...model.complaint import Complaint
-from ...model.constants import MediaTypes
-from ...model.contributor import Contributor
-from ...model.coverage import WorkCoverageRecord
-from ...model.datasource import DataSource
-from ...model.edition import Edition
-from ...model.identifier import Identifier
-from ...model.licensing import (
+from core.mock_analytics_provider import MockAnalyticsProvider
+from core.model import create
+from core.model.circulationevent import CirculationEvent
+from core.model.collection import CollectionMissing
+from core.model.complaint import Complaint
+from core.model.constants import MediaTypes
+from core.model.contributor import Contributor
+from core.model.coverage import WorkCoverageRecord
+from core.model.datasource import DataSource
+from core.model.edition import Edition
+from core.model.identifier import Identifier
+from core.model.licensing import (
     DeliveryMechanism,
     Hold,
     License,
@@ -27,9 +27,9 @@ from ...model.licensing import (
     Loan,
     RightsStatus,
 )
-from ...model.resource import Hyperlink, Representation
-from ...testing import DatabaseTest
-from ...util.datetime_helpers import utc_now
+from core.model.resource import Hyperlink, Representation
+from core.testing import DatabaseTest
+from core.util.datetime_helpers import utc_now
 
 
 class TestDeliveryMechanism(DatabaseTest):

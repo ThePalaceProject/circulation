@@ -8,24 +8,24 @@ from flask_babel import lazy_gettext as _
 from lxml import etree
 from psycopg2.extras import NumericRange
 
-from ..classifier import (
+from core.classifier import (
     Classifier,
     Contemporary_Romance,
     Epic_Fantasy,
     Fantasy,
     History,
 )
-from ..config import Configuration, temp_config
-from ..entrypoint import (
+from core.config import Configuration, temp_config
+from core.entrypoint import (
     AudiobooksEntryPoint,
     EbooksEntryPoint,
     EntryPoint,
     EverythingEntryPoint,
 )
-from ..external_search import MockExternalSearchIndex
-from ..facets import FacetConstants
-from ..lane import Facets, FeaturedFacets, Pagination, SearchFacets, WorkList
-from ..model import (
+from core.external_search import MockExternalSearchIndex
+from core.facets import FacetConstants
+from core.lane import Facets, FeaturedFacets, Pagination, SearchFacets, WorkList
+from core.model import (
     CachedFeed,
     Contributor,
     CustomList,
@@ -41,7 +41,7 @@ from ..model import (
     create,
     get_one,
 )
-from ..opds import (
+from core.opds import (
     AcquisitionFeed,
     Annotator,
     LookupAcquisitionFeed,
@@ -52,11 +52,11 @@ from ..opds import (
     TestUnfulfillableAnnotator,
     VerboseAnnotator,
 )
-from ..opds_import import OPDSXMLParser
-from ..testing import DatabaseTest
-from ..util.datetime_helpers import datetime_utc, utc_now
-from ..util.flask_util import OPDSEntryResponse, OPDSFeedResponse, Response
-from ..util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
+from core.opds_import import OPDSXMLParser
+from core.testing import DatabaseTest
+from core.util.datetime_helpers import datetime_utc, utc_now
+from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse, Response
+from core.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
 
 
 class TestBaseAnnotator(DatabaseTest):

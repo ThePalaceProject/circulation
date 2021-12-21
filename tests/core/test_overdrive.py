@@ -5,10 +5,10 @@ import pkgutil
 
 import pytest
 
-from ..config import CannotLoadConfiguration
-from ..coverage import CoverageFailure
-from ..metadata_layer import LinkData
-from ..model import (
+from core.config import CannotLoadConfiguration
+from core.coverage import CoverageFailure
+from core.metadata_layer import LinkData
+from core.model import (
     Collection,
     Contributor,
     DeliveryMechanism,
@@ -21,17 +21,17 @@ from ..model import (
     Representation,
     Subject,
 )
-from ..overdrive import (
+from core.overdrive import (
     MockOverdriveAPI,
     OverdriveAdvantageAccount,
     OverdriveAPI,
     OverdriveBibliographicCoverageProvider,
     OverdriveRepresentationExtractor,
 )
-from ..scripts import RunCollectionCoverageProviderScript
-from ..testing import DatabaseTest, MockRequestsResponse
-from ..util.http import HTTP, BadResponseException
-from ..util.string_helpers import base64
+from core.scripts import RunCollectionCoverageProviderScript
+from core.testing import DatabaseTest, MockRequestsResponse
+from core.util.http import HTTP, BadResponseException
+from core.util.string_helpers import base64
 
 
 class OverdriveTest(DatabaseTest):

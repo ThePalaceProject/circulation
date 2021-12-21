@@ -7,9 +7,9 @@ from wsgiref.handlers import format_date_time
 
 from flask import Response as FlaskResponse
 
-from ...util.datetime_helpers import utc_now
-from ...util.flask_util import OPDSEntryResponse, OPDSFeedResponse, Response
-from ...util.opds_writer import OPDSFeed
+from core.util.datetime_helpers import utc_now
+from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse, Response
+from core.util.opds_writer import OPDSFeed
 
 
 class TestResponse(object):

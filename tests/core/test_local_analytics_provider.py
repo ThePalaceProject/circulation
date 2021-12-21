@@ -1,9 +1,9 @@
 import pytest
 
-from ..local_analytics_provider import LocalAnalyticsProvider
-from ..model import CirculationEvent, ExternalIntegration, create, get_one
-from ..testing import DatabaseTest
-from ..util.datetime_helpers import utc_now
+from core.local_analytics_provider import LocalAnalyticsProvider
+from core.model import CirculationEvent, ExternalIntegration, create, get_one
+from core.testing import DatabaseTest
+from core.util.datetime_helpers import utc_now
 
 
 class TestInitializeLocalAnalyticsProvider(DatabaseTest):

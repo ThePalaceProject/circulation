@@ -3,12 +3,12 @@ from pdb import set_trace
 
 import pytest
 
-from ...model import get_one_or_create
-from ...model.coverage import WorkCoverageRecord
-from ...model.customlist import CustomList, CustomListEntry
-from ...model.datasource import DataSource
-from ...testing import DatabaseTest
-from ...util.datetime_helpers import utc_now
+from core.model import get_one_or_create
+from core.model.coverage import WorkCoverageRecord
+from core.model.customlist import CustomList, CustomListEntry
+from core.model.datasource import DataSource
+from core.testing import DatabaseTest
+from core.util.datetime_helpers import utc_now
 
 
 class TestCustomList(DatabaseTest):

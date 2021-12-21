@@ -2,7 +2,7 @@ import datetime
 
 import pytest
 
-from ..coverage import (
+from core.coverage import (
     BaseCoverageProvider,
     BibliographicCoverageProvider,
     CatalogCoverageProvider,
@@ -16,7 +16,7 @@ from ..coverage import (
     WorkClassificationCoverageProvider,
     WorkPresentationEditionCoverageProvider,
 )
-from ..metadata_layer import (
+from core.metadata_layer import (
     CirculationData,
     ContributorData,
     FormatData,
@@ -26,7 +26,7 @@ from ..metadata_layer import (
     ReplacementPolicy,
     SubjectData,
 )
-from ..model import (
+from core.model import (
     Collection,
     CollectionMissing,
     Contributor,
@@ -45,9 +45,9 @@ from ..model import (
     Work,
     WorkCoverageRecord,
 )
-from ..model.configuration import ExternalIntegrationLink
-from ..s3 import MockS3Uploader
-from ..testing import (
+from core.model.configuration import ExternalIntegrationLink
+from core.s3 import MockS3Uploader
+from core.testing import (
     AlwaysSuccessfulBibliographicCoverageProvider,
     AlwaysSuccessfulCollectionCoverageProvider,
     AlwaysSuccessfulCoverageProvider,
@@ -61,7 +61,7 @@ from ..testing import (
     TransientFailureCoverageProvider,
     TransientFailureWorkCoverageProvider,
 )
-from ..util.datetime_helpers import datetime_utc, utc_now
+from core.util.datetime_helpers import datetime_utc, utc_now
 
 
 class TestCoverageFailure(DatabaseTest):

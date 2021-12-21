@@ -42,8 +42,8 @@ from core.testing import (
     NeverSuccessfulCoverageProvider,
 )
 from core.util.datetime_helpers import datetime_utc
-from tests.admin.controller.test_controller import AdminControllerTest
-from tests.test_controller import CirculationControllerTest
+from tests.api.admin.controller.test_controller import AdminControllerTest
+from tests.api.test_controller import CirculationControllerTest
 
 
 class TestWorkController(AdminControllerTest):

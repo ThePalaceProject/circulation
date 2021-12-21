@@ -6,8 +6,8 @@ from api.saml.metadata.federations.model import (
     SAMLFederation,
 )
 from api.saml.metadata.monitor import SAMLMetadataMonitor
-from tests.saml import fixtures
-from tests.saml.database_test import DatabaseTest
+from tests.api.saml import fixtures
+from tests.api.saml.database_test import DatabaseTest
 
 
 class TestSAMLMetadataMonitor(DatabaseTest):

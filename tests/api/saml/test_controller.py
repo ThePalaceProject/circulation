@@ -23,8 +23,8 @@ from api.saml.metadata.model import (
 from api.saml.provider import SAML_INVALID_SUBJECT, SAMLWebSSOAuthenticationProvider
 from core.model import Credential, Library
 from core.util.problem_detail import ProblemDetail
-from tests.saml import fixtures
-from tests.saml.controller_test import ControllerTest
+from tests.api.saml import fixtures
+from tests.api.saml.controller_test import ControllerTest
 
 SERVICE_PROVIDER = SAMLServiceProviderMetadata(
     fixtures.SP_ENTITY_ID,

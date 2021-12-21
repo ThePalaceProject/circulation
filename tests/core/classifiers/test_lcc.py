@@ -1,6 +1,6 @@
-from ... import classifier
-from ...classifier import *
-from ...classifier.lcc import LCCClassifier as LCC
+from core import classifier
+from core.classifier import *
+from core.classifier.lcc import LCCClassifier as LCC
 
 
 class TestLCC(object):

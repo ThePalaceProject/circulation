@@ -4,9 +4,9 @@ from collections import defaultdict
 
 from money import Money
 
-from ...model import Edition, Identifier
-from ...testing import DatabaseTest
-from ...util import (
+from core.model import Edition, Identifier
+from core.testing import DatabaseTest
+from core.util import (
     Bigrams,
     MetadataSimilarity,
     MoneyUtility,
@@ -15,7 +15,7 @@ from ...util import (
     fast_query_count,
     slugify,
 )
-from ...util.median import median
+from core.util.median import median
 
 
 class DummyAuthor(object):

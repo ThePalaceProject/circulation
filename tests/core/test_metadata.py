@@ -6,9 +6,9 @@ from copy import deepcopy
 import pytest
 from parameterized import parameterized
 
-from ..analytics import Analytics
-from ..classifier import NO_NUMBER, NO_VALUE, Classifier
-from ..metadata_layer import (
+from core.analytics import Analytics
+from core.classifier import NO_NUMBER, NO_VALUE, Classifier
+from core.metadata_layer import (
     CirculationData,
     ContributorData,
     CSVMetadataImporter,
@@ -21,7 +21,7 @@ from ..metadata_layer import (
     SubjectData,
     TimestampData,
 )
-from ..model import (
+from core.model import (
     Contributor,
     CoverageRecord,
     DataSource,
@@ -36,11 +36,11 @@ from ..model import (
     Work,
     WorkCoverageRecord,
 )
-from ..model.configuration import ExternalIntegrationLink
-from ..s3 import MockS3Uploader
-from ..testing import DatabaseTest, DummyHTTPClient, DummyMetadataClient
-from ..util.datetime_helpers import datetime_utc, strptime_utc, to_utc, utc_now
-from ..util.http import RemoteIntegrationException
+from core.model.configuration import ExternalIntegrationLink
+from core.s3 import MockS3Uploader
+from core.testing import DatabaseTest, DummyHTTPClient, DummyMetadataClient
+from core.util.datetime_helpers import datetime_utc, strptime_utc, to_utc, utc_now
+from core.util.http import RemoteIntegrationException
 
 
 class TestIdentifierData(object):

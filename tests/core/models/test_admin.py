@@ -1,9 +1,9 @@
 # encoding: utf-8
 import pytest
 
-from ...model import create
-from ...model.admin import Admin, AdminRole
-from ...testing import DatabaseTest
+from core.model import create
+from core.model.admin import Admin, AdminRole
+from core.testing import DatabaseTest
 
 
 class TestAdmin(DatabaseTest):

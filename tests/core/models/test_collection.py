@@ -5,30 +5,30 @@ import json
 import pytest
 from mock import MagicMock, create_autospec
 
-from ...config import Configuration
-from ...model import create, get_one_or_create
-from ...model.circulationevent import CirculationEvent
-from ...model.collection import (
+from core.config import Configuration
+from core.model import create, get_one_or_create
+from core.model.circulationevent import CirculationEvent
+from core.model.collection import (
     Collection,
     CollectionConfigurationStorage,
     HasExternalIntegrationPerCollection,
 )
-from ...model.complaint import Complaint
-from ...model.configuration import (
+from core.model.complaint import Complaint
+from core.model.configuration import (
     ConfigurationSetting,
     ExternalIntegration,
     ExternalIntegrationLink,
 )
-from ...model.coverage import CoverageRecord, WorkCoverageRecord
-from ...model.customlist import CustomList
-from ...model.datasource import DataSource
-from ...model.edition import Edition
-from ...model.identifier import Identifier
-from ...model.licensing import Hold, License, LicensePool, Loan
-from ...model.work import Work
-from ...testing import DatabaseTest
-from ...util.datetime_helpers import utc_now
-from ...util.string_helpers import base64
+from core.model.coverage import CoverageRecord, WorkCoverageRecord
+from core.model.customlist import CustomList
+from core.model.datasource import DataSource
+from core.model.edition import Edition
+from core.model.identifier import Identifier
+from core.model.licensing import Hold, License, LicensePool, Loan
+from core.model.work import Work
+from core.testing import DatabaseTest
+from core.util.datetime_helpers import utc_now
+from core.util.string_helpers import base64
 
 
 class TestCollection(DatabaseTest):

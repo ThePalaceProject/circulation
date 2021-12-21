@@ -2,9 +2,9 @@
 import pytest
 from sqlalchemy.orm.exc import NoResultFound
 
-from ...model.datasource import DataSource
-from ...model.identifier import Identifier
-from ...testing import DatabaseTest
+from core.model.datasource import DataSource
+from core.model.identifier import Identifier
+from core.testing import DatabaseTest
 
 
 class TestDataSource(DatabaseTest):

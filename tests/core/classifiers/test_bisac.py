@@ -2,8 +2,8 @@ import re
 
 import pytest
 
-from ...classifier import BISACClassifier, Classifier
-from ...classifier.bisac import (
+from core.classifier import BISACClassifier, Classifier
+from core.classifier.bisac import (
     RE,
     MatchingRule,
     anything,

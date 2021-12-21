@@ -1,8 +1,8 @@
-from ... import classifier
-from ...classifier import *
-from ...classifier.keyword import FASTClassifier as FAST
-from ...classifier.keyword import KeywordBasedClassifier as Keyword
-from ...classifier.keyword import LCSHClassifier as LCSH
+from core import classifier
+from core.classifier import *
+from core.classifier.keyword import FASTClassifier as FAST
+from core.classifier.keyword import KeywordBasedClassifier as Keyword
+from core.classifier.keyword import LCSHClassifier as LCSH
 
 
 class TestLCSH(object):

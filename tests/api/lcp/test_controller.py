@@ -10,8 +10,8 @@ from api.lcp.factory import LCPServerFactory
 from api.lcp.server import LCPServer
 from core.lcp.credential import LCPCredentialFactory
 from core.model import ExternalIntegration
-from tests.lcp import fixtures
-from tests.test_controller import ControllerTest
+from tests.api.lcp import fixtures
+from tests.api.test_controller import ControllerTest
 
 
 class TestLCPController(ControllerTest):

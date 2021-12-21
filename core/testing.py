@@ -7,6 +7,7 @@ import tempfile
 import time
 import uuid
 from datetime import timedelta
+from pathlib import Path
 from pdb import set_trace
 
 import mock
@@ -1135,10 +1136,10 @@ class DatabaseTest(object):
 
     def sample_cover_path(self, name):
         """The path to the sample cover with the given filename."""
-        base_path = os.path.split(__file__)[0]
-        resource_path = os.path.join(base_path, "tests", "files", "covers")
-        sample_cover_path = os.path.join(resource_path, name)
-        return sample_cover_path
+        base_path = Path(__file__).parent.parent
+        resource_path = base_path / "tests" / "core" / "files" / "covers"
+        sample_cover_path = resource_path / name
+        return str(sample_cover_path)
 
     def sample_cover_representation(self, name):
         """A Representation of the sample cover with the given filename."""

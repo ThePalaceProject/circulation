@@ -7,10 +7,10 @@ configured, not that the code is correct.
 
 import datetime
 
-from ..selftest import HasSelfTests, SelfTestResult
-from ..testing import DatabaseTest
-from ..util.datetime_helpers import utc_now
-from ..util.http import IntegrationException
+from core.selftest import HasSelfTests, SelfTestResult
+from core.testing import DatabaseTest
+from core.util.datetime_helpers import utc_now
+from core.util.http import IntegrationException
 
 
 class TestSelfTestResult(DatabaseTest):

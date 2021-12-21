@@ -18,8 +18,8 @@ from api.saml.provider import SAMLWebSSOAuthenticationProvider
 from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvaluator
 from core.python_expression_dsl.parser import DSLParser
 from core.util.problem_detail import ProblemDetail
-from tests.saml import fixtures
-from tests.saml.controller_test import ControllerTest
+from tests.api.saml import fixtures
+from tests.api.saml.controller_test import ControllerTest
 
 
 class TestSAMLSettingsValidator(ControllerTest):

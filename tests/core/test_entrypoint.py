@@ -2,16 +2,16 @@ import json
 
 import pytest
 
-from ..entrypoint import (
+from core.entrypoint import (
     AudiobooksEntryPoint,
     EbooksEntryPoint,
     EntryPoint,
     EverythingEntryPoint,
     MediumEntryPoint,
 )
-from ..external_search import Filter
-from ..model import Edition, Work
-from ..testing import DatabaseTest
+from core.external_search import Filter
+from core.model import Edition, Work
+from core.testing import DatabaseTest
 
 
 class TestEntryPoint(DatabaseTest):

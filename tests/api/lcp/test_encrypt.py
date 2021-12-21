@@ -15,8 +15,8 @@ from core.model.configuration import (
     ConfigurationStorage,
     HasExternalIntegration,
 )
-from tests.lcp import fixtures
-from tests.lcp.database_test import DatabaseTest
+from tests.api.lcp import fixtures
+from tests.api.lcp.database_test import DatabaseTest
 
 
 class TestLCPEncryptor(DatabaseTest):

@@ -1,6 +1,6 @@
 from api.saml.provider import SAMLWebSSOAuthenticationProvider
 from core.model import ExternalIntegration
-from tests.test_controller import ControllerTest as BaseControllerTest
+from tests.api.test_controller import ControllerTest as BaseControllerTest
 
 
 class ControllerTest(BaseControllerTest):

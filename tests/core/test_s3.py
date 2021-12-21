@@ -10,8 +10,8 @@ from botocore.exceptions import BotoCoreError, ClientError
 from mock import MagicMock
 from parameterized import parameterized
 
-from ..mirror import MirrorUploader
-from ..model import (
+from core.mirror import MirrorUploader
+from core.model import (
     DataSource,
     ExternalIntegration,
     Hyperlink,
@@ -19,7 +19,7 @@ from ..model import (
     Representation,
     create,
 )
-from ..s3 import (
+from core.s3 import (
     MinIOUploader,
     MinIOUploaderConfiguration,
     MockS3Client,
@@ -28,8 +28,8 @@ from ..s3 import (
     S3Uploader,
     S3UploaderConfiguration,
 )
-from ..testing import DatabaseTest
-from ..util.datetime_helpers import datetime_utc, utc_now
+from core.testing import DatabaseTest
+from core.util.datetime_helpers import datetime_utc, utc_now
 
 
 class S3UploaderTest(DatabaseTest):

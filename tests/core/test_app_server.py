@@ -8,7 +8,7 @@ from flask import Flask
 from flask_babel import Babel
 from flask_babel import lazy_gettext as _
 
-from ..app_server import (
+from core.app_server import (
     ComplaintController,
     ErrorHandler,
     HeartbeatController,
@@ -18,15 +18,15 @@ from ..app_server import (
     load_facets_from_request,
     load_pagination_from_request,
 )
-from ..config import Configuration
-from ..entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EntryPoint
-from ..lane import Facets, Pagination, SearchFacets, WorkList
-from ..log import LogConfiguration
-from ..model import ConfigurationSetting, Identifier
-from ..opds import TestAnnotator
-from ..problem_details import INVALID_INPUT, INVALID_URN
-from ..testing import DatabaseTest
-from ..util.opds_writer import OPDSFeed, OPDSMessage
+from core.config import Configuration
+from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EntryPoint
+from core.lane import Facets, Pagination, SearchFacets, WorkList
+from core.log import LogConfiguration
+from core.model import ConfigurationSetting, Identifier
+from core.opds import TestAnnotator
+from core.problem_details import INVALID_INPUT, INVALID_URN
+from core.testing import DatabaseTest
+from core.util.opds_writer import OPDSFeed, OPDSMessage
 
 
 class TestHeartbeatController(object):

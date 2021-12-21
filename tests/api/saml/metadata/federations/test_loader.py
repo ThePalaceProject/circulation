@@ -10,7 +10,7 @@ from api.saml.metadata.federations.loader import (
 from api.saml.metadata.federations.model import SAMLFederation
 from api.saml.metadata.federations.validator import SAMLFederatedMetadataValidator
 from api.saml.metadata.parser import SAMLMetadataParser
-from tests.saml import fixtures
+from tests.api.saml import fixtures
 
 
 class TestSAMLMetadataLoader(object):

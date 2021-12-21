@@ -3,9 +3,9 @@ from unittest.mock import MagicMock, PropertyMock
 
 import pytest
 
-from ...model import ConfigurationSetting
-from ...model.hassessioncache import HasSessionCache
-from ...testing import DatabaseTest
+from core.model import ConfigurationSetting
+from core.model.hassessioncache import HasSessionCache
+from core.testing import DatabaseTest
 
 
 class TestHasSessionCache:

@@ -15,8 +15,8 @@ from core.model.configuration import (
     HasExternalIntegration,
 )
 from core.util.datetime_helpers import utc_now
-from tests.lcp import fixtures
-from tests.lcp.database_test import DatabaseTest
+from tests.api.lcp import fixtures
+from tests.api.lcp.database_test import DatabaseTest
 
 
 class TestLCPAPI(DatabaseTest):

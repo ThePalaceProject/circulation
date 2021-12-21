@@ -30,8 +30,8 @@ from core.model.configuration import (
     ExternalIntegration,
     HasExternalIntegration,
 )
-from tests.saml import fixtures
-from tests.saml.database_test import DatabaseTest
+from tests.api.saml import fixtures
+from tests.api.saml.database_test import DatabaseTest
 
 SERVICE_PROVIDER_WITHOUT_CERTIFICATE = SAMLServiceProviderMetadata(
     fixtures.SP_ENTITY_ID,

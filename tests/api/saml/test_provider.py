@@ -35,8 +35,8 @@ from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvalua
 from core.python_expression_dsl.parser import DSLParser
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.problem_detail import ProblemDetail
-from tests.saml import fixtures
-from tests.saml.controller_test import ControllerTest
+from tests.api.saml import fixtures
+from tests.api.saml.controller_test import ControllerTest
 
 SERVICE_PROVIDER = SAMLServiceProviderMetadata(
     fixtures.SP_ENTITY_ID,

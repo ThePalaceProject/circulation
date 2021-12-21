@@ -4,17 +4,18 @@ import shutil
 import stat
 import tempfile
 from io import StringIO
+from pathlib import Path
 
 import pytest
 from parameterized import parameterized
 
-from ..classifier import Classifier
-from ..config import CannotLoadConfiguration
-from ..external_search import MockExternalSearchIndex
-from ..lane import Lane, WorkList
-from ..metadata_layer import LinkData, TimestampData
-from ..mirror import MirrorUploader
-from ..model import (
+from core.classifier import Classifier
+from core.config import CannotLoadConfiguration
+from core.external_search import MockExternalSearchIndex
+from core.lane import Lane, WorkList
+from core.metadata_layer import LinkData, TimestampData
+from core.mirror import MirrorUploader
+from core.model import (
     CachedFeed,
     Collection,
     Complaint,
@@ -34,10 +35,10 @@ from ..model import (
     dump_query,
     get_one,
 )
-from ..model.configuration import ExternalIntegrationLink
-from ..monitor import CollectionMonitor, Monitor, ReaperMonitor
-from ..s3 import MinIOUploader, MinIOUploaderConfiguration, S3Uploader
-from ..scripts import (
+from core.model.configuration import ExternalIntegrationLink
+from core.monitor import CollectionMonitor, Monitor, ReaperMonitor
+from core.s3 import MinIOUploader, MinIOUploaderConfiguration, S3Uploader
+from core.scripts import (
     AddClassificationScript,
     CheckContributorNamesInDB,
     CollectionArgumentsScript,
@@ -81,13 +82,13 @@ from ..scripts import (
     WorkClassificationScript,
     WorkProcessingScript,
 )
-from ..testing import (
+from core.testing import (
     AlwaysSuccessfulCollectionCoverageProvider,
     AlwaysSuccessfulWorkCoverageProvider,
     DatabaseTest,
 )
-from ..util.datetime_helpers import datetime_utc, strptime_utc, to_utc, utc_now
-from ..util.worker_pools import DatabasePool
+from core.util.datetime_helpers import datetime_utc, strptime_utc, to_utc, utc_now
+from core.util.worker_pools import DatabasePool
 
 
 class TestScript(DatabaseTest):
@@ -1089,15 +1090,14 @@ class TestDatabaseMigrationScript(DatabaseMigrationScriptTest):
         assert 2 == script.python_timestamp.counter
 
     def test_directories_by_priority(self):
-        core = os.path.split(os.path.split(__file__)[0])[0]
-        parent = os.path.split(core)[0]
-        expected_core = os.path.join(core, "migration")
-        expected_parent = os.path.join(parent, "migration")
+        root = Path(__file__).parent.parent.parent
+        expected_core = root / "core" / "migration"
+        expected_parent = root / "migration"
 
         # This is the only place we're testing the real script.
         # Everywhere else should use the mock.
         script = DatabaseMigrationScript()
-        assert [expected_core, expected_parent] == script.directories_by_priority
+        assert [str(expected_core), str(expected_parent)] == script.directories_by_priority
 
     def test_fetch_migration_files(self, script, migrations, migration_dirs):
         result = script.fetch_migration_files()

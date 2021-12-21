@@ -7,7 +7,7 @@ import re
 import pytest
 from parameterized import parameterized
 
-from ...util.string_helpers import UnicodeAwareBase64, base64, random_string
+from core.util.string_helpers import UnicodeAwareBase64, base64, random_string
 
 
 class TestUnicodeAwareBase64(object):

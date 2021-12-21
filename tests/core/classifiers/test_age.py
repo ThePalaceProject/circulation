@@ -1,6 +1,6 @@
-from ...classifier import AgeOrGradeClassifier, Classifier
-from ...classifier import LCSHClassifier as LCSH
-from ...classifier.age import (
+from core.classifier import AgeOrGradeClassifier, Classifier
+from core.classifier import LCSHClassifier as LCSH
+from core.classifier.age import (
     AgeClassifier,
     GradeLevelClassifier,
     InterestLevelClassifier,

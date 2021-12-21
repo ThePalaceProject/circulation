@@ -24,7 +24,7 @@ from api.saml.metadata.parser import (
     SAMLMetadataParsingResult,
     SAMLSubjectParser,
 )
-from tests.saml import fixtures
+from tests.api.saml import fixtures
 
 
 class TestSAMLMetadataParser(object):

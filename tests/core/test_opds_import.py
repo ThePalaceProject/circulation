@@ -10,10 +10,10 @@ import pytest
 from lxml import etree
 from psycopg2.extras import NumericRange
 
-from ..config import CannotLoadConfiguration, IntegrationException
-from ..coverage import CoverageFailure
-from ..metadata_layer import CirculationData, LinkData, Metadata, TimestampData
-from ..model import (
+from core.config import CannotLoadConfiguration, IntegrationException
+from core.coverage import CoverageFailure
+from core.metadata_layer import CirculationData, LinkData, Metadata, TimestampData
+from core.model import (
     Collection,
     Contributor,
     CoverageRecord,
@@ -31,8 +31,8 @@ from ..model import (
     Work,
     WorkCoverageRecord,
 )
-from ..model.configuration import ExternalIntegrationLink
-from ..opds_import import (
+from core.model.configuration import ExternalIntegrationLink
+from core.opds_import import (
     AccessNotAuthenticated,
     MetadataWranglerOPDSLookup,
     OPDSImporter,
@@ -40,17 +40,17 @@ from ..opds_import import (
     OPDSXMLParser,
     SimplifiedOPDSLookup,
 )
-from ..s3 import MockS3Uploader, S3Uploader, S3UploaderConfiguration
-from ..selftest import SelfTestResult
-from ..testing import (
+from core.s3 import MockS3Uploader, S3Uploader, S3UploaderConfiguration
+from core.selftest import SelfTestResult
+from core.testing import (
     DatabaseTest,
     DummyHTTPClient,
     MockRequestsRequest,
     MockRequestsResponse,
 )
-from ..util.datetime_helpers import datetime_utc, utc_now
-from ..util.http import BadResponseException
-from ..util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
+from core.util.datetime_helpers import datetime_utc, utc_now
+from core.util.http import BadResponseException
+from core.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
 
 
 class DoomedOPDSImporter(OPDSImporter):
@@ -1124,7 +1124,7 @@ class TestOPDSImporter(OPDSImporterTest):
         assert "7" == seven.subject.identifier
         assert 100 == seven.weight
         assert Subject.AGE_RANGE == seven.subject.type
-        from ..classifier import Classifier
+        from core.classifier import Classifier
 
         classifier = Classifier.classifiers.get(seven.subject.type, None)
         classifier.classify(seven.subject)

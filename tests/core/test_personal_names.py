@@ -7,8 +7,8 @@ import sys
 import tempfile
 from io import StringIO
 
-from ..mock_analytics_provider import MockAnalyticsProvider
-from ..model import (
+from core.mock_analytics_provider import MockAnalyticsProvider
+from core.model import (
     Contributor,
     DataSource,
     Edition,
@@ -18,8 +18,8 @@ from ..model import (
     get_one,
     get_one_or_create,
 )
-from ..testing import DatabaseTest, DummyHTTPClient
-from ..util.personal_names import display_name_to_sort_name
+from core.testing import DatabaseTest, DummyHTTPClient
+from core.util.personal_names import display_name_to_sort_name
 
 
 class TestNameConversions(DatabaseTest):

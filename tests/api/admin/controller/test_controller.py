@@ -58,7 +58,7 @@ from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
 from core.util.datetime_helpers import utc_now
 from core.util.http import HTTP
-from tests.test_controller import CirculationControllerTest
+from tests.api.test_controller import CirculationControllerTest
 
 
 class AdminControllerTest(CirculationControllerTest):

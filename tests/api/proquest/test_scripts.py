@@ -10,7 +10,7 @@ from api.proquest.scripts import ProQuestOPDS2ImportScript
 from core.model import Collection, DataSource, ExternalIntegration, Identifier
 from core.opds2_import import RWPMManifestParser
 from core.testing import DatabaseTest
-from tests.proquest import fixtures
+from tests.api.proquest import fixtures
 
 
 class TestProQuestOPDS2ImportScript(DatabaseTest):

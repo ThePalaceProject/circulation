@@ -3,7 +3,7 @@ from copy import deepcopy
 
 import pytest
 
-from ..metadata_layer import (
+from core.metadata_layer import (
     CirculationData,
     ContributorData,
     FormatData,
@@ -14,7 +14,7 @@ from ..metadata_layer import (
     ReplacementPolicy,
     SubjectData,
 )
-from ..model import (
+from core.model import (
     Collection,
     DataSource,
     DeliveryMechanism,
@@ -25,11 +25,11 @@ from ..model import (
     RightsStatus,
     Subject,
 )
-from ..model.configuration import ExternalIntegrationLink
-from ..model.licensing import LicenseStatus
-from ..s3 import MockS3Uploader
-from ..testing import DatabaseTest, DummyHTTPClient
-from ..util.datetime_helpers import utc_now
+from core.model.configuration import ExternalIntegrationLink
+from core.model.licensing import LicenseStatus
+from core.s3 import MockS3Uploader
+from core.testing import DatabaseTest, DummyHTTPClient
+from core.util.datetime_helpers import utc_now
 
 
 class TestCirculationData(DatabaseTest):

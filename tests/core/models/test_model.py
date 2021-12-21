@@ -6,10 +6,10 @@ from psycopg2.extras import NumericRange
 from sqlalchemy import not_
 from sqlalchemy.orm.exc import MultipleResultsFound
 
-from ... import classifier
-from ...config import Configuration
-from ...external_search import mock_search_index
-from ...model import (
+from core import classifier
+from core.config import Configuration
+from core.external_search import mock_search_index
+from core.model import (
     DataSource,
     Edition,
     Genre,
@@ -19,7 +19,7 @@ from ...model import (
     numericrange_to_tuple,
     tuple_to_numericrange,
 )
-from ...testing import DatabaseTest
+from core.testing import DatabaseTest
 
 
 class TestDatabaseInterface(DatabaseTest):

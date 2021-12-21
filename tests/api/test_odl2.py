@@ -23,7 +23,7 @@ from core.model import (
     Work,
 )
 from core.model.configuration import ConfigurationFactory, ConfigurationStorage
-from tests.test_odl import LicenseHelper, LicenseInfoHelper, TestODLImporter
+from tests.api.test_odl import LicenseHelper, LicenseInfoHelper, TestODLImporter
 
 
 class TestODL2Importer(TestODLImporter):

@@ -12,7 +12,7 @@ from api.config import Configuration
 from api.registration.registry import RemoteRegistry
 from core.model import ExternalIntegration, create
 from core.testing import MockRequestsResponse
-from tests.admin.controller.test_controller import SettingsControllerTest
+from tests.api.admin.controller.test_controller import SettingsControllerTest
 
 
 class TestGeographicValidator(SettingsControllerTest):

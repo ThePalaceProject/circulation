@@ -23,9 +23,9 @@ from elasticsearch_dsl.query import Query as elasticsearch_dsl_query
 from elasticsearch_dsl.query import Range, Term, Terms
 from psycopg2.extras import NumericRange
 
-from ..classifier import Classifier
-from ..config import CannotLoadConfiguration, Configuration
-from ..external_search import (
+from core.classifier import Classifier
+from core.config import CannotLoadConfiguration, Configuration
+from core.external_search import (
     CurrentMapping,
     ExternalSearchIndex,
     Filter,
@@ -40,9 +40,9 @@ from ..external_search import (
     WorkSearchResult,
     mock_search_index,
 )
-from ..lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
-from ..metadata_layer import ContributorData, IdentifierData
-from ..model import (
+from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
+from core.metadata_layer import ContributorData, IdentifierData
+from core.model import (
     ConfigurationSetting,
     Contribution,
     Contributor,
@@ -54,9 +54,9 @@ from ..model import (
     WorkCoverageRecord,
     get_one_or_create,
 )
-from ..problem_details import INVALID_INPUT
-from ..testing import DatabaseTest, EndToEndSearchTest, ExternalSearchTest
-from ..util.datetime_helpers import datetime_utc, from_timestamp
+from core.problem_details import INVALID_INPUT
+from core.testing import DatabaseTest, EndToEndSearchTest, ExternalSearchTest
+from core.util.datetime_helpers import datetime_utc, from_timestamp
 
 RESEARCH = Term(audience=Classifier.AUDIENCE_RESEARCH.lower())
 

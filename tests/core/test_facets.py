@@ -1,6 +1,6 @@
-from ..facets import FacetConfig
-from ..facets import FacetConstants as Facets
-from ..testing import DatabaseTest
+from core.facets import FacetConfig
+from core.facets import FacetConstants as Facets
+from core.testing import DatabaseTest
 
 
 class TestFacetConfig(DatabaseTest):

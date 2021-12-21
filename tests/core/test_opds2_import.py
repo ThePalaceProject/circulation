@@ -4,7 +4,7 @@ import os
 from parameterized import parameterized
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
-from ..model import (
+from core.model import (
     Contribution,
     Contributor,
     DataSource,
@@ -15,7 +15,7 @@ from ..model import (
     MediaTypes,
     Work,
 )
-from ..opds2_import import OPDS2Importer, RWPMManifestParser
+from core.opds2_import import OPDS2Importer, RWPMManifestParser
 from .test_opds_import import OPDSTest
 
 

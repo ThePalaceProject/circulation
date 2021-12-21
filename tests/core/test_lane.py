@@ -9,21 +9,21 @@ from mock import MagicMock, call
 from sqlalchemy import and_, func, text
 from sqlalchemy.sql.elements import Case
 
-from ..classifier import Classifier
-from ..config import Configuration
-from ..entrypoint import (
+from core.classifier import Classifier
+from core.config import Configuration
+from core.entrypoint import (
     AudiobooksEntryPoint,
     EbooksEntryPoint,
     EntryPoint,
     EverythingEntryPoint,
 )
-from ..external_search import (
+from core.external_search import (
     Filter,
     MockExternalSearchIndex,
     WorkSearchResult,
     mock_search_index,
 )
-from ..lane import (
+from core.lane import (
     DatabaseBackedFacets,
     DatabaseBackedWorkList,
     DefaultSortOrderFacets,
@@ -37,7 +37,7 @@ from ..lane import (
     TopLevelWorkList,
     WorkList,
 )
-from ..model import (
+from core.model import (
     CachedFeed,
     CustomListEntry,
     DataSource,
@@ -53,10 +53,10 @@ from ..model import (
     get_one_or_create,
     tuple_to_numericrange,
 )
-from ..problem_details import INVALID_INPUT
-from ..testing import DatabaseTest, EndToEndSearchTest, LogCaptureHandler
-from ..util.datetime_helpers import utc_now
-from ..util.opds_writer import OPDSFeed
+from core.problem_details import INVALID_INPUT
+from core.testing import DatabaseTest, EndToEndSearchTest, LogCaptureHandler
+from core.util.datetime_helpers import utc_now
+from core.util.opds_writer import OPDSFeed
 
 
 class TestFacetsWithEntryPoint(DatabaseTest):

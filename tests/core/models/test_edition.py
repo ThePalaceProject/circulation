@@ -1,17 +1,17 @@
 # encoding: utf-8
 import datetime
 
-from ...model import PresentationCalculationPolicy, get_one_or_create
-from ...model.constants import MediaTypes
-from ...model.contributor import Contributor
-from ...model.coverage import CoverageRecord
-from ...model.datasource import DataSource
-from ...model.edition import Edition
-from ...model.identifier import Identifier
-from ...model.licensing import DeliveryMechanism
-from ...model.resource import Hyperlink, Representation
-from ...testing import DatabaseTest
-from ...util.datetime_helpers import utc_now
+from core.model import PresentationCalculationPolicy, get_one_or_create
+from core.model.constants import MediaTypes
+from core.model.contributor import Contributor
+from core.model.coverage import CoverageRecord
+from core.model.datasource import DataSource
+from core.model.edition import Edition
+from core.model.identifier import Identifier
+from core.model.licensing import DeliveryMechanism
+from core.model.resource import Hyperlink, Representation
+from core.testing import DatabaseTest
+from core.util.datetime_helpers import utc_now
 
 
 class TestEdition(DatabaseTest):

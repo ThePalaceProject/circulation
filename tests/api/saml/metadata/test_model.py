@@ -10,7 +10,7 @@ from api.saml.metadata.model import (
     SAMLSubject,
     SAMLSubjectPatronIDExtractor,
 )
-from tests.saml import fixtures
+from tests.api.saml import fixtures
 
 
 class TestAttributeStatement(object):

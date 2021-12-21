@@ -7,21 +7,21 @@ import pytest
 from mock import MagicMock
 from psycopg2.extras import NumericRange
 
-from ...classifier import Classifier, Fantasy, Romance, Science_Fiction
-from ...external_search import MockExternalSearchIndex
-from ...model import get_one_or_create, tuple_to_numericrange
-from ...model.classification import Genre, Subject
-from ...model.complaint import Complaint
-from ...model.contributor import Contributor
-from ...model.coverage import WorkCoverageRecord
-from ...model.datasource import DataSource
-from ...model.edition import Edition
-from ...model.identifier import Identifier
-from ...model.licensing import LicensePool
-from ...model.resource import Hyperlink, Representation, Resource
-from ...model.work import Work, WorkGenre
-from ...testing import DatabaseTest
-from ...util.datetime_helpers import datetime_utc, from_timestamp, utc_now
+from core.classifier import Classifier, Fantasy, Romance, Science_Fiction
+from core.external_search import MockExternalSearchIndex
+from core.model import get_one_or_create, tuple_to_numericrange
+from core.model.classification import Genre, Subject
+from core.model.complaint import Complaint
+from core.model.contributor import Contributor
+from core.model.coverage import WorkCoverageRecord
+from core.model.datasource import DataSource
+from core.model.edition import Edition
+from core.model.identifier import Identifier
+from core.model.licensing import LicensePool
+from core.model.resource import Hyperlink, Representation, Resource
+from core.model.work import Work, WorkGenre
+from core.testing import DatabaseTest
+from core.util.datetime_helpers import datetime_utc, from_timestamp, utc_now
 
 
 class TestWork(DatabaseTest):

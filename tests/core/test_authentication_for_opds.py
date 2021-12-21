@@ -1,7 +1,7 @@
 import pytest
 
-from ..util.authentication_for_opds import AuthenticationForOPDSDocument as Doc
-from ..util.authentication_for_opds import OPDSAuthenticationFlow as Flow
+from core.util.authentication_for_opds import AuthenticationForOPDSDocument as Doc
+from core.util.authentication_for_opds import OPDSAuthenticationFlow as Flow
 
 
 class MockFlow(Flow):

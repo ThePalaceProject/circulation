@@ -1,6 +1,6 @@
-from ...model import DataSource, Measurement, get_one_or_create
-from ...testing import DatabaseTest
-from ...util.datetime_helpers import datetime_utc
+from core.model import DataSource, Measurement, get_one_or_create
+from core.testing import DatabaseTest
+from core.util.datetime_helpers import datetime_utc
 
 
 class TestMeasurement(DatabaseTest):

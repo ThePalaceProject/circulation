@@ -1,6 +1,6 @@
-from ... import classifier
-from ...classifier import *
-from ...classifier.ddc import DeweyDecimalClassifier as DDC
+from core import classifier
+from core.classifier import *
+from core.classifier.ddc import DeweyDecimalClassifier as DDC
 
 
 class TestDewey(object):

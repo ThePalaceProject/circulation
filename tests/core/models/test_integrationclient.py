@@ -3,9 +3,9 @@ import datetime
 
 import pytest
 
-from ...model.integrationclient import IntegrationClient
-from ...testing import DatabaseTest
-from ...util.datetime_helpers import utc_now
+from core.model.integrationclient import IntegrationClient
+from core.testing import DatabaseTest
+from core.util.datetime_helpers import utc_now
 
 
 class TestIntegrationClient(DatabaseTest):

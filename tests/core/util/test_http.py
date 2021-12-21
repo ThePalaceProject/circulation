@@ -3,9 +3,9 @@ import json
 import pytest
 import requests
 
-from ...problem_details import INVALID_INPUT
-from ...testing import MockRequestsResponse
-from ...util.http import (
+from core.problem_details import INVALID_INPUT
+from core.testing import MockRequestsResponse
+from core.util.http import (
     HTTP,
     INTEGRATION_ERROR,
     BadResponseException,
@@ -13,7 +13,7 @@ from ...util.http import (
     RequestNetworkException,
     RequestTimedOut,
 )
-from ...util.problem_detail import ProblemDetail
+from core.util.problem_detail import ProblemDetail
 
 
 class TestHTTP(object):

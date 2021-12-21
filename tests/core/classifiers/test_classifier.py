@@ -4,8 +4,8 @@ from collections import Counter
 
 from psycopg2.extras import NumericRange
 
-from ... import classifier
-from ...classifier import (
+from core import classifier
+from core.classifier import (
     Classifier,
     FreeformAudienceClassifier,
     GenreData,
@@ -14,18 +14,18 @@ from ...classifier import (
     fiction_genres,
     nonfiction_genres,
 )
-from ...classifier.age import (
+from core.classifier.age import (
     AgeClassifier,
     GradeLevelClassifier,
     InterestLevelClassifier,
 )
-from ...classifier.ddc import DeweyDecimalClassifier as DDC
-from ...classifier.keyword import FASTClassifier as FAST
-from ...classifier.keyword import LCSHClassifier as LCSH
-from ...classifier.lcc import LCCClassifier as LCC
-from ...classifier.simplified import SimplifiedGenreClassifier
-from ...model import Classification, DataSource, Genre, Subject
-from ...testing import DatabaseTest
+from core.classifier.ddc import DeweyDecimalClassifier as DDC
+from core.classifier.keyword import FASTClassifier as FAST
+from core.classifier.keyword import LCSHClassifier as LCSH
+from core.classifier.lcc import LCCClassifier as LCC
+from core.classifier.simplified import SimplifiedGenreClassifier
+from core.model import Classification, DataSource, Genre, Subject
+from core.testing import DatabaseTest
 
 genres = dict()
 GenreData.populate(globals(), genres, fiction_genres, nonfiction_genres)

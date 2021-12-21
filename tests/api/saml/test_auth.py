@@ -34,8 +34,8 @@ from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvalua
 from core.python_expression_dsl.parser import DSLParser
 from core.util.datetime_helpers import datetime_utc
 from core.util.string_helpers import base64
-from tests.saml import fixtures
-from tests.test_controller import ControllerTest
+from tests.api.saml import fixtures
+from tests.api.test_controller import ControllerTest
 
 from .database_test import DatabaseTest
 

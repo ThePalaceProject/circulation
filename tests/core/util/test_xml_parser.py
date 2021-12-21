@@ -2,7 +2,7 @@
 
 from lxml.etree import XMLSyntaxError
 
-from ...util.xmlparser import XMLParser
+from core.util.xmlparser import XMLParser
 
 
 class MockParser(XMLParser):

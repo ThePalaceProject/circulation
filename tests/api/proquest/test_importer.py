@@ -54,7 +54,7 @@ from core.model.configuration import (
 from core.opds2_import import RWPMManifestParser
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import datetime_utc, utc_now
-from tests.proquest import fixtures
+from tests.api.proquest import fixtures
 
 
 class TestProQuestOPDS2Importer(DatabaseTest):

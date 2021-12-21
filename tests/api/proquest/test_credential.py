@@ -14,7 +14,7 @@ from api.saml.metadata.model import (
 )
 from core.model import Credential, DataSource
 from core.testing import DatabaseTest
-from tests.saml import fixtures
+from tests.api.saml import fixtures
 
 
 class TestProQuestCredentialManager(DatabaseTest):

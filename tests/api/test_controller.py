@@ -9,6 +9,7 @@ import time
 import urllib.parse
 from contextlib import contextmanager
 from decimal import Decimal
+from pathlib import Path
 from time import mktime
 from wsgiref.handlers import format_date_time
 
@@ -135,7 +136,7 @@ from core.util.http import RemoteIntegrationException
 from core.util.opds_writer import OPDSFeed
 from core.util.problem_detail import ProblemDetail
 from core.util.string_helpers import base64
-from tests.test_odl import BaseODLTest
+from tests.api.test_odl import BaseODLTest
 
 
 class ControllerTest(VendorIDTest):
@@ -6437,11 +6438,9 @@ class TestStaticFileController(CirculationControllerTest):
         )
         cache_timeout.value = 10
 
-        directory = os.path.join(
-            os.path.abspath(os.path.dirname(__file__)), "files", "images"
-        )
+        directory = Path(__file__).parent / "files" / "images"
         filename = "blue.jpg"
-        with open(os.path.join(directory, filename), "rb") as f:
+        with (directory / filename).open("rb") as f:
             expected_content = f.read()
 
         with self.app.test_request_context("/"):
@@ -6460,15 +6459,13 @@ class TestStaticFileController(CirculationControllerTest):
             )
 
     def test_image(self):
-        directory = os.path.join(
-            os.path.abspath(os.path.dirname(__file__)), "..", "resources", "images"
-        )
-        filename = "CleverLoginButton280.png"
-        with open(os.path.join(directory, filename), "rb") as f:
+        directory = Path(__file__).parent.parent.parent / "resources" / "images"
+        filename = directory / "CleverLoginButton280.png"
+        with filename.open("rb") as f:
             expected_content = f.read()
 
         with self.app.test_request_context("/"):
-            response = self.app.manager.static_files.image(filename)
+            response = self.app.manager.static_files.image(str(filename))
 
         assert 200 == response.status_code
         assert expected_content == response.response.file.read()
