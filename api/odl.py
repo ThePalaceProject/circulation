@@ -4,7 +4,7 @@ import json
 import logging
 import uuid
 from io import StringIO
-from typing import Callable, Optional
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import dateutil
 import feedparser
@@ -19,7 +19,7 @@ from uritemplate import URITemplate
 from core import util
 from core.analytics import Analytics
 from core.lcp.credential import LCPCredentialFactory
-from core.metadata_layer import CirculationData, FormatData, LicenseData, TimestampData
+from core.metadata_layer import FormatData, LicenseData, TimestampData
 from core.model import (
     Collection,
     ConfigurationSetting,
@@ -49,7 +49,7 @@ from core.model.configuration import (
     HasExternalIntegration,
 )
 from core.model.licensing import LicenseStatus
-from core.monitor import CollectionMonitor, IdentifierSweepMonitor
+from core.monitor import CollectionMonitor
 from core.opds_import import OPDSImporter, OPDSImportMonitor, OPDSXMLParser
 from core.testing import DatabaseTest, MockRequestsResponse
 from core.util.datetime_helpers import to_utc, utc_now
@@ -539,10 +539,49 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
         loan = loan.one()
         return self._fulfill(loan, internal_format)
 
+    @staticmethod
+    def _find_content_link_and_type(
+        links: List[Dict],
+        drm_scheme: Optional[str],
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """Find a content link with the type information corresponding to the selected delivery mechanism.
+
+        :param links: List of dict-like objects containing information about available links in the LCP license file
+        :param drm_scheme: Selected delivery mechanism DRM scheme
+
+        :return: Two-tuple containing a content link and content type
+        """
+        candidates = []
+        for link in links:
+            # Depending on the format being served, the crucial information
+            # may be in 'manifest' or in 'license'.
+            if link.get("rel") not in ("manifest", "license"):
+                continue
+            href = link.get("href")
+            type = link.get("type")
+
+            # For DeMarque audiobook content, we need to translate the type property
+            # to reflect what we have stored in our delivery mechanisms.
+            if type in ODLImporter.LICENSE_FORMATS:
+                type = ODLImporter.LICENSE_FORMATS[type][ODLImporter.DRM_SCHEME]
+
+            candidates.append((href, type))
+
+        if len(candidates) == 0:
+            # No candidates
+            return None, None
+
+        if not drm_scheme:
+            # If we don't have a requested DRM scheme, so we use the first one.
+            # TODO: Can this just be dropped?
+            return candidates[0]
+
+        return next(filter(lambda x: x[1] == drm_scheme, candidates), (None, None))
+
     def _fulfill(
         self,
         loan: Loan,
-        delivery_mechanism: Optional[LicensePoolDeliveryMechanism] = None,
+        delivery_mechanism: Optional[Union[str, LicensePoolDeliveryMechanism]] = None,
     ) -> FulfillmentInfo:
         licensepool = loan.license_pool
         doc = self.get_license_status_document(loan)
@@ -560,42 +599,12 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
         expires = dateutil.parser.parse(expires)
 
         links = doc.get("links", [])
-        content_link = None
-        content_type = None
-        for link in links:
-            # Depending on the format being served, the crucial information
-            # may be in 'manifest' or in 'license'.
-            if link.get("rel") in ("manifest", "license"):
-                candidate_content_link = link.get("href")
-                candidate_content_type = link.get("type")
+        if isinstance(delivery_mechanism, LicensePoolDeliveryMechanism):
+            delivery_mechanism = delivery_mechanism.delivery_mechanism.drm_scheme
 
-                if not delivery_mechanism:
-                    # If we don't have a LicensePoolDeliveryMechanism instance,
-                    # we can't really decide whether the link has the correct content and DRM type,
-                    # so we take the first one.
-                    content_link = candidate_content_link
-                    content_type = candidate_content_type
-                    break
-                elif isinstance(delivery_mechanism, str):
-                    # If delivery mechanism is a string,
-                    # then we suppose that it contains the DRM type in the case of the DRM-protected content
-                    # and the content type in the case of OA content.
-                    if delivery_mechanism == candidate_content_type:
-                        content_link = candidate_content_link
-                        content_type = candidate_content_type
-                        break
-                elif isinstance(delivery_mechanism, LicensePoolDeliveryMechanism):
-                    # If we have a LicensePoolDeliveryMechanism instance,
-                    # then we use it to find a link with the correct content and DRM types.
-                    if (
-                        candidate_content_type
-                        == delivery_mechanism.delivery_mechanism.drm_scheme
-                        or candidate_content_type
-                        == delivery_mechanism.delivery_mechanism.content_type
-                    ):
-                        content_link = candidate_content_link
-                        content_type = candidate_content_type
-                        break
+        content_link, content_type = self._find_content_link_and_type(
+            links, delivery_mechanism
+        )
 
         return FulfillmentInfo(
             licensepool.collection,
@@ -920,6 +929,21 @@ class ODLImporter(OPDSImporter):
     # about the license.
     LICENSE_INFO_DOCUMENT_MEDIA_TYPE = "application/vnd.odl.info+json"
 
+    FEEDBOOKS_AUDIO = "{0}; protection={1}".format(
+        MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+        DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
+    )
+
+    CONTENT_TYPE = "content-type"
+    DRM_SCHEME = "drm-scheme"
+
+    LICENSE_FORMATS = {
+        FEEDBOOKS_AUDIO: {
+            CONTENT_TYPE: MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+            DRM_SCHEME: DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
+        }
+    }
+
     @classmethod
     def fetch_license_info(cls, document_link: str, do_get: Callable) -> Optional[dict]:
         status_code, _, response = do_get(document_link, headers={})
@@ -959,6 +983,7 @@ class ODLImporter(OPDSImporter):
         document_terms = license_info_document.get("terms", {})
         document_expires = document_terms.get("expires")
         document_concurrency = document_terms.get("concurrency")
+        document_format = license_info_document.get("format")
 
         if identifier is None:
             logging.error("License info document has no identifier.")
@@ -1000,6 +1025,13 @@ class ODLImporter(OPDSImporter):
         if document_concurrency is not None:
             concurrency = int(document_concurrency)
 
+        content_types = None
+        if document_format is not None:
+            if isinstance(document_format, str):
+                content_types = [document_format]
+            elif isinstance(document_format, list):
+                content_types = document_format
+
         return LicenseData(
             identifier=identifier,
             checkout_url=checkout_link,
@@ -1009,6 +1041,7 @@ class ODLImporter(OPDSImporter):
             checkouts_available=available,
             status=status,
             terms_concurrency=concurrency,
+            content_types=content_types,
         )
 
     @classmethod
@@ -1093,11 +1126,7 @@ class ODLImporter(OPDSImporter):
 
             # But it may instead describe an audiobook protected with
             # the Feedbooks access-control scheme.
-            feedbooks_audio = "%s; protection=%s" % (
-                MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-                DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
-            )
-            if full_content_type == feedbooks_audio:
+            if full_content_type == cls.FEEDBOOKS_AUDIO:
                 content_type = MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE
                 drm_schemes.append(DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM)
 
@@ -1140,7 +1169,6 @@ class ODLImporter(OPDSImporter):
                     break
 
             expires = None
-            total_checkouts = None
             concurrent_checkouts = None
 
             terms = parser._xpath(odl_license_tag, "odl:terms")

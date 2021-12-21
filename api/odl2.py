@@ -7,7 +7,7 @@ from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
 from api.odl import ODLAPI, ODLImporter
 from core.metadata_layer import FormatData
-from core.model import DeliveryMechanism, Edition, MediaTypes, RightsStatus
+from core.model import Edition, RightsStatus
 from core.model.configuration import (
     ConfigurationAttributeType,
     ConfigurationFactory,
@@ -48,21 +48,6 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
     """
 
     NAME = ODL2API.NAME
-
-    FEEDBOOKS_AUDIO = "{0}; protection={1}".format(
-        MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-        DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
-    )
-
-    CONTENT_TYPE = "content-type"
-    DRM_SCHEME = "drm-scheme"
-
-    LICENSE_FORMATS = {
-        FEEDBOOKS_AUDIO: {
-            CONTENT_TYPE: MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-            DRM_SCHEME: DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
-        }
-    }
 
     def __init__(
         self,
@@ -177,42 +162,6 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
         if publication.licenses:
             for odl_license in publication.licenses:
                 identifier = odl_license.metadata.identifier
-
-                for license_format in odl_license.metadata.formats:
-                    if (
-                        skipped_license_formats
-                        and license_format in skipped_license_formats
-                    ):
-                        continue
-
-                    if not medium:
-                        medium = Edition.medium_from_media_type(license_format)
-
-                    drm_schemes = (
-                        odl_license.metadata.protection.formats
-                        if odl_license.metadata.protection
-                        else []
-                    )
-
-                    if license_format in self.LICENSE_FORMATS:
-                        drm_scheme = self.LICENSE_FORMATS[license_format][
-                            self.DRM_SCHEME
-                        ]
-                        license_format = self.LICENSE_FORMATS[license_format][
-                            self.CONTENT_TYPE
-                        ]
-
-                        drm_schemes.append(drm_scheme)
-
-                    for drm_scheme in drm_schemes or [None]:
-                        formats.append(
-                            FormatData(
-                                content_type=license_format,
-                                drm_scheme=drm_scheme,
-                                rights_uri=RightsStatus.IN_COPYRIGHT,
-                            )
-                        )
-
                 checkout_link = first_or_default(
                     odl_license.links.get_by_rel(OPDS2LinkRelationsRegistry.BORROW.key)
                 )
@@ -250,6 +199,49 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
 
                 if parsed_license is not None:
                     licenses.append(parsed_license)
+
+                # DPLA feed doesn't have information about a DRM protection used for audiobooks.
+                # We want to try to extract that information from the License Info Document it's present there.
+                license_formats = set(odl_license.metadata.formats)
+                if parsed_license and parsed_license.content_types:
+                    license_formats |= set(parsed_license.content_types)
+
+                for license_format in license_formats:
+                    if (
+                        skipped_license_formats
+                        and license_format in skipped_license_formats
+                    ):
+                        continue
+
+                    if not medium:
+                        medium = Edition.medium_from_media_type(license_format)
+
+                    if license_format in ODLImporter.LICENSE_FORMATS:
+                        # Special case to handle DeMarque audiobooks which
+                        # include the protection in the content type
+                        drm_schemes = [
+                            ODLImporter.LICENSE_FORMATS[license_format][
+                                ODLImporter.DRM_SCHEME
+                            ]
+                        ]
+                        license_format = ODLImporter.LICENSE_FORMATS[license_format][
+                            ODLImporter.CONTENT_TYPE
+                        ]
+                    else:
+                        drm_schemes = (
+                            odl_license.metadata.protection.formats
+                            if odl_license.metadata.protection
+                            else []
+                        )
+
+                    for drm_scheme in drm_schemes or [None]:
+                        formats.append(
+                            FormatData(
+                                content_type=license_format,
+                                drm_scheme=drm_scheme,
+                                rights_uri=RightsStatus.IN_COPYRIGHT,
+                            )
+                        )
 
         metadata.circulation.licenses = licenses
         metadata.circulation.licenses_owned = None

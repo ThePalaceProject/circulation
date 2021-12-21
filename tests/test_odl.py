@@ -740,8 +740,61 @@ class TestODLAPI(DatabaseTest, BaseODLAPITest):
 
         assert 0 == db.query(Loan).count()
 
-    def test_fulfill_success_license(
-        self, license, patron, api, checkout, pool, collection, db
+    @pytest.mark.parametrize(
+        "delivery_mechanism, correct_link, links",
+        [
+            (
+                DeliveryMechanism.ADOBE_DRM,
+                "http://acsm",
+                [
+                    {
+                        "rel": "license",
+                        "href": "http://acsm",
+                        "type": DeliveryMechanism.ADOBE_DRM,
+                    }
+                ],
+            ),
+            (
+                MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+                "http://manifest",
+                [
+                    {
+                        "rel": "manifest",
+                        "href": "http://manifest",
+                        "type": MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+                    }
+                ],
+            ),
+            (
+                DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
+                "http://correct",
+                [
+                    {
+                        "rel": "license",
+                        "href": "http://acsm",
+                        "type": DeliveryMechanism.ADOBE_DRM,
+                    },
+                    {
+                        "rel": "manifest",
+                        "href": "http://correct",
+                        "type": ODLImporter.FEEDBOOKS_AUDIO,
+                    },
+                ],
+            ),
+        ],
+    )
+    def test_fulfill_success(
+        self,
+        license,
+        patron,
+        api,
+        checkout,
+        pool,
+        collection,
+        db,
+        delivery_mechanism,
+        correct_link,
+        links,
     ):
         # Fulfill a loan in a way that gives access to a license file.
         license.setup(concurrency=1, available=1)
@@ -751,59 +804,20 @@ class TestODLAPI(DatabaseTest, BaseODLAPITest):
             {
                 "status": "ready",
                 "potential_rights": {"end": "2017-10-21T11:12:13Z"},
-                "links": [
-                    {
-                        "rel": "license",
-                        "href": "http://acsm",
-                        "type": DeliveryMechanism.ADOBE_DRM,
-                    }
-                ],
+                "links": links,
             }
         )
 
         api.queue_response(200, content=lsd)
-        fulfillment = api.fulfill(patron, "pin", pool, DeliveryMechanism.ADOBE_DRM)
+        fulfillment = api.fulfill(patron, "pin", pool, delivery_mechanism)
 
         assert collection == fulfillment.collection(db)
         assert pool.data_source.name == fulfillment.data_source_name
         assert pool.identifier.type == fulfillment.identifier_type
         assert pool.identifier.identifier == fulfillment.identifier
         assert datetime_utc(2017, 10, 21, 11, 12, 13) == fulfillment.content_expires
-        assert "http://acsm" == fulfillment.content_link
-        assert DeliveryMechanism.ADOBE_DRM == fulfillment.content_type
-
-    def test_fulfill_success_manifest(
-        self, license, patron, api, checkout, pool, collection, db
-    ):
-        # Fulfill a loan in a way that gives access to a manifest file.
-        license.setup(concurrency=1, available=1)
-        checkout()
-
-        audiobook = MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE
-
-        lsd = json.dumps(
-            {
-                "status": "ready",
-                "potential_rights": {"end": "2017-10-21T11:12:13Z"},
-                "links": [
-                    {
-                        "rel": "manifest",
-                        "href": "http://manifest",
-                        "type": audiobook,
-                    }
-                ],
-            }
-        )
-
-        api.queue_response(200, content=lsd)
-        fulfillment = api.fulfill(patron, "pin", pool, audiobook)
-        assert collection == fulfillment.collection(db)
-        assert pool.data_source.name == fulfillment.data_source_name
-        assert pool.identifier.type == fulfillment.identifier_type
-        assert pool.identifier.identifier == fulfillment.identifier
-        assert datetime_utc(2017, 10, 21, 11, 12, 13) == fulfillment.content_expires
-        assert "http://manifest" == fulfillment.content_link
-        assert audiobook == fulfillment.content_type
+        assert correct_link == fulfillment.content_link
+        assert delivery_mechanism == fulfillment.content_type
 
     def test_fulfill_cannot_fulfill(self, license, checkout, db, api, patron, pool):
         license.setup(concurrency=7, available=7)

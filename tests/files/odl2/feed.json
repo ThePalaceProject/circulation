@@ -65,8 +65,7 @@
             "identifier": "urn:uuid:f7847120-fc6f-11e3-8158-56847afe9799",
             "format": [
               "application/epub+zip",
-              "text/html",
-              "application/audiobook+json; protection=http://www.feedbooks.com/audiobooks/access-restriction"
+              "text/html"
             ],
             "price": {
               "currency": "USD",
