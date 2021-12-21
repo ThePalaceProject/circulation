@@ -6460,12 +6460,12 @@ class TestStaticFileController(CirculationControllerTest):
 
     def test_image(self):
         directory = Path(__file__).parent.parent.parent / "resources" / "images"
-        filename = directory / "CleverLoginButton280.png"
-        with filename.open("rb") as f:
+        filename = "CleverLoginButton280.png"
+        with (directory / filename).open("rb") as f:
             expected_content = f.read()
 
         with self.app.test_request_context("/"):
-            response = self.app.manager.static_files.image(str(filename))
+            response = self.app.manager.static_files.image(filename)
 
         assert 200 == response.status_code
         assert expected_content == response.response.file.read()

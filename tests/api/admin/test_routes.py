@@ -8,13 +8,9 @@ from api.admin import routes
 from api.admin.controller import AdminController, setup_admin_controllers
 from api.admin.problem_details import *
 from api.controller import CirculationManager
+
 from ..test_controller import ControllerTest
-from ..test_routes import (
-    MockApp,
-    MockController,
-    MockManager,
-    RouteTestFixtures,
-)
+from ..test_routes import MockApp, MockController, MockManager, RouteTestFixtures
 
 
 class MockAdminApp(object):
@@ -857,7 +853,10 @@ class TestAdminStatic(AdminRouteTest):
         # Go to the back to the root folder to get the right
         # path for the static files.
         root_path = Path(__file__).parent.parent.parent.parent
-        local_path = root_path / "api/admin/node_modules/@thepalaceproject/circulation-admin/dist"
+        local_path = (
+            root_path
+            / "api/admin/node_modules/@thepalaceproject/circulation-admin/dist"
+        )
 
         url = "/admin/static/circulation-admin.js"
         self.assert_request_calls(

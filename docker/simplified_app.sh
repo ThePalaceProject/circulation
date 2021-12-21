@@ -10,7 +10,7 @@ if [ -z ${version} ]; then
   echo "WARN: No version specified, will build default branch.";
 fi
 
-# Add packages we need to build the app and its dependancies
+# Add packages we need to build the app and its dependencies
 apt-get update
 $minimal_apt_get_install --no-upgrade \
   software-properties-common \
@@ -40,11 +40,6 @@ git clone https://github.com/${repo}.git circulation
 chown simplified:simplified circulation
 cd circulation
 git checkout $version
-
-# Use https to access submodules.
-git submodule init
-git config submodule.core.url "$(git config submodule.core.url | perl -p -e 's|git@(.*?):|https://\1/|g')"
-git submodule update --init --recursive
 
 # Add a .version file to the directory. This file
 # supplies an endpoint to check the app's current version.

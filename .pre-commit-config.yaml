@@ -35,4 +35,4 @@ repos:
       - id: check-github-workflows
 
 # Exclude test files, since they may be intentionally malformed
-exclude: ^tests/files/
+exclude: ^tests/(core|api)/files/

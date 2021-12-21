@@ -1097,7 +1097,10 @@ class TestDatabaseMigrationScript(DatabaseMigrationScriptTest):
         # This is the only place we're testing the real script.
         # Everywhere else should use the mock.
         script = DatabaseMigrationScript()
-        assert [str(expected_core), str(expected_parent)] == script.directories_by_priority
+        assert [
+            str(expected_core),
+            str(expected_parent),
+        ] == script.directories_by_priority
 
     def test_fetch_migration_files(self, script, migrations, migration_dirs):
         result = script.fetch_migration_files()

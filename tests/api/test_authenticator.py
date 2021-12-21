@@ -789,7 +789,8 @@ class TestLibraryAuthenticator(AuthenticatorTest):
         # immediately raises a RemoteIntegrationException, which will become
         # a CannotLoadConfiguration.
         integration = self._external_integration(
-            "tests.api.mock_authentication_provider", ExternalIntegration.PATRON_AUTH_GOAL
+            "tests.api.mock_authentication_provider",
+            ExternalIntegration.PATRON_AUTH_GOAL,
         )
         library.integrations.append(integration)
         auth = LibraryAuthenticator(_db=self._db, library=library)
