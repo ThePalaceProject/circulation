@@ -1,0 +1,121 @@
+[build-system]
+build-backend = "poetry.core.masonry.api"
+requires = ["poetry-core>=1.0.0"]
+
+[tool.poetry]
+authors = ["The Palace Project <info@thepalaceproject.org>"]
+description = "The Palace Project Manager Application"
+homepage = "https://thepalaceproject.org"
+license = "Apache-2.0"
+name = "Palace Manager"
+readme = "README.md"
+repository = "https://github.com/ThePalaceProject/circulation"
+version = "0" # Version number is managed with tags in git
+
+[tool.poetry.dependencies]
+alabaster = { version = "0.7.12", optional = true }
+aws-xray-sdk = { version = "~2.8", optional = true }
+Babel = "2.9.1"
+beautifulsoup4 = "4.9.1"
+boto3 = "~1.18"
+botocore = "~1.21"
+certifi = "*"
+cffi = "1.14.3"
+chardet = "3.0.4"
+click = "7.1.2"
+contextlib2 = "0.6.0.post1"
+cryptography = "3.3.2"
+docker = "4.3.1"  # docker is used for the LCP feature.
+docutils = "0.16"
+elasticsearch = "~6.8"
+elasticsearch-dsl = "6.4.0"
+expiringdict = "1.2.1"
+feedparser = "6.0.2"
+Flask = "~1.1.2"
+Flask-Babel = "1.0.0"
+Flask-Cors = "3.0.9"
+flask-sqlalchemy-session = "1.1"
+funcsigs = "1.0.2"
+fuzzywuzzy = "0.18.0"  # fuzzywuzzy is for author name manipulations
+html-sanitizer = "1.9.1"
+httplib2 = "0.19.0"
+idna = "2.10"
+imagesize = "1.2.0"
+ipaddress = "1.0.23"
+isbnlib = "3.10.3"
+isodate = "0.6.0"
+itsdangerous = "1.1.0"
+Jinja2 = "2.11.3"
+jmespath = "0.10.0"
+loggly-python-handler = "1.0.1"  # NYPL requirement, can possibly be removed.
+lxml = "4.6.5"
+MarkupSafe = "1.1.1"
+money = "1.3.0"
+multipledispatch = "0.6.0"
+nameparser = "1.0.6"  # nameparser is for author name manipulations
+ndg-httpsclient = "0.5.1"  # ndg-httpsclient ensures we support SNI-based SSL
+newrelic = "5.18.0.148"  # newrelic is an NYPL-sepcific requirement that might be removeable.
+nltk = "3.6.5"  # nltk is a textblob dependency.
+oauth2client = "4.1.3"
+packaging = "20.4"
+palace-webpub-manifest-parser = "~2.0.3"
+Pillow = "8.3.2"
+psycopg2 = { version = "~2.8.6", optional = true }
+psycopg2-binary = { version = "~2.8.6", optional = true }
+py-bcrypt = "0.4"
+pyasn1 = "0.4.8"
+pyasn1-modules = "0.2.8"
+pycparser = "2.20"
+pycryptodome = "3.9.8"
+Pygments = "2.7.4"
+pyinstrument = { version = "~4.1", optional = true }
+PyJWT = "1.4.2"
+PyLD = "1.0.5"
+pymarc = "4.0.0"
+pyOpenSSL = "19.1.0"
+pyparsing = "2.4.7"
+pypostalcode = "0.3.6"
+pyspellchecker = "0.5.5"
+pytest = "^6"  # Used for tests
+python = ">=3.6"
+python-dateutil = "2.8.2"
+python-Levenshtein = "~0.12"
+python3-saml = "1.12.0"  # python-saml is required for SAML authentication
+pytz = "2021.1"
+rdflib = "5.0.0"
+requests = "~2.26"
+requests-futures = "1.0.0"
+requests-mock = "1.8.0"  # requests-mock is used for unit tests.
+rsa = "~4.7"  # rsa is an oauth2client dependency.
+s3transfer = "0.3.3"
+singledispatch = "3.4.0.3"
+snowballstemmer = "2.0.0"
+soupsieve = "1.9.6"
+Sphinx = "1.8.5"  # Sphinx is for code documentation
+sphinxcontrib-websupport = "1.1.2"
+SQLAlchemy = "1.3.19"
+textblob = "0.15.3"
+typing = "3.7.4.3"
+typing-extensions = { version = "~4.0", python = "< 3.8" }
+unicodecsv = "0.14.1"
+uritemplate = "3.0.1"
+urllib3 = "~1.26.5"
+uszipcode = "0.2.4"
+uWSGI = "2.0.19.1"
+watchtower = "0.8.0"  # watchtower is for Cloudwatch logging integration
+wcag-contrast-ratio = "0.9"
+websocket-client = "0.57.0"
+Werkzeug = "1.0.1"
+xmlsec = "1.3.12"  # xmlsec is required for SAML authentication
+
+[tool.poetry.dev-dependencies]
+freezegun = "~1.1"  # freezegun is used for unit tests.
+parameterized = "0.7.4"
+pre-commit = "~2.16"
+pyfakefs = "3.7"
+pytest-timeout = "*"
+
+[tool.poetry.extras]
+pg = ["psycopg2"]
+pg-binary = ["psycopg2-binary"]
+profiler = ["aws-xray-sdk", "pyinstrument"]
