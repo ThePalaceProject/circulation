@@ -1,17 +1,14 @@
 # encoding=utf8
-import calendar
 import datetime
 import email
 import json
-import os
 import random
-import time
+import sys
 import urllib.parse
 from contextlib import contextmanager
 from decimal import Decimal
 from pathlib import Path
 from time import mktime
-from unittest.mock import MagicMock, patch
 from wsgiref.handlers import format_date_time
 
 import feedparser
@@ -130,13 +127,19 @@ from core.problem_details import *
 from core.testing import DummyHTTPClient, MockRequestsResponse
 from core.user_profile import ProfileController, ProfileStorage
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
-from core.util.datetime_helpers import datetime_utc, from_timestamp, utc_now
+from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.flask_util import Response
 from core.util.http import RemoteIntegrationException
 from core.util.opds_writer import OPDSFeed
 from core.util.problem_detail import ProblemDetail
 from core.util.string_helpers import base64
 from tests.api.test_odl import BaseODLTest
+
+# TODO: we can drop this when we drop support for Python 3.6 and 3.7
+if sys.version_info < (3, 8):
+    from mock import MagicMock, patch
+else:
+    from unittest.mock import MagicMock, patch
 
 
 class ControllerTest(VendorIDTest):
