@@ -1,7 +1,7 @@
 # encoding: utf-8
 import functools
 import os
-from unittest.mock import MagicMock
+import sys
 from urllib.parse import urlsplit
 
 import boto3
@@ -30,6 +30,12 @@ from core.s3 import (
 )
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import datetime_utc, utc_now
+
+# TODO: we can drop this when we drop support for Python 3.6 and 3.7
+if sys.version_info < (3, 8):
+    from mock import MagicMock
+else:
+    from unittest.mock import MagicMock
 
 
 class S3UploaderTest(DatabaseTest):
