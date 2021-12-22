@@ -1,0 +1,19 @@
+name: 'Poetry'
+description: 'Install python poetry'
+
+outputs:
+  version:
+    description: "Installed version"
+    value: ${{ steps.poetry-version.outputs.version }}
+
+runs:
+  using: "composite"
+  steps:
+    - run: |
+        curl -sSL https://install.python-poetry.org | python
+        ln -s "$HOME/.local/bin/poetry" "$GITHUB_PATH/poetry"
+      shell: bash
+
+    - id: poetry-version
+      run: echo "::set-output name=version::$(poetry --version)"
+      shell: bash

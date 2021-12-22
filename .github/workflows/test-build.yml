@@ -41,10 +41,7 @@ jobs:
           sudo apt-get install --yes libxmlsec1-dev libxml2-dev
 
       - name: Install Poetry
-        run: |
-          curl -sSL https://install.python-poetry.org | python
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          poetry --version
+        uses: ./.github/actions/poetry
 
       - name: Install Tox
         run: |
