@@ -214,7 +214,7 @@ class RunMonitorScript(Script):
         if self.monitor:
             self.monitor.run()
         elif self.collection_monitor:
-            logging.warn(
+            logging.warning(
                 "Running a CollectionMonitor by delegating to RunCollectionMonitorScript. "
                 "It would be better if you used RunCollectionMonitorScript directly."
             )
@@ -534,7 +534,7 @@ class IdentifierInputScript(InputScript):
                     _db, identifier_type, arg, autocreate=autocreate
                 )
             if not identifier:
-                logging.warn("Could not load identifier %s/%s", identifier_type, arg)
+                logging.warning("Could not load identifier %s/%s", identifier_type, arg)
             if identifier:
                 identifiers.append(identifier)
         return identifiers
@@ -609,7 +609,7 @@ class LibraryInputScript(InputScript):
                     libraries.append(library)
                     break
             else:
-                logging.warn("Could not find library %s", arg)
+                logging.warning("Could not find library %s", arg)
         return libraries
 
     def do_run(self, *args, **kwargs):
@@ -704,7 +704,7 @@ class PatronInputScript(LibraryInputScript):
                     patrons.append(patron)
                     break
             else:
-                logging.warn("Could not find patron %s", arg)
+                logging.warning("Could not find patron %s", arg)
         return patrons
 
     def do_run(self, *args, **kwargs):
@@ -1503,7 +1503,7 @@ class AddClassificationScript(IdentifierInputScript):
                 if work:
                     work.calculate_presentation(policy=policy)
         else:
-            self.log.warn("Could not locate subject, doing nothing.")
+            self.log.warning("Could not locate subject, doing nothing.")
 
 
 class WorkProcessingScript(IdentifierInputScript):
@@ -2000,7 +2000,7 @@ class MirrorResourcesScript(CollectionInputScript):
         )
         if not license_pool:
             # This shouldn't happen.
-            self.log.warn(
+            self.log.warning(
                 "Could not find LicensePool for %r, skipping it rather than mirroring something we shouldn't."
             )
             return
@@ -2009,7 +2009,7 @@ class MirrorResourcesScript(CollectionInputScript):
         if link_obj.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD:
             rights_status = self.derive_rights_status(license_pool, resource)
             if not rights_status:
-                self.log.warn(
+                self.log.warning(
                     "Could not unambiguously determine rights status for %r, skipping.",
                     link_obj,
                 )
@@ -2660,7 +2660,7 @@ class DatabaseMigrationInitializationScript(DatabaseMigrationScript):
             # A Timestamp exists and it has a .finish, so it wasn't created
             # by TimestampInfo.find.
             if parsed.force:
-                self.log.warn(
+                self.log.warning(
                     "Overwriting existing %s timestamp: %r",
                     self.name,
                     existing_timestamp,

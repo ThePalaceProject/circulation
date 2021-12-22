@@ -169,7 +169,7 @@ class DatabaseTest(object):
             shutil.rmtree(cls.tmp_data_dir)
 
         else:
-            logging.warn(
+            logging.warning(
                 "Cowardly refusing to remove 'temporary' directory %s"
                 % cls.tmp_data_dir
             )
@@ -877,7 +877,7 @@ class DatabaseTest(object):
         """
         if not "TESTING" in os.environ:
             # we are on production, abort, abort!
-            logging.warn(
+            logging.warning(
                 "Forgot to remove call to testing.py:DatabaseTest.print_database_instance() before pushing to production."
             )
             return
@@ -913,7 +913,7 @@ class DatabaseTest(object):
         """
         if not "TESTING" in os.environ:
             # we are on production, abort, abort!
-            logging.warn(
+            logging.warning(
                 "Forgot to remove call to testing.py:DatabaseTest.print_database_class() before pushing to production."
             )
             return

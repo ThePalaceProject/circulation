@@ -647,7 +647,7 @@ class OPDSImporter(object):
             )
         except CannotLoadConfiguration:
             # The Metadata Wrangler isn't configured, but we can import without it.
-            self.log.warn(
+            self.log.warning(
                 "Metadata Wrangler integration couldn't be loaded, importing without it."
             )
             self.metadata_client = None
