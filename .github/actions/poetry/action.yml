@@ -11,7 +11,7 @@ runs:
   steps:
     - run: |
         curl -sSL https://install.python-poetry.org | python
-        ln -s "$HOME/.local/bin/poetry" "$GITHUB_PATH/poetry"
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
       shell: bash
 
     - id: poetry-version
