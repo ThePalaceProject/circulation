@@ -255,14 +255,6 @@ six = "*"
 develop = ["mock", "pytest (>=3.0.0)", "pytest-cov", "pytz", "coverage (<5.0.0)", "sphinx", "sphinx-rtd-theme"]
 
 [[package]]
-name = "enum34"
-version = "1.1.10"
-description = "Python 3.4 Enum backported to 3.3, 3.2, 3.1, 2.7, 2.6, 2.5, and 2.4"
-category = "main"
-optional = false
-python-versions = "*"
-
-[[package]]
 name = "expiringdict"
 version = "1.2.1"
 description = "Dictionary with auto-expiring values for caching purposes"
@@ -683,14 +675,13 @@ pyparsing = ">=2.0.2,<3.0.5 || >3.0.5"
 
 [[package]]
 name = "palace-webpub-manifest-parser"
-version = "2.0.3"
+version = "2.0.4"
 description = "A parser for the Readium Web Publication Manifest, OPDS 2.0 and ODL formats."
 category = "main"
 optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
 
 [package.dependencies]
-enum34 = ">=1.1.10,<2.0.0"
 jsonschema = ">=3.2.0,<4.0.0"
 multipledispatch = ">=0.6.0,<0.7.0"
 pyrsistent = "0.16.1"
@@ -1582,11 +1573,6 @@ elasticsearch-dsl = [
     {file = "elasticsearch-dsl-6.4.0.tar.gz", hash = "sha256:26416f4dd46ceca43d62ef74970d9de4bdd6f4b0f163316f0b432c9e61a08bec"},
     {file = "elasticsearch_dsl-6.4.0-py2.py3-none-any.whl", hash = "sha256:f60aea7fd756ac1fbe7ce114bbf4949aefbf495dfe8896640e787c67344f12f6"},
 ]
-enum34 = [
-    {file = "enum34-1.1.10-py2-none-any.whl", hash = "sha256:a98a201d6de3f2ab3db284e70a33b0f896fbf35f8086594e8c9e74b909058d53"},
-    {file = "enum34-1.1.10-py3-none-any.whl", hash = "sha256:c3858660960c984d6ab0ebad691265180da2b43f07e061c0f8dca9ef3cffd328"},
-    {file = "enum34-1.1.10.tar.gz", hash = "sha256:cce6a7477ed816bd2542d03d53db9f0db935dd013b70f336a95c73979289f248"},
-]
 expiringdict = [
     {file = "expiringdict-1.2.1.tar.gz", hash = "sha256:fe2ba427220425c3c8a3d29f6d2e2985bcee323f8bcd4021e68ebefbd90d8250"},
 ]
@@ -1839,8 +1825,8 @@ packaging = [
     {file = "packaging-21.3.tar.gz", hash = "sha256:dd47c42927d89ab911e606518907cc2d3a1f38bbd026385970643f9c5b8ecfeb"},
 ]
 palace-webpub-manifest-parser = [
-    {file = "palace_webpub_manifest_parser-2.0.3-py2.py3-none-any.whl", hash = "sha256:0ce0c0b9e3166cef5e3c13147fdf56ea4ee12837a980626f407af10a84a64da5"},
-    {file = "palace_webpub_manifest_parser-2.0.3.tar.gz", hash = "sha256:e8a0058f46079b435528b61b4760dd573fc961166ddc83b27dddbbe30b134ac5"},
+    {file = "palace_webpub_manifest_parser-2.0.4-py2.py3-none-any.whl", hash = "sha256:4eecf2ee030d5a2082e8728b7350cf85b24c821e4fc872180a17963e836d277f"},
+    {file = "palace_webpub_manifest_parser-2.0.4.tar.gz", hash = "sha256:8a315792ab0031e43957c6c7dc2fd57e0327a04fd05f1f7e84a4cbfbabd0f58c"},
 ]
 parameterized = [
     {file = "parameterized-0.7.4-py2.py3-none-any.whl", hash = "sha256:59ab908e31c01505a987a2be78854e19cb1630c047bbab7848169c371d614d56"},
