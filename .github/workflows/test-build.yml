@@ -7,9 +7,6 @@ env:
   # Don't push the Docker image if the `NO_DOCKER_IMAGE` secret is set.
   IMAGE_PUSH_ENABLED: ${{ secrets.NO_DOCKER_IMAGE == null }}
 
-  POETRY_VERSION: 1.1.12
-  POETRY_URL: https://raw.githubusercontent.com/python-poetry/poetry/master/install-poetry.py
-
 jobs:
   test:
     name: ${{ matrix.module }} Tests (Py ${{ matrix.python-version }})

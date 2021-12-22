@@ -16,9 +16,6 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install Poetry
-        uses: ./.github/actions/poetry
-
       - name: Install Pre-commit
         run: |
           pip install pre-commit
