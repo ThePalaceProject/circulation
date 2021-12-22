@@ -1968,7 +1968,7 @@ class NavigationFeed(OPDSFeed):
 # Mock annotators for use in unit tests.
 
 
-class TestAnnotator(Annotator):
+class MockAnnotator(Annotator):
     def __init__(self):
         self.lanes_by_work = defaultdict(list)
 
@@ -2047,7 +2047,7 @@ class TestAnnotator(Annotator):
         return "Test Top Level Title"
 
 
-class TestAnnotatorWithGroup(TestAnnotator):
+class MockAnnotatorWithGroup(MockAnnotator):
     def group_uri(self, work, license_pool, identifier):
         lanes = self.lanes_by_work.get(work, None)
 
@@ -2071,7 +2071,7 @@ class TestAnnotatorWithGroup(TestAnnotator):
         return "Test Top Level Title"
 
 
-class TestUnfulfillableAnnotator(TestAnnotator):
+class MockUnfulfillableAnnotator(MockAnnotator):
     """Raise an UnfulfillableWork exception when asked to annotate an entry."""
 
     def annotate_work_entry(self, *args, **kwargs):

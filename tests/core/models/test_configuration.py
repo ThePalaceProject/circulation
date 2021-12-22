@@ -787,7 +787,7 @@ SETTING4_DEFAULT = None
 SETTING4_CATEGORY = "Settings"
 
 
-class TestConfiguration(ConfigurationGrouping):
+class MockConfiguration(ConfigurationGrouping):
     setting1 = ConfigurationMetadata(
         key=SETTING1_KEY,
         label=SETTING1_LABEL,
@@ -847,7 +847,7 @@ class ConfigurationWithBooleanProperty(ConfigurationGrouping):
     )
 
 
-class TestConfiguration2(ConfigurationGrouping):
+class MockConfiguration2(ConfigurationGrouping):
     setting1 = ConfigurationMetadata(
         key="setting1",
         label=SETTING1_LABEL,
@@ -911,7 +911,7 @@ class TestConfigurationGrouping(object):
         configuration_storage = create_autospec(spec=ConfigurationStorage)
         configuration_storage.load = MagicMock(return_value=expected_value)
         db = create_autospec(spec=sqlalchemy.orm.session.Session)
-        configuration = TestConfiguration(configuration_storage, db)
+        configuration = MockConfiguration(configuration_storage, db)
 
         # Act
         setting_value = getattr(configuration, setting_name)
@@ -924,33 +924,33 @@ class TestConfigurationGrouping(object):
         [
             (
                 "default_menu_value",
-                TestConfiguration.setting3.key,
+                MockConfiguration.setting3.key,
                 None,
-                TestConfiguration.setting3.default,
+                MockConfiguration.setting3.default,
             ),
             (
                 "menu_value",
-                TestConfiguration.setting3.key,
+                MockConfiguration.setting3.key,
                 json.dumps(
                     [
-                        TestConfiguration.setting3.options[0].key,
-                        TestConfiguration.setting3.options[1].key,
+                        MockConfiguration.setting3.options[0].key,
+                        MockConfiguration.setting3.options[1].key,
                     ]
                 ),
                 [
-                    TestConfiguration.setting3.options[0].key,
-                    TestConfiguration.setting3.options[1].key,
+                    MockConfiguration.setting3.options[0].key,
+                    MockConfiguration.setting3.options[1].key,
                 ],
             ),
             (
                 "default_list_value",
-                TestConfiguration.setting4.key,
+                MockConfiguration.setting4.key,
                 None,
-                TestConfiguration.setting4.default,
+                MockConfiguration.setting4.default,
             ),
             (
                 "menu_value",
-                TestConfiguration.setting4.key,
+                MockConfiguration.setting4.key,
                 json.dumps(["value1", "value2"]),
                 ["value1", "value2"],
             ),
@@ -961,7 +961,7 @@ class TestConfigurationGrouping(object):
         configuration_storage = create_autospec(spec=ConfigurationStorage)
         configuration_storage.load = MagicMock(return_value=db_value)
         db = create_autospec(spec=sqlalchemy.orm.session.Session)
-        configuration = TestConfiguration(configuration_storage, db)
+        configuration = MockConfiguration(configuration_storage, db)
 
         # Act
         setting_value = getattr(configuration, setting_name)
@@ -975,7 +975,7 @@ class TestConfigurationGrouping(object):
         configuration_storage = create_autospec(spec=ConfigurationStorage)
         configuration_storage.load = MagicMock(return_value=None)
         db = create_autospec(spec=sqlalchemy.orm.session.Session)
-        configuration = TestConfiguration(configuration_storage, db)
+        configuration = MockConfiguration(configuration_storage, db)
 
         # Act
         setting_value = configuration.setting1
@@ -991,7 +991,7 @@ class TestConfigurationGrouping(object):
         configuration_storage = create_autospec(spec=ConfigurationStorage)
         configuration_storage.save = MagicMock(return_value=expected_value)
         db = create_autospec(spec=sqlalchemy.orm.session.Session)
-        configuration = TestConfiguration(configuration_storage, db)
+        configuration = MockConfiguration(configuration_storage, db)
 
         # Act
         setattr(configuration, setting_name, expected_value)
@@ -1003,7 +1003,7 @@ class TestConfigurationGrouping(object):
 
     def test_to_settings_considers_default_indices(self):
         # Act
-        settings = TestConfiguration.to_settings()
+        settings = MockConfiguration.to_settings()
 
         # Assert
         assert len(settings) == 4
@@ -1060,7 +1060,7 @@ class TestConfigurationGrouping(object):
 
     def test_to_settings_considers_explicit_indices(self):
         # Act
-        settings = TestConfiguration2.to_settings()
+        settings = MockConfiguration2.to_settings()
 
         # Assert
         assert len(settings) == 2
