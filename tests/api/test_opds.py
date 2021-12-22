@@ -1197,7 +1197,7 @@ class TestLibraryAnnotator(VendorIDTest):
 
         feed = AcquisitionFeed(self._db, "title", "url", [work], self.annotator)
         u = str(feed)
-        holds_re = re.compile('<opds:holds\W+total="25"\W*/>', re.S)
+        holds_re = re.compile(r'<opds:holds\W+total="25"\W*/>', re.S)
         assert holds_re.search(u) is not None
 
         copies_re = re.compile('<opds:copies[^>]+available="50"', re.S)

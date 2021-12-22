@@ -1208,7 +1208,9 @@ class Representation(Base, MediaTypes):
         # Known extensions can be followed by a version number (.epub3)
         # or an additional extension (.epub.noimages)
         known_extensions = "|".join(list(self.FILE_EXTENSIONS.values()))
-        known_extension_re = re.compile("\.(%s)\d?\.?[\w\d]*$" % known_extensions, re.I)
+        known_extension_re = re.compile(
+            r"\.(%s)\d?\.?[\w\d]*$" % known_extensions, re.I
+        )
 
         known_match = known_extension_re.search(url_path)
 
@@ -1216,7 +1218,7 @@ class Representation(Base, MediaTypes):
             return known_match.group()
 
         else:
-            any_extension_re = re.compile("\.[\w\d]*$", re.I)
+            any_extension_re = re.compile(r"\.[\w\d]*$", re.I)
 
             any_match = any_extension_re.search(url_path)
 

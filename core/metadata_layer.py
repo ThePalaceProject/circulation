@@ -2501,10 +2501,10 @@ class MARCExtractor(object):
     # Common things found in a MARC record after the name of the author
     # which we sould like to remove.
     END_OF_AUTHOR_NAME_RES = [
-        re.compile(",\s+[0-9]+-"),  # Birth year
-        re.compile(",\s+active "),
-        re.compile(",\s+graf,"),
-        re.compile(",\s+author."),
+        re.compile(r",\s+[0-9]+-"),  # Birth year
+        re.compile(r",\s+active "),
+        re.compile(r",\s+graf,"),
+        re.compile(r",\s+author."),
     ]
 
     @classmethod
