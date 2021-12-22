@@ -16,12 +16,12 @@ from urllib.parse import quote, urlparse, urlsplit
 import requests
 from PIL import Image
 from sqlalchemy import (
-    Binary,
     Column,
     DateTime,
     Float,
     ForeignKey,
     Integer,
+    LargeBinary,
     Unicode,
     UniqueConstraint,
 )
@@ -567,7 +567,7 @@ class Representation(Base, MediaTypes):
     image_width = Column(Integer, index=True)
 
     # The content of the representation itself.
-    content = Column(Binary)
+    content = Column(LargeBinary)
 
     # Instead of being stored in the database, the content of the
     # representation may be stored on a local file relative to the
