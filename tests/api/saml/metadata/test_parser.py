@@ -1,6 +1,7 @@
+from unittest.mock import MagicMock, create_autospec
+
 import onelogin
 import pytest
-from mock import MagicMock, create_autospec
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
 from parameterized import parameterized
 

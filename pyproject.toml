@@ -14,7 +14,7 @@ version = "0" # Version number is managed with tags in git
 
 [tool.poetry.dependencies]
 alabaster = { version = "0.7.12", optional = true }
-aws-xray-sdk = { version = "~2.8", optional = true }
+aws-xray-sdk = "~2.8"
 boto3 = "~1.18"
 botocore = "~1.21"
 certifi = "*"
@@ -30,6 +30,7 @@ Flask-Babel = "1.0.0"
 Flask-Cors = "3.0.9"
 flask-sqlalchemy-session = "1.1"
 fuzzywuzzy = "0.18.0"  # fuzzywuzzy is for author name manipulations
+html-sanitizer = "~1.9.1"
 isbnlib = "3.10.3"
 loggly-python-handler = "1.0.1"  # NYPL requirement, can possibly be removed.
 lxml = "4.6.5"
@@ -45,7 +46,7 @@ psycopg2-binary = { version = "~2.8.6", optional = true }
 py-bcrypt = "0.4"
 pycryptodome = "3.9.8"
 Pygments = { version = "2.7.4", optional = true }
-pyinstrument = { version = "~4.1", optional = true }
+pyinstrument = "< 4.2"
 PyJWT = "1.4.2"
 PyLD = "1.0.5"
 pymarc = "4.0.0"
@@ -54,7 +55,7 @@ pyparsing = "2.4.7"
 pypostalcode = "0.3.6"
 pyspellchecker = "0.5.5"
 pytest = "^6"  # Can't be made a dev dep because mocks included beside prod code.
-python = ">=3.6"
+python = ">=3.6.1,<4"
 python-dateutil = "2.8.2"
 python-Levenshtein = "~0.12"
 python3-saml = "1.12.0"  # python-saml is required for SAML authentication
@@ -87,4 +88,3 @@ requests-mock = "1.8.0"
 docs = ["alabaster", "docutils", "Pygments", "Sphinx", "sphinxcontrib-websupport"]
 pg = ["psycopg2"]
 pg-binary = ["psycopg2-binary"]
-profiler = ["aws-xray-sdk", "pyinstrument"]

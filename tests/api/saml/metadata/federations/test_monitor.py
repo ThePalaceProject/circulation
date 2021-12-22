@@ -1,4 +1,4 @@
-from mock import MagicMock, create_autospec
+from unittest.mock import MagicMock, create_autospec
 
 from api.saml.metadata.federations.loader import SAMLFederatedIdentityProviderLoader
 from api.saml.metadata.federations.model import (

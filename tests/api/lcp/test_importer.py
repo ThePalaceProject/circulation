@@ -1,5 +1,6 @@
+from unittest.mock import MagicMock, create_autospec
+
 import sqlalchemy
-from mock import MagicMock, create_autospec
 
 from api.lcp.encrypt import LCPEncryptionResult, LCPEncryptor
 from api.lcp.importer import LCPImporter

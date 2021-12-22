@@ -1,13 +1,13 @@
 # encoding: utf-8
 import functools
 import os
+from unittest.mock import MagicMock
 from urllib.parse import urlsplit
 
 import boto3
 import botocore
 import pytest
 from botocore.exceptions import BotoCoreError, ClientError
-from mock import MagicMock
 from parameterized import parameterized
 
 from core.mirror import MirrorUploader

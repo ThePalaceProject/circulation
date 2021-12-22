@@ -1,8 +1,8 @@
 import datetime
 import json
+from unittest.mock import MagicMock, create_autospec, patch
 
 from freezegun import freeze_time
-from mock import MagicMock, create_autospec, patch
 
 from api.lcp.collection import LCPAPI, LCPFulfilmentInfo
 from api.lcp.encrypt import LCPEncryptionConfiguration

@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from decimal import Decimal
 from pathlib import Path
 from time import mktime
+from unittest.mock import MagicMock, patch
 from wsgiref.handlers import format_date_time
 
 import feedparser
@@ -19,7 +20,6 @@ import pytest
 from flask import Response as FlaskResponse
 from flask import url_for
 from flask_sqlalchemy_session import current_session
-from mock import MagicMock, patch
 from werkzeug.datastructures import ImmutableMultiDict
 from werkzeug.exceptions import NotFound
 

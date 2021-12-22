@@ -2,12 +2,12 @@ import datetime
 import json
 import re
 from collections import defaultdict
+from unittest.mock import create_autospec
 
 import dateutil
 import feedparser
 import pytest
 from lxml import etree
-from mock import create_autospec
 
 from api.adobe_vendor_id import AuthdataUtility
 from api.circulation import BaseCirculationAPI, CirculationAPI, FulfillmentInfo

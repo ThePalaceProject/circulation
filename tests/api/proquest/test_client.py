@@ -1,8 +1,8 @@
 import json
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
 import requests_mock
-from mock import MagicMock, create_autospec
 from parameterized import parameterized
 from requests import HTTPError
 

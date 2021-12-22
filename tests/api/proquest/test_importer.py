@@ -3,11 +3,11 @@ import json
 import os
 import shutil
 import tempfile
+from unittest.mock import ANY, MagicMock, call, create_autospec, patch
 
 import pytest
 from flask import Response
 from freezegun import freeze_time
-from mock import ANY, MagicMock, call, create_autospec, patch
 from parameterized import parameterized
 from requests import HTTPError
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory

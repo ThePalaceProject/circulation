@@ -1,7 +1,7 @@
 import json
+from unittest.mock import MagicMock, PropertyMock, call, create_autospec
 
 import sqlalchemy
-from mock import MagicMock, PropertyMock, call, create_autospec
 from parameterized import parameterized
 
 from api.app import initialize_database

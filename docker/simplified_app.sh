@@ -53,12 +53,17 @@ SIMPLIFIED_ENVIRONMENT=/var/www/circulation/environment.sh
 echo "if [[ -f $SIMPLIFIED_ENVIRONMENT ]]; then \
       source $SIMPLIFIED_ENVIRONMENT; fi" >> env/bin/activate
 
+# Install Poetry
+curl -sSL https://install.python-poetry.org | POETRY_HOME="/opt/poetry" python3
+ln -s /opt/poetry/bin/poetry /bin/poetry
+
 # Install required python libraries.
 set +x && source env/bin/activate && set -x
 # Update pip and setuptools.
 python3 -m pip install -U pip setuptools
 # Install the necessary requirements.
-python3 -m pip install -r requirements.txt
+poetry install --no-dev --no-root -E pg
+poetry cache clear -n --all pypi
 
 # Install NLTK.
 python3 -m textblob.download_corpora
