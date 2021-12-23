@@ -9,12 +9,12 @@ from .permanent_work_id import WorkIDCalculator
 
 """Fallback algorithms for dealing with personal names when VIAF fails us."""
 
-phdFix = re.compile("((. +)|(, ?))P(h|H)\.? *(D|d)(\.| |$){1}")
-mdFix = re.compile("((. +)|(, ?))M\.? *D(\.| |$){1}")
+phdFix = re.compile(r"((. +)|(, ?))P(h|H)\.? *(D|d)(\.| |$){1}")
+mdFix = re.compile(r"((. +)|(, ?))M\.? *D(\.| |$){1}")
 # omit exclamation point in case it can be part of stage name
 # only match punctuation that's not part of name initials or title.
 # so "Bitshifter, B." is OK, "Bitshifter, Bob Jr.", but "Bitshifter, Robert." is not.
-trailingPunctuation = re.compile("(.*)(\w{4,})([?:.,;]*?)\Z")
+trailingPunctuation = re.compile(r"(.*)(\w{4,})([?:.,;]*?)\Z")
 
 
 def _replace_md(match):

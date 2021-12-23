@@ -2050,7 +2050,7 @@ class DatabaseMigrationScript(Script):
     SERVICE_NAME = "Database Migration"
     PY_TIMESTAMP_SERVICE_NAME = SERVICE_NAME + " - Python"
 
-    MIGRATION_WITH_COUNTER = re.compile("\d{8}-(\d+)-(.)+\.(py|sql)")
+    MIGRATION_WITH_COUNTER = re.compile(r"\d{8}-(\d+)-(.)+\.(py|sql)")
 
     # There are some SQL commands that can't be run inside a transaction.
     TRANSACTIONLESS_COMMANDS = ["alter type"]

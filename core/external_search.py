@@ -932,18 +932,18 @@ class CurrentMapping(Mapping):
     for name, pattern, replacement in [
         # The special author name "[Unknown]" should sort after everything
         # else. REPLACEMENT CHARACTER is the final valid Unicode character.
-        ("unknown_author", "\[Unknown\]", "\N{REPLACEMENT CHARACTER}"),
+        ("unknown_author", r"\[Unknown\]", "\N{REPLACEMENT CHARACTER}"),
         # Works by a given primary author should be secondarily sorted
         # by title, not by the other contributors.
-        ("primary_author_only", "\s+;.*", ""),
+        ("primary_author_only", r"\s+;.*", ""),
         # Remove parentheticals (e.g. the full name of someone who
         # goes by initials).
-        ("strip_parentheticals", "\s+\([^)]+\)", ""),
+        ("strip_parentheticals", r"\s+\([^)]+\)", ""),
         # Remove periods from consideration.
-        ("strip_periods", "\.", ""),
+        ("strip_periods", r"\.", ""),
         # Collapse spaces for people whose sort names end with initials.
-        ("collapse_three_initials", " ([A-Z]) ([A-Z]) ([A-Z])$", " $1$2$3"),
-        ("collapse_two_initials", " ([A-Z]) ([A-Z])$", " $1$2"),
+        ("collapse_three_initials", r" ([A-Z]) ([A-Z]) ([A-Z])$", " $1$2$3"),
+        ("collapse_two_initials", r" ([A-Z]) ([A-Z])$", " $1$2"),
     ]:
         normalizer = dict(
             type="pattern_replace", pattern=pattern, replacement=replacement

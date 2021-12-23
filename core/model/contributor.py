@@ -361,17 +361,20 @@ class Contributor(Base):
         _db.commit()
 
     # Regular expressions used by default_names().
-    PARENTHETICAL = re.compile("\([^)]*\)")
+    PARENTHETICAL = re.compile(r"\([^)]*\)")
     ALPHABETIC = re.compile("[a-zA-z]")
     NUMBERS = re.compile("[0-9]")
 
     DATE_RES = [
-        re.compile("\(?" + x + "\)?")
+        # TODO: This doesn't seem quite right. The second paren should be present
+        #  only if the first is present (i.e., both or neither).
+        re.compile(r"\(?" + x + r"\)?")
         for x in (
             "[0-9?]+-",
             "[0-9]+st cent",
             "[0-9]+nd cent",
             "[0-9]+th cent",
+            # TODO: Probably meant to be "blank" `space`, rather than a `backspace`.
             "\bcirca",
         )
     ]

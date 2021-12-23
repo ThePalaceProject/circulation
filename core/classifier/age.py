@@ -45,15 +45,16 @@ class GradeLevelClassifier(Classifier):
 
     # Regular expressions that match common ways of expressing grade
     # levels.
+    # TODO: Is this code duplicated in core/classifier/__init__.py?
     grade_res = [
         re.compile(x, re.I)
         for x in [
             "grades? ([kp0-9]+) to ([kp0-9]+)?",
             "grades? ([kp0-9]+) ?-? ?([kp0-9]+)?",
-            "gr\.? ([kp0-9]+) ?-? ?([kp0-9]+)?",
+            r"gr\.? ([kp0-9]+) ?-? ?([kp0-9]+)?",
             "grades?: ([kp0-9]+) to ([kp0-9]+)",
             "grades?: ([kp0-9]+) ?-? ?([kp0-9]+)?",
-            "gr\.? ([kp0-9]+)",
+            r"gr\.? ([kp0-9]+)",
             "([0-9]+)[tnsr][hdt] grade",
             "([a-z]+) grade",
             r"\b(kindergarten|preschool)\b",
