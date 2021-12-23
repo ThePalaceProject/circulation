@@ -62,7 +62,7 @@ set +x && source env/bin/activate && set -x
 # Update pip and setuptools.
 python3 -m pip install -U pip setuptools
 # Install the necessary requirements.
-poetry install --no-dev --no-root --ansi -E pg
+poetry install --no-dev --no-root -E pg
 poetry cache clear -n --all pypi
 
 # Install NLTK.

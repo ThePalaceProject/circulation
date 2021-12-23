@@ -5,6 +5,7 @@ ARG version
 ARG repo="thepalaceproject/circulation"
 
 ENV SIMPLIFIED_DB_TASK "ignore"
+ENV LANG=C.UTF-8
 
 # Copy over all Palace build files for this image
 COPY . /ls_build
