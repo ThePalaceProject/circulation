@@ -22,7 +22,6 @@ ARG repo="thepalaceproject/circulation"
 ENV SIMPLIFIED_DB_TASK "auto"
 # Set the local timezone in /docker/simplified_cron.sh
 ENV TZ=US/Eastern
-ENV LANG=C.UTF-8
 
 # Copy over all Palace build files for this image
 COPY . /ls_build
