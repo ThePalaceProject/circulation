@@ -896,7 +896,7 @@ class BibliographicParser(Axis360Parser):
 
     # Axis authors with a special role have an abbreviation after their names,
     # e.g. "San Ruby (FRW)"
-    role_abbreviation = re.compile("\(([A-Z][A-Z][A-Z])\)$")
+    role_abbreviation = re.compile(r"\(([A-Z][A-Z][A-Z])\)$")
     generic_author = object()
     role_abbreviation_to_role = dict(
         INT=Contributor.INTRODUCTION_ROLE,
