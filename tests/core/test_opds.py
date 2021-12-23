@@ -2236,7 +2236,7 @@ class TestLookupAcquisitionFeed(DatabaseTest):
         entry = feed.create_entry((identifier, work))
         if isinstance(entry, OPDSMessage):
             return feed, entry
-        if entry:
+        if entry is not None:
             entry = etree.tounicode(entry)
         return feed, entry
 

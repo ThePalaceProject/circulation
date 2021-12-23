@@ -1662,7 +1662,7 @@ class OPDSImporter(object):
         :param entry_tag: A <atom:entry> tag.
         :param default: The value to use if nothing is found.
         """
-        if not entry_tag:
+        if entry_tag is None:
             return default
 
         medium = None
