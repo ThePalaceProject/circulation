@@ -59,8 +59,7 @@ echo "if [[ -f $SIMPLIFIED_ENVIRONMENT ]]; then \
       source $SIMPLIFIED_ENVIRONMENT; fi" >> env/bin/activate
 
 # Install Poetry
-export POETRY_VERSION="1.1"
-curl -sSL https://install.python-poetry.org | POETRY_HOME="/opt/poetry" python3
+curl -sSL https://install.python-poetry.org | POETRY_HOME="/opt/poetry" python3 - --yes --version "1.1.12"
 ln -s /opt/poetry/bin/poetry /bin/poetry
 
 # Install required python libraries.
