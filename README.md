@@ -15,6 +15,7 @@ Docker images created from this code are available at:
 
 - [circ-webapp](https://github.com/ThePalaceProject/circulation/pkgs/container/circ-webapp)
 - [circ-scripts](https://github.com/ThePalaceProject/circulation/pkgs/container/circ-scripts)
+- [circ-exec](https://github.com/ThePalaceProject/circulation/pkgs/container/circ-exec)
 
 Docker images are the preferred way to deploy this code in a production environment.
 
@@ -325,10 +326,10 @@ tox -e "py38-{api,core}"
 If you wish to pass additional arguments to `pytest` you can do so through `tox`. Every argument passed after a `--` to
 the `tox` command line will the passed to `pytest`, overriding the default.
 
-Only run the `test_google_analytics_provider` tests with Python 3.6 using docker.
+Only run the `test_google_analytics_provider` tests with Python 3.8 using docker.
 
 ```sh
-tox -e "py36-docker" -- tests/test_google_analytics_provider.py
+tox -e "py38-api-docker" -- tests/api/test_google_analytics_provider.py
 ```
 
 ## Usage with Docker

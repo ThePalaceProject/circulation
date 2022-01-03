@@ -3,7 +3,7 @@
 ## Using This Image
 
 You will need **a PostgreSQL instance URL** in the format
-`postgres://[username]:[password]@[host]:[port]/[database_name]`. Check the `./docker-compose.yml` file for an example.
+`postgresql://[username]:[password]@[host]:[port]/[database_name]`. Check the `./docker-compose.yml` file for an example.
 With this URL, you can create containers for both the web application (`circ-webapp`) and for the background cron jobs
 that import and update books and otherwise keep the app running smoothly (`circ-scripts`). Either container can be used
 to initialize or migrate the database. During the first deployment against a brand new database, the first container run
@@ -54,7 +54,7 @@ jobs. The most accurate place to look for recommended jobs and their recommended
 [the existing `circ-scripts` crontab](https://github.com/NYPL-Simplified/circulation/blob/main/docker/services/simplified_crontab).
 
 Because containers based on `circ-exec` are built, run their job, and are destroyed, it's important to configure an
-external log aggregator.
+external log aggregator if you wish to capture logs from the job.
 
 ```sh
 # See the section "Environment Variables" below for more information
