@@ -1,6 +1,5 @@
 import json
-
-from mock import PropertyMock, create_autospec
+from unittest.mock import PropertyMock, create_autospec
 
 from api.admin.controller.collection_settings import CollectionSettingsController
 from api.controller import CirculationManager

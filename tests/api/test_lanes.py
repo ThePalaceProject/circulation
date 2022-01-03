@@ -2,9 +2,9 @@
 import datetime
 import json
 from collections import Counter
+from unittest.mock import MagicMock
 
 import pytest
-from mock import MagicMock
 
 from api.config import CannotLoadConfiguration, Configuration, temp_config
 from api.lanes import (

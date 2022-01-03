@@ -2,9 +2,9 @@ import datetime
 import json
 import os
 import urllib.parse
+from unittest.mock import MagicMock, create_autospec
 
 import requests_mock
-from mock import MagicMock, create_autospec
 from parameterized import parameterized
 
 from api.lcp import utils

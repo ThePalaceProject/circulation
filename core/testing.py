@@ -1,4 +1,3 @@
-import inspect
 import json
 import logging
 import os
@@ -8,12 +7,9 @@ import time
 import uuid
 from datetime import timedelta
 from pathlib import Path
-from pdb import set_trace
+from unittest import mock
 
-import mock
 import pytest
-from psycopg2.errors import UndefinedTable
-from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm.session import Session
 
 from . import external_search
@@ -23,7 +19,6 @@ from .config import Configuration
 from .coverage import (
     BibliographicCoverageProvider,
     CollectionCoverageProvider,
-    CoverageFailure,
     IdentifierCoverageProvider,
     WorkCoverageProvider,
 )
@@ -39,7 +34,6 @@ from .model import (
     Classification,
     Collection,
     Complaint,
-    ConfigurationSetting,
     Contributor,
     CoverageRecord,
     Credential,
@@ -58,9 +52,7 @@ from .model import (
     LicensePool,
     LicensePoolDeliveryMechanism,
     Patron,
-    PresentationCalculationPolicy,
     Representation,
-    Resource,
     RightsStatus,
     SessionManager,
     Subject,

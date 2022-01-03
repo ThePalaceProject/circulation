@@ -1,8 +1,8 @@
 """Test circulation-specific extensions to the self-test infrastructure."""
 import datetime
 from io import StringIO
+from unittest import mock
 
-import mock
 import pytest
 
 from api.authenticator import BasicAuthenticationProvider

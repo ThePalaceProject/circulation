@@ -1,7 +1,7 @@
 import json
 import sys
+from unittest.mock import MagicMock, create_autospec, patch
 
-from mock import MagicMock, create_autospec, patch
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
 from api.proquest.client import ProQuestAPIClient, ProQuestAPIClientFactory

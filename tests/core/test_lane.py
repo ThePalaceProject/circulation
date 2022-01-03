@@ -2,10 +2,10 @@ import datetime
 import json
 import logging
 import random
+from unittest.mock import MagicMock, call
 
 import pytest
 from elasticsearch.exceptions import ElasticsearchException
-from mock import MagicMock, call
 from sqlalchemy import and_, func, text
 from sqlalchemy.sql.elements import Case
 

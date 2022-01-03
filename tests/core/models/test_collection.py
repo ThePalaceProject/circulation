@@ -1,9 +1,9 @@
 # encoding: utf-8
 import datetime
 import json
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
-from mock import MagicMock, create_autospec
 
 from core.config import Configuration
 from core.model import create, get_one_or_create

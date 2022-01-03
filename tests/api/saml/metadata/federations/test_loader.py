@@ -1,5 +1,6 @@
+from unittest.mock import MagicMock, create_autospec, patch
+
 import pytest
-from mock import MagicMock, create_autospec, patch
 
 from api.saml.metadata.federations import incommon
 from api.saml.metadata.federations.loader import (

@@ -1,10 +1,10 @@
 """Test the CirculationAPI."""
 from datetime import timedelta
+from unittest.mock import MagicMock
 
 import flask
 import pytest
 from flask import Flask
-from mock import MagicMock
 from parameterized import parameterized
 
 from api.authenticator import LibraryAuthenticator, PatronData

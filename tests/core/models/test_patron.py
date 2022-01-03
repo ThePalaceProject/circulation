@@ -1,8 +1,8 @@
 # encoding: utf-8
 import datetime
+from unittest.mock import MagicMock, call
 
 import pytest
-from mock import MagicMock, call
 
 from core.classifier import Classifier
 from core.model import create, tuple_to_numericrange

@@ -31,6 +31,11 @@ $minimal_apt_get_install --no-upgrade \
   libxmlsec1-openssl \
   libxml2-dev
 
+# We should be able to drop these lines when we move to Python > 3.6
+# https://click.palletsprojects.com/en/5.x/python3/#python-3-surrogate-handling
+export LC_ALL=C.UTF-8
+export LANG=C.UTF-8
+
 # Create a user.
 useradd -ms /bin/bash -U simplified
 
@@ -53,12 +58,17 @@ SIMPLIFIED_ENVIRONMENT=/var/www/circulation/environment.sh
 echo "if [[ -f $SIMPLIFIED_ENVIRONMENT ]]; then \
       source $SIMPLIFIED_ENVIRONMENT; fi" >> env/bin/activate
 
+# Install Poetry
+curl -sSL https://install.python-poetry.org | POETRY_HOME="/opt/poetry" python3 - --yes --version "1.1.12"
+ln -s /opt/poetry/bin/poetry /bin/poetry
+
 # Install required python libraries.
 set +x && source env/bin/activate && set -x
 # Update pip and setuptools.
 python3 -m pip install -U pip setuptools
 # Install the necessary requirements.
-python3 -m pip install -r requirements.txt
+poetry install --no-dev --no-root -E pg
+poetry cache clear -n --all pypi
 
 # Install NLTK.
 python3 -m textblob.download_corpora

@@ -1,8 +1,8 @@
 import datetime
 import json
+from unittest.mock import MagicMock, create_autospec, patch
 
 from freezegun import freeze_time
-from mock import MagicMock, create_autospec, patch
 from parameterized import parameterized
 
 from api.authenticator import PatronData

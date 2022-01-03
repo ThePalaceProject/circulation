@@ -1,0 +1,21 @@
+{
+  "plugins" : {
+    "line-length" : {
+      "line_length" : 120,
+      "heading_line_length": 120,
+      "code_block_line_length": 120
+    },
+    "no-duplicate-heading" : {
+      "allow_different_nesting": true
+    },
+    "ul-indent" : {
+      "indent" : 4
+    },
+    "blanks-around-fences" : {
+      "list_items": false
+    },
+    "first-line-heading" : {
+      "enabled": false
+    }
+  }
+}

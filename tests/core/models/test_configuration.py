@@ -1,11 +1,11 @@
 # encoding: utf-8
 import json
 from enum import Enum
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
 import sqlalchemy
 from flask_babel import lazy_gettext as _
-from mock import MagicMock, create_autospec
 from parameterized import parameterized
 from sqlalchemy.exc import IntegrityError
 

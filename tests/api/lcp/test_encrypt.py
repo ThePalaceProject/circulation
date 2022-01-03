@@ -1,5 +1,6 @@
+from unittest.mock import MagicMock, create_autospec, patch
+
 import pytest
-from mock import MagicMock, create_autospec, patch
 from parameterized import parameterized
 from pyfakefs.fake_filesystem_unittest import Patcher
 

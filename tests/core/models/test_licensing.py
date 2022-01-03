@@ -1,8 +1,8 @@
 # encoding: utf-8
 import datetime
+from unittest.mock import MagicMock, PropertyMock
 
 import pytest
-from mock import MagicMock, PropertyMock
 from parameterized import parameterized
 from sqlalchemy.exc import IntegrityError
 

@@ -1,8 +1,8 @@
 import json
+from unittest.mock import MagicMock, PropertyMock, create_autospec
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 from flask import request
-from mock import MagicMock, PropertyMock, create_autospec
 from parameterized import parameterized
 
 from api.authenticator import Authenticator, PatronData

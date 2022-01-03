@@ -1,15 +1,13 @@
 # encoding: utf-8
 import json
 import os
-import pkgutil
 import random
 from datetime import datetime, timedelta
 from io import BytesIO, StringIO
+from unittest import mock
+from unittest.mock import MagicMock
 
-import mock
 import pytest
-import pytz
-from mock import MagicMock
 from pymarc import parse_xml_to_array
 from pymarc.record import Record
 
@@ -35,20 +33,16 @@ from core.metadata_layer import ReplacementPolicy, TimestampData
 from core.mock_analytics_provider import MockAnalyticsProvider
 from core.model import (
     CirculationEvent,
-    Collection,
     Contributor,
     DataSource,
     DeliveryMechanism,
     Edition,
     ExternalIntegration,
-    Hold,
     Hyperlink,
     Identifier,
     LicensePool,
-    Loan,
     Measurement,
     Representation,
-    Resource,
     Subject,
     Timestamp,
     Work,

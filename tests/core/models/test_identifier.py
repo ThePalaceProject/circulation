@@ -1,10 +1,10 @@
 # encoding: utf-8
 import datetime
+from unittest.mock import PropertyMock, create_autospec
 
 import feedparser
 import pytest
 from lxml import etree
-from mock import PropertyMock, create_autospec
 from parameterized import parameterized
 
 from core.model import PresentationCalculationPolicy

@@ -1,9 +1,8 @@
 from copy import copy
+from unittest.mock import MagicMock, PropertyMock, create_autospec, patch
 from urllib.parse import parse_qs, urlsplit
-from xml.dom.minidom import Document
 
 from freezegun import freeze_time
-from mock import MagicMock, PropertyMock, create_autospec, patch
 from onelogin.saml2.utils import OneLogin_Saml2_Utils, OneLogin_Saml2_XML
 from onelogin.saml2.xmlparser import fromstring
 from parameterized import parameterized

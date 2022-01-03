@@ -1,4 +1,4 @@
-from mock import ANY, create_autospec, patch
+from unittest.mock import ANY, create_autospec, patch
 
 from api.lcp.importer import LCPImporter
 from api.lcp.mirror import LCPMirror

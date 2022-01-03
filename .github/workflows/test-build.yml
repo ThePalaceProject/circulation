@@ -37,7 +37,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes libxmlsec1-dev libxml2-dev
 
-      - name: Install Python Packages
+      - name: Install Poetry
+        uses: ./.github/actions/poetry
+
+      - name: Install Tox
         run: |
           pip install --upgrade pip
           pip install tox tox-gh-actions tox-docker

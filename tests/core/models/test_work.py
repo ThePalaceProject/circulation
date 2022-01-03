@@ -2,9 +2,9 @@
 import datetime
 import os
 import random
+from unittest.mock import MagicMock
 
 import pytest
-from mock import MagicMock
 from psycopg2.extras import NumericRange
 
 from core.classifier import Classifier, Fantasy, Romance, Science_Fiction
