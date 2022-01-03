@@ -489,7 +489,6 @@ class TestSIP2AuthenticationProvider(DatabaseTest):
         assert isinstance(results[1].exception, IOError)
         assert results[1].exception.args == ("Error logging in",)
 
-
         # Set the log in username and password
         integration.username = "user1"
         integration.password = "pass1"
@@ -511,7 +510,9 @@ class TestSIP2AuthenticationProvider(DatabaseTest):
         assert results[2].name == "Authenticating test patron"
         assert results[2].success == False
         assert isinstance(results[2].exception, CannotLoadConfiguration)
-        assert results[2].exception.args == ("No test patron identifier is configured.",)
+        assert results[2].exception.args == (
+            "No test patron identifier is configured.",
+        )
 
         # Now add the test patron credentials into the mocked client and SIP2 authenticator provider
         patronDataClient = MockSIPLogin(login_user_id="user1", login_password="pass1")

@@ -45,11 +45,11 @@ from core.opds import (
     AcquisitionFeed,
     Annotator,
     LookupAcquisitionFeed,
-    NavigationFacets,
-    NavigationFeed,
     MockAnnotator,
     MockAnnotatorWithGroup,
     MockUnfulfillableAnnotator,
+    NavigationFacets,
+    NavigationFeed,
     VerboseAnnotator,
 )
 from core.opds_import import OPDSXMLParser
@@ -956,8 +956,8 @@ class TestOPDS(DatabaseTest):
 
         [next_link] = self.links(parsed, "next")
         assert (
-                MockAnnotator.feed_url(lane, facets, pagination.next_page)
-                == next_link["href"]
+            MockAnnotator.feed_url(lane, facets, pagination.next_page)
+            == next_link["href"]
         )
 
         # This was the first page, so no previous link.
@@ -1023,8 +1023,8 @@ class TestOPDS(DatabaseTest):
 
         [next_link] = self.links(parsed, "next")
         assert (
-                MockAnnotator.feed_url(lane, facets, pagination.next_page)
-                == next_link["href"]
+            MockAnnotator.feed_url(lane, facets, pagination.next_page)
+            == next_link["href"]
         )
 
         # This was the first page, so no previous link.
@@ -1101,8 +1101,8 @@ class TestOPDS(DatabaseTest):
 
         [next_link] = self.links(parsed, "next")
         assert (
-                MockAnnotator.feed_url(worklist, pagination=pagination.next_page)
-                == next_link["href"]
+            MockAnnotator.feed_url(worklist, pagination=pagination.next_page)
+            == next_link["href"]
         )
 
         # This was the first page, so no previous link.
@@ -1113,8 +1113,8 @@ class TestOPDS(DatabaseTest):
         parsed = feedparser.parse(str(works))
         [previous_link] = self.links(parsed, "previous")
         assert (
-                MockAnnotator.feed_url(worklist, pagination=pagination.previous_page)
-                == previous_link["href"]
+            MockAnnotator.feed_url(worklist, pagination=pagination.previous_page)
+            == previous_link["href"]
         )
         assert 1 == len(parsed["entries"])
         assert [] == self.links(parsed, "next")
