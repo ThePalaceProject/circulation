@@ -323,7 +323,7 @@ pytz = "*"
 
 [[package]]
 name = "flask-cors"
-version = "3.0.9"
+version = "3.0.10"
 description = "A Flask extension adding a decorator for CORS support"
 category = "main"
 optional = false
@@ -1416,7 +1416,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.6.1,<4"
-content-hash = "d01797d4187b58ad47d65fa39e797e1eaf0eb7ccd662f5bd2baa25a795c7cfd3"
+content-hash = "411642cb109093473b80ed79f89d59f451f4168c50f65d93a6ca481554866928"
 
 [metadata.files]
 alabaster = [
@@ -1593,8 +1593,8 @@ flask-babel = [
     {file = "Flask_Babel-1.0.0-py3-none-any.whl", hash = "sha256:247f4ec34cf605d03781f480bccb1a5acb719df1d1a2a743c091ab3db5d5fde2"},
 ]
 flask-cors = [
-    {file = "Flask-Cors-3.0.9.tar.gz", hash = "sha256:6bcfc100288c5d1bcb1dbb854babd59beee622ffd321e444b05f24d6d58466b8"},
-    {file = "Flask_Cors-3.0.9-py2.py3-none-any.whl", hash = "sha256:cee4480aaee421ed029eaa788f4049e3e26d15b5affb6a880dade6bafad38324"},
+    {file = "Flask-Cors-3.0.10.tar.gz", hash = "sha256:b60839393f3b84a0f3746f6cdca56c1ad7426aa738b70d6c61375857823181de"},
+    {file = "Flask_Cors-3.0.10-py2.py3-none-any.whl", hash = "sha256:74efc975af1194fc7891ff5cd85b0f7478be4f7f59fe158102e91abb72bb4438"},
 ]
 flask-sqlalchemy-session = [
     {file = "Flask-SQLAlchemy-Session-1.1.tar.gz", hash = "sha256:0fbc520d587c891c2a0d58aa7952bc37edd73660f10006ff4732a72aa16d8157"},
