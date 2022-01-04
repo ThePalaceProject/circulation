@@ -1,0 +1,8 @@
+disable-default-queries: true
+
+queries:
+  - uses: ./.github/codeql/queries.qls
+
+paths-ignore:
+  - tests
+  - bin

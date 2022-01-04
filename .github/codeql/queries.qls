@@ -1,0 +1,14 @@
+- description: Standard Code Scanning queries for Python
+
+# Documentation used to create this file:
+# https://codeql.github.com/docs/codeql-cli/creating-codeql-query-suites/
+# https://github.com/github/codeql/issues/4426
+# https://github.com/github/codeql/tree/main/python/ql/src/codeql-suites
+
+- import: codeql-suites/python-code-scanning.qls
+  from: codeql-python
+
+# This rule causes a lot of false positives in our codebase
+- exclude:
+    query filename:
+        - CleartextLogging.ql
