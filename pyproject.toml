@@ -19,7 +19,7 @@ boto3 = "~1.18"
 botocore = "~1.21"
 certifi = "*"
 click = "7.1.2"
-contextlib2 = "0.6.0.post1"
+contextlib2 = "21.6.0"
 docutils = { version = "0.16", optional = true }
 elasticsearch = "~6.8"
 elasticsearch-dsl = "6.4.0"
