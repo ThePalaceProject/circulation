@@ -3,9 +3,7 @@ from flask_babel import lazy_gettext as _
 
 from api.admin.controller.metadata_services import MetadataServicesController
 from api.admin.controller.self_tests import SelfTestsController
-from api.nyt import NYTBestSellerAPI
 from core.model import ExternalIntegration
-from core.opds_import import MetadataWranglerOPDSLookup
 
 
 class MetadataServiceSelfTestsController(

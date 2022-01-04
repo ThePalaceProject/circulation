@@ -1,12 +1,11 @@
 # encoding: utf-8
-import datetime
 import json
 from collections import Counter
 from unittest.mock import MagicMock
 
 import pytest
 
-from api.config import CannotLoadConfiguration, Configuration, temp_config
+from api.config import Configuration
 from api.lanes import (
     ContributorFacets,
     ContributorLane,
@@ -28,31 +27,19 @@ from api.lanes import (
     create_lane_for_tiny_collection,
     create_lanes_for_large_collection,
     create_world_languages_lane,
-    load_lanes,
 )
 from api.novelist import MockNoveListAPI
 from core.classifier import Classifier
 from core.entrypoint import AudiobooksEntryPoint
 from core.external_search import Filter
-from core.lane import (
-    DatabaseBackedFacets,
-    DefaultSortOrderFacets,
-    Facets,
-    FacetsWithEntryPoint,
-    FeaturedFacets,
-    Lane,
-    WorkList,
-)
+from core.lane import DefaultSortOrderFacets, Facets, FeaturedFacets, Lane, WorkList
 from core.metadata_layer import ContributorData, Metadata
 from core.model import (
     CachedFeed,
-    Contribution,
     Contributor,
     DataSource,
     Edition,
     ExternalIntegration,
-    Library,
-    SessionManager,
     create,
 )
 from core.testing import DatabaseTest

@@ -1,21 +1,14 @@
-import logging
-import os
-import sys
-
 from sqlalchemy import and_, or_
 
 from core.model import (
     Annotation,
     Collection,
-    DataSource,
-    Edition,
     ExternalIntegration,
     Hold,
-    Identifier,
     LicensePool,
     Loan,
 )
-from core.monitor import EditionSweepMonitor, ReaperMonitor
+from core.monitor import ReaperMonitor
 from core.util.datetime_helpers import utc_now
 
 from .odl import ODLAPI, SharedODLAPI

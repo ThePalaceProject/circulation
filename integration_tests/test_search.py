@@ -26,16 +26,13 @@
 #
 # $ nosetests integration_tests/test_search.py
 
-import json
 import logging
-import os
 import re
-import urllib.parse
 from functools import wraps
 
 from core.external_search import ExternalSearchIndex, Filter
 from core.lane import Pagination
-from core.model import Library, production_session
+from core.model import production_session
 from core.util.personal_names import (
     display_name_to_sort_name,
     sort_name_to_display_name,

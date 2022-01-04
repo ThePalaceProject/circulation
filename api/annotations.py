@@ -4,7 +4,7 @@ import os
 from pyld import jsonld
 
 from core.app_server import url_for
-from core.model import Annotation, Identifier, get_one_or_create
+from core.model import Annotation, Identifier
 from core.util.datetime_helpers import utc_now
 
 from .problem_details import *

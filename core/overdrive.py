@@ -1,16 +1,14 @@
 import datetime
 import json
 import logging
-import os
-import sys
+from threading import RLock
 from urllib.parse import quote, urlsplit, urlunsplit
 
 import isbnlib
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 
-from .classifier import Classifier
-from .config import CannotLoadConfiguration, Configuration, temp_config
+from .config import CannotLoadConfiguration
 from .coverage import BibliographicCoverageProvider
 from .metadata_layer import (
     CirculationData,
@@ -34,19 +32,16 @@ from .model import (
     ExternalIntegration,
     Hyperlink,
     Identifier,
-    Library,
     Measurement,
     MediaTypes,
     Representation,
     Subject,
-    get_one,
     get_one_or_create,
 )
 from .testing import DatabaseTest, MockRequestsResponse
-from .util.datetime_helpers import strptime_utc, to_utc, utc_now
+from .util.datetime_helpers import strptime_utc, utc_now
 from .util.http import HTTP, BadResponseException
 from .util.string_helpers import base64
-from .util.worker_pools import RLock
 
 
 class OverdriveAPI(object):

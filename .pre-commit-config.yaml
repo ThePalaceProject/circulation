@@ -28,6 +28,15 @@ repos:
       - id: isort
         name: Run isort
 
+  - repo: https://github.com/myint/autoflake
+    rev: v1.4
+    hooks:
+      - id: autoflake
+        args:
+          - --in-place
+          - --remove-all-unused-imports
+          - --ignore-init-module-imports
+
   - repo: https://github.com/sirosen/check-jsonschema
     rev: 0.9.0
     hooks:

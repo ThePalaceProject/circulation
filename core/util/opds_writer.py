@@ -1,8 +1,6 @@
 import datetime
-import logging
 
 import pytz
-from flask import Response
 from lxml import builder, etree
 
 from .datetime_helpers import utc_now

@@ -12,7 +12,7 @@ python bin/repair/check_contributor_names --identifier-type 'RBDigital ID' 97814
 which generates a report file that lists the contributors affected, and whether their names
 were fixed or complained about.
 """
-import startup
+import startup  # noqa: autoflake
 
 from core.scripts import CheckContributorNamesInDB
 

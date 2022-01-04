@@ -1,7 +1,6 @@
 # encoding: utf-8
 
 import datetime
-from pdb import set_trace
 from threading import RLock
 
 from sqlalchemy import event, text
@@ -9,15 +8,12 @@ from sqlalchemy.orm.base import NO_VALUE
 from sqlalchemy.orm.session import Session
 
 from ..config import Configuration
-from ..util.datetime_helpers import to_utc, utc_now
+from ..util.datetime_helpers import utc_now
 from . import Base
-from .admin import Admin, AdminRole
-from .classification import Genre
 from .collection import Collection
 from .configuration import ConfigurationSetting, ExternalIntegration
-from .datasource import DataSource
 from .library import Library
-from .licensing import DeliveryMechanism, LicensePool
+from .licensing import LicensePool
 from .work import Work
 
 site_configuration_has_changed_lock = RLock()

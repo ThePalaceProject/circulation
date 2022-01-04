@@ -136,7 +136,6 @@ class TestHTTP(object):
             m(url, fake_200_response, disallowed_response_codes=["2xx"])
         except Exception as e:
             exc = e
-            pass
         assert exc is not None
 
         debug_doc = exc.as_problem_detail_document(debug=True)

@@ -1,7 +1,6 @@
 # encoding: utf-8
 import random
 import time
-from pdb import set_trace
 from threading import Thread
 from urllib.parse import quote, urlencode
 

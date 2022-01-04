@@ -1,5 +1,4 @@
 import json
-import pkgutil
 from datetime import date, timedelta
 from decimal import Decimal
 from urllib import parse
@@ -7,7 +6,7 @@ from urllib import parse
 import pytest
 
 from api.authenticator import PatronData
-from api.config import CannotLoadConfiguration, Configuration
+from api.config import CannotLoadConfiguration
 from api.millenium_patron import MilleniumPatronAPI
 from core.model import ConfigurationSetting
 from core.testing import DatabaseTest

@@ -5,7 +5,6 @@ from zipfile import ZipFile
 
 import feedparser
 from flask_babel import lazy_gettext as _
-from lxml import etree
 
 from core.model import (
     Collection,
@@ -13,7 +12,6 @@ from core.model import (
     ExternalIntegration,
     Hyperlink,
     Representation,
-    Resource,
     RightsStatus,
 )
 from core.opds import OPDSFeed

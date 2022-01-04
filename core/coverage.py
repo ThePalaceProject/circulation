@@ -13,7 +13,6 @@ from .model import (
     CoverageRecord,
     DataSource,
     Edition,
-    ExternalIntegration,
     Identifier,
     LicensePool,
     PresentationCalculationPolicy,
@@ -21,7 +20,6 @@ from .model import (
     Work,
     WorkCoverageRecord,
     get_one,
-    get_one_or_create,
 )
 from .util.datetime_helpers import utc_now
 from .util.worker_pools import DatabaseJob
@@ -489,7 +487,6 @@ class BaseCoverageProvider(object):
         """Do something special to mark the successful coverage of the
         given item.
         """
-        pass
 
     def should_update(self, coverage_record):
         """Should we do the work to update the given coverage record?"""

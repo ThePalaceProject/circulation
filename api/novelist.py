@@ -9,8 +9,7 @@ from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql import and_, join, or_, select
 
-from core.config import CannotLoadConfiguration, Configuration
-from core.coverage import CoverageFailure, IdentifierCoverageProvider
+from core.config import CannotLoadConfiguration
 from core.metadata_layer import (
     ContributorData,
     IdentifierData,
@@ -20,7 +19,6 @@ from core.metadata_layer import (
     SubjectData,
 )
 from core.model import (
-    Collection,
     Contribution,
     Contributor,
     DataSource,
@@ -34,7 +32,6 @@ from core.model import (
     Representation,
     Session,
     Subject,
-    get_one,
 )
 from core.util import TitleProcessor
 from core.util.http import HTTP

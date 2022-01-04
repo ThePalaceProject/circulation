@@ -1,13 +1,4 @@
-from core.model import (
-    CirculationEvent,
-    DataSource,
-    Edition,
-    Identifier,
-    LicensePool,
-    PresentationCalculationPolicy,
-    Work,
-    get_one_or_create,
-)
+from core.model import DataSource, Edition, Identifier, PresentationCalculationPolicy
 from core.testing import DatabaseTest
 
 

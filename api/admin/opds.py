@@ -5,10 +5,9 @@ from api.metadata_wrangler import MetadataWranglerCollectionRegistrar
 from api.opds import LibraryAnnotator
 from core.lane import Facets, Pagination
 from core.mirror import MirrorUploader
-from core.model import DataSource, LicensePool, Measurement, Session
+from core.model import DataSource, LicensePool, Session
 from core.model.configuration import ExternalIntegrationLink
 from core.opds import AcquisitionFeed, VerboseAnnotator
-from core.util.opds_writer import AtomFeed
 
 
 class AdminAnnotator(LibraryAnnotator):

@@ -163,7 +163,6 @@ class Annotator(object):
         """Make any custom modifications necessary to integrate this
         OPDS feed into the application's workflow.
         """
-        pass
 
     @classmethod
     def group_uri(cls, work, license_pool, identifier):

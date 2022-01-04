@@ -4,7 +4,7 @@ from psycopg2.extras import NumericRange
 from sqlalchemy.exc import IntegrityError
 
 from core.classifier import Classifier
-from core.model import create, get_one, get_one_or_create
+from core.model import create
 from core.model.classification import Genre, Subject
 from core.testing import DatabaseTest
 

@@ -2,7 +2,6 @@ import contextlib
 import datetime
 import json
 import logging
-import os
 import re
 import time
 from collections import defaultdict
@@ -10,7 +9,7 @@ from collections import defaultdict
 from elasticsearch import Elasticsearch
 from elasticsearch.exceptions import ElasticsearchException, RequestError
 from elasticsearch.helpers import bulk as elasticsearch_bulk
-from elasticsearch_dsl import SF, Index, MultiSearch, Search
+from elasticsearch_dsl import SF, MultiSearch, Search
 from elasticsearch_dsl.query import (
     Bool,
     DisMax,
@@ -24,7 +23,7 @@ from elasticsearch_dsl.query import (
     Nested,
 )
 from elasticsearch_dsl.query import Query as BaseQuery
-from elasticsearch_dsl.query import SimpleQueryString, Term, Terms
+from elasticsearch_dsl.query import Term, Terms
 from flask_babel import lazy_gettext as _
 from spellchecker import SpellChecker
 
@@ -34,7 +33,7 @@ from .classifier import (
     GradeLevelClassifier,
     KeywordBasedClassifier,
 )
-from .config import CannotLoadConfiguration, Configuration
+from .config import CannotLoadConfiguration
 from .coverage import CoverageFailure, WorkPresentationProvider
 from .facets import FacetConstants
 from .lane import Pagination
@@ -52,9 +51,8 @@ from .model import (
     WorkCoverageRecord,
     numericrange_to_tuple,
 )
-from .monitor import WorkSweepMonitor
 from .problem_details import INVALID_INPUT
-from .selftest import HasSelfTests, SelfTestResult
+from .selftest import HasSelfTests
 from .util.datetime_helpers import from_timestamp
 from .util.personal_names import display_name_to_sort_name
 from .util.problem_detail import ProblemDetail

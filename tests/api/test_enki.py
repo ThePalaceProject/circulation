@@ -1,14 +1,12 @@
 import datetime
 import json
 import os
-import pkgutil
 
 import pytest
 
 from api.authenticator import BasicAuthenticationProvider
 from api.circulation import FulfillmentInfo, LoanInfo
 from api.circulation_exceptions import *
-from api.config import CannotLoadConfiguration
 from api.enki import (
     BibliographicParser,
     EnkiAPI,
@@ -18,7 +16,6 @@ from api.enki import (
 )
 from core.metadata_layer import CirculationData, Metadata, TimestampData
 from core.model import (
-    CirculationEvent,
     ConfigurationSetting,
     Contributor,
     DataSource,
@@ -28,20 +25,13 @@ from core.model import (
     Hyperlink,
     Identifier,
     LicensePool,
-    Measurement,
     Representation,
-    Resource,
     Subject,
     Work,
 )
-from core.scripts import RunCollectionCoverageProviderScript
 from core.testing import DatabaseTest, MockRequestsResponse
 from core.util.datetime_helpers import datetime_utc, utc_now
-from core.util.http import (
-    BadResponseException,
-    RemoteIntegrationException,
-    RequestTimedOut,
-)
+from core.util.http import RemoteIntegrationException, RequestTimedOut
 
 
 class BaseEnkiTest(DatabaseTest):
@@ -933,7 +923,6 @@ class TestEnkiImport(BaseEnkiTest):
         """This functionality is tested as part of
         test_update_circulation.
         """
-        pass
 
 
 class TestEnkiCollectionReaper(BaseEnkiTest):

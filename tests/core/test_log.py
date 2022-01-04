@@ -12,7 +12,6 @@ from core.log import (
     CloudwatchLogs,
     JSONFormatter,
     LogConfiguration,
-    Logger,
     Loggly,
     LogglyHandler,
     StringFormatter,

@@ -1,12 +1,9 @@
 import os
-import time
 
 import jwt
 import pytest
 
-from api.authenticator import PatronData
 from api.circulation_exceptions import RemoteInitiatedServerError
-from api.config import Configuration, temp_config
 from api.firstbook2 import FirstBookAuthenticationAPI, MockFirstBookAuthenticationAPI
 from core.model import ExternalIntegration
 from core.testing import DatabaseTest

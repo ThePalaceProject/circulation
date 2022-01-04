@@ -1,6 +1,6 @@
 from flask_babel import lazy_gettext as _
 
-from core.problem_details import *
+from core.problem_details import *  # noqa: autoflake
 from core.util.problem_detail import ProblemDetail as pd
 
 REMOTE_INTEGRATION_FAILED = pd(

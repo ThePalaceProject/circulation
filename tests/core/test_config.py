@@ -3,7 +3,7 @@ import os
 from sqlalchemy.orm.session import Session
 
 from core.config import Configuration as BaseConfiguration
-from core.model import ConfigurationSetting, ExternalIntegration
+from core.model import ExternalIntegration
 from core.testing import DatabaseTest
 
 

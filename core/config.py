@@ -5,10 +5,8 @@ import logging
 import os
 
 from flask_babel import lazy_gettext as _
-from sqlalchemy import create_engine
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import ArgumentError
-from sqlalchemy.orm.session import Session
 
 from .entrypoint import EntryPoint
 from .facets import FacetConstants
@@ -29,8 +27,6 @@ class CannotLoadConfiguration(IntegrationException):
     configuration, with no need to actually talk to the foreign
     server.
     """
-
-    pass
 
 
 @contextlib.contextmanager

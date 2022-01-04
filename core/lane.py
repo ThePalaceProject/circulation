@@ -7,7 +7,6 @@ from urllib.parse import quote_plus
 
 import elasticsearch
 from flask_babel import lazy_gettext as _
-from psycopg2.extras import NumericRange
 from sqlalchemy import (
     Boolean,
     Column,
@@ -17,11 +16,9 @@ from sqlalchemy import (
     Unicode,
     UniqueConstraint,
     and_,
-    case,
     event,
     not_,
     or_,
-    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, INT4RANGE, JSON
 from sqlalchemy.ext.associationproxy import association_proxy
@@ -32,14 +29,12 @@ from sqlalchemy.orm import (
     contains_eager,
     defer,
     joinedload,
-    lazyload,
     relationship,
 )
 from sqlalchemy.sql import select
-from sqlalchemy.sql.expression import Select, literal
+from sqlalchemy.sql.expression import Select
 
-from . import classifier
-from .classifier import Classifier, GenreData
+from .classifier import Classifier
 from .config import Configuration
 from .entrypoint import EntryPoint, EverythingEntryPoint
 from .facets import FacetConstants
@@ -50,25 +45,21 @@ from .model import (
     CustomList,
     CustomListEntry,
     DataSource,
-    DeliveryMechanism,
     Edition,
     Genre,
     Library,
     LicensePool,
-    LicensePoolDeliveryMechanism,
     Session,
     Work,
     WorkGenre,
     directly_modified,
-    get_one,
     get_one_or_create,
-    numericrange_to_tuple,
     site_configuration_has_changed,
     tuple_to_numericrange,
 )
 from .model.constants import EditionConstants
 from .problem_details import *
-from .util import LanguageCodes, fast_query_count
+from .util import LanguageCodes
 from .util.accept_language import parse_accept_language
 from .util.datetime_helpers import utc_now
 from .util.opds_writer import OPDSFeed
@@ -1809,7 +1800,7 @@ class WorkList(object):
             that generates such a list when executed.
 
         """
-        from .external_search import ExternalSearchIndex, Filter
+        from .external_search import ExternalSearchIndex
 
         search_engine = search_engine or ExternalSearchIndex.load(_db)
         filter = self.filter(_db, facets)
@@ -2180,8 +2171,6 @@ class TopLevelWorkList(HierarchyWorkList):
     """A special WorkList representing the top-level view of
     a library's collection.
     """
-
-    pass
 
 
 class DatabaseBackedWorkList(WorkList):

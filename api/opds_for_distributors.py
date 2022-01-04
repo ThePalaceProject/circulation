@@ -14,7 +14,6 @@ from core.model import (
     Identifier,
     LicensePool,
     Loan,
-    Representation,
     RightsStatus,
     Session,
     get_one,
@@ -29,7 +28,6 @@ from core.util.string_helpers import base64
 
 from .circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
 from .circulation_exceptions import *
-from .config import IntegrationException
 
 
 class OPDSForDistributorsAPI(BaseCirculationAPI, HasSelfTests):

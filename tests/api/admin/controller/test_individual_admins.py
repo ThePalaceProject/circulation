@@ -2,7 +2,6 @@ import json
 
 import flask
 import pytest
-from flask_babel import lazy_gettext as _
 from werkzeug.datastructures import MultiDict
 
 from api.admin.exceptions import *

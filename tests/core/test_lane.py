@@ -6,8 +6,7 @@ from unittest.mock import MagicMock, call
 
 import pytest
 from elasticsearch.exceptions import ElasticsearchException
-from sqlalchemy import and_, func, text
-from sqlalchemy.sql.elements import Case
+from sqlalchemy import and_, text
 
 from core.classifier import Classifier
 from core.config import Configuration
@@ -39,17 +38,13 @@ from core.lane import (
 )
 from core.model import (
     CachedFeed,
-    CustomListEntry,
     DataSource,
     Edition,
     Genre,
-    Identifier,
     Library,
     LicensePool,
-    SessionManager,
     Work,
     WorkGenre,
-    dump_query,
     get_one_or_create,
     tuple_to_numericrange,
 )

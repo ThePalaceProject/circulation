@@ -1,5 +1,4 @@
 import re
-import struct
 import unicodedata
 from hashlib import md5
 

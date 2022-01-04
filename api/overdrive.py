@@ -6,9 +6,7 @@ import urllib.parse
 import dateutil
 import flask
 import pytz
-import requests
 from flask_babel import lazy_gettext as _
-from sqlalchemy.orm import contains_eager
 
 from core.analytics import Analytics
 from core.metadata_layer import ReplacementPolicy
@@ -20,13 +18,10 @@ from core.model import (
     DeliveryMechanism,
     Edition,
     ExternalIntegration,
-    Hold,
     Identifier,
     LicensePool,
-    Loan,
     MediaTypes,
     Representation,
-    Session,
 )
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
 from core.overdrive import MockOverdriveAPI as BaseMockOverdriveAPI

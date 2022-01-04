@@ -1,20 +1,17 @@
 import datetime
 import os
-import pkgutil
 import random
 from io import StringIO
 from urllib.parse import quote
 
-import feedparser
 import pytest
 from lxml import etree
 from psycopg2.extras import NumericRange
 
-from core.config import CannotLoadConfiguration, IntegrationException
+from core.config import IntegrationException
 from core.coverage import CoverageFailure
-from core.metadata_layer import CirculationData, LinkData, Metadata, TimestampData
+from core.metadata_layer import CirculationData, LinkData, Metadata
 from core.model import (
-    Collection,
     Contributor,
     CoverageRecord,
     DataSource,
@@ -38,7 +35,6 @@ from core.opds_import import (
     OPDSImporter,
     OPDSImportMonitor,
     OPDSXMLParser,
-    SimplifiedOPDSLookup,
 )
 from core.s3 import MockS3Uploader, S3Uploader, S3UploaderConfiguration
 from core.selftest import SelfTestResult

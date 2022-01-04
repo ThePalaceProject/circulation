@@ -15,8 +15,6 @@ from typing import Optional
 
 from dateutil.parser import parse
 from pymarc import MARCReader
-from sqlalchemy.orm import aliased
-from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, or_
 
@@ -31,7 +29,6 @@ from .model import (
     DataSource,
     DeliveryMechanism,
     Edition,
-    Equivalency,
     Hyperlink,
     Identifier,
     License,
@@ -44,7 +41,6 @@ from .model import (
     RightsStatus,
     Subject,
     Timestamp,
-    Work,
     get_one,
     get_one_or_create,
 )

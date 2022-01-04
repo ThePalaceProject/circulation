@@ -3,7 +3,6 @@
 
 import logging
 from functools import total_ordering
-from pdb import set_trace
 
 from sqlalchemy import (
     Boolean,

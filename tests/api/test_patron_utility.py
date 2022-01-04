@@ -6,7 +6,7 @@ import pytest
 
 from api.authenticator import PatronData
 from api.circulation_exceptions import *
-from api.config import Configuration, temp_config
+from api.config import Configuration
 from api.util.patron import PatronUtility
 from core.model import ConfigurationSetting
 from core.testing import DatabaseTest

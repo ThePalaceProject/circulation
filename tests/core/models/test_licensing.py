@@ -13,14 +13,12 @@ from core.model.collection import CollectionMissing
 from core.model.complaint import Complaint
 from core.model.constants import MediaTypes
 from core.model.contributor import Contributor
-from core.model.coverage import WorkCoverageRecord
 from core.model.datasource import DataSource
 from core.model.edition import Edition
 from core.model.identifier import Identifier
 from core.model.licensing import (
     DeliveryMechanism,
     Hold,
-    License,
     LicensePool,
     LicensePoolDeliveryMechanism,
     LicenseStatus,

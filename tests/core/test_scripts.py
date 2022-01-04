@@ -1,6 +1,5 @@
 import os
 import random
-import shutil
 import stat
 import tempfile
 from io import StringIO
@@ -87,7 +86,7 @@ from core.testing import (
     AlwaysSuccessfulWorkCoverageProvider,
     DatabaseTest,
 )
-from core.util.datetime_helpers import datetime_utc, strptime_utc, to_utc, utc_now
+from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
 from core.util.worker_pools import DatabasePool
 
 
@@ -2226,8 +2225,6 @@ class MockOPDSImportMonitor(object):
 class MockOPDSImporter(object):
     """Pretend to import titles from an OPDS feed."""
 
-    pass
-
 
 class MockOPDSImportScript(OPDSImportScript):
     """Actually instantiate a monitor that will pretend to do something."""
@@ -3042,34 +3039,22 @@ class TestUpdateCustomListSizeScript(DatabaseTest):
 class TestWorkConsolidationScript(object):
     """TODO"""
 
-    pass
-
 
 class TestWorkPresentationScript(object):
     """TODO"""
-
-    pass
 
 
 class TestWorkClassificationScript(object):
     """TODO"""
 
-    pass
-
 
 class TestWorkOPDSScript(object):
     """TODO"""
-
-    pass
 
 
 class TestCustomListManagementScript(object):
     """TODO"""
 
-    pass
-
 
 class TestNYTBestSellerListsScript(object):
     """TODO"""
-
-    pass

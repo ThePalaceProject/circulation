@@ -1,11 +1,10 @@
 import flask
 import pytest
-from werkzeug.datastructures import ImmutableMultiDict, MultiDict
+from werkzeug.datastructures import MultiDict
 
 from api.admin.exceptions import *
 from api.config import Configuration
 from core.model import AdminRole, ConfigurationSetting
-from core.opds import AcquisitionFeed
 
 from .test_controller import SettingsControllerTest
 

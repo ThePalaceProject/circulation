@@ -1,5 +1,4 @@
 # encoding: utf-8
-import datetime
 
 from core.model import PresentationCalculationPolicy, get_one_or_create
 from core.model.constants import MediaTypes

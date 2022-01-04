@@ -10,7 +10,7 @@ from core.model.datasource import DataSource
 from core.model.identifier import Identifier
 from core.model.licensing import LicensePool
 from core.testing import DatabaseTest
-from core.util.datetime_helpers import datetime_utc, strptime_utc, to_utc, utc_now
+from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
 
 
 class TestCirculationEvent(DatabaseTest):

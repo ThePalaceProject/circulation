@@ -3,8 +3,6 @@
 import gzip
 import json
 import logging
-import os
-import subprocess
 import sys
 import traceback
 from functools import wraps
@@ -13,23 +11,19 @@ from io import BytesIO
 import flask
 from flask import make_response, url_for
 from flask_babel import lazy_gettext as _
-from lxml import etree
 from psycopg2 import DatabaseError
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 
 from .cdn import cdnify
-from .classifier import Classifier
 from .config import Configuration
-from .entrypoint import EntryPoint
 from .lane import Facets, Pagination
 from .log import LogConfiguration
-from .model import Complaint, Identifier, Patron, get_one
+from .model import Complaint, Identifier
 from .opds import AcquisitionFeed, LookupAcquisitionFeed
 from .problem_details import *
 from .util.flask_util import OPDSFeedResponse, problem
-from .util.opds_writer import OPDSFeed, OPDSMessage
+from .util.opds_writer import OPDSMessage
 from .util.problem_detail import ProblemDetail
 
 
@@ -423,7 +417,6 @@ class URNLookupHandler(object):
 
         By default, does nothing.
         """
-        pass
 
 
 class ComplaintController(object):

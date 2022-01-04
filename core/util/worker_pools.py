@@ -1,7 +1,6 @@
 import logging
-from contextlib import contextmanager
 from queue import Queue
-from threading import RLock, Thread, settrace
+from threading import Thread
 
 # Much of the work in this file is based on
 # https://github.com/shazow/workerpool, with
@@ -153,11 +152,9 @@ class Job(object):
 
     def rollback(self, *args, **kwargs):
         """Cleans up the task if it errors"""
-        pass
 
     def finalize(self, *args, **kwargs):
         """Finalizes the task if it is successful"""
-        pass
 
     def do_run(self):
         """Does the work"""

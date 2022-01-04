@@ -1,5 +1,4 @@
 import datetime
-from pdb import set_trace
 
 import pytest
 import pytz

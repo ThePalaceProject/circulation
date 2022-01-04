@@ -395,8 +395,6 @@ class WillNotGenerateExpensiveFeed(Exception):
     expensive to generate.
     """
 
-    pass
-
 
 class CachedMARCFile(Base):
     """A record that a MARC file has been created and cached for a particular lane."""

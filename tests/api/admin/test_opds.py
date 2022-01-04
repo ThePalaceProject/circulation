@@ -3,9 +3,8 @@ import feedparser
 from api.admin.opds import AdminAnnotator, AdminFeed
 from api.opds import AcquisitionFeed
 from core.lane import Facets, Pagination
-from core.model import Complaint, DataSource, ExternalIntegration, Library, Measurement
+from core.model import Complaint, DataSource, ExternalIntegration, Measurement
 from core.model.configuration import ExternalIntegrationLink
-from core.opds import Annotator
 from core.testing import DatabaseTest
 
 

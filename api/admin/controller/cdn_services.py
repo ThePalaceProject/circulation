@@ -3,7 +3,7 @@ from flask import Response
 from flask_babel import lazy_gettext as _
 
 from api.admin.problem_details import *
-from core.model import Configuration, ExternalIntegration, get_one
+from core.model import Configuration, ExternalIntegration
 from core.util.problem_detail import ProblemDetail
 
 from . import SettingsController

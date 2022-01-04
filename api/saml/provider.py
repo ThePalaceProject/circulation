@@ -9,7 +9,7 @@ from flask_babel import lazy_gettext as _
 
 from api.authenticator import BaseSAMLAuthenticationProvider, PatronData
 from api.problem_details import *
-from api.saml.auth import SAMLAuthenticationManager, SAMLAuthenticationManagerFactory
+from api.saml.auth import SAMLAuthenticationManagerFactory
 from api.saml.configuration.model import SAMLConfiguration, SAMLConfigurationFactory
 from api.saml.configuration.validator import SAMLSettingsValidator
 from api.saml.metadata.filter import SAMLSubjectFilter

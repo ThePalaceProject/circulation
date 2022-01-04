@@ -3,7 +3,6 @@ import datetime
 import json
 from io import StringIO
 
-import flask
 import pytest
 
 from api.adobe_vendor_id import (
@@ -12,23 +11,16 @@ from api.adobe_vendor_id import (
     ShortClientTokenLibraryConfigurationScript,
 )
 from api.authenticator import BasicAuthenticationProvider
-from api.config import Configuration, temp_config
+from api.config import Configuration
 from api.marc import LibraryAnnotator as MARCLibraryAnnotator
 from api.novelist import NoveListAPI
 from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EntryPoint
 from core.external_search import MockExternalSearchIndex, mock_search_index
-from core.lane import Facets, FeaturedFacets, Lane, Pagination, WorkList
+from core.lane import Facets, FeaturedFacets, Pagination, WorkList
 from core.marc import MARCExporter
-from core.metadata_layer import (
-    CirculationData,
-    IdentifierData,
-    LinkData,
-    Metadata,
-    ReplacementPolicy,
-)
+from core.metadata_layer import IdentifierData, Metadata, ReplacementPolicy
 from core.mirror import MirrorUploader
 from core.model import (
-    CachedFeed,
     CachedMARCFile,
     ConfigurationSetting,
     Credential,

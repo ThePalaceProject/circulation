@@ -82,8 +82,6 @@ def parse_identifier(db, identifier):
 class AccessNotAuthenticated(Exception):
     """No authentication is configured for this service"""
 
-    pass
-
 
 class SimplifiedOPDSLookup(object):
     """Tiny integration class for the Simplified 'lookup' protocol."""
@@ -1147,7 +1145,6 @@ class OPDSImporter(object):
         information that allows a patron to actually get a book
         that's not open access.
         """
-        pass
 
     @classmethod
     def combine(self, d1, d2):

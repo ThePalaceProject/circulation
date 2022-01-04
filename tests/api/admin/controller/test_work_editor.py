@@ -14,7 +14,7 @@ from werkzeug.datastructures import ImmutableMultiDict, MultiDict
 
 from api.admin.exceptions import *
 from api.admin.problem_details import *
-from core.classifier import SimplifiedGenreClassifier, genres
+from core.classifier import SimplifiedGenreClassifier
 from core.model import (
     AdminRole,
     Classification,
@@ -26,11 +26,9 @@ from core.model import (
     Edition,
     Genre,
     Hyperlink,
-    Measurement,
     Representation,
     ResourceTransformation,
     RightsStatus,
-    SessionManager,
     Subject,
     create,
 )
@@ -38,7 +36,6 @@ from core.model.configuration import ExternalIntegrationLink
 from core.s3 import MockS3Uploader
 from core.testing import (
     AlwaysSuccessfulCoverageProvider,
-    MockRequestsResponse,
     NeverSuccessfulCoverageProvider,
 )
 from core.util.datetime_helpers import datetime_utc

@@ -1,5 +1,5 @@
 import sys
-from typing import Iterable, List, Optional, Tuple, Union
+from typing import Iterable, Optional, Tuple, Union
 
 from sqlalchemy.orm.session import Session
 

@@ -4,36 +4,11 @@ The CoverageProviders themselves are in the file corresponding to the
 service that needs coverage -- overdrive.py, metadata_wrangler.py, and
 so on.
 """
-import logging
-from io import StringIO
 
-from lxml import etree
 
-from core.coverage import (
-    CollectionCoverageProvider,
-    CoverageFailure,
-    WorkCoverageProvider,
-)
-from core.model import (
-    Collection,
-    ConfigurationSetting,
-    CoverageRecord,
-    DataSource,
-    Edition,
-    ExternalIntegration,
-    Identifier,
-    LicensePool,
-    WorkCoverageRecord,
-)
-from core.opds_import import (
-    AccessNotAuthenticated,
-    MetadataWranglerOPDSLookup,
-    OPDSImporter,
-    OPDSXMLParser,
-    SimplifiedOPDSLookup,
-)
-from core.util.http import RemoteIntegrationException
-from core.util.opds_writer import OPDSFeed
+from core.coverage import CollectionCoverageProvider, CoverageFailure
+from core.model import DataSource
+from core.opds_import import OPDSImporter
 
 
 class RegistrarImporter(OPDSImporter):
@@ -120,7 +95,6 @@ class OPDSImportCoverageProvider(CollectionCoverageProvider):
 
         By default, nothing happens.
         """
-        pass
 
     @property
     def api_method(self):

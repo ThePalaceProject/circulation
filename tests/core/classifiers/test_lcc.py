@@ -1,4 +1,3 @@
-from core import classifier
 from core.classifier import *
 from core.classifier.lcc import LCCClassifier as LCC
 

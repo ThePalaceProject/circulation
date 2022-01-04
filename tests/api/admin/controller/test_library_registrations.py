@@ -13,7 +13,7 @@ from core.model import (
     Library,
     create,
 )
-from core.testing import DummyHTTPClient, MockRequestsResponse
+from core.testing import DummyHTTPClient
 from core.util.http import HTTP
 
 from .test_controller import SettingsControllerTest

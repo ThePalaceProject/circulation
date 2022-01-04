@@ -3,7 +3,6 @@ import base64
 import datetime
 import json
 import logging
-import os
 import sys
 import uuid
 
@@ -1066,7 +1065,6 @@ class AuthdataUtility(object):
         run the migration script
         20161102-adobe-id-is-delegated-patron-identifier.py.
         """
-        import uuid
 
         _db = Session.object_session(patron)
         credential = get_one(

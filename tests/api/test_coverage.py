@@ -6,15 +6,8 @@ from api.coverage import (
     ReaperImporter,
     RegistrarImporter,
 )
-from core.config import CannotLoadConfiguration, Configuration, temp_config
 from core.coverage import CoverageFailure
-from core.model import (
-    Collection,
-    DataSource,
-    ExternalIntegration,
-    Identifier,
-    LicensePool,
-)
+from core.model import Collection, DataSource, ExternalIntegration, LicensePool
 from core.opds_import import MockSimplifiedOPDSLookup, OPDSImporter
 from core.testing import DatabaseTest, MockRequestsResponse
 from core.util.http import BadResponseException

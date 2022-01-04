@@ -1,4 +1,3 @@
-import contextlib
 import datetime
 import json
 import logging
@@ -6,19 +5,10 @@ from collections import defaultdict
 
 from api.adobe_vendor_id import AuthdataUtility
 from api.circulation import BaseCirculationAPI, CirculationAPI, HoldInfo, LoanInfo
-from api.config import Configuration, temp_config
+from api.config import Configuration
 from api.registration.constants import RegistrationConstants
 from api.shared_collection import SharedCollectionAPI
-from core.model import (
-    ConfigurationSetting,
-    DataSource,
-    ExternalIntegration,
-    Hold,
-    Identifier,
-    Library,
-    Loan,
-    Session,
-)
+from core.model import ConfigurationSetting, DataSource, ExternalIntegration, Hold, Loan
 from core.testing import DatabaseTest
 
 

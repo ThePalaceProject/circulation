@@ -1,6 +1,5 @@
 from core import classifier
 from core.classifier import *
-from core.classifier.keyword import FASTClassifier as FAST
 from core.classifier.keyword import KeywordBasedClassifier as Keyword
 from core.classifier.keyword import LCSHClassifier as LCSH
 
