@@ -220,6 +220,11 @@ consistently.
 We lint to make sure our imports are sorted and correctly formatted using [isort](https://pycqa.github.io/isort/). Our
 isort configuration is stored in our [tox.ini](tox.ini) which isort automatically detects.
 
+#### autoflake
+
+We lint using [autoflake](https://pypi.org/project/autoflake/) to flag and remove any unused import statement. If an
+unused import is needed for some reason it can be ignored with a `#noqa` comment in the code.
+
 ## Continuous Integration
 
 This project runs all the unit tests through Github Actions for new pull requests and when merging into the default
