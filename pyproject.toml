@@ -83,7 +83,7 @@ Werkzeug = "1.0.1"
 [tool.poetry.dev-dependencies]
 freezegun = "~1.1"
 Jinja2 = "2.11.3"
-parameterized = "0.7.4"
+parameterized = "0.8.1"
 pre-commit = "~2.16"
 pyfakefs = "3.7"
 pytest-timeout = "*"
