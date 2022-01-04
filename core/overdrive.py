@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+from threading import RLock
 from urllib.parse import quote, urlsplit, urlunsplit
 
 import isbnlib
@@ -41,7 +42,6 @@ from .testing import DatabaseTest, MockRequestsResponse
 from .util.datetime_helpers import strptime_utc, utc_now
 from .util.http import HTTP, BadResponseException
 from .util.string_helpers import base64
-from .util.worker_pools import RLock
 
 
 class OverdriveAPI(object):

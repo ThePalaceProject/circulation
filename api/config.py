@@ -5,6 +5,8 @@ from Crypto.Cipher import PKCS1_OAEP
 from Crypto.PublicKey import RSA
 from flask_babel import lazy_gettext as _
 
+from core.config import CannotLoadConfiguration  # noqa: autoflake
+from core.config import IntegrationException  # noqa: autoflake
 from core.config import Configuration as CoreConfiguration
 from core.config import empty_config as core_empty_config
 from core.config import temp_config as core_temp_config
