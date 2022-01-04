@@ -167,16 +167,6 @@ the `xcode-select --install` command. If it does not work, you can try adding th
 export CPPFLAGS="-DXMLSEC_NO_XKMS=1"
 ```
 
-## Generating Documentation
-
-Code documentation can be generated using Sphinx. The configuration for the documentation can be found in `/docs`.
-
-Github Actions handles generating the `.rst` source files, generating the HTML static site, and deploying the build to
-the `gh-pages` branch.
-
-To view the documentation _locally_, go into the `/docs` directory and run `make html`. This will generate the .rst
-source files and build the static site in `/docs/build/html`
-
 ## Code Style
 
 Code style on this project is linted using [pre-commit](https://pre-commit.com/). This python application is included
