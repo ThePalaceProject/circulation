@@ -692,7 +692,7 @@ uritemplate = ">=3.0.1,<4.0.0"
 
 [[package]]
 name = "parameterized"
-version = "0.7.4"
+version = "0.8.1"
 description = "Parameterized testing with any Python test framework"
 category = "dev"
 optional = false
@@ -1416,7 +1416,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.6.1,<4"
-content-hash = "c51f51c72839df6c8e27fbcfd6006f83559d058dfaae665bd937e6110aa71e21"
+content-hash = "7d41a528fd0fee41671360eb6a7dfbb9441645fce469b2c083e0a62c1fe21791"
 
 [metadata.files]
 alabaster = [
@@ -1844,8 +1844,8 @@ palace-webpub-manifest-parser = [
     {file = "palace_webpub_manifest_parser-2.0.4.tar.gz", hash = "sha256:8a315792ab0031e43957c6c7dc2fd57e0327a04fd05f1f7e84a4cbfbabd0f58c"},
 ]
 parameterized = [
-    {file = "parameterized-0.7.4-py2.py3-none-any.whl", hash = "sha256:59ab908e31c01505a987a2be78854e19cb1630c047bbab7848169c371d614d56"},
-    {file = "parameterized-0.7.4.tar.gz", hash = "sha256:190f8cc7230eee0b56b30d7f074fd4d165f7c45e6077582d0813c8557e738490"},
+    {file = "parameterized-0.8.1-py2.py3-none-any.whl", hash = "sha256:9cbb0b69a03e8695d68b3399a8a5825200976536fe1cb79db60ed6a4c8c9efe9"},
+    {file = "parameterized-0.8.1.tar.gz", hash = "sha256:41bbff37d6186430f77f900d777e5bb6a24928a1c46fb1de692f8b52b8833b5c"},
 ]
 pathlib-mate = [
     {file = "pathlib_mate-1.0.2-py2.py3-none-any.whl", hash = "sha256:3f47df5bc61ecaf1aea08a52b131aa92016252485d466a355cc1cdc59a3cb9c6"},
