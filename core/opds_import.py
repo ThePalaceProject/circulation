@@ -647,7 +647,7 @@ class OPDSImporter(object):
             )
         except CannotLoadConfiguration:
             # The Metadata Wrangler isn't configured, but we can import without it.
-            self.log.warn(
+            self.log.warning(
                 "Metadata Wrangler integration couldn't be loaded, importing without it."
             )
             self.metadata_client = None
@@ -1662,7 +1662,7 @@ class OPDSImporter(object):
         :param entry_tag: A <atom:entry> tag.
         :param default: The value to use if nothing is found.
         """
-        if not entry_tag:
+        if entry_tag is None:
             return default
 
         medium = None

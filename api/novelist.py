@@ -154,7 +154,7 @@ class NoveListAPI(object):
             ]
 
         if not isbns:
-            self.log.warn(
+            self.log.warning(
                 (
                     "Identifiers without an ISBN equivalent can't"
                     "be looked up with NoveList: %r"
@@ -171,7 +171,7 @@ class NoveListAPI(object):
                 lookup_metadata.append(metadata)
 
         if not lookup_metadata:
-            self.log.warn(
+            self.log.warning(
                 (
                     "No NoveList metadata found for Identifiers without an ISBN"
                     "equivalent can't be looked up with NoveList: %r"
@@ -185,7 +185,7 @@ class NoveListAPI(object):
         )
         if best_metadata:
             if round(confidence, 2) < 0.5:
-                self.log.warn(self.NO_ISBN_EQUIVALENCY, identifier)
+                self.log.warning(self.NO_ISBN_EQUIVALENCY, identifier)
                 return None
             return metadata
 
@@ -211,7 +211,7 @@ class NoveListAPI(object):
             return metadata_objects[0], confidence
 
         # One or more of the equivalents did not return the same NoveList work
-        self.log.warn("%r has inaccurate ISBN equivalents", identifier)
+        self.log.warning("%r has inaccurate ISBN equivalents", identifier)
         counter = Counter()
         for metadata in metadata_objects:
             counter[metadata.primary_identifier] += 1
@@ -221,7 +221,7 @@ class NoveListAPI(object):
         )
         if most_amount == secondmost:
             # The counts are the same, and neither can be trusted.
-            self.log.warn(self.NO_ISBN_EQUIVALENCY, identifier)
+            self.log.warning(self.NO_ISBN_EQUIVALENCY, identifier)
             return None, None
         confidence = most_amount / float(len(metadata_objects))
         target_metadata = [

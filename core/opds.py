@@ -1267,11 +1267,11 @@ class AcquisitionFeed(OPDSFeed):
 
         # There's no reason to present a book that has no active license pool.
         if not identifier:
-            logging.warn("%r HAS NO IDENTIFIER", work)
+            logging.warning("%r HAS NO IDENTIFIER", work)
             return None
 
         if not active_license_pool and not even_if_no_license_pool:
-            logging.warn("NO ACTIVE LICENSE POOL FOR %r", work)
+            logging.warning("NO ACTIVE LICENSE POOL FOR %r", work)
             return self.error_message(
                 identifier,
                 403,
@@ -1279,7 +1279,7 @@ class AcquisitionFeed(OPDSFeed):
             )
 
         if not active_edition:
-            logging.warn("NO ACTIVE EDITION FOR %r", active_license_pool)
+            logging.warning("NO ACTIVE EDITION FOR %r", active_license_pool)
             return self.error_message(
                 identifier,
                 403,
@@ -1418,7 +1418,7 @@ class AcquisitionFeed(OPDSFeed):
         if edition.medium:
             additional_type = Edition.medium_to_additional_type.get(edition.medium)
             if not additional_type:
-                logging.warn("No additionalType for medium %s", edition.medium)
+                logging.warning("No additionalType for medium %s", edition.medium)
             additional_type_field = AtomFeed.schema_("additionalType")
             kw[additional_type_field] = additional_type
 
@@ -1968,7 +1968,7 @@ class NavigationFeed(OPDSFeed):
 # Mock annotators for use in unit tests.
 
 
-class TestAnnotator(Annotator):
+class MockAnnotator(Annotator):
     def __init__(self):
         self.lanes_by_work = defaultdict(list)
 
@@ -2047,7 +2047,7 @@ class TestAnnotator(Annotator):
         return "Test Top Level Title"
 
 
-class TestAnnotatorWithGroup(TestAnnotator):
+class MockAnnotatorWithGroup(MockAnnotator):
     def group_uri(self, work, license_pool, identifier):
         lanes = self.lanes_by_work.get(work, None)
 
@@ -2071,7 +2071,7 @@ class TestAnnotatorWithGroup(TestAnnotator):
         return "Test Top Level Title"
 
 
-class TestUnfulfillableAnnotator(TestAnnotator):
+class MockUnfulfillableAnnotator(MockAnnotator):
     """Raise an UnfulfillableWork exception when asked to annotate an entry."""
 
     def annotate_work_entry(self, *args, **kwargs):

@@ -541,7 +541,7 @@ class Axis360API(
         collection = self.collection
         pool = identifier.licensed_through_collection(collection)
         if not pool:
-            self.log.warn(
+            self.log.warning(
                 "Was about to reap %r but no local license pool in this collection.",
                 identifier,
             )
@@ -896,7 +896,7 @@ class BibliographicParser(Axis360Parser):
 
     # Axis authors with a special role have an abbreviation after their names,
     # e.g. "San Ruby (FRW)"
-    role_abbreviation = re.compile("\(([A-Z][A-Z][A-Z])\)$")
+    role_abbreviation = re.compile(r"\(([A-Z][A-Z][A-Z])\)$")
     generic_author = object()
     role_abbreviation_to_role = dict(
         INT=Contributor.INTRODUCTION_ROLE,
@@ -1094,7 +1094,7 @@ class BibliographicParser(Axis360Parser):
                 continue
 
             if informal_name not in self.DELIVERY_DATA_FOR_AXIS_FORMAT:
-                self.log.warn(
+                self.log.warning(
                     "Unrecognized Axis format name for %s: %s"
                     % (identifier, informal_name)
                 )

@@ -1120,7 +1120,7 @@ class CirculationAPI(object):
         :param delivery_mechanism: A DeliveryMechanism.
         """
         if isinstance(delivery_mechanism, LicensePoolDeliveryMechanism):
-            self.log.warn(
+            self.log.warning(
                 "LicensePoolDeliveryMechanism passed into fulfill_open_access, should be DeliveryMechanism."
             )
             delivery_mechanism = delivery_mechanism.delivery_mechanism

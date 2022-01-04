@@ -16,12 +16,12 @@ from urllib.parse import quote, urlparse, urlsplit
 import requests
 from PIL import Image
 from sqlalchemy import (
-    Binary,
     Column,
     DateTime,
     Float,
     ForeignKey,
     Integer,
+    LargeBinary,
     Unicode,
     UniqueConstraint,
 )
@@ -213,7 +213,7 @@ class Resource(Base):
 
         # Humans have voted positively on this Resource, and now it's
         # being rejected regardless.
-        logging.warn("Rejecting Resource with positive votes: %r", self)
+        logging.warning("Rejecting Resource with positive votes: %r", self)
 
         # Make the voted_quality negative without impacting the weight
         # of existing votes so the value can be restored relatively
@@ -567,7 +567,7 @@ class Representation(Base, MediaTypes):
     image_width = Column(Integer, index=True)
 
     # The content of the representation itself.
-    content = Column(Binary)
+    content = Column(LargeBinary)
 
     # Instead of being stored in the database, the content of the
     # representation may be stored on a local file relative to the
@@ -1208,7 +1208,9 @@ class Representation(Base, MediaTypes):
         # Known extensions can be followed by a version number (.epub3)
         # or an additional extension (.epub.noimages)
         known_extensions = "|".join(list(self.FILE_EXTENSIONS.values()))
-        known_extension_re = re.compile("\.(%s)\d?\.?[\w\d]*$" % known_extensions, re.I)
+        known_extension_re = re.compile(
+            r"\.(%s)\d?\.?[\w\d]*$" % known_extensions, re.I
+        )
 
         known_match = known_extension_re.search(url_path)
 
@@ -1216,7 +1218,7 @@ class Representation(Base, MediaTypes):
             return known_match.group()
 
         else:
-            any_extension_re = re.compile("\.[\w\d]*$", re.I)
+            any_extension_re = re.compile(r"\.[\w\d]*$", re.I)
 
             any_match = any_extension_re.search(url_path)
 

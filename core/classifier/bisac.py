@@ -654,7 +654,7 @@ class BISACClassifier(Classifier):
 
     # A BISAC name copied from the BISAC website may end with this
     # human-readable note, which is not part of the official name.
-    see_also = re.compile("\(see also .*")
+    see_also = re.compile(r"\(see also .*")
 
     @classmethod
     def scrub_identifier(cls, identifier):

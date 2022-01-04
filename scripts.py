@@ -357,7 +357,7 @@ class CacheRepresentationPerLane(TimestampScript, LaneSweeperScript):
                 if alpha:
                     self.languages.append(alpha)
                 else:
-                    self.log.warn("Ignored unrecognized language code %s", alpha)
+                    self.log.warning("Ignored unrecognized language code %s", alpha)
         self.max_depth = parsed.max_depth
         self.min_depth = parsed.min_depth
 
@@ -573,24 +573,24 @@ class CacheFacetListsPerLane(CacheRepresentationPerLane):
         for entrypoint_name in chosen_entrypoints:
             entrypoint = EntryPoint.BY_INTERNAL_NAME.get(entrypoint_name)
             if not entrypoint:
-                logging.warn("Ignoring unknown entry point %s" % entrypoint_name)
+                logging.warning("Ignoring unknown entry point %s" % entrypoint_name)
                 continue
             if not entrypoint_name in allowed_entrypoint_names:
-                logging.warn("Ignoring disabled entry point %s" % entrypoint_name)
+                logging.warning("Ignoring disabled entry point %s" % entrypoint_name)
                 continue
             for order in chosen_orders:
                 if order not in allowed_orders:
-                    logging.warn("Ignoring unsupported ordering %s" % order)
+                    logging.warning("Ignoring unsupported ordering %s" % order)
                     continue
                 for availability in chosen_availabilities:
                     if availability not in allowed_availabilities:
-                        logging.warn(
+                        logging.warning(
                             "Ignoring unsupported availability %s" % availability
                         )
                         continue
                     for collection in chosen_collections:
                         if collection not in allowed_collections:
-                            logging.warn(
+                            logging.warning(
                                 "Ignoring unsupported collection %s" % collection
                             )
                             continue
@@ -1395,7 +1395,7 @@ class DirectoryImportScript(TimestampScript):
         default_medium_type=None,
     ):
         if dry_run:
-            self.log.warn(
+            self.log.warning(
                 "This is a dry run. No files will be uploaded and nothing will change in the database."
             )
 
@@ -1829,7 +1829,7 @@ class DirectoryImportScript(TimestampScript):
 
         # If we went through that whole loop without returning,
         # we have failed.
-        logging.warn(
+        logging.warning(
             "Could not find %s for %s. Looked in: %s",
             file_type,
             base_filename,

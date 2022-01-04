@@ -41,7 +41,7 @@ from core.model import (
     RightsStatus,
     Work,
 )
-from core.opds import AcquisitionFeed, TestAnnotator, UnfulfillableWork
+from core.opds import AcquisitionFeed, MockAnnotator, UnfulfillableWork
 from core.opds_import import OPDSXMLParser
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import datetime_utc, utc_now
@@ -224,7 +224,7 @@ class TestCirculationManagerAnnotator(DatabaseTest):
         # Test the case where we accept the defaults.
         work = self._work()
         url = self._url
-        annotator = TestAnnotator()
+        annotator = MockAnnotator()
         response = m(self._db, work, annotator, url)
         assert isinstance(response, OPDSEntryResponse)
         assert "<title>%s</title>" % work.title in response.get_data(as_text=True)
@@ -1197,7 +1197,7 @@ class TestLibraryAnnotator(VendorIDTest):
 
         feed = AcquisitionFeed(self._db, "title", "url", [work], self.annotator)
         u = str(feed)
-        holds_re = re.compile('<opds:holds\W+total="25"\W*/>', re.S)
+        holds_re = re.compile(r'<opds:holds\W+total="25"\W*/>', re.S)
         assert holds_re.search(u) is not None
 
         copies_re = re.compile('<opds:copies[^>]+available="50"', re.S)

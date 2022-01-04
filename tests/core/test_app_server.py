@@ -23,7 +23,7 @@ from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EntryPoint
 from core.lane import Facets, Pagination, SearchFacets, WorkList
 from core.log import LogConfiguration
 from core.model import ConfigurationSetting, Identifier
-from core.opds import TestAnnotator
+from core.opds import MockAnnotator
 from core.problem_details import INVALID_INPUT, INVALID_URN
 from core.testing import DatabaseTest
 from core.util.opds_writer import OPDSFeed, OPDSMessage
@@ -164,7 +164,7 @@ class TestURNLookupController(DatabaseTest):
     def test_work_lookup(self):
         work = self._work(with_license_pool=True)
         identifier = work.license_pools[0].identifier
-        annotator = TestAnnotator()
+        annotator = MockAnnotator()
         # NOTE: We run this test twice to verify that the controller
         # doesn't keep any state between requests. At one point there
         # was a bug which would have caused a book to show up twice on
@@ -198,7 +198,7 @@ class TestURNLookupController(DatabaseTest):
         work = self._work(with_license_pool=True)
         work.license_pools[0].open_access = False
         identifier = work.license_pools[0].identifier
-        annotator = TestAnnotator()
+        annotator = MockAnnotator()
         with self.app.test_request_context("/?urn=%s" % identifier.urn):
             response = self.controller.permalink(identifier.urn, annotator)
 

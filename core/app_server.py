@@ -244,7 +244,7 @@ class ErrorHandler(object):
                 # service. It's a serious problem, but probably not
                 # indicative of a bug in our software. Log it at log level
                 # WARN.
-                log_method = logging.warn
+                log_method = logging.warning
             response = make_response(document.response)
         else:
             # There's no way to turn this exception into a problem

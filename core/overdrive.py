@@ -664,7 +664,7 @@ class OverdriveRepresentationExtractor(object):
         products = book_list["products"]
         for product in products:
             if not "id" in product:
-                cls.log.warn("No ID found in %r", product)
+                cls.log.warning("No ID found in %r", product)
                 continue
             book_id = product["id"]
             data = dict(
@@ -682,7 +682,7 @@ class OverdriveRepresentationExtractor(object):
                 link = links["availability"]["href"]
                 data["availability_link"] = OverdriveAPI.make_link_safe(link)
             else:
-                logging.getLogger("Overdrive API").warn(
+                logging.getLogger("Overdrive API").warning(
                     "No availability link for %s", book_id
                 )
             l.append(data)

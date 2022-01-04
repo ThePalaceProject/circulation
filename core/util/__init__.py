@@ -59,7 +59,7 @@ def slugify(text, length_limit=None):
     >>> slugify('Happy birthday!', length_limit=4)
     happ
     """
-    slug = re.sub("[.!@#'$,?\(\)]", "", text.lower())
+    slug = re.sub(r"[.!@#'$,?\(\)]", "", text.lower())
     slug = re.sub("&", " and ", slug)
     slug = re.sub(" {2,}", " ", slug)
 
@@ -75,7 +75,7 @@ def slugify(text, length_limit=None):
 class MetadataSimilarity(object):
     """Estimate how similar two bits of metadata are."""
 
-    SEPARATOR = re.compile("\W")
+    SEPARATOR = re.compile(r"\W")
 
     @classmethod
     def _wordbag(cls, s):

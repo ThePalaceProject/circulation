@@ -377,7 +377,9 @@ class ExternalIntegration(Base):
 
         integrations = integrations.all()
         if len(integrations) > 1:
-            logging.warn("Multiple integrations found for '%s'/'%s'" % (protocol, goal))
+            logging.warning(
+                "Multiple integrations found for '%s'/'%s'" % (protocol, goal)
+            )
 
         if [i for i in integrations if i.libraries] and not library:
             raise ValueError(

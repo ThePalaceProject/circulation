@@ -45,11 +45,11 @@ from core.opds import (
     AcquisitionFeed,
     Annotator,
     LookupAcquisitionFeed,
+    MockAnnotator,
+    MockAnnotatorWithGroup,
+    MockUnfulfillableAnnotator,
     NavigationFacets,
     NavigationFeed,
-    TestAnnotator,
-    TestAnnotatorWithGroup,
-    TestUnfulfillableAnnotator,
     VerboseAnnotator,
 )
 from core.opds_import import OPDSXMLParser
@@ -485,7 +485,7 @@ class TestOPDS(DatabaseTest):
         work = self._work(with_open_access_download=True, authors="Alice")
         [lp] = work.license_pools
 
-        annotator = TestAnnotatorWithGroup()
+        annotator = MockAnnotatorWithGroup()
         feed = AcquisitionFeed(
             self._db, "test", "http://the-url.com/", [work], annotator
         )
@@ -550,7 +550,7 @@ class TestOPDS(DatabaseTest):
         facets = Facets.default(self._default_library)
 
         cached_feed = AcquisitionFeed.page(
-            self._db, "title", "http://the-url.com/", lane, TestAnnotator, facets=facets
+            self._db, "title", "http://the-url.com/", lane, MockAnnotator, facets=facets
         )
 
         u = str(cached_feed)
@@ -631,7 +631,7 @@ class TestOPDS(DatabaseTest):
 
         self._db.commit()
         works = self._db.query(Work)
-        with_times = AcquisitionFeed(self._db, "test", "url", works, TestAnnotator)
+        with_times = AcquisitionFeed(self._db, "test", "url", works, MockAnnotator)
         u = str(with_times)
         assert "dcterms:issued" in u
 
@@ -678,7 +678,7 @@ class TestOPDS(DatabaseTest):
             w.calculate_opds_entries(verbose=False)
 
         works = self._db.query(Work)
-        with_publisher = AcquisitionFeed(self._db, "test", "url", works, TestAnnotator)
+        with_publisher = AcquisitionFeed(self._db, "test", "url", works, MockAnnotator)
         with_publisher = feedparser.parse(str(with_publisher))
         entries = sorted(with_publisher["entries"], key=lambda x: x["title"])
         assert "The Publisher" == entries[0]["dcterms_publisher"]
@@ -936,7 +936,7 @@ class TestOPDS(DatabaseTest):
                 "test",
                 self._url,
                 lane,
-                TestAnnotator,
+                MockAnnotator,
                 pagination=pagination,
                 search_engine=search_engine,
             )
@@ -947,16 +947,16 @@ class TestOPDS(DatabaseTest):
 
         # Make sure the links are in place.
         [up_link] = self.links(parsed, "up")
-        assert TestAnnotator.groups_url(lane.parent) == up_link["href"]
+        assert MockAnnotator.groups_url(lane.parent) == up_link["href"]
         assert lane.parent.display_name == up_link["title"]
 
         [start] = self.links(parsed, "start")
-        assert TestAnnotator.groups_url(None) == start["href"]
-        assert TestAnnotator.top_level_title() == start["title"]
+        assert MockAnnotator.groups_url(None) == start["href"]
+        assert MockAnnotator.top_level_title() == start["title"]
 
         [next_link] = self.links(parsed, "next")
         assert (
-            TestAnnotator.feed_url(lane, facets, pagination.next_page)
+            MockAnnotator.feed_url(lane, facets, pagination.next_page)
             == next_link["href"]
         )
 
@@ -967,7 +967,7 @@ class TestOPDS(DatabaseTest):
         cached_works = str(make_page(pagination.next_page))
         parsed = feedparser.parse(cached_works)
         [previous] = self.links(parsed, "previous")
-        assert TestAnnotator.feed_url(lane, facets, pagination) == previous["href"]
+        assert MockAnnotator.feed_url(lane, facets, pagination) == previous["href"]
         assert work2.title == parsed["entries"][0]["title"]
 
         # The feed has breadcrumb links
@@ -979,11 +979,11 @@ class TestOPDS(DatabaseTest):
         # There's one breadcrumb link for each parent Lane, plus one for
         # the top-level.
         assert len(parentage) + 1 == len(links)
-        assert TestAnnotator.top_level_title() == links[0].get("title")
-        assert TestAnnotator.default_lane_url() == links[0].get("href")
+        assert MockAnnotator.top_level_title() == links[0].get("title")
+        assert MockAnnotator.default_lane_url() == links[0].get("href")
         for i, lane in enumerate(parentage):
             assert lane.display_name == links[i + 1].get("title")
-            assert TestAnnotator.lane_url(lane) == links[i + 1].get("href")
+            assert MockAnnotator.lane_url(lane) == links[i + 1].get("href")
 
     def test_page_feed_for_worklist(self):
         # Test the ability to create a paginated feed of works for a
@@ -1004,7 +1004,7 @@ class TestOPDS(DatabaseTest):
                 "test",
                 self._url,
                 lane,
-                TestAnnotator,
+                MockAnnotator,
                 pagination=pagination,
                 search_engine=search_engine,
             )
@@ -1018,12 +1018,12 @@ class TestOPDS(DatabaseTest):
         assert [] == self.links(parsed, "up")
 
         [start] = self.links(parsed, "start")
-        assert TestAnnotator.groups_url(None) == start["href"]
-        assert TestAnnotator.top_level_title() == start["title"]
+        assert MockAnnotator.groups_url(None) == start["href"]
+        assert MockAnnotator.top_level_title() == start["title"]
 
         [next_link] = self.links(parsed, "next")
         assert (
-            TestAnnotator.feed_url(lane, facets, pagination.next_page)
+            MockAnnotator.feed_url(lane, facets, pagination.next_page)
             == next_link["href"]
         )
 
@@ -1034,7 +1034,7 @@ class TestOPDS(DatabaseTest):
         cached_works = str(make_page(pagination.next_page))
         parsed = feedparser.parse(cached_works)
         [previous] = self.links(parsed, "previous")
-        assert TestAnnotator.feed_url(lane, facets, pagination) == previous["href"]
+        assert MockAnnotator.feed_url(lane, facets, pagination) == previous["href"]
         assert work2.title == parsed["entries"][0]["title"]
 
         # The feed has no parents, so no breadcrumbs.
@@ -1091,7 +1091,7 @@ class TestOPDS(DatabaseTest):
                 "url",
                 pagination,
                 url_fn,
-                TestAnnotator,
+                MockAnnotator,
             )
 
         works = from_query(pagination)
@@ -1101,7 +1101,7 @@ class TestOPDS(DatabaseTest):
 
         [next_link] = self.links(parsed, "next")
         assert (
-            TestAnnotator.feed_url(worklist, pagination=pagination.next_page)
+            MockAnnotator.feed_url(worklist, pagination=pagination.next_page)
             == next_link["href"]
         )
 
@@ -1113,7 +1113,7 @@ class TestOPDS(DatabaseTest):
         parsed = feedparser.parse(str(works))
         [previous_link] = self.links(parsed, "previous")
         assert (
-            TestAnnotator.feed_url(worklist, pagination=pagination.previous_page)
+            MockAnnotator.feed_url(worklist, pagination=pagination.previous_page)
             == previous_link["href"]
         )
         assert 1 == len(parsed["entries"])
@@ -1144,7 +1144,7 @@ class TestOPDS(DatabaseTest):
             "Urban Fantasy", parent=self.fantasy, genres=["Urban Fantasy"]
         )
 
-        annotator = TestAnnotatorWithGroup()
+        annotator = MockAnnotatorWithGroup()
         private = object()
         cached_groups = AcquisitionFeed.groups(
             self._db,
@@ -1216,7 +1216,7 @@ class TestOPDS(DatabaseTest):
         # Mock search index and Annotator.
         search_engine = MockExternalSearchIndex()
 
-        class Mock(TestAnnotator):
+        class Mock(MockAnnotator):
             def annotate_feed(self, feed, worklist):
                 self.called = True
 
@@ -1269,7 +1269,7 @@ class TestOPDS(DatabaseTest):
                 "fantasy",
                 pagination=pagination,
                 facets=facets,
-                annotator=TestAnnotator,
+                annotator=MockAnnotator,
                 private=private,
             )
 
@@ -1284,11 +1284,11 @@ class TestOPDS(DatabaseTest):
 
         # Make sure the links are in place.
         [start] = self.links(parsed, "start")
-        assert TestAnnotator.groups_url(None) == start["href"]
-        assert TestAnnotator.top_level_title() == start["title"]
+        assert MockAnnotator.groups_url(None) == start["href"]
+        assert MockAnnotator.top_level_title() == start["title"]
 
         [next_link] = self.links(parsed, "next")
-        expect = TestAnnotator.search_url(
+        expect = MockAnnotator.search_url(
             fantasy_lane, "test", pagination.next_page, facets=facets
         )
         assert expect == next_link["href"]
@@ -1303,7 +1303,7 @@ class TestOPDS(DatabaseTest):
 
         # Make sure there's an "up" link to the lane that was searched
         [up_link] = self.links(parsed, "up")
-        uplink_url = TestAnnotator.lane_url(fantasy_lane)
+        uplink_url = MockAnnotator.lane_url(fantasy_lane)
         assert uplink_url == up_link["href"]
         assert fantasy_lane.display_name == up_link["title"]
 
@@ -1311,7 +1311,7 @@ class TestOPDS(DatabaseTest):
         feed = str(make_page(pagination.next_page))
         parsed = feedparser.parse(feed)
         [previous] = self.links(parsed, "previous")
-        expect = TestAnnotator.search_url(
+        expect = MockAnnotator.search_url(
             fantasy_lane, "test", pagination, facets=facets
         )
         assert expect == previous["href"]
@@ -1344,7 +1344,7 @@ class TestOPDS(DatabaseTest):
                 "test",
                 self._url,
                 fantasy_lane,
-                TestAnnotator,
+                MockAnnotator,
                 pagination=Pagination.default(),
                 search_engine=search_engine,
             )
@@ -1387,7 +1387,7 @@ class TestAcquisitionFeed(DatabaseTest):
             "feed title",
             "url",
             wl,
-            TestAnnotator,
+            MockAnnotator,
             max_age=10,
             private=private,
         )
@@ -1403,7 +1403,7 @@ class TestAcquisitionFeed(DatabaseTest):
     def test_as_response(self):
         # Verify the ability to convert an AcquisitionFeed object to an
         # OPDSFeedResponse containing the feed.
-        feed = AcquisitionFeed(self._db, "feed title", "http://url/", [], TestAnnotator)
+        feed = AcquisitionFeed(self._db, "feed title", "http://url/", [], MockAnnotator)
 
         # Some other piece of code set expectations for how this feed should
         # be cached.
@@ -1422,7 +1422,7 @@ class TestAcquisitionFeed(DatabaseTest):
     def test_as_error_response(self):
         # Verify the ability to convert an AcquisitionFeed object to an
         # OPDSFeedResponse that is to be treated as an error message.
-        feed = AcquisitionFeed(self._db, "feed title", "http://url/", [], TestAnnotator)
+        feed = AcquisitionFeed(self._db, "feed title", "http://url/", [], MockAnnotator)
 
         # Some other piece of code set expectations for how this feed should
         # be cached.
@@ -1674,7 +1674,7 @@ class TestAcquisitionFeed(DatabaseTest):
         # this Work.
         private = object()
         entry = AcquisitionFeed.single_entry(
-            self._db, work, TestAnnotator, private=private
+            self._db, work, MockAnnotator, private=private
         )
         assert isinstance(entry, OPDSEntryResponse)
 
@@ -1694,7 +1694,7 @@ class TestAcquisitionFeed(DatabaseTest):
         five_hundred_years = datetime.timedelta(days=(500 * 365))
         work.presentation_edition.issued = utc_now() - five_hundred_years
 
-        entry = AcquisitionFeed.single_entry(self._db, work, TestAnnotator)
+        entry = AcquisitionFeed.single_entry(self._db, work, MockAnnotator)
 
         expected = str(work.presentation_edition.issued.date())
         assert expected in str(entry)
@@ -1740,7 +1740,7 @@ class TestAcquisitionFeed(DatabaseTest):
 
         # But now the annotator is set up to insert a tag with that
         # namespace.
-        class AddDRMTagAnnotator(TestAnnotator):
+        class AddDRMTagAnnotator(MockAnnotator):
             @classmethod
             def annotate_work_entry(
                 cls, work, license_pool, edition, identifier, feed, entry
@@ -1762,7 +1762,7 @@ class TestAcquisitionFeed(DatabaseTest):
         work = self._work(title="Hello, World!", with_license_pool=True)
         work.license_pools[0].identifier = None
         work.presentation_edition.primary_identifier = None
-        entry = AcquisitionFeed.single_entry(self._db, work, TestAnnotator)
+        entry = AcquisitionFeed.single_entry(self._db, work, MockAnnotator)
         assert entry == None
 
     def test_error_when_work_has_no_licensepool(self):
@@ -1852,7 +1852,7 @@ class TestAcquisitionFeed(DatabaseTest):
         response = AcquisitionFeed.single_entry(
             self._db,
             work,
-            TestUnfulfillableAnnotator,
+            MockUnfulfillableAnnotator,
         )
         assert isinstance(response, Response)
         expect = AcquisitionFeed.error_message(
@@ -1921,7 +1921,7 @@ class TestAcquisitionFeed(DatabaseTest):
         class MockFeed(AcquisitionFeed):
             def __init__(self):
                 super(MockFeed, self).__init__(
-                    _db, "", "", [], annotator=TestAnnotator()
+                    _db, "", "", [], annotator=MockAnnotator()
                 )
                 self.feed = []
 
@@ -1943,7 +1943,7 @@ class TestAcquisitionFeed(DatabaseTest):
             # For easier reading, all assertions in this test are
             # written as calls to this function.
             feed = MockFeed()
-            annotator = TestAnnotator()
+            annotator = MockAnnotator()
 
             entrypoint = add_breadcrumbs_kwargs.get("entrypoint", None)
             include_lane = add_breadcrumbs_kwargs.get("include_lane", False)
@@ -2107,7 +2107,7 @@ class TestAcquisitionFeed(DatabaseTest):
             def show_current_entrypoint(self, entrypoint):
                 self.current_entrypoint = entrypoint
 
-        annotator = TestAnnotator
+        annotator = MockAnnotator
         feed = MockFeed(self._db, "title", "url", [], annotator=annotator)
 
         lane = self._lane()
@@ -2236,7 +2236,7 @@ class TestLookupAcquisitionFeed(DatabaseTest):
         entry = feed.create_entry((identifier, work))
         if isinstance(entry, OPDSMessage):
             return feed, entry
-        if entry:
+        if entry is not None:
             entry = etree.tounicode(entry)
         return feed, entry
 
@@ -2312,7 +2312,7 @@ class TestLookupAcquisitionFeed(DatabaseTest):
     def test_unfilfullable_work(self):
         work = self._work(with_open_access_download=True)
         [pool] = work.license_pools
-        feed, entry = self.entry(pool.identifier, work, TestUnfulfillableAnnotator)
+        feed, entry = self.entry(pool.identifier, work, MockUnfulfillableAnnotator)
         expect = AcquisitionFeed.error_message(
             pool.identifier,
             403,
@@ -2414,7 +2414,7 @@ class TestEntrypointLinkInsertion(DatabaseTest):
         self.no_eps.works = works
         self.wl.works = works
 
-        self.annotator = TestAnnotator
+        self.annotator = MockAnnotator
         self.old_add_entrypoint_links = AcquisitionFeed.add_entrypoint_links
         AcquisitionFeed.add_entrypoint_links = self.mock.add_entrypoint_links
 
@@ -2618,7 +2618,7 @@ class TestNavigationFeed(DatabaseTest):
             "Navigation",
             "http://navigation",
             self.fiction,
-            TestAnnotator,
+            MockAnnotator,
             max_age=42,
             private=private,
         )
@@ -2663,7 +2663,7 @@ class TestNavigationFeed(DatabaseTest):
 
     def test_navigation_without_sublanes(self):
         feed = NavigationFeed.navigation(
-            self._db, "Navigation", "http://navigation", self.fantasy, TestAnnotator
+            self._db, "Navigation", "http://navigation", self.fantasy, MockAnnotator
         )
         parsed = feedparser.parse(str(feed))
         assert "Navigation" == parsed["feed"]["title"]

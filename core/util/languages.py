@@ -632,7 +632,7 @@ class LanguageNames(object):
     ignore = set(["No linguistic content", "Not applicable", "Uncoded"])
 
     number = re.compile("[0-9]")
-    parentheses = re.compile("\([^)]+\)")
+    parentheses = re.compile(r"\([^)]+\)")
 
     @classmethod
     def _process(cls, human_readable_name, alpha):

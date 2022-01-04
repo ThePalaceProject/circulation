@@ -463,7 +463,7 @@ class ContributorData(object):
                     sort_name,
                 )
             else:
-                log.warn(
+                log.warning(
                     "Canonicalizer could not find sort name for %r/%s",
                     identifier_obj,
                     self.display_name,
@@ -838,7 +838,7 @@ class MetaToModelUtility(object):
             link_obj.identifier and identifier != link_obj.identifier
         ):
             # insanity found
-            self.log.warn(
+            self.log.warning(
                 "Tried to mirror a link with an invalid identifier %r" % identifier
             )
             return
@@ -2366,7 +2366,7 @@ class CSVMetadataImporter(object):
         language = self._field(row, self.language_field, self.default_language)
         medium = self._field(row, self.medium_field, self.default_medium)
         if medium not in list(Edition.medium_to_additional_type.keys()):
-            self.log.warn("Ignored unrecognized medium %s" % medium)
+            self.log.warning("Ignored unrecognized medium %s" % medium)
             medium = Edition.BOOK_MEDIUM
         series = self._field(row, self.series_field)
         publisher = self._field(row, self.publisher_field)
@@ -2486,7 +2486,7 @@ class CSVMetadataImporter(object):
             try:
                 value = to_utc(parse(value))
             except ValueError:
-                self.log.warn('Could not parse date "%s"' % value)
+                self.log.warning('Could not parse date "%s"' % value)
                 value = None
         return value
 
@@ -2501,10 +2501,10 @@ class MARCExtractor(object):
     # Common things found in a MARC record after the name of the author
     # which we sould like to remove.
     END_OF_AUTHOR_NAME_RES = [
-        re.compile(",\s+[0-9]+-"),  # Birth year
-        re.compile(",\s+active "),
-        re.compile(",\s+graf,"),
-        re.compile(",\s+author."),
+        re.compile(r",\s+[0-9]+-"),  # Birth year
+        re.compile(r",\s+active "),
+        re.compile(r",\s+graf,"),
+        re.compile(r",\s+author."),
     ]
 
     @classmethod

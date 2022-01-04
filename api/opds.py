@@ -1193,7 +1193,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         if not self.identifies_patrons and rel != OPDSFeed.OPEN_ACCESS_REL:
             return
         if isinstance(delivery_mechanism, LicensePoolDeliveryMechanism):
-            logging.warn(
+            logging.warning(
                 "LicensePoolDeliveryMechanism passed into fulfill_link instead of DeliveryMechanism!"
             )
             delivery_mechanism = delivery_mechanism.delivery_mechanism

@@ -1896,7 +1896,7 @@ class SettingsController(AdminCirculationManagerController):
             message = _("Exception getting self-test results for %s %s: %s")
             error_message = str(e)
             args = (self.type, item.name, error_message)
-            logging.warn(message, *args, exc_info=error_message)
+            logging.warning(message, *args, exc_info=error_message)
             self_test_results = dict(exception=message % args)
 
         return self_test_results
