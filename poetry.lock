@@ -1348,14 +1348,17 @@ testing = ["coverage (>=4)", "coverage-enable-subprocess (>=1)", "flaky (>=3)", 
 
 [[package]]
 name = "watchtower"
-version = "0.8.0"
+version = "2.0.1"
 description = "Python CloudWatch Logging"
 category = "main"
 optional = false
-python-versions = "*"
+python-versions = ">=3.6"
 
 [package.dependencies]
 boto3 = ">=1.9.253,<2"
+
+[package.extras]
+tests = ["pyyaml (>=5.3.1,<6)", "flake8 (>=4.0.1,<5)", "coverage", "build", "wheel", "mypy"]
 
 [[package]]
 name = "wcag-contrast-ratio"
@@ -1416,7 +1419,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.6.1,<4"
-content-hash = "d01797d4187b58ad47d65fa39e797e1eaf0eb7ccd662f5bd2baa25a795c7cfd3"
+content-hash = "79a81460f0acc0bb3962c275cdaca419f87c8a84e73b9806b59804b649e288c9"
 
 [metadata.files]
 alabaster = [
@@ -2390,8 +2393,8 @@ virtualenv = [
     {file = "virtualenv-20.10.0.tar.gz", hash = "sha256:576d05b46eace16a9c348085f7d0dc8ef28713a2cabaa1cf0aea41e8f12c9218"},
 ]
 watchtower = [
-    {file = "watchtower-0.8.0-py2.py3-none-any.whl", hash = "sha256:d6704b258494bddc3e9ddda286ef5067e4b09ab4287aea4289afdd035cc4742b"},
-    {file = "watchtower-0.8.0.tar.gz", hash = "sha256:9733d1dfc2ab25880386188ee41b19d39893a09c91725bd92b2f782a72890fda"},
+    {file = "watchtower-2.0.1-py3-none-any.whl", hash = "sha256:85ce51084e761ee7dd94142604af77536ab149c78bf80a4e839c7baa286b95b3"},
+    {file = "watchtower-2.0.1.tar.gz", hash = "sha256:7c010791fbe89a7b4f82334a1f9696f60a6a8acdb608839dc9045f574fa46ef7"},
 ]
 wcag-contrast-ratio = [
     {file = "wcag-contrast-ratio-0.9.tar.gz", hash = "sha256:69192b8e5c0a7d0dc5ff1187eeb3e398141633a4bde51c69c87f58fe87ed361c"},
