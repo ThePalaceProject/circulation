@@ -67,7 +67,7 @@ python3-saml = "1.12.0"  # python-saml is required for SAML authentication
 pytz = "2021.3"
 requests = "~2.27"
 Sphinx = { version = "1.8.5", optional = true }  # Sphinx is for code documentation
-sphinxcontrib-websupport = { version = "1.1.2", optional = true }
+sphinxcontrib-websupport = { version = "1.2.4", optional = true }
 SQLAlchemy = "~1.3.19"
 textblob = "0.15.3"
 typing-extensions = { version = "~4.0", python = "< 3.8" }
