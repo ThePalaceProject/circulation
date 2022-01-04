@@ -10,7 +10,6 @@ import unicodedata
 import uuid
 from collections import defaultdict
 from enum import Enum
-from pdb import set_trace
 
 from sqlalchemy import and_, exists, text
 from sqlalchemy.exc import ProgrammingError
@@ -158,7 +157,6 @@ class Script(object):
         :param exception: A stack trace for the exception, if any,
            that stopped the script from running.
         """
-        pass
 
 
 class TimestampScript(Script):

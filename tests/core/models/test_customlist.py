@@ -1,5 +1,4 @@
 # encoding: utf-8
-from pdb import set_trace
 
 import pytest
 

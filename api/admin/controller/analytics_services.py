@@ -4,7 +4,7 @@ from flask import Response
 from api.admin.problem_details import *
 from api.google_analytics_provider import GoogleAnalyticsProvider
 from core.local_analytics_provider import LocalAnalyticsProvider
-from core.model import ExternalIntegration, get_one
+from core.model import ExternalIntegration
 from core.util.problem_detail import ProblemDetail
 
 from . import SettingsController

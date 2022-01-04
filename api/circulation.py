@@ -1652,7 +1652,6 @@ class BaseCirculationAPI(object):
         :param pin: The patron's alleged password.
         :param licensepool: Contains lending info as well as link to parent Identifier.
         """
-        pass
 
     def checkout(self, patron, pin, licensepool, internal_format):
         """Check out a book on behalf of a patron.
@@ -1722,4 +1721,3 @@ class BaseCirculationAPI(object):
 
     def update_availability(self, licensepool):
         """Update availability information for a book."""
-        pass

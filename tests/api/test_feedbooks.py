@@ -1,5 +1,4 @@
 # encoding: utf-8
-import os
 from io import BytesIO
 from zipfile import ZipFile
 
@@ -8,7 +7,6 @@ import pytest
 from api.feedbooks import FeedbooksImportMonitor, FeedbooksOPDSImporter, RehostingPolicy
 from core.metadata_layer import LinkData, Metadata
 from core.model import (
-    Collection,
     DataSource,
     ExternalIntegration,
     Hyperlink,

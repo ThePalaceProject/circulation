@@ -1,6 +1,4 @@
 import pytest
-from flask import Response
-from lxml import etree
 
 from api.config import CannotLoadConfiguration
 from api.custom_patron_catalog import COPPAGate, CustomPatronCatalog, CustomRootLane
@@ -256,4 +254,3 @@ class TestCOPPAGate(DatabaseTest):
             "start",
             dict(href=no_url, type=OPDSFeed.ACQUISITION_FEED_TYPE),
         ) == gate.replace_link_called_with
-        pass

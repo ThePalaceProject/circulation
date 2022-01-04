@@ -11,7 +11,7 @@ from api.opds_for_distributors import (
     OPDSForDistributorsImporter,
     OPDSForDistributorsReaperMonitor,
 )
-from core.metadata_layer import CirculationData, LinkData, TimestampData
+from core.metadata_layer import CirculationData, LinkData
 from core.model import (
     Collection,
     Credential,

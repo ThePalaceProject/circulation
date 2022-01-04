@@ -1,9 +1,7 @@
 import base64
 import datetime
 import json
-import re
 
-import jwt
 import pytest
 from jwt.exceptions import DecodeError, ExpiredSignatureError, InvalidIssuedAtError
 
@@ -16,8 +14,7 @@ from api.adobe_vendor_id import (
     AuthdataUtility,
     DeviceManagementRequestHandler,
 )
-from api.config import CannotLoadConfiguration, Configuration, temp_config
-from api.opds import CirculationManagerAnnotator
+from api.config import CannotLoadConfiguration, Configuration
 from api.problem_details import *
 from api.registration.constants import RegistrationConstants
 from api.simple_authentication import SimpleAuthenticationProvider
@@ -28,7 +25,6 @@ from core.model import (
     DataSource,
     DelegatedPatronIdentifier,
     ExternalIntegration,
-    Library,
 )
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.problem_detail import ProblemDetail
@@ -1131,7 +1127,7 @@ class TestAuthdataUtility(VendorIDTest):
         assert [] == self._db.query(DelegatedPatronIdentifier).all()
 
     def test_migrate_adobe_id_success(self):
-        from api.opds import CirculationManagerAnnotator
+        pass
 
         patron = self._patron()
 

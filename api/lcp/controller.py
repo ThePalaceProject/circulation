@@ -1,7 +1,6 @@
 import logging
 
 import flask
-from flask import Response
 
 from api.admin.problem_details import MISSING_COLLECTION
 from api.controller import CirculationManagerController

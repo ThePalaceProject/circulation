@@ -14,7 +14,7 @@ from core.model import (
     get_one,
 )
 from core.model.configuration import ExternalIntegrationLink
-from core.s3 import S3Uploader, S3UploaderConfiguration
+from core.s3 import S3UploaderConfiguration
 
 from .test_controller import SettingsControllerTest
 

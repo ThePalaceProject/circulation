@@ -13,7 +13,6 @@ from flask import redirect
 from flask_babel import lazy_gettext as _
 
 from api.problem_details import *
-from api.saml.auth import SAMLAuthenticationManager
 from api.saml.configuration.model import SAMLConfigurationFactory
 from api.saml.metadata.parser import SAMLMetadataParser
 from core.util.problem_detail import ProblemDetail

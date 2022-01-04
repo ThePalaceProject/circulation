@@ -1,14 +1,10 @@
 """Interface to the New York Times APIs."""
 import json
 import logging
-import os
-from collections import Counter
 from datetime import datetime, timedelta
 
 import dateutil
-import isbnlib
 from flask_babel import lazy_gettext as _
-from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 
 from core.external_list import TitleFromExternalList

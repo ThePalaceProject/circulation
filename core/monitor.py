@@ -245,7 +245,6 @@ class Monitor(object):
         """Do any work that needs to be done at the end, once the main work
         has completed successfully.
         """
-        pass
 
 
 class TimelineMonitor(Monitor):

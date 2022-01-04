@@ -1,7 +1,6 @@
 import base64
 import json
 
-import flask
 import pytest
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.PublicKey import RSA

@@ -3,7 +3,6 @@
 import datetime
 import uuid
 
-import sqlalchemy
 from sqlalchemy import (
     Column,
     DateTime,

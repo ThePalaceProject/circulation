@@ -11,7 +11,6 @@ from api.novelist import NoveListAPI
 from api.nyt import NYTBestSellerAPI
 from core.model import AdminRole, ExternalIntegration, Library, create, get_one
 from core.opds_import import MetadataWranglerOPDSLookup
-from core.util.http import HTTP
 
 from .test_controller import SettingsControllerTest
 

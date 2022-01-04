@@ -1,7 +1,6 @@
 # encoding: utf-8
 import json
 import os
-import pkgutil
 
 import pytest
 
@@ -9,7 +8,6 @@ from core.config import CannotLoadConfiguration
 from core.coverage import CoverageFailure
 from core.metadata_layer import LinkData
 from core.model import (
-    Collection,
     Contributor,
     DeliveryMechanism,
     Edition,
@@ -30,7 +28,7 @@ from core.overdrive import (
 )
 from core.scripts import RunCollectionCoverageProviderScript
 from core.testing import DatabaseTest, MockRequestsResponse
-from core.util.http import HTTP, BadResponseException
+from core.util.http import BadResponseException
 from core.util.string_helpers import base64
 
 

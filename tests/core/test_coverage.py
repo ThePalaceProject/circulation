@@ -4,9 +4,7 @@ import pytest
 
 from core.coverage import (
     BaseCoverageProvider,
-    BibliographicCoverageProvider,
     CatalogCoverageProvider,
-    CollectionCoverageProvider,
     CoverageFailure,
     CoverageProviderProgress,
     IdentifierCoverageProvider,
@@ -27,13 +25,11 @@ from core.metadata_layer import (
     SubjectData,
 )
 from core.model import (
-    Collection,
     CollectionMissing,
     Contributor,
     CoverageRecord,
     DataSource,
     DeliveryMechanism,
-    Edition,
     ExternalIntegration,
     Hyperlink,
     Identifier,
@@ -1936,7 +1932,6 @@ class TestCatalogCoverageProvider(CoverageProviderTest):
         class Provider(CatalogCoverageProvider):
             SERVICE_NAME = "test"
             DATA_SOURCE_NAME = DataSource.OVERDRIVE
-            pass
 
         provider = Provider(c1)
         assert [i1] == provider.items_that_need_coverage().all()

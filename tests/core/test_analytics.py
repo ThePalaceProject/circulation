@@ -1,10 +1,7 @@
-import json
-
 from core.analytics import Analytics
-from core.config import Configuration, temp_config
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.mock_analytics_provider import MockAnalyticsProvider
-from core.model import CirculationEvent, ExternalIntegration, Library, create, get_one
+from core.model import CirculationEvent, ExternalIntegration, Library, create
 from core.testing import DatabaseTest
 
 # We can't import mock_analytics_provider from within a test,

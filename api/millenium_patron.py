@@ -1,23 +1,20 @@
 import datetime
-import logging
-import os
 import re
 from urllib import parse
 
 import dateutil
-import requests
 from flask_babel import lazy_gettext as _
 from lxml import etree
 from money import Money
 
-from core.model import ExternalIntegration, Patron, get_one, get_one_or_create
+from core.model import ExternalIntegration
 from core.util import MoneyUtility
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.http import HTTP
 from core.util.xmlparser import XMLParser
 
 from .authenticator import BasicAuthenticationProvider, PatronData
-from .config import CannotLoadConfiguration, Configuration
+from .config import CannotLoadConfiguration
 
 
 class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):

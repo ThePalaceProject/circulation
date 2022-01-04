@@ -1,5 +1,3 @@
-import flask
-from flask import Response
 from flask_babel import lazy_gettext as _
 
 from api.admin.controller.self_tests import SelfTestsController
@@ -7,7 +5,6 @@ from api.admin.problem_details import *
 from core.model import Collection
 from core.opds_import import OPDSImporter, OPDSImportMonitor
 from core.selftest import HasSelfTests
-from core.util.problem_detail import ProblemDetail
 
 
 class CollectionSelfTestsController(SelfTestsController):

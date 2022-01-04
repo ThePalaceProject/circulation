@@ -39,7 +39,7 @@ from core.model import (
 from core.model.configuration import ExternalIntegrationLink
 from core.s3 import MockS3Uploader
 from core.testing import DatabaseTest, DummyHTTPClient, DummyMetadataClient
-from core.util.datetime_helpers import datetime_utc, strptime_utc, to_utc, utc_now
+from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
 from core.util.http import RemoteIntegrationException
 
 

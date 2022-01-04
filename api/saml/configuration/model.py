@@ -1,6 +1,5 @@
 import cgi
 import html
-import json
 from threading import Lock
 
 from contextlib2 import contextmanager

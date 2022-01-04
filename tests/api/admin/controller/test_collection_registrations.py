@@ -4,7 +4,7 @@ from werkzeug.datastructures import MultiDict
 
 from api.admin.exceptions import *
 from api.odl import SharedODLAPI
-from api.registration.registry import Registration, RemoteRegistry
+from api.registration.registry import Registration
 from core.model import AdminRole, ConfigurationSetting, Library, create
 from core.util.http import HTTP
 

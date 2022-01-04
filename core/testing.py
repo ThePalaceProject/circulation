@@ -1632,7 +1632,6 @@ class MockRequestsResponse(object):
         """Null implementation of raise_for_status, a method
         implemented by real requests Response objects.
         """
-        pass
 
 
 @pytest.fixture(autouse=True, scope="session")

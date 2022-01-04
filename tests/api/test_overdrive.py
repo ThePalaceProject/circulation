@@ -1,6 +1,5 @@
 # encoding: utf-8
 import json
-import pkgutil
 import random
 from datetime import timedelta
 
@@ -23,7 +22,6 @@ from api.overdrive import (
 from core.metadata_layer import TimestampData
 from core.model import (
     CirculationEvent,
-    Collection,
     ConfigurationSetting,
     DataSource,
     DeliveryMechanism,

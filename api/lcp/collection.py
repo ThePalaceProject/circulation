@@ -15,7 +15,6 @@ from core.model import (
     DeliveryMechanism,
     ExternalIntegration,
     LicensePool,
-    LicensePoolDeliveryMechanism,
     Loan,
     get_one,
 )

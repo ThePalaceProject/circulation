@@ -24,7 +24,7 @@ from core.classifier.keyword import FASTClassifier as FAST
 from core.classifier.keyword import LCSHClassifier as LCSH
 from core.classifier.lcc import LCCClassifier as LCC
 from core.classifier.simplified import SimplifiedGenreClassifier
-from core.model import Classification, DataSource, Genre, Subject
+from core.model import DataSource, Genre, Subject
 from core.testing import DatabaseTest
 
 genres = dict()

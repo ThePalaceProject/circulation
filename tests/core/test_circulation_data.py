@@ -15,12 +15,10 @@ from core.metadata_layer import (
     SubjectData,
 )
 from core.model import (
-    Collection,
     DataSource,
     DeliveryMechanism,
     Hyperlink,
     Identifier,
-    License,
     Representation,
     RightsStatus,
     Subject,

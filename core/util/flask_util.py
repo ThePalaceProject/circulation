@@ -3,7 +3,6 @@ import datetime
 import time
 from wsgiref.handlers import format_date_time
 
-import flask
 from flask import Response as FlaskResponse
 from lxml import etree
 

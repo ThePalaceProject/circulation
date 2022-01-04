@@ -1,7 +1,6 @@
 # encoding: utf-8
 # IntegrationClient
 
-import os
 import re
 
 from sqlalchemy import Boolean, Column, DateTime, Integer, Unicode

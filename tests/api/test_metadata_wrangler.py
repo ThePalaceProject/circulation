@@ -16,7 +16,7 @@ from api.metadata_wrangler import (
     MWCollectionUpdateMonitor,
 )
 from api.testing import MonitorTest
-from core.config import CannotLoadConfiguration, Configuration, temp_config
+from core.config import CannotLoadConfiguration
 from core.coverage import CoverageFailure
 from core.model import (
     CoverageRecord,

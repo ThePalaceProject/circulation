@@ -9,7 +9,6 @@ package_dir = os.path.join(bin_dir, "..")
 sys.path.append(os.path.abspath(package_dir))
 
 # NOTE: We need to import it explicitly to initialize MirrorUploader.IMPLEMENTATION_REGISTRY
-from core import s3
 from core.scripts import OPDSImportScript
 
 OPDSImportScript().run()

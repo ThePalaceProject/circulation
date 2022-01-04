@@ -6,7 +6,6 @@ from flask_babel import lazy_gettext as _
 
 from api.admin.exceptions import *
 from api.admin.problem_details import *
-from api.admin.validator import Validator
 from core.model import Admin, AdminRole, Library, get_one, get_one_or_create
 from core.util.problem_detail import ProblemDetail
 

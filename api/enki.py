@@ -1,7 +1,6 @@
 import datetime
 import json
 import logging
-import os
 import time
 
 from flask_babel import lazy_gettext as _
@@ -28,24 +27,17 @@ from core.model import (
     ExternalIntegration,
     Hyperlink,
     Identifier,
-    LicensePool,
     Representation,
     Session,
     Subject,
 )
-from core.monitor import (
-    CollectionMonitor,
-    IdentifierSweepMonitor,
-    Monitor,
-    TimelineMonitor,
-)
+from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import from_timestamp, strptime_utc, utc_now
 from core.util.http import HTTP, RemoteIntegrationException, RequestTimedOut
 
 from .circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
 from .circulation_exceptions import *
-from .config import CannotLoadConfiguration
 from .selftest import HasSelfTests, SelfTestResult
 
 

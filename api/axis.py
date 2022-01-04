@@ -6,7 +6,7 @@ import socket
 import ssl
 import urllib
 from datetime import timedelta
-from typing import Optional, Union
+from typing import Union
 
 import certifi
 from flask_babel import lazy_gettext as _

@@ -15,7 +15,6 @@ from core.model.configuration import (
     ConfigurationFactory,
     ConfigurationGrouping,
     ConfigurationMetadata,
-    ConfigurationOption,
     ConfigurationStorage,
 )
 from core.util import is_session

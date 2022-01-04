@@ -5,7 +5,6 @@
 import base64 as stdlib_base64
 import binascii
 import os
-import sys
 
 
 class UnicodeAwareBase64(object):

@@ -6,15 +6,7 @@ import pytest
 from api.config import CannotLoadConfiguration
 from api.novelist import MockNoveListAPI, NoveListAPI
 from core.metadata_layer import Metadata
-from core.model import (
-    DataSource,
-    Edition,
-    ExternalIntegration,
-    Identifier,
-    Representation,
-    get_one,
-    get_one_or_create,
-)
+from core.model import DataSource, ExternalIntegration, Identifier
 from core.testing import DatabaseTest, DummyHTTPClient, MockRequestsResponse
 from core.util.http import HTTP
 

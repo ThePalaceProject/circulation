@@ -1,9 +1,7 @@
 # encoding: utf-8
 import json
-import logging
 import re
 import time
-from collections import defaultdict
 
 import pytest
 from elasticsearch.exceptions import ElasticsearchException
@@ -29,7 +27,6 @@ from core.external_search import (
     CurrentMapping,
     ExternalSearchIndex,
     Filter,
-    Mapping,
     MockExternalSearchIndex,
     MockSearchResult,
     Query,
@@ -40,7 +37,7 @@ from core.external_search import (
     WorkSearchResult,
     mock_search_index,
 )
-from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
+from core.lane import Facets, FeaturedFacets, Pagination, SearchFacets, WorkList
 from core.metadata_layer import ContributorData, IdentifierData
 from core.model import (
     ConfigurationSetting,
@@ -48,9 +45,7 @@ from core.model import (
     Contributor,
     DataSource,
     Edition,
-    ExternalIntegration,
     Genre,
-    Work,
     WorkCoverageRecord,
     get_one_or_create,
 )

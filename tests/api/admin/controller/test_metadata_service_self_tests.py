@@ -1,10 +1,7 @@
-from flask_babel import lazy_gettext as _
-
 from api.admin.problem_details import *
 from api.nyt import NYTBestSellerAPI
 from core.model import ExternalIntegration, create
-from core.opds_import import MetadataWranglerOPDSLookup
-from core.selftest import HasSelfTests, SelfTestResult
+from core.selftest import HasSelfTests
 
 from .test_controller import SettingsControllerTest
 

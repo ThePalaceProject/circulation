@@ -2,7 +2,6 @@ import base64
 import json
 import logging
 
-import flask
 from flask_babel import lazy_gettext as _
 
 from core.config import CannotLoadConfiguration

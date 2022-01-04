@@ -1,5 +1,4 @@
 import datetime
-import re
 
 import pytz
 from lxml import etree

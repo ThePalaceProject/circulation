@@ -8,16 +8,7 @@ from api.monitor import (
     LoanReaper,
 )
 from api.odl import ODLAPI, SharedODLAPI
-from api.testing import MonitorTest
-from core.metadata_layer import TimestampData
-from core.model import (
-    Annotation,
-    Collection,
-    CoverageRecord,
-    DataSource,
-    ExternalIntegration,
-    Identifier,
-)
+from core.model import Annotation, DataSource, ExternalIntegration
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
 

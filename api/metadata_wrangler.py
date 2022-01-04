@@ -5,7 +5,7 @@ from io import StringIO
 
 import feedparser
 from lxml import etree
-from sqlalchemy import and_, func, or_
+from sqlalchemy import or_
 from sqlalchemy.orm import aliased, contains_eager
 
 from api.coverage import OPDSImportCoverageProvider, ReaperImporter, RegistrarImporter

@@ -1,4 +1,3 @@
-import datetime
 import unicodedata
 import urllib.parse
 
@@ -7,7 +6,6 @@ from psycopg2.extras import NumericRange
 
 from api.config import CannotLoadConfiguration
 from api.google_analytics_provider import GoogleAnalyticsProvider
-from core.analytics import Analytics
 from core.model import (
     CirculationEvent,
     ConfigurationSetting,

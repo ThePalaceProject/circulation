@@ -8,7 +8,6 @@ import uszipcode
 
 from api.admin.geographic_validator import GeographicValidator
 from api.admin.problem_details import *
-from api.config import Configuration
 from api.registration.registry import RemoteRegistry
 from core.model import ExternalIntegration, create
 from core.testing import MockRequestsResponse

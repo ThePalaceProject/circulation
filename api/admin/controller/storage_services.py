@@ -4,7 +4,6 @@ from flask import Response
 from api.admin.problem_details import *
 
 # NOTE: We need to import it explicitly to initialize MirrorUploader.IMPLEMENTATION_REGISTRY
-from api.lcp import mirror
 from core.mirror import MirrorUploader
 from core.model import ExternalIntegration, get_one
 from core.util.problem_detail import ProblemDetail

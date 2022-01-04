@@ -1,5 +1,4 @@
 import datetime
-from io import StringIO
 from urllib.parse import quote
 
 import pytest
@@ -26,7 +25,7 @@ from core.model import (
     Work,
     get_one,
 )
-from core.s3 import MockS3Uploader, S3Uploader
+from core.s3 import MockS3Uploader
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import datetime_utc, utc_now
 

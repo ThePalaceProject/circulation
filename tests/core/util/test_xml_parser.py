@@ -1,6 +1,5 @@
 # encoding: utf-8
 
-from lxml.etree import XMLSyntaxError
 
 from core.util.xmlparser import XMLParser
 

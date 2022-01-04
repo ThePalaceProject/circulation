@@ -1,7 +1,6 @@
 import base64
 import json
 import os
-from pdb import set_trace
 
 import pytest
 from Crypto.Cipher import PKCS1_OAEP

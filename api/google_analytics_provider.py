@@ -5,7 +5,7 @@ import uuid
 
 from flask_babel import lazy_gettext as _
 
-from core.model import ConfigurationSetting, ExternalIntegration, Session, get_one
+from core.model import ConfigurationSetting, ExternalIntegration, Session
 from core.util.http import HTTP
 
 from .config import CannotLoadConfiguration

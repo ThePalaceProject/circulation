@@ -1,8 +1,6 @@
 import json
 import logging
-import os
 import socket
-from io import StringIO
 
 from boto3.session import Session as AwsSession
 from flask_babel import lazy_gettext as _

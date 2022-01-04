@@ -2,7 +2,6 @@
 document to describe an unusual setup.
 """
 
-from flask import Response
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm.session import Session
 

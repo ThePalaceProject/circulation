@@ -1,5 +1,4 @@
 import os
-import random
 import sys
 
 bin_dir = os.path.split(__file__)[0]
@@ -12,14 +11,7 @@ from overdrive import OverdriveAPI
 from threem import ThreeMAPI
 
 from circulation import CirculationAPI
-from core.model import (
-    DataSource,
-    Identifier,
-    LicensePool,
-    Patron,
-    get_one_or_create,
-    production_session,
-)
+from core.model import Identifier, Patron, get_one_or_create, production_session
 
 barcode, pin, borrow_urn, hold_urn = sys.argv[1:5]
 email = os.environ.get(
