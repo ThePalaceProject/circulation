@@ -64,7 +64,7 @@ python = ">=3.6.1,<4"
 python-dateutil = "2.8.2"
 python-Levenshtein = "~0.12"
 python3-saml = "1.12.0"  # python-saml is required for SAML authentication
-pytz = "2021.1"
+pytz = "2021.3"
 requests = "~2.27"
 Sphinx = { version = "1.8.5", optional = true }  # Sphinx is for code documentation
 sphinxcontrib-websupport = { version = "1.1.2", optional = true }
