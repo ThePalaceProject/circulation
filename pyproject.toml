@@ -55,7 +55,7 @@ pymarc = "4.0.0"
 pyOpenSSL = "21.0.0"
 pyparsing = "2.4.7"
 pypostalcode = "0.4.1"
-pyspellchecker = "0.5.5"
+pyspellchecker = "0.6.2"
 pytest = "^6"  # Can't be made a dev dep because mocks included beside prod code.
 python = ">=3.6.1,<4"
 python-dateutil = "2.8.2"
