@@ -1,11 +1,14 @@
 import datetime
 import logging
 import traceback
+from contextlib import contextmanager
 from io import BytesIO
+from typing import Optional
 from urllib.parse import quote, urljoin, urlparse
 
 import dateutil
 import feedparser
+import sqlalchemy
 from flask_babel import lazy_gettext as _
 from lxml import etree
 from sqlalchemy.orm import aliased
@@ -42,7 +45,15 @@ from .model import (
     Subject,
     get_one,
 )
-from .model.configuration import ExternalIntegrationLink
+from .model.configuration import (
+    ConfigurationAttributeType,
+    ConfigurationFactory,
+    ConfigurationGrouping,
+    ConfigurationMetadata,
+    ConfigurationStorage,
+    ExternalIntegrationLink,
+    HasExternalIntegration,
+)
 from .monitor import CollectionMonitor
 from .selftest import HasSelfTests, SelfTestResult
 from .util.datetime_helpers import datetime_utc, to_utc, utc_now
@@ -77,6 +88,20 @@ def parse_identifier(db, identifier):
         )
 
     return parsed_identifier
+
+
+class ConnectionConfiguration(ConfigurationGrouping):
+    max_retry_count = ConfigurationMetadata(
+        key="max_retry_count",
+        label=_("Max retry count"),
+        description=_(
+            "Max number of times Circulation Manager will try attempt to reconnect "
+            "in the case of any connection-related errors."
+        ),
+        type=ConfigurationAttributeType.NUMBER,
+        required=False,
+        default=3,
+    )
 
 
 class AccessNotAuthenticated(Exception):
@@ -1868,7 +1893,7 @@ class OPDSImporter(object):
         return series_name, series_position
 
 
-class OPDSImportMonitor(CollectionMonitor, HasSelfTests):
+class OPDSImportMonitor(CollectionMonitor, HasSelfTests, HasExternalIntegration):
     """Periodically monitor a Collection's OPDS archive feed and import
     every title it mentions.
     """
@@ -1911,7 +1936,33 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests):
         self.custom_accept_header = collection.external_integration.custom_accept_header
 
         self.importer = import_class(_db, collection=collection, **import_class_kwargs)
+
+        self._configuration_storage: ConfigurationStorage = ConfigurationStorage(self)
+        self._configuration_factory: ConfigurationFactory = ConfigurationFactory()
+        self._max_retry_count: Optional[int] = None
+
+        with self._get_configuration(_db) as configuration:
+            self._max_retry_count = (
+                int(configuration.max_retry_count)
+                if configuration.max_retry_count is not None
+                else None
+            )
+
         super(OPDSImportMonitor, self).__init__(_db, collection)
+
+    @contextmanager
+    def _get_configuration(
+        self, db: sqlalchemy.orm.session.Session
+    ) -> ConnectionConfiguration:
+        """Return the configuration object.
+
+        :param db: Database session
+        :return: Configuration object
+        """
+        with self._configuration_factory.create(
+            self._configuration_storage, db, ConnectionConfiguration
+        ) as configuration:
+            yield configuration
 
     def external_integration(self, _db):
         return get_one(_db, ExternalIntegration, id=self.external_integration_id)
@@ -1944,8 +1995,13 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests):
 
         Long timeout, raise error on anything but 2xx or 3xx.
         """
+
         headers = self._update_headers(headers)
-        kwargs = dict(timeout=120, allowed_response_codes=["2xx", "3xx"])
+        kwargs = dict(
+            timeout=120,
+            max_retry_count=self._max_retry_count,
+            allowed_response_codes=["2xx", "3xx"],
+        )
         response = HTTP.get_with_timeout(url, headers=headers, **kwargs)
         return response.status_code, response.headers, response.content
 

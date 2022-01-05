@@ -3,6 +3,9 @@ from urllib.parse import urlparse
 
 import requests
 from flask_babel import lazy_gettext as _
+from requests import sessions
+from requests.adapters import HTTPAdapter
+from urllib3 import Retry
 
 from .problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
 from .problem_detail import ProblemDetail as pd
@@ -212,7 +215,7 @@ class HTTP(object):
         exception.
         """
         return cls._request_with_timeout(
-            url, requests.request, http_method, *args, **kwargs
+            url, sessions.Session.request, http_method, *args, **kwargs
         )
 
     @classmethod
@@ -238,6 +241,8 @@ class HTTP(object):
 
         if not "timeout" in kwargs:
             kwargs["timeout"] = 20
+
+        max_retry_count = kwargs.pop("max_retry_count", None)
 
         # Unicode data can't be sent over the wire. Convert it
         # to UTF-8.
@@ -265,7 +270,20 @@ class HTTP(object):
                 # gets added on here. But if you do pass in both
                 # arguments, it will still work.
                 args = args + (url,)
-            response = make_request_with(*args, **kwargs)
+
+            if make_request_with == sessions.Session.request:
+                with sessions.Session() as session:
+                    if max_retry_count is not None:
+                        retry_strategy = Retry(total=max_retry_count)
+                        adapter = HTTPAdapter(max_retries=retry_strategy)
+
+                        session.mount("http://", adapter)
+                        session.mount("https://", adapter)
+
+                    response = session.request(*args, **kwargs)
+            else:
+                response = make_request_with(*args, **kwargs)
+
             if verbose:
                 logging.info(
                     "Response from %s: %s %r %r",
