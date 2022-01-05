@@ -1158,14 +1158,14 @@ pymysql = ["pymysql (<1)", "pymysql"]
 
 [[package]]
 name = "textblob"
-version = "0.15.3"
+version = "0.17.1"
 description = "Simple, Pythonic text processing. Sentiment analysis, part-of-speech tagging, noun phrase parsing, and more."
 category = "main"
 optional = false
 python-versions = "*"
 
 [package.dependencies]
-nltk = ">=3.1"
+nltk = {version = ">=3.1", markers = "python_version >= \"3\""}
 
 [[package]]
 name = "toml"
@@ -1344,7 +1344,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.6.1,<4"
-content-hash = "5b0abadd19daf3063bd968f2c52241db7b01afa49a6dcc37aa0b786ff7fb55ad"
+content-hash = "0c7dbc177598f81b82a7eb7c061609e9739fc1113c7b821dad22d6a7e0926a90"
 
 [metadata.files]
 atomicwrites = [
@@ -2265,8 +2265,8 @@ sqlalchemy = [
     {file = "SQLAlchemy-1.3.24.tar.gz", hash = "sha256:ebbb777cbf9312359b897bf81ba00dae0f5cb69fba2a18265dcc18a6f5ef7519"},
 ]
 textblob = [
-    {file = "textblob-0.15.3-py2.py3-none-any.whl", hash = "sha256:b0eafd8b129c9b196c8128056caed891d64b7fa20ba570e1fcde438f4f7dd312"},
-    {file = "textblob-0.15.3.tar.gz", hash = "sha256:7ff3c00cb5a85a30132ee6768b8c68cb2b9d76432fec18cd1b3ffe2f8594ec8c"},
+    {file = "textblob-0.17.1-py2.py3-none-any.whl", hash = "sha256:15546d7f309e96a3f542bee42751c8e5ce4d519d3d274ee79df2318141f0b788"},
+    {file = "textblob-0.17.1.tar.gz", hash = "sha256:8dc0875dfab1eaf0dc772a9dbc4afaa9ca93d0e35cd62cb792f3a38e067ab68f"},
 ]
 toml = [
     {file = "toml-0.10.2-py2.py3-none-any.whl", hash = "sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b"},
