@@ -879,7 +879,7 @@ requests = ["requests"]
 
 [[package]]
 name = "pymarc"
-version = "4.0.0"
+version = "4.1.2"
 description = "Read, write and modify MARC bibliographic data"
 category = "main"
 optional = false
@@ -1341,7 +1341,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.6.1,<4"
-content-hash = "9487497d3a66803dba5577283981ac173912416f088f893309486d917f1c1662"
+content-hash = "1b16ad4ac925dcfcceabf79cfcc7d729e3db9403a60418eb32db45dfac545988"
 
 [metadata.files]
 atomicwrites = [
@@ -2033,7 +2033,8 @@ pyld = [
     {file = "PyLD-1.0.5.tar.gz", hash = "sha256:ce6d9cd065fb3a390ec65e665dcb3655ed2aa07431d98e201ea3bc99f56a8bfb"},
 ]
 pymarc = [
-    {file = "pymarc-4.0.0.tar.gz", hash = "sha256:e5abe4d9243babd89811ddb3b841e3dbc18ae5dc6c062813e102bf42e0b09067"},
+    {file = "pymarc-4.1.2-py3-none-any.whl", hash = "sha256:daf0b426de3eb2dca8525ae9d02e0e6f66ce39573806c13d9d60c674f3d403d5"},
+    {file = "pymarc-4.1.2.tar.gz", hash = "sha256:0245b6a3d53b35ebe37c40a3f13249bbc624a0ba7e9f6360087568ebb7a3ea4e"},
 ]
 pyopenssl = [
     {file = "pyOpenSSL-21.0.0-py2.py3-none-any.whl", hash = "sha256:8935bd4920ab9abfebb07c41a4f58296407ed77f04bd1a92914044b848ba1ed6"},
