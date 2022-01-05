@@ -1224,7 +1224,7 @@ socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
 
 [[package]]
 name = "uszipcode"
-version = "0.2.4"
+version = "0.2.6"
 description = "USA zipcode programmable database, includes up-to-date census and geometry information."
 category = "main"
 optional = false
@@ -1234,7 +1234,7 @@ python-versions = "*"
 attrs = "*"
 pathlib-mate = "*"
 requests = "*"
-sqlalchemy = "*"
+SQLAlchemy = "*"
 
 [package.extras]
 docs = ["sphinx (==1.8.1)", "sphinx-rtd-theme", "sphinx-jinja", "sphinx-copybutton", "docfly (>=0.0.17)", "rstobj (>=0.0.5)", "pygments"]
@@ -1338,7 +1338,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.6.1,<4"
-content-hash = "f28fd51a49877c245c5396d69512702d188185f9829814be27fc1cb33df83257"
+content-hash = "a8dc2791aaaa242f5ca674ff9a2a4432300396511797dc62452cd871e4f89a75"
 
 [metadata.files]
 atomicwrites = [
@@ -2290,8 +2290,8 @@ urllib3 = [
     {file = "urllib3-1.26.7.tar.gz", hash = "sha256:4987c65554f7a2dbf30c18fd48778ef124af6fab771a377103da0585e2336ece"},
 ]
 uszipcode = [
-    {file = "uszipcode-0.2.4-py2.py3-none-any.whl", hash = "sha256:1b87c114495742727b9c27468fb7eb68fc36a1fe75b0e4437ac1a88826326733"},
-    {file = "uszipcode-0.2.4.tar.gz", hash = "sha256:0c9f3ff83b6c18ab81942024fc8e7f63bb17ab43d6589d80bebb5112584b98c3"},
+    {file = "uszipcode-0.2.6-py2.py3-none-any.whl", hash = "sha256:f1b30034d1d634bdf440f62ef61dbe2d3d6d9021c939ff9499b15e0a779fec18"},
+    {file = "uszipcode-0.2.6.tar.gz", hash = "sha256:80072754f17675d7667345ef9f01b0195e783acbf4f43e3f1e69cfd632c64b28"},
 ]
 uwsgi = [
     {file = "uwsgi-2.0.20.tar.gz", hash = "sha256:88ab9867d8973d8ae84719cf233b7dafc54326fcaec89683c3f9f77c002cdff9"},
