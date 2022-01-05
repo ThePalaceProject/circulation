@@ -293,7 +293,7 @@ dotenv = ["python-dotenv"]
 
 [[package]]
 name = "flask-babel"
-version = "1.0.0"
+version = "2.0.0"
 description = "Adds i18n/l10n support to Flask applications"
 category = "main"
 optional = false
@@ -304,6 +304,9 @@ Babel = ">=2.3"
 Flask = "*"
 Jinja2 = ">=2.5"
 pytz = "*"
+
+[package.extras]
+dev = ["pytest", "pytest-mock", "bumpversion", "ghp-import", "sphinx", "pallets-sphinx-themes"]
 
 [[package]]
 name = "flask-cors"
@@ -1338,7 +1341,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.6.1,<4"
-content-hash = "a5a836486e069df1d4cac8a7967e18362f17dae350b5bfc0b0de87721e765448"
+content-hash = "3a1830647d40e3d5c0b93d9e194a92107ed93d98cb1bea0c745dc211933b230c"
 
 [metadata.files]
 atomicwrites = [
@@ -1503,8 +1506,8 @@ flask = [
     {file = "Flask-1.1.4.tar.gz", hash = "sha256:0fbeb6180d383a9186d0d6ed954e0042ad9f18e0e8de088b2b419d526927d196"},
 ]
 flask-babel = [
-    {file = "Flask-Babel-1.0.0.tar.gz", hash = "sha256:d6a70468f9a8919d59fba2a291a003da3a05ff884275dddbd965f3b98b09ab3e"},
-    {file = "Flask_Babel-1.0.0-py3-none-any.whl", hash = "sha256:247f4ec34cf605d03781f480bccb1a5acb719df1d1a2a743c091ab3db5d5fde2"},
+    {file = "Flask-Babel-2.0.0.tar.gz", hash = "sha256:f9faf45cdb2e1a32ea2ec14403587d4295108f35017a7821a2b1acb8cfd9257d"},
+    {file = "Flask_Babel-2.0.0-py3-none-any.whl", hash = "sha256:e6820a052a8d344e178cdd36dd4bb8aea09b4bda3d5f9fa9f008df2c7f2f5468"},
 ]
 flask-cors = [
     {file = "Flask-Cors-3.0.10.tar.gz", hash = "sha256:b60839393f3b84a0f3746f6cdca56c1ad7426aa738b70d6c61375857823181de"},
