@@ -1,6 +1,7 @@
 import datetime
 import os
 from io import BytesIO
+from urllib.parse import urlparse
 from zipfile import ZipFile
 
 import feedparser
@@ -430,15 +431,18 @@ class RehostingPolicy(object):
         # The rights statement isn't especially helpful, but maybe we
         # can make a determination based on where Feedbooks got the
         # book from.
-        source = (source or "").lower()
+        try:
+            host = urlparse(source or "").hostname.lower()
+        except ValueError:
+            host = ""
 
-        if any(site in source for site in cls.US_SITES):
+        if any(site in host for site in cls.US_SITES):
             # This book originally came from a US-hosted site that
             # specializes in open-access books, so we must be able
             # to rehost it.
             return True
 
-        if source in ("wikisource", "gutenberg"):
+        if host in ("wikisource", "gutenberg"):
             # Presumably en.wikisource and Project Gutenberg US.  We
             # special case these to avoid confusing the US versions of
             # these sites with other countries'.
@@ -446,7 +450,7 @@ class RehostingPolicy(object):
 
         # And we special-case this one to avoid confusing Australian
         # Project Gutenberg with US Project Gutenberg.
-        if "gutenberg.net" in source and not "gutenberg.net.au" in source:
+        if "gutenberg.net" in host and "gutenberg.net.au" not in host:
             return True
 
         # Unless one of the above conditions is met, we must assume

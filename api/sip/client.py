@@ -402,9 +402,9 @@ class SIPClient(Constants):
             os.write(fd, self.ssl_key.encode("utf-8"))
             os.close(fd)
         connection = self.make_insecure_connection()
-        connection = ssl.wrap_socket(
-            connection, certfile=tmp_ssl_cert_path, keyfile=tmp_ssl_key_path
-        )
+        context = ssl.create_default_context()
+        context.load_cert_chain(certfile=tmp_ssl_cert_path, keyfile=tmp_ssl_key_path)
+        connection = context.wrap_socket(connection)
 
         # Now that the connection has been established, the temporary
         # files are no longer needed. Remove them.
