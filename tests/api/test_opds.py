@@ -478,7 +478,9 @@ class TestLibraryAnnotator(VendorIDTest):
         # The drm:licensor tag is the one we get by calling
         # adobe_id_tags() on that identifier.
         [expect] = self.annotator.adobe_id_tags(adobe_id_identifier.credential)
-        assert etree.tostring(expect) == etree.tostring(licensor)
+        assert etree.tostring(expect, method="c14n2") == etree.tostring(
+            licensor, method="c14n2"
+        )
 
     def test_no_adobe_id_tags_when_vendor_id_not_configured(self):
         """When vendor ID delegation is not configured, adobe_id_tags()
@@ -528,7 +530,9 @@ class TestLibraryAnnotator(VendorIDTest):
         # object that renders to the same XML.
         [same_tag] = self.annotator.adobe_id_tags(patron_identifier)
         assert same_tag is not element
-        assert etree.tostring(element) == etree.tostring(same_tag)
+        assert etree.tostring(element, method="c14n2") == etree.tostring(
+            same_tag, method="c14n2"
+        )
 
         # If the Adobe Vendor ID configuration is present but
         # incomplete, adobe_id_tags does nothing.
@@ -1473,7 +1477,9 @@ class TestLibraryAnnotator(VendorIDTest):
         # If we remove that attribute, the feed-level tag is the same as the
         # generic tag.
         del feed_tag.attrib[key]
-        assert etree.tostring(feed_tag) == etree.tostring(generic_tag)
+        assert etree.tostring(feed_tag, method="c14n2") == etree.tostring(
+            generic_tag, method="c14n2"
+        )
 
     def test_borrow_link_raises_unfulfillable_work(self):
         edition, pool = self._edition(with_license_pool=True)
