@@ -68,7 +68,7 @@ textblob = "0.17.1"
 typing-extensions = { version = "~4.0", python = "< 3.8" }
 unicodecsv = "0.14.1" # this is used, but can probably be removed on py3
 uritemplate = "3.0.1"
-urllib3 = "~1.26.5"
+urllib3 = "~1.26.8"
 uszipcode = "0.2.6"
 uWSGI = "~2.0.19"
 watchtower = "1.0.6"  # watchtower is for Cloudwatch logging integration
