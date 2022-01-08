@@ -2,9 +2,11 @@ import datetime
 import os
 import random
 from io import StringIO
+from unittest.mock import MagicMock, create_autospec, patch
 from urllib.parse import quote
 
 import pytest
+import requests_mock
 from lxml import etree
 from psycopg2.extras import NumericRange
 
@@ -28,9 +30,15 @@ from core.model import (
     Work,
     WorkCoverageRecord,
 )
-from core.model.configuration import ExternalIntegrationLink
+from core.model.configuration import (
+    ConfigurationFactory,
+    ConfigurationStorage,
+    ExternalIntegrationLink,
+    HasExternalIntegration,
+)
 from core.opds_import import (
     AccessNotAuthenticated,
+    ConnectionConfiguration,
     MetadataWranglerOPDSLookup,
     OPDSImporter,
     OPDSImportMonitor,
@@ -2697,3 +2705,42 @@ class TestOPDSImportMonitor(OPDSImporterTest):
         headers = dict(expect)
         new_headers = monitor._update_headers(headers)
         assert headers == expect
+
+    def test_retry(self):
+        retry_count = 15
+        feed = self.content_server_mini_feed
+        feed_url = "https://example.com/feed.opds"
+
+        # First, we need to override the default value of "Max retry count" configuration setting.
+        external_integration_association = create_autospec(spec=HasExternalIntegration)
+        external_integration_association.external_integration = MagicMock(
+            return_value=self._default_collection.external_integration
+        )
+        configuration_storage = ConfigurationStorage(external_integration_association)
+        configuration_factory = ConfigurationFactory()
+
+        with configuration_factory.create(
+            configuration_storage, self._db, ConnectionConfiguration
+        ) as configuration:
+            configuration.max_retry_count = retry_count
+
+        # After we overrode the value of  configuration setting we can instantiate OPDSImportMonitor.
+        # It'll load new "Max retry count"'s value from the database.
+        monitor = OPDSImportMonitor(
+            self._db, collection=self._default_collection, import_class=OPDSImporter
+        )
+
+        # We mock Retry class to ensure that the correct retry count had been passed.
+        with patch("core.util.http.Retry") as retry_constructor_mock:
+            with requests_mock.Mocker() as request_mock:
+                request_mock.get(
+                    feed_url,
+                    text=feed,
+                    status_code=200,
+                    headers={"content-type": OPDSFeed.ACQUISITION_FEED_TYPE},
+                )
+
+                monitor.follow_one_link(feed_url)
+
+                # Ensure that the correct retry count had been passed.
+                retry_constructor_mock.assert_called_once_with(total=retry_count)
