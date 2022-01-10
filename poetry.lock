@@ -854,16 +854,16 @@ python-versions = "*"
 
 [[package]]
 name = "pyjwt"
-version = "1.4.2"
+version = "1.5.3"
 description = "JSON Web Token implementation in Python"
 category = "main"
 optional = false
 python-versions = "*"
 
 [package.extras]
-crypto = ["cryptography"]
+crypto = ["cryptography (>=1.4)"]
 flake8 = ["flake8", "flake8-import-order", "pep8-naming"]
-test = ["pytest (==2.7.3)", "pytest-cov", "pytest-runner"]
+test = ["pytest (>3,<4)", "pytest-cov", "pytest-runner"]
 
 [[package]]
 name = "pyld"
@@ -1344,7 +1344,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.6.1,<4"
-content-hash = "4621e19c3ad28206f679caaa7c6fe92810d1b1a55c2e8667a016f1d1f55de70d"
+content-hash = "c9b6f28c806f2ed7abc820979dbcb0bed0b477b88acddd930d99bf5d207c6d15"
 
 [metadata.files]
 atomicwrites = [
@@ -2029,8 +2029,8 @@ pyinstrument-cext = [
     {file = "pyinstrument_cext-0.2.4.tar.gz", hash = "sha256:79b29797209eebd441a8596accfa8b617445d9252fbf7ce75d3a4a0eb46cb877"},
 ]
 pyjwt = [
-    {file = "PyJWT-1.4.2-py2.py3-none-any.whl", hash = "sha256:99fe612dbe5f41e07124d9002c118c14f3ee703574ffa9779fee78135b8b94b6"},
-    {file = "PyJWT-1.4.2.tar.gz", hash = "sha256:87a831b7a3bfa8351511961469ed0462a769724d4da48a501cb8c96d1e17f570"},
+    {file = "PyJWT-1.5.3-py2.py3-none-any.whl", hash = "sha256:a4e5f1441e3ca7b382fd0c0b416777ced1f97c64ef0c33bfa39daf38505cfd2f"},
+    {file = "PyJWT-1.5.3.tar.gz", hash = "sha256:500be75b17a63f70072416843dc80c8821109030be824f4d14758f114978bae7"},
 ]
 pyld = [
     {file = "PyLD-1.0.5.tar.gz", hash = "sha256:ce6d9cd065fb3a390ec65e665dcb3655ed2aa07431d98e201ea3bc99f56a8bfb"},
