@@ -173,7 +173,7 @@ pyenv local circ
 On most systems, using `pyenv` will adjust your shell prompt to indicate which virtual environment you
 are now in:
 
-```
+```sh
 $ python --version
 Python 3.10.1
 
