@@ -56,11 +56,36 @@ brew install libxmlsec1
 brew install libjpeg
 ```
 
+#### Linux
+
+Most distributions will offer Python packages. On Arch Linux, the following command is sufficient:
+
+```sh
+pacman -S python
+```
+
 #### pyenv
 
 [pyenv](https://github.com/pyenv/pyenv) pyenv lets you easily switch between multiple versions of Python. It can be
 [installed](https://github.com/pyenv/pyenv-installer) using the command `curl https://pyenv.run | bash`. You can then
 install the version of Python you want to work with.
+
+It is recommended that [pyenv-virtualenv](https://github.com/pyenv/pyenv-virtualenv) be used to allow `pyenv`
+to manage _virtual environments_ in a manner that can be used by the [poetry](#poetry) tool. The `pyenv-virtualenv`
+plugin can be installed by cloning the relevant repository into the `plugins` subdirectory of your `$PYENV_ROOT`:
+
+```sh
+mkdir -p $PYENV_ROOT/plugins
+cd $PYENV_ROOT/plugins
+git clone https://github.com/pyenv/pyenv-virtualenv
+```
+
+After cloning the repository, `pyenv` now has a new `virtualenv` command:
+
+```sh
+$ pyenv virtualenv
+pyenv-virtualenv: no virtualenv name given.
+```
 
 #### Poetry
 
@@ -129,6 +154,33 @@ export SIMPLIFIED_PRODUCTION_DATABASE="postgres://palace:test@localhost:5432/cir
 ```
 
 ### Running the Application
+
+As mentioned in the [pyenv](#pyenv) section, the `poetry` tool should be executed under a virtual environment
+in order to guarantee that it will use the Python version you expect. To use a particular Python version,
+you should create a local virtual environment in the cloned `circulation` repository directory. Assuming that
+you want to use, for example, Python 3.9.9:
+
+```sh
+pyenv virtualenv 3.9.9 circ
+```
+
+This will create a new local virtual environment called `circ` that uses Python 3.9.9. Switch to that environment:
+
+```sh
+pyenv local circ
+```
+
+On most systems, using `pyenv` will adjust your shell prompt to indicate which virtual environment you
+are now in:
+
+```
+$ python --version
+Python 3.10.1
+
+$ pyenv local circ
+(circ) $ python --version
+Python 3.9.9
+```
 
 Install the dependencies:
 
