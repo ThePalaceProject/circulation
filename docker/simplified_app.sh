@@ -6,6 +6,9 @@ set -x
 repo="$1"
 version="$2"
 
+echo "______________________________________"
+echo $version
+echo "______________________________________"
 if [ -z ${version} ]; then
   echo "WARN: No version specified, will build default branch.";
 fi

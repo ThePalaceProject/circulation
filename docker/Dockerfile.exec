@@ -31,7 +31,7 @@ RUN /bin/bash -c "/ls_build/simplified_app.sh ${repo} ${version} \
 
 VOLUME /var/log
 WORKDIR /home/simplified/circulation/bin
-
+RUN echo ${SIMPLIFIED_DB_TASK}
 CMD ["/sbin/my_init", "--skip-runit", "--quiet", "--", \
      "/bin/bash", "-c", \
      "source ../env/bin/activate && ./${SIMPLIFIED_SCRIPT_NAME}"]
