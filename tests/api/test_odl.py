@@ -741,9 +741,10 @@ class TestODLAPI(DatabaseTest, BaseODLAPITest):
         assert 0 == db.query(Loan).count()
 
     @pytest.mark.parametrize(
-        "delivery_mechanism, correct_link, links",
+        "delivery_mechanism, correct_type, correct_link, links",
         [
             (
+                DeliveryMechanism.ADOBE_DRM,
                 DeliveryMechanism.ADOBE_DRM,
                 "http://acsm",
                 [
@@ -756,6 +757,7 @@ class TestODLAPI(DatabaseTest, BaseODLAPITest):
             ),
             (
                 MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+                MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
                 "http://manifest",
                 [
                     {
@@ -767,6 +769,7 @@ class TestODLAPI(DatabaseTest, BaseODLAPITest):
             ),
             (
                 DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
+                ODLImporter.FEEDBOOKS_AUDIO,
                 "http://correct",
                 [
                     {
@@ -793,6 +796,7 @@ class TestODLAPI(DatabaseTest, BaseODLAPITest):
         collection,
         db,
         delivery_mechanism,
+        correct_type,
         correct_link,
         links,
     ):
@@ -817,7 +821,7 @@ class TestODLAPI(DatabaseTest, BaseODLAPITest):
         assert pool.identifier.identifier == fulfillment.identifier
         assert datetime_utc(2017, 10, 21, 11, 12, 13) == fulfillment.content_expires
         assert correct_link == fulfillment.content_link
-        assert delivery_mechanism == fulfillment.content_type
+        assert correct_type == fulfillment.content_type
 
     def test_fulfill_cannot_fulfill(self, license, checkout, db, api, patron, pool):
         license.setup(concurrency=7, available=7)
