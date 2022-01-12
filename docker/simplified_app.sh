@@ -44,7 +44,6 @@ useradd -ms /bin/bash -U simplified
 mkdir -p /var/www/circulation && rsync -rtv /ls_build/ /var/www/circulation
 chown simplified:simplified /var/www/circulation
 cd /var/www/circulation
-ls -la /var/www/circulation
 git checkout $version
 
 # Add a .version file to the directory. This file
