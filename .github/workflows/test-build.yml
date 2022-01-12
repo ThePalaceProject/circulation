@@ -97,9 +97,9 @@ jobs:
             type=semver,pattern={{version}},priority=20
             type=ref,event=branch,priority=30
             type=sha,priority=40
-      - name: Dummy Steps
-        run: ls -la
-        
+      - name: Dummy Steps build-docker-exec
+        run: mkdir -p /var/www/circulation && cp -R * /var/www/circulation && chown simplified:simplified /var/www/circulation
+
       - name: Build & push circ-exec image
         uses: docker/build-push-action@v2
         with:
@@ -143,6 +143,8 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: dummy steps build-docker-scripts
+        run: ls -la /var/www/circulation
 
       - name: Build circ-scripts image
         uses: docker/build-push-action@v2
