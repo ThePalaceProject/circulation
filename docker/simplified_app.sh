@@ -6,9 +6,6 @@ set -x
 repo="$1"
 version="$2"
 
-echo "______________________________________"
-echo $version
-echo "______________________________________"
 if [ -z ${version} ]; then
   echo "WARN: No version specified, will build default branch.";
 fi
@@ -43,23 +40,11 @@ export LANG=C.UTF-8
 useradd -ms /bin/bash -U simplified
 
 # Get the proper version of the codebase.
-echo "----------"
-ls -la
-pwd
-echo "----------"
-#mkdir /var/www && cd /var/www
-echo "----------"
-ls -la
-pwd
-echo "----------"
+# mkdir /var/www && cd /var/www
 # git clone https://github.com/${repo}.git circulation
-# chown simplified:simplified circulation
-cd /home/runner/work/circulation/circulation
+# chown simplified:simplified /var/www/circulation
+cd /var/www/circulation
 git checkout $version
-echo "----------"
-ls -la
-pwd
-echo "----------"
 
 # Add a .version file to the directory. This file
 # supplies an endpoint to check the app's current version.
@@ -69,7 +54,7 @@ python3 -m venv env
 
 # Pass runtime environment variables to the app at runtime.
 touch environment.sh
-SIMPLIFIED_ENVIRONMENT=/home/runner/work/circulation/circulation/environment.sh
+SIMPLIFIED_ENVIRONMENT=/var/www/circulation/environment.sh
 echo "if [[ -f $SIMPLIFIED_ENVIRONMENT ]]; then \
       source $SIMPLIFIED_ENVIRONMENT; fi" >> env/bin/activate
 
@@ -90,7 +75,7 @@ python3 -m textblob.download_corpora
 mv /root/nltk_data /usr/lib/
 
 # Link the repository code to /home/simplified and change permissions
-su - simplified -c "ln -s /home/runner/work/circulation/circulation /home/simplified/circulation"
+su - simplified -c "ln -s /var/www/circulation /home/simplified/circulation"
 chown -RHh simplified:simplified /home/simplified/circulation
 
 # Give logs a place to go.
