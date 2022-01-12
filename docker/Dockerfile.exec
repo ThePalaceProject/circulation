@@ -23,7 +23,7 @@ ENV SIMPLIFIED_DB_TASK "ignore"
 ENV SIMPLIFIED_SCRIPT_NAME ""
 
 # Copy over all Palace build files for this image
-RUN ls -la /ls_build
+
 COPY . /ls_build
 RUN ls -la /ls_build
 RUN /bin/bash -c "/ls_build/simplified_app.sh ${repo} ${version} \
