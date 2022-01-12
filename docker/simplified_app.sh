@@ -47,14 +47,14 @@ echo "----------"
 ls -la
 pwd
 echo "----------"
-mkdir /var/www && cd /var/www
+#mkdir /var/www && cd /var/www
 echo "----------"
 ls -la
 pwd
 echo "----------"
-git clone https://github.com/${repo}.git circulation
-chown simplified:simplified circulation
-cd circulation
+# git clone https://github.com/${repo}.git circulation
+# chown simplified:simplified circulation
+cd /var/www/circulation
 git checkout $version
 echo "----------"
 ls -la
