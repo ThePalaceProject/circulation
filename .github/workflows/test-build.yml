@@ -97,7 +97,9 @@ jobs:
             type=semver,pattern={{version}},priority=20
             type=ref,event=branch,priority=30
             type=sha,priority=40
-
+      - name: Dummy Steps
+        run: ls -la
+        
       - name: Build & push circ-exec image
         uses: docker/build-push-action@v2
         with:
