@@ -95,8 +95,7 @@ class ConnectionConfiguration(ConfigurationGrouping):
         key="max_retry_count",
         label=_("Max retry count"),
         description=_(
-            "Max number of times Circulation Manager will try attempt to reconnect "
-            "in the case of any connection-related errors."
+            "The maximum number of times to retry a request for certain connection-related errors."
         ),
         type=ConfigurationAttributeType.NUMBER,
         required=False,

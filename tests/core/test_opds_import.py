@@ -2724,7 +2724,7 @@ class TestOPDSImportMonitor(OPDSImporterTest):
         ) as configuration:
             configuration.max_retry_count = retry_count
 
-        # After we overrode the value of  configuration setting we can instantiate OPDSImportMonitor.
+        # After we overrode the value of configuration setting we can instantiate OPDSImportMonitor.
         # It'll load new "Max retry count"'s value from the database.
         monitor = OPDSImportMonitor(
             self._db, collection=self._default_collection, import_class=OPDSImporter
