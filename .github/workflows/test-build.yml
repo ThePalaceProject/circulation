@@ -98,7 +98,7 @@ jobs:
             type=ref,event=branch,priority=30
             type=sha,priority=40
       - name: Dummy Steps build-docker-exec
-        run: sudo mkdir -p /var/www/circulation && sudo cp -R * /var/www/circulation && sudo chown simplified:simplified /var/www/circulation
+        run: sudo mkdir -p /var/www/circulation && sudo cp -R * /var/www/circulation
 
       - name: Build & push circ-exec image
         uses: docker/build-push-action@v2
