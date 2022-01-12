@@ -97,13 +97,11 @@ jobs:
             type=semver,pattern={{version}},priority=20
             type=ref,event=branch,priority=30
             type=sha,priority=40
-      - name: Dummy Steps build-docker-exec
-        run: sudo mkdir -p /var/www/circulation && sudo cp -R * /var/www/circulation
 
       - name: Build & push circ-exec image
         uses: docker/build-push-action@v2
         with:
-          context: ./docker
+          context: .
           file: ./docker/Dockerfile.exec
           push: ${{ env.IMAGE_PUSH_ENABLED }}
           tags: ${{ steps.exec-tags.outputs.tags }}
@@ -134,22 +132,17 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v1
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: dummy steps build-docker-scripts
-        run: ls -la /var/www/circulation
 
       - name: Build circ-scripts image
         uses: docker/build-push-action@v2
         with:
-          context: ./docker
+          context: .
           file: ./docker/Dockerfile.scripts
           load: true
           tags: circ
@@ -185,7 +178,7 @@ jobs:
       - name: Push circ-scripts image
         uses: docker/build-push-action@v2
         with:
-          context: ./docker
+          context: .
           file: ./docker/Dockerfile.scripts
           push: ${{ env.IMAGE_PUSH_ENABLED }}
           tags: ${{ steps.scripts-tags.outputs.tags }}
@@ -229,7 +222,7 @@ jobs:
       - name: Build circ-webapp image
         uses: docker/build-push-action@v2
         with:
-          context: ./docker
+          context: .
           file: ./docker/Dockerfile.webapp
           load: true
           tags: circ
@@ -265,7 +258,7 @@ jobs:
       - name: Push circ-webapp image
         uses: docker/build-push-action@v2
         with:
-          context: ./docker
+          context: .
           file: ./docker/Dockerfile.webapp
           push: ${{ env.IMAGE_PUSH_ENABLED }}
           tags: ${{ steps.webapp-tags.outputs.tags }}

@@ -30,7 +30,7 @@ $minimal_apt_get_install --no-upgrade \
   libxmlsec1-dev \
   libxmlsec1-openssl \
   libxml2-dev \
-  tree
+  rsync
 
 # We should be able to drop these lines when we move to Python > 3.6
 # https://click.palletsprojects.com/en/5.x/python3/#python-3-surrogate-handling
@@ -41,11 +41,10 @@ export LANG=C.UTF-8
 useradd -ms /bin/bash -U simplified
 
 # Get the proper version of the codebase.
-# mkdir /var/www && cd /var/www
-# git clone https://github.com/${repo}.git circulation
-tree /var/www
+mkdir -p /var/www/circulation && rsync -rtv /ls_build/ /var/www/circulation
 chown simplified:simplified /var/www/circulation
 cd /var/www/circulation
+ls -la /var/www/circulation
 git checkout $version
 
 # Add a .version file to the directory. This file
@@ -84,4 +83,4 @@ chown -RHh simplified:simplified /home/simplified/circulation
 mkdir /var/log/simplified
 
 # Copy scripts that run at startup.
-cp /ls_build/startup/* /etc/my_init.d/
+cp /ls_build/docker/startup/* /etc/my_init.d/
