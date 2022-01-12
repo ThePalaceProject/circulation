@@ -43,6 +43,10 @@ export LANG=C.UTF-8
 useradd -ms /bin/bash -U simplified
 
 # Get the proper version of the codebase.
+echo "----------"
+ls -la
+pwd
+echo "----------"
 mkdir /var/www && cd /var/www
 echo "----------"
 ls -la
