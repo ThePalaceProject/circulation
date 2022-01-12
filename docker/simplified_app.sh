@@ -54,7 +54,7 @@ pwd
 echo "----------"
 # git clone https://github.com/${repo}.git circulation
 # chown simplified:simplified circulation
-cd /var/www/circulation
+cd /home/runner/work/circulation/circulation
 git checkout $version
 echo "----------"
 ls -la
@@ -69,7 +69,7 @@ python3 -m venv env
 
 # Pass runtime environment variables to the app at runtime.
 touch environment.sh
-SIMPLIFIED_ENVIRONMENT=/var/www/circulation/environment.sh
+SIMPLIFIED_ENVIRONMENT=/home/runner/work/circulation/circulation/environment.sh
 echo "if [[ -f $SIMPLIFIED_ENVIRONMENT ]]; then \
       source $SIMPLIFIED_ENVIRONMENT; fi" >> env/bin/activate
 
@@ -90,7 +90,7 @@ python3 -m textblob.download_corpora
 mv /root/nltk_data /usr/lib/
 
 # Link the repository code to /home/simplified and change permissions
-su - simplified -c "ln -s /var/www/circulation /home/simplified/circulation"
+su - simplified -c "ln -s /home/runner/work/circulation/circulation /home/simplified/circulation"
 chown -RHh simplified:simplified /home/simplified/circulation
 
 # Give logs a place to go.
