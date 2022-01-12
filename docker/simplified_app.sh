@@ -44,11 +44,18 @@ useradd -ms /bin/bash -U simplified
 
 # Get the proper version of the codebase.
 mkdir /var/www && cd /var/www
+echo "----------"
 ls -la
+pwd
+echo "----------"
 git clone https://github.com/${repo}.git circulation
 chown simplified:simplified circulation
 cd circulation
 git checkout $version
+echo "----------"
+ls -la
+pwd
+echo "----------"
 
 # Add a .version file to the directory. This file
 # supplies an endpoint to check the app's current version.
