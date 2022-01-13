@@ -3,13 +3,6 @@ set -e
 source /bd_build/buildconfig
 set -x
 
-repo="$1"
-version="$2"
-
-if [ -z ${version} ]; then
-  echo "WARN: No version specified, will build default branch.";
-fi
-
 # Add packages we need to build the app and its dependencies
 apt-get update
 $minimal_apt_get_install --no-upgrade \
@@ -29,7 +22,7 @@ $minimal_apt_get_install --no-upgrade \
   libpq-dev \
   libxmlsec1-dev \
   libxmlsec1-openssl \
-  libxml2-dev 
+  libxml2-dev
 
 # We should be able to drop these lines when we move to Python > 3.6
 # https://click.palletsprojects.com/en/5.x/python3/#python-3-surrogate-handling
@@ -43,7 +36,6 @@ useradd -ms /bin/bash -U simplified
 mkdir -p /var/www/circulation && cp -r /ls_build/* /var/www/circulation
 chown simplified:simplified /var/www/circulation
 cd /var/www/circulation
-
 
 # Add a .version file to the directory. This file
 # supplies an endpoint to check the app's current version.
