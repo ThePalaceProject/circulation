@@ -80,7 +80,7 @@ freezegun = "~1.1"
 Jinja2 = "2.11.3"
 parameterized = "0.8.1"
 pre-commit = "~2.16"
-pyfakefs = "4.5.3"
+pyfakefs = "4.5.4"
 pytest-timeout = "*"
 requests-mock = "1.9.3"
 
