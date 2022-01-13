@@ -1,16 +1,13 @@
 FROM phusion/baseimage:bionic-1.0.0
 LABEL maintainer="The Palace Project <info@thepalaceproject.org>"
 
-ARG version
-ARG repo="thepalaceproject/circulation"
-
 ENV SIMPLIFIED_DB_TASK "ignore"
 ENV LANG=C.UTF-8
 
 # Copy over all Palace build files for this image
 COPY . /ls_build
 
-RUN /bin/bash -c "/ls_build/docker/simplified_app.sh ${repo} ${version} \
+RUN /bin/bash -c "/ls_build/docker/simplified_app.sh \
       && /ls_build/docker/logrotate.sh \
       && /ls_build/docker/nginx.sh \
       && /ls_build/docker/uwsgi.sh \
