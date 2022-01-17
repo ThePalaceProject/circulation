@@ -264,10 +264,10 @@ need to execute these operations ourselves manually. In this particular case, we
 
 The command will cause the application to crawl the configured OPDS feed and import every book in it. At the time
 of writing, this command will take around an hour to run the first time it is executed, but subsequent executions
-complete in seconds.
+complete in seconds. Please wait for the import to complete before continuing!
 
-At this point, the books are imported, but no OPDS feeds will have been generated, and no search service has been
-configured.
+When the import has completed, the books are imported but no OPDS feeds will have been generated, and no search
+service has been configured.
 
 #### Configuring Search
 
