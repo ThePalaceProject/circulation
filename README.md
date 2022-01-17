@@ -150,7 +150,7 @@ grant all privileges on database circ to palace;
 To let the application know which database to use set the `SIMPLIFIED_PRODUCTION_DATABASE` env variable.
 
 ```sh
-$ export SIMPLIFIED_PRODUCTION_DATABASE="postgres://palace:test@localhost:5432/circ"
+export SIMPLIFIED_PRODUCTION_DATABASE="postgres://palace:test@localhost:5432/circ"
 ```
 
 ### Running the Application
@@ -161,13 +161,13 @@ you should create a local virtual environment in the cloned `circulation` reposi
 you want to use, for example, Python 3.9.9:
 
 ```sh
-$ pyenv virtualenv 3.9.9 circ
+pyenv virtualenv 3.9.9 circ
 ```
 
 This will create a new local virtual environment called `circ` that uses Python 3.9.9. Switch to that environment:
 
 ```sh
-$ pyenv local circ
+pyenv local circ
 ```
 
 On most systems, using `pyenv` will adjust your shell prompt to indicate which virtual environment you
@@ -183,25 +183,24 @@ $ pyenv local circ
 Python 3.9.9
 ```
 
-We'll follow the convention of displaying `(circ)` in these instructions preceding shell prompts
-to indicate that commands should be executed within a virtual environment.
+For brevity, these instructions assume that all shell commands will be executed within a virtual environment.
 
 Install the dependencies:
 
 ```sh
-(circ) $ poetry install --no-root -E pg-binary
+poetry install --no-root -E pg-binary
 ```
 
 Run the application with:
 
 ```sh
-(circ) $ poetry run python app.py
+poetry run python app.py
 ```
 
 Check that there is now a web server listening on port `6500`:
 
 ```sh
-$ curl http://localhost:6500/
+curl http://localhost:6500/
 ```
 
 ### The Admin Interface
@@ -213,10 +212,10 @@ The admin interface can be accessed by visiting the `/admin` endpoint:
 
 ```sh
 # On Linux
-$ xdg-open http://localhost:6500/admin/
+xdg-open http://localhost:6500/admin/
 
 # On MacOS
-$ open http://localhost:6500/admin/
+open http://localhost:6500/admin/
 ```
 
 If no existing users are configured (which will be the case if this is a fresh instance of the application), the
@@ -258,7 +257,13 @@ need to execute these operations ourselves manually. In this particular case, we
 
 ```sh
 (circ) $ ./bin/opds_import_monitor
-{"host": "hazelnut", "app": "simplified", "name": "OPDS Import Monitor", "level": "INFO", "filename": "opds_import.py", "message": "[Palace Bookshelf] Following next link: http://openbookshelf.dp.la/lists/Open%20Bookshelf/crawlable", "timestamp": "2022-01-17T11:52:35.839978+00:00"}
+{"host": "hazelnut",
+ "app": "simplified",
+ "name": "OPDS Import Monitor",
+ "level": "INFO",
+ "filename": "opds_import.py",
+ "message": "[Palace Bookshelf] Following next link: http://openbookshelf.dp.la/lists/Open%20Bookshelf/crawlable",
+ "timestamp": "2022-01-17T11:52:35.839978+00:00"}
 ...
 ```
 
@@ -283,8 +288,8 @@ being executed on a regular schedule to generate search indices. Because we're r
 the local command-line, we need to execute those operations manually:
 
 ```sh
-(circ) $ ./bin/search_index_clear
-(circ) $ ./bin/search_index_refresh
+./bin/search_index_clear
+./bin/search_index_refresh
 ```
 
 Neither of the commands will produce any output if the operations succeed.
@@ -296,7 +301,7 @@ this operation is configured to execute on a regular schedule in the Docker imag
 it manually here:
 
 ```sh
-(circ) $ ./bin/opds_entry_coverage
+./bin/opds_entry_coverage
 ```
 
 The command will produce output indicating any errors.
@@ -311,7 +316,7 @@ The `./bin/repair/where_are_my_books` command can produce output that may indica
 in OPDS feeds. A working, correctly configured installation, at the time of writing, produces output such as this:
 
 ```sh
-(circ) $ ./bin/repair/where_are_my_books 
+(circ) $ ./bin/repair/where_are_my_books
 Checking library Hazelnut Peak
  Associated with collection Palace Bookshelf.
  Associated with 171 lanes.
@@ -326,8 +331,6 @@ Examining collection "Palace Bookshelf"
 
 We can see from the above output that the vast majority of the books in the _Open Bookshelf_ collection
 were indexed correctly.
-
-#### 
 
 ### Installation Issues
 
