@@ -368,7 +368,7 @@ speedup = ["python-levenshtein (>=0.12)"]
 
 [[package]]
 name = "html-sanitizer"
-version = "1.9.2"
+version = "1.9.3"
 description = "HTML sanitizer"
 category = "main"
 optional = false
@@ -827,7 +827,7 @@ python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
 
 [[package]]
 name = "pyfakefs"
-version = "4.5.3"
+version = "4.5.4"
 description = "pyfakefs implements a fake file system that mocks the Python file system modules."
 category = "dev"
 optional = false
@@ -936,7 +936,7 @@ six = "*"
 
 [[package]]
 name = "pyspellchecker"
-version = "0.6.2"
+version = "0.6.3"
 description = "Pure python spell checker based on work by Peter Norvig"
 category = "main"
 optional = false
@@ -1344,7 +1344,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.6.1,<4"
-content-hash = "4621e19c3ad28206f679caaa7c6fe92810d1b1a55c2e8667a016f1d1f55de70d"
+content-hash = "c4c9254d1004f4704eb639711d002f2cec91c45e44a78d08d2f315d6bed31626"
 
 [metadata.files]
 atomicwrites = [
@@ -1531,8 +1531,8 @@ fuzzywuzzy = [
     {file = "fuzzywuzzy-0.18.0.tar.gz", hash = "sha256:45016e92264780e58972dca1b3d939ac864b78437422beecebb3095f8efd00e8"},
 ]
 html-sanitizer = [
-    {file = "html_sanitizer-1.9.2-py3-none-any.whl", hash = "sha256:f20bb241cce1106239bf4c11861b0a4387691fffc3b01460d44d7c8f2f1813c1"},
-    {file = "html_sanitizer-1.9.2.tar.gz", hash = "sha256:6e2f15c959decf33a1d0b953b40147ada9c724cec1fb469a3141be7b003653d5"},
+    {file = "html_sanitizer-1.9.3-py3-none-any.whl", hash = "sha256:a2e084d0963f38116ba140e8992280acc78874044cf288f037f2ec4ba586ebe6"},
+    {file = "html_sanitizer-1.9.3.tar.gz", hash = "sha256:125c5e09b154cab598b6c11731902dcbdd9d0ede72311814ee040fe6ddef82e0"},
 ]
 httplib2 = [
     {file = "httplib2-0.20.2-py3-none-any.whl", hash = "sha256:6b937120e7d786482881b44b8eec230c1ee1c5c1d06bce8cc865f25abbbf713b"},
@@ -1971,8 +1971,8 @@ pycryptodome = [
     {file = "pycryptodome-3.12.0.zip", hash = "sha256:12c7343aec5a3b3df5c47265281b12b611f26ec9367b6129199d67da54b768c1"},
 ]
 pyfakefs = [
-    {file = "pyfakefs-4.5.3-py3-none-any.whl", hash = "sha256:501d784c6ad57ce7ab727249166d58043d199ebbb67b404ecab67bcb1a9bb696"},
-    {file = "pyfakefs-4.5.3.tar.gz", hash = "sha256:f49db689c1d5db6172131479ca77bd474ba2cb886c869b9867fb89cdab2df397"},
+    {file = "pyfakefs-4.5.4-py3-none-any.whl", hash = "sha256:e0cc0d22cb74badf4fb2143a112817d7aea1a58ee9dca015a68bf38c3691cb52"},
+    {file = "pyfakefs-4.5.4.tar.gz", hash = "sha256:5b5951e873f73bf12e3a19d8e4470c4b7962c51df753cf8c4caaf64e24a0a323"},
 ]
 pyinstrument = [
     {file = "pyinstrument-3.4.2-py2.py3-none-any.whl", hash = "sha256:76aae9a43e949af65baf3a2268144cce914bc8f1f524dcaeb68deba9bd0e24f6"},
@@ -2055,8 +2055,8 @@ pyrsistent = [
     {file = "pyrsistent-0.16.1.tar.gz", hash = "sha256:aa2ae1c2e496f4d6777f869ea5de7166a8ccb9c2e06ebcf6c7ff1b670c98c5ef"},
 ]
 pyspellchecker = [
-    {file = "pyspellchecker-0.6.2-py3-none-any.whl", hash = "sha256:218759d4166fd49dee5c0473da99792d9274aca495ded0d9594a0bd75e2831ca"},
-    {file = "pyspellchecker-0.6.2.tar.gz", hash = "sha256:af6a1d0393a175499475a873f31e52135f1efd5fc912c979101b795b3c2ee77f"},
+    {file = "pyspellchecker-0.6.3-py3-none-any.whl", hash = "sha256:9e19a683bd8d77b2668b1ffce2fd0e0a0e63b6ea3f6819aabc08f115ca1d1d88"},
+    {file = "pyspellchecker-0.6.3.tar.gz", hash = "sha256:764dfe1bcbd4d860b74205402167d55a02910870c07b83678e7d6b5a4d471909"},
 ]
 pytest = [
     {file = "pytest-6.2.5-py3-none-any.whl", hash = "sha256:7310f8d27bc79ced999e760ca304d69f6ba6c6649c0b60fb0e04a4a77cacc134"},

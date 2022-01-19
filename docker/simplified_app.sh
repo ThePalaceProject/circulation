@@ -33,15 +33,11 @@ export LANG=C.UTF-8
 # Create a user.
 useradd -ms /bin/bash -U simplified
 
-# Get the proper version of the codebase.
-mkdir -p /var/www/circulation && cp -r /ls_build/* /var/www/circulation
+# Change ownership of codebase
 chown simplified:simplified /var/www/circulation
 cd /var/www/circulation
 
-# Add a .version file to the directory. This file
-# supplies an endpoint to check the app's current version.
-printf "$(git describe --tags)" > .version
-
+# Setup virtualenv
 python3 -m venv env
 
 # Pass runtime environment variables to the app at runtime.
@@ -74,4 +70,7 @@ chown -RHh simplified:simplified /home/simplified/circulation
 mkdir /var/log/simplified
 
 # Copy scripts that run at startup.
-cp /ls_build/docker/startup/* /etc/my_init.d/
+cp /ls_build/startup/* /etc/my_init.d/
+
+# Cleanup
+rm -Rf /root/.cache

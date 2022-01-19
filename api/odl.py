@@ -559,12 +559,6 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
                 continue
             href = link.get("href")
             type = link.get("type")
-
-            # For DeMarque audiobook content, we need to translate the type property
-            # to reflect what we have stored in our delivery mechanisms.
-            if type in ODLImporter.LICENSE_FORMATS:
-                type = ODLImporter.LICENSE_FORMATS[type][ODLImporter.DRM_SCHEME]
-
             candidates.append((href, type))
 
         if len(candidates) == 0:
@@ -575,6 +569,11 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
             # If we don't have a requested DRM scheme, so we use the first one.
             # TODO: Can this just be dropped?
             return candidates[0]
+
+        # For DeMarque audiobook content, we need to translate the type property
+        # to reflect what we have stored in our delivery mechanisms.
+        if drm_scheme == DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM:
+            drm_scheme = ODLImporter.FEEDBOOKS_AUDIO
 
         return next(filter(lambda x: x[1] == drm_scheme, candidates), (None, None))
 
