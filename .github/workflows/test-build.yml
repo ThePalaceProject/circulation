@@ -250,6 +250,3 @@ jobs:
           file: ./docker/Dockerfile.webapp
           push: ${{ env.IMAGE_PUSH_ENABLED }}
           tags: ${{ steps.webapp-tags.outputs.tags }}
-          build-args: |
-            repo=${{ github.repository }}
-            version=${{ github.sha }}
