@@ -4,7 +4,7 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
-![Python: 3.6,3.7,3.8,3.9](https://img.shields.io/badge/Python-3.6%20%7C%203.7%20%7C%203.8%20%7C%203.9-blue)
+![Python: 3.7,3.8,3.9](https://img.shields.io/badge/Python-3.7%20%7C%203.8%20%7C%203.9-blue)
 
 This is a [The Palace Project](https://thepalaceproject.org) maintained fork of the NYPL
 [Library Simplified](http://www.librarysimplified.org/) Circulation Manager.
@@ -415,7 +415,7 @@ testing the branch, or deploying hotfixes.
 
 ## Testing
 
-The Github Actions CI service runs the unit tests against Python 3.6, 3.7, 3.8 and 3.9 automatically using
+The Github Actions CI service runs the unit tests against Python 3.7, 3.8 and 3.9 automatically using
 [tox](https://tox.readthedocs.io/en/latest/).
 
 To run `pytest` unit tests locally, install `tox`.
@@ -437,7 +437,6 @@ with service dependencies running in docker containers.
 
 | Factor      | Python Version |
 | ----------- | -------------- |
-| py36        | Python 3.6     |
 | py37        | Python 3.7     |
 | py38        | Python 3.8     |
 | py39        | Python 3.9     |
