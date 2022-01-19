@@ -123,9 +123,9 @@ We recommend you install at least version 18.06 of the Docker engine and version
 Determine which image you would like to build and update the tag and `Dockerfile` listed below accordingly.
 
 ```sh
-$ docker build --build-arg version=YOUR_DESIRED_BRANCH_OR_COMMIT \
+$ docker build \
     --tag circ-scripts:development \
-    --file Dockerfile.scripts \
+    --file docker/Dockerfile.scripts \
     --no-cache .
 ```
 
