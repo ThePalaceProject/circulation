@@ -1,15 +1,10 @@
-FROM phusion/baseimage:focal-1.0.0
+FROM ghcr.io/aseefahmed/docker-base:main
 LABEL maintainer="The Palace Project <info@thepalaceproject.org>"
 
 ENV SIMPLIFIED_DB_TASK "ignore"
 ENV LANG=C.UTF-8
 
-# Copy over all Palace build files for this image
-COPY . /ls_build
-
-RUN /bin/bash -c "/ls_build/docker/simplified_app.sh \
-      && /ls_build/docker/logrotate.sh \
-      && /ls_build/docker/nginx.sh \
+RUN /bin/bash -c "/ls_build/docker/nginx.sh \
       && /ls_build/docker/uwsgi.sh \
       && rm -rf /ls_build && /bd_build/cleanup.sh"
 
