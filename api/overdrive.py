@@ -5,7 +5,6 @@ import urllib.parse
 
 import dateutil
 import flask
-import pytz
 from flask_babel import lazy_gettext as _
 
 from core.analytics import Analytics
@@ -1364,10 +1363,6 @@ class NewTitlesOverdriveCollectionMonitor(OverdriveCirculationMonitor):
             self.log.error("Got invalid date: %s", date_added)
             return False
 
-        # The time stored in the database is UTC, but it's stored
-        # without any time zone information. Add that information so
-        # we can compare it against the date we got from Overdrive.
-        start = pytz.utc.localize(start)
         self.log.info(
             "Date added: %s, start time: %s, result %s",
             date_added,
