@@ -26,9 +26,12 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
-node_modules/
-admin/package.json
-admin/package-lock.json
+
+# Caches
+.*_cache
+.tox
+.pyre
+__pycache__
 
 # Installer logs
 pip-log.txt
@@ -60,9 +63,6 @@ coverage.xml
 *~
 .env
 
-# Special Elasticsearch 6 environment
-es6
-
 # Sphinx documentation
 # Only need to have three files to build the documentation.
 docs/**/
@@ -70,7 +70,6 @@ docs/**/
 docs/source/*
 !docs/source/conf.py
 !docs/source/index.rst
-
 
 # Mac OS
 .DS_Store
