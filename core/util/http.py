@@ -274,6 +274,9 @@ class HTTP(object):
             if make_request_with == sessions.Session.request:
                 with sessions.Session() as session:
                     if max_retry_count is not None:
+                        # TODO: Verify the status codes for which it retries.
+                        #  Are there any status codes for which we would NOT want to retry (e.g., 401, 403)?
+                        #  Are there some that we want to ensure get retried (e.g., 502, which we get a lot).
                         retry_strategy = Retry(total=max_retry_count)
                         adapter = HTTPAdapter(max_retries=retry_strategy)
 
