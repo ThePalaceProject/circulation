@@ -22,7 +22,8 @@ $minimal_apt_get_install --no-upgrade \
   libpq-dev \
   libxmlsec1-dev \
   libxmlsec1-openssl \
-  libxml2-dev
+  libxml2-dev \
+  pkg-config
 
 # We should be able to drop these lines when we move to Python > 3.6
 # https://click.palletsprojects.com/en/5.x/python3/#python-3-surrogate-handling
