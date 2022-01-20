@@ -116,19 +116,15 @@ versions of circ-webapp and circ-scripts
 However, there may come a time in development when you want to build Docker containers for a particular version of the
 Circulation Manager. If so, please use the instructions below.
 
-We recommend you install at least version 18.06 of the Docker engine and version 1.24 of Docker Compose.
+We recommend you install at least version 18.06 of the Docker engine.
 
 ### `.webapp` and `.scripts` images
 
-Determine which image you would like to build and update the tag and `Dockerfile` listed below accordingly.
+Determine which image you would like to build and update the tag and `Dockerfile` listed below accordingly. Run the
+build command from the root of the repository not the docker folder.
 
 ```sh
-$ docker build \
-    --tag circ-scripts:development \
-    --file docker/Dockerfile.scripts \
-    --no-cache .
+docker build --tag circ --file docker/Dockerfile.scripts .
 ```
 
-You must run this command with the `--no-cache` option or the code in the container will not be updated from the last
-build, defeating the purpose of the build and enhancing overall confusion. Feel free to change the image tag as you
-like.
+Feel free to change the image tag as you like.
