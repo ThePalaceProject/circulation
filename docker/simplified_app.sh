@@ -21,11 +21,6 @@ $minimal_apt_get_install --no-upgrade \
   libxmlsec1-openssl \
   pkg-config
 
-# We should be able to drop these lines when we move to Python > 3.6
-# https://click.palletsprojects.com/en/5.x/python3/#python-3-surrogate-handling
-export LC_ALL=C.UTF-8
-export LANG=C.UTF-8
-
 # Create a user.
 useradd -ms /bin/bash -U simplified
 
