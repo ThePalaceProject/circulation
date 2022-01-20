@@ -10,6 +10,7 @@ import sqlalchemy
 from money import Money
 from sqlalchemy import distinct
 from sqlalchemy.sql.functions import func
+from sqlalchemy import select
 
 # For backwards compatibility, import items that were moved to
 # languages.py
@@ -25,26 +26,8 @@ def batch(iterable, size=1):
 
 
 def fast_query_count(query):
-    """Counts the results of a query without using super-slow subquery"""
-
-    statement = query.enable_eagerloads(False).with_labels().statement
-    distinct_columns = statement._distinct
-    new_columns = [func.count()]
-    if isinstance(distinct_columns, list):
-        # When using distinct to select from the db, the distinct
-        # columns need to be incorporated into the count itself.
-        new_columns = [func.count(distinct(func.concat(*distinct_columns)))]
-
-        # Then we can remove the distinct criteria from the statement
-        # itself by setting it to its default value, False.
-        statement._distinct = False
-    count_q = statement.with_only_columns(new_columns).order_by(None)
-    count = query.session.execute(count_q).scalar()
-
-    if query._limit and query._limit < count:
-        return query._limit
-
-    return count
+    new_selection = select(func.count()).select_from(query.subquery())
+    return query.session.execute(new_selection).scalar_one()
 
 
 def slugify(text, length_limit=None):
