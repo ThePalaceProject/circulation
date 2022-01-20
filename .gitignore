@@ -73,3 +73,6 @@ docs/source/*
 
 # Mac OS
 .DS_Store
+
+# Git
+.git
