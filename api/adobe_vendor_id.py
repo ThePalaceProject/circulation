@@ -831,7 +831,7 @@ class AuthdataUtility(object):
         if exp:
             payload["exp"] = self.numericdate(exp)  # Expiration Time
         return base64.encodebytes(
-            jwt.encode(payload, self.secret, algorithm=self.ALGORITHM)
+            bytes(jwt.encode(payload, self.secret, algorithm=self.ALGORITHM), encoding='utf-8')
         )
 
     @classmethod
@@ -892,7 +892,7 @@ class AuthdataUtility(object):
     def _decode(self, authdata):
         # First, decode the authdata without checking the signature.
         decoded = jwt.decode(
-            authdata, algorithm=self.ALGORITHM, options=dict(verify_signature=False)
+            authdata, algorithms=[self.ALGORITHM], options=dict(verify_signature=False, verify_exp=True)
         )
 
         # This lets us get the library URI, which lets us get the secret.
@@ -905,7 +905,7 @@ class AuthdataUtility(object):
         # We know the secret for this library, so we can re-decode the
         # secret and require signature valudation this time.
         secret = self.secrets_by_library_uri[library_uri]
-        decoded = jwt.decode(authdata, secret, algorithm=self.ALGORITHM)
+        decoded = jwt.decode(authdata, secret, algorithms=[self.ALGORITHM])
         if not "sub" in decoded:
             raise jwt.exceptions.DecodeError("No subject specified.")
         return library_uri, decoded["sub"]
