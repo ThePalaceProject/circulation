@@ -4,7 +4,10 @@ import datetime
 import json
 import logging
 import sys
+import time
 import uuid
+
+from jwt.exceptions import InvalidIssuedAtError
 
 import flask
 import jwt
@@ -831,7 +834,10 @@ class AuthdataUtility(object):
         if exp:
             payload["exp"] = self.numericdate(exp)  # Expiration Time
         return base64.encodebytes(
-            bytes(jwt.encode(payload, self.secret, algorithm=self.ALGORITHM), encoding='utf-8')
+            bytes(
+                jwt.encode(payload, self.secret, algorithm=self.ALGORITHM),
+                encoding="utf-8",
+            )
         )
 
     @classmethod
@@ -892,8 +898,14 @@ class AuthdataUtility(object):
     def _decode(self, authdata):
         # First, decode the authdata without checking the signature.
         decoded = jwt.decode(
-            authdata, algorithms=[self.ALGORITHM], options=dict(verify_signature=False, verify_exp=True)
+            authdata,
+            algorithms=[self.ALGORITHM],
+            options=dict(verify_signature=False, verify_exp=True),
         )
+
+        # Fail future JWTs as per requirements, pyJWT stopped doing this, so doing it manually
+        if "iat" in decoded and decoded["iat"] > time.time():
+            raise InvalidIssuedAtError("Issued At claim (iat) cannot be in the future")
 
         # This lets us get the library URI, which lets us get the secret.
         library_uri = decoded.get("iss")
