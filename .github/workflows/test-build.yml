@@ -211,6 +211,9 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Create version file
+        run: git rev-parse --short HEAD > .version
+
       - name: Build circ-webapp image
         uses: docker/build-push-action@v2
         with:
