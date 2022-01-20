@@ -3,7 +3,7 @@
 .idea/
 
 # Byte-compiled / optimized / DLL files
-__pycache__/
+__pycache__
 *.py[cod]
 
 # C extensions
@@ -31,7 +31,6 @@ var/
 .*_cache
 .tox
 .pyre
-__pycache__
 
 # Installer logs
 pip-log.txt
@@ -62,6 +61,9 @@ coverage.xml
 
 *~
 .env
+.docker
+.git
+.pyre
 
 # Sphinx documentation
 # Only need to have three files to build the documentation.
@@ -73,6 +75,3 @@ docs/source/*
 
 # Mac OS
 .DS_Store
-
-# Git
-.git
