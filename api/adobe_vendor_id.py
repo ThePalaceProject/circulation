@@ -7,13 +7,12 @@ import sys
 import time
 import uuid
 
-from jwt.exceptions import InvalidIssuedAtError
-
 import flask
 import jwt
 from flask import Response
 from flask_babel import lazy_gettext as _
 from jwt.algorithms import HMACAlgorithm
+from jwt.exceptions import InvalidIssuedAtError
 from sqlalchemy.orm.session import Session
 
 from api.base_controller import BaseCirculationManagerController
