@@ -23,11 +23,7 @@ from werkzeug.exceptions import NotFound
 from api.adobe_vendor_id import AuthdataUtility, DeviceManagementProtocolController
 from api.annotations import AnnotationWriter
 from api.app import app, initialize_database
-from api.authenticator import (
-    CirculationPatronProfileStorage,
-    LibraryAuthenticator,
-    OAuthController,
-)
+from api.authenticator import CirculationPatronProfileStorage, LibraryAuthenticator
 from api.circulation import FulfillmentInfo, HoldInfo, LoanInfo
 from api.circulation_exceptions import *
 from api.circulation_exceptions import RemoteInitiatedServerError
@@ -377,7 +373,6 @@ class TestCirculationManager(CirculationControllerTest):
         # which are about to be reloaded.
         manager._external_search = object()
         manager.adobe_device_management = object()
-        manager.oauth_controller = object()
         manager.auth = object()
         manager.shared_collection_api = object()
         manager.new_custom_index_views = object()

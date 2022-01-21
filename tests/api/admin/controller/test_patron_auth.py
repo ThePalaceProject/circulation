@@ -7,7 +7,6 @@ from werkzeug.datastructures import MultiDict
 from api.admin.controller.patron_auth_services import PatronAuthServicesController
 from api.admin.exceptions import *
 from api.authenticator import AuthenticationProvider, BasicAuthenticationProvider
-from api.clever import CleverAuthenticationAPI
 from api.firstbook import FirstBookAuthenticationAPI
 from api.millenium_patron import MilleniumPatronAPI
 from api.problem_details import *
@@ -237,30 +236,6 @@ class TestPatronAuth(SettingsControllerTest):
             assert "^(u)" == library.get(
                 AuthenticationProvider.EXTERNAL_TYPE_REGULAR_EXPRESSION
             )
-
-    def test_patron_auth_services_get_with_clever_auth_service(self):
-        auth_service, ignore = create(
-            self._db,
-            ExternalIntegration,
-            protocol=CleverAuthenticationAPI.__module__,
-            goal=ExternalIntegration.PATRON_AUTH_GOAL,
-        )
-        auth_service.username = "user"
-        auth_service.password = "pass"
-        auth_service.libraries += [self._default_library]
-
-        with self.request_context_with_admin("/"):
-            response = (
-                self.manager.admin_patron_auth_services_controller.process_patron_auth_services()
-            )
-            [service] = response.get("patron_auth_services")
-
-            assert auth_service.id == service.get("id")
-            assert CleverAuthenticationAPI.__module__ == service.get("protocol")
-            assert "user" == service.get("settings").get(ExternalIntegration.USERNAME)
-            assert "pass" == service.get("settings").get(ExternalIntegration.PASSWORD)
-            [library] = service.get("libraries")
-            assert self._default_library.short_name == library.get("short_name")
 
     def test_patron_auth_services_get_with_saml_auth_service(self):
         auth_service, ignore = create(
