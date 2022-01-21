@@ -4,7 +4,6 @@ import datetime
 import json
 import logging
 import sys
-import time
 import uuid
 
 import flask
@@ -903,7 +902,7 @@ class AuthdataUtility(object):
         )
 
         # Fail future JWTs as per requirements, pyJWT stopped doing this, so doing it manually
-        if "iat" in decoded and decoded["iat"] > time.time():
+        if "iat" in decoded and decoded["iat"] > self.numericdate(utc_now()):
             raise InvalidIssuedAtError("Issued At claim (iat) cannot be in the future")
 
         # This lets us get the library URI, which lets us get the secret.
