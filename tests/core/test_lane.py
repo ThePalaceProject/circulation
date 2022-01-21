@@ -1168,7 +1168,7 @@ class TestDatabaseBackedFacets(DatabaseTest):
             unlimited_access_high.id,
         ] == [x.id for x in title_order]
         assert ["sort_title", "sort_author", "id"] == [
-            x.name for x in title_order._distinct
+            x.name for x in title_order._distinct_on
         ]
 
         # This sort order is not supported, so the default is used.
@@ -1181,7 +1181,7 @@ class TestDatabaseBackedFacets(DatabaseTest):
             open_access_high.id,
         ] == [x.id for x in unsupported_order]
         assert ["sort_author", "sort_title", "id"] == [
-            x.name for x in unsupported_order._distinct
+            x.name for x in unsupported_order._distinct_on
         ]
 
 
