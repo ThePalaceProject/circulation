@@ -1,0 +1,8 @@
+FROM phusion/baseimage:focal-1.0.0
+
+# Copy over all Palace build files for this image
+COPY ./docker /ls_build
+COPY --chown=1000:1000 . /var/www/circulation
+
+RUN /bin/bash -c "/ls_build/simplified_app.sh \
+      && /ls_build/logrotate.sh"

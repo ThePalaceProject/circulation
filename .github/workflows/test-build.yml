@@ -4,6 +4,7 @@ env:
   POSTGRES_USER: simplified_test
   POSTGRES_PASSWORD: test
   POSTGRES_DB: simplified_circulation_test
+  BASE_IMAGE: ghcr.io/${{ github.repository_owner }}/docker-base:${{ github.GITHUB_REF_NAME }}
 
   # Push the built docker image only in the following cases:
   #  - The `NO_DOCKER_IMAGE` secret is not set. (Useful if you want to disable pushing
@@ -19,52 +20,100 @@ env:
     }}
 
 jobs:
-  test:
-    name: ${{ matrix.module }} Tests (Py ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: [3.6, 3.7, 3.8, 3.9]
-        module: [Api, Core]
+  # test:
+  #   name: ${{ matrix.module }} Tests (Py ${{ matrix.python-version }})
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 60
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       python-version: [3.6, 3.7, 3.8, 3.9]
+  #       module: [Api, Core]
 
-    # We want to run on external PRs, but not on our own internal PRs as they'll be run
-    # by the push to the branch. This prevents duplicated runs on internal PRs.
-    # Some discussion of this here:
-    # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012
+  #   # We want to run on external PRs, but not on our own internal PRs as they'll be run
+  #   # by the push to the branch. This prevents duplicated runs on internal PRs.
+  #   # Some discussion of this here:
+  #   # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012
+  #   if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+
+  #   steps:
+  #     - uses: actions/checkout@v2
+
+  #     - name: Set up Python
+  #       uses: actions/setup-python@v2
+  #       with:
+  #         python-version: ${{ matrix.python-version }}
+
+  #     - name: Install Apt Packages
+  #       run: |
+  #         sudo apt-get update
+  #         sudo apt-get install --yes libxmlsec1-dev libxml2-dev
+
+  #     - name: Install Poetry
+  #       uses: ./.github/actions/poetry
+
+  #     - name: Install Tox
+  #       run: |
+  #         pip install --upgrade pip
+  #         pip install tox tox-gh-actions tox-docker
+
+  #     - name: Run Tests
+  #       run: tox
+  #       env:
+  #         MODULE: ${{ matrix.module }}
+  build-base-image:
+    name: Build base image
+    runs-on: ubuntu-latest
+
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
 
     steps:
       - uses: actions/checkout@v2
-
-      - name: Set up Python
-        uses: actions/setup-python@v2
         with:
-          python-version: ${{ matrix.python-version }}
+          persist-credentials: false
 
-      - name: Install Apt Packages
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes libxmlsec1-dev libxml2-dev
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
 
-      - name: Install Poetry
-        uses: ./.github/actions/poetry
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install Tox
-        run: |
-          pip install --upgrade pip
-          pip install tox tox-gh-actions tox-docker
+      - name: Cache Docker layer
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-single-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-single-buildx
+      - name: Generate tags for base image
+        id: base-tags
+        uses: docker/metadata-action@v3
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/docker-base
+          tags: |
+            type=semver,pattern={{major}}.{{minor}},priority=10
+            type=semver,pattern={{version}},priority=20
+            type=ref,event=branch,priority=30
+            type=sha,priority=40
+      - name: Build & push base docker image
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./docker/Dockerfile.base
+          push: ${{ env.IMAGE_PUSH_ENABLED }}
+          tags: ${{ steps.base-tags.outputs.tags }}
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new
 
-      - name: Run Tests
-        run: tox
-        env:
-          MODULE: ${{ matrix.module }}
 
   build-docker-exec:
     name: Build and push circ-exec docker image
     runs-on: ubuntu-latest
-    needs: [test]
+    needs: [build-base-image]
 
     # We want to run on external PRs, but not on our own internal PRs as they'll be run
     # by the push to the branch. This prevents duplicated runs on internal PRs.
@@ -97,7 +146,12 @@ jobs:
             type=semver,pattern={{version}},priority=20
             type=ref,event=branch,priority=30
             type=sha,priority=40
-
+      - name: Update base image
+        run: |
+          echo ${GITHUB_SHA::7}
+          repo_owner=$(echo "$GITHUB_REPOSITORY_OWNER" | awk '{print tolower($0)}')
+          sed -i.bak "s/REPOSITORY_OWNER/${repo_owner}/" docker/Dockerfile.exec
+          sed -i.bak "s/TAG/sha-${GITHUB_SHA::7}/" docker/Dockerfile.exec
       - name: Build & push circ-exec image
         uses: docker/build-push-action@v2
         with:
@@ -105,12 +159,12 @@ jobs:
           file: ./docker/Dockerfile.exec
           push: ${{ env.IMAGE_PUSH_ENABLED }}
           tags: ${{ steps.exec-tags.outputs.tags }}
-
+          cache-from: type=local,src=/tmp/.buildx-cache
 
   build-docker-scripts:
     name: Build and push circ-scripts docker image
     runs-on: ubuntu-latest
-    needs: [test]
+    needs: [build-base-image]
 
     # We want to run on external PRs, but not on our own internal PRs as they'll be run
     # by the push to the branch. This prevents duplicated runs on internal PRs.
@@ -140,7 +194,12 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
+      - name: Update base image
+        run: |
+          echo ${GITHUB_SHA::7}
+          repo_owner=$(echo "$GITHUB_REPOSITORY_OWNER" | awk '{print tolower($0)}')
+          sed -i.bak "s/REPOSITORY_OWNER/${repo_owner}/" docker/Dockerfile.scripts
+          sed -i.bak "s/TAG/sha-${GITHUB_SHA::7}/" docker/Dockerfile.scripts
       - name: Build circ-scripts image
         uses: docker/build-push-action@v2
         with:
@@ -155,7 +214,6 @@ jobs:
           --network ${{job.services.postgres.network}}
           -e SIMPLIFIED_PRODUCTION_DATABASE="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
           circ
-
       - name: Run circ-scripts tests
         run: ./docker/ci/test_scripts.sh
 
@@ -173,7 +231,6 @@ jobs:
             type=semver,pattern={{version}},priority=20
             type=ref,event=branch,priority=30
             type=sha,priority=40
-
       - name: Push circ-scripts image
         uses: docker/build-push-action@v2
         with:
@@ -186,7 +243,7 @@ jobs:
   build-docker-webapp:
     name: Build and push circ-webapp docker image
     runs-on: ubuntu-latest
-    needs: [test]
+    needs: [build-base-image]
 
     # We want to run on external PRs, but not on our own internal PRs as they'll be run
     # by the push to the branch. This prevents duplicated runs on internal PRs.
@@ -219,7 +276,12 @@ jobs:
 
       - name: Create version file
         run: git rev-parse --short HEAD > .version
-
+      - name: Update base image
+        run: |
+          echo ${GITHUB_SHA::7}
+          repo_owner=$(echo "$GITHUB_REPOSITORY_OWNER" | awk '{print tolower($0)}')
+          sed -i.bak "s/REPOSITORY_OWNER/${repo_owner}/" docker/Dockerfile.webapp
+          sed -i.bak "s/TAG/sha-${GITHUB_SHA::7}/" docker/Dockerfile.webapp
       - name: Build circ-webapp image
         uses: docker/build-push-action@v2
         with:
@@ -234,7 +296,6 @@ jobs:
           --network ${{job.services.postgres.network}}
           -e SIMPLIFIED_PRODUCTION_DATABASE="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
           circ
-
       - name: Run circ-webapp tests
         run: ./docker/ci/test_webapp.sh
 
@@ -252,7 +313,6 @@ jobs:
             type=semver,pattern={{version}},priority=20
             type=ref,event=branch,priority=30
             type=sha,priority=40
-
       - name: Push circ-webapp image
         uses: docker/build-push-action@v2
         with:
