@@ -33,7 +33,7 @@ class TestPatronAuth(SettingsControllerTest):
             )
             assert response.get("patron_auth_services") == []
             protocols = response.get("protocols")
-            assert 8 == len(protocols)
+            assert 7 == len(protocols)
             assert SimpleAuthenticationProvider.__module__ == protocols[0].get("name")
             assert "settings" in protocols[0]
             assert "library_settings" in protocols[0]

@@ -510,9 +510,6 @@ class TestAuthenticator(ControllerTest):
             def create_bearer_token(self, *args, **kwargs):
                 return "bearer token for %s" % self.name
 
-            def oauth_provider_lookup(self, *args, **kwargs):
-                return "oauth provider for %s" % self.name
-
             def decode_bearer_token(self, *args, **kwargs):
                 return "decoded bearer token for %s" % self.name
 
@@ -533,7 +530,6 @@ class TestAuthenticator(ControllerTest):
             assert LIBRARY_NOT_FOUND == auth.create_authentication_headers()
             assert LIBRARY_NOT_FOUND == auth.get_credential_from_header({})
             assert LIBRARY_NOT_FOUND == auth.create_bearer_token()
-            assert LIBRARY_NOT_FOUND == auth.oauth_provider_lookup()
 
         # The other libraries are in the authenticator.
         with self.app.test_request_context("/"):
@@ -550,7 +546,6 @@ class TestAuthenticator(ControllerTest):
             )
             assert "credential for l1" == auth.get_credential_from_header({})
             assert "bearer token for l1" == auth.create_bearer_token()
-            assert "oauth provider for l1" == auth.oauth_provider_lookup()
             assert "decoded bearer token for l1" == auth.decode_bearer_token()
 
         with self.app.test_request_context("/"):
@@ -567,7 +562,6 @@ class TestAuthenticator(ControllerTest):
             )
             assert "credential for l2" == auth.get_credential_from_header({})
             assert "bearer token for l2" == auth.create_bearer_token()
-            assert "oauth provider for l2" == auth.oauth_provider_lookup()
             assert "decoded bearer token for l2" == auth.decode_bearer_token()
 
 
@@ -580,42 +574,14 @@ class TestLibraryAuthenticator(AuthenticatorTest):
             libraries=[self._default_library],
         )
         millenium.url = "http://url/"
-        auth = LibraryAuthenticator.from_config(self._db, self._default_library)
+        analytics = MockAnalyticsProvider()
+        auth = LibraryAuthenticator.from_config(
+            self._db, self._default_library, analytics
+        )
 
         assert auth.basic_auth_provider != None
         assert isinstance(auth.basic_auth_provider, MilleniumPatronAPI)
-        assert {} == auth.oauth_providers_by_name
-
-    def test_from_config_basic_auth_and_oauth(self):
-        library = self._default_library
-        # A basic auth provider and an oauth provider.
-        firstbook = self._external_integration(
-            "api.firstbook",
-            ExternalIntegration.PATRON_AUTH_GOAL,
-        )
-        firstbook.url = "http://url/"
-        firstbook.password = "secret"
-        library.integrations.append(firstbook)
-
-        oauth = self._external_integration(
-            "api.clever",
-            ExternalIntegration.PATRON_AUTH_GOAL,
-        )
-        oauth.username = "client_id"
-        oauth.password = "client_secret"
-        library.integrations.append(oauth)
-
-        analytics = MockAnalyticsProvider()
-        auth = LibraryAuthenticator.from_config(self._db, library, analytics)
-
-        assert auth.basic_auth_provider != None
-        assert isinstance(auth.basic_auth_provider, FirstBookAuthenticationAPI)
         assert analytics == auth.basic_auth_provider.analytics
-
-        assert 1 == len(auth.oauth_providers_by_name)
-        clever = auth.oauth_providers_by_name[CleverAuthenticationAPI.NAME]
-        assert isinstance(clever, CleverAuthenticationAPI)
-        assert analytics == clever.analytics
 
     def test_with_custom_patron_catalog(self):
         """Instantiation of a LibraryAuthenticator may
@@ -674,8 +640,7 @@ class TestLibraryAuthenticator(AuthenticatorTest):
         auth = LibraryAuthenticator.from_config(self._db, self._default_library)
 
         # The LibraryAuthenticator exists but has no AuthenticationProviders.
-        assert None == auth.basic_auth_provider
-        assert {} == auth.oauth_providers_by_name
+        assert auth.basic_auth_provider is None
 
         # Both integrations have left their trace in
         # initialization_exceptions.
@@ -770,17 +735,12 @@ class TestLibraryAuthenticator(AuthenticatorTest):
         #
         # (This isn't necessarily a deal breaker, but most libraries
         # do authenticate their patrons.)
-        assert False == authenticator.supports_patron_authentication
+        assert authenticator.supports_patron_authentication is False
 
         # Adding a basic auth provider will make it start supporting
         # patron authentication.
         authenticator.basic_auth_provider = object()
-        assert True == authenticator.supports_patron_authentication
-        authenticator.basic_auth_provider = None
-
-        # So will adding an OAuth provider.
-        authenticator.oauth_providers_by_name[object()] = object()
-        assert True == authenticator.supports_patron_authentication
+        assert authenticator.supports_patron_authentication is True
 
     def test_identifies_individuals(self):
         # This LibraryAuthenticator does not authenticate patrons at
@@ -789,34 +749,27 @@ class TestLibraryAuthenticator(AuthenticatorTest):
             _db=self._db,
             library=self._default_library,
         )
+        assert authenticator.identifies_individuals is False
 
-        # This LibraryAuthenticator has two Authenticators, but
-        # neither of them identify patrons as individuals.
+        # This LibraryAuthenticator has one Authenticator, but
+        # does not identify patrons as individuals.
         class MockAuthenticator(object):
             NAME = "mock"
             IDENTIFIES_INDIVIDUALS = False
 
         basic = MockAuthenticator()
-        oauth = MockAuthenticator()
         authenticator = LibraryAuthenticator(
             _db=self._db,
             library=self._default_library,
             basic_auth_provider=basic,
-            oauth_providers=[oauth],
             bearer_token_signing_secret=self._str,
         )
-        assert False == authenticator.identifies_individuals
-
-        # If some Authenticators identify individuals and some do not,
-        # the library as a whole does not (necessarily) identify
-        # individuals.
-        basic.IDENTIFIES_INDIVIDUALS = True
-        assert False == authenticator.identifies_individuals
+        assert authenticator.identifies_individuals is False
 
         # If every Authenticator identifies individuals, then so does
         # the library as a whole.
-        oauth.IDENTIFIES_INDIVIDUALS = True
-        assert True == authenticator.identifies_individuals
+        basic.IDENTIFIES_INDIVIDUALS = True
+        assert authenticator.identifies_individuals is True
 
     def test_providers(self):
         integration = self._external_integration(self._str)
@@ -1044,7 +997,7 @@ class TestLibraryAuthenticator(AuthenticatorTest):
             # authentication sub-documents are assembled properly and
             # placed in the right position.
             flows = doc["authentication"]
-            oauth_doc, basic_doc = sorted(flows, key=lambda x: x["type"])
+            [basic_doc] = sorted(flows, key=lambda x: x["type"])
 
             expect_basic = basic.authentication_flow_document(self._db)
             assert expect_basic == basic_doc

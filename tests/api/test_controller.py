@@ -457,9 +457,6 @@ class TestCirculationManager(CirculationControllerTest):
         # The ExternalSearch object has been reset.
         assert isinstance(manager.external_search, MockExternalSearchIndex)
 
-        # The OAuth controller has been recreated.
-        assert isinstance(manager.oauth_controller, OAuthController)
-
         # So has the controller for the Device Management Protocol.
         assert isinstance(
             manager.adobe_device_management, DeviceManagementProtocolController
