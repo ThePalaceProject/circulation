@@ -8,9 +8,8 @@ from typing import Any, Iterable
 import flask_sqlalchemy_session
 import sqlalchemy
 from money import Money
-from sqlalchemy import distinct
+from sqlalchemy import distinct, select
 from sqlalchemy.sql.functions import func
-from sqlalchemy import select
 
 # For backwards compatibility, import items that were moved to
 # languages.py
