@@ -64,7 +64,7 @@ jobs:
   build-docker-images:
     name: Build and push docker images
     runs-on: ubuntu-latest
-    needs: [test]
+    # needs: [test]
 
     # We want to run on external PRs, but not on our own internal PRs as they'll be run
     # by the push to the branch. This prevents duplicated runs on internal PRs.
