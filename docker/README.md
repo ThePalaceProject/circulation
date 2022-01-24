@@ -23,6 +23,18 @@ $ docker run --name webapp -d \
     ghcr.io/thepalaceproject/circ-webapp:main
 ```
 
+Ff the database and ElasticSearch(ES) are running in containers, use the --link option to let the webapp docker container 
+to access them as bellow:
+
+```sh
+docker run \
+--link pg --link es \
+--name circ \
+-e SIMPLIFIED_PRODUCTION_DATABASE='postgres://[username]:[password]@[host]:[port]/[database_name]' \
+-d -p 6500:80 \
+ghcr.io/thepalaceproject/circ-webapp:main
+```
+
 Navigate to `http://localhost/admin` in your browser to visit the web admin for the Circulation Manager. In the admin,
 you can add or update configuration information. If you have not yet created an admin authorization protocol before,
 you'll need to do that before you can set other configuration.
