@@ -61,7 +61,7 @@ jobs:
         env:
           MODULE: ${{ matrix.module }}
 
-  build-docker-exec:
+  build-docker-images:
     name: Build and push docker images
     runs-on: ubuntu-latest
     needs: [test]
