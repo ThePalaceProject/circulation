@@ -192,7 +192,7 @@ jobs:
         if: always()
         run: docker stop circ
 
-      - name: Build & push circ-exec image
+      - name: Build & push exec image
         uses: docker/build-push-action@v2
         with:
           context: .
