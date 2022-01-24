@@ -9,7 +9,7 @@ LABEL maintainer="The Palace Project <info@thepalaceproject.org>"
 RUN go get -v github.com/readium/readium-lcp-server/lcpencrypt
 
 ###############################################################################
-## Final image
+## Base Image
 ###############################################################################
 
 FROM phusion/baseimage:focal-1.0.0 As base
@@ -20,6 +20,10 @@ COPY --chown=1000:1000 . /var/www/circulation
 
 RUN /bin/bash -c "/ls_build/simplified_app.sh \
       && /ls_build/logrotate.sh"
+
+###############################################################################
+## Circ-exec Image
+###############################################################################
 
 FROM base as exec
 
@@ -35,6 +39,10 @@ WORKDIR /home/simplified/circulation/bin
 CMD ["/sbin/my_init", "--skip-runit", "--quiet", "--", \
      "/bin/bash", "-c", \
      "source ../env/bin/activate && ./${SIMPLIFIED_SCRIPT_NAME}"]
+
+###############################################################################
+## Circ-scripts Image
+###############################################################################
 
 FROM base as scripts
 
@@ -52,12 +60,17 @@ WORKDIR /home/simplified/circulation/bin
 
 CMD ["/sbin/my_init"]
 
+###############################################################################
+## Circ-webapp Image
+###############################################################################
+
 FROM base as webapp
 
 ENV SIMPLIFIED_DB_TASK "ignore"
 ENV LANG=C.UTF-8
 
 RUN /bin/bash -c "/ls_build/nginx.sh \
+      && /ls_build/syslog-ng.sh \
       && /ls_build/uwsgi.sh \
       && rm -rf /ls_build && /bd_build/cleanup.sh"
 
