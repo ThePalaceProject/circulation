@@ -23,7 +23,7 @@ $ docker run --name webapp -d \
     ghcr.io/thepalaceproject/circ-webapp:main
 ```
 
-Ff the database and ElasticSearch(ES) are running in containers, use the --link option to let the webapp docker container 
+Ff the database and ElasticSearch(ES) are running in containers, use the --link option to let the webapp docker container
 to access them as bellow:
 
 ```sh
