@@ -95,39 +95,6 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate tags for circ-exec image
-        id: exec-tags
-        uses: docker/metadata-action@v3
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/circ-exec
-          tags: |
-            type=semver,pattern={{major}}.{{minor}},priority=10
-            type=semver,pattern={{version}},priority=20
-            type=ref,event=branch,priority=30
-            type=sha,priority=40
-
-      - name: Generate tags for circ-scripts image
-        id: scripts-tags
-        uses: docker/metadata-action@v3
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/circ-scripts
-          tags: |
-            type=semver,pattern={{major}}.{{minor}},priority=10
-            type=semver,pattern={{version}},priority=20
-            type=ref,event=branch,priority=30
-            type=sha,priority=40
-
-      - name: Generate tags for circ-webapp image
-        id: webapp-tags
-        uses: docker/metadata-action@v3
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/circ-webapp
-          tags: |
-            type=semver,pattern={{major}}.{{minor}},priority=10
-            type=semver,pattern={{version}},priority=20
-            type=ref,event=branch,priority=30
-            type=sha,priority=40
-
       - name: Create version file
         run: git rev-parse --short HEAD > .version
 
@@ -180,6 +147,39 @@ jobs:
       - name: Stop circ-webapp docker container
         if: always()
         run: docker stop circ
+
+      - name: Generate tags for circ-exec image
+        id: exec-tags
+        uses: docker/metadata-action@v3
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/circ-exec
+          tags: |
+            type=semver,pattern={{major}}.{{minor}},priority=10
+            type=semver,pattern={{version}},priority=20
+            type=ref,event=branch,priority=30
+            type=sha,priority=40
+
+      - name: Generate tags for circ-scripts image
+        id: scripts-tags
+        uses: docker/metadata-action@v3
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/circ-scripts
+          tags: |
+            type=semver,pattern={{major}}.{{minor}},priority=10
+            type=semver,pattern={{version}},priority=20
+            type=ref,event=branch,priority=30
+            type=sha,priority=40
+
+      - name: Generate tags for circ-webapp image
+        id: webapp-tags
+        uses: docker/metadata-action@v3
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/circ-webapp
+          tags: |
+            type=semver,pattern={{major}}.{{minor}},priority=10
+            type=semver,pattern={{version}},priority=20
+            type=ref,event=branch,priority=30
+            type=sha,priority=40
 
       - name: Build & push exec image
         uses: docker/build-push-action@v2
