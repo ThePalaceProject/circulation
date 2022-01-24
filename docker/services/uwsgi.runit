@@ -1,4 +1,4 @@
 #!/bin/bash
 set -e
 
-/var/www/circulation/env/bin/uwsgi --ini ~/circulation/uwsgi.ini
+exec /var/www/circulation/env/bin/uwsgi --ini /etc/uwsgi.ini
