@@ -69,7 +69,6 @@ FROM base as webapp
 ENV SIMPLIFIED_DB_TASK "ignore"
 
 RUN /bin/bash -c "/ls_build/nginx.sh \
-      && /ls_build/syslog-ng.sh \
       && /ls_build/uwsgi.sh \
       && rm -rf /ls_build && /bd_build/cleanup.sh"
 
