@@ -20,7 +20,7 @@ Once the webapp Docker image is built, we can run it in a container with the fol
 $ docker run --name webapp -d \
     --p 80:80 \
     -e SIMPLIFIED_PRODUCTION_DATABASE='postgres://[username]:[password]@[host]:[port]/[database_name]' \
-    ghcr.io/thepalaceproject/circ-webapp:main
+    ghcr.io/thepalaceproject/circ-webapp
 ```
 
 If the database and ElasticSearch(ES) are running in containers, use the --link option to let the webapp docker container
@@ -32,7 +32,7 @@ docker run \
 --name circ \
 -e SIMPLIFIED_PRODUCTION_DATABASE='postgres://[username]:[password]@[host]:[port]/[database_name]' \
 -d -p 6500:80 \
-ghcr.io/thepalaceproject/circ-webapp:main
+ghcr.io/thepalaceproject/circ-webapp
 ```
 
 Navigate to `http://localhost/admin` in your browser to visit the web admin for the Circulation Manager. In the admin,
@@ -49,7 +49,7 @@ Once the scripts Docker image is built, we can run it in a container with the fo
 $ docker run --name scripts -d \
     -e TZ='YOUR_TIMEZONE_STRING' \
     -e SIMPLIFIED_PRODUCTION_DATABASE='postgres://[username]:[password]@[host]:[port]/[database_name]' \
-    ghcr.io/thepalaceproject/circ-scripts:main
+    ghcr.io/thepalaceproject/circ-scripts
 ```
 
 Using `docker exec -it scripts /bin/bash` in your console, navigate to `/var/log/simplified` in the container. After
@@ -74,7 +74,7 @@ external log aggregator if you wish to capture logs from the job.
 $ docker run --name search_index_refresh -it \
     -e SIMPLIFIED_SCRIPT_NAME='refresh_materialized_views' \
     -e SIMPLIFIED_PRODUCTION_DATABASE='postgres://[username]:[password]@[host]:[port]/[database_name]' \
-    ghcr.io/thepalaceproject/circ-exec:main
+    ghcr.io/thepalaceproject/circ-exec
 ```
 
 ## Environment Variables

@@ -67,7 +67,6 @@ CMD ["/sbin/my_init"]
 FROM base as webapp
 
 ENV SIMPLIFIED_DB_TASK "ignore"
-ENV LANG=C.UTF-8
 
 RUN /bin/bash -c "/ls_build/nginx.sh \
       && /ls_build/syslog-ng.sh \
