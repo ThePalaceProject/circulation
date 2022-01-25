@@ -17,6 +17,22 @@ FROM phusion/baseimage:focal-1.0.0 As base
 # Copy over all Palace build files for this image
 COPY ./docker /ls_build
 COPY --chown=1000:1000 . /var/www/circulation
+RUN /bin/bash -c "apt-get update \
+      && $minimal_apt_get_install --no-upgrade \
+      python3 \
+      python3-dev \
+      python3-setuptools \
+      python3-venv \
+      python3-pip \
+      gcc \
+      libpcre3-dev \
+      libffi-dev \
+      libjpeg-dev \
+      libssl-dev \
+      libpq-dev \
+      libxmlsec1-dev \
+      libxmlsec1-openssl \
+      pkg-config"
 
 RUN /bin/bash -c "/ls_build/simplified_app.sh \
       && /ls_build/logrotate.sh"
