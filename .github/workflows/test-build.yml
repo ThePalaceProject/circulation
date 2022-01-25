@@ -107,7 +107,6 @@ jobs:
           tags: circ
           target: scripts
           push: ghcr.io/${{ github.repository_owner }}/circ
-          progress: plain
           cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/circ:buildcache
           cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/circ:buildcache,mode=max
 
