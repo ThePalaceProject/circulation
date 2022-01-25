@@ -98,6 +98,14 @@ jobs:
       - name: Create version file
         run: git rev-parse --short HEAD > .version
 
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-single-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-single-buildx
+
       - name: Build circ-scripts image
         uses: docker/build-push-action@v2
         with:
@@ -106,8 +114,8 @@ jobs:
           load: true
           tags: circ
           target: scripts
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new
 
       - name: Start circ-scripts docker container
         run: >
