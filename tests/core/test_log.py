@@ -150,6 +150,7 @@ class TestLogConfiguration(DatabaseTest):
         )
         assert cls.ERROR == internal_log_level
         assert cls.DEBUG == database_log_level
+        assert len(errors) == 0
         [loggly_handler] = [x for x in handlers if isinstance(x, LogglyHandler)]
         assert "http://example.com/a_token/" == loggly_handler.url
         assert "test app" == loggly_handler.formatter.app_name
@@ -157,8 +158,8 @@ class TestLogConfiguration(DatabaseTest):
         [cloudwatch_handler] = [
             x for x in handlers if isinstance(x, CloudWatchLogHandler)
         ]
-        assert "simplified" == cloudwatch_handler.stream_name
-        assert "simplified" == cloudwatch_handler.log_group
+        assert "simplified" == cloudwatch_handler.log_stream_name
+        assert "simplified" == cloudwatch_handler.log_group_name
         assert 60 == cloudwatch_handler.send_interval
 
         [stream_handler] = [x for x in handlers if isinstance(x, logging.StreamHandler)]
@@ -252,8 +253,8 @@ class TestLogConfiguration(DatabaseTest):
         integration.set_setting(CloudwatchLogs.REGION, "us-east-2")
         handler = CloudwatchLogs.get_handler(integration, testing=True)
         assert isinstance(handler, CloudWatchLogHandler)
-        assert "test_stream" == handler.stream_name
-        assert "test_group" == handler.log_group
+        assert "test_stream" == handler.log_stream_name
+        assert "test_group" == handler.log_group_name
         assert 120 == handler.send_interval
 
         integration.setting(CloudwatchLogs.INTERVAL).value = -10
