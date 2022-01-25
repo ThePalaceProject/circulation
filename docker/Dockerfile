@@ -18,7 +18,7 @@ FROM phusion/baseimage:focal-1.0.0 As base
 COPY ./docker /ls_build
 COPY --chown=1000:1000 . /var/www/circulation
 RUN /bin/bash -c "apt-get update \
-      && $minimal_apt_get_install --no-upgrade \
+      && $minimal_apt_get_install \
       python3 \
       python3-dev \
       python3-setuptools \
