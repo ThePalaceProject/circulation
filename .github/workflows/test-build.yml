@@ -104,25 +104,25 @@ jobs:
           context: .
           file: ./docker/Dockerfile
           load: true
-          tags: circ
+          tags: ghcr.io/${{ github.repository_owner }}/circ
           target: scripts
-          push: ghcr.io/${{ github.repository_owner }}/circ
+          push: ${{ env.IMAGE_PUSH_ENABLED }}
           cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/circ:buildcache
           cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/circ:buildcache,mode=max
 
-      - name: Start circ-scripts docker container
-        run: >
-          docker run --rm --name circ -d
-          --network ${{job.services.postgres.network}}
-          -e SIMPLIFIED_PRODUCTION_DATABASE="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
-          circ
+      # - name: Start circ-scripts docker container
+      #   run: >
+      #     docker run --rm --name circ -d
+      #     --network ${{job.services.postgres.network}}
+      #     -e SIMPLIFIED_PRODUCTION_DATABASE="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
+      #     circ
 
-      - name: Run circ-scripts tests
-        run: ./docker/ci/test_scripts.sh
+      # - name: Run circ-scripts tests
+      #   run: ./docker/ci/test_scripts.sh
 
-      - name: Stop circ-scripts docker container
-        if: always()
-        run: docker stop circ
+      # - name: Stop circ-scripts docker container
+      #   if: always()
+      #   run: docker stop circ
 
       - name: Build circ-webapp image
         uses: docker/build-push-action@v2
@@ -135,19 +135,19 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Start circ-webapp docker container
-        run: >
-          docker run --rm --name circ -p 8000:80 -d
-          --network ${{job.services.postgres.network}}
-          -e SIMPLIFIED_PRODUCTION_DATABASE="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
-          circ
+      # - name: Start circ-webapp docker container
+      #   run: >
+      #     docker run --rm --name circ -p 8000:80 -d
+      #     --network ${{job.services.postgres.network}}
+      #     -e SIMPLIFIED_PRODUCTION_DATABASE="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
+      #     circ
 
-      - name: Run circ-webapp tests
-        run: ./docker/ci/test_webapp.sh
+      # - name: Run circ-webapp tests
+      #   run: ./docker/ci/test_webapp.sh
 
-      - name: Stop circ-webapp docker container
-        if: always()
-        run: docker stop circ
+      # - name: Stop circ-webapp docker container
+      #   if: always()
+      #   run: docker stop circ
 
       - name: Generate tags for circ-exec image
         id: exec-tags
