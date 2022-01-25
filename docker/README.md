@@ -113,12 +113,12 @@ time zone of the library or libraries on the circulation manager instance. This 
 ### `UWSGI_PROCESSES`
 
 *Optional.* The number of processes to use when running uWSGI. This value can be updated in `docker-compose.yml` or
-added directly in `Dockerfile.webapp`. Defaults to 6.
+added directly in `Dockerfile` under webapp stage. Defaults to 6.
 
 ### `UWSGI_THREADS`
 
 *Optional.* The number of threads to use when running uWSGI. This value can be updated in `docker-compose.yml` or added
-directly in `Dockerfile.webapp`. Defaults to 2.
+directly in `Dockerfile` under webapp stage. Defaults to 2.
 
 ## Building new images
 
@@ -130,13 +130,16 @@ Circulation Manager. If so, please use the instructions below.
 
 We recommend you install at least version 18.06 of the Docker engine.
 
-### `.webapp` and `.scripts` images
+### `webapp` and `scripts` images
 
 Determine which image you would like to build and update the tag and `Dockerfile` listed below accordingly. Run the
-build command from the root of the repository not the docker folder.
+build command from the root of the repository not the docker folder. Use `target` option to determine which docker
+image to build as bellow:
 
 ```sh
-docker build --tag circ --file docker/Dockerfile.scripts .
+docker build --tag circ --file docker/Dockerfile --target scripts .
 ```
+
+See `Dockerfile` for details.
 
 Feel free to change the image tag as you like.
