@@ -64,7 +64,7 @@ jobs:
   build-docker-images:
     name: Build and push docker images
     runs-on: ubuntu-latest
-    # needs: [test78]
+    # needs: [test]
 
     # We want to run on external PRs, but not on our own internal PRs as they'll be run
     # by the push to the branch. This prevents duplicated runs on internal PRs.
@@ -87,7 +87,6 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
-        id: buildx
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v1
@@ -99,25 +98,18 @@ jobs:
       - name: Create version file
         run: git rev-parse --short HEAD > .version
 
-      - name: Cache Docker layers
-        uses: actions/cache@v2
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-single-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-single-buildx
-
       - name: Build circ-scripts image
         uses: docker/build-push-action@v2
         with:
           context: .
-          builder: ${{ steps.buildx.outputs.name }}
           file: ./docker/Dockerfile
           load: true
           tags: circ
           target: scripts
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new
+          push: ghcr.io/${{ github.repository_owner }}/circ
+          progress: plain
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/circ:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/circ:buildcache,mode=max
 
       - name: Start circ-scripts docker container
         run: >
@@ -223,8 +215,3 @@ jobs:
           target: webapp
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Move cache
-        run: |
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
