@@ -140,6 +140,6 @@ image to build as bellow:
 docker build --tag circ --file docker/Dockerfile --target scripts .
 ```
 
-See `Dockerfile` for details.
+See `docker/Dockerfile` for details.
 
 Feel free to change the image tag as you like.
