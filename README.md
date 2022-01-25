@@ -56,11 +56,36 @@ brew install libxmlsec1
 brew install libjpeg
 ```
 
+#### Linux
+
+Most distributions will offer Python packages. On Arch Linux, the following command is sufficient:
+
+```sh
+pacman -S python
+```
+
 #### pyenv
 
 [pyenv](https://github.com/pyenv/pyenv) pyenv lets you easily switch between multiple versions of Python. It can be
 [installed](https://github.com/pyenv/pyenv-installer) using the command `curl https://pyenv.run | bash`. You can then
 install the version of Python you want to work with.
+
+It is recommended that [pyenv-virtualenv](https://github.com/pyenv/pyenv-virtualenv) be used to allow `pyenv`
+to manage _virtual environments_ in a manner that can be used by the [poetry](#poetry) tool. The `pyenv-virtualenv`
+plugin can be installed by cloning the relevant repository into the `plugins` subdirectory of your `$PYENV_ROOT`:
+
+```sh
+mkdir -p $PYENV_ROOT/plugins
+cd $PYENV_ROOT/plugins
+git clone https://github.com/pyenv/pyenv-virtualenv
+```
+
+After cloning the repository, `pyenv` now has a new `virtualenv` command:
+
+```sh
+$ pyenv virtualenv
+pyenv-virtualenv: no virtualenv name given.
+```
 
 #### Poetry
 
@@ -130,6 +155,36 @@ export SIMPLIFIED_PRODUCTION_DATABASE="postgres://palace:test@localhost:5432/cir
 
 ### Running the Application
 
+As mentioned in the [pyenv](#pyenv) section, the `poetry` tool should be executed under a virtual environment
+in order to guarantee that it will use the Python version you expect. To use a particular Python version,
+you should create a local virtual environment in the cloned `circulation` repository directory. Assuming that
+you want to use, for example, Python 3.9.9:
+
+```sh
+pyenv virtualenv 3.9.9 circ
+```
+
+This will create a new local virtual environment called `circ` that uses Python 3.9.9. Switch to that environment:
+
+```sh
+pyenv local circ
+```
+
+On most systems, using `pyenv` will adjust your shell prompt to indicate which virtual environment you
+are now in. For example, the version of Python installed in your operating system might be `3.10.1`, but
+using a virtual environment can substitute, for example, `3.9.9`:
+
+```sh
+$ python --version
+Python 3.10.1
+
+$ pyenv local circ
+(circ) $ python --version
+Python 3.9.9
+```
+
+For brevity, these instructions assume that all shell commands will be executed within a virtual environment.
+
 Install the dependencies:
 
 ```sh
@@ -142,7 +197,140 @@ Run the application with:
 poetry run python app.py
 ```
 
-And visit `http://localhost:6500/`.
+Check that there is now a web server listening on port `6500`:
+
+```sh
+curl http://localhost:6500/
+```
+
+### The Admin Interface
+
+#### Access
+
+By default, the application is configured to provide a built-in version of the [admin web interface](https://github.com/ThePalaceProject/circulation-admin).
+The admin interface can be accessed by visiting the `/admin` endpoint:
+
+```sh
+# On Linux
+xdg-open http://localhost:6500/admin/
+
+# On MacOS
+open http://localhost:6500/admin/
+```
+
+If no existing users are configured (which will be the case if this is a fresh instance of the application), the
+admin interface will prompt you to specify an email address and password that will be used for subsequent logins.
+Extra users can be configured later.
+
+#### Creating A Library
+
+Navigate to `System Configuration → Libraries` and click _Create new library_. You will be prompted to enter various
+details such as the name of the library, a URL, and more. For example, the configuration for a hypothetical
+library, _Hazelnut Peak_, might look like this:
+
+![.github/readme/library.png](.github/readme/library.png)
+
+Note that the _Patron support email address_ will appear in OPDS feeds served by the application, so make sure
+that it is an email address you are happy to make public.
+
+At this point, the _library_ exists but does not contain any _collections_ and therefore won't be of much use to anyone.
+
+#### Adding Collections
+
+Navigate to `System Configuration → Collections` and click _Create new collection_. You will prompted to enter
+details that will be used to source the data for the collection. A good starting point, for testing purposes,
+is to use an open access OPDS feed as a data source. The [Open Bookshelf](https://openbookshelf.dp.la/) is a good example
+of such a feed. Enter the following details:
+
+![.github/readme/collection.png](.github/readme/collection.png)
+
+Note that we associate the collection with the _Hazelnut Peak_ library by selecting it in the `Libraries` drop-down.
+A collection can be associated with any number of libraries.
+
+##### Importing
+
+At this point, we have a library named _Hazelnut Peak_ configured to use the _Palace Bookshelf_ collection we created.
+It's now necessary to tell the application to start importing books from the OPDS feed. When the application is
+running inside a Docker image, the image is typically configured to execute various import operations on a regular
+schedule using `cron`. Because we're running the application from the command-line for development purposes, we
+need to execute these operations ourselves manually. In this particular case, we need to execute the `opds_import_monitor`:
+
+```sh
+(circ) $ ./bin/opds_import_monitor
+{"host": "hazelnut",
+ "app": "simplified",
+ "name": "OPDS Import Monitor",
+ "level": "INFO",
+ "filename": "opds_import.py",
+ "message": "[Palace Bookshelf] Following next link: http://openbookshelf.dp.la/lists/Open%20Bookshelf/crawlable",
+ "timestamp": "2022-01-17T11:52:35.839978+00:00"}
+...
+```
+
+The command will cause the application to crawl the configured OPDS feed and import every book in it. At the time
+of writing, this command will take around an hour to run the first time it is executed, but subsequent executions
+complete in seconds. Please wait for the import to complete before continuing!
+
+When the import has completed, the books are imported but no OPDS feeds will have been generated, and no search
+service has been configured.
+
+#### Configuring Search
+
+Navigate to `System Configuration → Search` and add a new Elasticsearch configuration. The required URL is
+the URL of the [Elasticsearch instance configured earlier](#elasticsearch):
+
+![Elasticsearch](.github/readme/search.png)
+
+#### Generating Search Indices
+
+As with the collection [configured earlier](#adding-collections), the application depends upon various operations
+being executed on a regular schedule to generate search indices. Because we're running the application from
+the local command-line, we need to execute those operations manually:
+
+```sh
+./bin/search_index_clear
+./bin/search_index_refresh
+```
+
+Neither of the commands will produce any output if the operations succeed.
+
+#### Generating OPDS Feeds
+
+When the collection has finished [importing](#importing), we are required to generate OPDS feeds. Again,
+this operation is configured to execute on a regular schedule in the Docker image, but we'll need to execute
+it manually here:
+
+```sh
+./bin/opds_entry_coverage
+```
+
+The command will produce output indicating any errors.
+
+Navigating to `http://localhost:6500/` should show an OPDS feed containing various books:
+
+![Feed](.github/readme/feed.png)
+
+#### Troubleshooting
+
+The `./bin/repair/where_are_my_books` command can produce output that may indicate why books are not appearing
+in OPDS feeds. A working, correctly configured installation, at the time of writing, produces output such as this:
+
+```sh
+(circ) $ ./bin/repair/where_are_my_books
+Checking library Hazelnut Peak
+ Associated with collection Palace Bookshelf.
+ Associated with 171 lanes.
+
+0 feeds in cachedfeeds table, not counting grouped feeds.
+
+Examining collection "Palace Bookshelf"
+ 7838 presentation-ready works.
+ 0 works not presentation-ready.
+ 7824 works in the search index, expected around 7838.
+```
+
+We can see from the above output that the vast majority of the books in the _Open Bookshelf_ collection
+were indexed correctly.
 
 ### Installation Issues
 
@@ -227,7 +415,7 @@ testing the branch, or deploying hotfixes.
 
 ## Testing
 
-The Github Actions CI service runs the unit tests against Python 3.6, 3.7, 3.8 and 3.9 automatically using
+The Github Actions CI service runs the unit tests against Python 3.7, 3.8 and 3.9 automatically using
 [tox](https://tox.readthedocs.io/en/latest/).
 
 To run `pytest` unit tests locally, install `tox`.
@@ -249,7 +437,6 @@ with service dependencies running in docker containers.
 
 | Factor      | Python Version |
 | ----------- | -------------- |
-| py36        | Python 3.6     |
 | py37        | Python 3.7     |
 | py38        | Python 3.8     |
 | py39        | Python 3.9     |
@@ -310,7 +497,7 @@ Make sure the ports and usernames are updated to reflect the local configuration
 ```sh
 # Set environment variables
 export SIMPLIFIED_TEST_DATABASE="postgres://simplified_test:test@localhost:9005/simplified_circulation_test"
-export SIMPLIFIED_TEST_ELASTICSEARCH="http://localhost:9006"
+export SIMPLIFIED_TEST_ELASTICSEARCH="http://localhost:9200"
 
 # Run tox
 tox -e "py38-{api,core}"

@@ -1,16 +1,13 @@
-FROM phusion/baseimage:bionic-1.0.0
-LABEL maintainer="The Palace Project <info@thepalaceproject.org>"
-
-ARG version
-ARG repo="thepalaceproject/circulation"
+FROM phusion/baseimage:focal-1.0.0
 
 ENV SIMPLIFIED_DB_TASK "ignore"
 ENV LANG=C.UTF-8
 
 # Copy over all Palace build files for this image
-COPY . /ls_build
+COPY ./docker /ls_build
+COPY --chown=1000:1000 . /var/www/circulation
 
-RUN /bin/bash -c "/ls_build/simplified_app.sh ${repo} ${version} \
+RUN /bin/bash -c "/ls_build/simplified_app.sh \
       && /ls_build/logrotate.sh \
       && /ls_build/nginx.sh \
       && /ls_build/uwsgi.sh \
@@ -21,7 +18,3 @@ WORKDIR /home/simplified/circulation
 EXPOSE 80
 
 CMD ["/sbin/my_init"]
-
-# # If you launch the container interactively with `docker run -it`,
-# # this is where you'll end up:
-# ENTRYPOINT ["/bin/bash"]
