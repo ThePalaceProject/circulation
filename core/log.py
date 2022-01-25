@@ -2,7 +2,7 @@ import json
 import logging
 import socket
 
-from boto3.session import Session as AwsSession
+from boto3 import client as AwsClient
 from flask_babel import lazy_gettext as _
 from loggly.handlers import HTTPSHandler as LogglyHandler
 from watchtower import CloudWatchLogHandler
@@ -373,12 +373,12 @@ class CloudwatchLogs(Logger):
             raise CannotLoadConfiguration(
                 "AWS Cloudwatch Logs interval configuration must be an integer."
             )
-        session = AwsSession(region_name=region)
+        client = AwsClient("logs", region_name=region)
         handler = CloudWatchLogHandler(
-            log_group=group,
-            stream_name=stream,
+            log_group_name=group,
+            log_stream_name=stream,
             send_interval=interval,
-            boto3_session=session,
+            boto3_client=client,
             create_log_group=create_group == "TRUE",
         )
         # Add a filter that makes sure no messages from botocore are processed by
