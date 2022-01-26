@@ -98,77 +98,77 @@ jobs:
       - name: Create version file
         run: git rev-parse --short HEAD > .version
 
-      - name: Build circ-scripts image
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          file: ./docker/Dockerfile
-          load: true
-          tags: circ
-          target: scripts
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      # - name: Build circ-scripts image
+      #   uses: docker/build-push-action@v2
+      #   with:
+      #     context: .
+      #     file: ./docker/Dockerfile
+      #     load: true
+      #     tags: circ
+      #     target: scripts
+      #     cache-from: type=gha
+      #     cache-to: type=gha,mode=max
 
-      - name: Start circ-scripts docker container
-        run: >
-          docker run --rm --name circ -d
-          --network ${{job.services.postgres.network}}
-          -e SIMPLIFIED_PRODUCTION_DATABASE="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
-          circ
+      # - name: Start circ-scripts docker container
+      #   run: >
+      #     docker run --rm --name circ -d
+      #     --network ${{job.services.postgres.network}}
+      #     -e SIMPLIFIED_PRODUCTION_DATABASE="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
+      #     circ
 
-      - name: Run circ-scripts tests
-        run: ./docker/ci/test_scripts.sh
+      # - name: Run circ-scripts tests
+      #   run: ./docker/ci/test_scripts.sh
 
-      - name: Stop circ-scripts docker container
-        if: always()
-        run: docker stop circ
+      # - name: Stop circ-scripts docker container
+      #   if: always()
+      #   run: docker stop circ
 
-      - name: Build circ-webapp image
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          file: ./docker/Dockerfile
-          load: true
-          tags: circ
-          target: webapp
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      # - name: Build circ-webapp image
+      #   uses: docker/build-push-action@v2
+      #   with:
+      #     context: .
+      #     file: ./docker/Dockerfile
+      #     load: true
+      #     tags: circ
+      #     target: webapp
+      #     cache-from: type=gha
+      #     cache-to: type=gha,mode=max
 
-      - name: Start circ-webapp docker container
-        run: >
-          docker run --rm --name circ -p 8000:80 -d
-          --network ${{job.services.postgres.network}}
-          -e SIMPLIFIED_PRODUCTION_DATABASE="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
-          circ
+      # - name: Start circ-webapp docker container
+      #   run: >
+      #     docker run --rm --name circ -p 8000:80 -d
+      #     --network ${{job.services.postgres.network}}
+      #     -e SIMPLIFIED_PRODUCTION_DATABASE="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
+      #     circ
 
-      - name: Run circ-webapp tests
-        run: ./docker/ci/test_webapp.sh
+      # - name: Run circ-webapp tests
+      #   run: ./docker/ci/test_webapp.sh
 
-      - name: Stop circ-webapp docker container
-        if: always()
-        run: docker stop circ
+      # - name: Stop circ-webapp docker container
+      #   if: always()
+      #   run: docker stop circ
 
-      - name: Generate tags for circ-exec image
-        id: exec-tags
-        uses: docker/metadata-action@v3
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/circ-exec
-          tags: |
-            type=semver,pattern={{major}}.{{minor}},priority=10
-            type=semver,pattern={{version}},priority=20
-            type=ref,event=branch,priority=30
-            type=sha,priority=40
+      # - name: Generate tags for circ-exec image
+      #   id: exec-tags
+      #   uses: docker/metadata-action@v3
+      #   with:
+      #     images: ghcr.io/${{ github.repository_owner }}/circ-exec
+      #     tags: |
+      #       type=semver,pattern={{major}}.{{minor}},priority=10
+      #       type=semver,pattern={{version}},priority=20
+      #       type=ref,event=branch,priority=30
+      #       type=sha,priority=40
 
-      - name: Generate tags for circ-scripts image
-        id: scripts-tags
-        uses: docker/metadata-action@v3
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/circ-scripts
-          tags: |
-            type=semver,pattern={{major}}.{{minor}},priority=10
-            type=semver,pattern={{version}},priority=20
-            type=ref,event=branch,priority=30
-            type=sha,priority=40
+      # - name: Generate tags for circ-scripts image
+      #   id: scripts-tags
+      #   uses: docker/metadata-action@v3
+      #   with:
+      #     images: ghcr.io/${{ github.repository_owner }}/circ-scripts
+      #     tags: |
+      #       type=semver,pattern={{major}}.{{minor}},priority=10
+      #       type=semver,pattern={{version}},priority=20
+      #       type=ref,event=branch,priority=30
+      #       type=sha,priority=40
 
       - name: Generate tags for circ-webapp image
         id: webapp-tags
@@ -181,27 +181,27 @@ jobs:
             type=ref,event=branch,priority=30
             type=sha,priority=40
 
-      - name: Build & push exec image
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          file: ./docker/Dockerfile
-          push: ${{ env.IMAGE_PUSH_ENABLED }}
-          tags: ${{ steps.exec-tags.outputs.tags }}
-          target: exec
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      # - name: Build & push exec image
+      #   uses: docker/build-push-action@v2
+      #   with:
+      #     context: .
+      #     file: ./docker/Dockerfile
+      #     push: ${{ env.IMAGE_PUSH_ENABLED }}
+      #     tags: ${{ steps.exec-tags.outputs.tags }}
+      #     target: exec
+      #     cache-from: type=gha
+      #     cache-to: type=gha,mode=max
 
-      - name: Build & push script image
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          file: ./docker/Dockerfile
-          push: ${{ env.IMAGE_PUSH_ENABLED }}
-          tags: ${{ steps.scripts-tags.outputs.tags }}
-          target: scripts
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      # - name: Build & push script image
+      #   uses: docker/build-push-action@v2
+      #   with:
+      #     context: .
+      #     file: ./docker/Dockerfile
+      #     push: ${{ env.IMAGE_PUSH_ENABLED }}
+      #     tags: ${{ steps.scripts-tags.outputs.tags }}
+      #     target: scripts
+      #     cache-from: type=gha
+      #     cache-to: type=gha,mode=max
 
       - name: Build & push webapp image
         uses: docker/build-push-action@v2
