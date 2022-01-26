@@ -194,7 +194,6 @@ jobs:
           target: exec
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
 
       - name: Build & push script image
         uses: docker/build-push-action@v2
