@@ -2,7 +2,7 @@
 ## lcpencrypt
 ###############################################################################
 
-FROM amd64/golang AS builder
+FROM golang AS builder
 
 LABEL maintainer="The Palace Project <info@thepalaceproject.org>"
 
