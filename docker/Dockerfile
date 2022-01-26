@@ -12,7 +12,7 @@ RUN go get -v github.com/readium/readium-lcp-server/lcpencrypt
 ## Base Image
 ###############################################################################
 
-FROM phusion/baseimage:focal-1.0.0 As base
+FROM phusion/baseimage:focal-1.1.0 As base
 
 # Copy over all Palace build files for this image
 COPY docker/simplified_app.sh /ls_build/
