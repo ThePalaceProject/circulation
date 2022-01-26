@@ -18,33 +18,6 @@ FROM phusion/baseimage:focal-1.0.0 As base
 COPY ./docker /ls_build
 COPY --chown=1000:1000 . /var/www/circulation
 
-RUN /bin/bash -c "apt-get update \
-      && apt-get install -y --no-upgrade \
-      python3 \
-      python3-dev \
-      python3-setuptools \
-      python3-venv \
-      python3-pip \
-      gcc \
-      libpcre3-dev \
-      libffi-dev \
-      libjpeg-dev \
-      libssl-dev \
-      libpq-dev \
-      libxmlsec1-dev \
-      libxmlsec1-openssl \
-      pkg-config"
-
-RUN /bin/bash -c "curl -sSL https://install.python-poetry.org | POETRY_HOME='/opt/poetry' python3 - --yes --version '1.1.12' \
-      && python3 -m venv env \
-      && ln -s /opt/poetry/bin/poetry /bin/poetry \
-      && set +x && source env/bin/activate && set -x \
-      && python3 -m pip install -U pip setuptools \
-      && poetry install --no-dev --no-root -E pg \
-      && poetry cache clear -n --all pypi \
-      && python3 -m textblob.download_corpora lite \
-      && mv /root/nltk_data /usr/lib/"
-
 RUN /bin/bash -c "/ls_build/simplified_app.sh \
       && /ls_build/logrotate.sh"
 
