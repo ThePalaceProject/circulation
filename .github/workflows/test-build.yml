@@ -19,52 +19,52 @@ env:
     }}
 
 jobs:
-  test:
-    name: ${{ matrix.module }} Tests (Py ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: [3.7, 3.8, 3.9]
-        module: [Api, Core]
+  # test:
+  #   name: ${{ matrix.module }} Tests (Py ${{ matrix.python-version }})
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 60
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       python-version: [3.7, 3.8, 3.9]
+  #       module: [Api, Core]
 
-    # We want to run on external PRs, but not on our own internal PRs as they'll be run
-    # by the push to the branch. This prevents duplicated runs on internal PRs.
-    # Some discussion of this here:
-    # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+  #   # We want to run on external PRs, but not on our own internal PRs as they'll be run
+  #   # by the push to the branch. This prevents duplicated runs on internal PRs.
+  #   # Some discussion of this here:
+  #   # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012
+  #   if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
 
-    steps:
-      - uses: actions/checkout@v2
+  #   steps:
+  #     - uses: actions/checkout@v2
 
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python-version }}
+  #     - name: Set up Python
+  #       uses: actions/setup-python@v2
+  #       with:
+  #         python-version: ${{ matrix.python-version }}
 
-      - name: Install Apt Packages
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes libxmlsec1-dev libxml2-dev
+  #     - name: Install Apt Packages
+  #       run: |
+  #         sudo apt-get update
+  #         sudo apt-get install --yes libxmlsec1-dev libxml2-dev
 
-      - name: Install Poetry
-        uses: ./.github/actions/poetry
+  #     - name: Install Poetry
+  #       uses: ./.github/actions/poetry
 
-      - name: Install Tox
-        run: |
-          pip install --upgrade pip
-          pip install tox tox-gh-actions tox-docker
+  #     - name: Install Tox
+  #       run: |
+  #         pip install --upgrade pip
+  #         pip install tox tox-gh-actions tox-docker
 
-      - name: Run Tests
-        run: tox
-        env:
-          MODULE: ${{ matrix.module }}
+  #     - name: Run Tests
+  #       run: tox
+  #       env:
+  #         MODULE: ${{ matrix.module }}
 
   build-docker-images:
     name: Build and push docker images
     runs-on: ubuntu-latest
-    needs: [test]
+    # needs: [test]
 
     # We want to run on external PRs, but not on our own internal PRs as they'll be run
     # by the push to the branch. This prevents duplicated runs on internal PRs.
@@ -87,6 +87,10 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
+        id: buildx
+
+      - name: Available platforms
+        run: echo ${{ steps.buildx.outputs.platforms }}
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v1
@@ -108,9 +112,11 @@ jobs:
           target: scripts
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
 
       - name: Start circ-scripts docker container
         run: >
+          docker images
           docker run --rm --name circ -d
           --network ${{job.services.postgres.network}}
           -e SIMPLIFIED_PRODUCTION_DATABASE="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
