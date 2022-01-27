@@ -127,7 +127,33 @@ jobs:
         if: always()
         run: docker stop circ
 
-      - name: Build circ-webapp image
+      - name: Build circ-scripts image (linux/arm64)
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          tags: circ
+          load: true
+          target: scripts
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/arm64
+
+      - name: Start circ-scripts docker container (linux/arm64)
+        run: >
+          docker run --rm --name circ -d --platform linux/arm64
+          --network ${{job.services.postgres.network}}
+          -e SIMPLIFIED_PRODUCTION_DATABASE="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
+          circ
+
+      - name: Run circ-scripts tests (linux/arm64)
+        run: ./docker/ci/test_scripts.sh
+
+      - name: Stop circ-scripts docker container (linux/arm64)
+        if: always()
+        run: docker stop circ
+
+      - name: Build circ-webapp image (linux/amd64)
         uses: docker/build-push-action@v2
         with:
           context: .
@@ -137,18 +163,45 @@ jobs:
           target: webapp
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          platforms: linux/amd64
 
-      - name: Start circ-webapp docker container
+      - name: Start circ-webapp docker container (linux/amd64)
         run: >
-          docker run --rm --name circ -p 8000:80 -d
+          docker run --rm --name circ -p 8000:80 -d --platform linux/amd64
           --network ${{job.services.postgres.network}}
           -e SIMPLIFIED_PRODUCTION_DATABASE="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
           circ
 
-      - name: Run circ-webapp tests
+      - name: Run circ-webapp tests (linux/amd64)
         run: ./docker/ci/test_webapp.sh
 
-      - name: Stop circ-webapp docker container
+      - name: Stop circ-webapp docker container (linux/amd64)
+        if: always()
+        run: docker stop circ
+
+      - name: Build circ-webapp image (linux/arm64)
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          load: true
+          tags: circ
+          target: webapp
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/arm64
+
+      - name: Start circ-webapp docker container (linux/arm64)
+        run: >
+          docker run --rm --name circ -p 8000:80 -d --platform linux/arm64
+          --network ${{job.services.postgres.network}}
+          -e SIMPLIFIED_PRODUCTION_DATABASE="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
+          circ
+
+      - name: Run circ-webapp tests (linux/arm64)
+        run: ./docker/ci/test_webapp.sh
+
+      - name: Stop circ-webapp docker container (linux/arm64)
         if: always()
         run: docker stop circ
 
