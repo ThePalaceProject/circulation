@@ -1003,7 +1003,7 @@ class TestWorkController(AdminControllerTest):
             )
             / len(image_histogram)
         )
-        assert root_mean_square < 0.01
+        assert root_mean_square < 10
 
         # Here the title and author are added in the center. Compare the result
         # with a pre-generated version.
@@ -1030,7 +1030,7 @@ class TestWorkController(AdminControllerTest):
             )
             / len(image_histogram)
         )
-        assert root_mean_square < 0.01
+        assert root_mean_square < 10
 
         # Remove temporary files if we've gotten this far. Assertion failures should leave
         # the files intact for manual inspection.
