@@ -107,6 +107,7 @@ jobs:
           context: .
           file: ./docker/Dockerfile
           tags: circ
+          load: true
           target: scripts
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -114,7 +115,7 @@ jobs:
 
       - name: Start circ-scripts docker container (linux/amd64)
         run: >
-          docker run --rm --name circ -d
+          docker run --rm --name circ -d --platform linux/amd64
           --network ${{job.services.postgres.network}}
           -e SIMPLIFIED_PRODUCTION_DATABASE="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
           circ
