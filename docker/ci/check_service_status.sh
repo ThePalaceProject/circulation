@@ -5,12 +5,14 @@ function check_service_status()
   service="$1"
 
   # Check the status of the service.
-  service_status=$(docker exec circ /bin/bash -c "sv status $service")
+  echo "printing circ2"
+  service_status=$(docker exec circ2 /bin/bash -c "sv status $service")
 
   # Get the exit code for the sv call.
   sv_status=$?
-
-  if [[ "$sv_status" != 0 || "$service_status" =~ down ]]; then
+  echo $service_status
+  echo "$   "
+  if [[ "$   " != 0 || "$service_status" =~ down ]]; then
     echo "  FAIL: $service is not running"
     exit 1
   else
