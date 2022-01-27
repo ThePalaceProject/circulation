@@ -101,7 +101,7 @@ jobs:
       - name: Create version file
         run: git rev-parse --short HEAD > .version
 
-      - name: Build circ-scripts image
+      - name: Build circ-scripts image (linux/amd64)
         uses: docker/build-push-action@v2
         with:
           context: .
@@ -112,18 +112,17 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/amd64
 
-      - name: Start circ-scripts docker container
+      - name: Start circ-scripts docker container (linux/amd64)
         run: >
-          docker images
           docker run --rm --name circ -d
           --network ${{job.services.postgres.network}}
           -e SIMPLIFIED_PRODUCTION_DATABASE="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
           circ
 
-      - name: Run circ-scripts tests
+      - name: Run circ-scripts tests (linux/amd64)
         run: ./docker/ci/test_scripts.sh
 
-      - name: Stop circ-scripts docker container
+      - name: Stop circ-scripts docker container (linux/amd64)
         if: always()
         run: docker stop circ
 
