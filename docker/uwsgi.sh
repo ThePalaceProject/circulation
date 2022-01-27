@@ -2,8 +2,8 @@
 set -ex
 
 # Configure uwsgi.
-cp /ls_build/services/uwsgi.ini /var/www/circulation/uwsgi.ini
-chown simplified:simplified /var/www/circulation/uwsgi.ini
+cp /ls_build/services/uwsgi.ini /etc/uwsgi.ini
+cp -R /ls_build/services/uwsgi.d /etc/uwsgi.d
 mkdir /var/log/uwsgi
 chown -R simplified:simplified /var/log/uwsgi
 
@@ -17,7 +17,6 @@ mkdir -p $app_home/service/uwsgi
 cp /ls_build/services/uwsgi.runit $app_home/service/uwsgi/run
 chown -R simplified:simplified $app_home/service
 
-# Create an alias to restart the application.
-touch $app_home/.bash_aliases
-echo "alias restart_app=\`touch ~/circulation/uwsgi.ini\`" >> $app_home/.bash_aliases
-chown -R simplified:simplified $app_home/.bash_aliases
+# Create socket folder with correct permissions.
+mkdir /var/run/uwsgi
+chown simplified:simplified /var/run/uwsgi

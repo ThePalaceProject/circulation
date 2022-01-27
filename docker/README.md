@@ -23,6 +23,18 @@ $ docker run --name webapp -d \
     ghcr.io/thepalaceproject/circ-webapp:main
 ```
 
+If the database and ElasticSearch(ES) are running in containers, use the --link option to let the webapp docker container
+to access them as bellow:
+
+```sh
+docker run \
+--link pg --link es \
+--name circ \
+-e SIMPLIFIED_PRODUCTION_DATABASE='postgres://[username]:[password]@[host]:[port]/[database_name]' \
+-d -p 6500:80 \
+ghcr.io/thepalaceproject/circ-webapp:main
+```
+
 Navigate to `http://localhost/admin` in your browser to visit the web admin for the Circulation Manager. In the admin,
 you can add or update configuration information. If you have not yet created an admin authorization protocol before,
 you'll need to do that before you can set other configuration.
@@ -101,12 +113,12 @@ time zone of the library or libraries on the circulation manager instance. This 
 ### `UWSGI_PROCESSES`
 
 *Optional.* The number of processes to use when running uWSGI. This value can be updated in `docker-compose.yml` or
-added directly in `Dockerfile.webapp`. Defaults to 6.
+added directly in `Dockerfile` under webapp stage. Defaults to 6.
 
 ### `UWSGI_THREADS`
 
 *Optional.* The number of threads to use when running uWSGI. This value can be updated in `docker-compose.yml` or added
-directly in `Dockerfile.webapp`. Defaults to 2.
+directly in `Dockerfile` under webapp stage. Defaults to 2.
 
 ## Building new images
 
@@ -118,13 +130,16 @@ Circulation Manager. If so, please use the instructions below.
 
 We recommend you install at least version 18.06 of the Docker engine.
 
-### `.webapp` and `.scripts` images
+### `webapp` and `scripts` images
 
 Determine which image you would like to build and update the tag and `Dockerfile` listed below accordingly. Run the
-build command from the root of the repository not the docker folder.
+build command from the root of the repository not the docker folder. Use `target` option to determine which docker
+image to build as bellow:
 
 ```sh
-docker build --tag circ --file docker/Dockerfile.scripts .
+docker build --tag circ --file docker/Dockerfile --target scripts .
 ```
+
+See `docker/Dockerfile` for details.
 
 Feel free to change the image tag as you like.
