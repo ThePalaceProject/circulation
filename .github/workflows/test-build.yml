@@ -115,7 +115,6 @@ jobs:
 
       - name: Start circ-scripts docker container
         run: >
-          docker images
           docker run --rm --name circ -d
           --network ${{job.services.postgres.network}}
           -e SIMPLIFIED_PRODUCTION_DATABASE="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
