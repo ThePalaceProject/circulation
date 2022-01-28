@@ -655,28 +655,21 @@ pyparsing = ">=2.0.2,<3.0.5 || >3.0.5"
 
 [[package]]
 name = "palace-webpub-manifest-parser"
-version = "2.0.4"
+version = "3.0.0"
 description = "A parser for the Readium Web Publication Manifest, OPDS 2.0 and ODL formats."
 category = "main"
 optional = false
-python-versions = ">3.6, <4"
-develop = false
+python-versions = ">=3.7,<4"
 
 [package.dependencies]
-jsonschema = "^3.2.0"
-multipledispatch = "^0.6.0"
+jsonschema = ">=3.2.0,<4.0.0"
+multipledispatch = ">=0.6.0,<0.7.0"
 pyrsistent = "0.16.1"
-python-dateutil = "^2.8.2"
-pytz = "^2021.1"
-requests = "^2.27.1"
-rfc3987 = "^1.3.8"
-uritemplate = "^3.0.1"
-
-[package.source]
-type = "git"
-url = "https://github.com/ThePalaceProject/webpub-manifest-parser.git"
-reference = "feature/py310"
-resolved_reference = "c8805cafebcd7bce4da2c981e5c48c748dc99068"
+python-dateutil = ">=2.8.2,<3.0.0"
+pytz = ">=2021.1,<2022.0"
+requests = ">=2.27.1,<3.0.0"
+rfc3987 = ">=1.3.8,<2.0.0"
+uritemplate = ">=3.0.1,<4.0.0"
 
 [[package]]
 name = "parameterized"
@@ -1354,7 +1347,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.7,<4"
-content-hash = "1320605cd7e72ff31ecff850ead5dae54f0302a05d94e13e8620ebc0bbb08a86"
+content-hash = "c9a659474542e12b47c13b7ac10eb5c224c6091ab64bc1e22bd657f9002f62d6"
 
 [metadata.files]
 atomicwrites = [
@@ -1784,7 +1777,10 @@ packaging = [
     {file = "packaging-21.3-py3-none-any.whl", hash = "sha256:ef103e05f519cdc783ae24ea4e2e0f508a9c99b2d4969652eed6a2e1ea5bd522"},
     {file = "packaging-21.3.tar.gz", hash = "sha256:dd47c42927d89ab911e606518907cc2d3a1f38bbd026385970643f9c5b8ecfeb"},
 ]
-palace-webpub-manifest-parser = []
+palace-webpub-manifest-parser = [
+    {file = "palace_webpub_manifest_parser-3.0.0-py3-none-any.whl", hash = "sha256:e22af2b2754754a3a0642817ad7c79ddd79acdbb1ebab2d8d81d6b561a95c048"},
+    {file = "palace_webpub_manifest_parser-3.0.0.tar.gz", hash = "sha256:96751ebbbcb22d92ec6a6c645e02fa1ccc93d6a876955ad52cc22cd9c47b96da"},
+]
 parameterized = [
     {file = "parameterized-0.8.1-py2.py3-none-any.whl", hash = "sha256:9cbb0b69a03e8695d68b3399a8a5825200976536fe1cb79db60ed6a4c8c9efe9"},
     {file = "parameterized-0.8.1.tar.gz", hash = "sha256:41bbff37d6186430f77f900d777e5bb6a24928a1c46fb1de692f8b52b8833b5c"},
