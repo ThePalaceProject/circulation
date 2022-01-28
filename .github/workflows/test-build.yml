@@ -64,7 +64,7 @@ jobs:
   test-docker-images:
     name: Tests Docker Images ( ${{ matrix.platform }})
     runs-on: ubuntu-latest
-    [test-docker-images]
+    needs: [test-modules]
     timeout-minutes: 60
     strategy:
       fail-fast: false
