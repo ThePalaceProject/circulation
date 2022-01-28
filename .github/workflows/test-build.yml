@@ -8,13 +8,10 @@ env:
   # Push the built docker image only in the following cases:
   #  - The `NO_DOCKER_IMAGE` secret is not set. (Useful if you want to disable pushing
   #    of docker images in local forks of this repo).
-  #  - The branch name does not start with `dependabot/`. The dependabot service does not
-  #    have the proper security token to push to github packages.
   #  - The event that triggered this action was a `push`. If it was a PR the github action
   #    context will not have permissions to push the image to github packages.
   IMAGE_PUSH_ENABLED: ${{
       secrets.NO_DOCKER_IMAGE == null &&
-      !startsWith(github.ref, 'refs/heads/dependabot/') &&
       github.event_name == 'push'
     }}
 
@@ -23,6 +20,8 @@ jobs:
     name: ${{ matrix.module }} Tests (Py ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -64,6 +63,9 @@ jobs:
   build-docker-images:
     name: Build and push docker images
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     needs: [test]
 
     # We want to run on external PRs, but not on our own internal PRs as they'll be run
