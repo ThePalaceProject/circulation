@@ -655,11 +655,11 @@ pyparsing = ">=2.0.2,<3.0.5 || >3.0.5"
 
 [[package]]
 name = "palace-webpub-manifest-parser"
-version = "2.0.4"
+version = "3.0.0"
 description = "A parser for the Readium Web Publication Manifest, OPDS 2.0 and ODL formats."
 category = "main"
 optional = false
-python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
+python-versions = ">=3.7,<4"
 
 [package.dependencies]
 jsonschema = ">=3.2.0,<4.0.0"
@@ -667,6 +667,7 @@ multipledispatch = ">=0.6.0,<0.7.0"
 pyrsistent = "0.16.1"
 python-dateutil = ">=2.8.2,<3.0.0"
 pytz = ">=2021.1,<2022.0"
+requests = ">=2.27.1,<3.0.0"
 rfc3987 = ">=1.3.8,<2.0.0"
 uritemplate = ">=3.0.1,<4.0.0"
 
@@ -1346,7 +1347,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.7,<4"
-content-hash = "6dc93d070477f9e588ecdc997f2886f11a848bc4abe13a61003333e3af7ce151"
+content-hash = "fa0a50d1212af638facc2c1fa1bef61c00ff60d2688b6f776850e0166f8514e5"
 
 [metadata.files]
 atomicwrites = [
@@ -1533,9 +1534,6 @@ frozendict = [
     {file = "frozendict-2.2.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:b39cfcf563b3432d4780bf15769e2de2a2906c46c26fb73a9582b69142621814"},
     {file = "frozendict-2.2.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e7198dda9741f3da79db952ecd27607d836727ed320f29438eac565133008c8c"},
     {file = "frozendict-2.2.0-cp310-cp310-win_amd64.whl", hash = "sha256:3a564bd93767044e740e0f6c59606cf612a143160ace9d2c047c4a297a74329a"},
-    {file = "frozendict-2.2.0-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:2a47f3f7fe52094904777d29f300ad6c11213dd81a8fbdec96aa2d4763104319"},
-    {file = "frozendict-2.2.0-cp36-cp36m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:2bfacb9f75768903495747ddaacb1bf98738fb3e966a27f0627f7f163fd676eb"},
-    {file = "frozendict-2.2.0-cp36-cp36m-win_amd64.whl", hash = "sha256:efc138fb1e2c115c39240f60b4b0daf752f1cca591d5f93ac4e788af0665d737"},
     {file = "frozendict-2.2.0-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:722e915421b2d869b236d8de8e0ab42f1e2f7e12d670f9bc3dedfc055550bcb9"},
     {file = "frozendict-2.2.0-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:4519f6eb661f268c60a3ea14f000d321159cf5e6db397129ea4921aef3bf2173"},
     {file = "frozendict-2.2.0-cp37-cp37m-win_amd64.whl", hash = "sha256:9c720e4a19e9b5f48d1b12e193d39765898dff4952320251c0ccd9960631cae9"},
@@ -1777,8 +1775,8 @@ packaging = [
     {file = "packaging-21.3.tar.gz", hash = "sha256:dd47c42927d89ab911e606518907cc2d3a1f38bbd026385970643f9c5b8ecfeb"},
 ]
 palace-webpub-manifest-parser = [
-    {file = "palace_webpub_manifest_parser-2.0.4-py2.py3-none-any.whl", hash = "sha256:4eecf2ee030d5a2082e8728b7350cf85b24c821e4fc872180a17963e836d277f"},
-    {file = "palace_webpub_manifest_parser-2.0.4.tar.gz", hash = "sha256:8a315792ab0031e43957c6c7dc2fd57e0327a04fd05f1f7e84a4cbfbabd0f58c"},
+    {file = "palace_webpub_manifest_parser-3.0.0-py3-none-any.whl", hash = "sha256:e22af2b2754754a3a0642817ad7c79ddd79acdbb1ebab2d8d81d6b561a95c048"},
+    {file = "palace_webpub_manifest_parser-3.0.0.tar.gz", hash = "sha256:96751ebbbcb22d92ec6a6c645e02fa1ccc93d6a876955ad52cc22cd9c47b96da"},
 ]
 parameterized = [
     {file = "parameterized-0.8.1-py2.py3-none-any.whl", hash = "sha256:9cbb0b69a03e8695d68b3399a8a5825200976536fe1cb79db60ed6a4c8c9efe9"},
