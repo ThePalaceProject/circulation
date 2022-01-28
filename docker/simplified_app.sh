@@ -23,5 +23,3 @@ $minimal_apt_get_install --no-upgrade \
 
 # Create a user.
 useradd -ms /bin/bash -U simplified
-
-
