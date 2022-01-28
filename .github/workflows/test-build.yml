@@ -152,11 +152,6 @@ jobs:
         platform: ["linux/amd64", "linux/arm64"]
         image: ["scripts", "webapp", "exec"]
 
-    # Push the built docker image only in the following cases:
-    #  - The `NO_DOCKER_IMAGE` secret is not set. (Useful if you want to disable pushing
-    #    of docker images in local forks of this repo).
-    if: secrets.NO_DOCKER_IMAGE == null
-
     steps:
       - uses: actions/checkout@v2
         with:
@@ -194,7 +189,10 @@ jobs:
         with:
           context: .
           file: ./docker/Dockerfile
-          push: true
+          # Push the built docker image only in the following cases:
+          #  - The `NO_DOCKER_IMAGE` secret is not set. (Useful if you want to disable pushing
+          #    of docker images in local forks of this repo).
+          push: ${{ secrets.NO_DOCKER_IMAGE == null }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           target: ${{ matrix.image }}
