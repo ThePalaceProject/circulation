@@ -60,5 +60,8 @@ chown -RHh simplified:simplified /home/simplified/circulation
 # Give logs a place to go.
 mkdir /var/log/simplified
 
+# Copy scripts that run at startup.
+cp /ls_build/startup/* /etc/my_init.d/
+
 # Cleanup
 rm -Rf /root/.cache
