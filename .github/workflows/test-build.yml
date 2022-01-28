@@ -80,7 +80,7 @@ jobs:
   docker-image-test:
     name: Docker test circ-${{ matrix.image }} (${{ matrix.platform }})
     runs-on: ubuntu-latest
-    needs: [docker-build-base]
+    needs: [docker-image-build]
     strategy:
       fail-fast: false
       matrix:
@@ -141,7 +141,7 @@ jobs:
   docker-image-push:
     name: Push circ-${{ matrix.image }}
     runs-on: ubuntu-latest
-    needs: [test, docker-test-images]
+    needs: [test, docker-image-test]
     strategy:
       fail-fast: false
       matrix:
