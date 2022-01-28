@@ -45,8 +45,18 @@ jobs:
           MODULE: ${{ matrix.module }}
 
   docker-build-base:
-    name: Build base image
+    name: Build base
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ["linux/amd64", "linux/arm64"]
+
+    # We want to run on external PRs, but not on our own internal PRs as they'll be run
+    # by the push to the branch. This prevents duplicated runs on internal PRs.
+    # Some discussion of this here:
+    # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
 
     steps:
       - uses: actions/checkout@v2
@@ -68,12 +78,11 @@ jobs:
           context: .
           file: ./docker/Dockerfile
           target: base
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64, linux/arm64
+          cache-to: type=gha,mode=max,scope=buildkit-${{ matrix.platform }}-${{ github.run_id }}
+          platforms: ${{ matrix.platform }}
 
   docker-test-images:
-    name: Test circ-${{ matrix.image }} (${{ matrix.platform }})
+    name: Test circ-${{ matrix.image }}
     runs-on: ubuntu-latest
     needs: [docker-build-base]
     strategy:
@@ -116,7 +125,7 @@ jobs:
           tags: circ
           load: true
           target: ${{ matrix.image }}
-          cache-from: type=gha
+          cache-from: type=gha,scope=buildkit-${{ matrix.platform }}-${{ github.run_id }}
           platforms: ${{ matrix.platform }}
 
       - name: Start container
@@ -134,26 +143,19 @@ jobs:
         run: docker stop circ
 
   docker-push-images:
-    name: Push docker images
+    name: Push circ-${{ matrix.image }}
     runs-on: ubuntu-latest
     needs: [test, docker-test-images]
     strategy:
       fail-fast: false
       matrix:
+        platform: ["linux/amd64", "linux/arm64"]
         image: ["scripts", "webapp", "exec"]
-    env:
-      # Push the built docker image only in the following cases:
-      #  - The `NO_DOCKER_IMAGE` secret is not set. (Useful if you want to disable pushing
-      #    of docker images in local forks of this repo).
-      #  - The branch name does not start with `dependabot/`. The dependabot service does not
-      #    have the proper security token to push to github packages.
-      #  - The event that triggered this action was a `push`. If it was a PR the github action
-      #    context will not have permissions to push the image to github packages.
-      IMAGE_PUSH_ENABLED: ${{
-          secrets.NO_DOCKER_IMAGE == null &&
-          !startsWith(github.ref, 'refs/heads/dependabot/') &&
-          github.event_name == 'push'
-        }}
+
+    # Push the built docker image only in the following cases:
+    #  - The `NO_DOCKER_IMAGE` secret is not set. (Useful if you want to disable pushing
+    #    of docker images in local forks of this repo).
+    if: secrets.NO_DOCKER_IMAGE == null
 
     steps:
       - uses: actions/checkout@v2
@@ -192,9 +194,9 @@ jobs:
         with:
           context: .
           file: ./docker/Dockerfile
-          push: ${{ env.IMAGE_PUSH_ENABLED }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           target: ${{ matrix.image }}
-          cache-from: type=gha
-          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha,scope=buildkit-${{ matrix.platform }}-${{ github.run_id }}
+          platforms: ${{ matrix.platform }}
