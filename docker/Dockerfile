@@ -17,7 +17,9 @@ FROM phusion/baseimage:focal-1.1.0 As base
 COPY ./docker /ls_build
 COPY --chown=1000:1000 poetry.lock pyproject.toml /var/www/circulation/
 
-RUN /bin/bash -c "/ls_build/simplified_app.sh \
+RUN /bin/bash -c "/ls_build/simplified_app.sh"
+
+RUN /bin/bash -c "/ls_build/install_python_packages.sh \
       && /ls_build/logrotate.sh"
 
 COPY --chown=1000:1000 . /var/www/circulation
