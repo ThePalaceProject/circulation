@@ -82,7 +82,7 @@ jobs:
           platforms: ${{ matrix.platform }}
 
   docker-test-images:
-    name: Test circ-${{ matrix.image }}
+    name: Test circ-${{ matrix.image }} (${{ matrix.platform }})
     runs-on: ubuntu-latest
     needs: [docker-build-base]
     strategy:
@@ -143,7 +143,7 @@ jobs:
         run: docker stop circ
 
   docker-push-images:
-    name: Push circ-${{ matrix.image }}
+    name: Push circ-${{ matrix.image }} (${{ matrix.platform }})
     runs-on: ubuntu-latest
     needs: [test, docker-test-images]
     strategy:
