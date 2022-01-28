@@ -11,6 +11,7 @@ import jwt
 from flask import Response
 from flask_babel import lazy_gettext as _
 from jwt.algorithms import HMACAlgorithm
+from jwt.exceptions import InvalidIssuedAtError
 from sqlalchemy.orm.session import Session
 
 from api.base_controller import BaseCirculationManagerController
@@ -831,7 +832,10 @@ class AuthdataUtility(object):
         if exp:
             payload["exp"] = self.numericdate(exp)  # Expiration Time
         return base64.encodebytes(
-            jwt.encode(payload, self.secret, algorithm=self.ALGORITHM)
+            bytes(
+                jwt.encode(payload, self.secret, algorithm=self.ALGORITHM),
+                encoding="utf-8",
+            )
         )
 
     @classmethod
@@ -892,8 +896,14 @@ class AuthdataUtility(object):
     def _decode(self, authdata):
         # First, decode the authdata without checking the signature.
         decoded = jwt.decode(
-            authdata, algorithm=self.ALGORITHM, options=dict(verify_signature=False)
+            authdata,
+            algorithms=[self.ALGORITHM],
+            options=dict(verify_signature=False, verify_exp=True),
         )
+
+        # Fail future JWTs as per requirements, pyJWT stopped doing this, so doing it manually
+        if "iat" in decoded and decoded["iat"] > self.numericdate(utc_now()):
+            raise InvalidIssuedAtError("Issued At claim (iat) cannot be in the future")
 
         # This lets us get the library URI, which lets us get the secret.
         library_uri = decoded.get("iss")
@@ -905,7 +915,7 @@ class AuthdataUtility(object):
         # We know the secret for this library, so we can re-decode the
         # secret and require signature valudation this time.
         secret = self.secrets_by_library_uri[library_uri]
-        decoded = jwt.decode(authdata, secret, algorithm=self.ALGORITHM)
+        decoded = jwt.decode(authdata, secret, algorithms=[self.ALGORITHM])
         if not "sub" in decoded:
             raise jwt.exceptions.DecodeError("No subject specified.")
         return library_uri, decoded["sub"]
