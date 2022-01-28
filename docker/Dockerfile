@@ -14,12 +14,12 @@ RUN go get -v github.com/readium/readium-lcp-server/lcpencrypt
 
 FROM phusion/baseimage:focal-1.1.0 As base
 
-# Copy over all Palace build files for this image
 COPY ./docker/simplified_app.sh /ls_build/
 COPY --chown=1000:1000 poetry.lock pyproject.toml /var/www/circulation/
 
 RUN /bin/bash -c "/ls_build/simplified_app.sh"
 
+# Copy over all Palace build files for this image
 COPY ./docker /ls_build
 
 RUN /bin/bash -c "ls_build/logrotate.sh"
