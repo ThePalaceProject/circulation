@@ -60,9 +60,8 @@ jobs:
   #       run: tox
   #       env:
   #         MODULE: ${{ matrix.module }}
-  
   test-docker-images:
-    name: ${{ matrix.module }} Tests (Py ${{ matrix.python-version }})
+    name: Tests Docker Images ( ${{ matrix.platform }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -111,6 +110,7 @@ jobs:
           target: scripts
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          platforms: ${{ matrix.platform }}
 
       - name: Start circ-scripts docker container
         run: >
@@ -136,6 +136,7 @@ jobs:
           target: webapp
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          platforms: ${{ matrix.platform }}
 
       - name: Start circ-webapp docker container
         run: >
@@ -190,7 +191,6 @@ jobs:
 
       - name: Create version file
         run: git rev-parse --short HEAD > .version
-
       # - name: Build circ-scripts image (linux/amd64)
       #   uses: docker/build-push-action@v2
       #   with:
