@@ -248,6 +248,7 @@ class TestSAMLAuthenticationManager(ControllerTest):
                 datetime_utc(2020, 6, 7, 23, 43, 0),
                 None,
                 SAMLSubject(
+                    "http://idp.example.com",
                     SAMLNameID(
                         SAMLNameIDFormat.TRANSIENT.value,
                         "http://idp.hilbertteam.net/idp/shibboleth",
@@ -279,6 +280,7 @@ class TestSAMLAuthenticationManager(ControllerTest):
                 datetime_utc(2020, 6, 7, 23, 43, 0),
                 "subject.attribute_statement.attributes['uid'].values[0] == 'student1'",
                 SAMLSubject(
+                    "http://idp.example.com",
                     SAMLNameID(
                         SAMLNameIDFormat.TRANSIENT.value,
                         "http://idp.hilbertteam.net/idp/shibboleth",
@@ -303,6 +305,7 @@ class TestSAMLAuthenticationManager(ControllerTest):
                 datetime_utc(2020, 6, 7, 23, 43, 0),
                 None,
                 SAMLSubject(
+                    "http://idp.example.com",
                     SAMLNameID(
                         SAMLNameIDFormat.PERSISTENT.value,
                         "https://shibboleth-dev.cc.columbia.edu/idp/shibboleth",
@@ -341,6 +344,7 @@ class TestSAMLAuthenticationManager(ControllerTest):
                 datetime_utc(2020, 6, 7, 23, 43, 0),
                 "subject.attribute_statement.attributes['eduPersonScopedAffiliation'].values[0] == 'alum@columbia.edu'",
                 SAMLSubject(
+                    "http://idp.example.com",
                     SAMLNameID(
                         SAMLNameIDFormat.PERSISTENT.value,
                         "https://shibboleth-dev.cc.columbia.edu/idp/shibboleth",

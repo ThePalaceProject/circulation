@@ -23,11 +23,13 @@ from core.opds2_import import (
     RWPMManifestParser,
 )
 from core.opds_import import ConnectionConfiguration
+from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, RWPMManifestParser
+from core.opds_import import OPDSImporterConfiguration
 from core.util import first_or_default
 from core.util.datetime_helpers import to_utc
 
 
-class ODL2APIConfiguration(OPDS2ImporterConfiguration, ConnectionConfiguration):
+class ODL2APIConfiguration(OPDSImporterConfiguration):
     skipped_license_formats = ConfigurationMetadata(
         key="odl2_skipped_license_formats",
         label=_("Skipped license formats"),

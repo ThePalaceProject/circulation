@@ -12,7 +12,6 @@ from parameterized import parameterized
 from requests import HTTPError
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
-from api.authenticator import BaseSAMLAuthenticationProvider
 from api.circulation import BaseCirculationAPI
 from api.circulation_exceptions import CannotFulfill, CannotLoan
 from api.proquest.client import (
@@ -32,7 +31,6 @@ from api.saml.metadata.model import (
     SAMLAttributeStatement,
     SAMLAttributeType,
     SAMLSubject,
-    SAMLSubjectJSONEncoder,
 )
 from core.metadata_layer import LinkData
 from core.model import (
@@ -295,24 +293,15 @@ class TestProQuestOPDS2Importer(DatabaseTest):
         ]
 
         saml_subject = SAMLSubject(
+            "http://idp.example.com",
             None,
             SAMLAttributeStatement(
                 [SAMLAttribute(SAMLAttributeType.uid.name, [affiliation_id])]
             ),
         )
-        saml_token = json.dumps(saml_subject, cls=SAMLSubjectJSONEncoder)
-        saml_datasource = DataSource.lookup(
-            self._db,
-            BaseSAMLAuthenticationProvider.TOKEN_DATA_SOURCE_NAME,
-            autocreate=True,
-        )
-        Credential.temporary_token_create(
-            self._db,
-            saml_datasource,
-            BaseSAMLAuthenticationProvider.TOKEN_TYPE,
-            self._proquest_patron,
-            datetime.timedelta(hours=1),
-            saml_token,
+        credential_manager = ProQuestCredentialManager()
+        credential_manager.create_saml_token(
+            self._db, self._proquest_patron, saml_subject
         )
 
         api_client_mock = create_autospec(spec=ProQuestAPIClient)

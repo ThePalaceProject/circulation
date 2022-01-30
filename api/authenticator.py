@@ -2818,9 +2818,6 @@ class BaseSAMLAuthenticationProvider(
 
     FLOW_TYPE = "http://librarysimplified.org/authtype/SAML-2.0"
 
-    TOKEN_TYPE = "SAML 2.0 token"
-    TOKEN_DATA_SOURCE_NAME = "SAML 2.0"
-
     SETTINGS = SAMLSettings()
 
     LIBRARY_SETTINGS = []

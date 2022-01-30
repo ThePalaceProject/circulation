@@ -1,7 +1,4 @@
-import datetime
-import json
 import logging
-from copy import deepcopy
 
 from contextlib2 import contextmanager
 from flask import url_for
@@ -12,16 +9,15 @@ from api.problem_details import *
 from api.saml.auth import SAMLAuthenticationManagerFactory
 from api.saml.configuration.model import SAMLConfiguration, SAMLConfigurationFactory
 from api.saml.configuration.validator import SAMLSettingsValidator
+from api.saml.credential import SAMLCredentialManager
 from api.saml.metadata.filter import SAMLSubjectFilter
 from api.saml.metadata.model import (
     SAMLLocalizedMetadataItem,
-    SAMLNameIDFormat,
     SAMLSubject,
-    SAMLSubjectJSONEncoder,
     SAMLSubjectPatronIDExtractor,
 )
 from api.saml.metadata.parser import SAMLMetadataParser
-from core.model import Credential, DataSource, Session, get_one_or_create
+from core.model import Credential, Session
 from core.model.configuration import (
     ConfigurationMetadata,
     ConfigurationStorage,
@@ -77,6 +73,7 @@ class SAMLWebSSOAuthenticationProvider(
         self._configuration_storage = ConfigurationStorage(self)
         self._configuration_factory = SAMLConfigurationFactory(SAMLMetadataParser())
         self._authentication_manager_factory = SAMLAuthenticationManagerFactory()
+        self._credential_manager = SAMLCredentialManager()
 
         db = Session.object_session(library)
 
@@ -226,60 +223,6 @@ class SAMLWebSSOAuthenticationProvider(
             )
             return [SAMLLocalizedMetadataItem(display_name, language="en")]
 
-    @staticmethod
-    def _create_token_value(subject):
-        """Serialize the SAML subject.
-
-        :param subject: SAML subject
-        :type subject: api.saml.metadata.model.SAMLSubject
-
-        :return: Token value
-        :rtype: str
-        """
-        subject = deepcopy(subject)
-
-        # We should not save a transient Name ID because it changes each time
-        if (
-            subject.name_id
-            and subject.name_id.name_format == SAMLNameIDFormat.TRANSIENT.value
-        ):
-            subject.name_id = None
-
-        token_value = json.dumps(subject, cls=SAMLSubjectJSONEncoder)
-
-        return token_value
-
-    def _create_token(self, db, patron, subject, cm_session_lifetime=None):
-        """Create a Credential object that ties the given patron to the
-            given provider token.
-
-        :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
-        :param patron: Patron object
-        :type patron: Patron
-
-        :param subject: SAML subject
-        :type subject: api.saml.metadata.model.SAMLSubject
-
-        :param cm_session_lifetime: (Optional) Circulation Manager's session lifetime expressed in days
-        :type cm_session_lifetime: Optional[int]
-
-        :return: Credential object
-        :rtype: Credential
-        """
-        session_lifetime = subject.valid_till
-
-        if cm_session_lifetime:
-            session_lifetime = datetime.timedelta(days=int(cm_session_lifetime))
-
-        token = self._create_token_value(subject)
-        data_source, ignore = self._get_token_data_source(db)
-
-        return Credential.temporary_token_create(
-            db, data_source, self.TOKEN_TYPE, patron, session_lifetime, token
-        )
-
     def _create_authenticate_url(self, db, idp_entity_id):
         """Returns an authentication link used by clients to authenticate patrons
 
@@ -302,20 +245,6 @@ class SAMLWebSSOAuthenticationProvider(
             provider=self.NAME,
             idp_entity_id=idp_entity_id,
         )
-
-    def _get_token_data_source(self, db):
-        """Returns a token data source
-
-        :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
-        :return: Token data source
-        :rtype: DataSource
-        """
-        # FIXME: This code will probably not work in a situation where a library has multiple SAML
-        #  authentication mechanisms for its patrons.
-        #  It'll look up a Credential from this data source but it won't be able to tell which IdP it came from.
-        return get_one_or_create(db, DataSource, name=self.TOKEN_DATA_SOURCE_NAME)
 
     @staticmethod
     def _join_ui_info_items(*ui_info_item_lists):
@@ -365,8 +294,7 @@ class SAMLWebSSOAuthenticationProvider(
             ProblemDetail if an error occurs.
         :rtype: Union[Patron, ProblemDetail]
         """
-        data_source, ignore = self._get_token_data_source(db)
-        credential = Credential.lookup_by_token(db, data_source, self.TOKEN_TYPE, token)
+        credential = self._credential_manager.lookup_saml_token_by_value(db, token)
         if credential:
             return credential.patron
 
@@ -473,7 +401,7 @@ class SAMLWebSSOAuthenticationProvider(
 
         # Create a credential for the Patron
         with self.get_configuration(db) as configuration:
-            credential, is_new = self._create_token(
+            credential = self._credential_manager.create_saml_token(
                 db, patron, subject, configuration.session_lifetime
             )
 

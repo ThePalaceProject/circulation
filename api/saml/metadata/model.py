@@ -4,6 +4,7 @@ import re
 from enum import Enum
 from json import JSONDecoder, JSONEncoder
 from json.decoder import WHITESPACE
+from typing import Any, Optional, Union
 
 from onelogin.saml2.constants import OneLogin_Saml2_Constants
 
@@ -786,29 +787,28 @@ class SAMLServiceProviderMetadata(SAMLProviderMetadata):
 class SAMLNameID(object):
     """Represents saml2:NameID"""
 
-    def __init__(self, name_format, name_qualifier, sp_name_qualifier, name_id):
+    def __init__(
+        self,
+        name_format: str,
+        name_qualifier: str,
+        sp_name_qualifier: str,
+        name_id: str,
+    ) -> None:
         """Initializes a new instance of NameID class
 
         :param name_format: Name ID's format
-        :type name_format: string
-
         :param name_qualifier: The security or administrative domain that qualifies the name identifier of the subject.
             This attribute provides a means to federate names from disparate user stores without collision
-        :type name_qualifier: string
-
         :param sp_name_qualifier: Further qualifies a federated name identifier with the name of the service provider
             or affiliation of providers which has federated the principal's identity
-        :type sp_name_qualifier: string
-
         :param name_id: Name ID value
-        :type name_id: string
         """
         self._name_format = name_format
         self._name_qualifier = name_qualifier
         self._sp_name_qualifier = sp_name_qualifier
         self._name_id = name_id
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         """Compares two NameID objects
 
         :param other: NameID object
@@ -827,53 +827,48 @@ class SAMLNameID(object):
             and self.name_id == other.name_id
         )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return a string representation.
 
         :return: String representation
-        :rtype: str
         """
         return "<NameID(name_format={0}, name_qualifier={1}, sp_name_qualifier={2}, name_id={3})>".format(
             self.name_format, self.name_qualifier, self.sp_name_qualifier, self.name_id
         )
 
     @property
-    def name_format(self):
+    def name_format(self) -> SAMLNameIDFormat:
         """Returns name ID's format
 
         :return: Name ID's format
-        :rtype: string
         """
         return self._name_format
 
     @property
-    def name_qualifier(self):
+    def name_qualifier(self) -> str:
         """Returns the security or administrative domain that qualifies the name identifier of the subject.
         This attribute provides a means to federate names from disparate user stores without collision
 
         :return: Security or administrative domain that qualifies the name identifier of the subject.
             This attribute provides a means to federate names from disparate user stores without collision
-        :rtype: string
         """
         return self._name_qualifier
 
     @property
-    def sp_name_qualifier(self):
+    def sp_name_qualifier(self) -> str:
         """Returns the attribute that further qualifies a federated name identifier with the name of the service provider
         or affiliation of providers which has federated the principal's identity
 
         :return: Attribute that further qualifies a federated name identifier with the name of the service provider
             or affiliation of providers which has federated the principal's identity
-        :rtype: string
         """
         return self._sp_name_qualifier
 
     @property
-    def name_id(self):
+    def name_id(self) -> str:
         """Returns name ID
 
         :return: Name ID
-        :rtype: string
         """
         return self._name_id
 
@@ -1050,21 +1045,24 @@ class SAMLAttributeStatement(object):
 class SAMLSubject(object):
     """Contains a name ID and a attribute statement"""
 
-    def __init__(self, name_id, attribute_statement, valid_till=None):
+    def __init__(
+        self,
+        idp: str,
+        name_id: SAMLNameID,
+        attribute_statement: SAMLAttributeStatement,
+        valid_till: Optional[Union[datetime.datetime, datetime.timedelta]] = None,
+    ):
         """Initializes a new instance of Subject class
 
+        :param idp: IdP's entityID
         :param name_id: Name ID
-        :type name_id: SAMLNameID
-
         :param attribute_statement: Attribute statement
-        :type attribute_statement: SAMLAttributeStatement
-
         :param valid_till: Time till which the subject is valid
             The default value is 30 minutes
             Please refer to the Shibboleth IdP documentation for more details:
             - https://wiki.shibboleth.net/confluence/display/IDP30/SessionConfiguration
-        :type valid_till: Optional[Union[datetime.datetime, datetime.timedelta]]
         """
+        self._idp = idp
         self._name_id = name_id
         self._attribute_statement = attribute_statement
         self._valid_till = valid_till
@@ -1104,21 +1102,28 @@ class SAMLSubject(object):
         :return: String representation
         :rtype: str
         """
-        return "<SAMLSubject(name_id={0}, attribute_statement={1}, valid_till={2})>".format(
-            self.name_id, self.attribute_statement, self.valid_till
+        return "<SAMLSubject(idp={0}, name_id={1}, attribute_statement={2}, valid_till={3})>".format(
+            self.idp, self.name_id, self.attribute_statement, self.valid_till
         )
 
     @property
-    def name_id(self):
-        """Returns the name ID
+    def idp(self) -> str:
+        """Return the IdP's entityID.
+
+        :return: IdP's entityID.
+        """
+        return self._idp
+
+    @property
+    def name_id(self) -> SAMLNameID:
+        """Return the name ID.
 
         :return: Name ID
-        :rtype: SAMLNameID
         """
         return self._name_id
 
     @name_id.setter
-    def name_id(self, value):
+    def name_id(self, value: Optional[SAMLNameID]) -> None:
         """Set the name ID.
 
         :param value: New name ID
@@ -1169,7 +1174,7 @@ class SAMLSubjectJSONEncoder(JSONEncoder):
         if not isinstance(subject, SAMLSubject):
             raise ValueError("subject must have type Subject")
 
-        result = {}
+        result = {"idp": subject.idp}
 
         if subject.name_id:
             result["name_id"] = {
@@ -1206,6 +1211,7 @@ class SAMLSubjectJSONDecoder(JSONDecoder):
         raw_subject = super(SAMLSubjectJSONDecoder, self).decode(raw_subject, _w)
         attribute_statement = None
         name_id = None
+        idp = raw_subject.get("idp", None)
 
         if "name_id" in raw_subject:
             raw_name_id_dict = raw_subject["name_id"]
@@ -1229,7 +1235,7 @@ class SAMLSubjectJSONDecoder(JSONDecoder):
 
             attribute_statement = SAMLAttributeStatement(attributes)
 
-        subject = SAMLSubject(name_id, attribute_statement)
+        subject = SAMLSubject(idp, name_id, attribute_statement)
 
         return subject
 

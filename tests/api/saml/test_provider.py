@@ -335,12 +335,13 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
             ),
             (
                 "subject_does_not_have_unique_id",
-                SAMLSubject(None, None),
+                SAMLSubject("http://idp.example.com", None, None),
                 SAML_INVALID_SUBJECT.detailed("Subject does not have a unique ID"),
             ),
             (
                 "subject_has_unique_id",
                 SAMLSubject(
+                    "http://idp.example.com",
                     None,
                     SAMLAttributeStatement(
                         [
@@ -361,6 +362,7 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
             (
                 "subject_has_unique_name_id_but_use_of_name_id_is_switched_off_using_integer_literal",
                 SAMLSubject(
+                    "http://idp.example.com",
                     SAMLNameID(SAMLNameIDFormat.UNSPECIFIED, "", "", "12345"),
                     SAMLAttributeStatement([]),
                 ),
@@ -370,6 +372,7 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
             (
                 "subject_has_unique_name_id_but_use_of_name_id_is_switched_off_using_string_literal",
                 SAMLSubject(
+                    "http://idp.example.com",
                     SAMLNameID(SAMLNameIDFormat.UNSPECIFIED, "", "", "12345"),
                     SAMLAttributeStatement([]),
                 ),
@@ -379,6 +382,7 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
             (
                 "subject_has_unique_name_id_and_use_of_name_id_is_switched_on_using_string_literal_true",
                 SAMLSubject(
+                    "http://idp.example.com",
                     SAMLNameID(SAMLNameIDFormat.UNSPECIFIED, "", "", "12345"),
                     SAMLAttributeStatement([]),
                 ),
@@ -393,6 +397,7 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
             (
                 "subject_has_unique_id_matching_the_regular_expression",
                 SAMLSubject(
+                    "http://idp.example.com",
                     None,
                     SAMLAttributeStatement(
                         [
@@ -416,6 +421,7 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
             (
                 "subject_has_unique_id_not_matching_the_regular_expression",
                 SAMLSubject(
+                    "http://idp.example.com",
                     None,
                     SAMLAttributeStatement(
                         [
@@ -473,12 +479,13 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
             ("empty_subject", None, SAML_INVALID_SUBJECT.detailed("Subject is empty")),
             (
                 "subject_does_not_have_unique_id",
-                SAMLSubject(None, None),
+                SAMLSubject("http://idp.example.com", None, None),
                 SAML_INVALID_SUBJECT.detailed("Subject does not have a unique ID"),
             ),
             (
                 "subject_has_unique_id",
                 SAMLSubject(
+                    "http://idp.example.com",
                     None,
                     SAMLAttributeStatement(
                         [
@@ -499,6 +506,7 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
             (
                 "subject_has_unique_id_and_persistent_name_id",
                 SAMLSubject(
+                    "http://idp.example.com",
                     SAMLNameID(
                         SAMLNameIDFormat.PERSISTENT.value,
                         "name-qualifier",
@@ -525,6 +533,7 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
             (
                 "subject_has_unique_id_and_transient_name_id",
                 SAMLSubject(
+                    "http://idp.example.com",
                     SAMLNameID(
                         SAMLNameIDFormat.TRANSIENT.value,
                         "name-qualifier",
@@ -546,11 +555,12 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
                     external_type="A",
                     complete=True,
                 ),
-                '{"attributes": {"eduPersonUniqueId": ["12345"]}}',
+                '{"idp": "http://idp.example.com", "attributes": {"eduPersonUniqueId": ["12345"]}}',
             ),
             (
                 "subject_has_unique_id_and_custom_session_lifetime",
                 SAMLSubject(
+                    "http://idp.example.com",
                     None,
                     SAMLAttributeStatement(
                         [
@@ -574,6 +584,7 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
             (
                 "subject_has_unique_id_and_empty_session_lifetime",
                 SAMLSubject(
+                    "http://idp.example.com",
                     None,
                     SAMLAttributeStatement(
                         [
@@ -597,6 +608,7 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
             (
                 "subject_has_unique_id_and_non_default_expiration_timeout",
                 SAMLSubject(
+                    "http://idp.example.com",
                     None,
                     SAMLAttributeStatement(
                         [
@@ -618,6 +630,7 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
             (
                 "subject_has_unique_id_non_default_expiration_timeout_and_custom_session_lifetime",
                 SAMLSubject(
+                    "http://idp.example.com",
                     None,
                     SAMLAttributeStatement(
                         [
@@ -642,6 +655,7 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
             (
                 "subject_has_unique_id_non_default_expiration_timeout_and_empty_session_lifetime",
                 SAMLSubject(
+                    "http://idp.example.com",
                     None,
                     SAMLAttributeStatement(
                         [

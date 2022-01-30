@@ -1,8 +1,10 @@
+from typing import Dict
 from unittest.mock import MagicMock, create_autospec
 
 import onelogin
 import pytest
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
+from onelogin.saml2.settings import OneLogin_Saml2_Settings
 from parameterized import parameterized
 
 from api.saml.metadata.model import (
@@ -595,12 +597,14 @@ class TestSAMLSubjectParser(object):
         [
             (
                 "name_id_and_attributes",
+                "http://idp.example.com",
                 SAMLNameIDFormat.TRANSIENT.value,
                 fixtures.IDP_1_ENTITY_ID,
                 fixtures.SP_ENTITY_ID,
                 "12345",
                 {SAMLAttributeType.eduPersonUniqueId.value: ["12345"]},
                 SAMLSubject(
+                    "http://idp.example.com",
                     SAMLNameID(
                         SAMLNameIDFormat.TRANSIENT.value,
                         fixtures.IDP_1_ENTITY_ID,
@@ -618,6 +622,7 @@ class TestSAMLSubjectParser(object):
             ),
             (
                 "edu_person_targeted_id_as_name_id",
+                "http://idp.example.com",
                 None,
                 None,
                 None,
@@ -634,6 +639,7 @@ class TestSAMLSubjectParser(object):
                     ]
                 },
                 SAMLSubject(
+                    "http://idp.example.com",
                     SAMLNameID(
                         SAMLNameIDFormat.PERSISTENT.value,
                         fixtures.IDP_1_ENTITY_ID,
@@ -651,6 +657,7 @@ class TestSAMLSubjectParser(object):
             ),
             (
                 "edu_person_targeted_id_as_name_id_and_other_attributes",
+                "http://idp.example.com",
                 None,
                 None,
                 None,
@@ -668,6 +675,7 @@ class TestSAMLSubjectParser(object):
                     SAMLAttributeType.eduPersonPrincipalName.value: ["12345"],
                 },
                 SAMLSubject(
+                    "http://idp.example.com",
                     SAMLNameID(
                         SAMLNameIDFormat.PERSISTENT.value,
                         fixtures.IDP_1_ENTITY_ID,
@@ -688,6 +696,7 @@ class TestSAMLSubjectParser(object):
             ),
             (
                 "edu_person_principal_name_as_name_id",
+                "http://idp.example.com",
                 None,
                 None,
                 None,
@@ -704,6 +713,7 @@ class TestSAMLSubjectParser(object):
                     ]
                 },
                 SAMLSubject(
+                    "http://idp.example.com",
                     SAMLNameID(
                         SAMLNameIDFormat.PERSISTENT.value,
                         fixtures.IDP_1_ENTITY_ID,
@@ -724,16 +734,21 @@ class TestSAMLSubjectParser(object):
     def test_parse(
         self,
         _,
-        name_id_format,
-        name_id_nq,
-        name_id_spnq,
-        name_id,
-        attributes,
-        expected_result,
+        idp: str,
+        name_id_format: str,
+        name_id_nq: str,
+        name_id_spnq: str,
+        name_id: str,
+        attributes: Dict[str, Dict],
+        expected_result: SAMLSubject,
     ):
         # Arrange
         parser = SAMLSubjectParser()
         auth = create_autospec(spec=OneLogin_Saml2_Auth)
+        settings = create_autospec(spec=OneLogin_Saml2_Settings)
+        idp_data = {"entityId": idp}
+        settings.get_idp_data = MagicMock(return_value=idp_data)
+        auth.get_settings = MagicMock(return_value=settings)
         auth.get_nameid_format = MagicMock(return_value=name_id_format)
         auth.get_nameid_nq = MagicMock(return_value=name_id_nq)
         auth.get_nameid_spnq = MagicMock(return_value=name_id_spnq)
