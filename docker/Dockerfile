@@ -15,11 +15,9 @@ RUN go get -v github.com/readium/readium-lcp-server/lcpencrypt
 FROM phusion/baseimage:focal-1.1.0 As base
 
 COPY ./docker /ls_build
+RUN /bin/bash -c "/ls_build/system_setup.sh"
 COPY --chown=1000:1000 poetry.lock pyproject.toml /var/www/circulation/
-
-RUN /bin/bash -c "/ls_build/simplified_app.sh"
-
-RUN /bin/bash -c "/ls_build/install_python_packages.sh \
+RUN /bin/bash -c "/ls_build/app_setup.sh \
       && /ls_build/logrotate.sh"
 
 COPY --chown=1000:1000 . /var/www/circulation
