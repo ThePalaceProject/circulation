@@ -1,8 +1,10 @@
 import base64
 import json
+import logging
 import math
 import operator
 import os
+import tempfile
 from functools import reduce
 from io import BytesIO
 
@@ -955,7 +957,7 @@ class TestWorkController(AdminControllerTest):
         assert True == result
 
     def test_process_cover_image(self):
-        work = self._work(with_license_pool=True, title="Title", authors="Authpr")
+        work = self._work(with_license_pool=True, title="Title", authors="Author")
 
         base_path = os.path.split(__file__)[0]
         folder = os.path.dirname(base_path)
@@ -964,10 +966,30 @@ class TestWorkController(AdminControllerTest):
         original = Image.open(path)
         processed = Image.open(path)
 
+        tmpfile_before_0 = tempfile.NamedTemporaryFile(
+            prefix="image-before-no-title_", suffix=".png", delete=False
+        )
+        tmpfile_before_1 = tempfile.NamedTemporaryFile(
+            prefix="image-before-title_", suffix=".png", delete=False
+        )
+        tmpfile_after_0 = tempfile.NamedTemporaryFile(
+            prefix="image-after-no-title_", suffix=".png", delete=False
+        )
+        tmpfile_after_1 = tempfile.NamedTemporaryFile(
+            prefix="image-after-title_", suffix=".png", delete=False
+        )
+        logging.info("image before processing (no title): %s", tmpfile_before_0.name)
+        logging.info("image before processing (with title): %s", tmpfile_before_1.name)
+        logging.info("image after processing (no title): %s", tmpfile_after_0.name)
+        logging.info("image after processing (with title): %s", tmpfile_after_1.name)
+
         # Without a title position, the image won't be changed.
         processed = self.manager.admin_work_controller._process_cover_image(
             work, processed, "none"
         )
+
+        original.save(fp=tmpfile_before_0.name, format="PNG")
+        processed.save(fp=tmpfile_after_0.name, format="PNG")
 
         image_histogram = original.histogram()
         expected_histogram = processed.histogram()
@@ -993,6 +1015,9 @@ class TestWorkController(AdminControllerTest):
         path = os.path.join(resource_path, "blue_with_title_author.png")
         expected_image = Image.open(path)
 
+        expected_image.save(fp=tmpfile_before_1.name, format="PNG")
+        processed.save(fp=tmpfile_after_1.name, format="PNG")
+
         image_histogram = processed.histogram()
         expected_histogram = expected_image.histogram()
 
@@ -1006,6 +1031,11 @@ class TestWorkController(AdminControllerTest):
             / len(image_histogram)
         )
         assert root_mean_square < 10
+
+        # Remove temporary files if we've gotten this far. Assertion failures should leave
+        # the files intact for manual inspection.
+        for f in [tmpfile_before_0, tmpfile_before_1, tmpfile_after_0, tmpfile_after_1]:
+            os.remove(f.name)
 
     def test_preview_book_cover(self):
         work = self._work(with_license_pool=True)
