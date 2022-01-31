@@ -21,12 +21,6 @@ $minimal_apt_get_install --no-upgrade \
   libxmlsec1-openssl \
   pkg-config
 
-# Pass runtime environment variables to the app at runtime.
-touch environment.sh
-SIMPLIFIED_ENVIRONMENT=/var/www/circulation/environment.sh
-echo "if [[ -f $SIMPLIFIED_ENVIRONMENT ]]; then \
-      source $SIMPLIFIED_ENVIRONMENT; fi" >> env/bin/activate
-
 # Update pip and setuptools.
 python3 -m pip install -U pip setuptools
 
