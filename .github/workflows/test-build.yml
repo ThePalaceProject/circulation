@@ -48,11 +48,9 @@ jobs:
     name: Docker build base
     runs-on: ubuntu-latest
 
-    # We want to run on external PRs, but not on our own internal PRs as they'll be run
-    # by the push to the branch. This prevents duplicated runs on internal PRs.
-    # Some discussion of this here:
-    # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    # Only build docker containers on pushes to branches. Otherwise we won't have
+    # permissions to create the docker containers.
+    if: github.event_name == 'push'
 
     steps:
       - uses: actions/checkout@v2
@@ -118,7 +116,7 @@ jobs:
         with:
           context: .
           file: ./docker/Dockerfile
-          tags: circ
+          tags: test_image
           load: true
           target: ${{ matrix.image }}
           cache-from: type=gha,scope=buildkit-${{ github.run_id }}
@@ -126,17 +124,17 @@ jobs:
 
       - name: Start container
         run: >
-          docker run --rm --name circ -d --platform ${{ matrix.platform }}
+          docker run --rm --name test_container -d --platform ${{ matrix.platform }}
           --network ${{job.services.postgres.network}}
           -e SIMPLIFIED_PRODUCTION_DATABASE="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
-          circ
+          test_image
 
       - name: Run tests
-        run: ./docker/ci/test_${{ matrix.image }}.sh circ
+        run: ./docker/ci/test_${{ matrix.image }}.sh test_container
 
       - name: Stop container
         if: always()
-        run: docker stop circ
+        run: docker stop test_container
 
   docker-image-push:
     name: Push circ-${{ matrix.image }}
@@ -184,9 +182,9 @@ jobs:
         with:
           context: .
           file: ./docker/Dockerfile
-          # Push the built docker image only in the following cases:
-          #  - The `NO_DOCKER_IMAGE` secret is not set. (Useful if you want to disable pushing
-          #    of docker images in local forks of this repo).
+          # Push the built docker image only when the `NO_DOCKER_IMAGE` secret is not set.
+          # (Useful if you want to disable pushing of docker images in local forks of
+          # this repo).
           push: ${{ secrets.NO_DOCKER_IMAGE == null }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
