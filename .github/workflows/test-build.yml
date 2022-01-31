@@ -6,10 +6,12 @@ jobs:
     name: ${{ matrix.module }} Tests (Py ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.7, 3.8, 3.9]
+        python-version: ["3.7", "3.8", "3.9", "3.10"]
         module: [Api, Core]
 
     # We want to run on external PRs, but not on our own internal PRs as they'll be run
@@ -47,6 +49,8 @@ jobs:
   docker-image-build:
     name: Docker build base
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     # Only build docker containers on pushes to branches. Otherwise we won't have
     # permissions to create the docker containers.
@@ -79,6 +83,8 @@ jobs:
     name: Docker test circ-${{ matrix.image }} (${{ matrix.platform }})
     runs-on: ubuntu-latest
     needs: [docker-image-build]
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -140,6 +146,9 @@ jobs:
     name: Push circ-${{ matrix.image }}
     runs-on: ubuntu-latest
     needs: [test, docker-image-test]
+    permissions:
+      contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:
