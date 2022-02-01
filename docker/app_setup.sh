@@ -6,10 +6,8 @@ useradd -ms /bin/bash -U simplified
 
 cd /var/www/circulation
 
-# Setup virtualenv
+# Setup & Activate virtualenv
 python3 -m venv env
-
-# Install required python libraries.
 set +x && source env/bin/activate && set -x
 
 # Update pip and setuptools.
@@ -21,10 +19,7 @@ SIMPLIFIED_ENVIRONMENT=/var/www/circulation/environment.sh
 echo "if [[ -f $SIMPLIFIED_ENVIRONMENT ]]; then \
       source $SIMPLIFIED_ENVIRONMENT; fi" >> env/bin/activate
 
-# Install required python libraries.
-set +x && source env/bin/activate && set -x
-
-# Install the necessary requirements.
+# Install Python libraries.
 poetry install --no-dev --no-root -E pg
 poetry cache clear -n --all pypi
 
