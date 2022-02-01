@@ -9,6 +9,12 @@ cd /var/www/circulation
 # Setup virtualenv
 python3 -m venv env
 
+# Install required python libraries.
+set +x && source env/bin/activate && set -x
+
+# Update pip and setuptools.
+python3 -m pip install -U pip setuptools
+
 # Pass runtime environment variables to the app at runtime.
 touch environment.sh
 SIMPLIFIED_ENVIRONMENT=/var/www/circulation/environment.sh

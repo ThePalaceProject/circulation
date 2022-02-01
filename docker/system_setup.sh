@@ -3,9 +3,11 @@ set -e
 source /bd_build/buildconfig
 set -x
 
+# Make sure base system is up to date
+apt-get update && apt-get upgrade -y -o Dpkg::Options::="--force-confold"
+
 # Add packages we need to build the app and its dependencies
-apt-get update
-$minimal_apt_get_install --no-upgrade \
+install_clean --no-upgrade \
   python3 \
   python3-dev \
   python3-setuptools \
@@ -21,9 +23,6 @@ $minimal_apt_get_install --no-upgrade \
   libxmlsec1-openssl \
   pkg-config
 
-# Update pip and setuptools.
-python3 -m pip install -U pip setuptools
-
 # Install Poetry
 curl -sSL https://install.python-poetry.org | POETRY_HOME="/opt/poetry" python3 - --yes --version "1.1.12"
 ln -s /opt/poetry/bin/poetry /bin/poetry
@@ -33,3 +32,5 @@ cp /ls_build/startup/* /etc/my_init.d/
 
 # Cleanup
 rm -Rf /root/.cache
+apt-get clean
+rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
