@@ -52,9 +52,11 @@ jobs:
     permissions:
       contents: read
 
-    # Only build docker containers on pushes to branches. Otherwise we won't have
-    # permissions to create the docker containers.
-    if: github.event_name == 'push'
+    # We want to run on external PRs, but not on our own internal PRs as they'll be run
+    # by the push to the branch. This prevents duplicated runs on internal PRs.
+    # Some discussion of this here:
+    # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
 
     steps:
       - uses: actions/checkout@v2
@@ -102,6 +104,10 @@ jobs:
           POSTGRES_USER: ${{ env.POSTGRES_USER }}
           POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
           POSTGRES_DB: ${{ env.POSTGRES_DB }}
+
+    # Only push docker containers on a push event. Otherwise we won't have
+    # permissions to create the docker containers.
+    if: github.event_name == 'push'
 
     steps:
       - uses: actions/checkout@v2
