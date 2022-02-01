@@ -2,7 +2,7 @@
 ## lcpencrypt
 ###############################################################################
 
-FROM amd64/golang AS builder
+FROM golang AS builder
 
 LABEL maintainer="The Palace Project <info@thepalaceproject.org>"
 
@@ -14,6 +14,9 @@ RUN go get -v github.com/readium/readium-lcp-server/lcpencrypt
 
 FROM phusion/baseimage:focal-1.1.0 As base
 
+COPY --from=builder /go/bin/lcpencrypt /go/bin/lcpencrypt
+
+# Copy over all Palace build files for this image
 COPY ./docker /ls_build
 RUN /bin/bash -c "/ls_build/system_setup.sh"
 COPY --chown=1000:1000 poetry.lock pyproject.toml /var/www/circulation/
@@ -27,8 +30,6 @@ COPY --chown=1000:1000 . /var/www/circulation
 ###############################################################################
 
 FROM base as exec
-
-COPY --from=builder /go/bin/lcpencrypt /go/bin/lcpencrypt
 
 ENV SIMPLIFIED_DB_TASK "ignore"
 ENV SIMPLIFIED_SCRIPT_NAME ""
@@ -46,8 +47,6 @@ CMD ["/sbin/my_init", "--skip-runit", "--quiet", "--", \
 ###############################################################################
 
 FROM base as scripts
-
-COPY --from=builder /go/bin/lcpencrypt /go/bin/lcpencrypt
 
 ENV SIMPLIFIED_DB_TASK "auto"
 # Set the local timezone in /docker/simplified_cron.sh
