@@ -41,3 +41,4 @@ mkdir /var/log/simplified
 
 # Cleanup
 rm -Rf /root/.cache
+/bd_build/cleanup.sh

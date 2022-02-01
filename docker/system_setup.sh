@@ -34,3 +34,4 @@ cp /ls_build/startup/* /etc/my_init.d/
 rm -Rf /root/.cache
 apt-get clean
 rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+/bd_build/cleanup.sh
