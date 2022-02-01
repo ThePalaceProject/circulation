@@ -18,10 +18,12 @@ COPY --from=builder /go/bin/lcpencrypt /go/bin/lcpencrypt
 
 # Copy over all Palace build files for this image
 COPY ./docker /ls_build
-COPY --chown=1000:1000 . /var/www/circulation
-
-RUN /bin/bash -c "/ls_build/simplified_app.sh \
+RUN /bin/bash -c "/ls_build/system_setup.sh"
+COPY --chown=1000:1000 poetry.lock pyproject.toml /var/www/circulation/
+RUN /bin/bash -c "/ls_build/app_setup.sh \
       && /ls_build/logrotate.sh"
+
+COPY --chown=1000:1000 . /var/www/circulation
 
 ###############################################################################
 ## Circ-exec Image
