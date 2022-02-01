@@ -8,6 +8,8 @@ on:
 jobs:
   sync_with_nypl:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repo to sync

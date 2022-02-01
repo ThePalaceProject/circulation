@@ -718,7 +718,10 @@ class CirculationManagerController(BaseCirculationManagerController):
                 if_modified_since
             )
         except TypeError:
-            # Parse error.
+            # Parse error <= Python 3.9
+            return None
+        except ValueError:
+            # Parse error >= Python 3.10
             return None
         if not parsed_if_modified_since:
             return None
