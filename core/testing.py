@@ -7,6 +7,7 @@ import time
 import uuid
 from datetime import timedelta
 from pathlib import Path
+from typing import Optional
 from unittest import mock
 
 import pytest
@@ -1659,3 +1660,45 @@ def pytest_configure(config):
         "markers", "elasticsearch: mark test as requiring elasticsearch"
     )
     config.addinivalue_line("markers", "minio: mark test as requiring minio")
+
+
+class MockDeliveryMechanism:
+    """Mocks the DeliveryMechanism class."""
+
+    drm_scheme: Optional[str]
+    content_type: Optional[str]
+
+    def __repr__(self):
+        return f"MockDeliveryMechanism(drm_scheme={self.drm_scheme}, content_type={self.content_type})"
+
+    def __eq__(self, other):
+        return (
+            self.drm_scheme == other.drm_scheme
+            and self.content_type == other.content_type
+        )
+
+    def __init__(self):
+        self.drm_scheme = None
+        self.content_type = "application/epub+zip"
+
+
+class MockLicensePoolDeliveryMechanism:
+    """Mocks the LicensePoolDeliveryMechanism."""
+
+    delivery_mechanism: MockDeliveryMechanism
+
+    def __repr__(self):
+        return f"MockLicensePoolDeliveryMechanism(delivery_mechanism={self.delivery_mechanism})"
+
+    def __eq__(self, other):
+        return self.delivery_mechanism == other.delivery_mechanism
+
+    def __init__(self):
+        self.delivery_mechanism = MockDeliveryMechanism()
+
+    @staticmethod
+    def mechanism_of(drm_scheme: Optional[str], content_type: Optional[str]):
+        _mechanism = MockLicensePoolDeliveryMechanism()
+        _mechanism.delivery_mechanism.drm_scheme = drm_scheme
+        _mechanism.delivery_mechanism.content_type = content_type
+        return _mechanism

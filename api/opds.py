@@ -4,6 +4,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
+from typing import List
 
 from flask import url_for
 
@@ -29,6 +30,7 @@ from core.model import (
     Patron,
     Session,
 )
+from core.model.licensing import FormatPriorities
 from core.opds import AcquisitionFeed, Annotator, UnfulfillableWork
 from core.util.datetime_helpers import from_timestamp
 from core.util.opds_writer import OPDSFeed
@@ -48,6 +50,7 @@ class CirculationManagerAnnotator(Annotator):
         active_holds_by_work={},
         active_fulfillments_by_work={},
         hidden_content_types=[],
+        prioritized_drm_schemes=[],
         test_mode=False,
     ):
         if lane:
@@ -60,6 +63,7 @@ class CirculationManagerAnnotator(Annotator):
         self.active_holds_by_work = active_holds_by_work
         self.active_fulfillments_by_work = active_fulfillments_by_work
         self.hidden_content_types = hidden_content_types
+        self.prioritized_drm_schemes = prioritized_drm_schemes
         self.test_mode = test_mode
 
     def is_work_entry_solo(self, work):
@@ -176,19 +180,14 @@ class CirculationManagerAnnotator(Annotator):
             # determining the active license pool.
             return super(CirculationManagerAnnotator, self).active_licensepool_for(work)
 
-    def visible_delivery_mechanisms(self, licensepool):
-        """Filter the given `licensepool`'s LicensePoolDeliveryMechanisms
-        to those with content types that are not hidden.
-        """
-        hidden = self.hidden_content_types
-        for lpdm in licensepool.delivery_mechanisms:
-            mechanism = lpdm.delivery_mechanism
-            if not mechanism:
-                # This shouldn't happen, but just in case.
-                continue
-            if mechanism.content_type in hidden:
-                continue
-            yield lpdm
+    def visible_delivery_mechanisms(
+        self, licensepool: LicensePool
+    ) -> List[LicensePoolDeliveryMechanism]:
+        return FormatPriorities(
+            prioritized_drm_schemes=[],
+            prioritized_content_types=[],
+            hidden_content_types=self.hidden_content_types,
+        ).prioritize_for_pool(licensepool)
 
     def annotate_work_entry(
         self, work, active_license_pool, edition, identifier, feed, entry, updated=None

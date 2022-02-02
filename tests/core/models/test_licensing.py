@@ -1,5 +1,6 @@
 # encoding: utf-8
 import datetime
+import json
 from unittest.mock import MagicMock, PropertyMock
 
 import pytest
@@ -18,6 +19,7 @@ from core.model.edition import Edition
 from core.model.identifier import Identifier
 from core.model.licensing import (
     DeliveryMechanism,
+    FormatPriorities,
     Hold,
     LicensePool,
     LicensePoolDeliveryMechanism,
@@ -26,7 +28,7 @@ from core.model.licensing import (
     RightsStatus,
 )
 from core.model.resource import Hyperlink, Representation
-from core.testing import DatabaseTest
+from core.testing import DatabaseTest, MockLicensePoolDeliveryMechanism
 from core.util.datetime_helpers import utc_now
 
 
@@ -1568,3 +1570,205 @@ class TestLicensePoolDeliveryMechanism(DatabaseTest):
         # NOTE: we are not interested in the result returned by repr,
         # we just want to make sure that repr doesn't throw any unexpected exceptions
         repr(license_delivery_mechanism_mock)
+
+
+class TestFormatPriorities:
+
+    make = MockLicensePoolDeliveryMechanism.mechanism_of
+
+    """An arrangement of delivery mechanisms taken from a working database."""
+    sample_data_0 = [
+        make("application/vnd.adobe.adept+xml", "application/epub+zip"),
+        make(
+            "Libby DRM",
+            "application/vnd.overdrive.circulation.api+json;profile=audiobook",
+        ),
+        make(None, "application/audiobook+json"),
+        make("application/vnd.librarysimplified.bearer-token+json", "application/pdf"),
+        make(
+            "application/vnd.librarysimplified.bearer-token+json",
+            "application/epub+zip",
+        ),
+        make(None, "application/epub+zip"),
+        make(None, "application/pdf"),
+        make("application/vnd.librarysimplified.findaway.license+json", None),
+        make(
+            "application/vnd.librarysimplified.bearer-token+json",
+            "application/audiobook+json",
+        ),
+        make(None, "application/kepub+zip"),
+        make(None, "application/x-mobipocket-ebook"),
+        make(None, "application/x-mobi8-ebook"),
+        make(None, "text/plain; charset=utf-8"),
+        make(None, "application/octet-stream"),
+        make(None, "text/html; charset=utf-8"),
+        make(
+            "http://www.feedbooks.com/audiobooks/access-restriction",
+            "application/audiobook+json",
+        ),
+        make(
+            "application/vnd.readium.lcp.license.v1.0+json", "application/audiobook+lcp"
+        ),
+        make("application/vnd.readium.lcp.license.v1.0+json", "application/epub+zip"),
+    ]
+
+    def test_identity_empty(self):
+        priorities = FormatPriorities(
+            prioritized_drm_schemes=[],
+            prioritized_content_types=[],
+            hidden_content_types=[],
+        )
+        assert [] == priorities.prioritize_mechanisms([])
+
+    def test_identity_one(self):
+        priorities = FormatPriorities(
+            prioritized_drm_schemes=[],
+            prioritized_content_types=[],
+            hidden_content_types=[],
+        )
+        mechanism_0 = MockLicensePoolDeliveryMechanism()
+        assert [mechanism_0] == priorities.prioritize_mechanisms([mechanism_0])
+
+    def test_hidden_types_excluded(self):
+        priorities = FormatPriorities(
+            prioritized_drm_schemes=[],
+            prioritized_content_types=[],
+            hidden_content_types=["application/epub+zip"],
+        )
+        mechanism_0 = MockLicensePoolDeliveryMechanism()
+        assert [] == priorities.prioritize_mechanisms([mechanism_0])
+
+    def test_non_prioritized_drm_0(self):
+        priorities = FormatPriorities(
+            prioritized_drm_schemes=[],
+            prioritized_content_types=[],
+            hidden_content_types=[],
+        )
+        expected = self.sample_data_0.copy()
+        assert expected == priorities.prioritize_mechanisms(self.sample_data_0)
+
+    def test_prioritized_content_type_0(self):
+        """A simple configuration where an unusual content type is prioritized."""
+        priorities = FormatPriorities(
+            prioritized_drm_schemes=[],
+            prioritized_content_types=["application/x-mobi8-ebook"],
+            hidden_content_types=[],
+        )
+        make = MockLicensePoolDeliveryMechanism.mechanism_of
+        # We expect the mobi8-ebook format to be pushed to the front of the list.
+        # All other non-DRM formats are moved to the start of the list in a more or less arbitrary order.
+        expected = [
+            make(None, "application/x-mobi8-ebook"),
+            make(None, "application/audiobook+json"),
+            make(None, "application/epub+zip"),
+            make(None, "application/pdf"),
+            make(None, "application/kepub+zip"),
+            make(None, "application/x-mobipocket-ebook"),
+            make(None, "text/plain; charset=utf-8"),
+            make(None, "application/octet-stream"),
+            make(None, "text/html; charset=utf-8"),
+            make("application/vnd.adobe.adept+xml", "application/epub+zip"),
+            make(
+                "Libby DRM",
+                "application/vnd.overdrive.circulation.api+json;profile=audiobook",
+            ),
+            make(
+                "application/vnd.librarysimplified.bearer-token+json", "application/pdf"
+            ),
+            make(
+                "application/vnd.librarysimplified.bearer-token+json",
+                "application/epub+zip",
+            ),
+            make("application/vnd.librarysimplified.findaway.license+json", None),
+            make(
+                "application/vnd.librarysimplified.bearer-token+json",
+                "application/audiobook+json",
+            ),
+            make(
+                "http://www.feedbooks.com/audiobooks/access-restriction",
+                "application/audiobook+json",
+            ),
+            make(
+                "application/vnd.readium.lcp.license.v1.0+json",
+                "application/audiobook+lcp",
+            ),
+            make(
+                "application/vnd.readium.lcp.license.v1.0+json", "application/epub+zip"
+            ),
+        ]
+
+        received = priorities.prioritize_mechanisms(self.sample_data_0)
+        assert expected == received
+        assert len(self.sample_data_0) == len(received)
+
+    def test_prioritized_content_type_1(self):
+        """A test of a more aggressive configuration where multiple content types
+        and DRM schemes are prioritized."""
+        priorities = FormatPriorities(
+            prioritized_drm_schemes=[
+                "application/vnd.readium.lcp.license.v1.0+json",
+                "application/vnd.librarysimplified.bearer-token+json",
+                "application/vnd.adobe.adept+xml",
+            ],
+            prioritized_content_types=[
+                "application/epub+zip",
+                "application/audiobook+json",
+                "application/audiobook+lcp" "application/pdf",
+            ],
+            hidden_content_types=[
+                "application/x-mobipocket-ebook",
+                "application/x-mobi8-ebook",
+                "application/kepub+zip",
+                "text/plain; charset=utf-8",
+                "application/octet-stream",
+                "text/html; charset=utf-8",
+            ],
+        )
+        make = MockLicensePoolDeliveryMechanism.mechanism_of
+        expected = [
+            make(None, "application/epub+zip"),
+            make(None, "application/audiobook+json"),
+            make(None, "application/pdf"),
+            make(
+                "application/vnd.readium.lcp.license.v1.0+json", "application/epub+zip"
+            ),
+            make(
+                "application/vnd.readium.lcp.license.v1.0+json",
+                "application/audiobook+lcp",
+            ),
+            make(
+                "application/vnd.librarysimplified.bearer-token+json",
+                "application/epub+zip",
+            ),
+            make(
+                "application/vnd.librarysimplified.bearer-token+json",
+                "application/audiobook+json",
+            ),
+            make(
+                "application/vnd.librarysimplified.bearer-token+json", "application/pdf"
+            ),
+            make("application/vnd.adobe.adept+xml", "application/epub+zip"),
+            make(
+                "http://www.feedbooks.com/audiobooks/access-restriction",
+                "application/audiobook+json",
+            ),
+            make(
+                "Libby DRM",
+                "application/vnd.overdrive.circulation.api+json;profile=audiobook",
+            ),
+            make("application/vnd.librarysimplified.findaway.license+json", None),
+        ]
+        received = priorities.prioritize_mechanisms(self.sample_data_0)
+        assert expected == received
+
+    @staticmethod
+    def _show(mechanisms):
+        output = []
+        for mechanism in mechanisms:
+            item = {}
+            if mechanism.delivery_mechanism.drm_scheme:
+                item["drm"] = mechanism.delivery_mechanism.drm_scheme
+            if mechanism.delivery_mechanism.content_type:
+                item["type"] = mechanism.delivery_mechanism.content_type
+            output.append(item)
+        print(json.dumps(output, indent=2))
