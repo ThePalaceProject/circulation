@@ -12,15 +12,15 @@ files = ["core/util", "core/python_expression_dsl"]
 [[tool.mypy.overrides]]
 ignore_missing_imports = true
 module = [
-    "fuzzywuzzy",
-    "nameparser",
     "flask_sqlalchemy_session",
-    "sqlalchemy.*",
+    "fuzzywuzzy",
     "money",
+    "nameparser",
+    "pyparsing",
+    "sqlalchemy.*",
     "textblob.*",
     "flask_babel",
     "lxml.*",
-    "pyparsing",
     "multipledispatch"
 ]
 
