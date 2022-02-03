@@ -2068,6 +2068,9 @@ class RightsStatus(Base):
 class FormatPriorities:
     """Functions for prioritizing delivery mechanisms based on content type and DRM scheme."""
 
+    PRIORITIZED_DRM_SCHEMES_KEY: str = "prioritized_drm_schemes"
+    PRIORITIZED_CONTENT_TYPES_KEY: str = "prioritized_content_types"
+
     _prioritized_drm_schemes: Mapping[str, int]
     _prioritized_content_types: Mapping[str, int]
     _hidden_content_types: List[str]
@@ -2101,17 +2104,13 @@ class FormatPriorities:
         self._hidden_content_types = hidden_content_types
 
     def prioritize_for_pool(
-        self, pool: Optional[LicensePool]
+        self, pool: LicensePool
     ) -> List[LicensePoolDeliveryMechanism]:
         """
         Filter and prioritize the delivery mechanisms in the given pool.
         :param pool: The license pool
         :return: A list of suitable delivery mechanisms in priority order, highest priority first
         """
-        # Evidently some consumers want to call this method
-        # without a usable license pool.
-        if not pool:
-            return []
         return self.prioritize_mechanisms(pool.delivery_mechanisms)
 
     def prioritize_mechanisms(
