@@ -1931,14 +1931,19 @@ class Metadata(MetaToModelUtility):
 
         # Apply all new subjects to the identifier.
         for subject in list(new_subjects.values()):
-            identifier.classify(
-                data_source,
-                subject.type,
-                subject.identifier,
-                subject.name,
-                weight=subject.weight,
-            )
-            work_requires_full_recalculation = True
+            try:
+                identifier.classify(
+                    data_source,
+                    subject.type,
+                    subject.identifier,
+                    subject.name,
+                    weight=subject.weight,
+                )
+                work_requires_full_recalculation = True
+            except ValueError as e:
+                self.log.error(
+                    f"Error classifying subject: {subject} for identifier {identifier}: {e}"
+                )
 
         # Associate all links with the primary identifier.
         if replace.links and self.links is not None:
