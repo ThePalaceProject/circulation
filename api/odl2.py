@@ -1,15 +1,13 @@
 import logging
 
-from api.odl import ODLAPI
 from contextlib2 import contextmanager
 from flask_babel import lazy_gettext as _
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
-from core import util
-from core.metadata_layer import FormatData, LicenseData
-from core.model import DeliveryMechanism, Edition, MediaTypes, RightsStatus
 from api.odl import ODLAPI, ODLImporter
+from core.metadata_layer import FormatData
+from core.model import DeliveryMechanism, Edition, MediaTypes, RightsStatus
 from core.model.configuration import (
     ConfigurationAttributeType,
     ConfigurationFactory,
@@ -20,8 +18,8 @@ from core.model.configuration import (
 )
 from core.opds2_import import (
     OPDS2Importer,
-    OPDS2ImportMonitor,
     OPDS2ImporterConfiguration,
+    OPDS2ImportMonitor,
     RWPMManifestParser,
 )
 from core.util import first_or_default
@@ -273,7 +271,6 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
         metadata.medium = medium
 
         return metadata
-
 
     def external_integration(self, db):
         return self.collection.external_integration

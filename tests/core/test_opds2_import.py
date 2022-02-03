@@ -18,7 +18,11 @@ from core.model import (
 from core.model.collection import Collection
 from core.model.configuration import ConfigurationFactory, ConfigurationStorage
 from core.model.constants import IdentifierType
-from core.opds2_import import OPDS2Importer, OPDS2ImporterConfiguration, RWPMManifestParser
+from core.opds2_import import (
+    OPDS2Importer,
+    OPDS2ImporterConfiguration,
+    RWPMManifestParser,
+)
 
 from .test_opds_import import OPDSTest
 
@@ -106,13 +110,15 @@ class TestOPDS2Importer(OPDS2Test):
             ("manifest encoded as a byte-string", "bytes"),
         ]
     )
-    def test_opds2_importer_correctly_imports_valid_opds2_feed(self, _, manifest_type: str):
+    def test_opds2_importer_correctly_imports_valid_opds2_feed(
+        self, _, manifest_type: str
+    ):
         """Ensure that OPDS2Importer correctly imports valid OPDS 2.x feeds.
         :param manifest_type: Manifest's type: string or binary
         """
         # Arrange
         content_server_feed = self.sample_opds("feed.json")
-        
+
         if manifest_type == "bytes":
             content_server_feed = content_server_feed.encode()
 
@@ -282,9 +288,7 @@ class TestOPDS2Importer(OPDS2Test):
         assert 2 == len(works)
 
         # 3.1. Edition with open-access links (Moby-Dick)
-        moby_dick_work = self._get_work_by_identifier(
-            works, self.MOBY_DICK_IDENTIFIER
-        )
+        moby_dick_work = self._get_work_by_identifier(works, self.MOBY_DICK_IDENTIFIER)
         assert isinstance(moby_dick_work, Work)
         assert moby_dick_edition == moby_dick_work.presentation_edition
         assert 1 == len(moby_dick_work.license_pools)

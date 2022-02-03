@@ -2,9 +2,6 @@ import datetime
 import json
 import os
 
-import requests_mock
-from api.odl import ODLImporter
-from api.odl2 import ODL2API, ODL2APIConfiguration, ODL2Importer
 import pytest
 from freezegun import freeze_time
 from webpub_manifest_parser.core.ast import PresentationMetadata
@@ -27,7 +24,6 @@ from core.model import (
 )
 from core.model.configuration import ConfigurationFactory, ConfigurationStorage
 from core.model.constants import IdentifierConstants
-from core.opds2_import import RWPMManifestParser
 from tests.api.test_odl import LicenseHelper, LicenseInfoHelper, TestODLImporter
 
 

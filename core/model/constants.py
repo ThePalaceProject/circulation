@@ -2,9 +2,9 @@
 # DataSourceConstants, EditionConstants, IdentifierConstants, LinkRelations,
 # MediaTypes
 
-from enum import Enum
 import re
 from collections import OrderedDict
+from enum import Enum
 
 
 class DataSourceConstants(object):
@@ -195,8 +195,10 @@ class IdentifierConstants(object):
     IDEAL_IMAGE_HEIGHT = 240
     IDEAL_IMAGE_WIDTH = 160
 
+
 class IdentifierType(Enum):
     """Enumeration of all available identifier types."""
+
     OVERDRIVE_ID = IdentifierConstants.OVERDRIVE_ID
     ODILO_ID = IdentifierConstants.ODILO_ID
     BIBLIOTHECA_ID = IdentifierConstants.BIBLIOTHECA_ID
@@ -217,6 +219,7 @@ class IdentifierType(Enum):
     ENKI_ID = IdentifierConstants.ENKI_ID
     SUDOC_CALL_NUMBER = IdentifierConstants.SUDOC_CALL_NUMBER
     PROQUEST_ID = IdentifierConstants.PROQUEST_ID
+
 
 class LinkRelations(object):
     # Some common link relations.

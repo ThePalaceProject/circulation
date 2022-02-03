@@ -1,15 +1,11 @@
-from contextlib import contextmanager
 import json
 import logging
+from contextlib import contextmanager
 from io import BytesIO, StringIO
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 from urllib.parse import urljoin, urlparse
+
 import sqlalchemy
-
-from pip import Optional
-from core.model.configuration import ConfigurationAttributeType, ConfigurationFactory, ConfigurationGrouping, ConfigurationMetadata, ConfigurationOption, ConfigurationStorage, HasExternalIntegration
-from core.model.constants import IdentifierType
-
 import webpub_manifest_parser.opds2.ast as opds2_ast
 from flask_babel import lazy_gettext as _
 from webpub_manifest_parser.core import ManifestParserFactory, ManifestParserResult
@@ -21,6 +17,17 @@ from webpub_manifest_parser.opds2.registry import (
     OPDS2MediaTypesRegistry,
 )
 from webpub_manifest_parser.utils import encode, first_or_default
+
+from core.model.configuration import (
+    ConfigurationAttributeType,
+    ConfigurationFactory,
+    ConfigurationGrouping,
+    ConfigurationMetadata,
+    ConfigurationOption,
+    ConfigurationStorage,
+    HasExternalIntegration,
+)
+from core.model.constants import IdentifierType
 
 from .coverage import CoverageFailure
 from .metadata_layer import (
@@ -106,6 +113,7 @@ class RWPMManifestParser(object):
 
         return result
 
+
 class OPDS2ImporterConfiguration(ConfigurationGrouping):
     """Contains configuration settings of ProQuestOPDS2Importer."""
 
@@ -139,7 +147,11 @@ class OPDS2ImporterConfiguration(ConfigurationGrouping):
         supported_identifier_types = self.supported_identifier_types
 
         if supported_identifier_types:
-            return set(json.loads(supported_identifier_types)) if type(supported_identifier_types) is str else supported_identifier_types
+            return (
+                set(json.loads(supported_identifier_types))
+                if type(supported_identifier_types) is str
+                else supported_identifier_types
+            )
         else:
             # By default, all the identifier types are supported.
             return set(self.ALL_SUPPORTED_IDENTIFIER_TYPES)
@@ -168,6 +180,7 @@ class OPDS2ImporterConfiguration(ConfigurationGrouping):
                 )
 
         self.supported_identifier_types = json.dumps(supported_identifier_types)
+
 
 class OPDS2Importer(OPDSImporter, HasExternalIntegration):
     """Imports editions and license pools from an OPDS 2.0 feed."""
@@ -245,15 +258,14 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
                 )
             )
 
-        self._parser : RWPMManifestParser = parser
-        self._logger : logging.Logger = logging.getLogger(__name__)
+        self._parser: RWPMManifestParser = parser
+        self._logger: logging.Logger = logging.getLogger(__name__)
 
         self._external_integration_id: int = collection.external_integration.id
         self._configuration_storage: ConfigurationStorage = ConfigurationStorage(self)
         self._configuration_factory: ConfigurationFactory = ConfigurationFactory()
         self._supported_identifier_types: Optional[set] = None
-    
-    
+
     def _is_identifier_allowed(self, identifier: Identifier) -> bool:
         """Check the identifier and return a boolean value indicating whether CM can import it.
 
@@ -863,7 +875,9 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
         """
         if self._supported_identifier_types is None:
             with self._get_configuration(self._db) as configuration:
-                self._supported_identifier_types = configuration.get_supported_identifier_types()
+                self._supported_identifier_types = (
+                    configuration.get_supported_identifier_types()
+                )
 
         return self._supported_identifier_types
 
@@ -1114,4 +1128,3 @@ class OPDS2ImportMonitor(OPDSImportMonitor):
         return "{0}, {1};q=0.9, */*;q=0.1".format(
             OPDS2MediaTypesRegistry.OPDS_FEED.key, "application/json"
         )
-
