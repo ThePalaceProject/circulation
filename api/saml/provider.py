@@ -9,7 +9,7 @@ from flask_babel import lazy_gettext as _
 
 from api.authenticator import BaseSAMLAuthenticationProvider, PatronData
 from api.problem_details import *
-from api.saml.auth import SAMLAuthenticationManager, SAMLAuthenticationManagerFactory
+from api.saml.auth import SAMLAuthenticationManagerFactory
 from api.saml.configuration.model import SAMLConfiguration, SAMLConfigurationFactory
 from api.saml.configuration.validator import SAMLSettingsValidator
 from api.saml.metadata.filter import SAMLSubjectFilter
@@ -84,11 +84,7 @@ class SAMLWebSSOAuthenticationProvider(
             self._patron_id_use_name_id = ConfigurationMetadata.to_bool(
                 configuration.patron_id_use_name_id
             )
-            self._patron_id_attributes = (
-                json.loads(configuration.patron_id_attributes)
-                if configuration.patron_id_attributes
-                else []
-            )
+            self._patron_id_attributes = configuration.patron_id_attributes
             self._patron_id_regular_expression = (
                 configuration.patron_id_regular_expression
             )
@@ -471,7 +467,9 @@ class SAMLWebSSOAuthenticationProvider(
             return patron_data
 
         # Convert the PatronData into a Patron object
-        patron, is_new = patron_data.get_or_create_patron(db, self.library_id, self.analytics)
+        patron, is_new = patron_data.get_or_create_patron(
+            db, self.library_id, self.analytics
+        )
 
         # Create a credential for the Patron
         with self.get_configuration(db) as configuration:

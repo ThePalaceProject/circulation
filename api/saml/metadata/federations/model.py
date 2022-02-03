@@ -1,4 +1,4 @@
-from sqlalchemy import ARRAY, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from core.model import Base
@@ -32,7 +32,9 @@ class SAMLFederation(Base):
         """
         if not federation_type or not isinstance(federation_type, str):
             raise ValueError("Argument 'federation_type' must be a non-empty string")
-        if not idp_metadata_service_url or not isinstance(idp_metadata_service_url, str):
+        if not idp_metadata_service_url or not isinstance(
+            idp_metadata_service_url, str
+        ):
             raise ValueError(
                 "Argument 'idp_metadata_service_url' must be a non-empty string"
             )

@@ -8,7 +8,7 @@ package_dir = os.path.join(bin_dir, "..")
 sys.path.append(os.path.abspath(package_dir))
 
 # NOTE: We need to import it explicitly to initialize MirrorUploader.IMPLEMENTATION_REGISTRY
-from api.lcp import mirror
+from api.lcp import mirror  # noqa: autoflake
 from scripts import DirectoryImportScript
 
 DirectoryImportScript().run()

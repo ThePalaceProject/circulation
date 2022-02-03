@@ -1,6 +1,5 @@
 import cgi
 import html
-import json
 from threading import Lock
 
 from contextlib2 import contextmanager
@@ -22,7 +21,9 @@ from core.model.configuration import (
     ConfigurationMetadata,
     ConfigurationOption,
 )
+
 cgi.escape = html.escape
+
 
 class SAMLConfigurationError(BaseError):
     """Raised in the case of any configuration errors."""
@@ -78,8 +79,8 @@ class SAMLConfiguration(ConfigurationGrouping):
         default="true",
         options=[
             ConfigurationOption("true", "Use SAML NameID"),
-            ConfigurationOption("false", "Do NOT use SAML NameID")
-        ]
+            ConfigurationOption("false", "Do NOT use SAML NameID"),
+        ],
     )
 
     patron_id_attributes = ConfigurationMetadata(
@@ -240,15 +241,11 @@ class SAMLConfiguration(ConfigurationGrouping):
         if not self.federated_identity_provider_entity_ids:
             return []
 
-        federated_identity_provider_entity_ids = json.loads(
-            self.federated_identity_provider_entity_ids
-        )
-
         return (
             db.query(SAMLFederatedIdentityProvider)
             .filter(
                 SAMLFederatedIdentityProvider.entity_id.in_(
-                    federated_identity_provider_entity_ids
+                    self.federated_identity_provider_entity_ids
                 )
             )
             .all()

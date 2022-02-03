@@ -1,42 +1,29 @@
+import base64
+import json
+import os
+import textwrap
+import urllib.error
+import urllib.parse
+import urllib.request
+from collections import Counter
+from io import BytesIO
+
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
-from . import AdminCirculationManagerController
-from collections import Counter
-from core.opds import AcquisitionFeed
-from api.admin.opds import AdminAnnotator, AdminFeed
+from PIL import Image, ImageDraw, ImageFont
+
+from api.admin.opds import AdminAnnotator
 from api.admin.problem_details import *
-from api.config import (
-    Configuration,
-    CannotLoadConfiguration
-)
-from api.metadata_wrangler import MetadataWranglerCollectionRegistrar
 from api.admin.validator import Validator
-from core.app_server import (
-    load_pagination_from_request,
-)
-from core.classifier import (
-    genres,
-    SimplifiedGenreClassifier,
-    NO_NUMBER,
-    NO_VALUE
-)
+from api.config import CannotLoadConfiguration
+from api.metadata_wrangler import MetadataWranglerCollectionRegistrar
+from core.classifier import NO_NUMBER, NO_VALUE, SimplifiedGenreClassifier, genres
+from core.lane import Lane
+from core.metadata_layer import LinkData, Metadata, ReplacementPolicy
 from core.mirror import MirrorUploader
-from core.util.problem_detail import ProblemDetail
-from core.util import LanguageCodes
-from core.metadata_layer import (
-    Metadata,
-    LinkData,
-    ReplacementPolicy,
-)
-from core.lane import (Lane, WorkList)
 from core.model import (
-    create,
-    get_one,
-    get_one_or_create,
     Classification,
-    Collection,
-    Complaint,
     Contributor,
     CustomList,
     DataSource,
@@ -48,20 +35,18 @@ from core.model import (
     Representation,
     RightsStatus,
     Subject,
-    Work
+    create,
+    get_one,
+    get_one_or_create,
 )
 from core.model.configuration import ExternalIntegrationLink
-from core.util.datetime_helpers import (
-    strptime_utc,
-    utc_now,
-)
-import base64
-import json
-import os
-from PIL import Image, ImageDraw, ImageFont
-from io import BytesIO
-import textwrap
-import urllib.request, urllib.parse, urllib.error
+from core.opds import AcquisitionFeed
+from core.util import LanguageCodes
+from core.util.datetime_helpers import strptime_utc, utc_now
+from core.util.problem_detail import ProblemDetail
+
+from . import AdminCirculationManagerController
+
 
 class WorkController(AdminCirculationManagerController):
 
@@ -96,13 +81,12 @@ class WorkController(AdminCirculationManagerController):
             return work
 
         counter = self._count_complaints_for_work(work)
-        response = dict({
-            "book": {
-                "identifier_type": identifier_type,
-                "identifier": identifier
-            },
-            "complaints": counter
-        })
+        response = dict(
+            {
+                "book": {"identifier_type": identifier_type, "identifier": identifier},
+                "complaints": counter,
+            }
+        )
 
         return response
 
@@ -139,7 +123,7 @@ class WorkController(AdminCirculationManagerController):
             Contributor.PRODUCER_ROLE,
             Contributor.TRANSCRIBER_ROLE,
             Contributor.TRANSLATOR_ROLE,
-            ]:
+        ]:
             marc_to_role[CODES[role]] = role
         return marc_to_role
 
@@ -154,10 +138,14 @@ class WorkController(AdminCirculationManagerController):
     def rights_status(self):
         """Return the supported rights status values with their names and whether
         they are open access."""
-        return {uri: dict(name=name,
-                          open_access=(uri in RightsStatus.OPEN_ACCESS),
-                          allows_derivatives=(uri in RightsStatus.ALLOWS_DERIVATIVES))
-                for uri, name in list(RightsStatus.NAMES.items())}
+        return {
+            uri: dict(
+                name=name,
+                open_access=(uri in RightsStatus.OPEN_ACCESS),
+                allows_derivatives=(uri in RightsStatus.ALLOWS_DERIVATIVES),
+            )
+            for uri, name in list(RightsStatus.NAMES.items())
+        }
 
     def edit(self, identifier_type, identifier):
         """Edit a work's metadata."""
@@ -179,9 +167,10 @@ class WorkController(AdminCirculationManagerController):
         staff_data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
         primary_identifier = work.presentation_edition.primary_identifier
         staff_edition, is_new = get_one_or_create(
-            self._db, Edition,
+            self._db,
+            Edition,
             primary_identifier_id=primary_identifier.id,
-            data_source_id=staff_data_source.id
+            data_source_id=staff_data_source.id,
         )
         self._db.expire(primary_identifier)
 
@@ -199,7 +188,9 @@ class WorkController(AdminCirculationManagerController):
 
         # The form data includes roles and names for contributors in the same order.
         new_contributor_roles = flask.request.form.getlist("contributor-role")
-        new_contributor_names = [str(n) for n in flask.request.form.getlist("contributor-name")]
+        new_contributor_names = [
+            str(n) for n in flask.request.form.getlist("contributor-name")
+        ]
         # The first author in the form is considered the primary author, even
         # though there's no separate MARC code for that.
         for i, role in enumerate(new_contributor_roles):
@@ -212,12 +203,17 @@ class WorkController(AdminCirculationManagerController):
         # that already exist from the list so they won't be added again.
         deleted_contributions = False
         for contribution in staff_edition.contributions:
-            if (contribution.role, contribution.contributor.display_name) not in roles_and_names:
+            if (
+                contribution.role,
+                contribution.contributor.display_name,
+            ) not in roles_and_names:
                 self._db.delete(contribution)
                 deleted_contributions = True
                 changed = True
             else:
-                roles_and_names.remove((contribution.role, contribution.contributor.display_name))
+                roles_and_names.remove(
+                    (contribution.role, contribution.contributor.display_name)
+                )
         if deleted_contributions:
             # Ensure the staff edition's contributions are up-to-date when
             # calculating the presentation edition later.
@@ -232,8 +228,11 @@ class WorkController(AdminCirculationManagerController):
                 if role not in list(Contributor.MARC_ROLE_CODES.keys()):
                     self._db.rollback()
                     return UNKNOWN_ROLE.detailed(
-                        _("Role %(role)s is not one of the known contributor roles.",
-                          role=role))
+                        _(
+                            "Role %(role)s is not one of the known contributor roles.",
+                            role=role,
+                        )
+                    )
                 contributor = staff_edition.add_contributor(name=name, roles=[role])
                 contributor.display_name = name
                 changed = True
@@ -246,7 +245,7 @@ class WorkController(AdminCirculationManagerController):
             changed = True
 
         new_series_position = flask.request.form.get("series_position")
-        if new_series_position != None and new_series_position != '':
+        if new_series_position != None and new_series_position != "":
             try:
                 new_series_position = int(new_series_position)
             except ValueError:
@@ -265,13 +264,16 @@ class WorkController(AdminCirculationManagerController):
             if new_medium not in list(Edition.medium_to_additional_type.keys()):
                 self._db.rollback()
                 return UNKNOWN_MEDIUM.detailed(
-                    _("Medium %(medium)s is not one of the known media.",
-                      medium=new_medium))
+                    _(
+                        "Medium %(medium)s is not one of the known media.",
+                        medium=new_medium,
+                    )
+                )
             staff_edition.medium = new_medium
             changed = True
 
         new_language = flask.request.form.get("language")
-        if new_language != None and new_language != '':
+        if new_language != None and new_language != "":
             new_language = LanguageCodes.string_to_alpha_3(new_language)
             if not new_language:
                 self._db.rollback()
@@ -297,9 +299,9 @@ class WorkController(AdminCirculationManagerController):
             changed = True
 
         new_issued = flask.request.form.get("issued")
-        if new_issued != None and new_issued != '':
+        if new_issued != None and new_issued != "":
             try:
-                new_issued = strptime_utc(new_issued, '%Y-%m-%d')
+                new_issued = strptime_utc(new_issued, "%Y-%m-%d")
             except ValueError:
                 self._db.rollback()
                 return INVALID_DATE_FORMAT
@@ -317,7 +319,7 @@ class WorkController(AdminCirculationManagerController):
         # relates to the quality threshold in the library settings.
         changed_rating = False
         new_rating = flask.request.form.get("rating")
-        if new_rating != None and new_rating != '':
+        if new_rating != None and new_rating != "":
             try:
                 new_rating = float(new_rating)
             except ValueError:
@@ -327,10 +329,19 @@ class WorkController(AdminCirculationManagerController):
             if new_rating < scale[0] or new_rating > scale[1]:
                 self._db.rollback()
                 return INVALID_RATING.detailed(
-                    _("The rating must be a number between %(low)s and %(high)s.",
-                      low=scale[0], high=scale[1]))
+                    _(
+                        "The rating must be a number between %(low)s and %(high)s.",
+                        low=scale[0],
+                        high=scale[1],
+                    )
+                )
             if (new_rating - scale[0]) / (scale[1] - scale[0]) != work.quality:
-                primary_identifier.add_measurement(staff_data_source, Measurement.RATING, new_rating, weight=WorkController.STAFF_WEIGHT)
+                primary_identifier.add_measurement(
+                    staff_data_source,
+                    Measurement.RATING,
+                    new_rating,
+                    weight=WorkController.STAFF_WEIGHT,
+                )
                 changed = True
                 changed_rating = True
 
@@ -342,8 +353,8 @@ class WorkController(AdminCirculationManagerController):
                 old_summary = work.summary
 
             work.presentation_edition.primary_identifier.add_link(
-                Hyperlink.DESCRIPTION, None,
-                staff_data_source, content=new_summary)
+                Hyperlink.DESCRIPTION, None, staff_data_source, content=new_summary
+            )
 
             # Delete previous staff summary
             if old_summary:
@@ -376,7 +387,9 @@ class WorkController(AdminCirculationManagerController):
         self.require_librarian(flask.request.library)
 
         # Turn source + identifier into a LicensePool
-        pools = self.load_licensepools(flask.request.library, identifier_type, identifier)
+        pools = self.load_licensepools(
+            flask.request.library, identifier_type, identifier
+        )
         if isinstance(pools, ProblemDetail):
             # Something went wrong.
             return pools
@@ -398,7 +411,9 @@ class WorkController(AdminCirculationManagerController):
         self.require_librarian(flask.request.library)
 
         # Turn source + identifier into a group of LicensePools
-        pools = self.load_licensepools(flask.request.library, identifier_type, identifier)
+        pools = self.load_licensepools(
+            flask.request.library, identifier_type, identifier
+        )
         if isinstance(pools, ProblemDetail):
             # Something went wrong.
             return pools
@@ -418,7 +433,9 @@ class WorkController(AdminCirculationManagerController):
 
         if not provider and work.license_pools:
             try:
-                provider = MetadataWranglerCollectionRegistrar(work.license_pools[0].collection)
+                provider = MetadataWranglerCollectionRegistrar(
+                    work.license_pools[0].collection
+                )
             except CannotLoadConfiguration:
                 return METADATA_REFRESH_FAILURE
 
@@ -431,8 +448,9 @@ class WorkController(AdminCirculationManagerController):
 
         if record.exception:
             # There was a coverage failure.
-            if (str(record.exception).startswith("201") or
-                str(record.exception).startswith("202")):
+            if str(record.exception).startswith("201") or str(
+                record.exception
+            ).startswith("202"):
                 # A 201/202 error means it's never looked up this work before
                 # so it's started the resolution process or looking for sources.
                 return METADATA_REFRESH_PENDING
@@ -476,30 +494,34 @@ class WorkController(AdminCirculationManagerController):
             return work
 
         identifier_id = work.presentation_edition.primary_identifier.id
-        results = self._db \
-            .query(Classification) \
-            .join(Subject) \
-            .join(DataSource) \
-            .filter(Classification.identifier_id == identifier_id) \
-            .order_by(Classification.weight.desc()) \
+        results = (
+            self._db.query(Classification)
+            .join(Subject)
+            .join(DataSource)
+            .filter(Classification.identifier_id == identifier_id)
+            .order_by(Classification.weight.desc())
             .all()
+        )
 
         data = []
         for result in results:
-            data.append(dict({
-                "type": result.subject.type,
-                "name": result.subject.identifier,
-                "source": result.data_source.name,
-                "weight": result.weight
-            }))
+            data.append(
+                dict(
+                    {
+                        "type": result.subject.type,
+                        "name": result.subject.identifier,
+                        "source": result.data_source.name,
+                        "weight": result.weight,
+                    }
+                )
+            )
 
-        return dict({
-            "book": {
-                "identifier_type": identifier_type,
-                "identifier": identifier
-            },
-            "classifications": data
-        })
+        return dict(
+            {
+                "book": {"identifier_type": identifier_type, "identifier": identifier},
+                "classifications": data,
+            }
+        )
 
     def edit_classifications(self, identifier_type, identifier):
         """Edit a work's audience, target age, fiction status, and genres."""
@@ -513,24 +535,19 @@ class WorkController(AdminCirculationManagerController):
 
         # Previous staff classifications
         primary_identifier = work.presentation_edition.primary_identifier
-        old_classifications = self._db \
-            .query(Classification) \
-            .join(Subject) \
+        old_classifications = (
+            self._db.query(Classification)
+            .join(Subject)
             .filter(
                 Classification.identifier == primary_identifier,
-                Classification.data_source == staff_data_source
+                Classification.data_source == staff_data_source,
             )
-        old_genre_classifications = old_classifications \
-            .filter(Subject.genre_id != None)
+        )
+        old_genre_classifications = old_classifications.filter(Subject.genre_id != None)
         old_staff_genres = [
-            c.subject.genre.name
-            for c in old_genre_classifications
-            if c.subject.genre
+            c.subject.genre.name for c in old_genre_classifications if c.subject.genre
         ]
-        old_computed_genres = [
-            work_genre.genre.name
-            for work_genre in work.work_genres
-        ]
+        old_computed_genres = [work_genre.genre.name for work_genre in work.work_genres]
 
         # New genres should be compared to previously computed genres
         new_genres = flask.request.form.getlist("genres")
@@ -557,9 +574,14 @@ class WorkController(AdminCirculationManagerController):
         new_target_age_min = int(new_target_age_min) if new_target_age_min else None
         new_target_age_max = flask.request.form.get("target_age_max")
         new_target_age_max = int(new_target_age_max) if new_target_age_max else None
-        if new_target_age_max is not None and new_target_age_min is not None and \
-            new_target_age_max < new_target_age_min:
-            return INVALID_EDIT.detailed(_("Minimum target age must be less than maximum target age."))
+        if (
+            new_target_age_max is not None
+            and new_target_age_min is not None
+            and new_target_age_max < new_target_age_min
+        ):
+            return INVALID_EDIT.detailed(
+                _("Minimum target age must be less than maximum target age.")
+            )
 
         if work.target_age:
             old_target_age_min = work.target_age.lower
@@ -567,7 +589,10 @@ class WorkController(AdminCirculationManagerController):
         else:
             old_target_age_min = None
             old_target_age_max = None
-        if new_target_age_min != old_target_age_min or new_target_age_max != old_target_age_max:
+        if (
+            new_target_age_min != old_target_age_min
+            or new_target_age_max != old_target_age_max
+        ):
             # Delete all previous staff target age classifications
             for c in old_classifications:
                 if c.subject.type == Subject.AGE_RANGE:
@@ -575,7 +600,10 @@ class WorkController(AdminCirculationManagerController):
 
             # Create a new classification with a high weight - higher than audience
             if new_target_age_min and new_target_age_max:
-                age_range_identifier = "%s-%s" % (new_target_age_min, new_target_age_max)
+                age_range_identifier = "%s-%s" % (
+                    new_target_age_min,
+                    new_target_age_max,
+                )
                 primary_identifier.classify(
                     data_source=staff_data_source,
                     subject_type=Subject.AGE_RANGE,
@@ -609,7 +637,10 @@ class WorkController(AdminCirculationManagerController):
             genre, is_new = Genre.lookup(self._db, name)
             if not isinstance(genre, Genre):
                 return GENRE_NOT_FOUND
-            if genres[name].is_fiction is not None and genres[name].is_fiction != new_fiction:
+            if (
+                genres[name].is_fiction is not None
+                and genres[name].is_fiction != new_fiction
+            ):
                 return INCOMPATIBLE_GENRE
             if name == "Erotica" and new_audience != "Adults Only":
                 return EROTICA_FOR_ADULTS_ONLY
@@ -627,7 +658,7 @@ class WorkController(AdminCirculationManagerController):
                         data_source=staff_data_source,
                         subject_type=Subject.SIMPLIFIED_GENRE,
                         subject_identifier=genre,
-                        weight=WorkController.STAFF_WEIGHT
+                        weight=WorkController.STAFF_WEIGHT,
                     )
 
             # add NONE genre classification if we aren't keeping any genres
@@ -636,18 +667,19 @@ class WorkController(AdminCirculationManagerController):
                     data_source=staff_data_source,
                     subject_type=Subject.SIMPLIFIED_GENRE,
                     subject_identifier=SimplifiedGenreClassifier.NONE,
-                    weight=WorkController.STAFF_WEIGHT
+                    weight=WorkController.STAFF_WEIGHT,
                 )
             else:
                 # otherwise delete existing NONE genre classification
-                none_classifications = self._db \
-                    .query(Classification) \
-                    .join(Subject) \
+                none_classifications = (
+                    self._db.query(Classification)
+                    .join(Subject)
                     .filter(
                         Classification.identifier == primary_identifier,
-                        Subject.identifier == SimplifiedGenreClassifier.NONE
-                    ) \
+                        Subject.identifier == SimplifiedGenreClassifier.NONE,
+                    )
                     .all()
+                )
                 for c in none_classifications:
                     self._db.delete(c)
 
@@ -656,7 +688,7 @@ class WorkController(AdminCirculationManagerController):
             classify=True,
             regenerate_opds_entries=True,
             regenerate_marc_record=True,
-            update_search_index=True
+            update_search_index=True,
         )
         work.calculate_presentation(policy=policy)
 
@@ -664,16 +696,24 @@ class WorkController(AdminCirculationManagerController):
 
     MINIMUM_COVER_WIDTH = 600
     MINIMUM_COVER_HEIGHT = 900
-    TOP = 'top'
-    CENTER = 'center'
-    BOTTOM = 'bottom'
+    TOP = "top"
+    CENTER = "center"
+    BOTTOM = "bottom"
     TITLE_POSITIONS = [TOP, CENTER, BOTTOM]
 
     def _validate_cover_image(self, image):
         image_width, image_height = image.size
-        if image_width < self.MINIMUM_COVER_WIDTH or image_height < self.MINIMUM_COVER_HEIGHT:
-           return INVALID_IMAGE.detailed(_("Cover image must be at least %(width)spx in width and %(height)spx in height.",
-                                                 width=self.MINIMUM_COVER_WIDTH, height=self.MINIMUM_COVER_HEIGHT))
+        if (
+            image_width < self.MINIMUM_COVER_WIDTH
+            or image_height < self.MINIMUM_COVER_HEIGHT
+        ):
+            return INVALID_IMAGE.detailed(
+                _(
+                    "Cover image must be at least %(width)spx in width and %(height)spx in height.",
+                    width=self.MINIMUM_COVER_WIDTH,
+                    height=self.MINIMUM_COVER_HEIGHT,
+                )
+            )
         return True
 
     def _process_cover_image(self, work, image, title_position):
@@ -684,7 +724,7 @@ class WorkController(AdminCirculationManagerController):
 
         if title_position in self.TITLE_POSITIONS:
             # Convert image to 'RGB' mode if it's not already, so drawing on it works.
-            if image.mode != 'RGB':
+            if image.mode != "RGB":
                 image = image.convert("RGB")
 
             draw = ImageDraw.Draw(image)
@@ -693,7 +733,9 @@ class WorkController(AdminCirculationManagerController):
             admin_dir = os.path.dirname(os.path.split(__file__)[0])
             package_dir = os.path.join(admin_dir, "../..")
             bold_font_path = os.path.join(package_dir, "resources/OpenSans-Bold.ttf")
-            regular_font_path = os.path.join(package_dir, "resources/OpenSans-Regular.ttf")
+            regular_font_path = os.path.join(
+                package_dir, "resources/OpenSans-Regular.ttf"
+            )
             font_size = image_width // 20
             bold_font = ImageFont.truetype(bold_font_path, font_size)
             regular_font = ImageFont.truetype(regular_font_path, font_size)
@@ -729,16 +771,24 @@ class WorkController(AdminCirculationManagerController):
             else:
                 start_y = image_height / 14
 
-            draw.rectangle([(start_x, start_y),
-                            (start_x + rectangle_width, start_y + rectangle_height)],
-                           fill=(255,255,255,255))
+            draw.rectangle(
+                [
+                    (start_x, start_y),
+                    (start_x + rectangle_width, start_y + rectangle_height),
+                ],
+                fill=(255, 255, 255, 255),
+            )
 
             current_y = start_y + line_height / 2
             for lines, font in [(title_lines, bold_font), (author_lines, regular_font)]:
                 for line in lines:
                     line_width, ignore = font.getsize(line)
-                    draw.text((start_x + (rectangle_width - line_width) / 2, current_y),
-                              line, font=font, fill=(0,0,0,255))
+                    draw.text(
+                        (start_x + (rectangle_width - line_width) / 2, current_y),
+                        line,
+                        font=font,
+                        fill=(0, 0, 0, 255),
+                    )
                     current_y += line_height
 
             del draw
@@ -769,7 +819,9 @@ class WorkController(AdminCirculationManagerController):
         if not image_file and not image_url:
             return INVALID_IMAGE.detailed(_("Image file or image URL is required."))
         elif image_url and not Validator()._is_url(image_url, []):
-            return INVALID_URL.detailed(_('"%(url)s" is not a valid URL.', url=image_url))
+            return INVALID_URL.detailed(
+                _('"%(url)s" is not a valid URL.', url=image_url)
+            )
 
         title_position = flask.request.form.get("title_position")
         if image_url and not image_file:
@@ -791,7 +843,9 @@ class WorkController(AdminCirculationManagerController):
             return self._process_cover_image(work, image, title_position)
         return image
 
-    def _original_cover_info(self, image, work, data_source, rights_uri, rights_explanation):
+    def _original_cover_info(
+        self, image, work, data_source, rights_uri, rights_explanation
+    ):
         original, derivation_settings, cover_href = None, None, None
         cover_rights_explanation = rights_explanation
         title_position = flask.request.form.get("title_position")
@@ -802,7 +856,12 @@ class WorkController(AdminCirculationManagerController):
             image.save(original_buffer, format="PNG")
             original_content = original_buffer.getvalue()
             if not original_href:
-                original_href = Hyperlink.generic_uri(data_source, work.presentation_edition.primary_identifier, Hyperlink.IMAGE, content=original_content)
+                original_href = Hyperlink.generic_uri(
+                    data_source,
+                    work.presentation_edition.primary_identifier,
+                    Hyperlink.IMAGE,
+                    content=original_content,
+                )
 
             image = self._process_cover_image(work, image, title_position)
 
@@ -810,19 +869,26 @@ class WorkController(AdminCirculationManagerController):
             if rights_uri != RightsStatus.IN_COPYRIGHT:
                 original_rights_explanation = rights_explanation
             original = LinkData(
-                Hyperlink.IMAGE, original_href, rights_uri=rights_uri,
-                rights_explanation=original_rights_explanation, content=original_content,
+                Hyperlink.IMAGE,
+                original_href,
+                rights_uri=rights_uri,
+                rights_explanation=original_rights_explanation,
+                content=original_content,
             )
             derivation_settings = dict(title_position=title_position)
             if rights_uri in RightsStatus.ALLOWS_DERIVATIVES:
-                cover_rights_explanation = "The original image license allows derivatives."
+                cover_rights_explanation = (
+                    "The original image license allows derivatives."
+                )
         else:
             cover_href = cover_url
 
         return original, derivation_settings, cover_href, cover_rights_explanation
 
     def _get_collection_from_pools(self, identifier_type, identifier):
-        pools = self.load_licensepools(flask.request.library, identifier_type, identifier)
+        pools = self.load_licensepools(
+            flask.request.library, identifier_type, identifier
+        )
         if isinstance(pools, ProblemDetail):
             return pools
         if not pools:
@@ -853,31 +919,50 @@ class WorkController(AdminCirculationManagerController):
         # Look for an appropriate mirror to store this cover image. Since the
         # mirror should be used for covers, we don't need a mirror for books.
         mirrors = mirrors or dict(
-            covers_mirror=MirrorUploader.for_collection(collection, ExternalIntegrationLink.COVERS),
-            books_mirror=None
+            covers_mirror=MirrorUploader.for_collection(
+                collection, ExternalIntegrationLink.COVERS
+            ),
+            books_mirror=None,
         )
         if not mirrors.get(ExternalIntegrationLink.COVERS):
-            return INVALID_CONFIGURATION_OPTION.detailed(_("Could not find a storage integration for uploading the cover."))
+            return INVALID_CONFIGURATION_OPTION.detailed(
+                _("Could not find a storage integration for uploading the cover.")
+            )
 
         image = self.generate_cover_image(work, identifier_type, identifier)
         if isinstance(image, ProblemDetail):
             return image
 
-        original, derivation_settings, cover_href, cover_rights_explanation = self._original_cover_info(image, work, data_source, rights_uri, rights_explanation)
+        (
+            original,
+            derivation_settings,
+            cover_href,
+            cover_rights_explanation,
+        ) = self._original_cover_info(
+            image, work, data_source, rights_uri, rights_explanation
+        )
 
         buffer = BytesIO()
         image.save(buffer, format="PNG")
         content = buffer.getvalue()
 
         if not cover_href:
-            cover_href = Hyperlink.generic_uri(data_source, work.presentation_edition.primary_identifier, Hyperlink.IMAGE, content=content)
+            cover_href = Hyperlink.generic_uri(
+                data_source,
+                work.presentation_edition.primary_identifier,
+                Hyperlink.IMAGE,
+                content=content,
+            )
 
         cover_data = LinkData(
-            Hyperlink.IMAGE, href=cover_href,
+            Hyperlink.IMAGE,
+            href=cover_href,
             media_type=Representation.PNG_MEDIA_TYPE,
-            content=content, rights_uri=rights_uri,
+            content=content,
+            rights_uri=rights_uri,
             rights_explanation=cover_rights_explanation,
-            original=original, transformation_settings=derivation_settings,
+            original=original,
+            transformation_settings=derivation_settings,
         )
 
         presentation_policy = PresentationCalculationPolicy(
@@ -902,9 +987,9 @@ class WorkController(AdminCirculationManagerController):
         )
 
         metadata = Metadata(data_source, links=[cover_data])
-        metadata.apply(work.presentation_edition,
-                       collection,
-                       replace=replacement_policy)
+        metadata.apply(
+            work.presentation_edition, collection, replace=replacement_policy
+        )
 
         # metadata.apply only updates the edition, so we also need
         # to update the work.
@@ -913,7 +998,9 @@ class WorkController(AdminCirculationManagerController):
         return Response(_("Success"), 200)
 
     def _count_complaints_for_work(self, work):
-        complaint_types = [complaint.type for complaint in work.complaints if not complaint.resolved]
+        complaint_types = [
+            complaint.type for complaint in work.complaints if not complaint.resolved
+        ]
         return Counter(complaint_types)
 
     def custom_lists(self, identifier_type, identifier):
@@ -958,12 +1045,27 @@ class WorkController(AdminCirculationManagerController):
 
                 if id:
                     is_new = False
-                    list = get_one(self._db, CustomList, id=int(id), name=name, library=library, data_source=staff_data_source)
+                    list = get_one(
+                        self._db,
+                        CustomList,
+                        id=int(id),
+                        name=name,
+                        library=library,
+                        data_source=staff_data_source,
+                    )
                     if not list:
                         self._db.rollback()
-                        return MISSING_CUSTOM_LIST.detailed(_("Could not find list \"%(list_name)s\"", list_name=name))
+                        return MISSING_CUSTOM_LIST.detailed(
+                            _('Could not find list "%(list_name)s"', list_name=name)
+                        )
                 else:
-                    list, is_new = create(self._db, CustomList, name=name, data_source=staff_data_source, library=library)
+                    list, is_new = create(
+                        self._db,
+                        CustomList,
+                        name=name,
+                        data_source=staff_data_source,
+                        library=library,
+                    )
                     list.created = utc_now()
                 entry, was_new = list.add_entry(work, featured=True)
                 if was_new:

@@ -1,10 +1,9 @@
 class Dialect:
-    """Describe a SIP2 dialect.
-    """
+    """Describe a SIP2 dialect."""
 
     # Constants for each class
-    GENERIC_ILS = 'GenericILS'
-    AG_VERSO = 'AutoGraphicsVerso'
+    GENERIC_ILS = "GenericILS"
+    AG_VERSO = "AutoGraphicsVerso"
 
     # Settings defined in each class
     sendEndSession = None
@@ -17,8 +16,10 @@ class Dialect:
         else:
             return GenericILS
 
+
 class GenericILS(Dialect):
     sendEndSession = True
+
 
 class AutoGraphicsVerso(Dialect):
     sendEndSession = False

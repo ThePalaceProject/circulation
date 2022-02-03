@@ -1,11 +1,14 @@
 import datetime
+
 import dateutil
 from money import Money
-from api.config import Configuration
+
 from api.circulation_exceptions import *
+from api.config import Configuration
 from core.model.patron import Patron
 from core.util import MoneyUtility
 from core.util.datetime_helpers import utc_now
+
 
 class PatronUtility(object):
     """Apply circulation-specific logic to Patron model objects."""
@@ -69,6 +72,7 @@ class PatronUtility(object):
             raise OutstandingFines()
 
         from api.authenticator import PatronData
+
         if patron.block_reason is not None:
             if patron.block_reason is PatronData.EXCESSIVE_FINES:
                 # The authentication mechanism itself may know that
@@ -105,9 +109,9 @@ class PatronUtility(object):
         # less likely that a patron's authorization will expire before
         # they think it should.
         now_local = datetime.datetime.now(tz=dateutil.tz.tzlocal())
-        if (patron.authorization_expires
-            and cls._to_date(patron.authorization_expires)
-            < cls._to_date(now_local)):
+        if patron.authorization_expires and cls._to_date(
+            patron.authorization_expires
+        ) < cls._to_date(now_local):
             return False
         return True
 

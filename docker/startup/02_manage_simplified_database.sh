@@ -2,7 +2,7 @@
 # Manages the Circulation Manager database (either initializing it, migrating
 # it, or ignoring it) when the container starts and before the app launches.
 
-set -ex
+set -e
 
 WORKDIR=/var/www/circulation
 BINDIR=$WORKDIR/bin
@@ -10,10 +10,13 @@ CORE_BINDIR=$WORKDIR/core/bin
 
 initialization_task="${BINDIR}/util/initialize_instance"
 migration_task="${CORE_BINDIR}/migrate_database"
+migration_logfile="/var/log/migrate.log"
 
-su simplified <<EOF
+su simplified <<EOF 2>&1 | tee -a ${migration_logfile}
 # Default value 'ignore' does nothing.
 if ! [[ $SIMPLIFIED_DB_TASK == "ignore" ]]; then
+  echo "-- Begin Migrate --"
+  date
 
   # Enter the virtual environment for the application.
   source $WORKDIR/env/bin/activate;

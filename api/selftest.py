@@ -1,26 +1,20 @@
 import sys
+from typing import Iterable, Optional, Tuple, Union
+
 from sqlalchemy.orm.session import Session
+
+from core.config import IntegrationException
+from core.exceptions import BaseError
+from core.model import Collection, ExternalIntegration, Library, LicensePool, Patron
+from core.opds_import import OPDSImporter, OPDSImportMonitor
+from core.scripts import LibraryInputScript
+from core.selftest import HasSelfTests as CoreHasSelfTests
+from core.selftest import SelfTestResult
+from core.util.problem_detail import ProblemDetail
 
 from .authenticator import LibraryAuthenticator
 from .circulation import CirculationAPI
-from .feedbooks import (
-    FeedbooksOPDSImporter,
-    FeedbooksImportMonitor,
-)
-from core.config import IntegrationException
-from core.model import (
-    ExternalIntegration,
-    LicensePool,
-)
-from core.opds_import import (
-    OPDSImporter,
-    OPDSImportMonitor,
-)
-from core.scripts import LibraryInputScript
-from core.selftest import (
-    HasSelfTests as CoreHasSelfTests,
-    SelfTestResult,
-)
+from .feedbooks import FeedbooksImportMonitor, FeedbooksOPDSImporter
 
 
 class HasSelfTests(CoreHasSelfTests):
@@ -30,51 +24,86 @@ class HasSelfTests(CoreHasSelfTests):
     on behalf of a specific patron.
     """
 
-    def default_patrons(self, collection):
+    class _NoValidLibrarySelfTestPatron(BaseError):
+        """Exception raised when no valid self-test patron found for library.
+
+        Attributes:
+            message -- primary error message.
+            detail (optional) -- additional explanation of the error
+        """
+
+        def __init__(self, message: str, *, detail: str = None):
+            super().__init__(message=message)
+            self.message = message
+            self.detail = detail
+
+    def default_patrons(
+        self, collection: Collection
+    ) -> Iterable[Union[Tuple[Library, Patron, Optional[str]], SelfTestResult]]:
         """Find a usable default Patron for each of the libraries associated
         with the given Collection.
 
-        :yield: A sequence of (Library, Patron, password) 3-tuples.
-            Yields (SelfTestFailure, None, None) if the Collection is not
-            associated with any libraries, if a library does not
-            have a default patron configured, or if there is an
-            exception acquiring a library's default patron.
+        :yield: If the collection has no associated libraries, yields a single
+            failure SelfTestResult. Otherwise, for EACH associated library,
+            yields either:
+                - a (Library, Patron, (optional) password) 3-tuple, when a
+                default patron can be determined; or
+                - a failure SelfTestResult when it cannot.
         """
         _db = Session.object_session(collection)
         if not collection.libraries:
             yield self.test_failure(
                 "Acquiring test patron credentials.",
                 "Collection is not associated with any libraries.",
-                "Add the collection to a library that has a patron authentication service."
+                "Add the collection to a library that has a patron authentication service.",
             )
+            # Not strictly necessary, but makes it obvious that we won't do anything else.
+            return
 
         for library in collection.libraries:
-            name = library.name
             task = "Acquiring test patron credentials for library %s" % library.name
             try:
-                library_authenticator = LibraryAuthenticator.from_config(
-                    _db, library
-                )
-                patron = password = None
-                auth = library_authenticator.basic_auth_provider
-                if auth:
-                    patron, password = auth.testing_patron(_db)
-
-                if not patron:
-                    yield self.test_failure(
-                        task,
-                        "Library has no test patron configured.",
-                        "You can specify a test patron when you configure the library's patron authentication service."
-                    )
-                    continue
-
-                yield (library, patron, password)
+                patron, password = self._determine_self_test_patron(library, _db=_db)
+                yield library, patron, password
+            except self._NoValidLibrarySelfTestPatron as e:
+                yield self.test_failure(task, e.message, e.detail)
             except IntegrationException as e:
                 yield self.test_failure(task, e)
             except Exception as e:
                 yield self.test_failure(
                     task, "Exception getting default patron: %r" % e
                 )
+
+    @classmethod
+    def _determine_self_test_patron(
+        cls, library: Library, _db=None
+    ) -> Tuple[Patron, Optional[str]]:
+        """Obtain the test Patron and optional password for a library's self-tests.
+
+        :param library: The library being tested.
+        :param _db: Database session object.
+        :return: A 2-tuple with either (1) a patron and optional password.
+        :raise: _NoValidLibrarySelfTestPatron when a valid patron is not found.
+        """
+        _db = _db or Session.object_session(library)
+        library_authenticator = LibraryAuthenticator.from_config(_db, library)
+        auth = library_authenticator.basic_auth_provider
+        patron, password = auth.testing_patron(_db) if auth else (None, None)
+        if isinstance(patron, Patron):
+            return patron, password
+
+        # If we get here, then we have failed to find a valid test patron
+        # and will raise an exception.
+        if patron is None:
+            message = "Library has no test patron configured."
+            detail = "You can specify a test patron when you configure the library's patron authentication service."
+        elif isinstance(patron, ProblemDetail):
+            message = patron.detail
+            detail = patron.debug_message
+        else:
+            message = f"Authentication provider returned unexpected type ({type(patron)}) instead of patron."
+            detail = None
+        raise cls._NoValidLibrarySelfTestPatron(message, detail=detail)
 
 
 class RunSelfTestsScript(LibraryInputScript):
@@ -128,11 +157,7 @@ class RunSelfTestsScript(LibraryInputScript):
             success = "SUCCESS"
         else:
             success = "FAILURE"
-        self.out.write(
-            "  %s %s (%.1fsec)\n" % (
-                success, result.name, result.duration
-            )
-        )
+        self.out.write("  %s %s (%.1fsec)\n" % (success, result.name, result.duration))
         if isinstance(result.result, (bytes, str)):
             self.out.write("   Result: %s\n" % result.result)
         if result.exception:
@@ -161,9 +186,7 @@ class HasCollectionSelfTests(HasSelfTests):
             else:
                 title = "[title unknown]"
             identifier = lp.identifier.identifier
-            titles.append(
-                "%s (ID: %s)" % (title, identifier)
-            )
+            titles.append("%s (ID: %s)" % (title, identifier))
 
         if titles:
             return titles
@@ -173,5 +196,5 @@ class HasCollectionSelfTests(HasSelfTests):
     def _run_self_tests(self):
         yield self.run_test(
             "Checking for titles that have no delivery mechanisms.",
-            self._no_delivery_mechanisms_test
+            self._no_delivery_mechanisms_test,
         )

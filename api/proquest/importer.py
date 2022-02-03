@@ -42,7 +42,7 @@ from core.model.configuration import (
     ExternalIntegration,
     HasExternalIntegration,
 )
-from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, RWPMManifestParser, OPDS2ImporterConfiguration
+from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, RWPMManifestParser
 from core.opds_import import OPDSImporter
 from core.util.datetime_helpers import utc_now
 
@@ -82,15 +82,15 @@ class CannotCreateProQuestTokenError(BaseError):
         super(CannotCreateProQuestTokenError, self).__init__(message, inner_exception)
 
 
-class ProQuestOPDS2ImporterConfiguration(OPDS2ImporterConfiguration):
+class ProQuestOPDS2ImporterConfiguration(ConfigurationGrouping):
     """Contains configuration settings of ProQuestOPDS2Importer."""
 
     DEFAULT_TOKEN_EXPIRATION_TIMEOUT_SECONDS = 60 * 60
     TEST_AFFILIATION_ID = 1
-    DEFAULT_AFFILIATION_ATTRIBUTES = (
+    DEFAULT_AFFILIATION_ATTRIBUTES = [
         SAMLAttributeType.eduPersonPrincipalName.name,
         SAMLAttributeType.eduPersonScopedAffiliation.name,
-    )
+    ]
 
     data_source_name = ConfigurationMetadata(
         key=Collection.DATA_SOURCE_NAME_SETTING,
@@ -266,44 +266,6 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         ) as configuration:
             yield configuration
 
-    @staticmethod
-    def _get_affiliation_attributes(configuration):
-        """Return a configured list of SAML attributes which can contain affiliation ID.
-
-        :param configuration: Configuration object
-        :type configuration: ProQuestOPDS2ImporterConfiguration
-
-        :return: Configured list of SAML attributes which can contain affiliation ID
-        :rtype: List[str]
-        """
-        affiliation_attributes = (
-            ProQuestOPDS2ImporterConfiguration.DEFAULT_AFFILIATION_ATTRIBUTES
-        )
-
-        if configuration.affiliation_attributes:
-            if isinstance(configuration.affiliation_attributes, list):
-                affiliation_attributes = configuration.affiliation_attributes
-            elif isinstance(configuration.affiliation_attributes, str):
-                affiliation_attributes = tuple(
-                    map(
-                        str.strip,
-                        str(configuration.affiliation_attributes)
-                        .replace("[", "")
-                        .replace("]", "")
-                        .replace("(", "")
-                        .replace(")", "")
-                        .replace("'", "")
-                        .replace('"', "")
-                        .split(","),
-                    )
-                )
-            else:
-                raise ValueError(
-                    "Configuration setting 'affiliation_attributes' has an incorrect format"
-                )
-
-        return affiliation_attributes
-
     def _get_patron_affiliation_id(self, patron, configuration):
         """Get a patron's affiliation ID.
 
@@ -316,9 +278,8 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         :return: Patron's affiliation ID
         :rtype: Optional[str]
         """
-        affiliation_attributes = self._get_affiliation_attributes(configuration)
         affiliation_id = self._credential_manager.lookup_patron_affiliation_id(
-            self._db, patron, affiliation_attributes
+            self._db, patron, configuration.affiliation_attributes
         )
 
         self._logger.info(
@@ -450,9 +411,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         :rtype: List[LinkData]
         """
         self._logger.debug(
-            "Started extracting image links from {0}".format(
-                encode(publication.images)
-            )
+            "Started extracting image links from {0}".format(encode(publication.images))
         )
 
         image_links = []
@@ -767,6 +726,15 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
 
             raise CannotFulfill(str(exception))
 
+    def external_integration(self, db):
+        """Return an external integration associated with this object.
+        :param db: Database session
+        :type db: sqlalchemy.orm.session.Session
+        :return: External integration associated with this object
+        :rtype: core.model.configuration.ExternalIntegration
+        """
+        return self.collection.external_integration
+
 
 class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
     PROTOCOL = ExternalIntegration.PROQUEST
@@ -808,7 +776,11 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
         :type process_removals: bool
         """
         if not isinstance(parser, RWPMManifestParser):
-            raise ValueError("Argument 'parser' must be an instance of {0}".format(RWPMManifestParser))
+            raise ValueError(
+                "Argument 'parser' must be an instance of {0}".format(
+                    RWPMManifestParser
+                )
+            )
 
         import_class_kwargs["parser"] = parser
 
@@ -885,7 +857,9 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
 
             try:
                 feed_page_content = json.dumps(
-                    feed, default=str, ensure_ascii=True,
+                    feed,
+                    default=str,
+                    ensure_ascii=True,
                 )
                 feed_page_file.write(feed_page_content)
                 feed_page_file.flush()
@@ -1027,6 +1001,7 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
             self._logger.exception(
                 "An unexpected exception occurred during fetching ProQuest paged OPDS 2.0 feeds"
             )
+            raise
         finally:
             shutil.rmtree(feed_pages_directory)
 
@@ -1035,27 +1010,32 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
     def run_once(self, progress_ignore):
         # This list is used to keep track of all identifiers in the ProQuest feed.
         feed_identifiers = []
-
-        feeds = self._get_feeds()
         total_imported = 0
         total_failures = 0
 
-        for link, feed in feeds:
-            if self._process_removals:
-                self._collect_feed_identifiers(feed, feed_identifiers)
+        try:
+            feeds = self._get_feeds()
 
-            self.log.info("Importing next feed: %s", link)
-            imported_editions, failures = self.import_one_feed(feed)
-            total_imported += len(imported_editions)
-            total_failures += len(failures)
-            self._db.commit()
+            for link, feed in feeds:
+                if self._process_removals:
+                    self._collect_feed_identifiers(feed, feed_identifiers)
+
+                self.log.info("Importing next feed: %s", link)
+                imported_editions, failures = self.import_one_feed(feed)
+                total_imported += len(imported_editions)
+                total_failures += len(failures)
+                self._db.commit()
+
+            if self._process_removals:
+                self._clean_removed_items(feed_identifiers)
+        except Exception:
+            self._logger.exception(
+                "An unexpected error occurred while importing the ProQuest feed"
+            )
 
         achievements = "Items imported: %d. Failures: %d." % (
             total_imported,
             total_failures,
         )
-
-        if self._process_removals:
-            self._clean_removed_items(feed_identifiers)
 
         return TimestampData(achievements=achievements)

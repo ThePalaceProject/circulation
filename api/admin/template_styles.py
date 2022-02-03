@@ -1,6 +1,6 @@
 body_style = """
     margin: 10vh auto;
-    font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    font-family: 'Open Sans',Helvetica,Arial,sans-serif;
     padding: 25px 15px;
     width: 40vw;
     color: #403d37;
@@ -15,9 +15,12 @@ label_style = """
     font-weight: 700;
 """
 
-error_style = body_style + """
+error_style = (
+    body_style
+    + """
     border-color: #D0343A;
 """
+)
 input_style = """
     border-radius: .25em;
     display: block;
@@ -37,11 +40,12 @@ section_style = """
     align-items: center;
 """
 button_style = """
-    background: #1B7FA7;
+    background: #242DAB;
     border-color: transparent;
     border-radius: .25em;
     color: #fff;
     padding: 10px;
+    font-family: 'Open Sans',Helvetica,Arial,sans-serif;
     font-size: 1rem;
     cursor: pointer;
     display: block;
@@ -50,10 +54,10 @@ button_style = """
 """
 
 link_style = """
-    background: #1B7FA7;
+    background: #242DAB;
     text-align: center;
     text-decoration: none;
-    border-color: #1B7FA7;
+    border-color: #242DAB;
     border-radius: .25em;
     color: #fff;
     padding: 10px;
@@ -64,14 +68,22 @@ link_style = """
     margin: 2vh auto;
 """
 
-small_link_style = link_style + """
+small_link_style = (
+    link_style
+    + """
     width: 5vw;
     margin-bottom: 0;
 """
+)
 
 hr_style = """
     width: 10vw;
     margin: 3px 0 0 0;
     border: none;
     border-bottom: 1px solid #403d37;
+"""
+
+logo_style = """
+    width: 200px;
+    margin: 20px;
 """

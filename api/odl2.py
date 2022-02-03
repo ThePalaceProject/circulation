@@ -1,7 +1,6 @@
-import json
 import logging
 
-from api.odl import ODLAPI, ODLExpiredItemsReaper
+from api.odl import ODLAPI
 from contextlib2 import contextmanager
 from flask_babel import lazy_gettext as _
 from webpub_manifest_parser.odl import ODLFeedParserFactory
@@ -10,26 +9,29 @@ from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 from core import util
 from core.metadata_layer import FormatData, LicenseData
 from core.model import DeliveryMechanism, Edition, MediaTypes, RightsStatus
+from api.odl import ODLAPI, ODLImporter
 from core.model.configuration import (
     ConfigurationAttributeType,
     ConfigurationFactory,
     ConfigurationMetadata,
     ConfigurationStorage,
+    ExternalIntegration,
     HasExternalIntegration,
 )
 from core.opds2_import import (
     OPDS2Importer,
-    OPDS2ImporterConfiguration,
     OPDS2ImportMonitor,
+    OPDS2ImporterConfiguration,
     RWPMManifestParser,
 )
 from core.util import first_or_default
+from core.util.datetime_helpers import to_utc
 
 
 class ODL2APIConfiguration(OPDS2ImporterConfiguration):
     skipped_license_formats = ConfigurationMetadata(
         key="odl2_skipped_license_formats",
-        label=_("Ignored license formats"),
+        label=_("Skipped license formats"),
         description=_(
             "List of license formats that will NOT be imported into Circulation Manager."
         ),
@@ -40,7 +42,7 @@ class ODL2APIConfiguration(OPDS2ImporterConfiguration):
 
 
 class ODL2API(ODLAPI):
-    NAME = "ODL 2.0"
+    NAME = ExternalIntegration.ODL2
     SETTINGS = ODLAPI.SETTINGS + ODL2APIConfiguration.to_settings()
 
 
@@ -170,21 +172,62 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
         )
         formats = []
         licenses = []
-        licenses_owned = 0
-        licenses_available = 0
         medium = None
 
         with self._get_configuration(self._db) as configuration:
             skipped_license_formats = configuration.skipped_license_formats
 
             if skipped_license_formats:
-                skipped_license_formats = set(json.loads(skipped_license_formats))
+                skipped_license_formats = set(skipped_license_formats)
 
         if publication.licenses:
-            for license in publication.licenses:
-                identifier = license.metadata.identifier
+            for odl_license in publication.licenses:
+                identifier = odl_license.metadata.identifier
+                checkout_link = first_or_default(
+                    odl_license.links.get_by_rel(OPDS2LinkRelationsRegistry.BORROW.key)
+                )
+                if checkout_link:
+                    checkout_link = checkout_link.href
 
-                for license_format in license.metadata.formats:
+                license_info_document_link = first_or_default(
+                    odl_license.links.get_by_rel(OPDS2LinkRelationsRegistry.SELF.key)
+                )
+                if license_info_document_link:
+                    license_info_document_link = license_info_document_link.href
+
+                expires = (
+                    to_utc(odl_license.metadata.terms.expires)
+                    if odl_license.metadata.terms
+                    else None
+                )
+                concurrency = (
+                    int(odl_license.metadata.terms.concurrency)
+                    if odl_license.metadata.terms
+                    else None
+                )
+
+                if not license_info_document_link:
+                    parsed_license = None
+                else:
+                    parsed_license = ODLImporter.get_license_data(
+                        license_info_document_link,
+                        checkout_link,
+                        identifier,
+                        expires,
+                        concurrency,
+                        self.http_get,
+                    )
+
+                if parsed_license is not None:
+                    licenses.append(parsed_license)
+
+                # DPLA feed doesn't have information about a DRM protection used for audiobooks.
+                # We want to try to extract that information from the License Info Document it's present there.
+                license_formats = set(odl_license.metadata.formats)
+                if parsed_license and parsed_license.content_types:
+                    license_formats |= set(parsed_license.content_types)
+
+                for license_format in license_formats:
                     if (
                         skipped_license_formats
                         and license_format in skipped_license_formats
@@ -194,21 +237,23 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
                     if not medium:
                         medium = Edition.medium_from_media_type(license_format)
 
-                    drm_schemes = (
-                        license.metadata.protection.formats
-                        if license.metadata.protection
-                        else []
-                    )
-
-                    if license_format in self.LICENSE_FORMATS:
-                        drm_scheme = self.LICENSE_FORMATS[license_format][
-                            self.DRM_SCHEME
+                    if license_format in ODLImporter.LICENSE_FORMATS:
+                        # Special case to handle DeMarque audiobooks which
+                        # include the protection in the content type
+                        drm_schemes = [
+                            ODLImporter.LICENSE_FORMATS[license_format][
+                                ODLImporter.DRM_SCHEME
+                            ]
                         ]
-                        license_format = self.LICENSE_FORMATS[license_format][
-                            self.CONTENT_TYPE
+                        license_format = ODLImporter.LICENSE_FORMATS[license_format][
+                            ODLImporter.CONTENT_TYPE
                         ]
-
-                        drm_schemes.append(drm_scheme)
+                    else:
+                        drm_schemes = (
+                            odl_license.metadata.protection.formats
+                            if odl_license.metadata.protection
+                            else []
+                        )
 
                     for drm_scheme in drm_schemes or [None]:
                         formats.append(
@@ -219,66 +264,19 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
                             )
                         )
 
-                expires = None
-                remaining_checkouts = None
-                available_checkouts = None
-                concurrent_checkouts = None
-
-                checkout_link = first_or_default(
-                    license.links.get_by_rel(OPDS2LinkRelationsRegistry.BORROW.key)
-                )
-                if checkout_link:
-                    checkout_link = checkout_link.href
-
-                odl_status_link = first_or_default(
-                    license.links.get_by_rel(OPDS2LinkRelationsRegistry.SELF.key)
-                )
-                if odl_status_link:
-                    odl_status_link = odl_status_link.href
-
-                if odl_status_link:
-                    status_code, _, response = self.http_get(
-                        odl_status_link, headers={}
-                    )
-
-                    if status_code < 400:
-                        status = json.loads(response)
-                        checkouts = status.get("checkouts", {})
-                        remaining_checkouts = checkouts.get("left")
-                        available_checkouts = checkouts.get("available")
-
-                if license.metadata.terms:
-                    expires = license.metadata.terms.expires
-                    concurrent_checkouts = license.metadata.terms.concurrency
-
-                    if expires:
-                        expires = util.datetime_helpers.to_utc(expires)
-                        now = util.datetime_helpers.utc_now()
-
-                        if expires <= now:
-                            continue
-
-                licenses_owned += int(concurrent_checkouts or 0)
-                licenses_available += int(available_checkouts or 0)
-
-                licenses.append(
-                    LicenseData(
-                        identifier=identifier,
-                        checkout_url=checkout_link,
-                        status_url=odl_status_link,
-                        expires=expires,
-                        remaining_checkouts=remaining_checkouts,
-                        concurrent_checkouts=concurrent_checkouts,
-                    )
-                )
-
-        metadata.circulation.licenses_owned = licenses_owned
-        metadata.circulation.licenses_available = licenses_available
         metadata.circulation.licenses = licenses
+        metadata.circulation.licenses_owned = None
+        metadata.circulation.licenses_available = None
+        metadata.circulation.licenses_reserved = None
+        metadata.circulation.patrons_in_hold_queue = None
         metadata.circulation.formats.extend(formats)
         metadata.medium = medium
 
         return metadata
+
+
+    def external_integration(self, db):
+        return self.collection.external_integration
 
 
 class ODL2ImportMonitor(OPDS2ImportMonitor):
@@ -287,9 +285,8 @@ class ODL2ImportMonitor(OPDS2ImportMonitor):
     PROTOCOL = ODL2Importer.NAME
     SERVICE_NAME = "ODL 2.x Import Monitor"
 
-
-class ODL2ExpiredItemsReaper(ODLExpiredItemsReaper):
-    """Responsible for removing expired ODL licenses."""
-
-    SERVICE_NAME = "ODL 2 Expired Items Reaper"
-    PROTOCOL = ODL2Importer.NAME
+    def __init__(self, _db, collection, import_class, **import_class_kwargs):
+        # Always force reimport ODL collections to get up to date license information
+        super().__init__(
+            _db, collection, import_class, force_reimport=True, **import_class_kwargs
+        )

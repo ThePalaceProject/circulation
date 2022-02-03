@@ -1,9 +1,12 @@
 import logging
 from contextlib import contextmanager
+from typing import Dict, Optional, Tuple
 
 import requests
 from flask_babel import lazy_gettext as _
 from requests import HTTPError, Request
+from requests.adapters import HTTPAdapter
+from urllib3 import Retry
 
 from core.exceptions import BaseError
 from core.model import DeliveryMechanism
@@ -361,35 +364,24 @@ class ProQuestAPIClient(object):
 
     def _send_request(
         self,
-        configuration,
-        method,
-        url,
-        query_parameters,
-        token=None,
-        response_must_be_json=False,
-    ):
+        configuration: ProQuestAPIClientConfiguration,
+        method: str,
+        url: str,
+        query_parameters: Dict,
+        token: Optional[str] = None,
+        response_must_be_json: bool = False,
+        retry_strategy: Optional[Retry] = None,
+    ) -> Tuple[requests.models.Response, Optional[Dict]]:
         """Send an HTTP requests, check the result code and return the response.
 
         :param configuration: Configuration object
-        :type configuration: ProQuestAPIClientConfiguration
-
         :param method: HTTP method
-        :type method: str
-
         :param url: Target URL
-        :type url: str
-
         :param query_parameters: Dictionary containing query parameters
-        :type query_parameters: Dict
-
         :param token: Optional JWT token to be put in the Authorization header
-        :type token: Optional[str]
-
         :param response_must_be_json: Boolean value specifying whether the response must contain a valid JSON document
-        :type response_must_be_json: bool
-
+        :param retry_strategy: Optional retry strategy
         :return: 2-tuple containing the response and the JSON document containing in it (if any)
-        :rtype: Tuple[requests.models.Response, Optional[Dict]]
         """
         self._logger.debug(
             "Started sending {0} HTTP request to {1} with the following parameters: {2}".format(
@@ -401,6 +393,11 @@ class ProQuestAPIClient(object):
         proxies = self._get_request_proxies(configuration)
 
         with requests.sessions.Session() as session:
+            if retry_strategy:
+                adapter = HTTPAdapter(max_retries=retry_strategy)
+                session.mount("https://", adapter)
+                session.mount("http://", adapter)
+
             request = session.prepare_request(request)
             response = session.send(request, proxies=proxies)
 
@@ -444,6 +441,7 @@ class ProQuestAPIClient(object):
             configuration.books_catalog_service_url,
             parameters,
             response_must_be_json=True,
+            retry_strategy=Retry(total=3),
         )
 
         self._logger.info(
@@ -458,6 +456,39 @@ class ProQuestAPIClient(object):
             )
 
         return response_json[self.RESPONSE_OPDS_FEED_FIELD]
+
+    @staticmethod
+    def _is_feed_page_empty_or_incorrect(feed: Dict) -> bool:
+        """Determine whether the feed page is correctly structured and contains any publications.
+
+        ProQuest used to throw a 404 or 500 error when we tried to request a non-existent page,
+        but this behavior recently had changed. Instead of throwing an error, they
+        return empty pages, making CM infinitely loop through them.
+
+        NOTE: This method doesn't use a proper OPDS 2.x parser because it'd slow down downloading a big feed.
+        Instead, it uses a number of heuristics we got working with the ProQuest feed.
+        If the structure of the feed changes, this method will stop working and the download process will fail.
+        """
+        # 1. Let's see whether there are any groups.
+        groups = feed.get("groups")
+        if not groups or not isinstance(groups, list):
+            return True
+
+        # 2. Let's try to get the first one. The ProQuest feed usually contains a single group.
+        group = groups[0]
+        if not group or not isinstance(group, dict):
+            return True
+
+        # 3. Then let's see whether there any publications in the group.
+        publications = group.get("publications")
+        if (
+            not publications
+            or not isinstance(publications, list)
+            or len(publications) < 1
+        ):
+            return True
+
+        return False
 
     def download_feed_page(self, db, page, hits_per_page):
         """Download a single page of a paginated OPDS 2.0 feed.
@@ -534,6 +565,10 @@ class ProQuestAPIClient(object):
                     feed = self._download_feed_page(
                         configuration, page, configuration.page_size
                     )
+
+                    if self._is_feed_page_empty_or_incorrect(feed):
+                        break
+
                     page += 1
 
                     yield feed

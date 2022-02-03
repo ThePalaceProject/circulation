@@ -1,17 +1,11 @@
-import logging
-
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
 
-from .circulation_exceptions import *
-from core.model import (
-    Library,
-    Loan,
-    Patron,
-    get_one,
-)
+from core.model import Library, Loan, Patron, get_one
 from core.util.problem_detail import ProblemDetail
+
+from .circulation_exceptions import *
 from .problem_details import *
 
 
@@ -35,8 +29,8 @@ class BaseCirculationManagerController(object):
 
         # If we're using a token instead, flask doesn't extract it for us.
         if not header:
-            if 'Authorization' in flask.request.headers:
-                header = flask.request.headers['Authorization']
+            if "Authorization" in flask.request.headers:
+                header = flask.request.headers["Authorization"]
 
         return header
 
@@ -53,7 +47,7 @@ class BaseCirculationManagerController(object):
 
         :return: A Patron, if one could be authenticated; None otherwise.
         """
-        if not hasattr(flask.request, 'patron'):
+        if not hasattr(flask.request, "patron"):
             # Call authenticated_patron_from_request for its side effect
             # of setting flask.request.patron
             self.authenticated_patron_from_request()
@@ -104,9 +98,7 @@ class BaseCirculationManagerController(object):
 
         If there's no problem, return a Patron object.
         """
-        patron = self.manager.auth.authenticated_patron(
-            self._db, authorization_header
-        )
+        patron = self.manager.auth.authenticated_patron(self._db, authorization_header)
         if not patron:
             return INVALID_CREDENTIALS
 

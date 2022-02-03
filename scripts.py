@@ -5,68 +5,41 @@ import logging
 import os
 import sys
 import time
+from datetime import timedelta
 from io import StringIO
-from datetime import (
-    datetime,
-    timedelta,
-)
 
-from enum import Enum
-from sqlalchemy import (
-    or_,
-)
+from sqlalchemy import or_
 
-from api.adobe_vendor_id import (
-    AuthdataUtility,
-)
+from api.adobe_vendor_id import AuthdataUtility
 from api.authenticator import LibraryAuthenticator
-from api.bibliotheca import (
-    BibliothecaCirculationSweep
-)
-from api.config import (
-    CannotLoadConfiguration,
-    Configuration,
-)
+from api.bibliotheca import BibliothecaCirculationSweep
+from api.config import CannotLoadConfiguration, Configuration
 from api.controller import CirculationManager
 from api.lanes import create_default_lanes
 from api.local_analytics_exporter import LocalAnalyticsExporter
 from api.marc import LibraryAnnotator as MARCLibraryAnnotator
-from api.novelist import (
-    NoveListAPI
-)
+from api.novelist import NoveListAPI
 from api.nyt import NYTBestSellerAPI
-from api.odl import (
-    ODLImporter,
-    ODLImportMonitor,
-    SharedODLImporter,
-    SharedODLImportMonitor,
-)
+from api.odl import SharedODLImporter, SharedODLImportMonitor
 from api.onix import ONIXExtractor
 from api.opds_for_distributors import (
     OPDSForDistributorsImporter,
     OPDSForDistributorsImportMonitor,
     OPDSForDistributorsReaperMonitor,
 )
-from api.overdrive import (
-    OverdriveAPI,
-)
+from api.overdrive import OverdriveAPI
 from core.entrypoint import EntryPoint
 from core.external_list import CustomListFromCSV
 from core.external_search import ExternalSearchIndex
-from core.lane import Lane
-from core.lane import (
-    Pagination,
-    Facets,
-    FeaturedFacets,
-)
+from core.lane import Facets, FeaturedFacets, Lane, Pagination
 from core.marc import MARCExporter
 from core.metadata_layer import (
     CirculationData,
     FormatData,
-    ReplacementPolicy,
     LinkData,
+    MARCExtractor,
+    ReplacementPolicy,
 )
-from core.metadata_layer import MARCExtractor
 from core.mirror import MirrorUploader
 from core.model import (
     CachedMARCFile,
@@ -78,8 +51,8 @@ from core.model import (
     DataSource,
     DeliveryMechanism,
     Edition,
+    EditionConstants,
     ExternalIntegration,
-    get_one,
     Hold,
     Hyperlink,
     Identifier,
@@ -91,32 +64,25 @@ from core.model import (
     SessionManager,
     Subject,
     Timestamp,
-    Work,
-    EditionConstants,
+    get_one,
 )
 from core.model.configuration import ExternalIntegrationLink
-from core.opds import (
-    AcquisitionFeed,
-)
-from core.opds_import import (
-    MetadataWranglerOPDSLookup,
-    OPDSImporter,
-)
-from core.scripts import OPDSImportScript, CollectionType
+from core.opds import AcquisitionFeed
+from core.opds_import import MetadataWranglerOPDSLookup, OPDSImporter
 from core.scripts import (
-    Script as CoreScript,
+    CollectionType,
     DatabaseMigrationInitializationScript,
     IdentifierInputScript,
     LaneSweeperScript,
     LibraryInputScript,
+    OPDSImportScript,
     PatronInputScript,
-    TimestampScript,
 )
+from core.scripts import Script as CoreScript
+from core.scripts import TimestampScript
 from core.util import LanguageCodes
-from core.util.opds_writer import (
-    OPDSFeed,
-)
 from core.util.datetime_helpers import utc_now
+from core.util.opds_writer import OPDSFeed
 
 
 class Script(CoreScript):
@@ -124,14 +90,15 @@ class Script(CoreScript):
         if not Configuration.instance:
             Configuration.load(self._db)
 
+
 class CreateWorksForIdentifiersScript(Script):
 
     """Do the bare minimum to associate each Identifier with an Edition
     with title and author, so that we can calculate a permanent work
     ID.
     """
-    to_check = [Identifier.OVERDRIVE_ID, Identifier.THREEM_ID,
-                Identifier.GUTENBERG_ID]
+
+    to_check = [Identifier.OVERDRIVE_ID, Identifier.THREEM_ID, Identifier.GUTENBERG_ID]
     BATCH_SIZE = 100
     name = "Create works for identifiers"
 
@@ -153,18 +120,25 @@ class CreateWorksForIdentifiersScript(Script):
             Edition.title == None,
             Edition.sort_author == None,
         )
-        edition_missing_title_or_author = self._db.query(Identifier).join(
-            Identifier.primarily_identifies).filter(
-                either_title_or_author_missing)
+        edition_missing_title_or_author = (
+            self._db.query(Identifier)
+            .join(Identifier.primarily_identifies)
+            .filter(either_title_or_author_missing)
+        )
 
-        no_edition = self._db.query(Identifier).filter(
-            Identifier.primarily_identifies==None).filter(
-                Identifier.type.in_(self.to_check))
+        no_edition = (
+            self._db.query(Identifier)
+            .filter(Identifier.primarily_identifies == None)
+            .filter(Identifier.type.in_(self.to_check))
+        )
 
         for q, descr in (
-                (edition_missing_title_or_author,
-                 "identifiers whose edition is missing title or author"),
-                (no_edition, "identifiers with no edition")):
+            (
+                edition_missing_title_or_author,
+                "identifiers whose edition is missing title or author",
+            ),
+            (no_edition, "identifiers with no edition"),
+        ):
             batch = []
             self.log.debug("Trying to fix %d %s", q.count(), descr)
             for i in q:
@@ -179,17 +153,19 @@ class CreateWorksForIdentifiersScript(Script):
         if response.status_code != 200:
             raise Exception(response.text)
 
-        content_type = response.headers['content-type']
+        content_type = response.headers["content-type"]
         if content_type != OPDSFeed.ACQUISITION_FEED_TYPE:
             raise Exception("Wrong media type: %s" % content_type)
 
         importer = OPDSImporter(
-            self._db, response.text,
-            overwrite_rels=[Hyperlink.DESCRIPTION, Hyperlink.IMAGE])
+            self._db,
+            response.text,
+            overwrite_rels=[Hyperlink.DESCRIPTION, Hyperlink.IMAGE],
+        )
         imported, messages_by_id = importer.import_from_feed()
-        self.log.info("%d successes, %d failures.",
-                      len(imported), len(messages_by_id))
+        self.log.info("%d successes, %d failures.", len(imported), len(messages_by_id))
         self._db.commit()
+
 
 class MetadataCalculationScript(Script):
 
@@ -221,8 +197,12 @@ class MetadataCalculationScript(Script):
 
         def checkpoint():
             self._db.commit()
-            self.log.info("%d successes, %d failures, %d new works.",
-                          success, failure, also_created_work)
+            self.log.info(
+                "%d successes, %d failures, %d new works.",
+                success,
+                failure,
+                also_created_work,
+            )
 
         i = 0
         for edition in q:
@@ -230,7 +210,8 @@ class MetadataCalculationScript(Script):
             if edition.sort_author:
                 success += 1
                 work, is_new = edition.license_pool.calculate_work(
-                    search_index_client=search_index_client)
+                    search_index_client=search_index_client
+                )
                 if work:
                     work.calculate_presentation()
                     if is_new:
@@ -241,6 +222,7 @@ class MetadataCalculationScript(Script):
             if not i % 1000:
                 checkpoint()
         checkpoint()
+
 
 class FillInAuthorScript(MetadataCalculationScript):
     """Fill in Edition.sort_author for Editions that have a list of
@@ -253,9 +235,13 @@ class FillInAuthorScript(MetadataCalculationScript):
     name = "Fill in missing authors"
 
     def q(self):
-        return self._db.query(Edition).join(
-            Edition.contributions).join(Contribution.contributor).filter(
-                Edition.sort_author==None)
+        return (
+            self._db.query(Edition)
+            .join(Edition.contributions)
+            .join(Contribution.contributor)
+            .filter(Edition.sort_author == None)
+        )
+
 
 class UpdateStaffPicksScript(Script):
 
@@ -264,17 +250,16 @@ class UpdateStaffPicksScript(Script):
     def run(self):
         inp = self.open()
         tag_fields = {
-            'tags': Subject.NYPL_APPEAL,
+            "tags": Subject.NYPL_APPEAL,
         }
 
         integ = Configuration.integration(Configuration.STAFF_PICKS_INTEGRATION)
         fields = integ.get(Configuration.LIST_FIELDS, {})
 
         importer = CustomListFromCSV(
-            DataSource.LIBRARY_STAFF, CustomList.STAFF_PICKS_NAME,
-            **fields
+            DataSource.LIBRARY_STAFF, CustomList.STAFF_PICKS_NAME, **fields
         )
-        reader = csv.DictReader(inp, dialect='excel-tab')
+        reader = csv.DictReader(inp, dialect="excel-tab")
         importer.to_customlist(self._db, reader)
         self._db.commit()
 
@@ -282,21 +267,21 @@ class UpdateStaffPicksScript(Script):
         if len(sys.argv) > 1:
             return open(sys.argv[1])
 
-        url = Configuration.integration_url(
-            Configuration.STAFF_PICKS_INTEGRATION, True
-        )
-        if not url.startswith('https://') or url.startswith('http://'):
+        url = Configuration.integration_url(Configuration.STAFF_PICKS_INTEGRATION, True)
+        if not url.startswith("https://") or url.startswith("http://"):
             url = self.DEFAULT_URL_TEMPLATE % url
         self.log.info("Retrieving %s", url)
         representation, cached = Representation.get(
-            self._db, url, do_get=Representation.browser_http_get,
-            accept="text/csv", max_age=timedelta(days=1))
+            self._db,
+            url,
+            do_get=Representation.browser_http_get,
+            accept="text/csv",
+            max_age=timedelta(days=1),
+        )
         if representation.status_code != 200:
-            raise ValueError("Unexpected status code %s" %
-                             representation.status_code)
+            raise ValueError("Unexpected status code %s" % representation.status_code)
         if not representation.media_type.startswith("text/csv"):
-            raise ValueError("Unexpected media type %s" %
-                             representation.media_type)
+            raise ValueError("Unexpected media type %s" % representation.media_type)
         return StringIO(representation.content)
 
 
@@ -308,26 +293,27 @@ class CacheRepresentationPerLane(TimestampScript, LaneSweeperScript):
     def arg_parser(cls, _db):
         parser = LaneSweeperScript.arg_parser(_db)
         parser.add_argument(
-            '--language',
-            help='Process only lanes that include books in this language.',
-            action='append'
+            "--language",
+            help="Process only lanes that include books in this language.",
+            action="append",
         )
         parser.add_argument(
-            '--max-depth',
-            help='Stop processing lanes once you reach this depth.',
+            "--max-depth",
+            help="Stop processing lanes once you reach this depth.",
             type=int,
-            default=None
+            default=None,
         )
         parser.add_argument(
-            '--min-depth',
-            help='Start processing lanes once you reach this depth.',
+            "--min-depth",
+            help="Start processing lanes once you reach this depth.",
             type=int,
-            default=1
+            default=1,
         )
         return parser
 
-    def __init__(self, _db=None, cmd_args=None, testing=False, manager=None,
-                 *args, **kwargs):
+    def __init__(
+        self, _db=None, cmd_args=None, testing=False, manager=None, *args, **kwargs
+    ):
         """Constructor.
         :param _db: A database connection.
         :param cmd_args: A mock set of command-line arguments, to use instead
@@ -347,9 +333,12 @@ class CacheRepresentationPerLane(TimestampScript, LaneSweeperScript):
         if not manager:
             manager = CirculationManager(self._db, testing=testing)
         from api.app import app
+
         app.manager = manager
         self.app = app
-        self.base_url = ConfigurationSetting.sitewide(self._db, Configuration.BASE_URL_KEY).value
+        self.base_url = ConfigurationSetting.sitewide(
+            self._db, Configuration.BASE_URL_KEY
+        ).value
 
     def parse_args(self, cmd_args=None):
         parser = self.arg_parser(self._db)
@@ -361,7 +350,7 @@ class CacheRepresentationPerLane(TimestampScript, LaneSweeperScript):
                 if alpha:
                     self.languages.append(alpha)
                 else:
-                    self.log.warn("Ignored unrecognized language code %s", alpha)
+                    self.log.warning("Ignored unrecognized language code %s", alpha)
         self.max_depth = parsed.max_depth
         self.min_depth = parsed.min_depth
 
@@ -417,7 +406,7 @@ class CacheRepresentationPerLane(TimestampScript, LaneSweeperScript):
         ctx.pop()
         end = time.time()
         self.log.info(
-            "Processed library %s in %.2fsec", library.short_name, end-begin
+            "Processed library %s in %.2fsec", library.short_name, end - begin
         )
 
     def process_lane(self, lane):
@@ -434,8 +423,7 @@ class CacheRepresentationPerLane(TimestampScript, LaneSweeperScript):
                 if pagination:
                     extra_description += " Pagination: %s." % pagination.query_string
                 self.log.info(
-                    "Generating feed for %s.%s", lane.full_identifier,
-                    extra_description
+                    "Generating feed for %s.%s", lane.full_identifier, extra_description
                 )
                 a = time.time()
                 feed = self.do_generate(lane, facets, pagination)
@@ -443,8 +431,7 @@ class CacheRepresentationPerLane(TimestampScript, LaneSweeperScript):
                 if feed:
                     cached_feeds.append(feed)
                     self.log.info(
-                        "Took %.2f sec to make %d bytes.", (b-a),
-                        len(feed.data)
+                        "Took %.2f sec to make %d bytes.", (b - a), len(feed.data)
                     )
         total_size = sum(len(x.data) for x in cached_feeds)
         return cached_feeds
@@ -477,55 +464,58 @@ class CacheFacetListsPerLane(CacheRepresentationPerLane):
     def arg_parser(cls, _db):
         parser = CacheRepresentationPerLane.arg_parser(_db)
         available = Facets.DEFAULT_ENABLED_FACETS[Facets.ORDER_FACET_GROUP_NAME]
-        order_help = 'Generate feeds for this ordering. Possible values: %s.' % (
+        order_help = "Generate feeds for this ordering. Possible values: %s." % (
             ", ".join(available)
         )
         parser.add_argument(
-            '--order',
+            "--order",
             help=order_help,
-            action='append',
+            action="append",
             default=[],
         )
 
         available = Facets.DEFAULT_ENABLED_FACETS[Facets.AVAILABILITY_FACET_GROUP_NAME]
-        availability_help = 'Generate feeds for this availability setting. Possible values: %s.' % (
-            ", ".join(available)
+        availability_help = (
+            "Generate feeds for this availability setting. Possible values: %s."
+            % (", ".join(available))
         )
         parser.add_argument(
-            '--availability',
+            "--availability",
             help=availability_help,
-            action='append',
+            action="append",
             default=[],
         )
 
         available = Facets.DEFAULT_ENABLED_FACETS[Facets.COLLECTION_FACET_GROUP_NAME]
-        collection_help = 'Generate feeds for this collection within each lane. Possible values: %s.' % (
-            ", ".join(available)
+        collection_help = (
+            "Generate feeds for this collection within each lane. Possible values: %s."
+            % (", ".join(available))
         )
         parser.add_argument(
-            '--collection',
+            "--collection",
             help=collection_help,
-            action='append',
+            action="append",
             default=[],
         )
 
         available = [x.INTERNAL_NAME for x in EntryPoint.ENTRY_POINTS]
-        entrypoint_help = 'Generate feeds for this entry point within each lane. Possible values: %s.' % (
-            ", ".join(available)
+        entrypoint_help = (
+            "Generate feeds for this entry point within each lane. Possible values: %s."
+            % (", ".join(available))
         )
         parser.add_argument(
-            '--entrypoint',
+            "--entrypoint",
             help=entrypoint_help,
-            action='append',
+            action="append",
             default=[],
         )
 
         default_pages = 2
         parser.add_argument(
-            '--pages',
+            "--pages",
             help="Number of pages to cache for each facet. Default: %d" % default_pages,
             type=int,
-            default=default_pages
+            default=default_pages,
         )
         return parser
 
@@ -553,9 +543,7 @@ class CacheFacetListsPerLane(CacheRepresentationPerLane):
         allowed_orders = library.enabled_facets(Facets.ORDER_FACET_GROUP_NAME)
         chosen_orders = self.orders or [default_order]
 
-        allowed_entrypoint_names = [
-            x.INTERNAL_NAME for x in library.entrypoints
-        ]
+        allowed_entrypoint_names = [x.INTERNAL_NAME for x in library.entrypoints]
         default_entrypoint_name = None
         if allowed_entrypoint_names:
             default_entrypoint_name = allowed_entrypoint_names[0]
@@ -570,44 +558,46 @@ class CacheFacetListsPerLane(CacheRepresentationPerLane):
         )
         chosen_availabilities = self.availabilities or [default_availability]
 
-        default_collection = library.default_facet(
-            Facets.COLLECTION_FACET_GROUP_NAME
-        )
-        allowed_collections = library.enabled_facets(
-            Facets.COLLECTION_FACET_GROUP_NAME
-        )
+        default_collection = library.default_facet(Facets.COLLECTION_FACET_GROUP_NAME)
+        allowed_collections = library.enabled_facets(Facets.COLLECTION_FACET_GROUP_NAME)
         chosen_collections = self.collections or [default_collection]
 
-        top_level = (lane.parent is None)
+        top_level = lane.parent is None
         for entrypoint_name in chosen_entrypoints:
             entrypoint = EntryPoint.BY_INTERNAL_NAME.get(entrypoint_name)
             if not entrypoint:
-                logging.warn("Ignoring unknown entry point %s" % entrypoint_name)
+                logging.warning("Ignoring unknown entry point %s" % entrypoint_name)
                 continue
             if not entrypoint_name in allowed_entrypoint_names:
-                logging.warn("Ignoring disabled entry point %s" % entrypoint_name)
+                logging.warning("Ignoring disabled entry point %s" % entrypoint_name)
                 continue
             for order in chosen_orders:
                 if order not in allowed_orders:
-                    logging.warn("Ignoring unsupported ordering %s" % order)
+                    logging.warning("Ignoring unsupported ordering %s" % order)
                     continue
                 for availability in chosen_availabilities:
                     if availability not in allowed_availabilities:
-                        logging.warn("Ignoring unsupported availability %s" % availability)
+                        logging.warning(
+                            "Ignoring unsupported availability %s" % availability
+                        )
                         continue
                     for collection in chosen_collections:
                         if collection not in allowed_collections:
-                            logging.warn("Ignoring unsupported collection %s" % collection)
+                            logging.warning(
+                                "Ignoring unsupported collection %s" % collection
+                            )
                             continue
                         facets = Facets(
-                            library=library, collection=collection,
+                            library=library,
+                            collection=collection,
                             availability=availability,
                             entrypoint=entrypoint,
                             entrypoint_is_default=(
-                                top_level and
-                                entrypoint.INTERNAL_NAME == default_entrypoint_name
+                                top_level
+                                and entrypoint.INTERNAL_NAME == default_entrypoint_name
                             ),
-                            order=order, order_ascending=True
+                            order=order,
+                            order_ascending=True,
                         )
                         yield facets
 
@@ -630,9 +620,14 @@ class CacheFacetListsPerLane(CacheRepresentationPerLane):
         url = annotator.feed_url(lane, facets=facets, pagination=pagination)
         feed_class = feed_class or AcquisitionFeed
         return feed_class.page(
-            _db=self._db, title=title, url=url, worklist=lane,
-            annotator=annotator, facets=facets, pagination=pagination,
-            max_age=0
+            _db=self._db,
+            title=title,
+            url=url,
+            worklist=lane,
+            annotator=annotator,
+            facets=facets,
+            pagination=pagination,
+            max_age=0,
         )
 
 
@@ -658,8 +653,13 @@ class CacheOPDSGroupFeedPerLane(CacheRepresentationPerLane):
         # there's no need to consider the case of a lane with no sublanes,
         # unlike the corresponding code in OPDSFeedController.groups()
         return feed_class.groups(
-            _db=self._db, title=title, url=url, worklist=lane,
-            annotator=annotator, max_age=0, facets=facets
+            _db=self._db,
+            title=title,
+            url=url,
+            worklist=lane,
+            annotator=annotator,
+            max_age=0,
+            facets=facets,
         )
 
     def facets(self, lane):
@@ -668,7 +668,7 @@ class CacheOPDSGroupFeedPerLane(CacheRepresentationPerLane):
         This is the only way grouped feeds are ever generated, so there is
         no way to override this.
         """
-        top_level = (lane.parent is None)
+        top_level = lane.parent is None
         library = lane.get_library(self._db)
 
         # If the WorkList has explicitly defined EntryPoints, we want to
@@ -687,11 +687,10 @@ class CacheOPDSGroupFeedPerLane(CacheRepresentationPerLane):
                 minimum_featured_quality=library.minimum_featured_quality,
                 uses_customlists=lane.uses_customlists,
                 entrypoint=entrypoint,
-                entrypoint_is_default=(
-                    top_level and entrypoint is default_entrypoint
-                )
+                entrypoint_is_default=(top_level and entrypoint is default_entrypoint),
             )
             yield facets
+
 
 class CacheMARCFiles(LaneSweeperScript):
     """Generate and cache MARC files for each input library."""
@@ -702,15 +701,16 @@ class CacheMARCFiles(LaneSweeperScript):
     def arg_parser(cls, _db):
         parser = LaneSweeperScript.arg_parser(_db)
         parser.add_argument(
-            '--max-depth',
-            help='Stop processing lanes once you reach this depth.',
+            "--max-depth",
+            help="Stop processing lanes once you reach this depth.",
             type=int,
             default=0,
         )
         parser.add_argument(
-            '--force',
+            "--force",
             help="Generate new MARC files even if MARC files have already been generated recently enough",
-            dest='force', action='store_true',
+            dest="force",
+            action="store_true",
         )
         return parser
 
@@ -727,9 +727,12 @@ class CacheMARCFiles(LaneSweeperScript):
 
     def should_process_library(self, library):
         integration = ExternalIntegration.lookup(
-            self._db, ExternalIntegration.MARC_EXPORT,
-            ExternalIntegration.CATALOG_GOAL, library)
-        return (integration is not None)
+            self._db,
+            ExternalIntegration.MARC_EXPORT,
+            ExternalIntegration.CATALOG_GOAL,
+            library,
+        )
+        return integration is not None
 
     def process_library(self, library):
         if self.should_process_library(library):
@@ -761,29 +764,40 @@ class CacheMARCFiles(LaneSweeperScript):
             update_frequency = MARCExporter.DEFAULT_UPDATE_FREQUENCY
 
         last_update = None
-        files_q = self._db.query(CachedMARCFile).filter(
-            CachedMARCFile.library==library
-        ).filter(
-            CachedMARCFile.lane==(lane if isinstance(lane, Lane) else None),
-        ).order_by(CachedMARCFile.end_time.desc())
+        files_q = (
+            self._db.query(CachedMARCFile)
+            .filter(CachedMARCFile.library == library)
+            .filter(
+                CachedMARCFile.lane == (lane if isinstance(lane, Lane) else None),
+            )
+            .order_by(CachedMARCFile.end_time.desc())
+        )
 
         if files_q.count() > 0:
             last_update = files_q.first().end_time
-        if not self.force and last_update and (last_update > utc_now() - timedelta(days=update_frequency)):
-            self.log.info("Skipping lane %s because last update was less than %d days ago" % (lane.display_name, update_frequency))
+        if (
+            not self.force
+            and last_update
+            and (last_update > utc_now() - timedelta(days=update_frequency))
+        ):
+            self.log.info(
+                "Skipping lane %s because last update was less than %d days ago"
+                % (lane.display_name, update_frequency)
+            )
             return
 
         # To find the storage integration for the exporter, first find the
         # external integration link associated with the exporter's external
         # integration.
         integration_link = get_one(
-            self._db, ExternalIntegrationLink,
+            self._db,
+            ExternalIntegrationLink,
             external_integration_id=exporter.integration.id,
-            purpose=ExternalIntegrationLink.MARC
+            purpose=ExternalIntegrationLink.MARC,
         )
         # Then use the "other" integration value to find the storage integration.
-        storage_integration = get_one(self._db, ExternalIntegration,
-            id=integration_link.other_integration_id
+        storage_integration = get_one(
+            self._db, ExternalIntegration, id=integration_link.other_integration_id
         )
 
         if not storage_integration:
@@ -791,9 +805,7 @@ class CacheMARCFiles(LaneSweeperScript):
             return
 
         # First update the file with ALL the records.
-        records = exporter.records(
-            lane, annotator, storage_integration
-        )
+        records = exporter.records(lane, annotator, storage_integration)
 
         # Then create a new file with changes since the last update.
         start_time = None
@@ -807,14 +819,13 @@ class CacheMARCFiles(LaneSweeperScript):
 
 
 class AdobeAccountIDResetScript(PatronInputScript):
-
     @classmethod
     def arg_parser(cls, _db):
         parser = super(AdobeAccountIDResetScript, cls).arg_parser(_db)
         parser.add_argument(
-            '--delete',
+            "--delete",
             help="Actually delete credentials as opposed to showing what would happen.",
-            action='store_true'
+            action="store_true",
         )
         return parser
 
@@ -826,9 +837,7 @@ class AdobeAccountIDResetScript(PatronInputScript):
             self.log.info(
                 "This is a dry run. Nothing will actually change in the database."
             )
-            self.log.info(
-                "Run with --delete to change the database."
-            )
+            self.log.info("Run with --delete to change the database.")
 
         if patrons and self.delete:
             self.log.warn(
@@ -837,7 +846,7 @@ Running this script will permanently disconnect %d patron(s) from their Adobe ac
 They will be unable to fulfill any existing loans that involve Adobe-encrypted files.
 Sleeping for five seconds to give you a chance to back out.
 You'll get another chance to back out before the database session is committed.""",
-                len(patrons)
+                len(patrons),
             )
             time.sleep(5)
         self.process_patrons(patrons)
@@ -853,34 +862,34 @@ You'll get another chance to back out before the database session is committed."
         """
         self.log.info(
             'Processing patron "%s"',
-            patron.authorization_identifier or patron.username
-            or patron.external_identifier
+            patron.authorization_identifier
+            or patron.username
+            or patron.external_identifier,
         )
         for credential in AuthdataUtility.adobe_relevant_credentials(patron):
             self.log.info(
-                ' Deleting "%s" credential "%s"',
-                credential.type, credential.credential
+                ' Deleting "%s" credential "%s"', credential.type, credential.credential
             )
             if self.delete:
                 self._db.delete(credential)
+
 
 class AvailabilityRefreshScript(IdentifierInputScript):
     """Refresh the availability information for a LicensePool, direct from the
     license source.
     """
+
     def do_run(self):
         args = self.parse_command_line(self._db)
         if not args.identifiers:
-            raise Exception(
-                "You must specify at least one identifier to refresh."
-            )
+            raise Exception("You must specify at least one identifier to refresh.")
 
         # We don't know exactly how big to make these batches, but 10 is
         # always safe.
         start = 0
         size = 10
         while start < len(args.identifiers):
-            batch = args.identifiers[start:start+size]
+            batch = args.identifiers[start : start + size]
             self.refresh_availability(batch)
             self._db.commit()
             start += size
@@ -888,14 +897,14 @@ class AvailabilityRefreshScript(IdentifierInputScript):
     def refresh_availability(self, identifiers):
         provider = None
         identifier = identifiers[0]
-        if identifier.type==Identifier.THREEM_ID:
+        if identifier.type == Identifier.THREEM_ID:
             sweeper = BibliothecaCirculationSweep(self._db)
             sweeper.process_batch(identifiers)
-        elif identifier.type==Identifier.OVERDRIVE_ID:
+        elif identifier.type == Identifier.OVERDRIVE_ID:
             api = OverdriveAPI(self._db)
             for identifier in identifiers:
                 api.update_licensepool(identifier.identifier)
-        elif identifier.type==Identifier.AXIS_360_ID:
+        elif identifier.type == Identifier.AXIS_360_ID:
             provider = Axis360BibliographicCoverageProvider(self._db)
             provider.process_batch(identifiers)
         else:
@@ -990,7 +999,9 @@ class InstanceInitializationScript(TimestampScript):
         if results is None:
             super(InstanceInitializationScript, self).run(*args, **kwargs)
         else:
-            self.log.error("I think this site has already been initialized; doing nothing.")
+            self.log.error(
+                "I think this site has already been initialized; doing nothing."
+            )
 
     def do_run(self, ignore_search=False):
         # Creates a "-current" alias on the Elasticsearch client.
@@ -1004,8 +1015,10 @@ class InstanceInitializationScript(TimestampScript):
         # Set a timestamp that represents the new database's version.
         db_init_script = DatabaseMigrationInitializationScript(_db=self._db)
         existing = get_one(
-            self._db, Timestamp, service=db_init_script.name,
-            service_type=Timestamp.SCRIPT_TYPE
+            self._db,
+            Timestamp,
+            service=db_init_script.name,
+            service_type=Timestamp.SCRIPT_TYPE,
         )
         if existing:
             # No need to run the script. We already have a timestamp.
@@ -1033,26 +1046,26 @@ class LoanReaperScript(TimestampScript):
         now = utc_now()
 
         # Reap loans and holds that we know have expired.
-        for obj, what in ((Loan, 'loans'), (Hold, 'holds')):
+        for obj, what in ((Loan, "loans"), (Hold, "holds")):
             qu = self._db.query(obj).filter(obj.end < now)
             self._reap(qu, "expired %s" % what)
 
         for obj, what, max_age in (
-                (Loan, 'loans', timedelta(days=90)),
-                (Hold, 'holds', timedelta(days=365)),
+            (Loan, "loans", timedelta(days=90)),
+            (Hold, "holds", timedelta(days=365)),
         ):
             # Reap loans and holds which have no end date and are very
             # old. It's very likely these loans and holds have expired
             # and we simply don't have the information.
             older_than = now - max_age
-            qu = self._db.query(obj).join(obj.license_pool).filter(
-                obj.end == None).filter(
-                    obj.start < older_than).filter(
-                        LicensePool.open_access == False
-                    )
-            explain = "%s older than %s" % (
-                what, older_than.strftime("%Y-%m-%d")
+            qu = (
+                self._db.query(obj)
+                .join(obj.license_pool)
+                .filter(obj.end == None)
+                .filter(obj.start < older_than)
+                .filter(LicensePool.open_access == False)
             )
+            explain = "%s older than %s" % (what, older_than.strftime("%Y-%m-%d"))
             self._reap(qu, explain)
 
     def _reap(self, qu, what):
@@ -1080,20 +1093,23 @@ class DisappearingBookReportScript(Script):
     """
 
     def do_run(self):
-        qu = self._db.query(LicensePool).filter(
-            LicensePool.open_access==False).filter(
-                LicensePool.suppressed==False).filter(
-                    LicensePool.licenses_owned<=0).order_by(
-                        LicensePool.availability_time.desc())
-        first_row = ["Identifier",
-                     "Title",
-                     "Author",
-                     "First seen",
-                     "Last seen (best guess)",
-                     "Current licenses owned",
-                     "Current licenses available",
-                     "Changes in number of licenses",
-                     "Changes in title availability",
+        qu = (
+            self._db.query(LicensePool)
+            .filter(LicensePool.open_access == False)
+            .filter(LicensePool.suppressed == False)
+            .filter(LicensePool.licenses_owned <= 0)
+            .order_by(LicensePool.availability_time.desc())
+        )
+        first_row = [
+            "Identifier",
+            "Title",
+            "Author",
+            "First seen",
+            "Last seen (best guess)",
+            "Current licenses owned",
+            "Current licenses available",
+            "Changes in number of licenses",
+            "Changes in title availability",
         ]
         print("\t".join(first_row))
 
@@ -1139,12 +1155,13 @@ class DisappearingBookReportScript(Script):
         # Now we look for relevant circulation events. First, an event
         # where the title was explicitly removed is pretty clearly
         # a 'last seen'.
-        base_query = self._db.query(CirculationEvent).filter(
-            CirculationEvent.license_pool==licensepool).order_by(
-                CirculationEvent.start.desc()
-            )
+        base_query = (
+            self._db.query(CirculationEvent)
+            .filter(CirculationEvent.license_pool == licensepool)
+            .order_by(CirculationEvent.start.desc())
+        )
         title_removal_events = base_query.filter(
-            CirculationEvent.type==CirculationEvent.DISTRIBUTOR_TITLE_REMOVE
+            CirculationEvent.type == CirculationEvent.DISTRIBUTOR_TITLE_REMOVE
         )
         if title_removal_events.count():
             candidate = title_removal_events[-1].start
@@ -1154,12 +1171,13 @@ class DisappearingBookReportScript(Script):
         # Also look for an event where the title went from a nonzero
         # number of licenses to a zero number of licenses. That's a
         # good 'last seen'.
-        license_removal_events = base_query.filter(
-            CirculationEvent.type==CirculationEvent.DISTRIBUTOR_LICENSE_REMOVE,
-        ).filter(
-            CirculationEvent.old_value>0).filter(
-                CirculationEvent.new_value<=0
+        license_removal_events = (
+            base_query.filter(
+                CirculationEvent.type == CirculationEvent.DISTRIBUTOR_LICENSE_REMOVE,
             )
+            .filter(CirculationEvent.old_value > 0)
+            .filter(CirculationEvent.new_value <= 0)
+        )
         if license_removal_events.count():
             candidate = license_removal_events[-1].start
             if not last_seen or candidate > last_seen:
@@ -1182,27 +1200,29 @@ class DisappearingBookReportScript(Script):
         if licensepool.availability_time:
             first_seen = licensepool.availability_time.strftime(self.format)
         else:
-            first_seen = ''
+            first_seen = ""
         data.append(first_seen)
         if last_seen:
             last_seen = last_seen.strftime(self.format)
         else:
-            last_seen = ''
+            last_seen = ""
         data.append(last_seen)
         data.append(licensepool.licenses_owned)
         data.append(licensepool.licenses_available)
 
         license_removals = []
         for event in license_removal_events:
-            description ="%s: %s→%s" % (
-                    event.start.strftime(self.format), event.old_value,
-                event.new_value
+            description = "%s: %s→%s" % (
+                event.start.strftime(self.format),
+                event.old_value,
+                event.new_value,
             )
             license_removals.append(description)
         data.append(", ".join(license_removals))
 
-        title_removals = [event.start.strftime(self.format)
-                          for event in title_removal_events]
+        title_removals = [
+            event.start.strftime(self.format) for event in title_removal_events
+        ]
         data.append(", ".join(title_removals))
 
         print("\t".join([str(x).encode("utf8") for x in data]))
@@ -1221,9 +1241,9 @@ class NYTBestSellerListsScript(TimestampScript):
         self.data_source = DataSource.lookup(self._db, DataSource.NYT)
         # For every best-seller list...
         names = self.api.list_of_lists()
-        for l in sorted(names['results'], key=lambda x: x['list_name_encoded']):
+        for l in sorted(names["results"], key=lambda x: x["list_name_encoded"]):
 
-            name = l['list_name_encoded']
+            name = l["list_name_encoded"]
             self.log.info("Handling list %s" % name)
             best = self.api.best_seller_list(l)
 
@@ -1234,9 +1254,9 @@ class NYTBestSellerListsScript(TimestampScript):
 
             # Mirror the list to the database.
             customlist = best.to_customlist(self._db)
-            self.log.info(
-                "Now %s entries in the list.", len(customlist.entries))
+            self.log.info("Now %s entries in the list.", len(customlist.entries))
             self._db.commit()
+
 
 class OPDSForDistributorsImportScript(OPDSImportScript):
     """Import all books from the OPDS feed associated with a collection
@@ -1245,6 +1265,7 @@ class OPDSForDistributorsImportScript(OPDSImportScript):
     IMPORTER_CLASS = OPDSForDistributorsImporter
     MONITOR_CLASS = OPDSForDistributorsImportMonitor
     PROTOCOL = OPDSForDistributorsImporter.NAME
+
 
 class OPDSForDistributorsReaperScript(OPDSImportScript):
     """Get all books from the OPDS feed associated with a collection
@@ -1266,59 +1287,62 @@ class DirectoryImportScript(TimestampScript):
     def arg_parser(cls, _db):
         parser = argparse.ArgumentParser()
         parser.add_argument(
-            '--collection-name',
-            help='Titles will be imported into a collection with this name. The collection will be created if it does not already exist.',
-            required=True
+            "--collection-name",
+            help="Titles will be imported into a collection with this name. The collection will be created if it does not already exist.",
+            required=True,
         )
         parser.add_argument(
-            '--collection-type',
-            help='Collection type. Valid values are: OPEN_ACCESS (default), PROTECTED_ACCESS, LCP.',
+            "--collection-type",
+            help="Collection type. Valid values are: OPEN_ACCESS (default), PROTECTED_ACCESS, LCP.",
             type=CollectionType,
             choices=list(CollectionType),
-            default=CollectionType.OPEN_ACCESS
+            default=CollectionType.OPEN_ACCESS,
         )
         parser.add_argument(
-            '--data-source-name',
-            help='All data associated with this import activity will be recorded as originating with this data source. The data source will be created if it does not already exist.',
-            required=True
+            "--data-source-name",
+            help="All data associated with this import activity will be recorded as originating with this data source. The data source will be created if it does not already exist.",
+            required=True,
         )
         parser.add_argument(
-            '--metadata-file',
-            help='Path to a file containing MARC or ONIX 3.0 metadata for every title in the collection',
-            required=True
+            "--metadata-file",
+            help="Path to a file containing MARC or ONIX 3.0 metadata for every title in the collection",
+            required=True,
         )
         parser.add_argument(
-            '--metadata-format',
+            "--metadata-format",
             help='Format of the metadata file ("marc" or "onix")',
-            default='marc',
+            default="marc",
         )
         parser.add_argument(
-            '--cover-directory',
-            help='Directory containing a full-size cover image for every title in the collection.',
+            "--cover-directory",
+            help="Directory containing a full-size cover image for every title in the collection.",
         )
         parser.add_argument(
-            '--ebook-directory',
-            help='Directory containing an EPUB or PDF file for every title in the collection.',
-            required=True
+            "--ebook-directory",
+            help="Directory containing an EPUB or PDF file for every title in the collection.",
+            required=True,
         )
         RS = RightsStatus
         rights_uris = ", ".join(RS.OPEN_ACCESS)
         parser.add_argument(
-            '--rights-uri',
-            help="A URI explaining the rights status of the works being uploaded. Acceptable values: %s" % rights_uris,
-            required=True
+            "--rights-uri",
+            help="A URI explaining the rights status of the works being uploaded. Acceptable values: %s"
+            % rights_uris,
+            required=True,
         )
         parser.add_argument(
-            '--dry-run',
+            "--dry-run",
             help="Show what would be imported, but don't actually do the import.",
-            action='store_true',
+            action="store_true",
         )
         parser.add_argument(
-            '--default-medium-type',
-            help='Default medium type used in the case when it\'s not explicitly specified in a metadata file. '
-                 'Valid values are: {0}.'.format(', '.join(EditionConstants.FULFILLABLE_MEDIA)),
+            "--default-medium-type",
+            help="Default medium type used in the case when it's not explicitly specified in a metadata file. "
+            "Valid values are: {0}.".format(
+                ", ".join(EditionConstants.FULFILLABLE_MEDIA)
+            ),
             type=str,
-            choices=EditionConstants.FULFILLABLE_MEDIA
+            choices=EditionConstants.FULFILLABLE_MEDIA,
         )
 
         return parser
@@ -1347,28 +1371,30 @@ class DirectoryImportScript(TimestampScript):
             ebook_directory=ebook_directory,
             rights_uri=rights_uri,
             dry_run=dry_run,
-            default_medium_type=default_medium_type
+            default_medium_type=default_medium_type,
         )
 
     def run_with_arguments(
-            self,
-            collection_name,
-            collection_type,
-            data_source_name,
-            metadata_file,
-            metadata_format,
-            cover_directory,
-            ebook_directory,
-            rights_uri,
-            dry_run,
-            default_medium_type=None
+        self,
+        collection_name,
+        collection_type,
+        data_source_name,
+        metadata_file,
+        metadata_format,
+        cover_directory,
+        ebook_directory,
+        rights_uri,
+        dry_run,
+        default_medium_type=None,
     ):
         if dry_run:
-            self.log.warn(
+            self.log.warning(
                 "This is a dry run. No files will be uploaded and nothing will change in the database."
             )
 
-        collection, mirrors = self.load_collection(collection_name, collection_type, data_source_name)
+        collection, mirrors = self.load_collection(
+            collection_name, collection_type, data_source_name
+        )
 
         if not collection or not mirrors:
             return
@@ -1378,10 +1404,15 @@ class DirectoryImportScript(TimestampScript):
         if dry_run:
             mirrors = None
 
-        self_hosted_collection = collection_type in (CollectionType.OPEN_ACCESS, CollectionType.PROTECTED_ACCESS)
+        self_hosted_collection = collection_type in (
+            CollectionType.OPEN_ACCESS,
+            CollectionType.PROTECTED_ACCESS,
+        )
         replacement_policy = ReplacementPolicy.from_license_source(self._db)
         replacement_policy.mirrors = mirrors
-        metadata_records = self.load_metadata(metadata_file, metadata_format, data_source_name, default_medium_type)
+        metadata_records = self.load_metadata(
+            metadata_file, metadata_format, data_source_name, default_medium_type
+        )
         for metadata in metadata_records:
             _, licensepool = self.work_from_metadata(
                 collection,
@@ -1390,7 +1421,7 @@ class DirectoryImportScript(TimestampScript):
                 replacement_policy,
                 cover_directory,
                 ebook_directory,
-                rights_uri
+                rights_uri,
             )
 
             licensepool.self_hosted = True if self_hosted_collection else False
@@ -1420,7 +1451,11 @@ class DirectoryImportScript(TimestampScript):
         :rtype: Tuple[Collection, List[MirrorUploader]]
         """
         collection, is_new = Collection.by_name_and_protocol(
-            self._db, collection_name, ExternalIntegration.LCP if collection_type == CollectionType.LCP else ExternalIntegration.MANUAL
+            self._db,
+            collection_name,
+            ExternalIntegration.LCP
+            if collection_type == CollectionType.LCP
+            else ExternalIntegration.MANUAL,
         )
 
         if is_new:
@@ -1435,20 +1470,20 @@ class DirectoryImportScript(TimestampScript):
             ExternalIntegrationLink.COVERS,
             ExternalIntegrationLink.OPEN_ACCESS_BOOKS
             if collection_type == CollectionType.OPEN_ACCESS
-            else ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS
+            else ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS,
         ]
         for type in types:
             mirror_for_type = MirrorUploader.for_collection(collection, type)
             if not mirror_for_type:
                 self.log.error(
-                    "An existing %s mirror integration should be assigned to the collection before running the script." % type
+                    "An existing %s mirror integration should be assigned to the collection before running the script."
+                    % type
                 )
                 return None, None
             mirrors[type] = mirror_for_type
 
         data_source = DataSource.lookup(
-            self._db, data_source_name, autocreate=True,
-            offers_licenses=True
+            self._db, data_source_name, autocreate=True, offers_licenses=True
         )
         collection.external_integration.set_setting(
             Collection.DATA_SOURCE_NAME_SETTING, data_source.name
@@ -1456,20 +1491,26 @@ class DirectoryImportScript(TimestampScript):
 
         return collection, mirrors
 
-    def load_metadata(self, metadata_file, metadata_format, data_source_name, default_medium_type):
+    def load_metadata(
+        self, metadata_file, metadata_format, data_source_name, default_medium_type
+    ):
         """Read a metadata file and convert the data into Metadata records."""
         metadata_records = []
 
-        if metadata_format == 'marc':
+        if metadata_format == "marc":
             extractor = MARCExtractor()
-        elif metadata_format == 'onix':
+        elif metadata_format == "onix":
             extractor = ONIXExtractor()
 
         with open(metadata_file) as f:
-            metadata_records.extend(extractor.parse(f, data_source_name, default_medium_type))
+            metadata_records.extend(
+                extractor.parse(f, data_source_name, default_medium_type)
+            )
         return metadata_records
 
-    def work_from_metadata(self, collection, collection_type, metadata, policy, *args, **kwargs):
+    def work_from_metadata(
+        self, collection, collection_type, metadata, policy, *args, **kwargs
+    ):
         """Creates a Work instance from metadata
 
         :param collection: Target collection
@@ -1496,8 +1537,7 @@ class DirectoryImportScript(TimestampScript):
 
         edition, new = metadata.edition(self._db)
         metadata.apply(edition, collection, replace=policy)
-        [pool] = [x for x in edition.license_pools
-                  if x.collection == collection]
+        [pool] = [x for x in edition.license_pools if x.collection == collection]
         if new:
             self.log.info("Created new edition for %s", edition.title)
         else:
@@ -1512,13 +1552,14 @@ class DirectoryImportScript(TimestampScript):
         return work, pool
 
     def annotate_metadata(
-            self,
-            collection_type,
-            metadata,
-            policy,
-            cover_directory,
-            ebook_directory,
-            rights_uri):
+        self,
+        collection_type,
+        metadata,
+        policy,
+        cover_directory,
+        ebook_directory,
+        rights_uri,
+    ):
         """Add a CirculationData and possibly an extra LinkData to `metadata`
 
         :param collection_type: Collection's type: open access/protected access
@@ -1550,7 +1591,7 @@ class DirectoryImportScript(TimestampScript):
             ebook_directory,
             mirrors,
             metadata.title,
-            rights_uri
+            rights_uri,
         )
         if not circulation_data:
             # There is no point in contining.
@@ -1558,9 +1599,13 @@ class DirectoryImportScript(TimestampScript):
 
         if metadata.circulation:
             circulation_data.licenses_owned = metadata.circulation.licenses_owned
-            circulation_data.licenses_available = metadata.circulation.licenses_available
+            circulation_data.licenses_available = (
+                metadata.circulation.licenses_available
+            )
             circulation_data.licenses_reserved = metadata.circulation.licenses_reserved
-            circulation_data.patrons_in_hold_queue = metadata.circulation.patrons_in_hold_queue
+            circulation_data.patrons_in_hold_queue = (
+                metadata.circulation.patrons_in_hold_queue
+            )
             circulation_data.licenses = metadata.circulation.licenses
 
         metadata.circulation = circulation_data
@@ -1576,19 +1621,19 @@ class DirectoryImportScript(TimestampScript):
             metadata.links.append(cover_link)
         else:
             logging.info(
-                "Proceeding with import even though %r has no cover.",
-                identifier
+                "Proceeding with import even though %r has no cover.", identifier
             )
 
     def load_circulation_data(
-            self,
-            collection_type,
-            identifier,
-            data_source,
-            ebook_directory,
-            mirrors,
-            title,
-            rights_uri):
+        self,
+        collection_type,
+        identifier,
+        data_source,
+        ebook_directory,
+        mirrors,
+        title,
+        rights_uri,
+    ):
         """Loads an actual copy of a book from disk
 
         :param collection_type: Collection's type: open access/protected access
@@ -1617,7 +1662,8 @@ class DirectoryImportScript(TimestampScript):
         :rtype: CirculationData
         """
         ignore, book_media_type, book_content = self._locate_file(
-            identifier.identifier, ebook_directory,
+            identifier.identifier,
+            ebook_directory,
             Representation.COMMON_EBOOK_EXTENSIONS,
             "ebook file",
         )
@@ -1626,39 +1672,50 @@ class DirectoryImportScript(TimestampScript):
             # no point in proceeding.
             return
 
-        book_mirror = mirrors[
-            ExternalIntegrationLink.OPEN_ACCESS_BOOKS
-            if collection_type == CollectionType.OPEN_ACCESS
-            else ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS
-        ] if mirrors else None
+        book_mirror = (
+            mirrors[
+                ExternalIntegrationLink.OPEN_ACCESS_BOOKS
+                if collection_type == CollectionType.OPEN_ACCESS
+                else ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS
+            ]
+            if mirrors
+            else None
+        )
 
         # Use the S3 storage for books.
         if book_mirror:
             book_url = book_mirror.book_url(
                 identifier,
-                '.' + Representation.FILE_EXTENSIONS[book_media_type],
+                "." + Representation.FILE_EXTENSIONS[book_media_type],
                 open_access=collection_type == CollectionType.OPEN_ACCESS,
                 data_source=data_source,
-                title=title
+                title=title,
             )
         else:
             # This is a dry run and we won't be mirroring anything.
-            book_url = identifier.identifier + "." + Representation.FILE_EXTENSIONS[book_media_type]
+            book_url = (
+                identifier.identifier
+                + "."
+                + Representation.FILE_EXTENSIONS[book_media_type]
+            )
 
-        book_link_rel = \
-            Hyperlink.OPEN_ACCESS_DOWNLOAD \
-            if collection_type == CollectionType.OPEN_ACCESS \
+        book_link_rel = (
+            Hyperlink.OPEN_ACCESS_DOWNLOAD
+            if collection_type == CollectionType.OPEN_ACCESS
             else Hyperlink.GENERIC_OPDS_ACQUISITION
+        )
         book_link = LinkData(
             rel=book_link_rel,
             href=book_url,
             media_type=book_media_type,
-            content=book_content
+            content=book_content,
         )
         formats = [
             FormatData(
                 content_type=book_media_type,
-                drm_scheme=DeliveryMechanism.LCP_DRM if collection_type == CollectionType.LCP else DeliveryMechanism.NO_DRM,
+                drm_scheme=DeliveryMechanism.LCP_DRM
+                if collection_type == CollectionType.LCP
+                else DeliveryMechanism.NO_DRM,
                 link=book_link,
             )
         ]
@@ -1673,20 +1730,23 @@ class DirectoryImportScript(TimestampScript):
 
     def load_cover_link(self, identifier, data_source, cover_directory, mirrors):
         """Load an actual book cover from disk.
-        
+
         :return: A LinkData containing a cover of the book, or None
             if no book cover can be found.
         """
         cover_filename, cover_media_type, cover_content = self._locate_file(
-            identifier.identifier, cover_directory,
-            Representation.COMMON_IMAGE_EXTENSIONS, "cover image"
+            identifier.identifier,
+            cover_directory,
+            Representation.COMMON_IMAGE_EXTENSIONS,
+            "cover image",
         )
 
         if not cover_content:
             return None
         cover_filename = (
             identifier.identifier
-            + '.' + Representation.FILE_EXTENSIONS[cover_media_type]
+            + "."
+            + Representation.FILE_EXTENSIONS[cover_media_type]
         )
 
         # Use an S3 storage mirror for specifically for covers.
@@ -1707,8 +1767,14 @@ class DirectoryImportScript(TimestampScript):
         return cover_link
 
     @classmethod
-    def _locate_file(cls, base_filename, directory, extensions,
-                     file_type="file", mock_filesystem_operations=None):
+    def _locate_file(
+        cls,
+        base_filename,
+        directory,
+        extensions,
+        file_type="file",
+        mock_filesystem_operations=None,
+    ):
         """Find an acceptable file in the given directory.
 
         :param base_filename: A string to be used as the base of the filename.
@@ -1740,8 +1806,8 @@ class DirectoryImportScript(TimestampScript):
         attempts = []
         for extension in extensions:
             for ext in (extension, extension.upper()):
-                if not ext.startswith('.'):
-                    ext = '.' + ext
+                if not ext.startswith("."):
+                    ext = "." + ext
                 filename = base_filename + ext
                 path = os.path.join(directory, filename)
                 attempts.append(path)
@@ -1756,9 +1822,11 @@ class DirectoryImportScript(TimestampScript):
 
         # If we went through that whole loop without returning,
         # we have failed.
-        logging.warn(
+        logging.warning(
             "Could not find %s for %s. Looked in: %s",
-            file_type, base_filename, ", ".join(attempts)
+            file_type,
+            base_filename,
+            ", ".join(attempts),
         )
         return None, None, None
 
@@ -1771,9 +1839,9 @@ class LaneResetScript(LibraryInputScript):
     def arg_parser(cls, _db):
         parser = LibraryInputScript.arg_parser(_db)
         parser.add_argument(
-            '--reset',
+            "--reset",
             help="Actually reset the lanes as opposed to showing what would happen.",
-            action='store_true'
+            action="store_true",
         )
         return parser
 
@@ -1785,9 +1853,7 @@ class LaneResetScript(LibraryInputScript):
             self.log.info(
                 "This is a dry run. Nothing will actually change in the database."
             )
-            self.log.info(
-                "Run with --reset to change the database."
-            )
+            self.log.info("Run with --reset to change the database.")
 
         if libraries and self.reset:
             self.log.warn(
@@ -1796,7 +1862,7 @@ Running this script will permanently reset the lanes for %d libraries. Any lanes
 custom lists will be deleted (though the lists themselves will be preserved).
 Sleeping for five seconds to give you a chance to back out.
 You'll get another chance to back out before the database session is committed.""",
-                len(libraries)
+                len(libraries),
             )
             time.sleep(5)
         self.process_libraries(libraries)
@@ -1806,10 +1872,20 @@ You'll get another chance to back out before the database session is committed."
             new_lane_output += "\n\nLibrary '%s':\n" % library.name
 
             def print_lanes_for_parent(parent):
-                lanes = self._db.query(Lane).filter(Lane.library==library).filter(Lane.parent==parent).order_by(Lane.priority)
+                lanes = (
+                    self._db.query(Lane)
+                    .filter(Lane.library == library)
+                    .filter(Lane.parent == parent)
+                    .order_by(Lane.priority)
+                )
                 lane_output = ""
                 for lane in lanes:
-                    lane_output += "  " + ("  " * len(list(lane.parentage)))  + lane.display_name + "\n"
+                    lane_output += (
+                        "  "
+                        + ("  " * len(list(lane.parentage)))
+                        + lane.display_name
+                        + "\n"
+                    )
                     lane_output += print_lanes_for_parent(lane)
                 return lane_output
 
@@ -1825,8 +1901,8 @@ You'll get another chance to back out before the database session is committed."
     def process_library(self, library):
         create_default_lanes(self._db, library)
 
-class NovelistSnapshotScript(TimestampScript, LibraryInputScript):
 
+class NovelistSnapshotScript(TimestampScript, LibraryInputScript):
     def do_run(self, output=sys.stdout, *args, **kwargs):
         parsed = self.parse_command_line(self._db, *args, **kwargs)
         for library in parsed.libraries:
@@ -1835,27 +1911,21 @@ class NovelistSnapshotScript(TimestampScript, LibraryInputScript):
             except CannotLoadConfiguration as e:
                 self.log.info(str(e))
                 continue
-            if (api):
+            if api:
                 response = api.put_items_novelist(library)
 
-                if (response):
+                if response:
                     result = "NoveList API Response\n"
                     result += str(response)
 
                     output.write(result)
 
-class ODLImportScript(OPDSImportScript):
-    """Import information from the feed associated
-    with an ODL collection."""
-
-    IMPORTER_CLASS = ODLImporter
-    MONITOR_CLASS = ODLImportMonitor
-    PROTOCOL = ODLImporter.NAME
 
 class SharedODLImportScript(OPDSImportScript):
     IMPORTER_CLASS = SharedODLImporter
     MONITOR_CLASS = SharedODLImportMonitor
     PROTOCOL = SharedODLImporter.NAME
+
 
 class LocalAnalyticsExportScript(Script):
     """Export circulation events for a date range to a CSV file."""
@@ -1864,12 +1934,12 @@ class LocalAnalyticsExportScript(Script):
     def arg_parser(cls, _db):
         parser = argparse.ArgumentParser()
         parser.add_argument(
-            '--start',
+            "--start",
             help="Include circulation events that happened at or after this time.",
             required=True,
         )
         parser.add_argument(
-            '--end',
+            "--end",
             help="Include circulation events that happened before this time.",
             required=True,
         )
@@ -1884,6 +1954,7 @@ class LocalAnalyticsExportScript(Script):
         exporter = exporter or LocalAnalyticsExporter()
         output.write(exporter.export(self._db, start, end))
 
+
 class GenerateShortTokenScript(LibraryInputScript):
     """
     Generate a short client token of the specified duration that can be used for testing that
@@ -1892,29 +1963,28 @@ class GenerateShortTokenScript(LibraryInputScript):
 
     @classmethod
     def arg_parser(cls, _db):
-        parser = super(GenerateShortTokenScript, cls).arg_parser(_db, multiple_libraries=False)
+        parser = super(GenerateShortTokenScript, cls).arg_parser(
+            _db, multiple_libraries=False
+        )
         parser.add_argument(
-            '--barcode',
+            "--barcode",
             help="The patron barcode.",
             required=True,
         )
-        parser.add_argument(
-            '--pin',
-            help="The patron pin."
-        )
+        parser.add_argument("--pin", help="The patron pin.")
         group = parser.add_mutually_exclusive_group(required=True)
         group.add_argument(
-            '--days',
+            "--days",
             help="Token expiry in days.",
             type=int,
         )
         group.add_argument(
-            '--hours',
+            "--hours",
             help="Token expiry in hours.",
             type=int,
         )
         group.add_argument(
-            '--minutes',
+            "--minutes",
             help="Token expiry in minutes.",
             type=int,
         )
@@ -1933,24 +2003,36 @@ class GenerateShortTokenScript(LibraryInputScript):
         patron = get_one(_db, Patron, authorization_identifier=args.barcode)
         if patron is None:
             # Fall back to a full patron lookup
-            auth = LibraryAuthenticator.from_config(_db, args.libraries[0]).basic_auth_provider
+            auth = LibraryAuthenticator.from_config(
+                _db, args.libraries[0]
+            ).basic_auth_provider
             if auth is None:
                 output.write("No methods to authenticate patron found!\n")
                 sys.exit(-1)
-            patron = auth.authenticate(_db, credentials={'username': args.barcode, 'password': args.pin})
+            patron = auth.authenticate(
+                _db, credentials={"username": args.barcode, "password": args.pin}
+            )
             if not isinstance(patron, Patron):
                 output.write("Patron not found {}!\n".format(args.barcode))
                 sys.exit(-1)
 
         authdata = authdata or AuthdataUtility.from_config(library, _db)
         if authdata is None:
-            output.write("Library not registered with library registry! Please register and try again.")
+            output.write(
+                "Library not registered with library registry! Please register and try again."
+            )
             sys.exit(-1)
 
         patron_identifier = authdata._adobe_patron_identifier(patron)
-        expires = {k: v for (k, v) in vars(args).items() if k in ['days', 'hours', 'minutes'] and v is not None}
-        vendor_id, token = authdata.encode_short_client_token(patron_identifier, expires=expires)
-        username, password = token.rsplit('|', 1)
+        expires = {
+            k: v
+            for (k, v) in vars(args).items()
+            if k in ["days", "hours", "minutes"] and v is not None
+        }
+        vendor_id, token = authdata.encode_short_client_token(
+            patron_identifier, expires=expires
+        )
+        username, password = token.rsplit("|", 1)
 
         output.write("Vendor ID: {}\n".format(vendor_id))
         output.write("Token: {}\n".format(token))

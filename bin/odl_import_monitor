@@ -8,8 +8,13 @@ bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..")
 sys.path.append(os.path.abspath(package_dir))
 
-# NOTE: We need to import it explicitly to initialize MirrorUploader.IMPLEMENTATION_REGISTRY
-from core import s3
-from scripts import ODLImportScript
+from api.odl import ODLImporter, ODLImportMonitor
 
-ODLImportScript().run()
+# NOTE: We need to import it explicitly to initialize MirrorUploader.IMPLEMENTATION_REGISTRY
+from core import s3  # noqa
+from core.scripts import RunCollectionMonitorScript
+
+RunCollectionMonitorScript(
+    ODLImportMonitor,
+    import_class=ODLImporter,
+).run()

@@ -1,20 +1,17 @@
+import json
+
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
-import json
+
 from api.admin.problem_details import *
-from api.registry import (
-    RemoteRegistry,
-    Registration,
-)
-from core.model import (
-    ExternalIntegration,
-    get_one,
-    Library,
-)
+from api.registration.registry import Registration, RemoteRegistry
+from core.model import ExternalIntegration, Library, get_one
 from core.util.http import HTTP
 from core.util.problem_detail import ProblemDetail
+
 from . import SettingsController
+
 
 class DiscoveryServiceLibraryRegistrationsController(SettingsController):
 
@@ -29,14 +26,15 @@ class DiscoveryServiceLibraryRegistrationsController(SettingsController):
         super(DiscoveryServiceLibraryRegistrationsController, self).__init__(manager)
         self.goal = ExternalIntegration.DISCOVERY_GOAL
 
-    def process_discovery_service_library_registrations(self,
-            registration_class=None,
-            do_get=HTTP.debuggable_get,
-            do_post=HTTP.debuggable_post
+    def process_discovery_service_library_registrations(
+        self,
+        registration_class=None,
+        do_get=HTTP.debuggable_get,
+        do_post=HTTP.debuggable_post,
     ):
         registration_class = registration_class or Registration
         self.require_system_admin()
-        if flask.request.method == 'GET':
+        if flask.request.method == "GET":
             return self.process_get(do_get)
         else:
             return self.process_post(registration_class, do_get, do_post)
@@ -48,11 +46,9 @@ class DiscoveryServiceLibraryRegistrationsController(SettingsController):
 
         services = []
         for registry in RemoteRegistry.for_protocol_and_goal(
-                self._db, ExternalIntegration.OPDS_REGISTRATION, self.goal
+            self._db, ExternalIntegration.OPDS_REGISTRATION, self.goal
         ):
-            result = (
-                registry.fetch_registration_document(do_get=do_get)
-            )
+            result = registry.fetch_registration_document(do_get=do_get)
             if isinstance(result, ProblemDetail):
                 # Unlike most cases like this, a ProblemDetail doesn't
                 # mean the whole request is ruined -- just that one of
@@ -98,7 +94,7 @@ class DiscoveryServiceLibraryRegistrationsController(SettingsController):
 
     def look_up_registry(self, integration_id):
         """Find the RemoteRegistry that the user is trying to register the library with,
-         and check that it actually exists."""
+        and check that it actually exists."""
 
         registry = RemoteRegistry.for_integration_id(
             self._db, integration_id, self.goal
@@ -120,7 +116,9 @@ class DiscoveryServiceLibraryRegistrationsController(SettingsController):
 
         integration_id = flask.request.form.get("integration_id")
         library_short_name = flask.request.form.get("library_short_name")
-        stage = flask.request.form.get("registration_stage") or Registration.TESTING_STAGE
+        stage = (
+            flask.request.form.get("registration_stage") or Registration.TESTING_STAGE
+        )
 
         registry = self.look_up_registry(integration_id)
         if isinstance(registry, ProblemDetail):

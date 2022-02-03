@@ -1,5 +1,6 @@
-from api import app
 import sys
+
+from api import app
 
 url = None
 if len(sys.argv) > 1:

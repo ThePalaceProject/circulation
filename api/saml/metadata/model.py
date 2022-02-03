@@ -4,13 +4,11 @@ import re
 from enum import Enum
 from json import JSONDecoder, JSONEncoder
 from json.decoder import WHITESPACE
-from core.util.datetime_helpers import (
-    from_timestamp,
-    utc_now,
-)
 
 import six
 from onelogin.saml2.constants import OneLogin_Saml2_Constants
+
+from core.util.datetime_helpers import from_timestamp, utc_now
 
 
 class SAMLLocalizedMetadataItem(object):
@@ -1077,9 +1075,7 @@ class SAMLSubject(object):
         elif isinstance(valid_till, datetime.datetime):
             self._valid_till = valid_till - utc_now()
         elif isinstance(valid_till, int):
-            self._valid_till = (
-                from_timestamp(valid_till) - utc_now()
-            )
+            self._valid_till = from_timestamp(valid_till) - utc_now()
         elif isinstance(valid_till, datetime.timedelta):
             self._valid_till = valid_till
         else:

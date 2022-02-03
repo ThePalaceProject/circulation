@@ -1,30 +1,33 @@
-from api.problem_details import *
+import json
+import os
+import re
+import urllib.error
+import urllib.parse
+import urllib.request
+
+import uszipcode
+from flask_babel import lazy_gettext as _
+from pypostalcode import PostalCodeDatabase
+
 from api.admin.exceptions import *
 from api.admin.validator import Validator
-from api.registry import RemoteRegistry
-from core.model import (
-    ExternalIntegration,
-    Representation
-)
+from api.problem_details import *
+from api.registration.registry import RemoteRegistry
+from core.model import ExternalIntegration
 from core.util.http import HTTP
 from core.util.problem_detail import ProblemDetail
-from flask_babel import lazy_gettext as _
-import json
-from pypostalcode import PostalCodeDatabase
-import re
-import urllib.request, urllib.parse, urllib.error
-import uszipcode
-import os
+
 
 class GeographicValidator(Validator):
-
     @staticmethod
     def get_us_search():
         # Use a known path for the uszipcode db_file_dir that already contains the DB that the
         # library would otherwise download. This is done because the host for this file can
         # be flaky. There is an issue for this in the underlying library here:
         # https://github.com/MacHu-GWU/uszipcode-project/issues/40
-        db_file_path = os.path.join(os.path.dirname(__file__), "..", "..", "data", "uszipcode")
+        db_file_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "data", "uszipcode"
+        )
         return uszipcode.SearchEngine(simple_zipcode=True, db_file_dir=db_file_path)
 
     def validate_geographic_areas(self, values, db):
@@ -45,7 +48,7 @@ class GeographicValidator(Validator):
             "PE": "Prince Edward Island",
             "QC": "Quebec",
             "SK": "Saskatchewan",
-            "YT": "Yukon Territories"
+            "YT": "Yukon Territories",
         }
 
         locations = {"US": [], "CA": []}
@@ -62,7 +65,12 @@ class GeographicValidator(Validator):
                     elif len(us_search.query(state=value)):
                         locations["US"].append(value)
                     else:
-                        return UNKNOWN_LOCATION.detailed(_('"%(value)s" is not a valid U.S. state or Canadian province abbreviation.', value=value))
+                        return UNKNOWN_LOCATION.detailed(
+                            _(
+                                '"%(value)s" is not a valid U.S. state or Canadian province abbreviation.',
+                                value=value,
+                            )
+                        )
                 elif value in list(CA_PROVINCES.values()):
                     locations["CA"].append(value)
                 elif self.is_zip(value, "CA"):
@@ -72,20 +80,39 @@ class GeographicValidator(Validator):
                         formatted = "%s, %s" % (info.city, info.province)
                         # In some cases--mainly involving very small towns--even if the zip code is valid,
                         # the registry won't recognize the name of the place to which it corresponds.
-                        registry_response = self.find_location_through_registry(formatted, db)
+                        registry_response = self.find_location_through_registry(
+                            formatted, db
+                        )
                         if registry_response:
-                            locations["CA"].append(formatted);
+                            locations["CA"].append(formatted)
                         else:
-                            return UNKNOWN_LOCATION.detailed(_('Unable to locate "%(value)s" (%(formatted)s).  Try entering the name of a larger area.', value=value, formatted=formatted))
+                            return UNKNOWN_LOCATION.detailed(
+                                _(
+                                    'Unable to locate "%(value)s" (%(formatted)s).  Try entering the name of a larger area.',
+                                    value=value,
+                                    formatted=formatted,
+                                )
+                            )
                     except:
-                        return UNKNOWN_LOCATION.detailed(_('"%(value)s" is not a valid Canadian zipcode.', value=value))
+                        return UNKNOWN_LOCATION.detailed(
+                            _(
+                                '"%(value)s" is not a valid Canadian zipcode.',
+                                value=value,
+                            )
+                        )
                 elif len(value.split(", ")) == 2:
                     # Is it in the format "[city], [state abbreviation]" or "[county], [state abbreviation]"?
                     city_or_county, state = value.split(", ")
                     if us_search.by_city_and_state(city_or_county, state):
-                        locations["US"].append(value);
-                    elif len([x for x in us_search.query(state=state, returns=None) if x.county == city_or_county]):
-                        locations["US"].append(value);
+                        locations["US"].append(value)
+                    elif len(
+                        [
+                            x
+                            for x in us_search.query(state=state, returns=None)
+                            if x.county == city_or_county
+                        ]
+                    ):
+                        locations["US"].append(value)
                     else:
                         # Flag this as needing to be checked with the registry
                         flagged = True
@@ -93,19 +120,25 @@ class GeographicValidator(Validator):
                     # Is it a US zipcode?
                     info = self.look_up_zip(value, "US")
                     if not info:
-                        return UNKNOWN_LOCATION.detailed(_('"%(value)s" is not a valid U.S. zipcode.', value=value))
-                    locations["US"].append(value);
+                        return UNKNOWN_LOCATION.detailed(
+                            _('"%(value)s" is not a valid U.S. zipcode.', value=value)
+                        )
+                    locations["US"].append(value)
                 else:
                     flagged = True
 
                 if flagged:
                     registry_response = self.find_location_through_registry(value, db)
-                    if registry_response and isinstance(registry_response, ProblemDetail):
+                    if registry_response and isinstance(
+                        registry_response, ProblemDetail
+                    ):
                         return registry_response
                     elif registry_response:
                         locations[registry_response].append(value)
                     else:
-                        return UNKNOWN_LOCATION.detailed(_('Unable to locate "%(value)s".', value=value))
+                        return UNKNOWN_LOCATION.detailed(
+                            _('Unable to locate "%(value)s".', value=value)
+                        )
         return locations
 
     def is_zip(self, value, country):
@@ -127,7 +160,7 @@ class GeographicValidator(Validator):
 
     def format_place(self, zip, city, state_or_province):
         details = "%s, %s" % (city, state_or_province)
-        return { zip: details }
+        return {zip: details}
 
     def find_location_through_registry(self, value, db):
         for nation in ["US", "CA"]:
@@ -143,13 +176,20 @@ class GeographicValidator(Validator):
         # If the circulation manager doesn't know about this location, check whether the Library Registry does.
         result = None
         for registry in RemoteRegistry.for_protocol_and_goal(
-            db, ExternalIntegration.OPDS_REGISTRATION, ExternalIntegration.DISCOVERY_GOAL
+            db,
+            ExternalIntegration.OPDS_REGISTRATION,
+            ExternalIntegration.DISCOVERY_GOAL,
         ):
             base_url = registry.integration.url + "/coverage?coverage="
 
             response = do_get(base_url + service_area_object)
             if not response.status_code == 200:
-                result = REMOTE_INTEGRATION_FAILED.detailed(_("Unable to contact the registry at %(url)s.", url=registry.integration.url))
+                result = REMOTE_INTEGRATION_FAILED.detailed(
+                    _(
+                        "Unable to contact the registry at %(url)s.",
+                        url=registry.integration.url,
+                    )
+                )
 
             if hasattr(response, "content"):
                 content = json.loads(response.content)

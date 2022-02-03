@@ -1,0 +1,17 @@
+{
+ "identifier": "urn:uuid:a44b9e96-7ad6-42b5-a86d-786563f32b12",
+ "status": "available",
+ "created": "2021-10-07T20:23:45Z",
+ "format": "application/audiobook+json; protection=http://www.feedbooks.com/audiobooks/access-restriction",
+ "price": {
+  "value": 69.95,
+  "currency": "usd"
+ },
+ "terms": {
+  "concurrency": 1,
+  "length": 5097600
+ },
+ "checkouts": {
+  "available": 1
+ }
+}

@@ -1,33 +1,28 @@
 import datetime
-import feedparser
+import os
 from io import BytesIO
 from zipfile import ZipFile
-from lxml import etree
-import os
+
+import feedparser
 from flask_babel import lazy_gettext as _
 
-from core.opds import OPDSFeed
-from core.opds_import import (
-    OPDSImporter,
-    OPDSImportMonitor,
-    OPDSXMLParser,
-)
 from core.model import (
     Collection,
     DataSource,
     ExternalIntegration,
     Hyperlink,
-    Resource,
     Representation,
     RightsStatus,
 )
+from core.opds import OPDSFeed
+from core.opds_import import OPDSImporter, OPDSImportMonitor, OPDSXMLParser
 from core.util.epub import EpubAccessor
 
 
 class FeedbooksOPDSImporter(OPDSImporter):
 
-    REALLY_IMPORT_KEY = 'really_import'
-    REPLACEMENT_CSS_KEY = 'replacement_css'
+    REALLY_IMPORT_KEY = "really_import"
+    REPLACEMENT_CSS_KEY = "replacement_css"
 
     NAME = ExternalIntegration.FEEDBOOKS
     DESCRIPTION = _("Import open-access books from FeedBooks.")
@@ -36,37 +31,50 @@ class FeedbooksOPDSImporter(OPDSImporter):
             "key": REALLY_IMPORT_KEY,
             "type": "select",
             "label": _("Really?"),
-            "description": _("Most libraries are better off importing free Feedbooks titles via an OPDS Import integration from NYPL's open-access content server or DPLA's Open Bookshelf. This setting makes sure you didn't create this collection by accident and really want to import directly from Feedbooks."),
+            "description": _(
+                "Most libraries are better off importing free Feedbooks titles via an OPDS Import integration from NYPL's open-access content server or DPLA's Open Bookshelf. This setting makes sure you didn't create this collection by accident and really want to import directly from Feedbooks."
+            ),
             "options": [
-                { "key": "false", "label": _("Don't actually import directly from Feedbooks.") },
-                { "key": "true", "label": _("I know what I'm doing; import directly from Feedbooks.") },
-          ],
-          "default": "false"
+                {
+                    "key": "false",
+                    "label": _("Don't actually import directly from Feedbooks."),
+                },
+                {
+                    "key": "true",
+                    "label": _(
+                        "I know what I'm doing; import directly from Feedbooks."
+                    ),
+                },
+            ],
+            "default": "false",
         },
         {
             "key": Collection.EXTERNAL_ACCOUNT_ID_KEY,
             "label": _("Import books in this language"),
-            "description": _("Feedbooks offers separate feeds for different languages. Each one can be made into a separate collection."),
+            "description": _(
+                "Feedbooks offers separate feeds for different languages. Each one can be made into a separate collection."
+            ),
             "type": "select",
             "options": [
-                { "key": "en", "label": _("English") },
-                { "key": "es", "label": _("Spanish") },
-                { "key": "fr", "label": _("French") },
-                { "key": "it", "label": _("Italian") },
-                { "key": "de", "label": _("German") },
+                {"key": "en", "label": _("English")},
+                {"key": "es", "label": _("Spanish")},
+                {"key": "fr", "label": _("French")},
+                {"key": "it", "label": _("Italian")},
+                {"key": "de", "label": _("German")},
             ],
             "default": "en",
         },
         {
-            "key" : REPLACEMENT_CSS_KEY,
+            "key": REPLACEMENT_CSS_KEY,
             "label": _("Replacement stylesheet"),
-            "description": _("If you are mirroring the Feedbooks titles, you may replace the Feedbooks stylesheet with an alternate stylesheet in the mirrored copies. The default value is an accessibility-focused stylesheet produced by the DAISY consortium. If you mirror Feedbooks titles but leave this empty, the Feedbooks titles will be mirrored as-is."),
+            "description": _(
+                "If you are mirroring the Feedbooks titles, you may replace the Feedbooks stylesheet with an alternate stylesheet in the mirrored copies. The default value is an accessibility-focused stylesheet produced by the DAISY consortium. If you mirror Feedbooks titles but leave this empty, the Feedbooks titles will be mirrored as-is."
+            ),
             "default": "http://www.daisy.org/z3986/2005/dtbook.2005.basic.css",
         },
-
     ]
 
-    BASE_OPDS_URL = 'http://www.feedbooks.com/books/recent.atom?lang=%(language)s'
+    BASE_OPDS_URL = "http://www.feedbooks.com/books/recent.atom?lang=%(language)s"
 
     THIRTY_DAYS = datetime.timedelta(days=30)
 
@@ -75,12 +83,14 @@ class FeedbooksOPDSImporter(OPDSImporter):
         new_css_url = integration.setting(self.REPLACEMENT_CSS_KEY).value
         if new_css_url:
             # We may need to modify incoming content to replace CSS.
-            kwargs['content_modifier'] = self.replace_css
-        kwargs['data_source_name'] = DataSource.FEEDBOOKS
+            kwargs["content_modifier"] = self.replace_css
+        kwargs["data_source_name"] = DataSource.FEEDBOOKS
 
         really_import = integration.setting(self.REALLY_IMPORT_KEY).bool_value
         if not really_import:
-            raise Exception("Refusing to instantiate a Feedbooks importer because it's configured to not actually do an import.")
+            raise Exception(
+                "Refusing to instantiate a Feedbooks importer because it's configured to not actually do an import."
+            )
 
         self.language = collection.external_account_id
 
@@ -91,15 +101,15 @@ class FeedbooksOPDSImporter(OPDSImporter):
             status_code, headers, content = self.http_get(new_css_url, {})
             if status_code != 200:
                 raise IOError(
-                    "Replacement stylesheet URL returned %r response code." % status_code
+                    "Replacement stylesheet URL returned %r response code."
+                    % status_code
                 )
-            content_type = headers.get('content-type', '')
-            if not content_type.startswith('text/css'):
+            content_type = headers.get("content-type", "")
+            if not content_type.startswith("text/css"):
                 raise IOError(
                     "Replacement stylesheet is %r, not a CSS document." % content_type
                 )
             self.new_css = content
-
 
     def extract_feed_data(self, feed, feed_url=None):
         metadata, failures = super(FeedbooksOPDSImporter, self).extract_feed_data(
@@ -124,19 +134,21 @@ class FeedbooksOPDSImporter(OPDSImporter):
         """Determine the URI that best encapsulates the rights
         status of the downloads associated with this book.
         """
-        rights = OPDSXMLParser._xpath1(entry, 'atom:rights')
+        rights = OPDSXMLParser._xpath1(entry, "atom:rights")
         if rights is not None:
             rights = rights.text
-        source = OPDSXMLParser._xpath1(entry, 'dcterms:source')
+        source = OPDSXMLParser._xpath1(entry, "dcterms:source")
         if source is not None:
             source = source.text
-        publication_year = OPDSXMLParser._xpath1(entry, 'dcterms:issued')
+        publication_year = OPDSXMLParser._xpath1(entry, "dcterms:issued")
         if publication_year is not None:
             publication_year = publication_year.text
         return RehostingPolicy.rights_uri(rights, source, publication_year)
 
     @classmethod
-    def _detail_for_elementtree_entry(cls, parser, entry_tag, feed_url=None, do_get=None):
+    def _detail_for_elementtree_entry(
+        cls, parser, entry_tag, feed_url=None, do_get=None
+    ):
         """Determine a more accurate value for this entry's default rights
         URI.
 
@@ -149,13 +161,14 @@ class FeedbooksOPDSImporter(OPDSImporter):
             parser, entry_tag, feed_url, do_get=do_get
         )
         rights_uri = cls.rights_uri_from_entry_tag(entry_tag)
-        circulation = detail.setdefault('circulation', {})
-        circulation['default_rights_uri'] =rights_uri
+        circulation = detail.setdefault("circulation", {})
+        circulation["default_rights_uri"] = rights_uri
         return detail
 
     @classmethod
-    def make_link_data(cls, rel, href=None, media_type=None, rights_uri=None,
-                       content=None):
+    def make_link_data(
+        cls, rel, href=None, media_type=None, rights_uri=None, content=None
+    ):
         """Turn basic link information into a LinkData object.
 
         FeedBooks puts open-access content behind generic
@@ -163,9 +176,8 @@ class FeedbooksOPDSImporter(OPDSImporter):
         links and (at the request of FeedBooks) ignore the other
         formats.
         """
-        if rel==Hyperlink.GENERIC_OPDS_ACQUISITION:
-            if (media_type
-                and media_type.startswith(Representation.EPUB_MEDIA_TYPE)):
+        if rel == Hyperlink.GENERIC_OPDS_ACQUISITION:
+            if media_type and media_type.startswith(Representation.EPUB_MEDIA_TYPE):
                 # Treat this generic acquisition link as an
                 # open-access link.
                 rel = Hyperlink.OPEN_ACCESS_DOWNLOAD
@@ -190,8 +202,11 @@ class FeedbooksOPDSImporter(OPDSImporter):
         existing_descriptions = []
         everything_except_descriptions = []
         for x in metadata.links:
-            if (x.rel == Hyperlink.ALTERNATE and x.href
-                and x.media_type == OPDSFeed.ENTRY_TYPE):
+            if (
+                x.rel == Hyperlink.ALTERNATE
+                and x.href
+                and x.media_type == OPDSFeed.ENTRY_TYPE
+            ):
                 alternate_links.append(x)
             if x.rel == Hyperlink.DESCRIPTION:
                 existing_descriptions.append((x.media_type, x.content))
@@ -205,8 +220,10 @@ class FeedbooksOPDSImporter(OPDSImporter):
 
             # Fetch the alternate entry.
             representation, is_new = Representation.get(
-                self._db, alternate_link.href, max_age=self.THIRTY_DAYS,
-                do_get=self.http_get
+                self._db,
+                alternate_link.href,
+                max_age=self.THIRTY_DAYS,
+                do_get=self.http_get,
             )
 
             if representation.status_code != 200:
@@ -215,10 +232,10 @@ class FeedbooksOPDSImporter(OPDSImporter):
             # Parse the alternate entry with feedparser and run it through
             # data_detail_for_feedparser_entry().
             parsed = feedparser.parse(representation.content)
-            if len(parsed['entries']) != 1:
+            if len(parsed["entries"]) != 1:
                 # This is supposed to be a single entry, and it's not.
                 continue
-            [entry] = parsed['entries']
+            [entry] = parsed["entries"]
             data_source = self.data_source
             detail_id, new_detail, failure = self.data_detail_for_feedparser_entry(
                 entry, data_source
@@ -237,16 +254,15 @@ class FeedbooksOPDSImporter(OPDSImporter):
             # Find any descriptions present in the alternate view which
             # are not present in the original.
             new_descriptions = [
-                x for x in new_detail['links']
+                x
+                for x in new_detail["links"]
                 if x.rel == Hyperlink.DESCRIPTION
                 and (x.media_type, x.content) not in existing_descriptions
             ]
 
             if new_descriptions:
                 # Replace old descriptions with new descriptions.
-                metadata.links = (
-                    everything_except_descriptions + new_descriptions
-                )
+                metadata.links = everything_except_descriptions + new_descriptions
                 break
 
         return metadata
@@ -255,7 +271,10 @@ class FeedbooksOPDSImporter(OPDSImporter):
         """This function will replace the content of every CSS file listed in an epub's
         manifest with the value in self.new_css. The rest of the file is not changed.
         """
-        if not (representation.media_type == Representation.EPUB_MEDIA_TYPE and representation.content):
+        if not (
+            representation.media_type == Representation.EPUB_MEDIA_TYPE
+            and representation.content
+        ):
             return
 
         if not self.new_css:
@@ -263,10 +282,12 @@ class FeedbooksOPDSImporter(OPDSImporter):
             return
 
         new_zip_content = BytesIO()
-        with EpubAccessor.open_epub(representation.url, content=representation.content) as (zip_file, package_path):
+        with EpubAccessor.open_epub(
+            representation.url, content=representation.content
+        ) as (zip_file, package_path):
             try:
                 manifest_element = EpubAccessor.get_element_from_package(
-                    zip_file, package_path, 'manifest'
+                    zip_file, package_path, "manifest"
                 )
             except ValueError as e:
                 # Invalid EPUB
@@ -276,8 +297,10 @@ class FeedbooksOPDSImporter(OPDSImporter):
             css_paths = []
             for child in manifest_element:
                 if child.tag == ("{%s}item" % EpubAccessor.IDPF_NAMESPACE):
-                    if child.get('media-type') == "text/css":
-                        href = package_path.replace(os.path.basename(package_path), child.get("href"))
+                    if child.get("media-type") == "text/css":
+                        href = package_path.replace(
+                            os.path.basename(package_path), child.get("href")
+                        )
                         css_paths.append(href)
 
             with ZipFile(new_zip_content, "w") as new_zip:
@@ -316,40 +339,43 @@ class RehostingPolicy(object):
 
     # These are the licenses that need to be preserved.
     RIGHTS_DICT = {
-        "Attribution Share Alike (cc by-sa)" : RightsStatus.CC_BY_SA,
-        "Attribution Non-Commercial No Derivatives (cc by-nc-nd)" : RightsStatus.CC_BY_NC_ND,
-        "Attribution Non-Commercial Share Alike (cc by-nc-sa)" : RightsStatus.CC_BY_NC_SA,
+        "Attribution Share Alike (cc by-sa)": RightsStatus.CC_BY_SA,
+        "Attribution Non-Commercial No Derivatives (cc by-nc-nd)": RightsStatus.CC_BY_NC_ND,
+        "Attribution Non-Commercial Share Alike (cc by-nc-sa)": RightsStatus.CC_BY_NC_SA,
     }
 
     # Feedbooks rights statuses indicating books that can be rehosted
     # in the US.
-    CAN_REHOST_IN_US = set([
-        "This work was published before 1923 and is in the public domain in the USA only.",
-        "This work is available for countries where copyright is Life+70 and in the USA.",
-        'This work is available for countries where copyright is Life+50 or in the USA (published before 1923).',
-        "Attribution (cc by)",
-        "Attribution Non-Commercial (cc by-nc)",
-
-        "Attribution Share Alike (cc by-sa)",
-        "Attribution Non-Commercial No Derivatives (cc by-nc-nd)",
-        "Attribution Non-Commercial Share Alike (cc by-nc-sa)",
-    ])
+    CAN_REHOST_IN_US = set(
+        [
+            "This work was published before 1923 and is in the public domain in the USA only.",
+            "This work is available for countries where copyright is Life+70 and in the USA.",
+            "This work is available for countries where copyright is Life+50 or in the USA (published before 1923).",
+            "Attribution (cc by)",
+            "Attribution Non-Commercial (cc by-nc)",
+            "Attribution Share Alike (cc by-sa)",
+            "Attribution Non-Commercial No Derivatives (cc by-nc-nd)",
+            "Attribution Non-Commercial Share Alike (cc by-nc-sa)",
+        ]
+    )
 
     RIGHTS_UNKNOWN = "Please read the legal notice included in this e-book and/or check the copyright status in your country."
 
     # These websites are hosted in the US and specialize in
     # open-access content. We will accept all FeedBooks titles taken
     # from these sites, even post-1923 titles.
-    US_SITES = set([
-        "archive.org",
-        "craphound.com",
-        "en.wikipedia.org",
-        "en.wikisource.org",
-        "futurismic.com",
-        "gutenberg.org",
-        "project gutenberg",
-        "shakespeare.mit.edu",
-    ])
+    US_SITES = set(
+        [
+            "archive.org",
+            "craphound.com",
+            "en.wikipedia.org",
+            "en.wikisource.org",
+            "futurismic.com",
+            "gutenberg.org",
+            "project gutenberg",
+            "shakespeare.mit.edu",
+        ]
+    )
 
     @classmethod
     def rights_uri(cls, rights, source, publication_year):
@@ -412,7 +438,7 @@ class RehostingPolicy(object):
             # to rehost it.
             return True
 
-        if source in ('wikisource', 'gutenberg'):
+        if source in ("wikisource", "gutenberg"):
             # Presumably en.wikisource and Project Gutenberg US.  We
             # special case these to avoid confusing the US versions of
             # these sites with other countries'.
@@ -420,7 +446,7 @@ class RehostingPolicy(object):
 
         # And we special-case this one to avoid confusing Australian
         # Project Gutenberg with US Project Gutenberg.
-        if ('gutenberg.net' in source and not 'gutenberg.net.au' in source):
+        if "gutenberg.net" in source and not "gutenberg.net.au" in source:
             return True
 
         # Unless one of the above conditions is met, we must assume
@@ -434,6 +460,7 @@ class RehostingPolicy(object):
         # some kind of general incompatible restriction (such as
         # Life+70) and it's not a pre-1923 book.
         return False
+
 
 class FeedbooksImportMonitor(OPDSImportMonitor):
     """The same as OPDSImportMonitor, but uses FeedbooksOPDSImporter
@@ -451,5 +478,5 @@ class FeedbooksImportMonitor(OPDSImportMonitor):
 
         This is the base URL plus the language setting.
         """
-        language = collection.external_account_id or 'en'
+        language = collection.external_account_id or "en"
         return FeedbooksOPDSImporter.BASE_OPDS_URL % dict(language=language)

@@ -1,50 +1,54 @@
-from enum import Enum
 import os
+from enum import Enum
 from urllib.parse import urljoin
 
 
 class OperationalMode(str, Enum):
-    production = 'production'
-    development = 'development'
+    production = "production"
+    development = "development"
 
 
 class Configuration:
 
-    PACKAGE_NAME = '@thepalaceproject/circulation-admin'
-    PACKAGE_VERSION = '0.0.5'
+    APP_NAME = "Palace Collection Manager"
+    PACKAGE_NAME = "@thepalaceproject/circulation-admin"
+    PACKAGE_VERSION = "0.0.7"
 
     STATIC_ASSETS = {
-        'admin_js': 'circulation-admin.js',
-        'admin_css': 'circulation-admin.css',
+        "admin_js": "circulation-admin.js",
+        "admin_css": "circulation-admin.css",
+        "admin_logo": "PalaceCollectionManagerLogo.svg",
     }
 
     # For proper operation, `package_url` MUST end with a slash ('/') and
     # `asset_rel_url` MUST NOT begin with one.
     PACKAGE_TEMPLATES = {
         OperationalMode.production: {
-            'package_url': 'https://cdn.jsdelivr.net/npm/{name}@{version}/',
-            'asset_rel_url': 'dist/{filename}'
+            "package_url": "https://cdn.jsdelivr.net/npm/{name}@{version}/",
+            "asset_rel_url": "dist/{filename}",
         },
         OperationalMode.development: {
-            'package_url': '/admin/',
-            'asset_rel_url': 'static/{filename}',
+            "package_url": "/admin/",
+            "asset_rel_url": "static/{filename}",
         },
     }
 
-    DEVELOPMENT_MODE_PACKAGE_TEMPLATE = 'node_modules/{name}'
-    STATIC_ASSETS_REL_PATH = 'dist'
+    DEVELOPMENT_MODE_PACKAGE_TEMPLATE = "node_modules/{name}"
+    STATIC_ASSETS_REL_PATH = "dist"
 
     ADMIN_DIRECTORY = os.path.abspath(os.path.dirname(__file__))
 
     # Environment variables that contain admin client package information.
-    ENV_ADMIN_UI_PACKAGE_NAME = 'TPP_CIRCULATION_ADMIN_PACKAGE_NAME'
-    ENV_ADMIN_UI_PACKAGE_VERSION = 'TPP_CIRCULATION_ADMIN_PACKAGE_VERSION'
+    ENV_ADMIN_UI_PACKAGE_NAME = "TPP_CIRCULATION_ADMIN_PACKAGE_NAME"
+    ENV_ADMIN_UI_PACKAGE_VERSION = "TPP_CIRCULATION_ADMIN_PACKAGE_VERSION"
 
     @classmethod
     def operational_mode(cls) -> OperationalMode:
-        return (OperationalMode.development
-                if os.path.isdir(cls.package_development_directory())
-                else OperationalMode.production)
+        return (
+            OperationalMode.development
+            if os.path.isdir(cls.package_development_directory())
+            else OperationalMode.production
+        )
 
     @classmethod
     def _package_name(cls) -> str:
@@ -56,7 +60,9 @@ class Configuration:
         return os.environ.get(cls.ENV_ADMIN_UI_PACKAGE_NAME) or cls.PACKAGE_NAME
 
     @classmethod
-    def lookup_asset_url(cls, key: str, *, _operational_mode: OperationalMode = None) -> str:
+    def lookup_asset_url(
+        cls, key: str, *, _operational_mode: OperationalMode = None
+    ) -> str:
         """Get the URL for the asset_type.
 
         :param key: The key used to lookup an asset's filename. If the key is
@@ -70,8 +76,12 @@ class Configuration:
         """
         operational_mode = _operational_mode or cls.operational_mode()
         filename = cls.STATIC_ASSETS.get(key, key)
-        return urljoin(cls.package_url(_operational_mode=operational_mode),
-                       cls.PACKAGE_TEMPLATES[operational_mode]['asset_rel_url'].format(filename=filename))
+        return urljoin(
+            cls.package_url(_operational_mode=operational_mode),
+            cls.PACKAGE_TEMPLATES[operational_mode]["asset_rel_url"].format(
+                filename=filename
+            ),
+        )
 
     @classmethod
     def package_url(cls, *, _operational_mode: OperationalMode = None) -> str:
@@ -86,11 +96,13 @@ class Configuration:
         :rtype: str
         """
         operational_mode = _operational_mode or cls.operational_mode()
-        version = (os.environ.get(cls.ENV_ADMIN_UI_PACKAGE_VERSION) or cls.PACKAGE_VERSION)
-        template = cls.PACKAGE_TEMPLATES[operational_mode]['package_url']
+        version = (
+            os.environ.get(cls.ENV_ADMIN_UI_PACKAGE_VERSION) or cls.PACKAGE_VERSION
+        )
+        template = cls.PACKAGE_TEMPLATES[operational_mode]["package_url"]
         url = template.format(name=cls._package_name(), version=version)
-        if not url.endswith('/'):
-            url += '/'
+        if not url.endswith("/"):
+            url += "/"
         return url
 
     @classmethod
@@ -103,8 +115,10 @@ class Configuration:
         :rtype: str
         """
         base_dir = _base_dir or cls.ADMIN_DIRECTORY
-        return os.path.join(base_dir,
-                            cls.DEVELOPMENT_MODE_PACKAGE_TEMPLATE.format(name=cls._package_name()))
+        return os.path.join(
+            base_dir,
+            cls.DEVELOPMENT_MODE_PACKAGE_TEMPLATE.format(name=cls._package_name()),
+        )
 
     @classmethod
     def static_files_directory(cls, *, _base_dir: str = None) -> str:

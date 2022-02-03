@@ -1,4 +1,3 @@
-
 class AdminAuthenticationProvider(object):
     def __init__(self, integration):
         self.integration = integration

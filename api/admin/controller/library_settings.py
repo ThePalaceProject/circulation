@@ -1,42 +1,40 @@
 import base64
-from io import BytesIO
 import json
-from typing import Any, Dict, Optional
 import uuid
+from io import BytesIO
+from typing import Any, Dict, Optional
 
 import flask
+import wcag_contrast_ratio
 from flask import Response
 from flask_babel import lazy_gettext as _
 from PIL import Image
-import wcag_contrast_ratio
 
-from . import SettingsController
 from api.admin.announcement_list_validator import AnnouncementListValidator
-from api.config import Configuration
-from api.lanes import create_default_lanes
 from api.admin.geographic_validator import GeographicValidator
 from api.admin.problem_details import *
-from core.model import (
-    ConfigurationSetting,
-    create,
-    get_one,
-    Library,
-)
-from core.util.problem_detail import ProblemDetail
+from api.config import Configuration
+from api.lanes import create_default_lanes
+from core.model import ConfigurationSetting, Library, create, get_one
 from core.util import LanguageCodes
+from core.util.problem_detail import ProblemDetail
+
+from . import SettingsController
 
 
 class LibrarySettingsController(SettingsController):
-
     def process_libraries(self):
-        if flask.request.method == 'GET':
+        if flask.request.method == "GET":
             return self.process_get()
         else:
             return self.process_post()
 
     def process_get(self):
-        libraries = []
-        for library in self._db.query(Library).order_by(Library.name):
+        response = []
+        libraries = self._db.query(Library).order_by(Library.name).all()
+        ConfigurationSetting.cache_warm(self._db)
+
+        for library in libraries:
             # Only include libraries this admin has librarian access to.
             if not flask.request.admin or not flask.request.admin.is_librarian(library):
                 continue
@@ -44,11 +42,17 @@ class LibrarySettingsController(SettingsController):
             settings = dict()
             for setting in Configuration.LIBRARY_SETTINGS:
                 if setting.get("type") == "announcements":
-                    value = ConfigurationSetting.for_library(setting.get("key"), library).json_value
+                    value = ConfigurationSetting.for_library(
+                        setting.get("key"), library
+                    ).json_value
                     if value:
-                        value = AnnouncementListValidator().validate_announcements(value)
+                        value = AnnouncementListValidator().validate_announcements(
+                            value
+                        )
                 if setting.get("type") == "list":
-                    value = ConfigurationSetting.for_library(setting.get("key"), library).json_value
+                    value = ConfigurationSetting.for_library(
+                        setting.get("key"), library
+                    ).json_value
                     if value and setting.get("format") == "geographic":
                         value = self.get_extra_geographic_information(value)
                 else:
@@ -57,21 +61,23 @@ class LibrarySettingsController(SettingsController):
                 if value:
                     settings[setting.get("key")] = value
 
-            libraries += [dict(
-                uuid=library.uuid,
-                name=library.name,
-                short_name=library.short_name,
-                settings=settings,
-            )]
-        return dict(libraries=libraries, settings=Configuration.LIBRARY_SETTINGS)
+            response += [
+                dict(
+                    uuid=library.uuid,
+                    name=library.name,
+                    short_name=library.short_name,
+                    settings=settings,
+                )
+            ]
+        return dict(libraries=response, settings=Configuration.LIBRARY_SETTINGS)
 
     def process_post(self, validators_by_type=None):
         library = None
         is_new = False
         if validators_by_type is None:
             validators_by_type = dict()
-            validators_by_type['geographic'] = GeographicValidator()
-            validators_by_type['announcements'] = AnnouncementListValidator()
+            validators_by_type["geographic"] = GeographicValidator()
+            validators_by_type["announcements"] = AnnouncementListValidator()
 
         library_uuid = flask.request.form.get("uuid")
         library = self.get_library_from_uuid(library_uuid)
@@ -98,7 +104,9 @@ class LibrarySettingsController(SettingsController):
         if short_name:
             library.short_name = short_name
 
-        configuration_settings = self.library_configuration_settings(library, validators_by_type)
+        configuration_settings = self.library_configuration_settings(
+            library, validators_by_type
+        )
         if isinstance(configuration_settings, ProblemDetail):
             return configuration_settings
 
@@ -113,8 +121,8 @@ class LibrarySettingsController(SettingsController):
     def create_library(self, short_name, library_uuid):
         self.require_system_admin()
         library, is_new = create(
-            self._db, Library, short_name=short_name,
-            uuid=str(uuid.uuid4()))
+            self._db, Library, short_name=short_name, uuid=str(uuid.uuid4())
+        )
         return library, is_new
 
     def process_delete(self, library_uuid):
@@ -123,7 +131,7 @@ class LibrarySettingsController(SettingsController):
         self._db.delete(library)
         return Response(str(_("Deleted")), 200)
 
-# Validation methods:
+    # Validation methods:
 
     def validate_form_fields(self):
         settings = Configuration.LIBRARY_SETTINGS
@@ -131,7 +139,7 @@ class LibrarySettingsController(SettingsController):
             self.check_for_missing_fields,
             self.check_web_color_contrast,
             self.check_header_links,
-            self.validate_formats
+            self.validate_formats,
         ]
         for validation in validations:
             result = validation(settings)
@@ -147,12 +155,18 @@ class LibrarySettingsController(SettingsController):
             return error
 
     def check_for_missing_settings(self, settings):
-        required = [s for s in Configuration.LIBRARY_SETTINGS if s.get('required') and not s.get('default')]
+        required = [
+            s
+            for s in Configuration.LIBRARY_SETTINGS
+            if s.get("required") and not s.get("default")
+        ]
         missing = [s for s in required if not flask.request.form.get(s.get("key"))]
         if missing:
             return INCOMPLETE_CONFIGURATION.detailed(
-                _("The configuration is missing a required setting: %(setting)s",
-                setting=missing[0].get("label"))
+                _(
+                    "The configuration is missing a required setting: %(setting)s",
+                    setting=missing[0].get("label"),
+                )
             )
 
     def check_web_color_contrast(self, settings):
@@ -161,19 +175,43 @@ class LibrarySettingsController(SettingsController):
         well on white, as these colors will serve as button backgrounds with
         white test, as well as text color on white backgrounds.
         """
-        primary = flask.request.form.get(Configuration.WEB_PRIMARY_COLOR, Configuration.DEFAULT_WEB_PRIMARY_COLOR)
-        secondary = flask.request.form.get(Configuration.WEB_SECONDARY_COLOR, Configuration.DEFAULT_WEB_SECONDARY_COLOR)
+        primary = flask.request.form.get(
+            Configuration.WEB_PRIMARY_COLOR, Configuration.DEFAULT_WEB_PRIMARY_COLOR
+        )
+        secondary = flask.request.form.get(
+            Configuration.WEB_SECONDARY_COLOR, Configuration.DEFAULT_WEB_SECONDARY_COLOR
+        )
+
         def hex_to_rgb(hex):
             hex = hex.lstrip("#")
-            return tuple(int(hex[i:i+2], 16)/255.0 for i in (0, 2 ,4))
-        primary_passes = wcag_contrast_ratio.passes_AA(wcag_contrast_ratio.rgb(hex_to_rgb(primary), hex_to_rgb("#ffffff")))
-        secondary_passes = wcag_contrast_ratio.passes_AA(wcag_contrast_ratio.rgb(hex_to_rgb(secondary), hex_to_rgb("#ffffff")))
+            return tuple(int(hex[i : i + 2], 16) / 255.0 for i in (0, 2, 4))
+
+        primary_passes = wcag_contrast_ratio.passes_AA(
+            wcag_contrast_ratio.rgb(hex_to_rgb(primary), hex_to_rgb("#ffffff"))
+        )
+        secondary_passes = wcag_contrast_ratio.passes_AA(
+            wcag_contrast_ratio.rgb(hex_to_rgb(secondary), hex_to_rgb("#ffffff"))
+        )
         if not (primary_passes and secondary_passes):
-            primary_check_url = "https://contrast-ratio.com/#%23" + secondary[1:] + "-on-%23" + "#ffffff"[1:]
-            secondary_check_url = "https://contrast-ratio.com/#%23" + secondary[1:] + "-on-%23" + "#ffffff"[1:]
+            primary_check_url = (
+                "https://contrast-ratio.com/#%23"
+                + secondary[1:]
+                + "-on-%23"
+                + "#ffffff"[1:]
+            )
+            secondary_check_url = (
+                "https://contrast-ratio.com/#%23"
+                + secondary[1:]
+                + "-on-%23"
+                + "#ffffff"[1:]
+            )
             return INVALID_CONFIGURATION_OPTION.detailed(
-                _("The web primary and secondary colors don't have enough contrast to pass the WCAG 2.0 AA guidelines and will be difficult for some patrons to read. Check contrast for primary <a href='%(primary_check_url)s' target='_blank'>here</a> and secondary <a href='%(primary_check_url)s' target='_blank'>here</a>.",
-                  primary_check_url=primary_check_url, secondary_check_url=secondary_check_url))
+                _(
+                    "The web primary and secondary colors don't have enough contrast to pass the WCAG 2.0 AA guidelines and will be difficult for some patrons to read. Check contrast for primary <a href='%(primary_check_url)s' target='_blank'>here</a> and secondary <a href='%(primary_check_url)s' target='_blank'>here</a>.",
+                    primary_check_url=primary_check_url,
+                    secondary_check_url=secondary_check_url,
+                )
+            )
 
     def check_header_links(self, settings):
         """Verify that header links and labels are the same length."""
@@ -181,19 +219,26 @@ class LibrarySettingsController(SettingsController):
         header_labels = flask.request.form.getlist(Configuration.WEB_HEADER_LABELS)
         if len(header_links) != len(header_labels):
             return INVALID_CONFIGURATION_OPTION.detailed(
-                _("There must be the same number of web header links and web header labels."))
+                _(
+                    "There must be the same number of web header links and web header labels."
+                )
+            )
 
     def get_library_from_uuid(self, library_uuid):
         if library_uuid:
             # Library UUID is required when editing an existing library
             # from the admin interface, and isn't present for new libraries.
             library = get_one(
-                self._db, Library, uuid=library_uuid,
+                self._db,
+                Library,
+                uuid=library_uuid,
             )
             if library:
                 return library
             else:
-                return LIBRARY_NOT_FOUND.detailed(_("The specified library uuid does not exist."))
+                return LIBRARY_NOT_FOUND.detailed(
+                    _("The specified library uuid does not exist.")
+                )
 
     def check_short_name_unique(self, library, short_name):
         if not library or short_name != library.short_name:
@@ -203,7 +248,7 @@ class LibrarySettingsController(SettingsController):
             if library_with_short_name:
                 return LIBRARY_SHORT_NAME_ALREADY_IN_USE
 
-# Configuration settings:
+    # Configuration settings:
 
     def get_extra_geographic_information(self, value):
         validator = GeographicValidator()
@@ -220,7 +265,7 @@ class LibrarySettingsController(SettingsController):
         return value
 
     def library_configuration_settings(
-            self, library, validators_by_format, settings=None
+        self, library, validators_by_format, settings=None
     ):
         """Validate and update a library's configuration settings based on incoming new
         values.
@@ -235,9 +280,9 @@ class LibrarySettingsController(SettingsController):
         for setting in settings:
             # Validate the incoming value.
             validator = None
-            if 'format' in setting:
+            if "format" in setting:
                 validator = validators_by_format.get(setting["format"])
-            elif 'type' in setting:
+            elif "type" in setting:
                 validator = validators_by_format.get(setting["type"])
             validated_value = self._validate_setting(library, setting, validator)
 
@@ -246,9 +291,9 @@ class LibrarySettingsController(SettingsController):
                 return validated_value
 
             # Validation succeeded -- set the new value.
-            ConfigurationSetting.for_library(setting['key'], library).value = self._format_validated_value(
-                validated_value, validator
-            )
+            ConfigurationSetting.for_library(
+                setting["key"], library
+            ).value = self._format_validated_value(validated_value, validator)
 
     def _validate_setting(self, library, setting, validator=None):
         """Validate the incoming value for a single library setting.
@@ -266,8 +311,8 @@ class LibrarySettingsController(SettingsController):
         # * A list value is returned as a JSON-encoded string. It
         #   would be better to keep that as a list for longer in case
         #   controller code needs to look at it.
-        format = setting.get('format')
-        type = setting.get('type')
+        format = setting.get("format")
+        type = setting.get("type")
 
         # In some cases, if there is no incoming value we can use a
         # default value or the current value.
@@ -275,7 +320,7 @@ class LibrarySettingsController(SettingsController):
         # When the configuration item is a list, we can't do this
         # because an empty list may be a valid value.
         current_value = self.current_value(setting, library)
-        default_value = setting.get('default') or current_value
+        default_value = setting.get("default") or current_value
 
         if format == "geographic":
             value = self.list_setting(setting)
@@ -286,7 +331,12 @@ class LibrarySettingsController(SettingsController):
         elif type == "list":
             value = self.list_setting(setting)
             if format == "language-code":
-                value = json.dumps([LanguageCodes.string_to_alpha_3(language) for language in json.loads(value)])
+                value = json.dumps(
+                    [
+                        LanguageCodes.string_to_alpha_3(language)
+                        for language in json.loads(value)
+                    ]
+                )
         else:
             if type == "image":
                 value = self.image_setting(setting) or default_value
@@ -296,7 +346,7 @@ class LibrarySettingsController(SettingsController):
 
     def scalar_setting(self, setting):
         """Retrieve the single value of the given setting from the current HTTP request."""
-        return flask.request.form.get(setting['key'])
+        return flask.request.form.get(setting["key"])
 
     def list_setting(self, setting, json_objects=False):
         """Retrieve the list of values for the given setting from the current HTTP request.
@@ -307,7 +357,7 @@ class LibrarySettingsController(SettingsController):
         :return: A JSON-encoded string encoding the list of values set for the given setting in the
            current request.
         """
-        if setting.get('options'):
+        if setting.get("options"):
             # Restrict to the values in 'options'.
             value = []
             for option in setting.get("options"):
@@ -342,9 +392,11 @@ class LibrarySettingsController(SettingsController):
         buffer = BytesIO()
         image.save(buffer, format=_format)
         b64 = base64.b64encode(buffer.getvalue())
-        return "data:image/png;base64,%s" % b64.decode('utf-8')
+        return "data:image/png;base64,%s" % b64.decode("utf-8")
 
-    def image_setting(self, setting: Dict[str, Any], max_dimension=Configuration.LOGO_MAX_DIMENSION) -> Optional[str]:
+    def image_setting(
+        self, setting: Dict[str, Any], max_dimension=Configuration.LOGO_MAX_DIMENSION
+    ) -> Optional[str]:
         """Retrieve an uploaded image file for the setting and return its data URL.
 
         If the image is too large, scale it down to the `max_dimension`
@@ -365,12 +417,11 @@ class LibrarySettingsController(SettingsController):
 
     def current_value(self, setting, library):
         """Retrieve the current value of the given setting from the database."""
-        return ConfigurationSetting.for_library(setting['key'], library).value
+        return ConfigurationSetting.for_library(setting["key"], library).value
 
     @classmethod
     def _format_validated_value(cls, value, validator=None):
-        """Convert a validated value to a string that can be stored in ConfigurationSetting.value
-        """
+        """Convert a validated value to a string that can be stored in ConfigurationSetting.value"""
         if not validator:
             # Assume the value is already a string.
             return value

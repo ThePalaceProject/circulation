@@ -9,7 +9,11 @@ from flask_babel import lazy_gettext as _
 
 from api.lcp import utils
 from core.exceptions import BaseError
-from core.model.configuration import ConfigurationGrouping, ConfigurationMetadata, ConfigurationAttributeType
+from core.model.configuration import (
+    ConfigurationAttributeType,
+    ConfigurationGrouping,
+    ConfigurationMetadata,
+)
 
 
 class LCPEncryptionException(BaseError):
@@ -19,54 +23,54 @@ class LCPEncryptionException(BaseError):
 class LCPEncryptionConfiguration(ConfigurationGrouping):
     """Contains different settings required by LCPEncryptor"""
 
-    DEFAULT_LCPENCRYPT_LOCATION = '/go/bin/lcpencrypt'
-    DEFAULT_LCPENCRYPT_DOCKER_IMAGE = 'readium/lcpencrypt'
+    DEFAULT_LCPENCRYPT_LOCATION = "/go/bin/lcpencrypt"
+    DEFAULT_LCPENCRYPT_DOCKER_IMAGE = "readium/lcpencrypt"
 
     lcpencrypt_location = ConfigurationMetadata(
-        key='lcpencrypt_location',
-        label=_('lcpencrypt\'s location'),
+        key="lcpencrypt_location",
+        label=_("lcpencrypt's location"),
         description=_(
-            'Full path to the local lcpencrypt binary. '
-            'The default value is {0}'.format(
-                DEFAULT_LCPENCRYPT_LOCATION
-            )
+            "Full path to the local lcpencrypt binary. "
+            "The default value is {0}".format(DEFAULT_LCPENCRYPT_LOCATION)
         ),
         type=ConfigurationAttributeType.TEXT,
         required=False,
-        default=DEFAULT_LCPENCRYPT_LOCATION
+        default=DEFAULT_LCPENCRYPT_LOCATION,
     )
 
     lcpencrypt_output_directory = ConfigurationMetadata(
-        key='lcpencrypt_output_directory',
-        label=_('lcpencrypt\'s output directory'),
+        key="lcpencrypt_output_directory",
+        label=_("lcpencrypt's output directory"),
         description=_(
-            'Full path to the directory where lcpencrypt stores encrypted content. '
-            'If not set encrypted books will be stored in lcpencrypt\'s working directory'),
+            "Full path to the directory where lcpencrypt stores encrypted content. "
+            "If not set encrypted books will be stored in lcpencrypt's working directory"
+        ),
         type=ConfigurationAttributeType.TEXT,
-        required=False
+        required=False,
     )
 
 
 class LCPEncryptionResult(object):
     """Represents an output sent by lcpencrypt"""
 
-    CONTENT_ID = 'content-id'
-    CONTENT_ENCRYPTION_KEY = 'content-encryption-key'
-    PROTECTED_CONTENT_LOCATION = 'protected-content-location'
-    PROTECTED_CONTENT_LENGTH = 'protected-content-length'
-    PROTECTED_CONTENT_SHA256 = 'protected-content-sha256'
-    PROTECTED_CONTENT_DISPOSITION = 'protected-content-disposition'
-    PROTECTED_CONTENT_TYPE = 'protected-content-type'
+    CONTENT_ID = "content-id"
+    CONTENT_ENCRYPTION_KEY = "content-encryption-key"
+    PROTECTED_CONTENT_LOCATION = "protected-content-location"
+    PROTECTED_CONTENT_LENGTH = "protected-content-length"
+    PROTECTED_CONTENT_SHA256 = "protected-content-sha256"
+    PROTECTED_CONTENT_DISPOSITION = "protected-content-disposition"
+    PROTECTED_CONTENT_TYPE = "protected-content-type"
 
     def __init__(
-            self,
-            content_id,
-            content_encryption_key,
-            protected_content_location,
-            protected_content_disposition,
-            protected_content_type,
-            protected_content_length,
-            protected_content_sha256):
+        self,
+        content_id,
+        content_encryption_key,
+        protected_content_location,
+        protected_content_disposition,
+        protected_content_type,
+        protected_content_length,
+        protected_content_sha256,
+    ):
         """Initializes a new instance of LCPEncryptorResult class
 
         :param: content_id: Content identifier
@@ -176,7 +180,9 @@ class LCPEncryptionResult(object):
         protected_content_location = result_dict.get(cls.PROTECTED_CONTENT_LOCATION)
         protected_content_length = result_dict.get(cls.PROTECTED_CONTENT_LENGTH)
         protected_content_sha256 = result_dict.get(cls.PROTECTED_CONTENT_SHA256)
-        protected_content_disposition = result_dict.get(cls.PROTECTED_CONTENT_DISPOSITION)
+        protected_content_disposition = result_dict.get(
+            cls.PROTECTED_CONTENT_DISPOSITION
+        )
         protected_content_type = result_dict.get(cls.PROTECTED_CONTENT_TYPE)
 
         return cls(
@@ -186,7 +192,7 @@ class LCPEncryptionResult(object):
             protected_content_disposition=protected_content_disposition,
             protected_content_type=protected_content_type,
             protected_content_length=protected_content_length,
-            protected_content_sha256=protected_content_sha256
+            protected_content_sha256=protected_content_sha256,
         )
 
     def __eq__(self, other):
@@ -201,14 +207,16 @@ class LCPEncryptionResult(object):
         if not isinstance(other, LCPEncryptionResult):
             return False
 
-        return \
-            self.content_id == other.content_id and \
-            self.content_encryption_key == other.content_encryption_key and \
-            self.protected_content_location == other.protected_content_location and \
-            self.protected_content_length == other.protected_content_length and \
-            self.protected_content_sha256 == other.protected_content_sha256 and \
-            self.protected_content_disposition == other.protected_content_disposition and \
-            self.protected_content_type == other.protected_content_type
+        return (
+            self.content_id == other.content_id
+            and self.content_encryption_key == other.content_encryption_key
+            and self.protected_content_location == other.protected_content_location
+            and self.protected_content_length == other.protected_content_length
+            and self.protected_content_sha256 == other.protected_content_sha256
+            and self.protected_content_disposition
+            == other.protected_content_disposition
+            and self.protected_content_type == other.protected_content_type
+        )
 
     def __repr__(self):
         """Returns a string representation of a LCPEncryptorResult object
@@ -216,23 +224,24 @@ class LCPEncryptionResult(object):
         :return: string representation of a LCPEncryptorResult object
         :rtype: string
         """
-        return \
-            '<LCPEncryptor.Result(' \
-            'content_id={0}, ' \
-            'content_encryption_key={1}, ' \
-            'protected_content_location={2}, ' \
-            'protected_content_length={3}, ' \
-            'protected_content_sha256={4}, ' \
-            'protected_content_disposition={5}, ' \
-            'protected_content_type={6})>'.format(
+        return (
+            "<LCPEncryptor.Result("
+            "content_id={0}, "
+            "content_encryption_key={1}, "
+            "protected_content_location={2}, "
+            "protected_content_length={3}, "
+            "protected_content_sha256={4}, "
+            "protected_content_disposition={5}, "
+            "protected_content_type={6})>".format(
                 self.content_id,
                 self.content_encryption_key,
                 self.protected_content_location,
                 self.protected_content_length,
                 self.protected_content_sha256,
                 self.protected_content_disposition,
-                self.protected_content_type
+                self.protected_content_type,
             )
+        )
 
 
 class LCPEncryptorResultJSONEncoder(JSONEncoder):
@@ -248,16 +257,16 @@ class LCPEncryptorResultJSONEncoder(JSONEncoder):
         :rtype: string
         """
         if not isinstance(result, LCPEncryptionResult):
-            raise ValueError('result must have type LCPEncryptorResult')
+            raise ValueError("result must have type LCPEncryptorResult")
 
         result = {
-            'content-id': result.content_id,
-            'content-encryption-key': result.content_encryption_key,
-            'protected-content-location': result.protected_content_location,
-            'protected-content-length': result.protected_content_length,
-            'protected-content-sha256': result.protected_content_sha256,
-            'protected-content-disposition': result.protected_content_disposition,
-            'protected-content-type': result.protected_content_type
+            "content-id": result.content_id,
+            "content-encryption-key": result.content_encryption_key,
+            "protected-content-location": result.protected_content_location,
+            "protected-content-length": result.protected_content_length,
+            "protected-content-sha256": result.protected_content_sha256,
+            "protected-content-disposition": result.protected_content_disposition,
+            "protected-content-type": result.protected_content_type,
         }
 
         return result
@@ -296,7 +305,7 @@ class LCPEncryptor(object):
                     output_directory,
                     identifier + target_extension
                     if target_extension not in identifier
-                    else identifier
+                    else identifier,
                 )
 
                 self._output_file_path = output_file_path
@@ -345,21 +354,18 @@ class LCPEncryptor(object):
             """
             parameters = [
                 self._lcpencrypt_location,
-                '-input',
+                "-input",
                 self._input_file_path,
-                '-contentid',
-                self._content_id
+                "-contentid",
+                self._content_id,
             ]
 
             if self._output_file_path:
-                parameters.extend([
-                    '-output',
-                    self._output_file_path
-                ])
+                parameters.extend(["-output", self._output_file_path])
 
             return parameters
 
-    OUTPUT_REGEX = re.compile(r'(\{.+\})?(.+)', re.DOTALL)
+    OUTPUT_REGEX = re.compile(r"(\{.+\})?(.+)", re.DOTALL)
 
     def __init__(self, configuration_storage, configuration_factory):
         """Initializes a new instance of LCPEncryptor class
@@ -394,7 +400,7 @@ class LCPEncryptor(object):
         :return: Encryption result
         :rtype: LCPEncryptionResult
         """
-        bracket_index = output.find('{')
+        bracket_index = output.find("{")
 
         if bracket_index > 0:
             output = output[bracket_index:]
@@ -402,12 +408,12 @@ class LCPEncryptor(object):
         match = self.OUTPUT_REGEX.match(output)
 
         if not match:
-            raise LCPEncryptionException('Output has a wrong format')
+            raise LCPEncryptionException("Output has a wrong format")
 
         match_groups = match.groups()
 
         if not match_groups:
-            raise LCPEncryptionException('Output has a wrong format')
+            raise LCPEncryptionException("Output has a wrong format")
 
         if not match_groups[0]:
             raise LCPEncryptionException(match_groups[1].strip())
@@ -416,10 +422,12 @@ class LCPEncryptor(object):
         json_result = json.loads(json_output)
         result = LCPEncryptionResult.from_dict(json_result)
 
-        if not result.protected_content_length or \
-                not result.protected_content_sha256 or \
-                not result.content_encryption_key:
-            raise LCPEncryptionException('Encryption failed')
+        if (
+            not result.protected_content_length
+            or not result.protected_content_sha256
+            or not result.content_encryption_key
+        ):
+            raise LCPEncryptionException("Encryption failed")
 
         return result
 
@@ -439,7 +447,7 @@ class LCPEncryptor(object):
         :rtype: LCPEncryptionResult
         """
         self._logger.info(
-            'Started running a local lcpencrypt binary. File path: {0}. Identifier: {1}'.format(
+            "Started running a local lcpencrypt binary. File path: {0}. Identifier: {1}".format(
                 file_path, identifier
             )
         )
@@ -448,26 +456,40 @@ class LCPEncryptor(object):
 
         try:
             if parameters.output_file_path:
-                self._logger.info('Creating a directory tree for {0}'.format(parameters.output_file_path))
+                self._logger.info(
+                    "Creating a directory tree for {0}".format(
+                        parameters.output_file_path
+                    )
+                )
 
                 output_directory = os.path.dirname(parameters.output_file_path)
 
                 if not os.path.exists(output_directory):
                     os.makedirs(output_directory)
 
-                self._logger.info('Directory tree {0} has been successfully created'.format(output_directory))
+                self._logger.info(
+                    "Directory tree {0} has been successfully created".format(
+                        output_directory
+                    )
+                )
 
-            self._logger.info('Running lcpencrypt using the following parameters: {0}'.format(parameters.to_array()))
+            self._logger.info(
+                "Running lcpencrypt using the following parameters: {0}".format(
+                    parameters.to_array()
+                )
+            )
 
             output = subprocess.check_output(parameters.to_array())
             result = self._parse_output(output)
         except Exception as exception:
-            self._logger.exception('An unhandled exception occurred during running a local lcpencrypt binary')
+            self._logger.exception(
+                "An unhandled exception occurred during running a local lcpencrypt binary"
+            )
 
             raise LCPEncryptionException(str(exception), inner_exception=exception)
 
         self._logger.info(
-            'Finished running a local lcpencrypt binary. File path: {0}. Identifier: {1}. Result: {2}'.format(
+            "Finished running a local lcpencrypt binary. File path: {0}. Identifier: {1}. Result: {2}".format(
                 file_path, identifier, result
             )
         )
@@ -490,9 +512,12 @@ class LCPEncryptor(object):
         :rtype: LCPEncryptionResult
         """
         with self._configuration_factory.create(
-                self._configuration_storage, db, LCPEncryptionConfiguration) as configuration:
+            self._configuration_storage, db, LCPEncryptionConfiguration
+        ) as configuration:
             if self._lcpencrypt_exists_locally(configuration):
-                result = self._run_lcpencrypt_locally(file_path, identifier, configuration)
+                result = self._run_lcpencrypt_locally(
+                    file_path, identifier, configuration
+                )
 
                 return result
             else:

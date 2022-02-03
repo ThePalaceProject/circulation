@@ -1,36 +1,16 @@
-import contextlib
 import datetime
 import json
 import logging
 from collections import defaultdict
 
+from api.adobe_vendor_id import AuthdataUtility
+from api.circulation import BaseCirculationAPI, CirculationAPI, HoldInfo, LoanInfo
+from api.config import Configuration
+from api.registration.constants import RegistrationConstants
+from api.shared_collection import SharedCollectionAPI
+from core.model import ConfigurationSetting, DataSource, ExternalIntegration, Hold, Loan
 from core.testing import DatabaseTest
 
-from core.model import (
-    ConfigurationSetting,
-    DataSource,
-    ExternalIntegration,
-    Identifier,
-    Library,
-    Loan,
-    Hold,
-    Session,
-)
-from api.circulation import (
-    BaseCirculationAPI,
-    CirculationAPI,
-    LoanInfo,
-    HoldInfo,
-)
-from api.shared_collection import (
-    SharedCollectionAPI,
-)
-from api.config import (
-    Configuration,
-    temp_config,
-)
-
-from api.adobe_vendor_id import AuthdataUtility
 
 class VendorIDTest(DatabaseTest):
     """A DatabaseTest that knows how to set up an Adobe Vendor ID
@@ -56,21 +36,21 @@ class VendorIDTest(DatabaseTest):
         # The first library acts as an Adobe Vendor ID server.
         self.adobe_vendor_id = self._external_integration(
             ExternalIntegration.ADOBE_VENDOR_ID,
-            ExternalIntegration.DRM_GOAL, username=self.TEST_VENDOR_ID,
-            libraries=[vendor_id_library]
+            ExternalIntegration.DRM_GOAL,
+            username=self.TEST_VENDOR_ID,
+            libraries=[vendor_id_library],
         )
 
         # The other libraries will share a registry integration.
         self.registry = self._external_integration(
             ExternalIntegration.OPDS_REGISTRATION,
             ExternalIntegration.DISCOVERY_GOAL,
-            libraries=short_token_libraries
+            libraries=short_token_libraries,
         )
         # The integration knows which Adobe Vendor ID server it
         # gets its Adobe IDs from.
         self.registry.set_setting(
-            AuthdataUtility.VENDOR_ID_KEY,
-            self.adobe_vendor_id.username
+            AuthdataUtility.VENDOR_ID_KEY, self.adobe_vendor_id.username
         )
 
         # As we give libraries their Short Client Token settings,
@@ -92,6 +72,12 @@ class VendorIDTest(DatabaseTest):
             ConfigurationSetting.for_library_and_externalintegration(
                 self._db, ExternalIntegration.PASSWORD, library, self.registry
             ).value = secret
+            ConfigurationSetting.for_library_and_externalintegration(
+                self._db,
+                RegistrationConstants.LIBRARY_REGISTRATION_STATUS,
+                library,
+                self.registry,
+            ).value = RegistrationConstants.SUCCESS_STATUS
 
             library.setting(Configuration.WEBSITE_URL).value = library_uri
 
@@ -108,7 +94,6 @@ class VendorIDTest(DatabaseTest):
 
 
 class MonitorTest(DatabaseTest):
-
     @property
     def ts(self):
         """Make the timestamp used by run() when calling run_once().
@@ -122,7 +107,7 @@ class AnnouncementTest(object):
     """A test that needs to create announcements."""
 
     # Create raw data to be used in tests.
-    format = '%Y-%m-%d'
+    format = "%Y-%m-%d"
     today = datetime.date.today()
     yesterday = (today - datetime.timedelta(days=1)).strftime(format)
     tomorrow = (today + datetime.timedelta(days=1)).strftime(format)
@@ -132,23 +117,20 @@ class AnnouncementTest(object):
 
     # This announcement is active.
     active = dict(
-        id="active",
-        start=today,
-        finish=tomorrow,
-        content="A sample announcement."
+        id="active", start=today, finish=tomorrow, content="A sample announcement."
     )
 
     # This announcement expired yesterday.
     expired = dict(active)
-    expired['id'] = 'expired'
-    expired['start'] = a_week_ago
-    expired['finish'] = yesterday
+    expired["id"] = "expired"
+    expired["start"] = a_week_ago
+    expired["finish"] = yesterday
 
     # This announcement should be displayed starting tomorrow.
     forthcoming = dict(active)
-    forthcoming['id'] = 'forthcoming'
-    forthcoming['start'] = tomorrow
-    forthcoming['finish'] = in_a_week
+    forthcoming["id"] = "forthcoming"
+    forthcoming["start"] = tomorrow
+    forthcoming["finish"] = in_a_week
 
 
 class MockRemoteAPI(BaseCirculationAPI):
@@ -159,34 +141,37 @@ class MockRemoteAPI(BaseCirculationAPI):
         self.log = logging.getLogger("Mock remote API")
         self.availability_updated_for = []
 
-    def checkout(
-            self, patron_obj, patron_password, licensepool,
-            delivery_mechanism
-    ):
+    def checkout(self, patron_obj, patron_password, licensepool, delivery_mechanism):
         # Should be a LoanInfo.
-        return self._return_or_raise('checkout')
+        return self._return_or_raise("checkout")
 
     def update_availability(self, licensepool):
         """Simply record the fact that update_availability was called."""
         self.availability_updated_for.append(licensepool)
 
-    def place_hold(self, patron, pin, licensepool,
-                   hold_notification_email=None):
+    def place_hold(self, patron, pin, licensepool, hold_notification_email=None):
         # Should be a HoldInfo.
-        return self._return_or_raise('hold')
+        return self._return_or_raise("hold")
 
-    def fulfill(self, patron, pin, licensepool, internal_format=None,
-                part=None, fulfill_part_url=None):
+    def fulfill(
+        self,
+        patron,
+        pin,
+        licensepool,
+        internal_format=None,
+        part=None,
+        fulfill_part_url=None,
+    ):
         # Should be a FulfillmentInfo.
-        return self._return_or_raise('fulfill')
+        return self._return_or_raise("fulfill")
 
     def checkin(self, patron, pin, licensepool):
         # Return value is not checked.
-        return self._return_or_raise('checkin')
+        return self._return_or_raise("checkin")
 
     def release_hold(self, patron, pin, licensepool):
         # Return value is not checked.
-        return self._return_or_raise('release_hold')
+        return self._return_or_raise("release_hold")
 
     def internal_format(self, delivery_mechanism):
         return delivery_mechanism
@@ -195,19 +180,19 @@ class MockRemoteAPI(BaseCirculationAPI):
         self.availability_updated_for.append(loan.license_pool)
 
     def queue_checkout(self, response):
-        self._queue('checkout', response)
+        self._queue("checkout", response)
 
     def queue_hold(self, response):
-        self._queue('hold', response)
+        self._queue("hold", response)
 
     def queue_fulfill(self, response):
-        self._queue('fulfill', response)
+        self._queue("fulfill", response)
 
     def queue_checkin(self, response):
-        self._queue('checkin', response)
+        self._queue("checkin", response)
 
     def queue_release_hold(self, response):
-        self._queue('release_hold', response)
+        self._queue("release_hold", response)
 
     def _queue(self, k, v):
         self.responses[k].append(v)
@@ -220,8 +205,8 @@ class MockRemoteAPI(BaseCirculationAPI):
             raise v
         return v
 
-class MockCirculationAPI(CirculationAPI):
 
+class MockCirculationAPI(CirculationAPI):
     def __init__(self, *args, **kwargs):
         super(MockCirculationAPI, self).__init__(*args, **kwargs)
         self.responses = defaultdict(list)
@@ -230,10 +215,10 @@ class MockCirculationAPI(CirculationAPI):
         self.remotes = {}
 
     def local_loans(self, patron):
-        return self._db.query(Loan).filter(Loan.patron==patron)
+        return self._db.query(Loan).filter(Loan.patron == patron)
 
     def local_holds(self, patron):
-        return self._db.query(Hold).filter(Hold.patron==patron)
+        return self._db.query(Hold).filter(Hold.patron == patron)
 
     def add_remote_loan(self, *args, **kwargs):
         self.remote_loans.append(LoanInfo(*args, **kwargs))
@@ -246,19 +231,19 @@ class MockCirculationAPI(CirculationAPI):
         return self.remote_loans, self.remote_holds, True
 
     def queue_checkout(self, licensepool, response):
-        self._queue('checkout', licensepool, response)
+        self._queue("checkout", licensepool, response)
 
     def queue_hold(self, licensepool, response):
-        self._queue('hold', licensepool, response)
+        self._queue("hold", licensepool, response)
 
     def queue_fulfill(self, licensepool, response):
-        self._queue('fulfill', licensepool, response)
+        self._queue("fulfill", licensepool, response)
 
     def queue_checkin(self, licensepool, response):
-        self._queue('checkin', licensepool, response)
+        self._queue("checkin", licensepool, response)
 
     def queue_release_hold(self, licensepool, response):
-        self._queue('release_hold', licensepool, response)
+        self._queue("release_hold", licensepool, response)
 
     def _queue(self, method, licensepool, response):
         mock = self.api_for_license_pool(licensepool)
@@ -279,6 +264,7 @@ class MockCirculationAPI(CirculationAPI):
             self.remotes[source] = remote
         return self.remotes[source]
 
+
 class MockSharedCollectionAPI(SharedCollectionAPI):
     def __init__(self, *args, **kwargs):
         super(MockSharedCollectionAPI, self).__init__(*args, **kwargs)
@@ -296,32 +282,39 @@ class MockSharedCollectionAPI(SharedCollectionAPI):
         return v
 
     def queue_register(self, response):
-        self._queue('register', response)
+        self._queue("register", response)
 
     def register(self, collection, url):
-        return self._return_or_raise('register')
+        return self._return_or_raise("register")
 
     def queue_borrow(self, response):
-        self._queue('borrow', response)
+        self._queue("borrow", response)
 
     def borrow(self, collection, client, pool, hold=None):
-        return self._return_or_raise('borrow')
+        return self._return_or_raise("borrow")
 
     def queue_revoke_loan(self, response):
-        self._queue('revoke-loan', response)
+        self._queue("revoke-loan", response)
 
     def revoke_loan(self, collection, client, loan):
-        return self._return_or_raise('revoke-loan')
+        return self._return_or_raise("revoke-loan")
 
     def queue_fulfill(self, response):
-        self._queue('fulfill', response)
+        self._queue("fulfill", response)
 
-    def fulfill(self, patron, pin, licensepool, internal_format=None,
-                part=None, fulfill_part_url=None):
-        return self._return_or_raise('fulfill')
+    def fulfill(
+        self,
+        patron,
+        pin,
+        licensepool,
+        internal_format=None,
+        part=None,
+        fulfill_part_url=None,
+    ):
+        return self._return_or_raise("fulfill")
 
     def queue_revoke_hold(self, response):
-        self._queue('revoke-hold', response)
+        self._queue("revoke-hold", response)
 
     def revoke_hold(self, collection, client, hold):
-        return self._return_or_raise('revoke-hold')
+        return self._return_or_raise("revoke-hold")

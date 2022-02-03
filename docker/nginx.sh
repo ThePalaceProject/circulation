@@ -3,7 +3,7 @@ set -e
 source /bd_build/buildconfig
 set -x
 
-$minimal_apt_get_install nginx
+install_clean nginx
 
 # Configure nginx.
 rm /etc/nginx/sites-enabled/default

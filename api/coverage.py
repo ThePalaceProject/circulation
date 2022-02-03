@@ -4,44 +4,18 @@ The CoverageProviders themselves are in the file corresponding to the
 service that needs coverage -- overdrive.py, metadata_wrangler.py, and
 so on.
 """
-import logging
-from lxml import etree
-from io import StringIO
-from core.coverage import (
-    CoverageFailure,
-    CollectionCoverageProvider,
-    WorkCoverageProvider,
-)
-from core.model import (
-    Collection,
-    ConfigurationSetting,
-    CoverageRecord,
-    DataSource,
-    Edition,
-    ExternalIntegration,
-    Identifier,
-    LicensePool,
-    WorkCoverageRecord,
-)
-from core.util.opds_writer import (
-    OPDSFeed
-)
-from core.opds_import import (
-    AccessNotAuthenticated,
-    MetadataWranglerOPDSLookup,
-    OPDSImporter,
-    OPDSXMLParser,
-    SimplifiedOPDSLookup,
-)
-from core.util.http import (
-    RemoteIntegrationException,
-)
+
+
+from core.coverage import CollectionCoverageProvider, CoverageFailure
+from core.model import DataSource
+from core.opds_import import OPDSImporter
 
 
 class RegistrarImporter(OPDSImporter):
     """We are successful whenever the metadata wrangler puts an identifier
     into the catalog, even if no metadata is immediately available.
     """
+
     SUCCESS_STATUS_CODES = [200, 201, 202]
 
 
@@ -50,6 +24,7 @@ class ReaperImporter(OPDSImporter):
     identifier has been removed, and also if the identifier wasn't in
     the catalog in the first place.
     """
+
     SUCCESS_STATUS_CODES = [200, 404]
 
 
@@ -57,6 +32,7 @@ class OPDSImportCoverageProvider(CollectionCoverageProvider):
     """Provide coverage for identifiers by looking them up, in batches,
     using the Simplified lookup protocol.
     """
+
     DEFAULT_BATCH_SIZE = 25
     OPDS_IMPORTER_CLASS = OPDSImporter
 
@@ -70,8 +46,12 @@ class OPDSImportCoverageProvider(CollectionCoverageProvider):
 
     def process_batch(self, batch):
         """Perform a Simplified lookup and import the resulting OPDS feed."""
-        (imported_editions, pools, works,
-         error_messages_by_id) = self.lookup_and_import_batch(batch)
+        (
+            imported_editions,
+            pools,
+            works,
+            error_messages_by_id,
+        ) = self.lookup_and_import_batch(batch)
 
         results = []
         imported_identifiers = set()
@@ -89,9 +69,7 @@ class OPDSImportCoverageProvider(CollectionCoverageProvider):
                 self.finalize_license_pool(pool)
             else:
                 msg = "OPDS import operation imported LicensePool, but no Edition."
-                results.append(
-                    self.failure(identifier, msg, transient=True)
-                )
+                results.append(self.failure(identifier, msg, transient=True))
 
         # Anything left over is either a CoverageFailure, or an
         # Identifier that used to be a CoverageFailure, indicating
@@ -117,12 +95,10 @@ class OPDSImportCoverageProvider(CollectionCoverageProvider):
 
         By default, nothing happens.
         """
-        pass
 
     @property
     def api_method(self):
-        """The method to call to fetch an OPDS feed from the remote server.
-        """
+        """The method to call to fetch an OPDS feed from the remote server."""
         return self.lookup_client.lookup
 
     def lookup_and_import_batch(self, batch):
@@ -158,9 +134,10 @@ class OPDSImportCoverageProvider(CollectionCoverageProvider):
         """
         self.lookup_client.check_content_type(response)
         importer = self.OPDS_IMPORTER_CLASS(
-            self._db, self.collection,
+            self._db,
+            self.collection,
             identifier_mapping=id_mapping,
-            data_source_name=self.data_source.name
+            data_source_name=self.data_source.name,
         )
         return importer.import_from_feed(response.text)
 
@@ -183,9 +160,7 @@ class MockOPDSImportCoverageProvider(OPDSImportCoverageProvider):
 
     def finalize_license_pool(self, license_pool):
         self.finalized.append(license_pool)
-        super(MockOPDSImportCoverageProvider, self).finalize_license_pool(
-            license_pool
-        )
+        super(MockOPDSImportCoverageProvider, self).finalize_license_pool(license_pool)
 
     def lookup_and_import_batch(self, batch):
         self.batches.append(batch)

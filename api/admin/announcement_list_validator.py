@@ -6,17 +6,21 @@ import dateutil
 from flask_babel import lazy_gettext as _
 
 from api.admin.validator import Validator
-
-from core.util.problem_detail import ProblemDetail
 from core.problem_details import *
+from core.util.problem_detail import ProblemDetail
 
 
 class AnnouncementListValidator(Validator):
 
-    DATE_FORMAT = '%Y-%m-%d'
+    DATE_FORMAT = "%Y-%m-%d"
 
-    def __init__(self, maximum_announcements=3, minimum_announcement_length=15,
-                 maximum_announcement_length=350, default_duration_days=60):
+    def __init__(
+        self,
+        maximum_announcements=3,
+        minimum_announcement_length=15,
+        maximum_announcement_length=350,
+        default_duration_days=60,
+    ):
         super(AnnouncementListValidator, self).__init__()
         self.maximum_announcements = maximum_announcements
         self.minimum_announcement_length = minimum_announcement_length
@@ -26,8 +30,10 @@ class AnnouncementListValidator(Validator):
     def validate_announcements(self, announcements):
         validated_announcements = []
         bad_format = INVALID_INPUT.detailed(
-            _("Invalid announcement list format: %(announcements)r",
-              announcements=announcements)
+            _(
+                "Invalid announcement list format: %(announcements)r",
+                announcements=announcements,
+            )
         )
         if isinstance(announcements, (bytes, str)):
             try:
@@ -38,8 +44,10 @@ class AnnouncementListValidator(Validator):
             return bad_format
         if len(announcements) > self.maximum_announcements:
             return INVALID_INPUT.detailed(
-                _("Too many announcements: maximum is %(maximum)d",
-                  maximum=self.maximum_announcements)
+                _(
+                    "Too many announcements: maximum is %(maximum)d",
+                    maximum=self.maximum_announcements,
+                )
             )
 
         seen_ids = set()
@@ -47,7 +55,7 @@ class AnnouncementListValidator(Validator):
             validated = self.validate_announcement(announcement)
             if isinstance(validated, ProblemDetail):
                 return validated
-            id = validated['id']
+            id = validated["id"]
             if id in seen_ids:
                 return INVALID_INPUT.detailed(_("Duplicate announcement ID: %s" % id))
             seen_ids.add(id)
@@ -58,46 +66,47 @@ class AnnouncementListValidator(Validator):
         validated = dict()
         if not isinstance(announcement, dict):
             return INVALID_INPUT.detailed(
-                _("Invalid announcement format: %(announcement)r", announcement=announcement)
+                _(
+                    "Invalid announcement format: %(announcement)r",
+                    announcement=announcement,
+                )
             )
 
-        validated['id'] = announcement.get('id', str(uuid.uuid4()))
+        validated["id"] = announcement.get("id", str(uuid.uuid4()))
 
-        for required_field in ('content',):
+        for required_field in ("content",):
             if not required_field in announcement:
                 return INVALID_INPUT.detailed(
                     _("Missing required field: %(field)s", field=required_field)
                 )
 
         # Validate the content of the announcement.
-        content = announcement['content']
+        content = announcement["content"]
         content = self.validate_length(
             content, self.minimum_announcement_length, self.maximum_announcement_length
         )
         if isinstance(content, ProblemDetail):
             return content
-        validated['content'] = content
+        validated["content"] = content
 
         # Validate the dates associated with the announcement
         today_local = datetime.date.today()
 
-        start = self.validate_date(
-            'start', announcement.get('start', today_local)
-        )
+        start = self.validate_date("start", announcement.get("start", today_local))
         if isinstance(start, ProblemDetail):
             return start
-        validated['start'] = start
+        validated["start"] = start
 
         default_finish = start + datetime.timedelta(days=self.default_duration_days)
         day_after_start = start + datetime.timedelta(days=1)
         finish = self.validate_date(
-            'finish',
-            announcement.get('finish', default_finish),
+            "finish",
+            announcement.get("finish", default_finish),
             minimum=day_after_start,
         )
         if isinstance(finish, ProblemDetail):
             return finish
-        validated['finish'] = finish
+        validated["finish"] = finish
 
         # That's it!
         return validated
@@ -114,14 +123,22 @@ class AnnouncementListValidator(Validator):
         """
         if len(value) < minimum:
             return INVALID_INPUT.detailed(
-                _('Value too short (%(length)d versus %(limit)d characters): %(value)s',
-                  length=len(value), limit=minimum, value=value)
+                _(
+                    "Value too short (%(length)d versus %(limit)d characters): %(value)s",
+                    length=len(value),
+                    limit=minimum,
+                    value=value,
+                )
             )
 
         if len(value) > maximum:
             return INVALID_INPUT.detailed(
-                _('Value too long (%(length)d versus %(limit)d characters): %(value)s',
-                  length=len(value), limit=maximum, value=value)
+                _(
+                    "Value too long (%(length)d versus %(limit)d characters): %(value)s",
+                    length=len(value),
+                    limit=maximum,
+                    value=value,
+                )
             )
         return value
 
@@ -145,7 +162,11 @@ class AnnouncementListValidator(Validator):
                 value = value.replace(tzinfo=dateutil.tz.tzlocal())
             except ValueError as e:
                 return INVALID_INPUT.detailed(
-                    _("Value for %(field)s is not a date: %(date)s", field=field, date=value)
+                    _(
+                        "Value for %(field)s is not a date: %(date)s",
+                        field=field,
+                        date=value,
+                    )
                 )
         if isinstance(value, datetime.datetime):
             value = value.date()
@@ -153,8 +174,10 @@ class AnnouncementListValidator(Validator):
             minimum = minimum.date()
         if minimum and value < minimum:
             return INVALID_INPUT.detailed(
-                _("Value for %(field)s must be no earlier than %(minimum)s",
-                  field=field, minimum=minimum.strftime(cls.DATE_FORMAT)
+                _(
+                    "Value for %(field)s must be no earlier than %(minimum)s",
+                    field=field,
+                    minimum=minimum.strftime(cls.DATE_FORMAT),
                 )
             )
         return value
@@ -162,4 +185,5 @@ class AnnouncementListValidator(Validator):
     def format_as_string(self, value):
         """Format the output of validate_announcements for storage in ConfigurationSetting.value"""
         from ..announcements import Announcements
+
         return json.dumps([x.json_ready for x in Announcements(value).announcements])
