@@ -1,10 +1,12 @@
 import re
+from typing import Optional, Type, TypeVar
 
 from pyparsing import (
     Forward,
     Group,
     Literal,
     ParseException,
+    ParseResults,
     QuotedString,
     Regex,
     Suppress,
@@ -19,8 +21,10 @@ from ..util import chunks
 from .ast import (
     BinaryArithmeticExpression,
     BinaryBooleanExpression,
+    BinaryExpression,
     ComparisonExpression,
     DotExpression,
+    Expression,
     FunctionCallExpression,
     Identifier,
     Number,
@@ -29,6 +33,7 @@ from .ast import (
     String,
     UnaryArithmeticExpression,
     UnaryBooleanExpression,
+    UnaryExpression,
 )
 
 
@@ -45,50 +50,47 @@ class DSLParser(object):
     DEFAULT_ERROR_MESSAGE = "Could not parse the expression"
 
     @staticmethod
-    def _parse_identifier(tokens):
+    def _parse_identifier(tokens: ParseResults) -> Identifier:
         """Transform the token into an Identifier node.
 
         :param tokens: ParseResults objects
-        :type tokens: pyparsing.ParseResults
 
         :return: Identifier node
-        :rtype: core.python_expression_dsl.ast.Identifier
         """
         return Identifier(tokens[0])
 
     @staticmethod
-    def _parse_string(tokens):
+    def _parse_string(tokens: ParseResults) -> String:
         """Transform the token into a String node.
 
         :param tokens: ParseResults objects
-        :type tokens: pyparsing.ParseResults
 
         :return: Identifier node
-        :rtype: core.python_expression_dsl.ast.String
         """
         return String(tokens[0])
 
     @staticmethod
-    def _parse_number(tokens):
+    def _parse_number(tokens: ParseResults) -> Number:
         """Transform the token into a Number node.
 
         :param tokens: ParseResults objects
-        :type tokens: pyparsing.ParseResults
 
         :return: Number node
-        :rtype: core.python_expression_dsl.ast.Number
         """
         return Number(tokens[0])
 
+    UE = TypeVar("UE", bound=UnaryExpression)
+
     @staticmethod
-    def _parse_unary_expression(expression_type, tokens):
+    def _parse_unary_expression(
+        expression_type: Type[UE], tokens: ParseResults
+    ) -> Optional[UE]:
+
         """Transform the token into an unary expression.
 
         :param tokens: ParseResults objects
-        :type tokens: pyparsing.ParseResults
 
         :return: UnaryExpression node
-        :rtype: core.python_expression_dsl.ast.UnaryExpression
         """
         if len(tokens) >= 2:
             tokens = list(reversed(tokens))
@@ -101,40 +103,44 @@ class DSLParser(object):
                 expression = expression_type(operator_type, expression)
 
             return expression
+        else:
+            return None
 
     @staticmethod
-    def _parse_unary_arithmetic_expression(tokens):
+    def _parse_unary_arithmetic_expression(
+        tokens: ParseResults,
+    ) -> Optional[UnaryArithmeticExpression]:
         """Transform the token into an UnaryArithmeticExpression node.
 
         :param tokens: ParseResults objects
-        :type tokens: pyparsing.ParseResults
 
         :return: UnaryArithmeticExpression node
-        :rtype: core.python_expression_dsl.ast.UnaryArithmeticExpression
         """
         return DSLParser._parse_unary_expression(UnaryArithmeticExpression, tokens)
 
     @staticmethod
-    def _parse_unary_boolean_expression(tokens):
+    def _parse_unary_boolean_expression(
+        tokens: ParseResults,
+    ) -> Optional[UnaryBooleanExpression]:
         """Transform the token into an UnaryBooleanExpression node.
 
         :param tokens: ParseResults objects
-        :type tokens: pyparsing.ParseResults
 
         :return: UnaryBooleanExpression node
-        :rtype: core.python_expression_dsl.ast.UnaryBooleanExpression
         """
         return DSLParser._parse_unary_expression(UnaryBooleanExpression, tokens)
 
+    BE = TypeVar("BE", bound=BinaryExpression)
+
     @staticmethod
-    def _parse_binary_expression(expression_type, tokens):
+    def _parse_binary_expression(
+        expression_type: Type[BE], tokens: ParseResults
+    ) -> Optional[BE]:
         """Transform the token into a BinaryExpression node.
 
         :param tokens: ParseResults objects
-        :type tokens: pyparsing.ParseResults
 
         :return: BinaryExpression node
-        :rtype: core.python_expression_dsl.ast.BinaryExpression
         """
         if len(tokens) >= 3:
             left_argument = tokens[0]
@@ -148,76 +154,72 @@ class DSLParser(object):
                 expression = expression_type(operator_type, expression, right_argument)
 
             return expression
+        else:
+            return None
 
     @staticmethod
-    def _parse_binary_arithmetic_expression(tokens):
+    def _parse_binary_arithmetic_expression(
+        tokens: ParseResults,
+    ) -> Optional[BinaryArithmeticExpression]:
         """Transform the token into a BinaryArithmeticExpression node.
 
         :param tokens: ParseResults objects
-        :type tokens: pyparsing.ParseResults
 
         :return: BinaryArithmeticExpression node
-        :rtype: core.python_expression_dsl.ast.BinaryArithmeticExpression
         """
         return DSLParser._parse_binary_expression(BinaryArithmeticExpression, tokens)
 
     @staticmethod
-    def _parse_binary_boolean_expression(tokens):
+    def _parse_binary_boolean_expression(
+        tokens: ParseResults,
+    ) -> Optional[BinaryBooleanExpression]:
         """Transform the token into a BinaryBooleanExpression node.
 
         :param tokens: ParseResults objects
-        :type tokens: pyparsing.ParseResults
 
         :return: BinaryBooleanExpression node
-        :rtype: core.python_expression_dsl.ast.BinaryBooleanExpression
         """
         return DSLParser._parse_binary_expression(BinaryBooleanExpression, tokens)
 
     @staticmethod
-    def _parse_comparison_expression(tokens):
+    def _parse_comparison_expression(
+        tokens: ParseResults,
+    ) -> Optional[ComparisonExpression]:
         """Transform the token into a ComparisonExpression node.
 
         :param tokens: ParseResults objects
-        :type tokens: pyparsing.ParseResults
 
         :return: ComparisonExpression node
-        :rtype: core.python_expression_dsl.ast.ComparisonExpression
         """
         return DSLParser._parse_binary_expression(ComparisonExpression, tokens)
 
     @staticmethod
-    def _parse_dot_expression(tokens):
+    def _parse_dot_expression(tokens: ParseResults) -> DotExpression:
         """Transform the token into a DotExpression node.
 
         :param tokens: ParseResults objects
-        :type tokens: pyparsing.ParseResults
 
         :return: ComparisonExpression node
-        :rtype: core.python_expression_dsl.ast.DotExpression
         """
         return DotExpression(list(tokens[0]))
 
     @staticmethod
-    def _parse_parenthesized_expression(tokens):
+    def _parse_parenthesized_expression(tokens: ParseResults) -> Expression:
         """Transform the token into a Expression node.
 
         :param tokens: ParseResults objects
-        :type tokens: pyparsing.ParseResults
 
         :return: ComparisonExpression node
-        :rtype: core.python_expression_dsl.ast.Expression
         """
         return tokens[0]
 
     @staticmethod
-    def _parse_function_call_expression(tokens):
+    def _parse_function_call_expression(tokens: ParseResults) -> FunctionCallExpression:
         """Transform the token into a FunctionCallExpression node.
 
         :param tokens: ParseResults objects
-        :type tokens: pyparsing.ParseResults
 
         :return: ComparisonExpression node
-        :rtype: core.python_expression_dsl.ast.FunctionCallExpression
         """
         function_identifier = tokens[0][0]
         arguments = tokens[0][1:]
@@ -225,14 +227,12 @@ class DSLParser(object):
         return FunctionCallExpression(function_identifier, arguments)
 
     @staticmethod
-    def _parse_slice_operation(tokens):
+    def _parse_slice_operation(tokens: ParseResults) -> SliceExpression:
         """Transform the token into a SliceExpression node.
 
         :param tokens: ParseResults objects
-        :type tokens: pyparsing.ParseResults
 
         :return: SliceExpression node
-        :rtype: core.python_expression_dsl.ast.SliceExpression
         """
         array_expression = tokens[0][0]
         slice_expression = tokens[0][1]
@@ -286,13 +286,13 @@ class DSLParser(object):
     )
 
     NUMBER = Regex(r"[+-]?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?").setParseAction(
-        _parse_number.__func__
+        _parse_number.__func__  # type: ignore
     )
     IDENTIFIER = Word(alphas, alphanums + "_$").setParseAction(
-        _parse_identifier.__func__
+        _parse_identifier.__func__  # type: ignore
     )
     STRING = (QuotedString("'") | QuotedString('"')).setParseAction(
-        _parse_string.__func__
+        _parse_string.__func__  # type: ignore
     )
 
     # Unary boolean operator
@@ -306,38 +306,54 @@ class DSLParser(object):
 
     comparison_expression = (
         arithmetic_expression + ZeroOrMore(COMPARISON_OPERATOR + arithmetic_expression)
-    ).setParseAction(_parse_comparison_expression.__func__)
+    ).setParseAction(
+        _parse_comparison_expression.__func__
+    )  # type: ignore
 
     inversion_expression = (
         ZeroOrMore(INVERSION_OPERATOR) + comparison_expression
-    ).setParseAction(_parse_unary_boolean_expression.__func__)
+    ).setParseAction(
+        _parse_unary_boolean_expression.__func__
+    )  # type: ignore
     conjunction_expression = (
         inversion_expression + ZeroOrMore(CONJUNCTION_OPERATOR + inversion_expression)
-    ).setParseAction(_parse_binary_boolean_expression.__func__)
+    ).setParseAction(
+        _parse_binary_boolean_expression.__func__
+    )  # type: ignore
     disjunction_expression = (
         conjunction_expression
         + ZeroOrMore(DISJUNCTION_OPERATOR + conjunction_expression)
-    ).setParseAction(_parse_binary_boolean_expression.__func__)
+    ).setParseAction(
+        _parse_binary_boolean_expression.__func__
+    )  # type: ignore
 
     expression = disjunction_expression
 
     dot_expression = Group(
         IDENTIFIER + ZeroOrMore(FULL_STOP + expression)
-    ).setParseAction(_parse_dot_expression.__func__)
+    ).setParseAction(
+        _parse_dot_expression.__func__
+    )  # type: ignore
 
     parenthesized_expression = Group(
         LEFT_PAREN + expression + RIGHT_PAREN
-    ).setParseAction(_parse_parenthesized_expression.__func__)
+    ).setParseAction(
+        _parse_parenthesized_expression.__func__
+    )  # type: ignore
 
     slice = expression
     slice_expression = Group(
         IDENTIFIER + LEFT_BRACKET + slice + RIGHT_BRACKET
-    ).setParseAction(_parse_slice_operation.__func__)
+    ).setParseAction(
+        _parse_slice_operation.__func__
+    )  # type: ignore
 
     function_call_arguments = ZeroOrMore(expression + ZeroOrMore(COMMA + expression))
     function_call_expression = Group(
         IDENTIFIER + LEFT_PAREN + function_call_arguments + RIGHT_PAREN
-    ).setParseAction(_parse_function_call_expression.__func__)
+    ).setParseAction(
+        _parse_function_call_expression.__func__
+    )  # type: ignore
 
     atom = (
         ZeroOrMore(NEGATION_OPERATOR)
@@ -350,18 +366,22 @@ class DSLParser(object):
             | dot_expression
             | IDENTIFIER
         )
-    ).setParseAction(_parse_unary_arithmetic_expression.__func__)
+    ).setParseAction(
+        _parse_unary_arithmetic_expression.__func__
+    )  # type: ignore
 
     factor = Forward()
     factor << (atom + ZeroOrMore(POWER_OPERATOR + factor)).setParseAction(
-        _parse_binary_arithmetic_expression.__func__
+        _parse_binary_arithmetic_expression.__func__  # type: ignore
     )
     term = (factor + ZeroOrMore(MULTIPLICATIVE_OPERATOR + factor)).setParseAction(
-        _parse_binary_arithmetic_expression.__func__
+        _parse_binary_arithmetic_expression.__func__  # type: ignore
     )
     arithmetic_expression << (
         term + ZeroOrMore(ADDITIVE_OPERATOR + term)
-    ).setParseAction(_parse_binary_arithmetic_expression.__func__)
+    ).setParseAction(
+        _parse_binary_arithmetic_expression.__func__
+    )  # type: ignore
 
     def _parse_error_message(self, parse_exception):
         """Transform the standard error description into a readable concise message.

@@ -6,6 +6,24 @@ requires = ["poetry-core>=1.0.0"]
 known_first_party = ["core", "api"]
 profile = "black"
 
+[tool.mypy]
+files = ["core/util", "core/python_expression_dsl"]
+
+[[tool.mypy.overrides]]
+ignore_missing_imports = true
+module = [
+    "fuzzywuzzy",
+    "nameparser",
+    "flask_sqlalchemy_session",
+    "sqlalchemy.*",
+    "money",
+    "textblob.*",
+    "flask_babel",
+    "lxml.*",
+    "pyparsing",
+    "multipledispatch"
+]
+
 [tool.poetry]
 authors = ["The Palace Project <info@thepalaceproject.org>"]
 description = "The Palace Project Manager Application"
@@ -78,11 +96,15 @@ Werkzeug = "1.0.1"
 [tool.poetry.dev-dependencies]
 freezegun = "~1.1"
 Jinja2 = "2.11.3"
+mypy = "^0.931"
 parameterized = "0.8.1"
 pre-commit = "~2.17"
 pyfakefs = "4.5.4"
 pytest-timeout = "*"
 requests-mock = "1.9.3"
+types-Flask = "^1.1.6"
+types-pytz = "^2021.3.4"
+types-requests = "^2.27.8"
 
 [tool.poetry.extras]
 pg = ["psycopg2"]
