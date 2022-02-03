@@ -24,4 +24,4 @@ jobs:
         run: poetry install
 
       - name: Run MyPy 🪄
-        run: pre-commit run --all-files
+        run: poetry mypy
