@@ -20,7 +20,12 @@ jobs:
       - name: Install Poetry 🎸
         uses: ./.github/actions/poetry
 
-      - name: Install Packages 📦
+      - name: Install OS Packages 🧰
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libxmlsec1-dev libxml2-dev
+
+      - name: Install Python Packages 📦
         run: poetry install
 
       - name: Run MyPy 🪄
