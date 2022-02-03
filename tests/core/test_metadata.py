@@ -1,5 +1,6 @@
 import csv
 import datetime
+import logging
 import os
 from copy import deepcopy
 
@@ -38,7 +39,12 @@ from core.model import (
 )
 from core.model.configuration import ExternalIntegrationLink
 from core.s3 import MockS3Uploader
-from core.testing import DatabaseTest, DummyHTTPClient, DummyMetadataClient
+from core.testing import (
+    DatabaseTest,
+    DummyHTTPClient,
+    DummyMetadataClient,
+    LogCaptureHandler,
+)
 from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
 from core.util.http import RemoteIntegrationException
 
@@ -122,6 +128,26 @@ class TestMetadataImporter(DatabaseTest):
         assert ["i will conquer", "i will persist"] == sorted(
             [x.subject.identifier for x in identifier.classifications]
         )
+
+    def test_classifications_with_missing_subject_name_and_ident(self):
+
+        # A subject with no name or identifier should result in an
+        # error message and no new classification.
+        subjects = [SubjectData(type=Subject.TAG, name=None, identifier=None)]
+
+        source1 = DataSource.lookup(self._db, DataSource.AXIS_360)
+        edition = self._edition()
+        identifier = edition.primary_identifier
+        metadata = Metadata(subjects=subjects, data_source=source1)
+        replace = ReplacementPolicy(subjects=True)
+        with LogCaptureHandler(logging.root) as logs:
+            metadata.apply(edition, None, replace=replace)
+            assert len(logs.error) == 1
+            assert str(logs.error[0]).startswith("Error classifying subject:")
+            assert str(logs.error[0]).endswith(
+                "Cannot look up Subject when neither identifier nor name is provided."
+            )
+        assert len(identifier.classifications) == 0
 
     def test_links(self):
         edition = self._edition()
