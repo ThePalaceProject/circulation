@@ -17,18 +17,15 @@ from sqlalchemy.sql.expression import and_
 from ..config import CannotLoadConfiguration, Configuration
 from ..mirror import MirrorUploader
 from ..util.string_helpers import random_string
-from . import Base, get_one, get_one_or_create
+from . import Base, get_one, get_one_or_create, hybrid_property
 from .constants import DataSourceConstants
 from .hassessioncache import HasSessionCache
 from .library import Library
 
-# Once we move to a newer version of SQLAlchemy with better type
-# support we should be able to drop this.
-# https://github.com/dropbox/sqlalchemy-stubs/issues/98
 if TYPE_CHECKING:
-    hybrid_property = property
-else:
-    from sqlalchemy.ext.hybrid import hybrid_property
+    # This is needed during type checking so we have the
+    # types of related models.
+    from core.model import Collection  # noqa: autoflake
 
 
 class ExternalIntegrationLink(Base, HasSessionCache):
@@ -304,7 +301,7 @@ class ExternalIntegration(Base):
 
     # Any number of Collections may designate an ExternalIntegration
     # as the source of their configuration
-    collections = relationship(  # type: ignore
+    collections = relationship(
         "Collection",
         backref="_external_integration",
         foreign_keys="Collection.external_integration_id",

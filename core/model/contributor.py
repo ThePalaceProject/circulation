@@ -285,7 +285,7 @@ class Contributor(Base):
         self._sort_name = new_sort_name
 
     # tell SQLAlchemy to use the sort_name setter for ort_name, not _sort_name, after all.
-    sort_name = synonym("_sort_name", descriptor=sort_name)
+    sort_name = synonym("_sort_name", descriptor=sort_name)  # type: ignore
 
     def merge_into(self, destination):
         """Two Contributor records should be the same.

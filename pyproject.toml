@@ -7,14 +7,20 @@ known_first_party = ["core", "api"]
 profile = "black"
 
 [tool.mypy]
+exclude = ['core/model/listeners.py']
 files = [
     "core/config.py",
     "core/entrypoint.py",
     "core/mirror.py",
-    "core/model/configuration.py",
-    "core/model/hassessioncache.py",
+    "core/s3.py",
+    "core/model",
     "core/python_expression_dsl",
-    "core/util"
+    "core/util",
+    "tests/core/test_s3.py",
+    "tests/core/test_mirror_uploader.py",
+    "tests/core/models",
+    "tests/core/python_expression_dsl",
+    "tests/core/util"
 ]
 plugins = ["sqlmypy"]
 
@@ -30,14 +36,26 @@ module = [
     "nameparser",
     "pyparsing",
     "sqlalchemy.*",
-    "textblob.*"
+    "textblob.*",
+    "parameterized",
+    "bcrypt",
+    "expiringdict",
+    "isbnlib",
+    "feedparser",
 ]
 
 [[tool.mypy.overrides]]
 follow_imports = "skip"
 module = [
     "core.classifier.*",
-    "core.model.*"
+    "core.model.*",
+    "core.testing",
+    "core.metadata_layer",
+    "core.log",
+    "core.lane",
+    "core.coverage",
+    "core.external_search",
+    "core.marc"
 ]
 
 [tool.poetry]
@@ -109,6 +127,8 @@ wcag-contrast-ratio = "0.9"
 Werkzeug = "1.0.1"
 
 [tool.poetry.dev-dependencies]
+boto3-stubs = "^1.20.48"
+botocore-stubs = "^1.23.48"
 freezegun = "~1.1"
 Jinja2 = "2.11.3"
 mypy = "^0.931"
@@ -119,6 +139,8 @@ pytest-timeout = "*"
 requests-mock = "1.9.3"
 sqlalchemy-stubs = "^0.4"
 types-Flask = "^1.1.6"
+types-Pillow = "^9.0.6"
+types-psycopg2 = "^2.9.6"
 types-pytz = "^2021.3.4"
 types-requests = "^2.27.8"
 

@@ -1,14 +1,12 @@
 # encoding: utf-8
 # Admin, AdminRole
 
-
 import bcrypt
 from sqlalchemy import Column, ForeignKey, Index, Integer, Unicode, UniqueConstraint
-from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.orm.session import Session
 
-from . import Base, get_one, get_one_or_create
+from . import Base, get_one, get_one_or_create, hybrid_property
 from .hassessioncache import HasSessionCache
 
 

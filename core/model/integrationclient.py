@@ -2,6 +2,7 @@
 # IntegrationClient
 
 import re
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, Column, DateTime, Integer, Unicode
 from sqlalchemy.orm import relationship
@@ -9,6 +10,9 @@ from sqlalchemy.orm import relationship
 from ..util.datetime_helpers import utc_now
 from ..util.string_helpers import random_string
 from . import Base, get_one, get_one_or_create
+
+if TYPE_CHECKING:
+    from core.model import Hold, Loan  # noqa: autoflake
 
 
 class IntegrationClient(Base):

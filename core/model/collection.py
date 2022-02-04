@@ -2,6 +2,7 @@
 # Collection, CollectionIdentifier, CollectionMissing
 import logging
 from abc import ABCMeta, abstractmethod
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
@@ -14,14 +15,13 @@ from sqlalchemy import (
     exists,
     func,
 )
-from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import backref, contains_eager, joinedload, mapper, relationship
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, or_
 
 from ..util.string_helpers import base64
-from . import Base, create, get_one, get_one_or_create
+from . import Base, create, get_one, get_one_or_create, hybrid_property
 from .configuration import (
     BaseConfigurationStorage,
     ConfigurationSetting,
@@ -37,6 +37,11 @@ from .integrationclient import IntegrationClient
 from .library import Library
 from .licensing import LicensePool, LicensePoolDeliveryMechanism
 from .work import Work
+
+if TYPE_CHECKING:
+    # This is needed during type checking so we have the
+    # types of related models.
+    from core.model import Credential, CustomList, Timestamp  # noqa: autoflake
 
 
 class Collection(Base, HasSessionCache):
@@ -84,12 +89,12 @@ class Collection(Base, HasSessionCache):
     # An Overdrive collection may have many children corresponding
     # to Overdrive Advantage collections.
     children = relationship(
-        "Collection", backref=backref("parent", remote_side=[id]), uselist=True
+        "Collection", backref=backref("parent", remote_side=[id]), uselist=True  # type: ignore
     )
 
     # A Collection can provide books to many Libraries.
     libraries = relationship(
-        "Library", secondary=lambda: collections_libraries, backref="collections"
+        "Library", secondary=lambda: collections_libraries, backref="collections"  # type: ignore
     )
 
     # A Collection can include many LicensePools.
@@ -105,7 +110,7 @@ class Collection(Base, HasSessionCache):
     timestamps = relationship("Timestamp", backref="collection")
 
     catalog = relationship(
-        "Identifier", secondary=lambda: collections_identifiers, backref="collections"
+        "Identifier", secondary=lambda: collections_identifiers, backref="collections"  # type: ignore
     )
 
     # A Collection can be associated with multiple CoverageRecords
@@ -120,7 +125,7 @@ class Collection(Base, HasSessionCache):
     # the list and they won't be added back, so the list doesn't
     # necessarily match the collection.
     customlists = relationship(
-        "CustomList", secondary=lambda: collections_customlists, backref="collections"
+        "CustomList", secondary=lambda: collections_customlists, backref="collections"  # type: ignore
     )
 
     # Most data sources offer different catalogs to different

@@ -3,10 +3,12 @@
 import logging
 import os
 import warnings
+from typing import TYPE_CHECKING, Dict
 
 from psycopg2.extensions import adapt as sqlescape
 from psycopg2.extras import NumericRange
 from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError, SAWarning
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -294,7 +296,7 @@ class SessionManager(object):
     # is also defined in SQL.
     RECURSIVE_EQUIVALENTS_FUNCTION = "recursive_equivalents.sql"
 
-    engine_for_url = {}
+    engine_for_url: Dict[str, Engine] = {}
 
     @classmethod
     def engine(cls, url=None):
@@ -520,3 +522,11 @@ from .patron import (
 )
 from .resource import Hyperlink, Representation, Resource, ResourceTransformation
 from .work import Work, WorkGenre
+
+# Once we move to a newer version of SQLAlchemy with better type
+# support we should be able to drop this.
+# https://github.com/dropbox/sqlalchemy-stubs/issues/98
+if TYPE_CHECKING:
+    hybrid_property = property
+else:
+    from sqlalchemy.ext.hybrid import hybrid_property

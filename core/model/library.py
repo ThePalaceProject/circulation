@@ -2,6 +2,7 @@
 # Library
 import logging
 from collections import Counter
+from typing import TYPE_CHECKING
 
 from expiringdict import ExpiringDict
 from sqlalchemy import (
@@ -13,10 +14,11 @@ from sqlalchemy import (
     Unicode,
     UniqueConstraint,
 )
-from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
+
+from core.model import hybrid_property
 
 from ..config import Configuration
 from ..entrypoint import EntryPoint
@@ -26,6 +28,18 @@ from .edition import Edition
 from .hassessioncache import HasSessionCache
 from .licensing import LicensePool
 from .work import Work
+
+if TYPE_CHECKING:
+    from core.model import (  # noqa: autoflake
+        AdminRole,
+        CachedFeed,
+        CachedMARCFile,
+        CirculationEvent,
+        ConfigurationSetting,
+        CustomList,
+        ExternalIntegration,
+        Patron,
+    )
 
 
 class Library(Base, HasSessionCache):
@@ -54,13 +68,13 @@ class Library(Base, HasSessionCache):
     # One, and only one, library may be the default. The default
     # library is the one chosen when an incoming request does not
     # designate a library.
-    _is_default = Column(Boolean, index=True, default=False, name="is_default")
+    _is_default = Column("is_default", Boolean, index=True, default=False)
 
     # The name of this library to use when signing short client tokens
     # for consumption by the library registry. e.g. "NYNYPL" for NYPL.
     # This name must be unique across the library registry.
     _library_registry_short_name = Column(
-        Unicode, unique=True, name="library_registry_short_name"
+        "library_registry_short_name", Unicode, unique=True
     )
 
     # The shared secret to use when signing short client tokens for
@@ -99,7 +113,7 @@ class Library(Base, HasSessionCache):
     # A Library may have many ExternalIntegrations.
     integrations = relationship(
         "ExternalIntegration",
-        secondary=lambda: externalintegrations_libraries,
+        secondary=lambda: externalintegrations_libraries,  # type: ignore
         backref="libraries",
     )
 

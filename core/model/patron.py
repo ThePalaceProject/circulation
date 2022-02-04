@@ -18,14 +18,13 @@ from sqlalchemy import (
     Unicode,
     UniqueConstraint,
 )
-from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 
 from ..classifier import Classifier
 from ..user_profile import ProfileStorage
 from ..util.datetime_helpers import utc_now
-from . import Base, get_one_or_create, numericrange_to_tuple
+from . import Base, get_one_or_create, hybrid_property, numericrange_to_tuple
 from .credential import Credential
 
 
@@ -95,7 +94,7 @@ class Patron(Base):
     # records managed by the vendors who provide the library with
     # ebooks.
     _last_loan_activity_sync = Column(
-        DateTime(timezone=True), default=None, name="last_loan_activity_sync"
+        "last_loan_activity_sync", DateTime(timezone=True), default=None
     )
 
     # The time, if any, at which the user's authorization to borrow
@@ -123,9 +122,7 @@ class Patron(Base):
     # Whether or not the patron wants their annotations synchronized
     # across devices (which requires storing those annotations on a
     # library server).
-    _synchronize_annotations = Column(
-        Boolean, default=None, name="synchronize_annotations"
-    )
+    _synchronize_annotations = Column("synchronize_annotations", Boolean, default=None)
 
     # If the circulation manager is set up to associate a patron's
     # neighborhood with circulation events, and it would be

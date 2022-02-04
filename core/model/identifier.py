@@ -5,6 +5,7 @@ import random
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from functools import total_ordering
+from typing import TYPE_CHECKING
 from urllib.parse import quote, unquote
 
 import isbnlib
@@ -33,6 +34,14 @@ from .coverage import CoverageRecord
 from .datasource import DataSource
 from .licensing import LicensePoolDeliveryMechanism, RightsStatus
 from .measurement import Measurement
+
+if TYPE_CHECKING:
+    from core.model import (  # noqa: autoflake
+        Annotation,
+        Edition,
+        Hyperlink,
+        LicensePool,
+    )
 
 
 class IdentifierParser(metaclass=ABCMeta):

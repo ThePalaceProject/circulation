@@ -4,6 +4,7 @@
 
 import logging
 from collections import defaultdict
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, Date, Enum, ForeignKey, Index, Integer, String, Unicode
 from sqlalchemy.dialects.postgresql import JSON
@@ -20,6 +21,11 @@ from .coverage import CoverageRecord
 from .datasource import DataSource
 from .identifier import Identifier
 from .licensing import DeliveryMechanism, LicensePool
+
+if TYPE_CHECKING:
+    # This is needed during type checking so we have the
+    # types of related models.
+    from core.model import CustomListEntry, Work  # noqa: autoflake
 
 
 class Edition(Base, EditionConstants):

@@ -10,14 +10,13 @@ from typing import TYPE_CHECKING, List, Mapping, Optional
 from sqlalchemy import Boolean, Column, DateTime
 from sqlalchemy import Enum as AlchemyEnum
 from sqlalchemy import ForeignKey, Index, Integer, String, Unicode, UniqueConstraint
-from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import or_
 from sqlalchemy.sql.functions import func
 
 from ..util.datetime_helpers import utc_now
-from . import Base, create, flush, get_one, get_one_or_create
+from . import Base, create, flush, get_one, get_one_or_create, hybrid_property
 from .circulationevent import CirculationEvent
 from .complaint import Complaint
 from .constants import DataSourceConstants, EditionConstants, LinkRelations, MediaTypes
@@ -26,6 +25,8 @@ from .patron import Hold, Loan, Patron
 
 if TYPE_CHECKING:
     # Only import for type checking, since it creates an import cycle
+    from core.model import Resource  # noqa: autoflake
+
     from ..analytics import Analytics
 
 
@@ -44,15 +45,15 @@ class LicenseStatus(PythonEnum):
 
 
 class LicenseFunctions:
-    identifier: str
-    checkout_url: str
-    status_url: str
-    status: LicenseStatus
-    expires: Optional[datetime.datetime]
-    checkouts_left: Optional[int]
-    checkouts_available: int
-    terms_concurrency: Optional[int]
-    content_types: Optional[str]
+    identifier: "Column[Optional[str]]"
+    checkout_url: "Column[Optional[str]]"
+    status_url: "Column[Optional[str]]"
+    status: "Optional[LicenseStatus]"
+    expires: "Column[Optional[datetime.datetime]]"
+    checkouts_left: "Column[Optional[int]]"
+    checkouts_available: "Column[Optional[int]]"
+    terms_concurrency: "Column[Optional[int]]"
+    content_types: "Column[Optional[str]]"
 
     @property
     def is_perpetual(self) -> bool:
@@ -76,7 +77,7 @@ class LicenseFunctions:
         )
 
     @property
-    def total_remaining_loans(self) -> int:
+    def total_remaining_loans(self) -> Optional[int]:
         if self.is_inactive:
             return 0
         elif self.is_loan_limited:
@@ -85,7 +86,7 @@ class LicenseFunctions:
             return self.terms_concurrency
 
     @property
-    def currently_available_loans(self) -> int:
+    def currently_available_loans(self) -> Optional[int]:
         if self.is_inactive:
             return 0
         else:
@@ -112,7 +113,7 @@ class License(Base, LicenseFunctions):
     identifier = Column(Unicode)
     checkout_url = Column(Unicode)
     status_url = Column(Unicode)
-    status = Column(AlchemyEnum(LicenseStatus))
+    status = Column(AlchemyEnum(LicenseStatus))  # type: ignore
 
     expires = Column(DateTime(timezone=True))
 
@@ -241,7 +242,7 @@ class LicensePool(Base):
 
     # This lets us cache the work of figuring out the best open access
     # link for this LicensePool.
-    _open_access_download_url = Column(Unicode, name="open_access_download_url")
+    _open_access_download_url = Column("open_access_download_url", Unicode)
 
     # A Collection can not have more than one LicensePool for a given
     # Identifier from a given DataSource.
@@ -660,8 +661,8 @@ class LicensePool(Base):
         """
         _db = Session.object_session(self)
 
-        licenses_owned = sum([l.total_remaining_loans for l in self.licenses])
-        licenses_available = sum([l.currently_available_loans for l in self.licenses])
+        licenses_owned = sum([l.total_remaining_loans for l in self.licenses])  # type: ignore
+        licenses_available = sum([l.currently_available_loans for l in self.licenses])  # type: ignore
 
         holds = self.get_active_holds()
 

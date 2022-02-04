@@ -11,8 +11,8 @@ from core.model import (
     Timestamp,
     WorkCoverageRecord,
     create,
-    site_configuration_has_changed,
 )
+from core.model.listeners import site_configuration_has_changed
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
 

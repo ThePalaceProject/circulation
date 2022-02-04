@@ -3,6 +3,7 @@
 
 import logging
 from collections import Counter
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
@@ -43,6 +44,10 @@ from .datasource import DataSource
 from .edition import Edition
 from .identifier import Identifier
 from .measurement import Measurement
+
+# Import related models when doing type checking
+if TYPE_CHECKING:
+    from core.model import CachedFeed, CustomListEntry, LicensePool  # noqa: autoflake
 
 
 class WorkGenre(Base):
@@ -264,12 +269,6 @@ class Work(Base):
         if self.presentation_edition:
             return self.presentation_edition.language
         return None
-
-    @property
-    def language_code(self):
-        if not self.presentation_edition:
-            return None
-        return self.presentation_edition.language_code
 
     @property
     def publisher(self):
