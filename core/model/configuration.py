@@ -579,7 +579,7 @@ class ConfigurationSetting(Base, HasSessionCache):
     )
     library_id = Column(Integer, ForeignKey("libraries.id"), index=True)
     key = Column(Unicode)
-    _value = Column(Unicode, name="value")
+    _value = Column("value", Unicode)
 
     __table_args__ = (
         # Unique indexes to prevent the creation of redundant
