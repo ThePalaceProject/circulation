@@ -224,7 +224,7 @@ class DSLEvaluationVisitor(Visitor):
 
         self._safe_classes = new_safe_classes
 
-    @dispatch(Identifier)  # type: ignore
+    @dispatch(Identifier)
     def visit(self, node: Identifier):
         """Process the Identifier node.
 

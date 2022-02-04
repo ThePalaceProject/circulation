@@ -89,7 +89,7 @@ class Collection(Base, HasSessionCache):
     # An Overdrive collection may have many children corresponding
     # to Overdrive Advantage collections.
     children = relationship(
-        "Collection", backref=backref("parent", remote_side=[id]), uselist=True  # type: ignore
+        "Collection", backref=backref("parent", remote_side=[id]), uselist=True
     )
 
     # A Collection can provide books to many Libraries.

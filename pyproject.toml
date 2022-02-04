@@ -23,6 +23,10 @@ files = [
     "tests/core/util"
 ]
 plugins = ["sqlmypy"]
+warn_redundant_casts = true
+warn_unreachable = true
+warn_unused_configs = true
+warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
 ignore_missing_imports = true
@@ -35,7 +39,6 @@ module = [
     "multipledispatch",
     "nameparser",
     "pyparsing",
-    "sqlalchemy.*",
     "textblob.*",
     "parameterized",
     "bcrypt",
