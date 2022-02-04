@@ -304,7 +304,7 @@ class ExternalIntegration(Base):
 
     # Any number of Collections may designate an ExternalIntegration
     # as the source of their configuration
-    collections = relationship(
+    collections = relationship(  # type: ignore
         "Collection",
         backref="_external_integration",
         foreign_keys="Collection.external_integration_id",
