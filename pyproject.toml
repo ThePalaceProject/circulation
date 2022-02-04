@@ -7,21 +7,36 @@ known_first_party = ["core", "api"]
 profile = "black"
 
 [tool.mypy]
-files = ["core/util", "core/python_expression_dsl"]
+files = [
+    "core/config.py",
+    "core/entrypoint.py",
+    "core/mirror.py",
+    "core/model/configuration.py",
+    "core/model/hassessioncache.py",
+    "core/python_expression_dsl",
+    "core/util"
+]
 
 [[tool.mypy.overrides]]
 ignore_missing_imports = true
 module = [
+    "flask_babel",
     "flask_sqlalchemy_session",
     "fuzzywuzzy",
+    "lxml.*",
     "money",
+    "multipledispatch",
     "nameparser",
     "pyparsing",
     "sqlalchemy.*",
-    "textblob.*",
-    "flask_babel",
-    "lxml.*",
-    "multipledispatch"
+    "textblob.*"
+]
+
+[[tool.mypy.overrides]]
+follow_imports = "skip"
+module = [
+    "core.classifier.*",
+    "core.model.*"
 ]
 
 [tool.poetry]

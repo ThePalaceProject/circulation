@@ -1,4 +1,5 @@
 from abc import ABCMeta, abstractmethod
+from typing import Dict, Type
 from urllib.parse import urlsplit
 
 from .config import CannotLoadConfiguration
@@ -17,7 +18,7 @@ class MirrorUploader(metaclass=ABCMeta):
     # sitewide() or for_collection(). A subclass that wants to take
     # advantage of this should add a mapping here from its .protocol
     # to itself.
-    IMPLEMENTATION_REGISTRY = {}
+    IMPLEMENTATION_REGISTRY: Dict[str, Type["MirrorUploader"]] = {}
 
     @classmethod
     def mirror(cls, _db, storage_name=None, integration=None):

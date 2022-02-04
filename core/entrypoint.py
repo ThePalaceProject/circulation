@@ -1,3 +1,6 @@
+from typing import Dict, List, Optional, Type
+
+
 class EntryPoint(object):
 
     """A EntryPoint is a top-level entry point into a library's Lane structure
@@ -21,14 +24,15 @@ class EntryPoint(object):
     # enabled.
     ENABLED_SETTING = "enabled_entry_points"
 
-    ENTRY_POINTS = []
-    DEFAULT_ENABLED = []
-    DISPLAY_TITLES = {}
-    BY_INTERNAL_NAME = {}
+    ENTRY_POINTS: List[Type["EntryPoint"]] = []
+    DEFAULT_ENABLED: List[Type["EntryPoint"]] = []
+    DISPLAY_TITLES: Dict[Type["EntryPoint"], str] = {}
+    BY_INTERNAL_NAME: Dict[str, Type["EntryPoint"]] = {}
 
     # A distinctive URI designating the sort of thing found through this
     # EntryPoint.
-    URI = None
+    URI: Optional[str] = None
+    INTERNAL_NAME: str
 
     @classmethod
     def register(cls, entrypoint_class, display_title, default_enabled=False):

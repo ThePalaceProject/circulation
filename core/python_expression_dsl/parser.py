@@ -15,7 +15,7 @@ from pyparsing import (
 )
 
 from core.exceptions import BaseError
-from core.python_expression_dsl.ast import Operator
+from core.python_expression_dsl.ast import Node, Operator
 from core.python_expression_dsl.util import (
     _parse_binary_arithmetic_expression,
     _parse_binary_boolean_expression,
@@ -162,14 +162,12 @@ class DSLParser(object):
         term + ZeroOrMore(ADDITIVE_OPERATOR + term)
     ).setParseAction(_parse_binary_arithmetic_expression)
 
-    def _parse_error_message(self, parse_exception):
+    def _parse_error_message(self, parse_exception: ParseException) -> str:
         """Transform the standard error description into a readable concise message.
 
         :param parse_exception: Exception thrown by pyparsing
-        :type parse_exception: ParseException
 
         :return: Error message
-        :rtype: str
         """
         error_message = str(parse_exception)
         match = self.PARSE_ERROR_MESSAGE_REGEX.match(error_message)
@@ -182,14 +180,12 @@ class DSLParser(object):
 
         return "Unexpected symbol '{0}' at position {1}".format(found, position)
 
-    def parse(self, expression):
+    def parse(self, expression: str) -> Node:
         """Parse the expression and transform it into AST.
 
         :param expression: String containing the expression
-        :type expression: str
 
         :return: AST node
-        :rtype: core.python_expression_dsl.ast.Node
         """
         try:
             results = self.expression.parseString(expression, parseAll=True)

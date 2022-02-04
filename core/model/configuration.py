@@ -6,10 +6,10 @@ import logging
 from abc import ABCMeta, abstractmethod
 from contextlib import contextmanager
 from enum import Enum
+from typing import TYPE_CHECKING, List
 
 from flask_babel import lazy_gettext as _
 from sqlalchemy import Column, ForeignKey, Index, Integer, Unicode
-from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_
@@ -21,6 +21,14 @@ from . import Base, get_one, get_one_or_create
 from .constants import DataSourceConstants
 from .hassessioncache import HasSessionCache
 from .library import Library
+
+# Once we move to a newer version of SQLAlchemy with better type
+# support we should be able to drop this.
+# https://github.com/dropbox/sqlalchemy-stubs/issues/98
+if TYPE_CHECKING:
+    hybrid_property = property
+else:
+    from sqlalchemy.ext.hybrid import hybrid_property
 
 
 class ExternalIntegrationLink(Base, HasSessionCache):
@@ -820,7 +828,7 @@ class ConfigurationSetting(Base, HasSessionCache):
     # As of this release of the software, this is our best guess as to
     # which data sources should have their audiobooks excluded from
     # lanes.
-    EXCLUDED_AUDIO_DATA_SOURCES_DEFAULT = []
+    EXCLUDED_AUDIO_DATA_SOURCES_DEFAULT: List[str] = []
 
     @classmethod
     def excluded_audio_data_sources(cls, _db):
