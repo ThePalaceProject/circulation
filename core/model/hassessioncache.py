@@ -28,7 +28,7 @@ class HasSessionCache:
 
     @property
     @abstractmethod
-    def id(self) -> Column[int]:
+    def id(self) -> "Column[int]":
         ...
 
     @abstractmethod
