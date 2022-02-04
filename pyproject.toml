@@ -12,15 +12,15 @@ files = [
     "core/config.py",
     "core/entrypoint.py",
     "core/mirror.py",
-    "core/s3.py",
     "core/model",
     "core/python_expression_dsl",
+    "core/s3.py",
     "core/util",
-    "tests/core/test_s3.py",
-    "tests/core/test_mirror_uploader.py",
     "tests/core/models",
     "tests/core/python_expression_dsl",
-    "tests/core/util"
+    "tests/core/test_mirror_uploader.py",
+    "tests/core/test_s3.py",
+    "tests/core/util",
 ]
 plugins = ["sqlmypy"]
 warn_redundant_casts = true
@@ -31,34 +31,34 @@ warn_unused_ignores = true
 [[tool.mypy.overrides]]
 ignore_missing_imports = true
 module = [
+    "bcrypt",
+    "expiringdict",
+    "feedparser",
     "flask_babel",
     "flask_sqlalchemy_session",
     "fuzzywuzzy",
+    "isbnlib",
     "lxml.*",
     "money",
     "multipledispatch",
     "nameparser",
+    "parameterized",
     "pyparsing",
     "textblob.*",
-    "parameterized",
-    "bcrypt",
-    "expiringdict",
-    "isbnlib",
-    "feedparser",
 ]
 
 [[tool.mypy.overrides]]
 follow_imports = "skip"
 module = [
     "core.classifier.*",
-    "core.model.*",
-    "core.testing",
-    "core.metadata_layer",
-    "core.log",
-    "core.lane",
     "core.coverage",
     "core.external_search",
-    "core.marc"
+    "core.lane",
+    "core.log",
+    "core.marc",
+    "core.metadata_layer",
+    "core.model.*",
+    "core.testing",
 ]
 
 [tool.poetry]
