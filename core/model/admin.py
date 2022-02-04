@@ -6,7 +6,9 @@ from sqlalchemy import Column, ForeignKey, Index, Integer, Unicode, UniqueConstr
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.orm.session import Session
 
-from . import Base, get_one, get_one_or_create, hybrid_property
+from core.model.hybrid import hybrid_property
+
+from . import Base, get_one, get_one_or_create
 from .hassessioncache import HasSessionCache
 
 

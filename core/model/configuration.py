@@ -14,10 +14,12 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_
 
+from core.model.hybrid import hybrid_property
+
 from ..config import CannotLoadConfiguration, Configuration
 from ..mirror import MirrorUploader
 from ..util.string_helpers import random_string
-from . import Base, get_one, get_one_or_create, hybrid_property
+from . import Base, get_one, get_one_or_create
 from .constants import DataSourceConstants
 from .hassessioncache import HasSessionCache
 from .library import Library

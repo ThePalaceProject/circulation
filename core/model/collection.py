@@ -20,8 +20,10 @@ from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, or_
 
+from core.model.hybrid import hybrid_property
+
 from ..util.string_helpers import base64
-from . import Base, create, get_one, get_one_or_create, hybrid_property
+from . import Base, create, get_one, get_one_or_create
 from .configuration import (
     BaseConfigurationStorage,
     ConfigurationSetting,

@@ -15,8 +15,10 @@ from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import or_
 from sqlalchemy.sql.functions import func
 
+from core.model.hybrid import hybrid_property
+
 from ..util.datetime_helpers import utc_now
-from . import Base, create, flush, get_one, get_one_or_create, hybrid_property
+from . import Base, create, flush, get_one, get_one_or_create
 from .circulationevent import CirculationEvent
 from .complaint import Complaint
 from .constants import DataSourceConstants, EditionConstants, LinkRelations, MediaTypes

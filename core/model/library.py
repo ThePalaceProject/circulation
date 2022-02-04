@@ -18,7 +18,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
 
-from core.model import hybrid_property
+from core.model.hybrid import hybrid_property
 
 from ..config import Configuration
 from ..entrypoint import EntryPoint

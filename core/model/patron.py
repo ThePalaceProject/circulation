@@ -21,10 +21,12 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 
+from core.model.hybrid import hybrid_property
+
 from ..classifier import Classifier
 from ..user_profile import ProfileStorage
 from ..util.datetime_helpers import utc_now
-from . import Base, get_one_or_create, hybrid_property, numericrange_to_tuple
+from . import Base, get_one_or_create, numericrange_to_tuple
 from .credential import Credential
 
 
