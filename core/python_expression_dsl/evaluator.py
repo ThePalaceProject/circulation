@@ -5,8 +5,8 @@ from typing import Callable, Dict, List, Optional, Union
 
 from multipledispatch import dispatch
 
-from ..exceptions import BaseError
-from .ast import (
+from core.exceptions import BaseError
+from core.python_expression_dsl.ast import (
     BinaryArithmeticExpression,
     BinaryBooleanExpression,
     BinaryExpression,
@@ -23,7 +23,7 @@ from .ast import (
     UnaryExpression,
     Visitor,
 )
-from .parser import DSLParser
+from core.python_expression_dsl.parser import DSLParser
 
 
 class DSLEvaluationError(BaseError):
