@@ -3,6 +3,7 @@ import datetime
 import logging
 import time
 from collections import defaultdict
+from typing import TYPE_CHECKING, Optional
 from urllib.parse import quote_plus
 
 import elasticsearch
@@ -22,7 +23,6 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import ARRAY, INT4RANGE, JSON
 from sqlalchemy.ext.associationproxy import association_proxy
-from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import (
     aliased,
     backref,
@@ -31,8 +31,11 @@ from sqlalchemy.orm import (
     joinedload,
     relationship,
 )
+from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import select
 from sqlalchemy.sql.expression import Select
+
+from core.model.hybrid import hybrid_property
 
 from .classifier import Classifier
 from .config import Configuration
@@ -49,21 +52,22 @@ from .model import (
     Genre,
     Library,
     LicensePool,
-    Session,
     Work,
     WorkGenre,
-    directly_modified,
     get_one_or_create,
-    site_configuration_has_changed,
     tuple_to_numericrange,
 )
 from .model.constants import EditionConstants
+from .model.listeners import directly_modified, site_configuration_has_changed
 from .problem_details import *
 from .util import LanguageCodes
 from .util.accept_language import parse_accept_language
 from .util.datetime_helpers import utc_now
 from .util.opds_writer import OPDSFeed
 from .util.problem_detail import ProblemDetail
+
+if TYPE_CHECKING:
+    from core.model import CachedMARCFile  # noqa: autoflake
 
 
 class BaseFacets(FacetConstants):
@@ -76,7 +80,7 @@ class BaseFacets(FacetConstants):
     # type of feed (the way FeaturedFacets always implies a 'groups' feed),
     # set the type of feed here. This will override any CACHED_FEED_TYPE
     # associated with the WorkList.
-    CACHED_FEED_TYPE = None
+    CACHED_FEED_TYPE: Optional[str] = None
 
     # By default, faceting objects have no opinion on how long the feeds
     # generated using them should be cached.
@@ -1281,10 +1285,9 @@ class WorkList(object):
     CACHED_FEED_TYPE = None
 
     # By default, a WorkList is always visible.
-    visible = True
-
-    # By default, a WorkList does not draw from CustomLists
-    uses_customlists = False
+    @property
+    def visible(self) -> bool:
+        return True
 
     def max_cache_age(self, type):
         """Determine how long a feed for this WorkList should be cached
@@ -2500,7 +2503,7 @@ class LaneGenre(Base):
         return lg
 
 
-Genre.lane_genres = relationship(
+Genre.lane_genres = relationship(  # type: ignore
     "LaneGenre", foreign_keys=LaneGenre.genre_id, backref="genre"
 )
 
@@ -2565,11 +2568,11 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
 
     # A lane may be restricted to works classified for specific audiences
     # (e.g. only Young Adult works).
-    _audiences = Column(ARRAY(Unicode), name="audiences")
+    _audiences = Column("audiences", ARRAY(Unicode))
 
     # A lane may further be restricted to works classified as suitable
     # for a specific age range.
-    _target_age = Column(INT4RANGE, name="target_age", index=True)
+    _target_age = Column("target_age", INT4RANGE, index=True)
 
     # A lane may be restricted to works available in certain languages.
     languages = Column(ARRAY(Unicode))
@@ -2594,7 +2597,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
 
     # Only the books on these specific CustomLists will be shown.
     customlists = relationship(
-        "CustomList", secondary=lambda: lanes_customlists, backref="lane"
+        "CustomList", secondary=lambda: lanes_customlists, backref="lane"  # type: ignore
     )
 
     # This has no effect unless list_datasource_id or
@@ -2626,7 +2629,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
 
     # Only a visible lane will show up in the user interface.  The
     # admin interface can see all the lanes, visible or not.
-    _visible = Column(Boolean, default=True, nullable=False, name="visible")
+    _visible = Column("visible", Boolean, default=True, nullable=False)
 
     # A Lane may have many CachedFeeds.
     cachedfeeds = relationship(
@@ -2647,10 +2650,6 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     def get_library(self, _db):
         """For compatibility with WorkList.get_library()."""
         return self.library
-
-    @property
-    def list_datasource_id(self):
-        return self._list_datasource_id
 
     @property
     def collection_ids(self):
@@ -3148,16 +3147,16 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         return lines
 
 
-Library.lanes = relationship(
+Library.lanes = relationship(  # type: ignore
     "Lane",
     backref="library",
     foreign_keys=Lane.library_id,
     cascade="all, delete-orphan",
 )
-DataSource.list_lanes = relationship(
+DataSource.list_lanes = relationship(  # type: ignore
     "Lane", backref="_list_datasource", foreign_keys=Lane._list_datasource_id
 )
-DataSource.license_lanes = relationship(
+DataSource.license_lanes = relationship(  # type: ignore
     "Lane", backref="license_datasource", foreign_keys=Lane.license_datasource_id
 )
 

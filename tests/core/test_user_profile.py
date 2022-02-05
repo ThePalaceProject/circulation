@@ -85,7 +85,7 @@ class TestProfileController(object):
             == problem.debug_message
         )
 
-    def test_get_non_dictionary_profile_document(self):
+    def test_get_non_dictionary_profile_document_json(self):
         """Test what happens if the profile_document cannot be converted to JSON."""
 
         class BadStorage(MockProfileStorage):

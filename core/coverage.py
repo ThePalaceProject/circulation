@@ -1,5 +1,6 @@
 import logging
 import traceback
+from typing import Optional, Union
 
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
@@ -135,13 +136,13 @@ class BaseCoverageProvider(object):
 
     # In your subclass, set this to the name of the service,
     # e.g. "Overdrive Bibliographic Coverage Provider".
-    SERVICE_NAME = None
+    SERVICE_NAME: Optional[str] = None
 
     # In your subclass, you _may_ set this to a string that distinguishes
     # two different CoverageProviders from the same data source.
     # (You may also override the operation method, if you need
     # database access to determine which operation to use.)
-    OPERATION = None
+    OPERATION: Optional[str] = None
 
     # The database session will be committed each time the
     # BaseCoverageProvider has (attempted to) provide coverage to this
@@ -149,7 +150,7 @@ class BaseCoverageProvider(object):
     # It's also possible to change it by passing in a value for
     # `batch_size` in the constructor, but generally nobody bothers
     # doing this.
-    DEFAULT_BATCH_SIZE = 100
+    DEFAULT_BATCH_SIZE: int = 100
 
     def __init__(
         self,
@@ -582,7 +583,7 @@ class IdentifierCoverageProvider(BaseCoverageProvider):
 
     # In your subclass, set this to the name of the data source you
     # consult when providing coverage, e.g. DataSource.OVERDRIVE.
-    DATA_SOURCE_NAME = None
+    DATA_SOURCE_NAME: str
 
     # In your subclass, set this to a single identifier type, or a list
     # of identifier types. The CoverageProvider will attempt to give
@@ -591,7 +592,7 @@ class IdentifierCoverageProvider(BaseCoverageProvider):
     # Setting this to None will attempt to give coverage to every single
     # Identifier in the system, which is probably not what you want.
     NO_SPECIFIED_TYPES = object()
-    INPUT_IDENTIFIER_TYPES = NO_SPECIFIED_TYPES
+    INPUT_IDENTIFIER_TYPES: Union[None, str, object] = NO_SPECIFIED_TYPES
 
     # Set this to False if a given Identifier needs to be run through
     # this CoverageProvider once for every Collection that has this
@@ -1077,14 +1078,14 @@ class CollectionCoverageProvider(IdentifierCoverageProvider):
 
     # By default, this type of CoverageProvider will provide coverage to
     # all Identifiers in the given Collection, regardless of their type.
-    INPUT_IDENTIFIER_TYPES = None
+    INPUT_IDENTIFIER_TYPES: Union[None, str, object] = None
 
     DEFAULT_BATCH_SIZE = 10
 
     # Set this to the name of the protocol managed by this type of
     # CoverageProvider. If this CoverageProvider can manage collections
     # for any protocol, leave this as None.
-    PROTOCOL = None
+    PROTOCOL: Optional[str] = None
 
     # By default, Works calculated by a CollectionCoverageProvider update
     # the ExternalSearchIndex. Set this value to True for applications that

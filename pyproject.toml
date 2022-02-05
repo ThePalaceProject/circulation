@@ -7,20 +7,14 @@ known_first_party = ["core", "api"]
 profile = "black"
 
 [tool.mypy]
-exclude = ['core/model/listeners.py']
+exclude = [
+    'core/model/listeners.py',
+    'core/bin',
+    'core/classifier',
+]
 files = [
-    "core/config.py",
-    "core/entrypoint.py",
-    "core/mirror.py",
-    "core/model",
-    "core/python_expression_dsl",
-    "core/s3.py",
-    "core/util",
-    "tests/core/models",
-    "tests/core/python_expression_dsl",
-    "tests/core/test_mirror_uploader.py",
-    "tests/core/test_s3.py",
-    "tests/core/util",
+    "core",
+    "tests/core",
 ]
 plugins = ["sqlmypy"]
 warn_redundant_casts = true
@@ -45,20 +39,20 @@ module = [
     "parameterized",
     "pyparsing",
     "textblob.*",
+    "elasticsearch.*",
+    "elasticsearch_dsl.*",
+    "spellchecker",
+    "watchtower",
+    "loggly.*",
+    "pymarc",
+    "webpub_manifest_parser.*",
 ]
 
 [[tool.mypy.overrides]]
 follow_imports = "skip"
 module = [
     "core.classifier.*",
-    "core.coverage",
-    "core.external_search",
-    "core.lane",
-    "core.log",
-    "core.marc",
-    "core.metadata_layer",
-    "core.model.*",
-    "core.testing",
+    "core.model.listeners"
 ]
 
 [tool.poetry]
@@ -142,8 +136,10 @@ pytest-timeout = "*"
 requests-mock = "1.9.3"
 sqlalchemy-stubs = "^0.4"
 types-Flask = "^1.1.6"
+types-freezegun = "^1.1.6"
 types-Pillow = "^9.0.6"
 types-psycopg2 = "^2.9.6"
+types-python-dateutil = "^2.8.9"
 types-pytz = "^2021.3.4"
 types-requests = "^2.27.8"
 

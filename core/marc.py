@@ -3,6 +3,7 @@ from io import BytesIO
 
 from flask_babel import lazy_gettext as _
 from pymarc import Field, Record
+from sqlalchemy.orm.session import Session
 
 from .classifier import Classifier
 from .config import CannotLoadConfiguration
@@ -16,7 +17,6 @@ from .model import (
     ExternalIntegration,
     Identifier,
     Representation,
-    Session,
     Work,
     get_one_or_create,
 )

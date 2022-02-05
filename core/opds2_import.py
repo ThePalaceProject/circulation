@@ -848,6 +848,9 @@ class OPDS2Importer(OPDSImporter):
         :return: CoverageFailure object describing the error
         :rtype: CoverageFailure
         """
+        if identifier.identifier is None:
+            raise ValueError
+
         if identifier not in failures:
             failures[identifier.identifier] = []
 
