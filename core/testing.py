@@ -101,7 +101,7 @@ class LogCaptureHandler(logging.Handler):
         self.logger.removeHandler(self)
 
     def emit(self, record):
-        level = self._normalize_level(record.levelname)
+        level = _normalize_level(record.levelname)
         if level not in self.LEVEL_NAMES:
             message = "Unexpected log level: '%s'." % record.levelname
             raise ValueError(message)

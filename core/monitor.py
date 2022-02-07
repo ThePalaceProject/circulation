@@ -823,7 +823,7 @@ class ReaperMonitor(Monitor):
     """
 
     MODEL_CLASS: Type[Base]
-    TIMESTAMP_FIELD: str
+    TIMESTAMP_FIELD: Optional[str] = None
     MAX_AGE: Union[datetime.timedelta, int]
     BATCH_SIZE: int = 1000
 
