@@ -2,7 +2,7 @@
 # Collection, CollectionIdentifier, CollectionMissing
 import logging
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
 from sqlalchemy import (
     Boolean,
@@ -101,7 +101,10 @@ class Collection(Base, HasSessionCache):
 
     # A Collection can include many LicensePools.
     licensepools = relationship(
-        "LicensePool", backref="collection", cascade="all, delete-orphan"
+        "LicensePool",
+        back_populates="collection",
+        cascade="all, delete-orphan",
+        uselist=True,
     )
 
     # A Collection can have many associated Credentials.
@@ -330,22 +333,20 @@ class Collection(Base, HasSessionCache):
     DEFAULT_AUDIENCE_KEY = "default_audience"
 
     @hybrid_property
-    def default_audience(self):
+    def default_audience(self) -> Optional[str]:
         """Return the default audience set up for this collection.
 
         :return: Default audience
-        :rtype: Optional[str]
         """
         setting = self.external_integration.setting(self.DEFAULT_AUDIENCE_KEY)
 
         return setting.value_or_default(None)
 
     @default_audience.setter
-    def default_audience(self, new_value):
+    def default_audience(self, new_value: Optional[str]):
         """Set the default audience for this collection.
 
         :param new_value: New default audience
-        :type new_value: Optional[str]
         """
         setting = self.external_integration.setting(self.DEFAULT_AUDIENCE_KEY)
 
@@ -948,14 +949,14 @@ class HasExternalIntegrationPerCollection(metaclass=ABCMeta):
     """Interface allowing to get access to an external integration"""
 
     @abstractmethod
-    def collection_external_integration(self, collection):
+    def collection_external_integration(
+        self, collection: Optional[Collection]
+    ) -> ExternalIntegration:
         """Returns an external integration associated with the collection
 
         :param collection: Collection
-        :type collection: core.model.Collection
 
         :return: External integration associated with the collection
-        :rtype: core.model.configuration.ExternalIntegration
         """
         raise NotImplementedError()
 
@@ -963,29 +964,25 @@ class HasExternalIntegrationPerCollection(metaclass=ABCMeta):
 class CollectionConfigurationStorage(BaseConfigurationStorage):
     """Serializes and deserializes values as library's configuration settings"""
 
-    def __init__(self, external_integration_association, collection):
+    def __init__(
+        self,
+        external_integration_association: HasExternalIntegrationPerCollection,
+        collection: Collection,
+    ):
         """Initializes a new instance of ConfigurationStorage class
 
         :param external_integration_association: Association with an external integtation
-        :type external_integration_association: HasExternalIntegrationPerCollection
-
         :param collection: Collection object
-        :type collection: Collection
         """
         self._integration_owner = external_integration_association
         self._collection_id = collection.id
 
-    def save(self, db, setting_name, value):
+    def save(self, db: Session, setting_name: str, value: Any):
         """Save the value as as a new configuration setting
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
         :param setting_name: Name of the library's configuration setting
-        :type setting_name: string
-
         :param value: Value to be saved
-        :type value: Any
         """
         collection = Collection.by_id(db, self._collection_id)
         integration = self._integration_owner.collection_external_integration(
@@ -995,16 +992,11 @@ class CollectionConfigurationStorage(BaseConfigurationStorage):
             setting_name, integration
         ).value = value
 
-    def load(self, db, setting_name):
+    def load(self, db: Session, setting_name: str) -> Any:
         """Loads and returns the library's configuration setting
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
         :param setting_name: Name of the library's configuration setting
-        :type setting_name: string
-
-        :return: Any
         """
         collection = Collection.by_id(db, self._collection_id)
         integration = self._integration_owner.collection_external_integration(

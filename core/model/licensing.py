@@ -27,7 +27,7 @@ from .patron import Hold, Loan, Patron
 
 if TYPE_CHECKING:
     # Only import for type checking, since it creates an import cycle
-    from core.model import Resource  # noqa: autoflake
+    from core.model import Collection, Resource  # noqa: autoflake
 
     from ..analytics import Analytics
 
@@ -188,6 +188,8 @@ class LicensePool(Base):
         Integer, ForeignKey("collections.id"), index=True, nullable=False
     )
 
+    collection = relationship("Collection", back_populates="licensepools")
+
     # Each LicensePool has an Edition which contains the metadata used
     # to describe this book.
     presentation_edition_id = Column(Integer, ForeignKey("editions.id"), index=True)
@@ -195,7 +197,7 @@ class LicensePool(Base):
     # If the source provides information about individual licenses, the
     # LicensePool may have many Licenses.
     licenses = relationship(
-        "License", backref="license_pool", cascade="all, delete-orphan"
+        "License", backref="license_pool", cascade="all, delete-orphan", uselist=True
     )
 
     # One LicensePool can have many Loans.
@@ -277,22 +279,20 @@ class LicensePool(Base):
         )
 
     @hybrid_property
-    def unlimited_access(self):
+    def unlimited_access(self) -> bool:
         """Returns a Boolean value indicating whether this LicensePool allows unlimited access.
         For example, in the case of LCP books without explicit licensing information
 
         :return: Boolean value indicating whether this LicensePool allows unlimited access
-        :rtype: bool
         """
         return self.licenses_owned == self.UNLIMITED_ACCESS
 
     @unlimited_access.setter
-    def unlimited_access(self, value):
+    def unlimited_access(self, value: bool):
         """Sets value of unlimited_access property.
         If you set it to False, license_owned and license_available will be reset to 0
 
         :param value: Boolean value indicating whether this LicensePool allows unlimited access
-        :type value: bool
         """
         if value:
             self.licenses_owned = self.UNLIMITED_ACCESS
@@ -663,8 +663,20 @@ class LicensePool(Base):
         """
         _db = Session.object_session(self)
 
-        licenses_owned = sum([l.total_remaining_loans for l in self.licenses])  # type: ignore
-        licenses_available = sum([l.currently_available_loans for l in self.licenses])  # type: ignore
+        licenses_owned = sum(
+            [
+                l.total_remaining_loans
+                for l in self.licenses
+                if l.total_remaining_loans is not None
+            ]
+        )
+        licenses_available = sum(
+            [
+                l.currently_available_loans
+                for l in self.licenses
+                if l.currently_available_loans is not None
+            ]
+        )
 
         holds = self.get_active_holds()
 

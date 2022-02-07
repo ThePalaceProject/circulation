@@ -6,7 +6,17 @@ import logging
 from abc import ABCMeta, abstractmethod
 from contextlib import contextmanager
 from enum import Enum
-from typing import TYPE_CHECKING, List
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Type,
+)
 
 from flask_babel import lazy_gettext as _
 from sqlalchemy import Column, ForeignKey, Index, Integer, Unicode
@@ -847,14 +857,12 @@ class HasExternalIntegration(metaclass=ABCMeta):
     """Interface allowing to get access to an external integration"""
 
     @abstractmethod
-    def external_integration(self, db):
+    def external_integration(self, db: Session) -> ExternalIntegration:
         """Returns an external integration associated with this object
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
 
         :return: External integration associated with this object
-        :rtype: core.model.configuration.ExternalIntegration
         """
         raise NotImplementedError()
 
@@ -863,31 +871,21 @@ class BaseConfigurationStorage(metaclass=ABCMeta):
     """Serializes and deserializes values as configuration settings"""
 
     @abstractmethod
-    def save(self, db, setting_name, value):
+    def save(self, db: Session, setting_name: str, value: Any):
         """Save the value as as a new configuration setting
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
         :param setting_name: Name of the configuration setting
-        :type setting_name: string
-
         :param value: Value to be saved
-        :type value: Any
         """
         raise NotImplementedError()
 
     @abstractmethod
-    def load(self, db, setting_name):
+    def load(self, db: Session, setting_name: str) -> Any:
         """Loads and returns the library's configuration setting
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
         :param setting_name: Name of the configuration setting
-        :type setting_name: string
-
-        :return: Any
         """
         raise NotImplementedError()
 
@@ -895,41 +893,30 @@ class BaseConfigurationStorage(metaclass=ABCMeta):
 class ConfigurationStorage(BaseConfigurationStorage):
     """Serializes and deserializes values as configuration settings"""
 
-    def __init__(self, integration_association):
+    def __init__(self, integration_association: HasExternalIntegration):
         """Initializes a new instance of ConfigurationStorage class
 
         :param integration_association: Association with an external integration
-        :type integration_association: HasExternalIntegration
         """
         self._integration_association = integration_association
 
-    def save(self, db, setting_name, value):
+    def save(self, db: Session, setting_name: str, value: Any):
         """Save the value as as a new configuration setting
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
         :param setting_name: Name of the configuration setting
-        :type setting_name: string
-
         :param value: Value to be saved
-        :type value: Any
         """
         integration = self._integration_association.external_integration(db)
         ConfigurationSetting.for_externalintegration(
             setting_name, integration
         ).value = value
 
-    def load(self, db, setting_name):
+    def load(self, db: Session, setting_name: str) -> Any:
         """Loads and returns the library's configuration setting
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
         :param setting_name: Name of the library's configuration setting
-        :type setting_name: string
-
-        :return: Any
         """
         integration = self._integration_association.external_integration(db)
         value = ConfigurationSetting.for_externalintegration(
@@ -949,16 +936,15 @@ class ConfigurationAttributeType(Enum):
     LIST = "list"
     MENU = "menu"
 
-    def to_control_type(self):
+    def to_control_type(self) -> Optional[str]:
         """Converts the value to a attribute type understandable by circulation-admin
 
         :return: String representation of attribute's type
-        :rtype: string
         """
         # NOTE: For some reason, circulation-admin converts "text" into <text> so we have to turn it into None
         # In this case circulation-admin will use <input>
         # TODO: To be fixed in https://jira.nypl.org/browse/SIMPLY-3008
-        if self.value == self.TEXT.value:
+        if self.value == ConfigurationAttributeType.TEXT.value:
             return None
         else:
             return self.value
@@ -981,26 +967,21 @@ class ConfigurationAttribute(Enum):
 class ConfigurationOption(object):
     """Key-value pair containing information about configuration attribute option"""
 
-    def __init__(self, key, label):
+    def __init__(self, key: str, label: str) -> None:
         """Initializes a new instance of ConfigurationOption class
 
         :param key: Key
-        :type key: string
-
         :param label: Label
-        :type label: string
         """
         self._key = key
         self._label = label
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         """Compares two ConfigurationOption objects
 
         :param other: ConfigurationOption object
-        :type other: ConfigurationOption
 
         :return: Boolean value indicating whether two items are equal
-        :rtype: bool
         """
         if not isinstance(other, ConfigurationOption):
             return False
@@ -1008,40 +989,35 @@ class ConfigurationOption(object):
         return self.key == other.key and self.label == other.label
 
     @property
-    def key(self):
+    def key(self) -> str:
         """Returns option's key
 
         :return: Option's key
-        :rtype: string
         """
         return self._key
 
     @property
-    def label(self):
+    def label(self) -> str:
         """Returns option's label
 
         :return: Option's label
-        :rtype: string
         """
         return self._label
 
-    def to_settings(self):
+    def to_settings(self) -> Dict[str, str]:
         """Returns a dictionary containing option metadata in the SETTINGS format
 
         :return: Dictionary containing option metadata in the SETTINGS format
-        :rtype: Dict
         """
         return {"key": self.key, "label": self.label}
 
     @staticmethod
-    def from_enum(cls):
+    def from_enum(cls: Type[Enum]) -> List["ConfigurationOption"]:
         """Convers Enum to a list of options in the SETTINGS format
 
         :param cls: Enum type
-        :type cls: type
 
         :return: List of options in the SETTINGS format
-        :rtype: List[Dict]
         """
         if not issubclass(cls, Enum):
             raise ValueError("Class should be descendant of Enum")
@@ -1053,26 +1029,22 @@ class HasConfigurationSettings(metaclass=ABCMeta):
     """Interface representing class containing ConfigurationMetadata properties"""
 
     @abstractmethod
-    def get_setting_value(self, setting_name):
+    def get_setting_value(self, setting_name: str) -> Any:
         """Returns a settings'value
 
         :param setting_name: Name of the setting
-        :type setting_name: string
 
         :return: Setting's value
-        :rtype: Any
         """
         raise NotImplementedError()
 
     @abstractmethod
-    def set_setting_value(self, setting_name, setting_value):
+    def set_setting_value(self, setting_name: str, setting_value: Any):
         """Sets setting's value
 
         :param setting_name: Name of the setting
-        :type setting_name: string
 
         :param setting_value: New value of the setting
-        :type setting_value: Any
         """
         raise NotImplementedError()
 
@@ -1084,42 +1056,27 @@ class ConfigurationMetadata(object):
 
     def __init__(
         self,
-        key,
-        label,
-        description,
-        type,
-        required=False,
-        default=None,
-        options=None,
-        category=None,
+        key: str,
+        label: str,
+        description: str,
+        type: ConfigurationAttributeType,
+        required: bool = False,
+        default: Optional[Any] = None,
+        options: List[ConfigurationOption] = None,
+        category: Optional[str] = None,
         format=None,
         index=None,
     ):
         """Initializes a new instance of ConfigurationMetadata class
 
         :param key: Setting's key
-        :type key: string
-
         :param label: Setting's label
-        :type label: string
-
         :param description: Setting's description
-        :type description: string
-
         :param type: Setting's type
-        :type type: ConfigurationAttributeType
-
         :param required: Boolean value indicating whether the setting is required or not
-        :type required: bool
-
         :param default: Setting's default value
-        :type default: Any
-
         :param options: Setting's options (used in the case of select)
-        :type options: List[ConfigurationSettingAttributeOption]
-
         :param category: Setting's category
-        :type category: string
         """
         self._key = key
         self._label = label
@@ -1137,18 +1094,18 @@ class ConfigurationMetadata(object):
             ConfigurationMetadata._counter += 1
             self._index = ConfigurationMetadata._counter
 
-    def __get__(self, owner_instance, owner_type):
+    def __get__(
+        self,
+        owner_instance: Optional[HasConfigurationSettings],
+        owner_type: Optional[Type],
+    ) -> Any:
         """Returns a value of the setting
 
         :param owner_instance: Instance of the owner, class having instance of ConfigurationMetadata as an attribute
-        :type owner_instance: Optional[ConfigurationMetadataOwner]
-
         :param owner_type: Owner's class
-        :type owner_type: Optional[Type]
 
         :return: ConfigurationMetadata instance (when called via a static method) or
             the setting's value (when called via an instance method)
-        :rtype: Union[ConfigurationMetadata, Any]
         """
         # If owner_instance is empty, it means that this method was called
         # via a static method of ConfigurationMetadataOwner (for example, ConfigurationBucket.to_settings).
@@ -1186,14 +1143,14 @@ class ConfigurationMetadata(object):
 
         return setting_value
 
-    def __set__(self, owner_instance, value):
+    def __set__(
+        self, owner_instance: Optional[HasConfigurationSettings], value: Any
+    ) -> Any:
         """Updates the setting's value
 
         :param owner_instance: Instance of the owner, class having instance of ConfigurationMetadata as an attribute
-        :type owner_instance: Optional[ConfigurationMetadataOwner]
 
         :param value: New setting's value
-        :type value: Any
         """
         if not isinstance(owner_instance, HasConfigurationSettings):
             raise Exception(
@@ -1203,83 +1160,74 @@ class ConfigurationMetadata(object):
         return owner_instance.set_setting_value(self._key, value)
 
     @property
-    def key(self):
+    def key(self) -> str:
         """Returns the setting's key
 
         :return: Setting's key
-        :rtype: string
         """
         return self._key
 
     @property
-    def label(self):
+    def label(self) -> str:
         """Returns the setting's label
 
         :return: Setting's label
-        :rtype: string
         """
         return self._label
 
     @property
-    def description(self):
+    def description(self) -> str:
         """Returns the setting's description
 
         :return: Setting's description
-        :rtype: string
         """
         return self._description
 
     @property
-    def type(self):
+    def type(self) -> ConfigurationAttributeType:
         """Returns the setting's type
 
         :return: Setting's type
-        :rtype: string
         """
         return self._type
 
     @property
-    def required(self):
+    def required(self) -> bool:
         """Returns the boolean value indicating whether the setting is required or not
 
         :return: Boolean value indicating whether the setting is required or not
-        :rtype: string
         """
         return self._required
 
     @property
-    def default(self):
+    def default(self) -> Optional[Any]:
         """Returns the setting's default value
 
         :return: Setting's default value
-        :rtype: string
         """
         return self._default
 
     @property
-    def options(self):
+    def options(self) -> Optional[List[ConfigurationOption]]:
         """Returns the setting's options (used in the case of select)
 
         :return: Setting's options (used in the case of select)
-        :rtype: string
         """
         return self._options
 
     @property
-    def category(self):
+    def category(self) -> Optional[str]:
         """Returns the setting's category
 
         :return: Setting's category
-        :rtype: string
         """
         return self._category
 
     @property
-    def format(self):
+    def format(self) -> str:
         """Returns the setting's format
 
         :return: Setting's format
-        :rtype: string
         """
         return self._format
 
@@ -1288,14 +1236,11 @@ class ConfigurationMetadata(object):
         return self._index
 
     @staticmethod
-    def get_configuration_metadata(cls):
+    def get_configuration_metadata(cls) -> List[Tuple[str, "ConfigurationMetadata"]]:
         """Returns a list of 2-tuples containing information ConfigurationMetadata properties in the specified class
 
         :param cls: Class
-        :type cls: type
-
         :return: List of 2-tuples containing information ConfigurationMetadata properties in the specified class
-        :rtype: List[Tuple[string, ConfigurationMetadata]]
         """
         members = inspect.getmembers(cls)
         configuration_metadata = []
@@ -1326,16 +1271,13 @@ class ConfigurationMetadata(object):
         }
 
     @staticmethod
-    def to_bool(metadata):
+    def to_bool(metadata: "ConfigurationMetadata") -> bool:
         """Return a boolean scalar indicating whether the configuration setting
             contains a value that can be treated as True (see ConfigurationSetting.MEANS_YES).
 
         :param metadata: ConfigurationMetadata object
-        :type metadata: ConfigurationMetadata
-
         :return: Boolean scalar indicating
             whether this configuration setting contains a value that can be treated as True
-        :rtype: bool
         """
         return str(metadata).lower() in ConfigurationSetting.MEANS_YES
 
@@ -1346,14 +1288,13 @@ class ConfigurationGrouping(HasConfigurationSettings):
     NOTE: Be aware that it's valid only while a database session is valid and must not be stored between requests
     """
 
-    def __init__(self, configuration_storage, db):
+    def __init__(
+        self, configuration_storage: BaseConfigurationStorage, db: Session
+    ) -> None:
         """Initializes a new instance of ConfigurationGrouping
 
         :param configuration_storage: ConfigurationStorage object
-        :type configuration_storage: BaseConfigurationStorage
-
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
         """
         self._logger = logging.getLogger()
         self._configuration_storage = configuration_storage
@@ -1365,34 +1306,27 @@ class ConfigurationGrouping(HasConfigurationSettings):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._db = None
 
-    def get_setting_value(self, setting_name):
+    def get_setting_value(self, setting_name: str) -> Any:
         """Returns a settings'value
 
         :param setting_name: Name of the setting
-        :type setting_name: string
-
         :return: Setting's value
-        :rtype: Any
         """
         return self._configuration_storage.load(self._db, setting_name)
 
-    def set_setting_value(self, setting_name, setting_value):
+    def set_setting_value(self, setting_name: str, setting_value: Any) -> Any:
         """Sets setting's value
 
         :param setting_name: Name of the setting
-        :type setting_name: string
-
         :param setting_value: New value of the setting
-        :type setting_value: Any
         """
         self._configuration_storage.save(self._db, setting_name, setting_value)
 
     @classmethod
-    def to_settings_generator(cls):
+    def to_settings_generator(cls) -> Iterable[Dict]:
         """Return a generator object returning settings in a format understandable by circulation-admin.
 
         :return: list of settings in a format understandable by circulation-admin.
-        :rtype: List[Dict]
         """
         for name, member in ConfigurationMetadata.get_configuration_metadata(cls):
             key_attribute = getattr(member, ConfigurationAttribute.KEY.value, None)
@@ -1401,6 +1335,9 @@ class ConfigurationGrouping(HasConfigurationSettings):
                 member, ConfigurationAttribute.DESCRIPTION.value, None
             )
             type_attribute = getattr(member, ConfigurationAttribute.TYPE.value, None)
+            control_type = (
+                type_attribute.to_control_type() if type_attribute is not None else None
+            )
             required_attribute = getattr(
                 member, ConfigurationAttribute.REQUIRED.value, None
             )
@@ -1418,7 +1355,7 @@ class ConfigurationGrouping(HasConfigurationSettings):
                 ConfigurationAttribute.KEY.value: key_attribute,
                 ConfigurationAttribute.LABEL.value: label_attribute,
                 ConfigurationAttribute.DESCRIPTION.value: description_attribute,
-                ConfigurationAttribute.TYPE.value: type_attribute.to_control_type(),
+                ConfigurationAttribute.TYPE.value: control_type,
                 ConfigurationAttribute.REQUIRED.value: required_attribute,
                 ConfigurationAttribute.DEFAULT.value: default_attribute,
                 ConfigurationAttribute.OPTIONS.value: [
@@ -1430,11 +1367,10 @@ class ConfigurationGrouping(HasConfigurationSettings):
             }
 
     @classmethod
-    def to_settings(cls):
+    def to_settings(cls) -> List[Dict]:
         """Return a list of settings in a format understandable by circulation-admin.
 
         :return: list of settings in a format understandable by circulation-admin.
-        :rtype: List[Dict]
         """
         return list(cls.to_settings_generator())
 
@@ -1443,20 +1379,18 @@ class ConfigurationFactory(object):
     """Factory creating new instances of ConfigurationGrouping class descendants."""
 
     @contextmanager
-    def create(self, configuration_storage, db, configuration_grouping_class):
+    def create(
+        self,
+        configuration_storage: ConfigurationStorage,
+        db: Session,
+        configuration_grouping_class: Type[ConfigurationGrouping],
+    ) -> Iterator[ConfigurationGrouping]:
         """Create a new instance of ConfigurationGrouping.
 
         :param configuration_storage: ConfigurationStorage object
-        :type configuration_storage: ConfigurationStorage
-
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
         :param configuration_grouping_class: Configuration bucket's class
-        :type configuration_grouping_class: Type[ConfigurationGrouping]
-
         :return: ConfigurationGrouping instance
-        :rtype: ConfigurationGrouping
         """
         with configuration_grouping_class(
             configuration_storage, db

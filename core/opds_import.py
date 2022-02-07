@@ -1952,7 +1952,7 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests, HasExternalIntegration)
     @contextmanager
     def _get_configuration(
         self, db: sqlalchemy.orm.session.Session
-    ) -> Iterator[ConnectionConfiguration]:
+    ) -> Iterator[ConfigurationGrouping]:
         """Return the configuration object.
 
         :param db: Database session
