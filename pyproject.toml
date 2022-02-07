@@ -47,7 +47,7 @@ Pillow = "9.0.1"
 psycopg2 = { version = "~2.9.3", optional = true }
 psycopg2-binary = { version = "~2.9.3", optional = true }
 py-bcrypt = "0.4"
-pycryptodome = "3.14.0"
+pycryptodome = "3.14.1"
 pyinstrument = "< 4.2"
 PyJWT = "2.3.0"
 PyLD = "2.0.3"
