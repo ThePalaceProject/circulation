@@ -154,17 +154,7 @@ class OPDS2ImporterConfiguration(ConfigurationGrouping):
 
         :return: List of supported identifier types
         """
-        supported_identifier_types = self.supported_identifier_types
-
-        if supported_identifier_types:
-            return (
-                set(json.loads(supported_identifier_types))
-                if type(supported_identifier_types) is str
-                else supported_identifier_types
-            )
-        else:
-            # By default, all the identifier types are supported.
-            return set(self.ALL_SUPPORTED_IDENTIFIER_TYPES)
+        return self.supported_identifier_types or set(self.ALL_SUPPORTED_IDENTIFIER_TYPES)
 
     def set_supported_identifier_types(
         self,
