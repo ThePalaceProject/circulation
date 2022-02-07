@@ -7,7 +7,7 @@ from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
 from api.odl import ODLAPI, ODLImporter
 from core.metadata_layer import FormatData
-from core.model import DeliveryMechanism, Edition, MediaTypes, RightsStatus
+from core.model import Edition, RightsStatus
 from core.model.configuration import (
     ConfigurationAttributeType,
     ConfigurationFactory,
@@ -52,21 +52,6 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
     """
 
     NAME = ODL2API.NAME
-
-    FEEDBOOKS_AUDIO = "{0}; protection={1}".format(
-        MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-        DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
-    )
-
-    CONTENT_TYPE = "content-type"
-    DRM_SCHEME = "drm-scheme"
-
-    LICENSE_FORMATS = {
-        FEEDBOOKS_AUDIO: {
-            CONTENT_TYPE: MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-            DRM_SCHEME: DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
-        }
-    }
 
     def __init__(
         self,

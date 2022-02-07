@@ -1,8 +1,19 @@
 import json
 import logging
 from contextlib import contextmanager
+from datetime import datetime
 from io import BytesIO, StringIO
-from typing import Dict, List, Optional, Set, Tuple
+from typing import (
+    Callable,
+    Collection,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+)
 from urllib.parse import urljoin, urlparse
 
 import sqlalchemy
@@ -18,6 +29,7 @@ from webpub_manifest_parser.opds2.registry import (
 )
 from webpub_manifest_parser.utils import encode, first_or_default
 
+from core.mirror import MirrorUploader
 from core.model.configuration import (
     ConfigurationAttributeType,
     ConfigurationFactory,
@@ -53,18 +65,17 @@ from .model import (
     RightsStatus,
     Subject,
 )
-from .opds_import import OPDSImporter, OPDSImportMonitor
+from .opds_import import OPDSImporter, OPDSImportMonitor, SimplifiedOPDSLookup
 from .util.http import BadResponseException
 from .util.opds_writer import OPDSFeed
 
 
 class RWPMManifestParser(object):
-    def __init__(self, manifest_parser_factory):
+    def __init__(self, manifest_parser_factory: ManifestParserFactory):
         """Initialize a new instance of RWPMManifestParser class.
 
         :param manifest_parser_factory: Factory creating a new instance
             of a RWPM-compatible parser (RWPM, OPDS 2.x, ODL 2.x, etc.)
-        :type manifest_parser_factory: ManifestParserFactory
         """
         if not isinstance(manifest_parser_factory, ManifestParserFactory):
             raise ValueError(
@@ -75,14 +86,13 @@ class RWPMManifestParser(object):
 
         self._manifest_parser_factory = manifest_parser_factory
 
-    def parse_manifest(self, manifest):
+    def parse_manifest(
+        self, manifest: Union[str, Dict, Manifestlike]
+    ) -> ManifestParserResult:
         """Parse the feed into an RPWM-like AST object.
 
         :param manifest: RWPM-like manifest
-        :type manifest: Union[str, Dict, webpub_manifest_parser.core.ast.Manifestlike]
-
         :return: Parsed RWPM-like manifest
-        :rtype: webpub_manifest_parser.core.ManifestParserResult
         """
         result = None
 
@@ -115,7 +125,7 @@ class RWPMManifestParser(object):
 
 
 class OPDS2ImporterConfiguration(ConfigurationGrouping):
-    """Contains configuration settings of ProQuestOPDS2Importer."""
+    """Contains configuration settings of OPDS2Importer."""
 
     ALL_SUPPORTED_IDENTIFIER_TYPES = set(
         [identifier_type.value for identifier_type in IdentifierType]
@@ -192,52 +202,36 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
 
     def __init__(
         self,
-        db,
-        collection,
-        parser,
-        data_source_name=None,
-        identifier_mapping=None,
-        http_get=None,
-        metadata_client=None,
-        content_modifier=None,
-        map_from_collection=None,
-        mirrors=None,
+        db: sqlalchemy.orm.session.Session,
+        collection: Collection,
+        parser: RWPMManifestParser,
+        data_source_name: str = None,
+        identifier_mapping: Dict = None,
+        http_get: Callable = None,
+        metadata_client: SimplifiedOPDSLookup = None,
+        content_modifier: Callable = None,
+        map_from_collection: Dict = None,
+        mirrors: Dict[str, MirrorUploader] = None,
     ):
         """Initialize a new instance of OPDS2Importer class.
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
 
         :param collection: Circulation Manager's collection.
             LicensePools created by this OPDS2Import class will be associated with the given Collection.
             If this is None, no LicensePools will be created -- only Editions.
-        :type collection: Collection
-
         :param parser: Feed parser
-        :type parser: RWPMManifestParser
-
         :param data_source_name: Name of the source of this OPDS feed.
             All Editions created by this import will be associated with this DataSource.
             If there is no DataSource with this name, one will be created.
             NOTE: If `collection` is provided, its .data_source will take precedence over any value provided here.
             This is only for use when you are importing OPDS metadata without any particular Collection in mind.
-        :type data_source_name: str
-
         :param identifier_mapping: Dictionary used for mapping external identifiers into a set of internal ones
-        :type identifier_mapping: Dict
-
         :param metadata_client: A SimplifiedOPDSLookup object that is used to fill in missing metadata
-        :type metadata_client: SimplifiedOPDSLookup
-
         :param content_modifier: A function that may modify-in-place representations (such as images and EPUB documents)
             as they come in from the network.
-        :type content_modifier: Callable
-
         :param map_from_collection: Identifier mapping
-        :type map_from_collection: Dict
-
         :param mirrors: A dictionary of different MirrorUploader objects for different purposes
-        :type mirrors: Dict[MirrorUploader]
         """
         super(OPDS2Importer, self).__init__(
             db,
@@ -274,23 +268,19 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
         and configure allowed identifier types in the CM Admin UI.
 
         :param identifier: Identifier object
-        :type identifier: Identifier
-
         :return: Boolean value indicating whether CM can import the identifier
-        :rtype: bool
         """
         supported_identifier_types = self._get_supported_identifier_types()
 
         return identifier.type in supported_identifier_types
 
-    def _extract_subjects(self, subjects):
+    def _extract_subjects(
+        self, subjects: List["core_ast.Subject"]
+    ) -> List["SubjectMetadata"]:
         """Extract a list of SubjectData objects from the webpub-manifest-parser's subject.
 
         :param subjects: Parsed subject object
-        :type subjects: List[core_ast.Subject]
-
         :return: List of subjects metadata
-        :rtype: List[SubjectMetadata]
         """
         self._logger.debug("Started extracting subjects metadata")
 
@@ -329,17 +319,16 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
 
         return subject_metadata_list
 
-    def _extract_contributors(self, contributors, default_role=Contributor.AUTHOR_ROLE):
+    def _extract_contributors(
+        self,
+        contributors: List["core_ast.Contributor"],
+        default_role: Optional[str] = Contributor.AUTHOR_ROLE,
+    ) -> List[ContributorData]:
         """Extract a list of ContributorData objects from the webpub-manifest-parser's contributor.
 
         :param contributors: Parsed contributor object
-        :type contributors: List[core_ast.Contributor]
-
         :param default_role: Default role
-        :type default_role: Optional[str]
-
         :return: List of contributors metadata
-        :rtype: List[ContributorData]
         """
         self._logger.debug("Started extracting contributors metadata")
 
@@ -421,14 +410,13 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
 
         return link_metadata
 
-    def _extract_description_link(self, publication):
+    def _extract_description_link(
+        self, publication: opds2_ast.OPDS2Publication
+    ) -> LinkData:
         """Extract description from the publication object and create a Hyperlink.DESCRIPTION link containing it.
 
         :param publication: Publication object
-        :type publication: opds2_ast.Publication
-
         :return: LinkData object containing publication's description
-        :rtype: LinkData
         """
         self._logger.debug(
             "Started extracting a description link from {0}".format(
@@ -453,17 +441,14 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
 
         return description_link
 
-    def _extract_image_links(self, publication, feed_self_url):
+    def _extract_image_links(
+        self, publication: "ast_core.Publication", feed_self_url: str
+    ) -> List[LinkData]:
         """Extracts a list of LinkData objects containing information about artwork.
 
         :param publication: Publication object
-        :type publication: ast_core.Publication
-
         :param feed_self_url: Feed's self URL
-        :type feed_self_url: str
-
         :return: List of links metadata
-        :rtype: List[LinkData]
         """
         self._logger.debug(
             "Started extracting image links from {0}".format(encode(publication.images))
@@ -516,17 +501,14 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
 
         return image_links
 
-    def _extract_links(self, publication, feed_self_url):
+    def _extract_links(
+        self, publication: "ast_core.Publication", feed_self_url: str
+    ) -> List[LinkData]:
         """Extract a list of LinkData objects from a list of webpub-manifest-parser links.
 
         :param publication: Publication object
-        :type publication: ast_core.Publication
-
         :param feed_self_url: Feed's self URL
-        :type feed_self_url: str
-
         :return: List of links metadata
-        :rtype: List[LinkData]
         """
         self._logger.debug(
             "Started extracting links from {0}".format(encode(publication.links))
@@ -554,14 +536,13 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
 
         return links
 
-    def _extract_media_types_and_drm_scheme_from_link(self, link):
+    def _extract_media_types_and_drm_scheme_from_link(
+        self, link: "ast_core.Link"
+    ) -> List[Tuple[str, str]]:
         """Extract information about content's media type and used DRM schema from the link.
 
         :param link: Link object
-        :type link: ast_core.Link
-
         :return: 2-tuple containing information about the content's media type and its DRM schema
-        :rtype: List[Tuple[str, str]]
         """
         self._logger.debug(
             "Started extracting media types and a DRM scheme from {0}".format(
@@ -609,14 +590,11 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
 
         return media_types_and_drm_scheme
 
-    def _extract_medium_from_links(self, links):
+    def _extract_medium_from_links(self, links: "ast_core.LinkList") -> Optional[str]:
         """Extract the publication's medium from its links.
 
         :param links: List of links
-        :type links: ast_core.LinkList
-
         :return: Publication's medium
-        :rtype: Optional[str]
         """
         derived = None
 
@@ -636,14 +614,14 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
         return derived
 
     @staticmethod
-    def _extract_medium(publication, default_medium=Edition.BOOK_MEDIUM):
+    def _extract_medium(
+        publication: opds2_ast.OPDS2Publication,
+        default_medium: str = Edition.BOOK_MEDIUM,
+    ) -> str:
         """Extract the publication's medium from its metadata.
 
         :param publication: Publication object
-        :type publication: opds2_core.OPDS2Publication
-
         :return: Publication's medium
-        :rtype: str
         """
         medium = default_medium
 
@@ -654,31 +632,28 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
 
         return medium
 
-    def _extract_identifier(self, publication):
+    def _extract_identifier(
+        self, publication: opds2_ast.OPDS2Publication
+    ) -> Identifier:
         """Extract the publication's identifier from its metadata.
 
         :param publication: Publication object
-        :type publication: opds2_core.OPDS2Publication
-
         :return: Identifier object
-        :rtype: Identifier
         """
         return self._parse_identifier(publication.metadata.identifier)
 
-    def _extract_publication_metadata(self, feed, publication, data_source_name):
+    def _extract_publication_metadata(
+        self,
+        feed: opds2_ast.OPDS2Feed,
+        publication: opds2_ast.OPDS2Publication,
+        data_source_name: str,
+    ) -> Metadata:
         """Extract a Metadata object from webpub-manifest-parser's publication.
 
         :param publication: Feed object
-        :type publication: opds2_ast.OPDS2Feed
-
         :param publication: Publication object
-        :type publication: opds2_ast.OPDS2Publication
-
         :param data_source_name: Data source's name
-        :type data_source_name: str
-
         :return: Publication's metadata
-        :rtype: Metadata
         """
         self._logger.debug(
             "Started extracting metadata from publication {0}".format(
@@ -811,24 +786,19 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
         return metadata
 
     def _find_formats_in_non_open_access_acquisition_links(
-        self, ast_link_list, link_data_list, rights_uri, circulation_data
-    ):
+        self,
+        ast_link_list: List["ast_core.Link"],
+        link_data_list: List[LinkData],
+        rights_uri: str,
+        circulation_data: CirculationData,
+    ) -> List[FormatData]:
         """Find circulation formats in non open-access acquisition links.
 
         :param ast_link_list: List of Link objects
-        :type ast_link_list: List[ast_core.Link]
-
         :param link_data_list: List of LinkData objects
-        :type link_data_list: List[LinkData]
-
         :param rights_uri: Rights URI
-        :type rights_uri: str
-
         :param circulation_data: Circulation data
-        :type circulation_data: CirculationData
-
         :return: List of additional circulation formats found in non-open access links
-        :rtype: List[FormatData]
         """
         formats = []
 
@@ -859,9 +829,7 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
     ) -> OPDS2ImporterConfiguration:
         """Return the configuration object.
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
         :return: Configuration object
-        :rtype: OPDS2ImporterConfiguration
         """
         with self._configuration_factory.create(
             self._configuration_storage, db, OPDS2ImporterConfiguration
@@ -871,7 +839,6 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
     def _get_supported_identifier_types(self) -> Set[int]:
         """Return a set of supported identifier types.
         :return: Set of supported identifier types
-        :rtype: Set[int]
         """
         if self._supported_identifier_types is None:
             with self._get_configuration(self._db) as configuration:
@@ -886,21 +853,17 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
     ) -> ExternalIntegration:
         """Return an external integration associated with this object.
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
         :return: External integration associated with this object
-        :rtype: core.model.configuration.ExternalIntegration
         """
         return self.collection.external_integration
 
     @staticmethod
-    def _get_publications(feed):
+    def _get_publications(
+        feed: opds2_ast.OPDS2Feed,
+    ) -> Iterable[opds2_ast.OPDS2Publication]:
         """Return all the publications in the feed.
-
         :param feed: OPDS 2.0 feed
-        :type feed: opds2_ast.OPDS2Feed
-
         :return: An iterable list of publications containing in the feed
-        :rtype: Iterable[opds2_ast.OPDS2Publication]
         """
         if feed.publications:
             for publication in feed.publications:
@@ -913,28 +876,24 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
                         yield publication
 
     @staticmethod
-    def _is_acquisition_link(link):
+    def _is_acquisition_link(link: "ast_core.Link") -> bool:
         """Return a boolean value indicating whether a link can be considered an acquisition link.
 
         :param link: Link object
-        :type link: ast_core.Link
-
         :return: Boolean value indicating whether a link can be considered an acquisition link
-        :rtype: bool
         """
         return any(
             [rel for rel in link.rels if rel in LinkRelations.CIRCULATION_ALLOWED]
         )
 
     @staticmethod
-    def _is_open_access_link_(link_data, circulation_data):
+    def _is_open_access_link_(
+        link_data: LinkData, circulation_data: CirculationData
+    ) -> bool:
         """Return a boolean value indicating whether the specified LinkData object describes an open-access link.
 
         :param link_data: LinkData object
-        :type link_data: LinkData
-
         :param circulation_data: CirculationData object
-        :type circulation_data: CirculationData
         """
         open_access_link = (
             link_data.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD and link_data.href
@@ -963,19 +922,10 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
         """Record a new coverage failure.
 
         :param failures: Dictionary mapping publication identifiers to corresponding CoverageFailure objects
-        :type failures: Dict[str, List[CoverageFailure]]
-
         :param identifier: Publication's identifier
-        :type identifier: Identifier
-
         :param error_message: Message describing the failure
-        :type error_message: str
-
         :param transient: Boolean value indicating whether the failure is final or it can go away in the future
-        :type transient: bool
-
         :return: CoverageFailure object describing the error
-        :rtype: CoverageFailure
         """
         if identifier not in failures:
             failures[identifier.identifier] = []
@@ -997,7 +947,6 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
             and could not be parsed by CM.
 
         :param publication: OPDS 2.x publication object
-        :type publication: opds2_ast.OPDS2Publication
         """
         original_identifier = publication.metadata.identifier
         title = publication.metadata.title
@@ -1009,14 +958,11 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
                 f"Publication # {original_identifier} ('{title}') has an unrecognizable identifier."
             )
 
-    def extract_next_links(self, feed):
+    def extract_next_links(self, feed: Union[str, opds2_ast.OPDS2Feed]) -> List[str]:
         """Extracts "next" links from the feed.
 
         :param feed: OPDS 2.0 feed
-        :type feed: Union[str, opds2_ast.OPDS2Feed]
-
         :return: List of "next" links
-        :rtype: List[str]
         """
         parser_result = self._parser.parse_manifest(feed)
         parsed_feed = parser_result.root
@@ -1029,14 +975,13 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
 
         return next_links
 
-    def extract_last_update_dates(self, feed):
+    def extract_last_update_dates(
+        self, feed: Union[str, opds2_ast.OPDS2Feed]
+    ) -> List[Tuple[str, datetime]]:
         """Extract last update date of the feed.
 
         :param feed: OPDS 2.0 feed
-        :type feed: Union[str, opds2_ast.OPDS2Feed]
-
         :return: A list of 2-tuples containing publication's identifiers and their last modified dates
-        :rtype: List[Tuple[str, datetime.datetime]]
         """
         parser_result = self._parser.parse_manifest(feed)
         parsed_feed = parser_result.root
@@ -1052,14 +997,12 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
 
         return dates
 
-    def extract_feed_data(self, feed, feed_url=None):
+    def extract_feed_data(
+        self, feed: Union[str, opds2_ast.OPDS2Feed], feed_url: Optional[str] = None
+    ) -> Tuple[Dict, Dict]:
         """Turn an OPDS 2.0 feed into lists of Metadata and CirculationData objects.
-
         :param feed: OPDS 2.0 feed
-        :type feed: Union[str, opds2_ast.OPDS2Feed]
-
         :param feed_url: Feed URL used to resolve relative links
-        :type feed_url: Optional[str]f
         """
         parser_result = self._parser.parse_manifest(feed)
         feed = parser_result.root

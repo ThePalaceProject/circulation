@@ -2076,10 +2076,9 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests, HasExternalIntegration)
                 # Maybe this is new, maybe not, but we can't associate
                 # the information with an Identifier, so we can't do
                 # anything about it.
-                if raw_identifier:
-                    self.log.info(
-                        f"Ignoring {raw_identifier} because unable to turn into an Identifier."
-                    )
+                self.log.info(
+                    f"Ignoring {raw_identifier} because unable to turn into an Identifier."
+                )
                 continue
 
             if self.identifier_needs_import(identifier, remote_updated):
