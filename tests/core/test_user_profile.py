@@ -81,7 +81,7 @@ class TestProfileController(object):
         problem = self.controller.get()
         assert 500 == problem.status_code
         assert (
-            "Profile profile_document is not a JSON object: 'Here it is!'."
+            "Profile document is not a JSON object: 'Here it is!'."
             == problem.debug_message
         )
 
