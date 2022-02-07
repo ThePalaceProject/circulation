@@ -118,11 +118,10 @@ class ProblemDetail(object):
 class ProblemError(BaseError):
     """Exception class allowing to raise and catch ProblemDetail objects."""
 
-    def __init__(self, problem_detail):
+    def __init__(self, problem_detail: ProblemDetail):
         """Initialize a new instance of ProblemError class.
 
         :param problem_detail: ProblemDetail object
-        :type problem_detail: ProblemDetail
         """
         if not isinstance(problem_detail, ProblemDetail):
             raise ValueError(
@@ -132,10 +131,9 @@ class ProblemError(BaseError):
         self._problem_detail = problem_detail
 
     @property
-    def problem_detail(self):
+    def problem_detail(self) -> ProblemDetail:
         """Return the ProblemDetail object associated with this exception.
 
         :return: ProblemDetail object associated with this exception
-        :rtype: ProblemDetail
         """
         return self._problem_detail
