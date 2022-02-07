@@ -154,7 +154,9 @@ class OPDS2ImporterConfiguration(ConfigurationGrouping):
 
         :return: List of supported identifier types
         """
-        return self.supported_identifier_types or set(self.ALL_SUPPORTED_IDENTIFIER_TYPES)
+        return self.supported_identifier_types or set(
+            self.ALL_SUPPORTED_IDENTIFIER_TYPES
+        )
 
     def set_supported_identifier_types(
         self,
