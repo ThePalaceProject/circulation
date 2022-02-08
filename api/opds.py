@@ -195,25 +195,19 @@ class CirculationManagerAnnotator(Annotator):
         # information _might_ contain a set of prioritized DRM schemes and
         # content types.
 
-        prioritized_drm_schemes: List[str]
         drm_setting: ConfigurationSetting = (
             ConfigurationSetting.for_externalintegration(
                 FormatPriorities.PRIORITIZED_DRM_SCHEMES_KEY, external
             )
         )
-        prioritized_drm_schemes = drm_setting.json_value
-        if not prioritized_drm_schemes:
-            prioritized_drm_schemes = []
+        prioritized_drm_schemes: List[str] = drm_setting.json_value or []
 
-        prioritized_content_types: List[str]
         content_setting: ConfigurationSetting = (
             ConfigurationSetting.for_externalintegration(
                 FormatPriorities.PRIORITIZED_CONTENT_TYPES_KEY, external
             )
         )
-        prioritized_content_types = content_setting.json_value
-        if not prioritized_content_types:
-            prioritized_content_types = []
+        prioritized_content_types: List[str] = content_setting.json_value or []
 
         return prioritized_drm_schemes, prioritized_content_types
 
