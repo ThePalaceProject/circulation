@@ -1,4 +1,5 @@
-# encoding: utf-8
+from __future__ import annotations
+
 # ExternalIntegration, ExternalIntegrationLink, ConfigurationSetting
 import inspect
 import json
@@ -1013,7 +1014,7 @@ class ConfigurationOption(object):
         return {"key": self.key, "label": self.label}
 
     @staticmethod
-    def from_enum(cls: Type[Enum]) -> List["ConfigurationOption"]:
+    def from_enum(cls: Type[Enum]) -> List[ConfigurationOption]:
         """Convers Enum to a list of options in the SETTINGS format
 
         :param cls: Enum type
@@ -1237,7 +1238,7 @@ class ConfigurationMetadata(object):
         return self._index
 
     @staticmethod
-    def get_configuration_metadata(cls) -> List[Tuple[str, "ConfigurationMetadata"]]:
+    def get_configuration_metadata(cls) -> List[Tuple[str, ConfigurationMetadata]]:
         """Returns a list of 2-tuples containing information ConfigurationMetadata properties in the specified class
 
         :param cls: Class
@@ -1272,7 +1273,7 @@ class ConfigurationMetadata(object):
         }
 
     @staticmethod
-    def to_bool(metadata: "ConfigurationMetadata") -> bool:
+    def to_bool(metadata: ConfigurationMetadata) -> bool:
         """Return a boolean scalar indicating whether the configuration setting
             contains a value that can be treated as True (see ConfigurationSetting.MEANS_YES).
 

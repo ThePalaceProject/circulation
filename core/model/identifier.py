@@ -1,4 +1,5 @@
-# encoding: utf-8
+from __future__ import annotations
+
 # Identifier, Equivalency
 import logging
 import random
@@ -400,7 +401,7 @@ class Identifier(Base, IdentifierConstants):
         _db: Session,
         identifier_string: str,
         must_support_license_pools: bool = False,
-    ) -> Tuple["Identifier", bool]:
+    ) -> Tuple[Identifier, bool]:
         """Parse identifier string.
 
         :param _db: Database session
@@ -424,7 +425,7 @@ class Identifier(Base, IdentifierConstants):
         identifier_string: str,
         parser: IdentifierParser,
         must_support_license_pools: bool = False,
-    ) -> Tuple["Identifier", bool]:
+    ) -> Tuple[Identifier, bool]:
         """Parse identifier string.
 
         :param _db: Database session

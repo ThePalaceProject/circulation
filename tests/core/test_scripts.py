@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import random
 import stat
@@ -2211,7 +2213,7 @@ class TestCollectionArgumentsScript(DatabaseTest):
 class MockOPDSImportMonitor(object):
     """Pretend to monitor an OPDS feed for new titles."""
 
-    INSTANCES: List["MockOPDSImportMonitor"] = []
+    INSTANCES: List[MockOPDSImportMonitor] = []
 
     def __init__(self, _db, collection, *args, **kwargs):
         self.collection = collection

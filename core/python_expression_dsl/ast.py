@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABCMeta, abstractmethod
 from enum import Enum
 from typing import List
@@ -7,7 +9,7 @@ class Visitor(metaclass=ABCMeta):
     """Interface for visitors walking through abstract syntax trees (AST)."""
 
     @abstractmethod
-    def visit(self, node: "Node"):
+    def visit(self, node: Node):
         """Process the specified node.
 
         :param node: AST node

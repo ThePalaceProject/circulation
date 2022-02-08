@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, Dict, Optional, Tuple, Type
 from urllib.parse import urlsplit
@@ -21,7 +23,7 @@ class MirrorUploader(metaclass=ABCMeta):
     # sitewide() or for_collection(). A subclass that wants to take
     # advantage of this should add a mapping here from its .protocol
     # to itself.
-    IMPLEMENTATION_REGISTRY: Dict[str, Type["MirrorUploader"]] = {}
+    IMPLEMENTATION_REGISTRY: Dict[str, Type[MirrorUploader]] = {}
 
     @classmethod
     def mirror(cls, _db, storage_name=None, integration=None):
@@ -92,7 +94,7 @@ class MirrorUploader(metaclass=ABCMeta):
         )
         return implementation_class(integration)
 
-    def __init__(self, integration: "ExternalIntegration", host: str):
+    def __init__(self, integration: ExternalIntegration, host: str):
         """Instantiate a MirrorUploader from an ExternalIntegration.
 
         :param integration: An ExternalIntegration configuring the credentials
@@ -117,9 +119,9 @@ class MirrorUploader(metaclass=ABCMeta):
 
     def mirror_one(
         self,
-        representation: "Representation",
+        representation: Representation,
         mirror_to: str,
-        collection: "Optional[Collection]" = None,
+        collection: Optional[Collection] = None,
     ):
         """Mirror a single Representation.
 

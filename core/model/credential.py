@@ -1,4 +1,5 @@
-# encoding: utf-8
+from __future__ import annotations
+
 # Credential, DRMDeviceIdentifier, DelegatedPatronIdentifier
 import datetime
 import uuid
@@ -97,8 +98,8 @@ class Credential(Base):
 
     @classmethod
     def _filter_invalid_credential(
-        cls, credential: "Credential", allow_persistent_token: bool
-    ) -> Optional["Credential"]:
+        cls, credential: Credential, allow_persistent_token: bool
+    ) -> Optional[Credential]:
         """Filter out invalid credentials based on their expiration time and persistence.
 
         :param credential: Credential object
@@ -177,10 +178,10 @@ class Credential(Base):
         _db: Session,
         data_source_name: str,
         token_type: str,
-        patron: "Patron",
+        patron: Patron,
         allow_persistent_token: bool = False,
         auto_create_datasource: bool = True,
-    ) -> Optional["Credential"]:
+    ) -> Optional[Credential]:
         """Look up a unique token.
         Lookup will fail on expired tokens. Unless persistent tokens
         are specifically allowed, lookup will fail on persistent tokens.

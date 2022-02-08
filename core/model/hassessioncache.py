@@ -1,4 +1,5 @@
-# encoding: utf-8
+from __future__ import annotations
+
 # HasSessionCache
 import logging
 from abc import abstractmethod
@@ -28,7 +29,7 @@ class HasSessionCache:
 
     @property
     @abstractmethod
-    def id(self) -> "Column[int]":
+    def id(self) -> Column[int]:
         ...
 
     @abstractmethod
