@@ -1573,44 +1573,49 @@ class TestLicensePoolDeliveryMechanism(DatabaseTest):
 
 
 class TestFormatPriorities:
-
-    make = MockLicensePoolDeliveryMechanism.mechanism_of
-
-    """An arrangement of delivery mechanisms taken from a working database."""
-    sample_data_0 = [
-        make("application/vnd.adobe.adept+xml", "application/epub+zip"),
-        make(
-            "Libby DRM",
-            "application/vnd.overdrive.circulation.api+json;profile=audiobook",
-        ),
-        make(None, "application/audiobook+json"),
-        make("application/vnd.librarysimplified.bearer-token+json", "application/pdf"),
-        make(
-            "application/vnd.librarysimplified.bearer-token+json",
-            "application/epub+zip",
-        ),
-        make(None, "application/epub+zip"),
-        make(None, "application/pdf"),
-        make("application/vnd.librarysimplified.findaway.license+json", None),
-        make(
-            "application/vnd.librarysimplified.bearer-token+json",
-            "application/audiobook+json",
-        ),
-        make(None, "application/kepub+zip"),
-        make(None, "application/x-mobipocket-ebook"),
-        make(None, "application/x-mobi8-ebook"),
-        make(None, "text/plain; charset=utf-8"),
-        make(None, "application/octet-stream"),
-        make(None, "text/html; charset=utf-8"),
-        make(
-            "http://www.feedbooks.com/audiobooks/access-restriction",
-            "application/audiobook+json",
-        ),
-        make(
-            "application/vnd.readium.lcp.license.v1.0+json", "application/audiobook+lcp"
-        ),
-        make("application/vnd.readium.lcp.license.v1.0+json", "application/epub+zip"),
-    ]
+    @pytest.fixture
+    def sample_data_0(self):
+        """An arrangement of delivery mechanisms taken from a working database."""
+        make = MockLicensePoolDeliveryMechanism.mechanism_of
+        return [
+            make("application/vnd.adobe.adept+xml", "application/epub+zip"),
+            make(
+                "Libby DRM",
+                "application/vnd.overdrive.circulation.api+json;profile=audiobook",
+            ),
+            make(None, "application/audiobook+json"),
+            make(
+                "application/vnd.librarysimplified.bearer-token+json", "application/pdf"
+            ),
+            make(
+                "application/vnd.librarysimplified.bearer-token+json",
+                "application/epub+zip",
+            ),
+            make(None, "application/epub+zip"),
+            make(None, "application/pdf"),
+            make("application/vnd.librarysimplified.findaway.license+json", None),
+            make(
+                "application/vnd.librarysimplified.bearer-token+json",
+                "application/audiobook+json",
+            ),
+            make(None, "application/kepub+zip"),
+            make(None, "application/x-mobipocket-ebook"),
+            make(None, "application/x-mobi8-ebook"),
+            make(None, "text/plain; charset=utf-8"),
+            make(None, "application/octet-stream"),
+            make(None, "text/html; charset=utf-8"),
+            make(
+                "http://www.feedbooks.com/audiobooks/access-restriction",
+                "application/audiobook+json",
+            ),
+            make(
+                "application/vnd.readium.lcp.license.v1.0+json",
+                "application/audiobook+lcp",
+            ),
+            make(
+                "application/vnd.readium.lcp.license.v1.0+json", "application/epub+zip"
+            ),
+        ]
 
     def test_identity_empty(self):
         priorities = FormatPriorities(
@@ -1638,16 +1643,16 @@ class TestFormatPriorities:
         mechanism_0 = MockLicensePoolDeliveryMechanism()
         assert [] == priorities.prioritize_mechanisms([mechanism_0])
 
-    def test_non_prioritized_drm_0(self):
+    def test_non_prioritized_drm_0(self, sample_data_0):
         priorities = FormatPriorities(
             prioritized_drm_schemes=[],
             prioritized_content_types=[],
             hidden_content_types=[],
         )
-        expected = self.sample_data_0.copy()
-        assert expected == priorities.prioritize_mechanisms(self.sample_data_0)
+        expected = sample_data_0.copy()
+        assert expected == priorities.prioritize_mechanisms(sample_data_0)
 
-    def test_prioritized_content_type_0(self):
+    def test_prioritized_content_type_0(self, sample_data_0):
         """A simple configuration where an unusual content type is prioritized."""
         priorities = FormatPriorities(
             prioritized_drm_schemes=[],
@@ -1697,11 +1702,11 @@ class TestFormatPriorities:
             ),
         ]
 
-        received = priorities.prioritize_mechanisms(self.sample_data_0)
+        received = priorities.prioritize_mechanisms(sample_data_0)
         assert expected == received
-        assert len(self.sample_data_0) == len(received)
+        assert len(sample_data_0) == len(received)
 
-    def test_prioritized_content_type_1(self):
+    def test_prioritized_content_type_1(self, sample_data_0):
         """A test of a more aggressive configuration where multiple content types
         and DRM schemes are prioritized."""
         priorities = FormatPriorities(
@@ -1758,7 +1763,7 @@ class TestFormatPriorities:
             ),
             make("application/vnd.librarysimplified.findaway.license+json", None),
         ]
-        received = priorities.prioritize_mechanisms(self.sample_data_0)
+        received = priorities.prioritize_mechanisms(sample_data_0)
         assert expected == received
 
     @staticmethod
