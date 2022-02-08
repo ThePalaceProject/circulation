@@ -5,7 +5,6 @@ import datetime
 import logging
 import sys
 from enum import Enum as PythonEnum
-from functools import cmp_to_key
 from typing import TYPE_CHECKING, List, Mapping, Optional
 
 from sqlalchemy import Boolean, Column, DateTime
@@ -2133,7 +2132,16 @@ class FormatPriorities:
             or len(self._prioritized_content_types) != 0
         ):
             mechanisms_filtered.sort(
-                key=cmp_to_key(self._compare_delivery_mechanisms), reverse=True
+                key=lambda mechanism: self._content_type_priority(
+                    mechanism.delivery_mechanism.content_type
+                ),
+                reverse=True,
+            )
+            mechanisms_filtered.sort(
+                key=lambda mechanism: self._drm_scheme_priority(
+                    mechanism.delivery_mechanism.drm_scheme
+                ),
+                reverse=True,
             )
 
         return mechanisms_filtered
@@ -2151,33 +2159,3 @@ class FormatPriorities:
         """Determine the priority of a content type. Prioritized content
         types are always of a higher priority than non-prioritized types."""
         return self._prioritized_content_types.get(content_type, 0)
-
-    @staticmethod
-    def _compare_int(x: int, y: int) -> int:
-        if x == y:
-            return 0
-        elif x > y:
-            return 1
-        else:
-            return -1
-
-    def _compare_delivery_mechanisms(
-        self,
-        mechanism_a: LicensePoolDeliveryMechanism,
-        mechanism_b: LicensePoolDeliveryMechanism,
-    ) -> int:
-        drm_a = self._drm_scheme_priority(mechanism_a.delivery_mechanism.drm_scheme)
-        drm_b = self._drm_scheme_priority(mechanism_b.delivery_mechanism.drm_scheme)
-        content_a = self._content_type_priority(
-            mechanism_a.delivery_mechanism.content_type
-        )
-        content_b = self._content_type_priority(
-            mechanism_b.delivery_mechanism.content_type
-        )
-
-        # If the two DRM schemes have equal priority, then compare based on
-        # content type.
-        if drm_a == drm_b:
-            return FormatPriorities._compare_int(content_a, content_b)
-
-        return FormatPriorities._compare_int(drm_a, drm_b)
