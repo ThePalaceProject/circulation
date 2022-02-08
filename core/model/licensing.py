@@ -2090,16 +2090,12 @@ class FormatPriorities:
         # Assign priorities to each content type and DRM scheme based on their position
         # in the given lists. Higher priorities are assigned to items that appear earlier.
         self._prioritized_content_types = {}
-        _priority = 1
-        for content_type in reversed(prioritized_content_types):
-            self._prioritized_content_types[content_type] = _priority
-            _priority = _priority + 1
+        for index, content_type in enumerate(reversed(prioritized_content_types)):
+            self._prioritized_content_types[content_type] = index + 1
 
         self._prioritized_drm_schemes = {}
-        _priority = 1
-        for drm_scheme in reversed(prioritized_drm_schemes):
-            self._prioritized_drm_schemes[drm_scheme] = _priority
-            _priority = _priority + 1
+        for index, drm_scheme in enumerate(reversed(prioritized_drm_schemes)):
+            self._prioritized_drm_schemes[drm_scheme] = index + 1
 
         self._hidden_content_types = hidden_content_types
 
