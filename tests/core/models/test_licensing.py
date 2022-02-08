@@ -1,6 +1,7 @@
 # encoding: utf-8
 import datetime
 import json
+from typing import Optional
 from unittest.mock import MagicMock, PropertyMock
 
 import pytest
@@ -28,7 +29,7 @@ from core.model.licensing import (
     RightsStatus,
 )
 from core.model.resource import Hyperlink, Representation
-from core.testing import DatabaseTest, MockLicensePoolDeliveryMechanism
+from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
 
 
@@ -1576,7 +1577,7 @@ class TestFormatPriorities:
     @pytest.fixture
     def sample_data_0(self):
         """An arrangement of delivery mechanisms taken from a working database."""
-        make = MockLicensePoolDeliveryMechanism.mechanism_of
+        make = TestFormatPriorities.mechanism_of
         return [
             make("application/vnd.adobe.adept+xml", "application/epub+zip"),
             make(
@@ -1631,7 +1632,7 @@ class TestFormatPriorities:
             prioritized_content_types=[],
             hidden_content_types=[],
         )
-        mechanism_0 = MockLicensePoolDeliveryMechanism()
+        mechanism_0 = TestFormatPriorities.mechanism_of()
         assert [mechanism_0] == priorities.prioritize_mechanisms([mechanism_0])
 
     def test_hidden_types_excluded(self):
@@ -1640,7 +1641,7 @@ class TestFormatPriorities:
             prioritized_content_types=[],
             hidden_content_types=["application/epub+zip"],
         )
-        mechanism_0 = MockLicensePoolDeliveryMechanism()
+        mechanism_0 = TestFormatPriorities.mechanism_of()
         assert [] == priorities.prioritize_mechanisms([mechanism_0])
 
     def test_non_prioritized_drm_0(self, sample_data_0):
@@ -1659,7 +1660,7 @@ class TestFormatPriorities:
             prioritized_content_types=["application/x-mobi8-ebook"],
             hidden_content_types=[],
         )
-        make = MockLicensePoolDeliveryMechanism.mechanism_of
+        make = TestFormatPriorities.mechanism_of
         # We expect the mobi8-ebook format to be pushed to the front of the list.
         # All other non-DRM formats are moved to the start of the list in a more or less arbitrary order.
         expected = [
@@ -1729,7 +1730,7 @@ class TestFormatPriorities:
                 "text/html; charset=utf-8",
             ],
         )
-        make = MockLicensePoolDeliveryMechanism.mechanism_of
+        make = TestFormatPriorities.mechanism_of
         expected = [
             make(None, "application/epub+zip"),
             make(None, "application/audiobook+json"),
@@ -1777,3 +1778,35 @@ class TestFormatPriorities:
                 item["type"] = mechanism.delivery_mechanism.content_type
             output.append(item)
         print(json.dumps(output, indent=2))
+
+    @staticmethod
+    def mechanism_of(
+        drm_scheme: Optional[str] = None,
+        content_type: Optional[str] = "application/epub+zip",
+    ):
+        def _delivery_eq(self, other):
+            return (
+                self.drm_scheme == other.drm_scheme
+                and self.content_type == other.content_type
+            )
+
+        def _delivery_repr(self):
+            return f"DeliveryMechanism(drm_scheme={self.drm_scheme}, content_type={self.content_type})"
+
+        _delivery = MagicMock(spec=DeliveryMechanism)
+        _delivery.drm_scheme = drm_scheme
+        _delivery.content_type = content_type
+        _delivery.__eq__ = _delivery_eq
+        _delivery.__repr__ = _delivery_repr
+
+        def _mechanism_eq(self, other):
+            return self.delivery_mechanism == other.delivery_mechanism
+
+        def _mechanism_repr(self):
+            return f"LicensePoolDeliveryMechanism(delivery_mechanism={self.delivery_mechanism})"
+
+        _mechanism = MagicMock(spec=LicensePoolDeliveryMechanism)
+        _mechanism.delivery_mechanism = _delivery
+        _mechanism.__eq__ = _mechanism_eq
+        _mechanism.__repr__ = _mechanism_repr
+        return _mechanism
