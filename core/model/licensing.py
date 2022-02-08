@@ -2138,24 +2138,19 @@ class FormatPriorities:
 
         return mechanisms_filtered
 
-    def _drm_scheme_priority(self, drm_scheme: str) -> int:
+    def _drm_scheme_priority(self, drm_scheme: Optional[str]) -> int:
         """Determine the priority of a DRM scheme. A lack of DRM is always
         prioritized over having DRM, and prioritized schemes are always
         higher priority than non-prioritized schemes."""
 
         if not drm_scheme:
             return sys.maxsize
-        if drm_scheme in self._prioritized_drm_schemes:
-            return self._prioritized_drm_schemes[drm_scheme]
-        return 0
+        return self._prioritized_drm_schemes.get(drm_scheme, 0)
 
     def _content_type_priority(self, content_type: str) -> int:
         """Determine the priority of a content type. Prioritized content
         types are always of a higher priority than non-prioritized types."""
-
-        if content_type in self._prioritized_content_types:
-            return self._prioritized_content_types[content_type]
-        return 0
+        return self._prioritized_content_types.get(content_type, 0)
 
     @staticmethod
     def _compare_int(x: int, y: int) -> int:
