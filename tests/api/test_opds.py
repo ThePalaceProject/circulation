@@ -36,11 +36,13 @@ from core.model import (
     DeliveryMechanism,
     ExternalIntegration,
     Hyperlink,
+    MediaTypes,
     PresentationCalculationPolicy,
     Representation,
     RightsStatus,
     Work,
 )
+from core.model.licensing import FormatPriorities, LicensePool
 from core.opds import AcquisitionFeed, MockAnnotator, UnfulfillableWork
 from core.opds_import import OPDSXMLParser
 from core.testing import DatabaseTest
@@ -147,6 +149,65 @@ class TestCirculationManagerAnnotator(DatabaseTest):
         # The EPUB is hidden, and this license pool has no delivery
         # mechanisms.
         assert [] == list(no_epub.visible_delivery_mechanisms(pool))
+
+    def test_visible_delivery_mechanisms_configured_0(self):
+        """Test that configuration options do affect OPDS feeds.
+        Exhaustive testing of different configuration values isn't necessary
+        here: See the tests for FormatProperties to see the actual semantics
+        of the configuration values."""
+        edition = self._edition()
+        pool: LicensePool = self._licensepool(edition)
+
+        pool.set_delivery_mechanism(
+            MediaTypes.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.NO_DRM,
+            RightsStatus.UNKNOWN,
+            None,
+        )
+        pool.set_delivery_mechanism(
+            MediaTypes.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.LCP_DRM,
+            RightsStatus.UNKNOWN,
+            None,
+        )
+        pool.set_delivery_mechanism(
+            MediaTypes.PDF_MEDIA_TYPE,
+            DeliveryMechanism.LCP_DRM,
+            RightsStatus.UNKNOWN,
+            None,
+        )
+
+        external: ExternalIntegration = pool.collection.external_integration
+        prioritize_drm_setting = ConfigurationSetting.for_externalintegration(
+            FormatPriorities.PRIORITIZED_DRM_SCHEMES_KEY, external
+        )
+        prioritize_content_type_setting = ConfigurationSetting.for_externalintegration(
+            FormatPriorities.PRIORITIZED_CONTENT_TYPES_KEY, external
+        )
+
+        prioritize_drm_setting.value = f'["{DeliveryMechanism.LCP_DRM}"]'
+        prioritize_content_type_setting.value = f'["{MediaTypes.PDF_MEDIA_TYPE}"]'
+
+        annotator = CirculationManagerAnnotator(
+            self.lane,
+            hidden_content_types=[],
+            test_mode=True,
+        )
+
+        # DRM-free types appear first.
+        # Then our LCP'd PDF.
+        # Then our LCP'd EPUB.
+        # Then our Adobe DRM'd EPUB.
+        results = annotator.visible_delivery_mechanisms(pool)
+        assert results[0].delivery_mechanism.content_type == MediaTypes.EPUB_MEDIA_TYPE
+        assert results[0].delivery_mechanism.drm_scheme == None
+        assert results[1].delivery_mechanism.content_type == MediaTypes.PDF_MEDIA_TYPE
+        assert results[1].delivery_mechanism.drm_scheme == DeliveryMechanism.LCP_DRM
+        assert results[2].delivery_mechanism.content_type == MediaTypes.EPUB_MEDIA_TYPE
+        assert results[2].delivery_mechanism.drm_scheme == DeliveryMechanism.LCP_DRM
+        assert results[3].delivery_mechanism.content_type == MediaTypes.EPUB_MEDIA_TYPE
+        assert results[3].delivery_mechanism.drm_scheme == DeliveryMechanism.ADOBE_DRM
+        assert len(results) == 4
 
     def test_rights_attributes(self):
         m = self.annotator.rights_attributes

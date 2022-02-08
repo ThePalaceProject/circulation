@@ -48,7 +48,7 @@ from core.model.configuration import (
     ConfigurationStorage,
     HasExternalIntegration,
 )
-from core.model.licensing import LicenseStatus
+from core.model.licensing import FormatPriorities, LicenseStatus
 from core.monitor import CollectionMonitor
 from core.opds_import import OPDSImporter, OPDSImportMonitor, OPDSXMLParser
 from core.testing import DatabaseTest, MockRequestsResponse
@@ -144,6 +144,48 @@ class ODLAPIConfiguration(ConfigurationGrouping):
         required=False,
         default=DEFAULT_ENCRYPTION_ALGORITHM,
         options=ConfigurationOption.from_enum(HashingAlgorithm),
+    )
+
+    prioritized_drm_schemes = ConfigurationMetadata(
+        key=FormatPriorities.PRIORITIZED_DRM_SCHEMES_KEY,
+        label=_("Prioritized DRM schemes"),
+        description=_(
+            "A list of DRM schemes that will be prioritized when OPDS links are generated. "
+            "DRM schemes specified earlier in the list will be prioritized over schemes specified later. "
+            f"Example schemes include <tt>{DeliveryMechanism.LCP_DRM}</tt> for LCP, and <tt>{DeliveryMechanism.ADOBE_DRM}</tt> "
+            "for Adobe DRM. "
+            "An empty list here specifies backwards-compatible behavior where no schemes are prioritized."
+            "<br/>"
+            "<br/>"
+            "<b>Note:</b> Adding any DRM scheme will cause acquisition links to be reordered into a predictable "
+            "order that prioritizes DRM-free content over content with DRM. If a book exists with <i>both</i> DRM-free "
+            "<i>and</i> DRM-encumbered formats, the DRM-free version will become preferred, which might not be how your "
+            "collection originally behaved."
+        ),
+        type=ConfigurationAttributeType.LIST,
+        required=False,
+        default=[],
+    )
+
+    prioritized_content_types = ConfigurationMetadata(
+        key=FormatPriorities.PRIORITIZED_CONTENT_TYPES_KEY,
+        label=_("Prioritized content types"),
+        description=_(
+            "A list of content types that will be prioritized when OPDS links are generated. "
+            "Content types specified earlier in the list will be prioritized over types specified later. "
+            f"Example types include <tt>{MediaTypes.EPUB_MEDIA_TYPE}</tt> for EPUB, and <tt>{MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE}</tt> "
+            "for audiobook manifests. "
+            "An empty list here specifies backwards-compatible behavior where no types are prioritized."
+            "<br/>"
+            "<br/>"
+            "<b>Note:</b> Adding any content type here will cause acquisition links to be reordered into a predictable "
+            "order that prioritizes DRM-free content over content with DRM. If a book exists with <i>both</i> DRM-free "
+            "<i>and</i> DRM-encumbered formats, the DRM-free version will become preferred, which might not be how your "
+            "collection originally behaved."
+        ),
+        type=ConfigurationAttributeType.LIST,
+        required=False,
+        default=[],
     )
 
 

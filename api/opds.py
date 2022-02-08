@@ -4,6 +4,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
+from typing import List, Optional
 
 from flask import url_for
 
@@ -19,9 +20,11 @@ from core.lcp.credential import LCPCredentialFactory
 from core.lcp.exceptions import LCPError
 from core.model import (
     CirculationEvent,
+    Collection,
     ConfigurationSetting,
     DeliveryMechanism,
     Edition,
+    ExternalIntegration,
     Hold,
     LicensePool,
     LicensePoolDeliveryMechanism,
@@ -29,6 +32,7 @@ from core.model import (
     Patron,
     Session,
 )
+from core.model.licensing import FormatPriorities
 from core.opds import AcquisitionFeed, Annotator, UnfulfillableWork
 from core.util.datetime_helpers import from_timestamp
 from core.util.opds_writer import OPDSFeed
@@ -41,6 +45,9 @@ from .novelist import NoveListAPI
 
 
 class CirculationManagerAnnotator(Annotator):
+
+    hidden_content_types: List[str]
+
     def __init__(
         self,
         lane,
@@ -176,19 +183,50 @@ class CirculationManagerAnnotator(Annotator):
             # determining the active license pool.
             return super(CirculationManagerAnnotator, self).active_licensepool_for(work)
 
-    def visible_delivery_mechanisms(self, licensepool):
-        """Filter the given `licensepool`'s LicensePoolDeliveryMechanisms
-        to those with content types that are not hidden.
-        """
-        hidden = self.hidden_content_types
-        for lpdm in licensepool.delivery_mechanisms:
-            mechanism = lpdm.delivery_mechanism
-            if not mechanism:
-                # This shouldn't happen, but just in case.
-                continue
-            if mechanism.content_type in hidden:
-                continue
-            yield lpdm
+    @staticmethod
+    def _prioritized_formats_for_pool(
+        licensepool: LicensePool,
+    ) -> (List[str], List[str]):
+        collection: Collection = licensepool.collection
+        external: ExternalIntegration = collection.external_integration
+
+        # Consult the configuration information for the external integration
+        # that underlies the license pool's collection. The configuration
+        # information _might_ contain a set of prioritized DRM schemes and
+        # content types.
+
+        drm_setting: ConfigurationSetting = (
+            ConfigurationSetting.for_externalintegration(
+                FormatPriorities.PRIORITIZED_DRM_SCHEMES_KEY, external
+            )
+        )
+        prioritized_drm_schemes: List[str] = drm_setting.json_value or []
+
+        content_setting: ConfigurationSetting = (
+            ConfigurationSetting.for_externalintegration(
+                FormatPriorities.PRIORITIZED_CONTENT_TYPES_KEY, external
+            )
+        )
+        prioritized_content_types: List[str] = content_setting.json_value or []
+
+        return prioritized_drm_schemes, prioritized_content_types
+
+    def visible_delivery_mechanisms(
+        self, licensepool: Optional[LicensePool]
+    ) -> List[LicensePoolDeliveryMechanism]:
+        if not licensepool:
+            return []
+
+        (
+            prioritized_drm_schemes,
+            prioritized_content_types,
+        ) = CirculationManagerAnnotator._prioritized_formats_for_pool(licensepool)
+
+        return FormatPriorities(
+            prioritized_drm_schemes=prioritized_drm_schemes,
+            prioritized_content_types=prioritized_content_types,
+            hidden_content_types=self.hidden_content_types,
+        ).prioritize_for_pool(licensepool)
 
     def annotate_work_entry(
         self, work, active_license_pool, edition, identifier, feed, entry, updated=None
