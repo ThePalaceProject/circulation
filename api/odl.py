@@ -153,8 +153,14 @@ class ODLAPIConfiguration(ConfigurationGrouping):
             "A list of DRM schemes that will be prioritized when OPDS links are generated. "
             "DRM schemes specified earlier in the list will be prioritized over schemes specified later. "
             f"Example schemes include <tt>{DeliveryMechanism.LCP_DRM}</tt> for LCP, and <tt>{DeliveryMechanism.ADOBE_DRM}</tt> "
-            f"for Adobe DRM. "
-            "An empty list here specifies backwards-compatible behaviour where no schemes are prioritized."
+            "for Adobe DRM. "
+            "An empty list here specifies backwards-compatible behavior where no schemes are prioritized."
+            "<br/>"
+            "<br/>"
+            "<b>Note:</b> Adding any DRM scheme will cause acquisition links to be reordered into a predictable "
+            "order that prioritizes DRM-free content over content with DRM. If a book exists with <i>both</i> DRM-free "
+            "<i>and</i> DRM-encumbered formats, the DRM-free version will become preferred, which might not be how your "
+            "collection originally behaved."
         ),
         type=ConfigurationAttributeType.LIST,
         required=False,
@@ -168,8 +174,14 @@ class ODLAPIConfiguration(ConfigurationGrouping):
             "A list of content types that will be prioritized when OPDS links are generated. "
             "Content types specified earlier in the list will be prioritized over types specified later. "
             f"Example types include <tt>{MediaTypes.EPUB_MEDIA_TYPE}</tt> for EPUB, and <tt>{MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE}</tt> "
-            f"for audiobook manifests. "
-            "An empty list here specifies backwards-compatible behaviour where no types are prioritized."
+            "for audiobook manifests. "
+            "An empty list here specifies backwards-compatible behavior where no types are prioritized."
+            "<br/>"
+            "<br/>"
+            "<b>Note:</b> Adding any content type here will cause acquisition links to be reordered into a predictable "
+            "order that prioritizes DRM-free content over content with DRM. If a book exists with <i>both</i> DRM-free "
+            "<i>and</i> DRM-encumbered formats, the DRM-free version will become preferred, which might not be how your "
+            "collection originally behaved."
         ),
         type=ConfigurationAttributeType.LIST,
         required=False,
