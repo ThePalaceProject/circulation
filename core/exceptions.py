@@ -1,7 +1,12 @@
+from typing import Optional
+
+
 class BaseError(Exception):
     """Base class for all errors"""
 
-    def __init__(self, message=None, inner_exception=None):
+    def __init__(
+        self, message: Optional[str] = None, inner_exception: Optional[Exception] = None
+    ):
         """Initializes a new instance of BaseError class
 
         :param message: String containing description of the error occurred
@@ -18,22 +23,18 @@ class BaseError(Exception):
         return hash(str(self))
 
     @property
-    def inner_exception(self):
+    def inner_exception(self) -> Optional[str]:
         """Returns an inner exception
 
         :return: Inner exception
-        :rtype: Exception
         """
         return self._inner_exception
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         """Compares two BaseError objects
 
         :param other: BaseError object
-        :type other: BaseError
-
         :return: Boolean value indicating whether two items are equal
-        :rtype: bool
         """
         if not isinstance(other, BaseError):
             return False

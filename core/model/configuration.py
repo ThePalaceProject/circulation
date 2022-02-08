@@ -309,6 +309,7 @@ class ExternalIntegration(Base):
         "ConfigurationSetting",
         backref="external_integration",
         cascade="all, delete",
+        uselist=True,
     )
 
     # Any number of Collections may designate an ExternalIntegration

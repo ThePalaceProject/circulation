@@ -1,7 +1,10 @@
 import logging
 from enum import Enum
+from typing import Any, Optional
 
-from ..model import Credential, DataSource
+from sqlalchemy.orm import Session
+
+from ..model import Credential, DataSource, Patron
 from .exceptions import LCPError
 
 
@@ -21,18 +24,18 @@ class LCPCredentialFactory(object):
         self._logger = logging.getLogger(__name__)
 
     def _get_or_create_persistent_token(
-        self, db, patron, data_source_type, credential_type, value=None
-    ):
+        self,
+        db: Session,
+        patron: Patron,
+        data_source_type: Any,
+        credential_type: Any,
+        value: Optional[str] = None,
+    ) -> Any:
         """Gets or creates a new persistent token
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
         :param patron: Patron object
-        :type patron: core.model.patron.Patron
-
         :param value: Optional value of the token
-        :type value: Optional[string]
         """
         self._logger.info(
             'Getting or creating "{0}" credentials for {1} in "{2}" data source with value "{3}"'.format(
@@ -61,17 +64,12 @@ class LCPCredentialFactory(object):
 
         return credential.credential, is_new
 
-    def get_patron_id(self, db, patron):
+    def get_patron_id(self, db: Session, patron: Patron) -> str:
         """Generates a new or returns an existing patron's ID associated with an LCP license
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
         :param patron: Patron object
-        :type patron: core.model.patron.Patron
-
         :return: Newly generated or existing patron's ID associated with an LCP license
-        :rtype: string
         """
         patron_id, _ = self._get_or_create_persistent_token(
             db,
@@ -82,17 +80,12 @@ class LCPCredentialFactory(object):
 
         return patron_id
 
-    def get_patron_passphrase(self, db, patron):
+    def get_patron_passphrase(self, db: Session, patron: Patron) -> str:
         """Generates a new or returns an existing patron's passphrase associated with an LCP license
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
         :param patron: Patron object
-        :type patron: core.model.patron.Patron
-
         :return: Newly generated or existing patron's passphrase associated with an LCP license
-        :rtype: string
         """
         patron_passphrase, _ = self._get_or_create_persistent_token(
             db,
@@ -103,17 +96,12 @@ class LCPCredentialFactory(object):
 
         return patron_passphrase
 
-    def get_hashed_passphrase(self, db, patron):
+    def get_hashed_passphrase(self, db: Session, patron: Patron) -> str:
         """Returns an existing hashed passphrase
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
         :param patron: Patron object
-        :type patron: core.model.patron.Patron
-
         :return: Existing hashed passphrase
-        :rtype: string
         """
         hashed_passphrase, is_new = self._get_or_create_persistent_token(
             db,
@@ -127,17 +115,14 @@ class LCPCredentialFactory(object):
 
         return hashed_passphrase
 
-    def set_hashed_passphrase(self, db, patron, hashed_passphrase):
+    def set_hashed_passphrase(
+        self, db: Session, patron: Patron, hashed_passphrase: str
+    ) -> Any:
         """Stores the hashed passphrase as a persistent token
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
         :param patron: Patron object
-        :type patron: core.model.patron.Patron
-
         :param hashed_passphrase: Existing hashed passphrase
-        :type hashed_passphrase: string
         """
         self._get_or_create_persistent_token(
             db,
