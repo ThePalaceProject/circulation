@@ -191,7 +191,7 @@ class Credential(Base):
         :param token_type: Token type
         :param patron: Patron object
         :param allow_persistent_token: Boolean value indicating whether persistent tokens are allowed or not
-                :param auto_create_datasource: Boolean value indicating whether
+        :param auto_create_datasource: Boolean value indicating whether
             a data source should be created in the case it doesn't
         """
         from .patron import Patron
