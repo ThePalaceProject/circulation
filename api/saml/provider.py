@@ -17,7 +17,7 @@ from api.saml.metadata.model import (
     SAMLSubjectPatronIDExtractor,
 )
 from api.saml.metadata.parser import SAMLMetadataParser
-from core.model import Credential, Session
+from core.model import Session
 from core.model.configuration import (
     ConfigurationMetadata,
     ConfigurationStorage,
