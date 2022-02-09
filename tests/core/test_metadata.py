@@ -729,7 +729,7 @@ class TestMetadataImporter(DatabaseTest):
         mirror_type = ExternalIntegrationLink.OPEN_ACCESS_BOOKS
 
         def dummy_content_modifier(representation):
-            representation.content = "Replaced Content"
+            representation.content = b"Replaced Content"
 
         h = DummyHTTPClient()
 
@@ -773,7 +773,7 @@ class TestMetadataImporter(DatabaseTest):
 
         # The representation was mirrored, with the modified content.
         assert [representation] == mirrors[mirror_type].uploaded
-        assert ["Replaced Content"] == mirrors[mirror_type].content
+        assert [b"Replaced Content"] == mirrors[mirror_type].content
 
     def test_mirror_protected_access_book(self):
         edition, pool = self._edition(with_license_pool=True)
@@ -785,7 +785,7 @@ class TestMetadataImporter(DatabaseTest):
         mirrors = {mirror_type: MockS3Uploader()}
 
         def dummy_content_modifier(representation):
-            representation.content = "Replaced Content"
+            representation.content = b"Replaced Content"
 
         h = DummyHTTPClient()
 
@@ -829,7 +829,7 @@ class TestMetadataImporter(DatabaseTest):
 
         # The representation was mirrored, with the modified content.
         assert [representation] == mirrors[mirror_type].uploaded
-        assert ["Replaced Content"] == mirrors[mirror_type].content
+        assert [b"Replaced Content"] == mirrors[mirror_type].content
 
     def test_measurements(self):
         edition = self._edition()

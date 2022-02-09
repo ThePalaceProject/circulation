@@ -32,7 +32,6 @@ from sqlalchemy.orm import (
     relationship,
 )
 from sqlalchemy.sql import select
-from sqlalchemy.sql.expression import Select
 
 from .classifier import Classifier
 from .config import Configuration
@@ -2398,7 +2397,7 @@ class DatabaseBackedWorkList(WorkList):
             # Use a subquery to obtain the CustomList IDs of all
             # CustomLists from this DataSource. This is significantly
             # simpler than adding a join against CustomList.
-            customlist_ids = Select(
+            customlist_ids = select(
                 [CustomList.id], CustomList.data_source_id == self.list_datasource_id
             )
         else:
