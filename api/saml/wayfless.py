@@ -7,7 +7,7 @@ import sqlalchemy
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
 
-from api.circulation import CirculationFulfilmentPostProcessor, FulfillmentInfo
+from api.circulation import CirculationFulfillmentPostProcessor, FulfillmentInfo
 from api.saml.credential import SAMLCredentialManager
 from core.exceptions import BaseError
 from core.model import Collection, get_one
@@ -59,12 +59,12 @@ class SAMLWAYFlessConfiguration(ConfigurationGrouping):
     )
 
 
-class SAMLWAYFlessFulfilmentError(BaseError):
+class SAMLWAYFlessFulfillmentError(BaseError):
     pass
 
 
 class SAMLWAYFlessAcquisitionLinkProcessor(
-    CirculationFulfilmentPostProcessor, HasExternalIntegration
+    CirculationFulfillmentPostProcessor, HasExternalIntegration
 ):
     """Interface indicating that the collection implementing it has templated links.
 
@@ -132,7 +132,7 @@ class SAMLWAYFlessAcquisitionLinkProcessor(
         """
         return get_one(db, ExternalIntegration, id=self._external_integration_id)
 
-    def fulfil(
+    def fulfill(
         self, patron, pin, licensepool, delivery_mechanism, fulfillment: FulfillmentInfo
     ) -> FulfillmentInfo:
         db = Session.object_session(patron)
@@ -157,7 +157,7 @@ class SAMLWAYFlessAcquisitionLinkProcessor(
                 self._logger.debug(f"SAML subject: {saml_subject}")
 
                 if not saml_subject.idp:
-                    raise SAMLWAYFlessFulfilmentError(
+                    raise SAMLWAYFlessFulfillmentError(
                         f"SAML subject {saml_subject} does not contain an IdP's entityID"
                     )
 
@@ -176,4 +176,4 @@ class SAMLWAYFlessAcquisitionLinkProcessor(
 
                 fulfillment.content_link = acquisition_link
 
-                return fulfillment
+        return fulfillment

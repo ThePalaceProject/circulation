@@ -636,7 +636,7 @@ class BaseCirculationAPI(object):
         """Update availability information for a book."""
 
 
-class CirculationFulfilmentPostProcessor(ABC):
+class CirculationFulfillmentPostProcessor(ABC):
     """Generic interface for a circulation fulfillment post-processor,
         i.e., a class adding additional logic to the fulfillment process AFTER the circulation item has been fulfilled.
 
@@ -644,7 +644,7 @@ class CirculationFulfilmentPostProcessor(ABC):
     """
 
     @abstractmethod
-    def fulfil(
+    def fulfill(
         self,
         patron: Patron,
         pin: str,
@@ -678,8 +678,8 @@ class CirculationAPI(object):
         library: Library,
         analytics: Optional[Analytics] = None,
         api_map: Optional[Dict[int, Type[BaseCirculationAPI]]] = None,
-        fulfilment_post_processors_map: Optional[
-            Dict[int, Type[CirculationFulfilmentPostProcessor]]
+        fulfillment_post_processors_map: Optional[
+            Dict[int, Type[CirculationFulfillmentPostProcessor]]
         ] = None,
     ):
         """Constructor.
@@ -702,24 +702,24 @@ class CirculationAPI(object):
             calls, we only instantiate one CirculationAPI per library,
             and keep them around as long as possible.
 
-        :param fulfilment_post_processors_map: A dictionary mapping Collection protocols
-            to fulfilment post-processors.
+        :param fulfillment_post_processors_map: A dictionary mapping Collection protocols
+            to fulfillment post-processors.
         """
         self._db = db
         self.library_id = library.id
         self.analytics = analytics
         self.initialization_exceptions = dict()
         api_map = api_map or self.default_api_map
-        fulfilment_post_processors_map = (
-            fulfilment_post_processors_map
-            or self.default_fulfilment_post_processors_map
+        fulfillment_post_processors_map = (
+            fulfillment_post_processors_map
+            or self.default_fulfillment_post_processors_map
         )
 
         # Each of the Library's relevant Collections is going to be
         # associated with an API object.
         self.api_for_collection = {}
-        self._fulfilment_post_processors_map: Dict[
-            int, CirculationFulfilmentPostProcessor
+        self._fulfillment_post_processors_map: Dict[
+            int, CirculationFulfillmentPostProcessor
         ] = {}
 
         # When we get our view of a patron's loans and holds, we need
@@ -745,13 +745,13 @@ class CirculationAPI(object):
                     self.api_for_collection[collection.id] = api
                     self.collection_ids_for_sync.append(collection.id)
 
-            if collection.protocol in fulfilment_post_processors_map:
-                fulfilment_post_processor = fulfilment_post_processors_map[
+            if collection.protocol in fulfillment_post_processors_map:
+                fulfillment_post_processor = fulfillment_post_processors_map[
                     collection.protocol
                 ](collection)
-                self._fulfilment_post_processors_map[
+                self._fulfillment_post_processors_map[
                     collection.id
-                ] = fulfilment_post_processor
+                ] = fulfillment_post_processor
 
     @property
     def library(self):
@@ -789,12 +789,12 @@ class CirculationAPI(object):
         }
 
     @property
-    def default_fulfilment_post_processors_map(
+    def default_fulfillment_post_processors_map(
         self,
-    ) -> Dict[str, Type[CirculationFulfilmentPostProcessor]]:
-        """Return a default mapping of protocols to fulfilment post-processors.
+    ) -> Dict[str, Type[CirculationFulfillmentPostProcessor]]:
+        """Return a default mapping of protocols to fulfillment post-processors.
 
-        :return: Mapping of protocols to fulfilment post-processors.
+        :return: Mapping of protocols to fulfillment post-processors.
         """
         from core.opds_import import OPDSImporter
 
@@ -808,15 +808,15 @@ class CirculationAPI(object):
         """Find the API to use for the given license pool."""
         return self.api_for_collection.get(licensepool.collection.id)
 
-    def fulfilment_post_processor_for_license_pool(
+    def fulfillment_post_processor_for_license_pool(
         self, licensepool: LicensePool
-    ) -> Optional[CirculationFulfilmentPostProcessor]:
-        """Return a fulfilment post-processor to use for the given license pool.
+    ) -> Optional[CirculationFulfillmentPostProcessor]:
+        """Return a fulfillment post-processor to use for the given license pool.
 
-        :param licensepool: License pool for which we need to get a fulfilment post-processor
-        :return: Fulfilment post-processor to use for the given license pool
+        :param licensepool: License pool for which we need to get a fulfillment post-processor
+        :return: Fulfillment post-processor to use for the given license pool
         """
-        return self._fulfilment_post_processors_map.get(licensepool.collection.id)
+        return self._fulfillment_post_processors_map.get(licensepool.collection.id)
 
     def can_revoke_hold(self, licensepool, hold):
         """Some circulation providers allow you to cancel a hold
@@ -831,7 +831,7 @@ class CirculationAPI(object):
         return False
 
     def _try_to_sign_fulfillment_link(self, licensepool, fulfillment):
-        """Tries to sign the fulfilment URL (only works in the case when the collection has mirrors set up)
+        """Tries to sign the fulfillment URL (only works in the case when the collection has mirrors set up)
 
         :param licensepool: License pool
         :type licensepool: LicensePool
@@ -856,7 +856,7 @@ class CirculationAPI(object):
             signed_url = mirror.sign_url(fulfillment.content_link)
 
             self.log.info(
-                "Fulfilment link {0} has been signed and translated into {1}".format(
+                "Fulfillment link {0} has been signed and translated into {1}".format(
                     fulfillment.content_link, signed_url
                 )
             )
@@ -926,7 +926,7 @@ class CirculationAPI(object):
             patron, licensepool, CirculationEvent.CM_CHECKOUT, include_neighborhood=True
         )
 
-    def _post_process_fulfilment(
+    def _post_process_fulfillment(
         self,
         patron: Patron,
         pin: str,
@@ -946,19 +946,19 @@ class CirculationAPI(object):
         :return: Processed FulfillmentInfo object
         """
         processed_fulfillment = fulfillment
-        fulfilment_post_processor = self.fulfilment_post_processor_for_license_pool(
+        fulfillment_post_processor = self.fulfillment_post_processor_for_license_pool(
             licensepool
         )
 
-        self.log.debug(f"Fulfilment post-processor: {fulfilment_post_processor}")
+        self.log.debug(f"Fulfillment post-processor: {fulfillment_post_processor}")
 
-        if fulfilment_post_processor:
-            processed_fulfillment = fulfilment_post_processor.fulfil(
+        if fulfillment_post_processor:
+            processed_fulfillment = fulfillment_post_processor.fulfill(
                 patron, pin, licensepool, delivery_mechanism, fulfillment
             )
 
             self.log.debug(
-                f"Fulfilment {fulfillment} has been processed into {processed_fulfillment}"
+                f"Fulfillment {fulfillment} has been processed into {processed_fulfillment}"
             )
 
         return processed_fulfillment
@@ -1417,7 +1417,7 @@ class CirculationAPI(object):
                 delivery_mechanism.delivery_mechanism,
             )
 
-            fulfillment = self._post_process_fulfilment(
+            fulfillment = self._post_process_fulfillment(
                 patron, pin, licensepool, delivery_mechanism, fulfillment
             )
 
@@ -1446,7 +1446,7 @@ class CirculationAPI(object):
             if not fulfillment or not (fulfillment.content_link or fulfillment.content):
                 raise NoAcceptableFormat()
 
-            fulfillment = self._post_process_fulfilment(
+            fulfillment = self._post_process_fulfillment(
                 patron, pin, licensepool, delivery_mechanism, fulfillment
             )
 
