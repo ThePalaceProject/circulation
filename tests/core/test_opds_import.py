@@ -18,6 +18,7 @@ from api.saml.metadata.model import (
     SAMLNameIDFormat,
     SAMLSubject,
 )
+from api.saml.wayfless import SAMLWAYFlessFulfillmentError
 from core.config import IntegrationException
 from core.coverage import CoverageFailure
 from core.metadata_layer import CirculationData, LinkData, Metadata
@@ -1821,59 +1822,96 @@ class TestOPDSImporter(OPDSImporterTest):
         )
         assert DeliveryMechanism.NO_DRM == lpdm.delivery_mechanism.drm_scheme
 
-    def test_wayfless_url(self):
-        feed = self.wayfless_feed
-
-        idp_entityID = "https://mycompany.com/adfs/services/trust"
-        library = self._library("Test library with SAML authentication", "SAML")
-        patron = self._patron(library=library)
-        saml_subject = SAMLSubject(
-            idp_entityID,
-            SAMLNameID(
-                SAMLNameIDFormat.PERSISTENT.value, "", "", "patron@university.com"
-            ),
-            SAMLAttributeStatement([]),
-        )
-        saml_credential_manager = SAMLCredentialManager()
-        saml_credential_manager.create_saml_token(self._db, patron, saml_subject)
-
-        collection = self._collection(
-            "OPDS collection with a WAYFless acquisition link",
-            ExternalIntegration.OPDS_IMPORT,
-            data_source_name="test",
-        )
-        library.collections.append(collection)
-
-        external_integration_association = create_autospec(spec=HasExternalIntegration)
-        external_integration_association.external_integration = MagicMock(
-            return_value=collection.external_integration
-        )
-        configuration_storage = ConfigurationStorage(external_integration_association)
-        configuration_factory = ConfigurationFactory()
-
-        with configuration_factory.create(
-            configuration_storage, self._db, OPDSImporterConfiguration
-        ) as configuration:
-            configuration.wayfless_url_template = (
-                "https://fsso.springer.com/saml/login?idp={idp}&targetUrl={targetUrl}"
+    @pytest.fixture()
+    def wayfless_circulation_api(self):
+        def _wayfless_circulation_api(
+            has_saml_entity_id=True,
+            has_saml_credential=True,
+        ):
+            idp_entityID = (
+                "https://mycompany.com/adfs/services/trust"
+                if has_saml_entity_id
+                else None
             )
 
-        imported_editions, pools, works, failures = OPDSImporter(
-            self._db, collection=collection
-        ).import_from_feed(feed)
+            feed = self.wayfless_feed
+            library = self._library("Test library with SAML authentication", "SAML")
+            patron = self._patron(library=library)
+            saml_subject = SAMLSubject(
+                idp_entityID,
+                SAMLNameID(
+                    SAMLNameIDFormat.PERSISTENT.value, "", "", "patron@university.com"
+                ),
+                SAMLAttributeStatement([]),
+            )
+            saml_credential_manager = SAMLCredentialManager()
+            if has_saml_credential:
+                saml_credential_manager.create_saml_token(
+                    self._db, patron, saml_subject
+                )
 
-        pool = pools[0]
-        pool.loan_to(patron)
+            collection = self._collection(
+                "OPDS collection with a WAYFless acquisition link",
+                ExternalIntegration.OPDS_IMPORT,
+                data_source_name="test",
+            )
+            library.collections.append(collection)
 
-        circulation = CirculationAPI(self._db, library)
+            external_integration_association = create_autospec(
+                spec=HasExternalIntegration
+            )
+            external_integration_association.external_integration = MagicMock(
+                return_value=collection.external_integration
+            )
+            configuration_storage = ConfigurationStorage(
+                external_integration_association
+            )
+            configuration_factory = ConfigurationFactory()
+
+            with configuration_factory.create(
+                configuration_storage, self._db, OPDSImporterConfiguration
+            ) as configuration:
+                configuration.wayfless_url_template = "https://fsso.springer.com/saml/login?idp={idp}&targetUrl={targetUrl}"
+
+            imported_editions, pools, works, failures = OPDSImporter(
+                self._db, collection=collection
+            ).import_from_feed(feed)
+
+            pool = pools[0]
+            pool.loan_to(patron)
+
+            return CirculationAPI(self._db, library), patron, pool
+
+        yield _wayfless_circulation_api
+
+    def test_wayfless_url(self, wayfless_circulation_api):
+        circulation, patron, pool = wayfless_circulation_api()
         fulfilment = circulation.fulfill(
             patron, "test", pool, first_or_default(pool.delivery_mechanisms)
         )
-
         assert (
             "https://fsso.springer.com/saml/login?idp=https%3A%2F%2Fmycompany.com%2Fadfs%2Fservices%2Ftrust&targetUrl=http%3A%2F%2Fwww.gutenberg.org%2Febooks%2F10441.epub.images"
             == fulfilment.content_link
         )
+
+    def test_wayfless_url_no_saml_credential(self, wayfless_circulation_api):
+        circulation, patron, pool = wayfless_circulation_api(has_saml_credential=False)
+        with pytest.raises(SAMLWAYFlessFulfillmentError) as excinfo:
+            circulation.fulfill(
+                patron, "test", pool, first_or_default(pool.delivery_mechanisms)
+            )
+        assert str(excinfo.value).startswith(
+            "There are no existing SAML credentials for patron"
+        )
+
+    def test_wayfless_url_no_saml_entity_id(self, wayfless_circulation_api):
+        circulation, patron, pool = wayfless_circulation_api(has_saml_entity_id=False)
+        with pytest.raises(SAMLWAYFlessFulfillmentError) as excinfo:
+            circulation.fulfill(
+                patron, "test", pool, first_or_default(pool.delivery_mechanisms)
+            )
+        assert str(excinfo.value).startswith("SAML subject")
+        assert str(excinfo.value).endswith("does not contain an IdP's entityID")
 
 
 class TestCombine(object):
