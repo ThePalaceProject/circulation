@@ -1594,8 +1594,8 @@ class TestFormatPriorities:
             _delivery = MagicMock(spec=DeliveryMechanism)
             _delivery.drm_scheme = drm_scheme
             _delivery.content_type = content_type
-            _delivery.__eq__ = _delivery_eq
-            _delivery.__repr__ = _delivery_repr
+            setattr(_delivery, "__eq__", _delivery_eq)
+            setattr(_delivery, "__repr__", _delivery_repr)
 
             return _delivery
 
@@ -1617,8 +1617,8 @@ class TestFormatPriorities:
 
             _mechanism = MagicMock(spec=LicensePoolDeliveryMechanism)
             _mechanism.delivery_mechanism = mock_delivery(drm_scheme, content_type)
-            _mechanism.__eq__ = _mechanism_eq
-            _mechanism.__repr__ = _mechanism_repr
+            setattr(_mechanism, "__eq__", _mechanism_eq)
+            setattr(_mechanism, "__repr__", _mechanism_repr)
             return _mechanism
 
         return mechanism

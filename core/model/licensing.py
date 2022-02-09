@@ -1501,6 +1501,10 @@ class LicensePoolDeliveryMechanism(Base):
     delivery_mechanism_id = Column(
         Integer, ForeignKey("deliverymechanisms.id"), index=True, nullable=False
     )
+    delivery_mechanism = relationship(
+        "DeliveryMechanism",
+        back_populates="license_pool_delivery_mechanisms",
+    )
 
     resource_id = Column(Integer, ForeignKey("resources.id"), nullable=True)
 
@@ -1777,7 +1781,8 @@ class DeliveryMechanism(Base, HasSessionCache):
 
     license_pool_delivery_mechanisms = relationship(
         "LicensePoolDeliveryMechanism",
-        backref="delivery_mechanism",
+        back_populates="delivery_mechanism",
+        uselist=True,
     )
 
     __table_args__ = (UniqueConstraint("content_type", "drm_scheme"),)
@@ -2170,7 +2175,9 @@ class FormatPriorities:
             return sys.maxsize
         return self._prioritized_drm_schemes.get(drm_scheme, 0)
 
-    def _content_type_priority(self, content_type: str) -> int:
+    def _content_type_priority(self, content_type: Optional[str]) -> int:
         """Determine the priority of a content type. Prioritized content
         types are always of a higher priority than non-prioritized types."""
+        if content_type is None:
+            return 0
         return self._prioritized_content_types.get(content_type, 0)
