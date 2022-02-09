@@ -497,6 +497,9 @@ class Configuration(ConfigurationConstants):
         url_obj = None
         try:
             url_obj = make_url(url)
+
+            # Calling render_as_string will hide the password.
+            logging.info("Connecting to database: %s" % url_obj.render_as_string())
         except ArgumentError as e:
             # Improve the error message by giving a guide as to what's
             # likely to work.
@@ -505,8 +508,6 @@ class Configuration(ConfigurationConstants):
                 % url
             )
 
-        # Calling __to_string__ will hide the password.
-        logging.info("Connecting to database: %s" % url_obj.__to_string__())
         return url
 
     @classmethod

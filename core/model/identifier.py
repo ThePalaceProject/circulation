@@ -238,16 +238,18 @@ class Identifier(Base, IdentifierConstants):
 
     equivalencies = relationship(
         "Equivalency",
-        primaryjoin=("Identifier.id==Equivalency.input_id"),
-        backref="input_identifiers",
+        foreign_keys="Equivalency.input_id",
+        back_populates="input",
         cascade="all, delete-orphan",
+        uselist=True,
     )
 
     inbound_equivalencies = relationship(
         "Equivalency",
-        primaryjoin=("Identifier.id==Equivalency.output_id"),
-        backref="output_identifiers",
+        foreign_keys="Equivalency.output_id",
+        back_populates="output",
         cascade="all, delete-orphan",
+        uselist=True,
     )
 
     # One Identifier may have many associated CoverageRecords.
@@ -1104,9 +1106,13 @@ class Equivalency(Base):
     # 'output' is the output
     id = Column(Integer, primary_key=True)
     input_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
-    input = relationship("Identifier", foreign_keys=input_id)
+    input = relationship(
+        "Identifier", foreign_keys=input_id, back_populates="equivalencies"
+    )
     output_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
-    output = relationship("Identifier", foreign_keys=output_id)
+    output = relationship(
+        "Identifier", foreign_keys=output_id, back_populates="inbound_equivalencies"
+    )
 
     # Who says?
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)

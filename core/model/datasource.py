@@ -53,7 +53,8 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
         nullable=True,
     )
     integration_client = relationship(
-        "IntegrationClient", backref=backref("data_source", uselist=False)
+        "IntegrationClient",
+        backref=backref("data_source", uselist=False),
     )
 
     # One DataSource can generate many Editions.
@@ -67,7 +68,8 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
 
     # One DataSource can grant access to many LicensePools.
     license_pools = relationship(
-        "LicensePool", backref=backref("data_source", lazy="joined")
+        "LicensePool",
+        backref=backref("data_source", lazy="joined"),
     )
 
     # One DataSource can provide many Hyperlinks.
