@@ -16,6 +16,14 @@ repos:
       - id: check-added-large-files
       - id: mixed-line-ending
 
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v2.31.0
+    hooks:
+      - id: pyupgrade
+        args:
+          - --py37-plus
+          - --keep-mock # This can be dropped when we go to Python 3.8
+
   - repo: https://github.com/myint/autoflake
     rev: v1.4
     hooks:
