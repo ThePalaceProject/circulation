@@ -2,7 +2,6 @@ import logging
 import re
 from enum import Enum
 
-import six
 from flask_babel import lazy_gettext as _
 
 from api.admin.problem_details import INCOMPLETE_CONFIGURATION
@@ -140,13 +139,13 @@ class SAMLSettingsValidator(Validator):
             if provider_type == ProviderType.ServiceProvider:
                 message = (
                     "Service Provider's metadata has incorrect format: {0}".format(
-                        six.ensure_text(str(exception))
+                        str(exception)
                     )
                 )
             else:
                 message = (
                     "Identity Provider's metadata has incorrect format: {0}".format(
-                        six.ensure_text(str(exception))
+                        str(exception)
                     )
                 )
 
@@ -276,7 +275,7 @@ class SAMLSettingsValidator(Validator):
                 return SAML_INCORRECT_FILTRATION_EXPRESSION.detailed(
                     _(
                         "SAML filtration expression has an incorrect format: {0}".format(
-                            six.ensure_text(str(exception))
+                            str(exception)
                         )
                     )
                 )
@@ -316,16 +315,14 @@ class SAMLSettingsValidator(Validator):
                     return SAML_INCORRECT_PATRON_ID_REGULAR_EXPRESSION.detailed(
                         _(
                             "SAML patron ID regular expression '{0}' does not have mandatory named group '{1}'".format(
-                                six.ensure_text(patron_id_regular_expression),
-                                six.ensure_text(
-                                    SAMLSubjectPatronIDExtractor.PATRON_ID_REGULAR_EXPRESSION_NAMED_GROUP
-                                ),
+                                patron_id_regular_expression,
+                                SAMLSubjectPatronIDExtractor.PATRON_ID_REGULAR_EXPRESSION_NAMED_GROUP,
                             )
                         )
                     )
             except re.error as exception:
                 error_message = "SAML patron ID regular expression '{0}' has an incorrect format: {1}".format(
-                    six.ensure_text(patron_id_regular_expression), exception
+                    patron_id_regular_expression, exception
                 )
 
                 self._logger.exception(error_message)
