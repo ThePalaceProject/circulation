@@ -4,7 +4,7 @@ import sys
 import time
 from abc import ABC, abstractmethod
 from threading import Thread
-from typing import Dict, Generic, Optional, Type, TypeVar
+from typing import Dict, Optional, Type
 
 import flask
 import sqlalchemy
