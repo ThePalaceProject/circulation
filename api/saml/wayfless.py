@@ -149,31 +149,35 @@ class SAMLWAYFlessAcquisitionLinkProcessor(
 
             self._logger.debug(f"SAML credentials: {saml_credential}")
 
-            if saml_credential:
-                saml_subject = self._saml_credential_manager.extract_saml_token(
-                    saml_credential
+            if not saml_credential:
+                raise SAMLWAYFlessFulfillmentError(
+                    f"There are no existing SAML credentials for patron {patron}"
                 )
 
-                self._logger.debug(f"SAML subject: {saml_subject}")
+            saml_subject = self._saml_credential_manager.extract_saml_token(
+                saml_credential
+            )
 
-                if not saml_subject.idp:
-                    raise SAMLWAYFlessFulfillmentError(
-                        f"SAML subject {saml_subject} does not contain an IdP's entityID"
-                    )
+            self._logger.debug(f"SAML subject: {saml_subject}")
 
-                acquisition_link = acquisition_link_template.replace(
-                    SAMLWAYFlessConfiguration.IDP_PLACEHOLDER,
-                    urllib.parse.quote(saml_subject.idp, safe=""),
-                )
-                acquisition_link = acquisition_link.replace(
-                    SAMLWAYFlessConfiguration.ACQUISITION_LINK_PLACEHOLDER,
-                    urllib.parse.quote(fulfillment.content_link, safe=""),
+            if not saml_subject.idp:
+                raise SAMLWAYFlessFulfillmentError(
+                    f"SAML subject {saml_subject} does not contain an IdP's entityID"
                 )
 
-                self._logger.debug(
-                    f"Old acquisition link {fulfillment.content_link} has been transformed to {acquisition_link}"
-                )
+            acquisition_link = acquisition_link_template.replace(
+                SAMLWAYFlessConfiguration.IDP_PLACEHOLDER,
+                urllib.parse.quote(saml_subject.idp, safe=""),
+            )
+            acquisition_link = acquisition_link.replace(
+                SAMLWAYFlessConfiguration.ACQUISITION_LINK_PLACEHOLDER,
+                urllib.parse.quote(fulfillment.content_link, safe=""),
+            )
 
-                fulfillment.content_link = acquisition_link
+            self._logger.debug(
+                f"Old acquisition link {fulfillment.content_link} has been transformed to {acquisition_link}"
+            )
+
+            fulfillment.content_link = acquisition_link
 
         return fulfillment
