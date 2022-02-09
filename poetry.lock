@@ -584,11 +584,11 @@ python-versions = "*"
 
 [[package]]
 name = "nltk"
-version = "3.6.7"
+version = "3.7"
 description = "Natural Language Toolkit"
 category = "main"
 optional = false
-python-versions = ">=3.6"
+python-versions = ">=3.7"
 
 [package.dependencies]
 click = "*"
@@ -597,7 +597,7 @@ regex = ">=2021.8.3"
 tqdm = "*"
 
 [package.extras]
-all = ["matplotlib", "numpy", "pyparsing", "python-crfsuite", "requests", "scikit-learn", "scipy", "twython"]
+all = ["numpy", "pyparsing", "scipy", "matplotlib", "twython", "requests", "scikit-learn", "python-crfsuite"]
 corenlp = ["requests"]
 machine_learning = ["numpy", "python-crfsuite", "scikit-learn", "scipy"]
 plot = ["matplotlib"]
@@ -1338,7 +1338,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.7,<4"
-content-hash = "fbc15c1b52373b0242dd36d00209f6e4aa3845412b2820ea4c6c528547e4c6b7"
+content-hash = "a05b15ea4042870c8cce282f2d59abbfaf48d662f8bfbf7e591c6e4bcdf09076"
 
 [metadata.files]
 atomicwrites = [
@@ -1749,8 +1749,8 @@ nameparser = [
     {file = "nameparser-1.1.1.tar.gz", hash = "sha256:ce8336ed7464fa7b9b8745f48b9c62dea6bed931b99715ca9479360544992143"},
 ]
 nltk = [
-    {file = "nltk-3.6.7-py3-none-any.whl", hash = "sha256:22e97be5d6c784d93a52d17860515cc50c5cfcc620b1f5c3747765041255a01e"},
-    {file = "nltk-3.6.7.zip", hash = "sha256:51bf1aef5304740a708be7c8e683f7798f03dc5c7a7e7feb758be9e95f4585e3"},
+    {file = "nltk-3.7-py3-none-any.whl", hash = "sha256:ba3de02490308b248f9b94c8bc1ac0683e9aa2ec49ee78536d8667afb5e3eec8"},
+    {file = "nltk-3.7.zip", hash = "sha256:d6507d6460cec76d70afea4242a226a7542f85c669177b9c7f562b7cf1b05502"},
 ]
 nodeenv = [
     {file = "nodeenv-1.6.0-py2.py3-none-any.whl", hash = "sha256:621e6b7076565ddcacd2db0294c0381e01fd28945ab36bcf00f41c5daf63bef7"},
