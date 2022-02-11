@@ -467,7 +467,7 @@ class TestBaseMetadataWranglerCoverageProvider(MetadataWranglerCoverageProviderT
 
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             self.Mock(self.collection, UnauthenticatedLookupClient())
-        assert "Authentication for the Library Simplified Metadata Wrangler " in str(
+        assert "Authentication for the Palace Collection Manager Metadata Wrangler " in str(
             excinfo.value
         )
 
