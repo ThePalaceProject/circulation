@@ -5,7 +5,6 @@ from enum import Enum
 from json import JSONDecoder, JSONEncoder
 from json.decoder import WHITESPACE
 
-import six
 from onelogin.saml2.constants import OneLogin_Saml2_Constants
 
 from core.util.datetime_helpers import from_timestamp, utc_now
@@ -1352,9 +1351,7 @@ class SAMLSubjectPatronIDExtractor(object):
         :rtype: Optional[str]
         """
         self._logger.info(
-            "Trying to extract a unique patron ID from {0}".format(
-                six.ensure_text(repr(subject))
-            )
+            "Trying to extract a unique patron ID from {0}".format(repr(subject))
         )
 
         patron_id = None
@@ -1380,8 +1377,8 @@ class SAMLSubjectPatronIDExtractor(object):
 
         self._logger.info(
             "Extracted a unique patron ID from {0}: {1}".format(
-                six.ensure_text(repr(subject)),
-                six.ensure_text(patron_id) if patron_id else "",
+                repr(subject),
+                patron_id if patron_id else "",
             )
         )
 
