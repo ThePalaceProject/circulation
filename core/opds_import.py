@@ -159,7 +159,7 @@ class SimplifiedOPDSLookup(object):
 class MetadataWranglerOPDSLookup(SimplifiedOPDSLookup, HasSelfTests):
 
     PROTOCOL = ExternalIntegration.METADATA_WRANGLER
-    NAME = _("Library Simplified Metadata Wrangler")
+    NAME = _("Palace Collection Manager Metadata Wrangler")
     CARDINALITY = 1
 
     SETTINGS = [
