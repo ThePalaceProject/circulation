@@ -310,12 +310,15 @@ class TestOPDS2Importer(OPDS2Test):
 
     @parameterized.expand(
         [
-            ("ISBN", IdentifierType.ISBN, MOBY_DICK_IDENTIFIER),
-            ("URI", IdentifierType.URI, HUCKLEBERRY_FINN_IDENTIFIER),
+            ("ISBN", IdentifierType.URI, MOBY_DICK_IDENTIFIER),
+            ("URI", IdentifierType.ISBN, HUCKLEBERRY_FINN_IDENTIFIER),
         ]
     )
     def test_opds2_importer_skips_publications_with_unsupported_identifier_types(
-        self, _, identifier_type: IdentifierType, identifier: str
+        self,
+        this_identifier_type,
+        ignore_identifier_type: IdentifierType,
+        identifier: str,
     ) -> None:
         """Ensure that OPDS2Importer imports only publications having supported identifier types.
         This test imports the feed consisting of two publications,
@@ -329,7 +332,7 @@ class TestOPDS2Importer(OPDS2Test):
         with self._configuration_factory.create(
             self._configuration_storage, self._db, OPDS2ImporterConfiguration
         ) as configuration:
-            configuration.set_supported_identifier_types([identifier_type])
+            configuration.set_ignored_identifier_types([ignore_identifier_type])
 
         content_server_feed = self.sample_opds("feed.json")
 
@@ -343,6 +346,7 @@ class TestOPDS2Importer(OPDS2Test):
         # Ensure that that CM imported only the edition having the selected identifier type.
         assert isinstance(imported_editions, list)
         assert 1 == len(imported_editions)
+        assert imported_editions[0].primary_identifier.type == this_identifier_type
 
         # Ensure that it was parsed correctly and available by its identifier.
         edition = self._get_edition_by_identifier(imported_editions, identifier)

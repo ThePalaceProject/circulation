@@ -1,19 +1,8 @@
-import json
 import logging
 from contextlib import contextmanager
 from datetime import datetime
 from io import BytesIO, StringIO
-from typing import (
-    Callable,
-    Collection,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Set,
-    Tuple,
-    Union,
-)
+from typing import Callable, Collection, Dict, Iterable, List, Optional, Tuple, Union
 from urllib.parse import urljoin, urlparse
 
 import sqlalchemy
@@ -29,17 +18,16 @@ from webpub_manifest_parser.opds2.registry import (
 )
 from webpub_manifest_parser.utils import encode, first_or_default
 
+from core.configuration.ignored_identifier import (
+    IgnoredIdentifierConfiguration,
+    IgnoredIdentifierImporterMixin,
+)
 from core.mirror import MirrorUploader
 from core.model.configuration import (
-    ConfigurationAttributeType,
     ConfigurationFactory,
-    ConfigurationGrouping,
-    ConfigurationMetadata,
-    ConfigurationOption,
     ConfigurationStorage,
     HasExternalIntegration,
 )
-from core.model.constants import IdentifierType
 
 from .coverage import CoverageFailure
 from .metadata_layer import (
@@ -124,67 +112,14 @@ class RWPMManifestParser(object):
         return result
 
 
-class OPDS2ImporterConfiguration(ConfigurationGrouping):
-    """Contains configuration settings of OPDS2Importer."""
-
-    ALL_SUPPORTED_IDENTIFIER_TYPES = set(
-        [identifier_type.value for identifier_type in IdentifierType]
-    )
-
-    supported_identifier_types = ConfigurationMetadata(
-        key="supported_identifier_types",
-        label=_("List of supported identifier types"),
-        description=_(
-            "Circulation Manager will be importing only publications with identifiers having one of the selected types."
-        ),
-        type=ConfigurationAttributeType.MENU,
-        required=False,
-        default=tuple(ALL_SUPPORTED_IDENTIFIER_TYPES),
-        options=[
-            ConfigurationOption(identifier_type, identifier_type)
-            for identifier_type in ALL_SUPPORTED_IDENTIFIER_TYPES
-        ],
-        format="narrow",
-    )
-
-    def get_supported_identifier_types(self) -> Set[str]:
-        """Return the list of supported identifier types.
-
-        By default, when the configuration setting hasn't been set yet, it returns all the available identifier types.
-
-        :return: List of supported identifier types
-        """
-        return self.supported_identifier_types or set(
-            self.ALL_SUPPORTED_IDENTIFIER_TYPES
-        )
-
-    def set_supported_identifier_types(
-        self,
-        value: Tuple[List[str], Set[str], List[IdentifierType], Set[IdentifierType]],
-    ) -> None:
-        """Update the list of supported identifier types.
-
-        :param value: New list of supported identifier types
-        """
-        if not isinstance(value, (list, set)):
-            raise ValueError("Argument 'value' must be either a list of set")
-
-        supported_identifier_types = []
-
-        for item in value:
-            if isinstance(item, str):
-                supported_identifier_types.append(item)
-            elif isinstance(item, IdentifierType):
-                supported_identifier_types.append(item.name)
-            else:
-                raise ValueError(
-                    "Argument 'value' must contain string or IdentifierType enumeration's items only"
-                )
-
-        self.supported_identifier_types = json.dumps(supported_identifier_types)
+class OPDS2ImporterConfiguration(IgnoredIdentifierConfiguration):
+    """Contains configuration settings of OPDS2Importer.
+    Currently empty, but maintaining it as a base class for others"""
 
 
-class OPDS2Importer(OPDSImporter, HasExternalIntegration):
+class OPDS2Importer(
+    IgnoredIdentifierImporterMixin, OPDSImporter, HasExternalIntegration
+):
     """Imports editions and license pools from an OPDS 2.0 feed."""
 
     NAME = ExternalIntegration.OPDS2_IMPORT
@@ -250,7 +185,6 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
         self._external_integration_id: int = collection.external_integration.id
         self._configuration_storage: ConfigurationStorage = ConfigurationStorage(self)
         self._configuration_factory: ConfigurationFactory = ConfigurationFactory()
-        self._supported_identifier_types: Optional[set] = None
 
     def _is_identifier_allowed(self, identifier: Identifier) -> bool:
         """Check the identifier and return a boolean value indicating whether CM can import it.
@@ -262,9 +196,11 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
         :param identifier: Identifier object
         :return: Boolean value indicating whether CM can import the identifier
         """
-        supported_identifier_types = self._get_supported_identifier_types()
+        configuration = self._get_configuration(self._db)
+        with configuration as conf:
+            ignored_identifier_types = self._get_ignored_identifier_types(conf)
 
-        return identifier.type in supported_identifier_types
+        return identifier.type not in ignored_identifier_types
 
     def _extract_subjects(
         self, subjects: List["core_ast.Subject"]
@@ -827,18 +763,6 @@ class OPDS2Importer(OPDSImporter, HasExternalIntegration):
             self._configuration_storage, db, OPDS2ImporterConfiguration
         ) as configuration:
             yield configuration
-
-    def _get_supported_identifier_types(self) -> Set[int]:
-        """Return a set of supported identifier types.
-        :return: Set of supported identifier types
-        """
-        if self._supported_identifier_types is None:
-            with self._get_configuration(self._db) as configuration:
-                self._supported_identifier_types = (
-                    configuration.get_supported_identifier_types()
-                )
-
-        return self._supported_identifier_types
 
     def external_integration(
         self, db: sqlalchemy.orm.session.Session

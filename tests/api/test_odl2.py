@@ -104,7 +104,7 @@ class TestODL2Importer(TestODLImporter):
         with configuration_factory.create(
             configuration_storage, db, ODL2APIConfiguration
         ) as configuration:
-            configuration.set_supported_identifier_types([IdentifierConstants.ISBN])
+            configuration.set_ignored_identifier_types([IdentifierConstants.URI])
             configuration.skipped_license_formats = json.dumps(["text/html"])
 
         # Act
