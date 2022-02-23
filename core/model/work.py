@@ -3,10 +3,9 @@
 
 import logging
 from collections import Counter
-from typing import TYPE_CHECKING, Optional
 from datetime import datetime
 from decimal import Decimal
-from typing import List
+from typing import TYPE_CHECKING, List
 
 from sqlalchemy import (
     Boolean,
