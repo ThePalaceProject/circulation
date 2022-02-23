@@ -4,6 +4,9 @@
 import logging
 from collections import Counter
 from typing import TYPE_CHECKING, Optional
+from datetime import datetime
+from decimal import Decimal
+from typing import List
 
 from sqlalchemy import (
     Boolean,
@@ -19,10 +22,12 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import INT4RANGE
 from sqlalchemy.ext.associationproxy import association_proxy
-from sqlalchemy.orm import contains_eager, relationship
+from sqlalchemy.orm import contains_eager, joinedload, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, case, join, literal_column, or_, select
 from sqlalchemy.sql.functions import func
+
+from core.model.classification import Subject
 
 from ..classifier import Classifier, WorkClassifier
 from ..config import CannotLoadConfiguration
@@ -1427,6 +1432,132 @@ class Work(Base):
     # This can be used in func.to_char to convert a SQL datetime into a string
     # that Elasticsearch can parse as a date.
     ELASTICSEARCH_TIME_FORMAT = 'YYYY-MM-DD"T"HH24:MI:SS"."MS'
+
+    @classmethod
+    def to_search_documents_in_app(cls, works, policy=None):
+        """In app to search document need to compare speeds
+        TODOS:
+        - license_pool computed fields
+        - identifiers
+        - customlists
+        - classifications
+        - target_age
+        """
+        _db = Session.object_session(works[0])
+
+        qu = _db.query(Work).filter(Work.id.in_([w.id for w in works]))
+        qu = qu.options(
+            joinedload(Work.presentation_edition)
+            .joinedload(Edition.contributions)
+            .joinedload(Contribution.contributor)
+        )
+        qu = qu.options(
+            joinedload(Work.license_pools),
+            joinedload(Work.work_genres).joinedload(WorkGenre.genre),
+        )
+
+        # print (str(qu))
+        rows: List(Work) = qu.all()
+
+        result = []
+        for item in rows:
+            print(item.target_age)
+            result.append(cls.search_doc_as_dict(item))
+
+        return result
+
+    @classmethod
+    def search_doc_as_dict(cls, doc):
+        columns = {
+            "work": [
+                "id",
+                "fiction",
+                "audience",
+                "summary_text",
+                "quality",
+                "rating",
+                "popularity",
+                "presentation_ready",
+                "presentation_edition_id",
+            ],
+            "edition": [
+                "title",
+                "subtitle",
+                "series",
+                "series_position",
+                "language",
+                "sort_title",
+                "author",
+                "sort_author",
+                "medium",
+                "publisher",
+                "imprint",
+                "permanent_work_id",
+                "id",
+            ],
+            "contribution": ["role"],
+            "contributor": ["display_name", "sort_name", "family_name", "lc", "viaf"],
+            "licensepools": [
+                "id",
+                "data_source_id",
+                "collection_id",
+                "open_access",
+                "suppressed",
+                "availability_time",
+            ],
+        }
+
+        result = {}
+
+        def _convert(value):
+            if isinstance(value, Decimal):
+                return float(value)
+            elif isinstance(value, datetime):
+                return value.isoformat()
+            return value
+
+        for c in columns["work"]:
+            val = getattr(doc, c)
+            result[c] = _convert(val)
+
+        for c in columns["edition"]:
+            val = getattr(doc.presentation_edition, c)
+            result[c] = _convert(val)
+
+        result["contributors"] = []
+        for item in doc.presentation_edition.contributions:
+            contributor = {}
+            for c in columns["contributor"]:
+                val = getattr(item.contributor, c)
+                contributor[c] = _convert(val)
+            for c in columns["contribution"]:
+                val = getattr(item, c)
+                contributor[c] = _convert(val)
+            result["contributors"].append(contributor)
+
+        result["licensepools"] = []
+        for item in doc.license_pools:
+            lc = {}
+            for c in columns["licensepools"]:
+                val = getattr(item, c)
+                if c is "availability_time":  # special case
+                    lc[c] = val.timestamp()
+                else:
+                    lc[c] = _convert(val)
+            result["licensepools"].append(lc)
+
+        # Extra special genre massaging
+        result["genres"] = []
+        for item in doc.work_genres:
+            genre = {
+                "scheme": Subject.SIMPLIFIED_GENRE,
+                "term": item.genre.id,
+                "name": item.genre.name,
+                "weight": item.affinity,
+            }
+            result["genres"].append(genre)
+
+        return result
 
     @classmethod
     def to_search_documents(cls, works, policy=None):
