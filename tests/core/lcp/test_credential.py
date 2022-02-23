@@ -7,6 +7,7 @@ from core.lcp.credential import (
     LCPCredentialFactory,
     LCPCredentialType,
     LCPHashedPassphrase,
+    LCPUnhashedPassphrase,
 )
 from core.lcp.exceptions import LCPError
 from core.model import Credential, DataSource
@@ -30,7 +31,7 @@ class TestCredentialFactory(DatabaseTest):
                 LCPCredentialType.PATRON_ID.value,
                 "get_patron_id",
                 "52a190d1-cd69-4794-9d7a-1ec50392697f",
-            )
+            ),
         ]
     )
     def test_getter(self, _, credential_type, method_name, expected_result):
@@ -51,6 +52,28 @@ class TestCredentialFactory(DatabaseTest):
             assert result == expected_result
             persistent_token_create_mock.assert_called_once_with(
                 self._db, self._data_source, credential_type, self._patron, None
+            )
+
+    def test_get_patron_passphrase(self):
+        # Arrange
+        expected_result = LCPUnhashedPassphrase("12345")
+        credential = Credential(credential=expected_result.text)
+
+        with patch.object(
+            Credential, "persistent_token_create"
+        ) as persistent_token_create_mock:
+            persistent_token_create_mock.return_value = (credential, True)
+
+            result = self._factory.get_patron_passphrase(self._db, self._patron)
+
+            # Assert
+            assert result == expected_result
+            persistent_token_create_mock.assert_called_once_with(
+                self._db,
+                self._data_source,
+                LCPCredentialType.LCP_PASSPHRASE.value,
+                self._patron,
+                None,
             )
 
     def test_get_hashed_passphrase_raises_exception_when_there_is_no_passphrase(self):
