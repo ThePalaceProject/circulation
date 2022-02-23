@@ -70,6 +70,9 @@ class LCPCredentialFactory:
         :param patron: Patron object
         :type patron: core.model.patron.Patron
 
+        :param commit: True if a generated identifier should be committed to the database
+        :type commit: bool
+
         :param value: Optional value of the token
         :type value: Optional[string]
         """
@@ -161,6 +164,8 @@ class LCPCredentialFactory:
         :rtype: LCPHashedPassphrase
         """
 
+        # Check if a hashed passphrase already exists, and avoid committing
+        # a new one if it doesn't.
         hashed_passphrase, is_new = self._get_or_create_persistent_token(
             db,
             patron,
