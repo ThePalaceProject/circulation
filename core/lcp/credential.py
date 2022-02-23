@@ -16,7 +16,7 @@ class LCPCredentialType(Enum):
     LCP_HASHED_PASSPHRASE = "Hashed LCP Passphrase passed to the LCP License Server"
 
 
-class LCPHashedPassphrase(object):
+class LCPHashedPassphrase:
     """A hashed passphrase."""
 
     hashed: str
@@ -29,7 +29,7 @@ class LCPHashedPassphrase(object):
         return self.hashed == other.hashed
 
 
-class LCPUnhashedPassphrase(object):
+class LCPUnhashedPassphrase:
     """An unhashed passphrase."""
 
     text: str
@@ -46,7 +46,7 @@ class LCPUnhashedPassphrase(object):
         return LCPHashedPassphrase(hashed_passphrase)
 
 
-class LCPCredentialFactory(object):
+class LCPCredentialFactory:
     """Generates patron's credentials used by the LCP License Server"""
 
     def __init__(self):
