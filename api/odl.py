@@ -1,4 +1,3 @@
-import binascii
 import datetime
 import json
 import logging
@@ -18,7 +17,11 @@ from uritemplate import URITemplate
 
 from core import util
 from core.analytics import Analytics
-from core.lcp.credential import LCPCredentialFactory
+from core.lcp.credential import (
+    LCPCredentialFactory,
+    LCPHashedPassphrase,
+    LCPUnhashedPassphrase,
+)
 from core.metadata_layer import FormatData, LicenseData, TimestampData
 from core.model import (
     Collection,
@@ -371,16 +374,12 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
                 self._configuration_storage, db, ODLAPIConfiguration
             ) as configuration:
                 hasher = self._get_hasher(configuration)
-                hashed_passphrase = hasher.hash(
+
+                unhashed_pass: LCPUnhashedPassphrase = (
                     self._credential_factory.get_patron_passphrase(db, patron)
                 )
-                encoded_passphrase = base64.b64encode(
-                    binascii.unhexlify(hashed_passphrase)
-                )
-
-                self._credential_factory.set_hashed_passphrase(
-                    db, patron, hashed_passphrase
-                )
+                hashed_pass: LCPHashedPassphrase = unhashed_pass.hash(hasher)
+                self._credential_factory.set_hashed_passphrase(db, patron, hashed_pass)
 
                 notification_url = self._url_for(
                     "odl_notify",
@@ -396,7 +395,7 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
                     patron_id=patron_id,
                     expires=expires.isoformat(),
                     notification_url=notification_url,
-                    passphrase=encoded_passphrase,
+                    passphrase=hashed_pass.hashed,
                     hint=configuration.passphrase_hint,
                     hint_url=configuration.passphrase_hint_url,
                 )

@@ -8,7 +8,7 @@ from api.lcp.collection import LCPAPI
 from api.lcp.controller import LCPController
 from api.lcp.factory import LCPServerFactory
 from api.lcp.server import LCPServer
-from core.lcp.credential import LCPCredentialFactory
+from core.lcp.credential import LCPCredentialFactory, LCPUnhashedPassphrase
 from core.model import ExternalIntegration
 from tests.api.lcp import fixtures
 from tests.api.test_controller import ControllerTest
@@ -19,7 +19,9 @@ class TestLCPController(ControllerTest):
         self,
     ):
         # Arrange
-        expected_passphrase = "1cde00b4-bea9-48fc-819b-bd17c578a22c"
+        expected_passphrase = LCPUnhashedPassphrase(
+            "1cde00b4-bea9-48fc-819b-bd17c578a22c"
+        )
 
         with patch(
             "api.lcp.controller.LCPCredentialFactory"
@@ -50,7 +52,7 @@ class TestLCPController(ControllerTest):
                 for result in [result1, result2]:
                     assert result.status_code == 200
                     assert ("passphrase" in result.json) == True
-                    assert result.json["passphrase"] == expected_passphrase
+                    assert result.json["passphrase"] == expected_passphrase.text
 
                 credential_factory.get_patron_passphrase.assert_has_calls(
                     [call(self._db, patron), call(self._db, patron)]

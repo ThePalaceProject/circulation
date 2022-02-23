@@ -3,7 +3,11 @@ from unittest.mock import patch
 import pytest
 from parameterized import parameterized
 
-from core.lcp.credential import LCPCredentialFactory, LCPCredentialType
+from core.lcp.credential import (
+    LCPCredentialFactory,
+    LCPCredentialType,
+    LCPHashedPassphrase,
+)
 from core.lcp.exceptions import LCPError
 from core.model import Credential, DataSource
 from core.testing import DatabaseTest
@@ -26,13 +30,7 @@ class TestCredentialFactory(DatabaseTest):
                 LCPCredentialType.PATRON_ID.value,
                 "get_patron_id",
                 "52a190d1-cd69-4794-9d7a-1ec50392697f",
-            ),
-            (
-                "get_patron_passphrase",
-                LCPCredentialType.LCP_PASSPHRASE.value,
-                "get_patron_passphrase",
-                "52a190d1-cd69-4794-9d7a-1ec50392697f",
-            ),
+            )
         ]
     )
     def test_getter(self, _, credential_type, method_name, expected_result):
@@ -62,7 +60,7 @@ class TestCredentialFactory(DatabaseTest):
 
     def test_get_hashed_passphrase_returns_existing_hashed_passphrase(self):
         # Arrange
-        expected_result = "12345"
+        expected_result = LCPHashedPassphrase("12345")
 
         # Act
         self._factory.set_hashed_passphrase(self._db, self._patron, expected_result)

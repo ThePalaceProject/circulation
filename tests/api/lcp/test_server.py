@@ -11,7 +11,7 @@ from api.lcp import utils
 from api.lcp.encrypt import LCPEncryptionResult
 from api.lcp.hash import HasherFactory
 from api.lcp.server import LCPServer, LCPServerConfiguration
-from core.lcp.credential import LCPCredentialFactory
+from core.lcp.credential import LCPCredentialFactory, LCPUnhashedPassphrase
 from core.model.configuration import (
     ConfigurationFactory,
     ConfigurationStorage,
@@ -167,10 +167,12 @@ class TestLCPServer(DatabaseTest):
         # Arrange
         patron = self._patron()
         expected_patron_id = "52a190d1-cd69-4794-9d7a-1ec50392697f"
-        expected_patron_passphrase = "52a190d1-cd69-4794-9d7a-1ec50392697a"
+        expected_patron_passphrase = LCPUnhashedPassphrase(
+            "52a190d1-cd69-4794-9d7a-1ec50392697a"
+        )
         expected_patron_key = self._hasher_factory.create(
             LCPServerConfiguration.DEFAULT_ENCRYPTION_ALGORITHM
-        ).hash(expected_patron_passphrase)
+        ).hash(expected_patron_passphrase.text)
 
         with self._configuration_factory.create(
             self._configuration_storage, self._db, LCPServerConfiguration

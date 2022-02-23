@@ -1,5 +1,8 @@
 import logging
 from enum import Enum
+from typing import Optional
+
+from api.lcp.hash import Hasher
 
 from ..model import Credential, DataSource
 from .exceptions import LCPError
@@ -13,6 +16,36 @@ class LCPCredentialType(Enum):
     LCP_HASHED_PASSPHRASE = "Hashed LCP Passphrase passed to the LCP License Server"
 
 
+class LCPHashedPassphrase(object):
+    """A hashed passphrase."""
+
+    hashed: str
+
+    def __init__(self, text: str):
+        assert type(text) == str
+        self.hashed = text
+
+    def __eq__(self, other):
+        return self.hashed == other.hashed
+
+
+class LCPUnhashedPassphrase(object):
+    """An unhashed passphrase."""
+
+    text: str
+
+    def __init__(self, text: str):
+        assert type(text) == str
+        self.text = text
+
+    def __eq__(self, other):
+        return self.text == other.text
+
+    def hash(self, hasher: Hasher) -> LCPHashedPassphrase:
+        hashed_passphrase = hasher.hash(self.text)
+        return LCPHashedPassphrase(hashed_passphrase)
+
+
 class LCPCredentialFactory(object):
     """Generates patron's credentials used by the LCP License Server"""
 
@@ -21,7 +54,13 @@ class LCPCredentialFactory(object):
         self._logger = logging.getLogger(__name__)
 
     def _get_or_create_persistent_token(
-        self, db, patron, data_source_type, credential_type, value=None
+        self,
+        db,
+        patron,
+        data_source_type,
+        credential_type,
+        commit: bool,
+        value: Optional[str] = None,
     ):
         """Gets or creates a new persistent token
 
@@ -46,7 +85,11 @@ class LCPCredentialFactory(object):
         credential, is_new = Credential.persistent_token_create(
             db, data_source, credential_type, patron, value
         )
-        transaction.commit()
+
+        if commit:
+            transaction.commit()
+        else:
+            transaction.rollback()
 
         self._logger.info(
             'Successfully {0} "{1}" {2} for {3} in "{4}" data source with value "{5}"'.format(
@@ -76,13 +119,14 @@ class LCPCredentialFactory(object):
         patron_id, _ = self._get_or_create_persistent_token(
             db,
             patron,
-            DataSource.INTERNAL_PROCESSING,
-            LCPCredentialType.PATRON_ID.value,
+            data_source_type=DataSource.INTERNAL_PROCESSING,
+            credential_type=LCPCredentialType.PATRON_ID.value,
+            commit=True,
         )
 
         return patron_id
 
-    def get_patron_passphrase(self, db, patron):
+    def get_patron_passphrase(self, db, patron) -> LCPUnhashedPassphrase:
         """Generates a new or returns an existing patron's passphrase associated with an LCP license
 
         :param db: Database session
@@ -97,13 +141,14 @@ class LCPCredentialFactory(object):
         patron_passphrase, _ = self._get_or_create_persistent_token(
             db,
             patron,
-            DataSource.INTERNAL_PROCESSING,
-            LCPCredentialType.LCP_PASSPHRASE.value,
+            data_source_type=DataSource.INTERNAL_PROCESSING,
+            credential_type=LCPCredentialType.LCP_PASSPHRASE.value,
+            commit=True,
         )
 
-        return patron_passphrase
+        return LCPUnhashedPassphrase(patron_passphrase)
 
-    def get_hashed_passphrase(self, db, patron):
+    def get_hashed_passphrase(self, db, patron) -> LCPHashedPassphrase:
         """Returns an existing hashed passphrase
 
         :param db: Database session
@@ -113,21 +158,25 @@ class LCPCredentialFactory(object):
         :type patron: core.model.patron.Patron
 
         :return: Existing hashed passphrase
-        :rtype: string
+        :rtype: LCPHashedPassphrase
         """
+
         hashed_passphrase, is_new = self._get_or_create_persistent_token(
             db,
             patron,
-            DataSource.INTERNAL_PROCESSING,
-            LCPCredentialType.LCP_HASHED_PASSPHRASE.value,
+            data_source_type=DataSource.INTERNAL_PROCESSING,
+            credential_type=LCPCredentialType.LCP_HASHED_PASSPHRASE.value,
+            commit=False,
         )
 
         if is_new:
             raise LCPError("Passphrase have to be explicitly set")
 
-        return hashed_passphrase
+        return LCPHashedPassphrase(hashed_passphrase)
 
-    def set_hashed_passphrase(self, db, patron, hashed_passphrase):
+    def set_hashed_passphrase(self, db, patron, hashed_passphrase: LCPHashedPassphrase):
+        assert type(hashed_passphrase) == LCPHashedPassphrase
+
         """Stores the hashed passphrase as a persistent token
 
         :param db: Database session
@@ -142,7 +191,8 @@ class LCPCredentialFactory(object):
         self._get_or_create_persistent_token(
             db,
             patron,
-            DataSource.INTERNAL_PROCESSING,
-            LCPCredentialType.LCP_HASHED_PASSPHRASE.value,
-            hashed_passphrase,
+            data_source_type=DataSource.INTERNAL_PROCESSING,
+            credential_type=LCPCredentialType.LCP_HASHED_PASSPHRASE.value,
+            commit=True,
+            value=hashed_passphrase.hashed,
         )
