@@ -24,7 +24,7 @@ class LCPHashedPassphrase:
     def __init__(self, text: str):
         if not isinstance(text, str):
             raise ValueError(
-                "A hashed passphrase cannot be a non-string type " + str(type(text))
+                "A hashed LCP passphrase cannot be a non-string type " + str(type(text))
             )
         self.hashed = text
 
@@ -40,7 +40,7 @@ class LCPUnhashedPassphrase:
     def __init__(self, text: str):
         if not isinstance(text, str):
             raise ValueError(
-                "A passphrase cannot be a non-string type " + str(type(text))
+                "An LCP passphrase cannot be a non-string type " + str(type(text))
             )
         self.text = text
 
