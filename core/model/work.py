@@ -1620,6 +1620,7 @@ class Work(Base):
             elif isinstance(value, datetime):
                 return value.timestamp()
             return value
+        
 
         def _set_value(parent, key, target):
             for c in columns[key]:
@@ -1682,6 +1683,14 @@ class Work(Base):
                 "weight": item.affinity,
             }
             result["genres"].append(genre)
+        
+        result["identifiers"] = []
+        for item in doc.identifiers:
+            identifier = {}
+            for c in columns["identifiers"]:
+                val = getattr(item, c)
+                identifier[c] = _convert(val)
+            result["identifiers"].append(identifier)
 
         result["identifiers"] = []
         for item in doc.identifiers:
