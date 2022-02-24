@@ -77,7 +77,6 @@ class LCPCredentialFactory:
         :type patron: core.model.patron.Patron
 
         :param commit: True if a generated identifier should be committed to the database
-        :type commit: bool
 
         :param value: Optional value of the token
         :type value: Optional[string]
