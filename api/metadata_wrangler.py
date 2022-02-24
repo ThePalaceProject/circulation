@@ -322,7 +322,7 @@ class BaseMetadataWranglerCoverageProvider(OPDSImportCoverageProvider):
         )
         if not self.lookup_client.authenticated:
             raise CannotLoadConfiguration(
-                "Authentication for the Library Simplified Metadata Wrangler "
+                "Authentication for the Palace Collection Manager Metadata Wrangler "
                 "is not set up. Without this, there is no way to register "
                 "your identifiers with the metadata wrangler."
             )

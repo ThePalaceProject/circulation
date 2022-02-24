@@ -1,7 +1,6 @@
 import logging
 from urllib.parse import urlparse
 
-import six
 from flask import request
 from flask_babel import lazy_gettext as _
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
@@ -176,7 +175,7 @@ class SAMLAuthenticationManager(object):
                 "An unexpected error occurred during filtering {0}".format(subject)
             )
 
-            return SAML_GENERIC_ERROR.detailed(six.ensure_text(str(exception)))
+            return SAML_GENERIC_ERROR.detailed(str(exception))
 
     @property
     def configuration(self):
@@ -229,7 +228,7 @@ class SAMLAuthenticationManager(object):
                 "Unexpected exception occurred while initiating authentication workflow"
             )
 
-            return SAML_GENERIC_ERROR.detailed(six.ensure_text(str(exception)))
+            return SAML_GENERIC_ERROR.detailed(str(exception))
 
     def finish_authentication(self, db, idp_entity_id):
         """Finish the SAML authentication workflow by validating AuthnResponse and extracting a SAML assertion from it.

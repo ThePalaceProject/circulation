@@ -572,15 +572,15 @@ class MARCExporter(object):
         {
             "key": INCLUDE_SIMPLIFIED_GENRES,
             "label": _(
-                "Include Library Simplified genres in MARC records (650 fields)"
+                "Include Palace Collection Manager genres in MARC records (650 fields)"
             ),
             "type": "select",
             "options": [
                 {
                     "key": "false",
-                    "label": _("Do not include Library Simplified genres"),
+                    "label": _("Do not include Palace Collection Manager genres"),
                 },
-                {"key": "true", "label": _("Include Library Simplified genres")},
+                {"key": "true", "label": _("Include Palace Collection Manager genres")},
             ],
             "default": "false",
         },
