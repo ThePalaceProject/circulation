@@ -1449,22 +1449,70 @@ class Work(Base):
         qu = qu.options(
             joinedload(Work.presentation_edition)
             .joinedload(Edition.contributions)
-            .joinedload(Contribution.contributor)
-        )
-        qu = qu.options(
+            .joinedload(Contribution.contributor),
             joinedload(Work.license_pools),
             joinedload(Work.work_genres).joinedload(WorkGenre.genre),
         )
 
+
         # print (str(qu))
         rows: List(Work) = qu.all()
 
-        result = []
-        for item in rows:
-            print(item.target_age)
-            result.append(cls.search_doc_as_dict(item))
+        ## IDENTIFIERS START
 
-        return result
+        works_alias = (
+            select(
+                [
+                    Work.id.label("work_id"),
+                    Edition.id.label("edition_id"),
+                    Edition.primary_identifier_id.label("identifier_id"),
+                ],
+                Work.id.in_((w.id for w in works)),
+            )
+            .select_from(
+                join(Work, Edition, Work.presentation_edition_id == Edition.id)
+            )
+            .alias("works_alias")
+        )
+
+        equivalent_identifiers = Identifier.recursively_equivalent_identifier_ids_query(
+            literal_column(works_alias.name + "." + works_alias.c.identifier_id.name),
+            policy=policy,
+        ).alias("equivalent_identifiers_subquery")
+        
+        #MARK
+
+        identifiers = (
+            select(
+                [
+                    works_alias.c.work_id,
+                    Identifier
+                ]
+            )
+            .where(Identifier.id.in_(equivalent_identifiers))
+            .select_from(works_alias)
+            .alias("identifier_subquery")
+        )
+
+        # print ("____"*20)
+        # print (str(works_alias))
+        # print ("____"*20)
+        # print ("EQUV", str(equivalent_identifiers))
+        # print ("____"*20)
+        # print ("IDX::", str(identifiers))
+        # print ("____"*20)
+        identifiers = list(_db.execute(identifiers))
+
+        ## IDENTIFIERS END
+        
+        results = []
+        for item in rows:
+            print(item)
+            item.identifiers = list(filter(lambda idx: idx[0] == item.id, identifiers))
+            search_doc = cls.search_doc_as_dict(item)
+            results.append(search_doc)
+
+        return results
 
     @classmethod
     def search_doc_as_dict(cls, doc):
@@ -1505,6 +1553,10 @@ class Work(Base):
                 "suppressed",
                 "availability_time",
             ],
+            "identifiers": [
+                "type",
+                "identifier"
+            ]
         }
 
         result = {}
@@ -1515,6 +1567,7 @@ class Work(Base):
             elif isinstance(value, datetime):
                 return value.isoformat()
             return value
+        
 
         for c in columns["work"]:
             val = getattr(doc, c)
@@ -1523,6 +1576,7 @@ class Work(Base):
         for c in columns["edition"]:
             val = getattr(doc.presentation_edition, c)
             result[c] = _convert(val)
+        result["edition_id"] = doc.presentation_edition.id
 
         result["contributors"] = []
         for item in doc.presentation_edition.contributions:
@@ -1556,6 +1610,14 @@ class Work(Base):
                 "weight": item.affinity,
             }
             result["genres"].append(genre)
+        
+        result["identifiers"] = []
+        for item in doc.identifiers:
+            identifier = {}
+            for c in columns["identifiers"]:
+                val = getattr(item, c)
+                identifier[c] = _convert(val)
+            result["identifiers"].append(identifier)
 
         return result
 
