@@ -3,6 +3,7 @@ from unittest.mock import patch
 import pytest
 from parameterized import parameterized
 
+from api.lcp.hash import HashingAlgorithm, UniversalHasher
 from core.lcp.credential import (
     LCPCredentialFactory,
     LCPCredentialType,
@@ -12,6 +13,25 @@ from core.lcp.credential import (
 from core.lcp.exceptions import LCPError
 from core.model import Credential, DataSource
 from core.testing import DatabaseTest
+
+
+class TestLCPTypes:
+    def test_bad_type_hashed(self):
+        with pytest.raises(ValueError):
+            LCPHashedPassphrase(23)
+
+    def test_bad_type_unhashed(self):
+        with pytest.raises(ValueError):
+            LCPUnhashedPassphrase(23)
+
+    def test_hashing(self):
+        expected = LCPHashedPassphrase(
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        )
+        received = LCPUnhashedPassphrase("hello").hash(
+            UniversalHasher(HashingAlgorithm.SHA256.value)
+        )
+        assert expected == received
 
 
 class TestCredentialFactory(DatabaseTest):
