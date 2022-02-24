@@ -1494,13 +1494,6 @@ class Work(Base):
             .alias("identifier_subquery")
         )
 
-        # print ("____"*20)
-        # print (str(works_alias))
-        # print ("____"*20)
-        # print ("EQUV", str(equivalent_identifiers))
-        # print ("____"*20)
-        # print ("IDX::", str(identifiers))
-        # print ("____"*20)
         identifiers = list(_db.execute(identifiers))
 
         ## IDENTIFIERS END
@@ -1541,7 +1534,6 @@ class Work(Base):
                 "publisher",
                 "imprint",
                 "permanent_work_id",
-                "id",
             ],
             "contribution": ["role"],
             "contributor": ["display_name", "sort_name", "family_name", "lc", "viaf"],
@@ -1568,36 +1560,28 @@ class Work(Base):
                 return value.isoformat()
             return value
         
+        def _set_value(parent, key, target):
+            for c in columns[key]:
+                val = getattr(parent, c)
+                target[c] = _convert(val)
 
-        for c in columns["work"]:
-            val = getattr(doc, c)
-            result[c] = _convert(val)
+        _set_value(doc, "work", result)
 
-        for c in columns["edition"]:
-            val = getattr(doc.presentation_edition, c)
-            result[c] = _convert(val)
+        _set_value(doc.presentation_edition, "edition", result)
         result["edition_id"] = doc.presentation_edition.id
 
         result["contributors"] = []
         for item in doc.presentation_edition.contributions:
             contributor = {}
-            for c in columns["contributor"]:
-                val = getattr(item.contributor, c)
-                contributor[c] = _convert(val)
-            for c in columns["contribution"]:
-                val = getattr(item, c)
-                contributor[c] = _convert(val)
+            _set_value(item.contributor, "contributor", contributor)
+            _set_value(item, "contribution", contributor)
             result["contributors"].append(contributor)
 
         result["licensepools"] = []
         for item in doc.license_pools:
             lc = {}
-            for c in columns["licensepools"]:
-                val = getattr(item, c)
-                if c is "availability_time":  # special case
-                    lc[c] = val.timestamp()
-                else:
-                    lc[c] = _convert(val)
+            _set_value(item, "licensepools", lc)
+            lc["availability_time"] = getattr(item, "availability_time").timestamp()
             result["licensepools"].append(lc)
 
         # Extra special genre massaging
@@ -1614,9 +1598,7 @@ class Work(Base):
         result["identifiers"] = []
         for item in doc.identifiers:
             identifier = {}
-            for c in columns["identifiers"]:
-                val = getattr(item, c)
-                identifier[c] = _convert(val)
+            _set_value(item, "identifiers", identifier)
             result["identifiers"].append(identifier)
 
         return result
