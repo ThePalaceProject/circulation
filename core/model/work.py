@@ -1621,6 +1621,10 @@ class Work(Base):
                 return value.timestamp()
             return value
         
+        def _set_value(parent, key, target):
+            for c in columns[key]:
+                val = getattr(parent, c)
+                target[c] = _convert(val)
 
         def _set_value(parent, key, target):
             for c in columns[key]:
@@ -1687,9 +1691,7 @@ class Work(Base):
         result["identifiers"] = []
         for item in doc.identifiers:
             identifier = {}
-            for c in columns["identifiers"]:
-                val = getattr(item, c)
-                identifier[c] = _convert(val)
+            _set_value(item, "identifiers", identifier)
             result["identifiers"].append(identifier)
 
         result["identifiers"] = []
