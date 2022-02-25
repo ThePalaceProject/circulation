@@ -19,9 +19,10 @@ from sqlalchemy import (
     String,
     Unicode,
 )
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import INT4RANGE
 from sqlalchemy.ext.associationproxy import association_proxy
-from sqlalchemy.orm import contains_eager, joinedload, relationship
+from sqlalchemy.orm import contains_eager, joinedload, relationship, lazyload
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, case, join, literal_column, or_, select
 from sqlalchemy.sql.functions import func
