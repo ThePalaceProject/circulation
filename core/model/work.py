@@ -1620,7 +1620,7 @@ class Work(Base):
             elif isinstance(value, datetime):
                 return value.timestamp()
             return value
-        
+
         def _set_value(parent, key, target):
             for c in columns[key]:
                 val = getattr(parent, c)
@@ -1651,6 +1651,16 @@ class Work(Base):
             result["target_age"]["upper"] = target_age.upper - (
                 0 if target_age.upper_inc else 1
             )
+
+        target_age = doc.target_age
+        result["target_age"] = {
+            "lower": None,
+            "upper": None
+        }
+        if target_age and target_age.lower is not None:
+            result["target_age"]["lower"] = target_age.lower + (0 if target_age.lower_inc else 1)
+        if target_age and target_age.upper is not None:
+            result["target_age"]["upper"] = target_age.upper - (0 if target_age.upper_inc else 1)
 
         _set_value(doc.presentation_edition, "edition", result)
 
@@ -1687,12 +1697,24 @@ class Work(Base):
                 "weight": item.affinity,
             }
             result["genres"].append(genre)
-        
+
         result["identifiers"] = []
         for item in doc.identifiers:
             identifier = {}
             _set_value(item, "identifiers", identifier)
             result["identifiers"].append(identifier)
+        
+        result["classifications"] = []
+        for item in doc.classifications:
+            classification = {}
+            _set_value(item, "classifications", classification)
+            result["classifications"].append(classification)
+
+        result["customlists"] = []
+        for item in doc.custom_list_entries:
+            customlist = {}
+            _set_value(item, "custom_list_entries", customlist)
+            result["customlists"].append(customlist)
 
         result["identifiers"] = []
         for item in doc.identifiers:
