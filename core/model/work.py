@@ -20,14 +20,15 @@ from sqlalchemy import (
     String,
     Unicode,
 )
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import INT4RANGE
 from sqlalchemy.ext.associationproxy import association_proxy
-from sqlalchemy.orm import contains_eager, joinedload, relationship
+from sqlalchemy.orm import contains_eager, joinedload, relationship, lazyload
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, case, join, literal_column, or_, select
 from sqlalchemy.sql.functions import func
 
-from core.model.classification import Subject
+from core.model.classification import Classification, Subject
 
 from ..classifier import Classifier, WorkClassifier
 from ..config import CannotLoadConfiguration
@@ -1523,8 +1524,6 @@ class Work(Base):
         )
 
         # Normalize by dividing each weight by the sum of the weights for that Identifier's Classifications.
-        from .classification import Classification
-
         weight_column = (
             func.sum(Classification.weight)
             / func.sum(func.sum(Classification.weight)).over()
@@ -1552,9 +1551,9 @@ class Work(Base):
 
         ## CLASSIFICATION END
 
+        # Create JSON
         results = []
         for item in rows:
-            print(item.target_age)
             item.identifiers = list(filter(lambda idx: idx[0] == item.id, identifiers))
             item.classifications = list(filter(lambda idx: idx[0] == item.id, all_subjects))
             search_doc = cls.search_doc_as_dict(item)
@@ -1682,7 +1681,7 @@ class Work(Base):
             identifier = {}
             _set_value(item, "identifiers", identifier)
             result["identifiers"].append(identifier)
-        
+
         result["classifications"] = []
         for item in doc.classifications:
             classification = {}
