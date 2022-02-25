@@ -23,6 +23,7 @@ from core.model import (
     Work,
 )
 from core.model.configuration import ConfigurationFactory, ConfigurationStorage
+from core.model.constants import IdentifierConstants
 from tests.api.test_odl import LicenseHelper, LicenseInfoHelper, TestODLImporter
 
 
@@ -103,6 +104,7 @@ class TestODL2Importer(TestODLImporter):
         with configuration_factory.create(
             configuration_storage, db, ODL2APIConfiguration
         ) as configuration:
+            configuration.set_ignored_identifier_types([IdentifierConstants.URI])
             configuration.skipped_license_formats = json.dumps(["text/html"])
 
         # Act
