@@ -1,3 +1,4 @@
+from ast import operator
 import logging
 import traceback
 from typing import Optional, Union
@@ -5,6 +6,7 @@ from typing import Optional, Union
 from sqlalchemy.orm import Load
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
+from sqlalchemy.orm import Load, joinedload
 
 from core.model.coverage import EquivalencyCoverageRecord
 
@@ -203,6 +205,7 @@ class BaseCoverageProvider(object):
         self.cutoff_time = cutoff_time
         self.registered_only = registered_only
         self.collection_id = None
+        self._last_batch_id = None
 
     @property
     def log(self):
