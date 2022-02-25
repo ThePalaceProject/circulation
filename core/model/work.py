@@ -20,10 +20,9 @@ from sqlalchemy import (
     String,
     Unicode,
 )
-from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import INT4RANGE
 from sqlalchemy.ext.associationproxy import association_proxy
-from sqlalchemy.orm import contains_eager, joinedload, relationship, lazyload
+from sqlalchemy.orm import contains_eager, joinedload, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, case, join, literal_column, or_, select
 from sqlalchemy.sql.functions import func
@@ -1453,7 +1452,6 @@ class Work(Base):
             joinedload(Work.custom_list_entries),
         )
 
-
         # print (str(qu))
         rows: List(Work) = qu.all()
 
@@ -1480,21 +1478,31 @@ class Work(Base):
             .alias("works_alias")
         )
 
-        equivalent_identifiers = Identifier.recursively_equivalent_identifier_ids_query(
-            literal_column(works_alias.name + "." + works_alias.c.identifier_id.name),
-            policy=policy,
-        ).column(works_alias.c.work_id).select_from(works_alias).cte("equivalent_cte")
+        equivalent_identifiers = (
+            Identifier.recursively_equivalent_identifier_ids_query(
+                literal_column(
+                    works_alias.name + "." + works_alias.c.identifier_id.name
+                ),
+                policy=policy,
+            )
+            .column(works_alias.c.work_id)
+            .select_from(works_alias)
+            .cte("equivalent_cte")
+        )
 
         identifiers = (
             select(
                 [
                     equivalent_identifiers.c.work_id,
                     Identifier.identifier,
-                    Identifier.type
+                    Identifier.type,
                 ]
             )
             .select_from(Identifier)
-            .where(Identifier.id == literal_column("equivalent_cte.fn_recursive_equivalents_1"))
+            .where(
+                Identifier.id
+                == literal_column("equivalent_cte.fn_recursive_equivalents_1")
+            )
         )
 
         identifiers = list(_db.execute(identifiers))
@@ -1541,7 +1549,10 @@ class Work(Base):
                 and_(Subject.type.in_(Subject.TYPES_FOR_SEARCH), term_column != None),
             )
             .group_by(scheme_column, term_column, equivalent_identifiers.c.work_id)
-            .where(Classification.identifier_id == literal_column("equivalent_cte.fn_recursive_equivalents_1"))
+            .where(
+                Classification.identifier_id
+                == literal_column("equivalent_cte.fn_recursive_equivalents_1")
+            )
             .select_from(
                 join(Classification, Subject, Classification.subject_id == Subject.id)
             )
@@ -1555,7 +1566,9 @@ class Work(Base):
         results = []
         for item in rows:
             item.identifiers = list(filter(lambda idx: idx[0] == item.id, identifiers))
-            item.classifications = list(filter(lambda idx: idx[0] == item.id, all_subjects))
+            item.classifications = list(
+                filter(lambda idx: idx[0] == item.id, all_subjects)
+            )
             search_doc = cls.search_doc_as_dict(item)
             results.append(search_doc)
 
@@ -1598,20 +1611,9 @@ class Work(Base):
                 "suppressed",
                 "availability_time",
             ],
-            "identifiers": [
-                "type",
-                "identifier"
-            ],
-            "classifications": [
-                "scheme",
-                "term",
-                "weight"
-            ],
-            "custom_list_entries": [
-                "list_id",
-                "featured",
-                "first_appearance"
-            ]
+            "identifiers": ["type", "identifier"],
+            "classifications": ["scheme", "term", "weight"],
+            "custom_list_entries": ["list_id", "featured", "first_appearance"],
         }
 
         result = {}
@@ -1633,14 +1635,15 @@ class Work(Base):
         result["work_id"] = getattr(doc, "id")
 
         target_age = doc.target_age
-        result["target_age"] = {
-            "lower": None,
-            "upper": None
-        }
+        result["target_age"] = {"lower": None, "upper": None}
         if target_age and target_age.lower is not None:
-            result["target_age"]["lower"] = target_age.lower + (0 if target_age.lower_inc else 1)
+            result["target_age"]["lower"] = target_age.lower + (
+                0 if target_age.lower_inc else 1
+            )
         if target_age and target_age.upper is not None:
-            result["target_age"]["upper"] = target_age.upper - (0 if target_age.upper_inc else 1)
+            result["target_age"]["upper"] = target_age.upper - (
+                0 if target_age.upper_inc else 1
+            )
 
         _set_value(doc.presentation_edition, "edition", result)
         result["edition_id"] = doc.presentation_edition.id
@@ -1657,12 +1660,12 @@ class Work(Base):
             lc = {}
             _set_value(item, "licensepools", lc)
             # lc["availability_time"] = getattr(item, "availability_time").timestamp()
-            lc['available'] = (item.unlimited_access or item.self_hosted or item.licenses_available > 0)
-            lc['licensed'] = (
-                            item.unlimited_access or
-                            item.self_hosted or
-                            item.licenses_owned > 0
-                        )
+            lc["available"] = (
+                item.unlimited_access or item.self_hosted or item.licenses_available > 0
+            )
+            lc["licensed"] = (
+                item.unlimited_access or item.self_hosted or item.licenses_owned > 0
+            )
             result["licensepools"].append(lc)
 
         # Extra special genre massaging

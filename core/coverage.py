@@ -1,11 +1,10 @@
-from ast import operator
 import logging
 import traceback
 from typing import Optional, Union
 
+from sqlalchemy.orm import Load
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
-from sqlalchemy.orm import Load, joinedload
 
 from . import log  # This sets the appropriate log format.
 from .metadata_layer import ReplacementPolicy, TimestampData
@@ -345,11 +344,17 @@ class BaseCoverageProvider(object):
 
         # Running this statement only ONCE as it adds an unbounded query, very bad for the DB cluster
         if self._last_batch_id is None:
-            self.log.info("%d items need coverage%s", qu.count(), count_as_covered_message)
+            self.log.info(
+                "%d items need coverage%s", qu.count(), count_as_covered_message
+            )
         else:
-            self.log.info("Covering items after %d : %s", self._last_batch_id, count_as_covered_message)
+            self.log.info(
+                "Covering items after %d : %s",
+                self._last_batch_id,
+                count_as_covered_message,
+            )
 
-        # This used to be an OFFSET query, 
+        # This used to be an OFFSET query,
         # however postgresql will ALWAYS do a seq scan in this case
         # Hence we make use of the indexed id attribute for offset
         # This is only possible because the we are ordering by this attribute
@@ -1463,9 +1468,13 @@ class WorkCoverageProvider(BaseCoverageProvider):
         :param: Only Works connected with one of the given identifiers
             are chosen.
         """
-        qu = WorkCoverageRecord.missing_coverage_from(self._db, operation=self.operation, 
-                                            count_as_missing_before=self.cutoff_time, **kwargs)
-        qu = qu.options(Load(Work).lazyload('*'))
+        qu = WorkCoverageRecord.missing_coverage_from(
+            self._db,
+            operation=self.operation,
+            count_as_missing_before=self.cutoff_time,
+            **kwargs
+        )
+        qu = qu.options(Load(Work).lazyload("*"))
 
         if identifiers:
             ids = [x.id for x in identifiers]
