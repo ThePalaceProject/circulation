@@ -1459,7 +1459,13 @@ class Work(Base):
         rows: List(Work) = qu.all()
 
         ## IDENTIFIERS START
-
+        ## Identifiers is a house of cards, it comes crashing down if anything is changed here
+        ## We need a WITH statement selecting the procedural function on works_alias
+        ## then proceed to select the Identifiers for each of those outcomes 
+        ## but must match works to the equivalent ids for which they were chosen
+        ## The same nonsense will be required for classifications
+        ## TODO: move this equivalence code into another job based on its required frequency
+        ## Add it to another table so it becomes faster to just query the pre-computed table
         works_alias = (
             select(
                 [
@@ -1478,24 +1484,21 @@ class Work(Base):
         equivalent_identifiers = Identifier.recursively_equivalent_identifier_ids_query(
             literal_column(works_alias.name + "." + works_alias.c.identifier_id.name),
             policy=policy,
-        ).alias("equivalent_identifiers_subquery")
-        
-        #MARK
+        ).column(works_alias.c.work_id).select_from(works_alias).cte("equivalent_cte")
 
         identifiers = (
             select(
                 [
-                    works_alias.c.work_id,
-                    Identifier
+                    equivalent_identifiers.c.work_id,
+                    Identifier.identifier,
+                    Identifier.type
                 ]
             )
-            .where(Identifier.id.in_(equivalent_identifiers))
-            .select_from(works_alias)
-            .alias("identifier_subquery")
+            .select_from(Identifier)
+            .where(Identifier.id == literal_column("equivalent_cte.fn_recursive_equivalents_1"))
         )
 
         identifiers = list(_db.execute(identifiers))
-
         ## IDENTIFIERS END
         
         results = []
@@ -1511,7 +1514,6 @@ class Work(Base):
     def search_doc_as_dict(cls, doc):
         columns = {
             "work": [
-                "id",
                 "fiction",
                 "audience",
                 "summary_text",
@@ -1566,6 +1568,8 @@ class Work(Base):
                 target[c] = _convert(val)
 
         _set_value(doc, "work", result)
+        result["_id"] = getattr(doc, "id")
+        result["work_id"] = getattr(doc, "id")
 
         _set_value(doc.presentation_edition, "edition", result)
         result["edition_id"] = doc.presentation_edition.id
