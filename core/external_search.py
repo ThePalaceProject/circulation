@@ -564,7 +564,7 @@ class ExternalSearchIndex(HasSelfTests):
             needs_add.append(work)
 
         # Add/update any works that need adding/updating.
-        docs = Work.to_search_documents(needs_add)
+        docs = Work.to_search_documents_in_app(needs_add)
 
         for doc in docs:
             doc["_index"] = self.works_index
