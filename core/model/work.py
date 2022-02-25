@@ -1437,11 +1437,8 @@ class Work(Base):
     def to_search_documents_in_app(cls, works, policy=None):
         """In app to search document need to compare speeds
         TODOS:
-        - license_pool computed fields
-        - identifiers
-        - customlists
-        - classifications
-        - target_age
+            Cleanup
+            Classifications optimization
         """
         _db = Session.object_session(works[0])
 
@@ -1452,6 +1449,7 @@ class Work(Base):
             .joinedload(Contribution.contributor),
             joinedload(Work.license_pools),
             joinedload(Work.work_genres).joinedload(WorkGenre.genre),
+            joinedload(Work.custom_list_entries),
         )
 
 
@@ -1461,7 +1459,7 @@ class Work(Base):
         ## IDENTIFIERS START
         ## Identifiers is a house of cards, it comes crashing down if anything is changed here
         ## We need a WITH statement selecting the procedural function on works_alias
-        ## then proceed to select the Identifiers for each of those outcomes 
+        ## then proceed to select the Identifiers for each of those outcomes
         ## but must match works to the equivalent ids for which they were chosen
         ## The same nonsense will be required for classifications
         ## TODO: move this equivalence code into another job based on its required frequency
@@ -1500,11 +1498,65 @@ class Work(Base):
 
         identifiers = list(_db.execute(identifiers))
         ## IDENTIFIERS END
-        
+
+        ## CLASSIFICATION START
+        ## Copied almost exactly from the previous implementation
+        ## Through trials in the local environment we find this to add
+        ## about 30% to the SQL CPU usage, this section holds back improvements
+        ## for the entire script
+        ## TODO: Improve this, maybe only run this section once a day???
+        # Map our constants for Subject type to their URIs.
+        scheme_column = case(
+            [
+                (Subject.type == key, literal_column("'%s'" % val))
+                for key, val in list(Subject.uri_lookup.items())
+            ]
+        )
+
+        # If the Subject has a name, use that, otherwise use the Subject's identifier.
+        # Also, 3M's classifications have slashes, e.g. "FICTION/Adventure". Make sure
+        # we get separated words for search.
+        term_column = func.replace(
+            case([(Subject.name != None, Subject.name)], else_=Subject.identifier),
+            "/",
+            " ",
+        )
+
+        # Normalize by dividing each weight by the sum of the weights for that Identifier's Classifications.
+        from .classification import Classification
+
+        weight_column = (
+            func.sum(Classification.weight)
+            / func.sum(func.sum(Classification.weight)).over()
+        )
+
+        subjects = (
+            select(
+                [
+                    equivalent_identifiers.c.work_id,
+                    scheme_column.label("scheme"),
+                    term_column.label("term"),
+                    weight_column.label("weight"),
+                ],
+                # Only include Subjects with terms that are useful for search.
+                and_(Subject.type.in_(Subject.TYPES_FOR_SEARCH), term_column != None),
+            )
+            .group_by(scheme_column, term_column, equivalent_identifiers.c.work_id)
+            .where(Classification.identifier_id == literal_column("equivalent_cte.fn_recursive_equivalents_1"))
+            .select_from(
+                join(Classification, Subject, Classification.subject_id == Subject.id)
+            )
+        )
+
+        all_subjects = list(_db.execute(subjects))
+
+        ## CLASSIFICATION END
+
         results = []
         for item in rows:
-            print(item)
+            print(item.target_age)
             item.identifiers = list(filter(lambda idx: idx[0] == item.id, identifiers))
+            item.classifications = list(filter(lambda idx: idx[0] == item.id, all_subjects))
             search_doc = cls.search_doc_as_dict(item)
             results.append(search_doc)
 
@@ -1550,6 +1602,16 @@ class Work(Base):
             "identifiers": [
                 "type",
                 "identifier"
+            ],
+            "classifications": [
+                "scheme",
+                "term",
+                "weight"
+            ],
+            "custom_list_entries": [
+                "list_id",
+                "featured",
+                "first_appearance"
             ]
         }
 
@@ -1559,9 +1621,9 @@ class Work(Base):
             if isinstance(value, Decimal):
                 return float(value)
             elif isinstance(value, datetime):
-                return value.isoformat()
+                return value.timestamp()
             return value
-        
+
         def _set_value(parent, key, target):
             for c in columns[key]:
                 val = getattr(parent, c)
@@ -1570,6 +1632,16 @@ class Work(Base):
         _set_value(doc, "work", result)
         result["_id"] = getattr(doc, "id")
         result["work_id"] = getattr(doc, "id")
+
+        target_age = doc.target_age
+        result["target_age"] = {
+            "lower": None,
+            "upper": None
+        }
+        if target_age and target_age.lower is not None:
+            result["target_age"]["lower"] = target_age.lower + (0 if target_age.lower_inc else 1)
+        if target_age and target_age.upper is not None:
+            result["target_age"]["upper"] = target_age.upper - (0 if target_age.upper_inc else 1)
 
         _set_value(doc.presentation_edition, "edition", result)
         result["edition_id"] = doc.presentation_edition.id
@@ -1585,7 +1657,13 @@ class Work(Base):
         for item in doc.license_pools:
             lc = {}
             _set_value(item, "licensepools", lc)
-            lc["availability_time"] = getattr(item, "availability_time").timestamp()
+            # lc["availability_time"] = getattr(item, "availability_time").timestamp()
+            lc['available'] = (item.unlimited_access or item.self_hosted or item.licenses_available > 0)
+            lc['licensed'] = (
+                            item.unlimited_access or
+                            item.self_hosted or
+                            item.licenses_owned > 0
+                        )
             result["licensepools"].append(lc)
 
         # Extra special genre massaging
@@ -1598,12 +1676,24 @@ class Work(Base):
                 "weight": item.affinity,
             }
             result["genres"].append(genre)
-        
+
         result["identifiers"] = []
         for item in doc.identifiers:
             identifier = {}
             _set_value(item, "identifiers", identifier)
             result["identifiers"].append(identifier)
+        
+        result["classifications"] = []
+        for item in doc.classifications:
+            classification = {}
+            _set_value(item, "classifications", classification)
+            result["classifications"].append(classification)
+
+        result["customlists"] = []
+        for item in doc.custom_list_entries:
+            customlist = {}
+            _set_value(item, "custom_list_entries", customlist)
+            result["customlists"].append(customlist)
 
         return result
 
