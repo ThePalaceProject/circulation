@@ -16,6 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.orm import joinedload
+from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, literal, literal_column, or_
 
 from ..util.datetime_helpers import utc_now
@@ -724,9 +725,11 @@ class WorkCoverageRecord(Base, BaseCoverageRecord):
             new_records,
         )
         _db.execute(insert)
-    
+
     @classmethod
-    def missing_coverage_from(cls, _db, count_as_missing_before=None, operation=None, **kwargs):
+    def missing_coverage_from(
+        cls, _db, count_as_missing_before=None, operation=None, **kwargs
+    ):
         qu = (
             _db.query(WorkCoverageRecord)
             .filter(WorkCoverageRecord.operation == operation)
