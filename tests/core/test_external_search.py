@@ -4,6 +4,7 @@ import re
 import time
 
 import pytest
+import sqlalchemy
 from elasticsearch.exceptions import ElasticsearchException
 from elasticsearch_dsl import Q
 from elasticsearch_dsl.function import RandomScore, ScriptScore
@@ -49,6 +50,8 @@ from core.model import (
     WorkCoverageRecord,
     get_one_or_create,
 )
+from core.model.classification import Subject
+from core.model.work import Work
 from core.problem_details import INVALID_INPUT
 from core.testing import DatabaseTest, EndToEndSearchTest, ExternalSearchTest
 from core.util.datetime_helpers import datetime_utc, from_timestamp
@@ -2452,7 +2455,7 @@ class TestQuery(DatabaseTest):
                 new_hypothesis,
                 boost="default",
                 filters=None,
-                **kwargs
+                **kwargs,
             ):
                 self._boosts[new_hypothesis] = boost
                 if kwargs:
@@ -4440,11 +4443,102 @@ class TestWorkSearchResult(DatabaseTest):
         assert work.sort_title == result.sort_title
 
 
+class PerfTimer:
+    def __enter__(self):
+        self.start = time.perf_counter()
+        self.execution_time = 0
+        return self
+
+    def __exit__(self, *args):
+        self.execution_time = time.perf_counter() - self.start
+
+
 class TestSearchIndexCoverageProvider(DatabaseTest):
     def test_operation(self):
         index = MockExternalSearchIndex()
         provider = SearchIndexCoverageProvider(self._db, search_index_client=index)
         assert WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION == provider.operation
+
+    def test_to_search_document(self):
+        """Compare the new and old to_search_document functions
+        TODO: classifications
+        """
+        customlist, editions = self._customlist()
+        works = [
+            self._work(
+                authors=[self._contributor()], with_license_pool=True, genre="history"
+            ),
+            editions[0].work,
+        ]
+
+        work1: Work = works[0]
+        work2: Work = works[1]
+
+        work1.target_age = NumericRange(lower=18, upper=22, bounds="()")
+        work2.target_age = NumericRange(lower=18, upper=99, bounds="[]")
+
+        genre1, is_new = Genre.lookup(self._db, "Psychology")
+        genre2, is_new = Genre.lookup(self._db, "Cooking")
+        subject1 = self._subject(type=Subject.SIMPLIFIED_GENRE, identifier="subject1")
+        subject1.genre = genre1
+        subject2 = self._subject(type=Subject.SIMPLIFIED_GENRE, identifier="subject2")
+        subject2.genre = genre2
+        source = DataSource.lookup(self._db, DataSource.AXIS_360)
+
+        # works.extend([self._work() for i in range(500)])
+
+        result = Work.to_search_documents(works)
+        inapp = Work.to_search_documents_in_app(works)
+
+        # Top level keys should be the same
+        assert len(result) == len(inapp)
+        assert result[0].keys() == inapp[0].keys()
+
+        inapp_work1 = list(filter(lambda x: x["work_id"] == work1.id, inapp))[0]
+        inapp_work2 = list(filter(lambda x: x["work_id"] == work2.id, inapp))[0]
+
+        # target ages
+        assert inapp_work1["target_age"]["lower"] == 19
+        assert inapp_work1["target_age"]["upper"] == 21
+        assert inapp_work2["target_age"]["lower"] == 18
+        assert inapp_work2["target_age"]["upper"] == 99
+
+        assert len(inapp_work1["genres"]) == 1
+        assert inapp_work2["genres"] == None
+
+        assert len(inapp_work1["licensepools"]) == 1
+        assert len(inapp_work2["licensepools"]) == 1  # customlist adds a pool
+
+        assert len(inapp_work2["customlists"]) == 1
+        assert inapp_work1["customlists"] == None
+
+        result_work1 = list(filter(lambda x: x["work_id"] == work1.id, result))[0]
+        result_work2 = list(filter(lambda x: x["work_id"] == work2.id, result))[0]
+
+        # Every item must be equivalent
+        for result_item, inapp_item in [
+            (result_work1, inapp_work1),
+            (result_work2, inapp_work2),
+        ]:
+            for key in result_item.keys():
+                assert result_item[key] == inapp_item[key]
+
+    def test_to_search_documents_performance(self):
+        works = [self._work(with_license_pool=True, genre="history") for i in range(20)]
+
+        with DBStatementCounter(self.connection) as old_counter:
+            with PerfTimer() as t1:
+                result = Work.to_search_documents(works)
+
+        with DBStatementCounter(self.connection) as new_counter:
+            with PerfTimer() as t2:
+                inapp = Work.to_search_documents_in_app(works)
+
+        # Do not be 100x performance
+        assert t2.execution_time < t1.execution_time * 5
+
+        # 3 queries per work only
+        assert new_counter.get_count() < len(works) * 3 + 1
 
     def test_success(self):
         work = self._work()
@@ -4484,3 +4578,38 @@ class TestSearchIndexCoverageProvider(DatabaseTest):
         assert work == record.obj
         assert True == record.transient
         assert "There was an error!" == record.exception
+
+
+class DBStatementCounter(object):
+    """
+    Use as a context manager to count the number of execute()'s performed
+    against the given sqlalchemy connection.
+
+    Usage:
+        with DBStatementCounter(conn) as ctr:
+            conn.execute("SELECT 1")
+            conn.execute("SELECT 1")
+        assert ctr.get_count() == 2
+    """
+
+    def __init__(self, conn):
+        self.conn = conn
+        self.count = 0
+        # Will have to rely on this since sqlalchemy 0.8 does not support
+        # removing event listeners
+        self.do_count = False
+        sqlalchemy.event.listen(conn, "after_execute", self.callback)
+
+    def __enter__(self):
+        self.do_count = True
+        return self
+
+    def __exit__(self, *_):
+        self.do_count = False
+
+    def get_count(self):
+        return self.count
+
+    def callback(self, *_):
+        if self.do_count:
+            self.count += 1

@@ -187,7 +187,6 @@ class BaseCoverageProvider(object):
         self.cutoff_time = cutoff_time
         self.registered_only = registered_only
         self.collection_id = None
-        self._last_batch_id = None
 
     @property
     def log(self):
@@ -343,14 +342,14 @@ class BaseCoverageProvider(object):
         qu = self.items_that_need_coverage(count_as_covered=count_as_covered)
 
         # Running this statement only ONCE as it adds an unbounded query, very bad for the DB cluster
-        if self._last_batch_id is None:
+        if progress.offset == 0:
             self.log.info(
                 "%d items need coverage%s", qu.count(), count_as_covered_message
             )
         else:
             self.log.info(
                 "Covering items after %d : %s",
-                self._last_batch_id,
+                progress.offset,
                 count_as_covered_message,
             )
 
@@ -359,14 +358,10 @@ class BaseCoverageProvider(object):
         # Hence we make use of the indexed id attribute for offset
         # This is only possible because the we are ordering by this attribute
         # Else it would not give us the correct batching
-        if self._last_batch_id is not None:
-            qu = qu.filter(WorkCoverageRecord.id > self._last_batch_id)
+        qu = qu.offset(progress.offset)
         batch = qu.limit(self.batch_size)
-        batch_count = batch.count()
-
         batch_results = batch.all()
-        works = [wcr.work for wcr in batch_results]
-        self._last_batch_id = batch_results[-1].id
+        batch_count = len(batch_results)
 
         if not batch_count:
             # The batch is empty. We're done.
@@ -377,7 +372,7 @@ class BaseCoverageProvider(object):
             successes,
             transient_failures,
             persistent_failures,
-        ), results = self.process_batch_and_handle_results(works)
+        ), results = self.process_batch_and_handle_results(batch_results)
 
         # Update the running totals so that the service's eventual timestamp
         # will have a useful .achievements.
@@ -1468,7 +1463,7 @@ class WorkCoverageProvider(BaseCoverageProvider):
         :param: Only Works connected with one of the given identifiers
             are chosen.
         """
-        qu = WorkCoverageRecord.missing_coverage_from(
+        qu = Work.missing_coverage_from(
             self._db,
             operation=self.operation,
             count_as_missing_before=self.cutoff_time,

@@ -1394,6 +1394,9 @@ class TestCustomListsController(AdminControllerTest):
         # regardless of filter, since that's what the mock search engine's count_works does.
         assert lane.size == 350
 
+        # Test fails without expiring the ORM cache
+        self._db.expire_all()
+
         with self.request_context_with_library_and_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
