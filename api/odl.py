@@ -1,3 +1,4 @@
+import binascii
 import datetime
 import json
 import logging
@@ -380,6 +381,9 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
                 )
                 hashed_pass: LCPHashedPassphrase = unhashed_pass.hash(hasher)
                 self._credential_factory.set_hashed_passphrase(db, patron, hashed_pass)
+                encoded_pass: str = base64.b64encode(
+                    binascii.unhexlify(hashed_pass.hashed)
+                )
 
                 notification_url = self._url_for(
                     "odl_notify",
@@ -395,7 +399,7 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
                     patron_id=patron_id,
                     expires=expires.isoformat(),
                     notification_url=notification_url,
-                    passphrase=hashed_pass.hashed,
+                    passphrase=encoded_pass,
                     hint=configuration.passphrase_hint,
                     hint_url=configuration.passphrase_hint_url,
                 )
