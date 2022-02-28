@@ -1452,7 +1452,6 @@ class Work(Base):
             joinedload(Work.custom_list_entries),
         )
 
-        # print (str(qu))
         rows: List(Work) = qu.all()
 
         ## IDENTIFIERS START
@@ -1580,12 +1579,11 @@ class Work(Base):
             "work": [
                 "fiction",
                 "audience",
-                "summary_text",
                 "quality",
                 "rating",
                 "popularity",
                 "presentation_ready",
-                "presentation_edition_id",
+                "last_update_time",
             ],
             "edition": [
                 "title",
@@ -1604,7 +1602,6 @@ class Work(Base):
             "contribution": ["role"],
             "contributor": ["display_name", "sort_name", "family_name", "lc", "viaf"],
             "licensepools": [
-                "id",
                 "data_source_id",
                 "collection_id",
                 "open_access",
@@ -1633,6 +1630,12 @@ class Work(Base):
         _set_value(doc, "work", result)
         result["_id"] = getattr(doc, "id")
         result["work_id"] = getattr(doc, "id")
+        result["summary"] = getattr(doc, "summary_text")
+        result["fiction"] = (
+            "Fiction" if getattr(doc, "fiction") is True else "Nonfiction"
+        )
+        if result["audience"]:
+            result["audience"] = result["audience"].replace(" ", "")
 
         target_age = doc.target_age
         result["target_age"] = {"lower": None, "upper": None}
@@ -1646,7 +1649,6 @@ class Work(Base):
             )
 
         _set_value(doc.presentation_edition, "edition", result)
-        result["edition_id"] = doc.presentation_edition.id
 
         result["contributors"] = []
         for item in doc.presentation_edition.contributions:
@@ -1666,6 +1668,9 @@ class Work(Base):
             lc["licensed"] = (
                 item.unlimited_access or item.self_hosted or item.licenses_owned > 0
             )
+            lc["medium"] = doc.presentation_edition.medium
+            lc["licensepool_id"] = item.id
+            lc["quality"] = doc.quality
             result["licensepools"].append(lc)
 
         # Extra special genre massaging
@@ -1696,6 +1701,11 @@ class Work(Base):
             customlist = {}
             _set_value(item, "custom_list_entries", customlist)
             result["customlists"].append(customlist)
+
+        # No empty lists, they should be null
+        for key, val in result.items():
+            if val == []:
+                result[key] = None
 
         return result
 
