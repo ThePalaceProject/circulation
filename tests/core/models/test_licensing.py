@@ -17,10 +17,10 @@ from core.model.constants import MediaTypes
 from core.model.contributor import Contributor
 from core.model.datasource import DataSource
 from core.model.edition import Edition
+from core.model.formats import FormatPriorities
 from core.model.identifier import Identifier
 from core.model.licensing import (
     DeliveryMechanism,
-    FormatPriorities,
     Hold,
     LicensePool,
     LicensePoolDeliveryMechanism,

@@ -14,11 +14,10 @@ from lxml import etree
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.session import Session
 
-from api.saml.wayfless import SAMLWAYFlessConfiguration
-
 from .classifier import Classifier
 from .config import CannotLoadConfiguration, IntegrationException
 from .coverage import CoverageFailure
+from .importers import BaseImporterConfiguration
 from .metadata_layer import (
     CirculationData,
     ContributorData,
@@ -50,6 +49,7 @@ from .model import (
 from .model.configuration import (
     ConfigurationAttributeType,
     ConfigurationFactory,
+    ConfigurationGrouping,
     ConfigurationMetadata,
     ConfigurationStorage,
     ExternalIntegrationLink,
@@ -91,7 +91,7 @@ def parse_identifier(db, identifier):
     return parsed_identifier
 
 
-class OPDSImporterConfiguration(SAMLWAYFlessConfiguration):
+class OPDSImporterConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
     max_retry_count = ConfigurationMetadata(
         key="max_retry_count",
         label=_("Max retry count"),

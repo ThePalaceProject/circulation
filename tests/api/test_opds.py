@@ -42,7 +42,8 @@ from core.model import (
     RightsStatus,
     Work,
 )
-from core.model.licensing import FormatPriorities, LicensePool
+from core.model.formats import FormatPriorities
+from core.model.licensing import LicensePool
 from core.opds import AcquisitionFeed, MockAnnotator, UnfulfillableWork
 from core.opds_import import OPDSXMLParser
 from core.testing import DatabaseTest
