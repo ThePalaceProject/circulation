@@ -342,14 +342,14 @@ class BaseCoverageProvider(object):
         qu = self.items_that_need_coverage(count_as_covered=count_as_covered)
 
         # Running this statement only ONCE as it adds an unbounded query, very bad for the DB cluster
-        if progress.offset == 0:
+        if progress.successes == 0:
             self.log.info(
                 "%d items need coverage%s", qu.count(), count_as_covered_message
             )
         else:
             self.log.info(
-                "Covering items after %d : %s",
-                progress.offset,
+                "Covering items after %d successes: %s",
+                progress.successes,
                 count_as_covered_message,
             )
 
