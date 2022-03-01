@@ -27,7 +27,7 @@ from core.classifier import Classifier, Fantasy, Urban_Fantasy
 from core.entrypoint import AudiobooksEntryPoint, EverythingEntryPoint
 from core.external_search import MockExternalSearchIndex, WorkSearchResult
 from core.lane import FacetsWithEntryPoint, WorkList
-from core.lcp.credential import LCPCredentialFactory
+from core.lcp.credential import LCPCredentialFactory, LCPHashedPassphrase
 from core.model import (
     CirculationEvent,
     ConfigurationSetting,
@@ -611,7 +611,7 @@ class TestLibraryAnnotator(VendorIDTest):
         identifier = pool.identifier
         patron = self._patron()
 
-        hashed_password = "hashed password"
+        hashed_password = LCPHashedPassphrase("hashed password")
 
         # Setup LCP credentials
         lcp_credential_factory = LCPCredentialFactory()
@@ -634,7 +634,7 @@ class TestLibraryAnnotator(VendorIDTest):
         link = self.annotator.fulfill_link(pool, loan, lcp_delivery_mechanism)
         hashed_passphrase = link[-1]
         assert hashed_passphrase.tag == "{%s}hashed_passphrase" % OPDSFeed.LCP_NS
-        assert hashed_passphrase.text == hashed_password
+        assert hashed_passphrase.text == hashed_password.hashed
 
     def test_default_lane_url(self):
         default_lane_url = self.annotator.default_lane_url()

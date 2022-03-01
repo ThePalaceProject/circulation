@@ -16,7 +16,7 @@ from core.classifier import Classifier
 from core.entrypoint import EverythingEntryPoint
 from core.external_search import WorkSearchResult
 from core.lane import Lane, WorkList
-from core.lcp.credential import LCPCredentialFactory
+from core.lcp.credential import LCPCredentialFactory, LCPHashedPassphrase
 from core.lcp.exceptions import LCPError
 from core.model import (
     CirculationEvent,
@@ -1370,13 +1370,13 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         response = []
 
         try:
-            hashed_passphrase = lcp_credential_factory.get_hashed_passphrase(
-                db, active_loan.patron
+            hashed_passphrase: LCPHashedPassphrase = (
+                lcp_credential_factory.get_hashed_passphrase(db, active_loan.patron)
             )
             hashed_passphrase_element = OPDSFeed.makeelement(
                 "{%s}hashed_passphrase" % OPDSFeed.LCP_NS
             )
-            hashed_passphrase_element.text = hashed_passphrase
+            hashed_passphrase_element.text = hashed_passphrase.hashed
             response.append(hashed_passphrase_element)
         except LCPError:
             # The patron's passphrase wasn't generated yet and not present in the database.

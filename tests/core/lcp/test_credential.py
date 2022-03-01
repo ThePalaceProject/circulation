@@ -3,10 +3,35 @@ from unittest.mock import patch
 import pytest
 from parameterized import parameterized
 
-from core.lcp.credential import LCPCredentialFactory, LCPCredentialType
+from api.lcp.hash import HashingAlgorithm, UniversalHasher
+from core.lcp.credential import (
+    LCPCredentialFactory,
+    LCPCredentialType,
+    LCPHashedPassphrase,
+    LCPUnhashedPassphrase,
+)
 from core.lcp.exceptions import LCPError
 from core.model import Credential, DataSource
 from core.testing import DatabaseTest
+
+
+class TestLCPTypes:
+    def test_bad_type_hashed(self):
+        with pytest.raises(ValueError):
+            LCPHashedPassphrase(23)
+
+    def test_bad_type_unhashed(self):
+        with pytest.raises(ValueError):
+            LCPUnhashedPassphrase(23)
+
+    def test_hashing(self):
+        expected = LCPHashedPassphrase(
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        )
+        received = LCPUnhashedPassphrase("hello").hash(
+            UniversalHasher(HashingAlgorithm.SHA256.value)
+        )
+        assert expected == received
 
 
 class TestCredentialFactory(DatabaseTest):
@@ -25,12 +50,6 @@ class TestCredentialFactory(DatabaseTest):
                 "get_patron_id",
                 LCPCredentialType.PATRON_ID.value,
                 "get_patron_id",
-                "52a190d1-cd69-4794-9d7a-1ec50392697f",
-            ),
-            (
-                "get_patron_passphrase",
-                LCPCredentialType.LCP_PASSPHRASE.value,
-                "get_patron_passphrase",
                 "52a190d1-cd69-4794-9d7a-1ec50392697f",
             ),
         ]
@@ -55,6 +74,28 @@ class TestCredentialFactory(DatabaseTest):
                 self._db, self._data_source, credential_type, self._patron, None
             )
 
+    def test_get_patron_passphrase(self):
+        # Arrange
+        expected_result = LCPUnhashedPassphrase("12345")
+        credential = Credential(credential=expected_result.text)
+
+        with patch.object(
+            Credential, "persistent_token_create"
+        ) as persistent_token_create_mock:
+            persistent_token_create_mock.return_value = (credential, True)
+
+            result = self._factory.get_patron_passphrase(self._db, self._patron)
+
+            # Assert
+            assert result == expected_result
+            persistent_token_create_mock.assert_called_once_with(
+                self._db,
+                self._data_source,
+                LCPCredentialType.LCP_PASSPHRASE.value,
+                self._patron,
+                None,
+            )
+
     def test_get_hashed_passphrase_raises_exception_when_there_is_no_passphrase(self):
         # Act, assert
         with pytest.raises(LCPError):
@@ -62,7 +103,7 @@ class TestCredentialFactory(DatabaseTest):
 
     def test_get_hashed_passphrase_returns_existing_hashed_passphrase(self):
         # Arrange
-        expected_result = "12345"
+        expected_result = LCPHashedPassphrase("12345")
 
         # Act
         self._factory.set_hashed_passphrase(self._db, self._patron, expected_result)
