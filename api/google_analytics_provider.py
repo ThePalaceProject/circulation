@@ -16,7 +16,7 @@ class GoogleAnalyticsProvider(object):
     NAME = _("Google Analytics")
     DESCRIPTION = _("How to Configure a Google Analytics Integration")
     INSTRUCTIONS = _(
-        "<p>In order to track usage statistics, you can configure the Circulation Manager "
+        "<p>In order to track usage statistics, you can configure the Palace Collection Manager "
         + "to connect to Google Analytics.</p>"
         + "<p>Create a <a href='https://analytics.google.com/analytics/web/provision/?authuser=0#/provision' "
         + "rel='noopener' rel='noreferer' target='_blank'>Google Analytics</a> account, "
