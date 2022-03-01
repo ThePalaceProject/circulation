@@ -159,7 +159,7 @@ class SimplifiedOPDSLookup(object):
 class MetadataWranglerOPDSLookup(SimplifiedOPDSLookup, HasSelfTests):
 
     PROTOCOL = ExternalIntegration.METADATA_WRANGLER
-    NAME = _("Library Simplified Metadata Wrangler")
+    NAME = _("Palace Collection Manager Metadata Wrangler")
     CARDINALITY = 1
 
     SETTINGS = [
@@ -2069,14 +2069,16 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests, HasExternalIntegration)
         last_update_dates = self.importer.extract_last_update_dates(feed)
 
         new_data = False
-        for identifier, remote_updated in last_update_dates:
+        for raw_identifier, remote_updated in last_update_dates:
 
-            identifier = self._parse_identifier(identifier)
+            identifier = self._parse_identifier(raw_identifier)
             if not identifier:
                 # Maybe this is new, maybe not, but we can't associate
                 # the information with an Identifier, so we can't do
                 # anything about it.
-                self.log.info("Ignoring %s because unable to turn into an Identifier.")
+                self.log.info(
+                    f"Ignoring {raw_identifier} because unable to turn into an Identifier."
+                )
                 continue
 
             if self.identifier_needs_import(identifier, remote_updated):

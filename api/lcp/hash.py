@@ -31,7 +31,9 @@ class Hasher(object, metaclass=ABCMeta):
 
 
 class UniversalHasher(Hasher):
-    def hash(self, value):
+    def hash(self, value: str) -> str:
+        assert type(value) == str
+
         if self._hashing_algorithm in [
             HashingAlgorithm.SHA256,
             HashingAlgorithm.SHA256.value,

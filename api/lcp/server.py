@@ -9,6 +9,7 @@ from requests.auth import HTTPBasicAuth
 from api.lcp import utils
 from api.lcp.encrypt import LCPEncryptionResult, LCPEncryptorResultJSONEncoder
 from api.lcp.hash import HashingAlgorithm
+from core.lcp.credential import LCPHashedPassphrase, LCPUnhashedPassphrase
 from core.model.configuration import (
     ConfigurationAttributeType,
     ConfigurationGrouping,
@@ -185,10 +186,10 @@ class LCPServer(object):
         :rtype: Dict
         """
         hasher = self._get_hasher(configuration)
-        hashed_passphrase = hasher.hash(
+        unhashed_passphrase: LCPUnhashedPassphrase = (
             self._credential_factory.get_patron_passphrase(db, patron)
         )
-
+        hashed_passphrase: LCPHashedPassphrase = unhashed_passphrase.hash(hasher)
         self._credential_factory.set_hashed_passphrase(db, patron, hashed_passphrase)
 
         partial_license = {
@@ -196,7 +197,7 @@ class LCPServer(object):
             "encryption": {
                 "user_key": {
                     "text_hint": configuration.passphrase_hint,
-                    "hex_value": hashed_passphrase,
+                    "hex_value": hashed_passphrase.hashed,
                 }
             },
         }

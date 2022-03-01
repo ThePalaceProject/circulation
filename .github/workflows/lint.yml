@@ -30,4 +30,4 @@ jobs:
           restore-keys: pre-commit-${{ runner.os }}-py${{ env.PYTHON_VERSION }}
 
       - name: Lint
-        run: pre-commit run --all-files
+        run: pre-commit run --all-files --show-diff-on-failure

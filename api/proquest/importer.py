@@ -35,14 +35,18 @@ from core.model import (
 from core.model.configuration import (
     ConfigurationAttributeType,
     ConfigurationFactory,
-    ConfigurationGrouping,
     ConfigurationMetadata,
     ConfigurationOption,
     ConfigurationStorage,
     ExternalIntegration,
     HasExternalIntegration,
 )
-from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, RWPMManifestParser
+from core.opds2_import import (
+    OPDS2Importer,
+    OPDS2ImporterConfiguration,
+    OPDS2ImportMonitor,
+    RWPMManifestParser,
+)
 from core.opds_import import OPDSImporter
 from core.util.datetime_helpers import utc_now
 
@@ -82,7 +86,7 @@ class CannotCreateProQuestTokenError(BaseError):
         super(CannotCreateProQuestTokenError, self).__init__(message, inner_exception)
 
 
-class ProQuestOPDS2ImporterConfiguration(ConfigurationGrouping):
+class ProQuestOPDS2ImporterConfiguration(OPDS2ImporterConfiguration):
     """Contains configuration settings of ProQuestOPDS2Importer."""
 
     DEFAULT_TOKEN_EXPIRATION_TIMEOUT_SECONDS = 60 * 60
@@ -728,10 +732,8 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
 
     def external_integration(self, db):
         """Return an external integration associated with this object.
-
         :param db: Database session
         :type db: sqlalchemy.orm.session.Session
-
         :return: External integration associated with this object
         :rtype: core.model.configuration.ExternalIntegration
         """

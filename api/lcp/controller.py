@@ -5,7 +5,7 @@ import flask
 from api.admin.problem_details import MISSING_COLLECTION
 from api.controller import CirculationManagerController
 from api.lcp.factory import LCPServerFactory
-from core.lcp.credential import LCPCredentialFactory
+from core.lcp.credential import LCPCredentialFactory, LCPUnhashedPassphrase
 from core.model import Collection, ExternalIntegration, Session
 from core.util.problem_detail import ProblemDetail
 
@@ -45,7 +45,7 @@ class LCPController(CirculationManagerController):
 
         return patron
 
-    def _get_lcp_passphrase(self, patron):
+    def _get_lcp_passphrase(self, patron) -> LCPUnhashedPassphrase:
         """Returns a patron's LCP passphrase
 
         :return: Patron's LCP passphrase
@@ -98,10 +98,12 @@ class LCPController(CirculationManagerController):
         lcp_passphrase = self._get_lcp_passphrase(patron)
 
         self._logger.info(
-            "Finished fetching a patron's LCP passphrase: {0}".format(lcp_passphrase)
+            "Finished fetching a patron's LCP passphrase: {0}".format(
+                lcp_passphrase.text
+            )
         )
 
-        response = flask.jsonify({"passphrase": lcp_passphrase})
+        response = flask.jsonify({"passphrase": lcp_passphrase.text})
 
         return response
 

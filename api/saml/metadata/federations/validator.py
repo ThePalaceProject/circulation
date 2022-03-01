@@ -2,7 +2,6 @@ import datetime
 import logging
 from abc import ABCMeta
 
-import six
 from onelogin.saml2.utils import OneLogin_Saml2_Utils
 from onelogin.saml2.xmlparser import fromstring
 
@@ -14,8 +13,7 @@ class SAMLFederatedMetadataValidationError(BaseError):
     """Raised in the case of any errors happened during SAML metadata validation."""
 
 
-@six.add_metaclass(ABCMeta)
-class SAMLFederatedMetadataValidator(object):
+class SAMLFederatedMetadataValidator(metaclass=ABCMeta):
     """Base class for all validators checking correctness of SAML federated metadata."""
 
     def validate(self, federation, metadata):
@@ -182,9 +180,7 @@ class SAMLMetadataSignatureValidator(SAMLFederatedMetadataValidator):
                 metadata, federation.certificate, raise_exceptions=True
             )
         except Exception as exception:
-            raise SAMLFederatedMetadataValidationError(
-                six.ensure_text(str(exception)), exception
-            )
+            raise SAMLFederatedMetadataValidationError(str(exception), exception)
 
         self._logger.info(
             "Finished verifying the validity of the metadata's signature belonging to {0}".format(

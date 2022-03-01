@@ -47,7 +47,8 @@ repos:
     rev: v0.19.0
     hooks:
       - id: toml-sort
-        args: [-aiI]
+        args: [--all, --in-place, --ignore-case]
+        files: pyproject.toml
 
   - repo: https://github.com/jackdewinter/pymarkdown
     rev: v0.9.3

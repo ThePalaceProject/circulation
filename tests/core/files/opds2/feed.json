@@ -75,7 +75,7 @@
             "name": "Samuel Langhorne Clemens"
           }
         ],
-        "identifier": "urn:isbn:9781234567897",
+        "identifier": "http://example.org/huckleberry-finn",
         "language": [
           "eng"
         ],

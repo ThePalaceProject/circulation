@@ -4,6 +4,7 @@
 
 import re
 from collections import OrderedDict
+from enum import Enum
 
 
 class DataSourceConstants(object):
@@ -193,6 +194,31 @@ class IdentifierConstants(object):
     IDEAL_COVER_ASPECT_RATIO = 2.0 / 3
     IDEAL_IMAGE_HEIGHT = 240
     IDEAL_IMAGE_WIDTH = 160
+
+
+class IdentifierType(Enum):
+    """Enumeration of all available identifier types."""
+
+    OVERDRIVE_ID = IdentifierConstants.OVERDRIVE_ID
+    ODILO_ID = IdentifierConstants.ODILO_ID
+    BIBLIOTHECA_ID = IdentifierConstants.BIBLIOTHECA_ID
+    GUTENBERG_ID = IdentifierConstants.GUTENBERG_ID
+    AXIS_360_ID = IdentifierConstants.AXIS_360_ID
+    ELIB_ID = IdentifierConstants.ELIB_ID
+    ASIN = IdentifierConstants.ASIN
+    ISBN = IdentifierConstants.ISBN
+    NOVELIST_ID = IdentifierConstants.NOVELIST_ID
+    OCLC_WORK = IdentifierConstants.OCLC_WORK
+    OCLC_NUMBER = IdentifierConstants.OCLC_NUMBER
+    OPEN_LIBRARY_ID = IdentifierConstants.OPEN_LIBRARY_ID
+    BIBLIOCOMMONS_ID = IdentifierConstants.BIBLIOCOMMONS_ID
+    URI = IdentifierConstants.URI
+    DOI = IdentifierConstants.DOI
+    UPC = IdentifierConstants.UPC
+    BIBBLIO_CONTENT_ITEM_ID = IdentifierConstants.BIBBLIO_CONTENT_ITEM_ID
+    ENKI_ID = IdentifierConstants.ENKI_ID
+    SUDOC_CALL_NUMBER = IdentifierConstants.SUDOC_CALL_NUMBER
+    PROQUEST_ID = IdentifierConstants.PROQUEST_ID
 
 
 class LinkRelations(object):
