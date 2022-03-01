@@ -353,11 +353,6 @@ class BaseCoverageProvider(object):
                 count_as_covered_message,
             )
 
-        # This used to be an OFFSET query,
-        # however postgresql will ALWAYS do a seq scan in this case
-        # Hence we make use of the indexed id attribute for offset
-        # This is only possible because the we are ordering by this attribute
-        # Else it would not give us the correct batching
         qu = qu.offset(progress.offset)
         batch = qu.limit(self.batch_size)
         batch_results = batch.all()
