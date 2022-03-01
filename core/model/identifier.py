@@ -860,9 +860,6 @@ class Identifier(Base, IdentifierConstants):
         if identifiers:
             qu = qu.filter(Identifier.id.in_([x.id for x in identifiers]))
 
-        # Using an offset must have an order by
-        qu = qu.order_by(Identifier.id)
-
         return qu
 
     def opds_entry(self):
