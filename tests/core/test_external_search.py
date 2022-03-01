@@ -4537,8 +4537,8 @@ class TestSearchIndexCoverageProvider(DatabaseTest):
         # Do not be 100x performance
         assert t2.execution_time < t1.execution_time * 5
 
-        # 3 queries per work only
-        assert new_counter.get_count() < len(works) * 3 + 1
+        # 4 queries per batch only
+        assert new_counter.get_count() == 4
 
     def test_success(self):
         work = self._work()
