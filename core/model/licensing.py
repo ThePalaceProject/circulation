@@ -2080,4 +2080,3 @@ class RightsStatus(Base):
             return rights
         else:
             return RightsStatus.UNKNOWN
-
