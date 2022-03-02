@@ -11,6 +11,9 @@ exclude = [
     'core/model/listeners.py',
     'core/bin',
     'core/classifier',
+    'core/configuration/ignored_identifier.py',
+    'core/opds2_import.py',
+    'tests/core/test_opds2_import.py',
 ]
 files = [
     "core",
