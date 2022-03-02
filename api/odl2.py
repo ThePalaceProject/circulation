@@ -16,13 +16,6 @@ from core.model.configuration import (
     ExternalIntegration,
     HasExternalIntegration,
 )
-from core.opds2_import import (
-    OPDS2Importer,
-    OPDS2ImporterConfiguration,
-    OPDS2ImportMonitor,
-    RWPMManifestParser,
-)
-from core.opds_import import ConnectionConfiguration
 from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, RWPMManifestParser
 from core.opds_import import OPDSImporterConfiguration
 from core.util import first_or_default
