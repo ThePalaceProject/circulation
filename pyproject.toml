@@ -54,6 +54,7 @@ module = [
 [[tool.mypy.overrides]]
 follow_imports = "skip"
 module = [
+    "api.*",
     "core.classifier.*",
     "core.model.listeners"
 ]
