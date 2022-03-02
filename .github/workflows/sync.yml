@@ -13,12 +13,12 @@ jobs:
 
     steps:
       - name: Checkout repo to sync
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           path: code
 
       - name: Checkout CI scripts
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: 'ThePalaceProject/ci-scripts'
           path: ci
