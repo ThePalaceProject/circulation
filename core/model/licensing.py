@@ -10,11 +10,12 @@ from typing import TYPE_CHECKING, List, Mapping, Optional
 from sqlalchemy import Boolean, Column, DateTime
 from sqlalchemy import Enum as AlchemyEnum
 from sqlalchemy import ForeignKey, Index, Integer, String, Unicode, UniqueConstraint
-from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import or_
 from sqlalchemy.sql.functions import func
+
+from core.model.hybrid import hybrid_property
 
 from ..util.datetime_helpers import utc_now
 from . import Base, create, flush, get_one, get_one_or_create
@@ -26,6 +27,8 @@ from .patron import Hold, Loan, Patron
 
 if TYPE_CHECKING:
     # Only import for type checking, since it creates an import cycle
+    from core.model import Collection, Resource  # noqa: autoflake
+
     from ..analytics import Analytics
 
 
@@ -44,15 +47,15 @@ class LicenseStatus(PythonEnum):
 
 
 class LicenseFunctions:
-    identifier: str
-    checkout_url: str
-    status_url: str
-    status: LicenseStatus
-    expires: Optional[datetime.datetime]
-    checkouts_left: Optional[int]
-    checkouts_available: int
-    terms_concurrency: Optional[int]
-    content_types: Optional[str]
+    identifier: "Column[Optional[str]]"
+    checkout_url: "Column[Optional[str]]"
+    status_url: "Column[Optional[str]]"
+    status: "Optional[LicenseStatus]"
+    expires: "Column[Optional[datetime.datetime]]"
+    checkouts_left: "Column[Optional[int]]"
+    checkouts_available: "Column[Optional[int]]"
+    terms_concurrency: "Column[Optional[int]]"
+    content_types: "Column[Optional[str]]"
 
     @property
     def is_perpetual(self) -> bool:
@@ -76,7 +79,7 @@ class LicenseFunctions:
         )
 
     @property
-    def total_remaining_loans(self) -> int:
+    def total_remaining_loans(self) -> Optional[int]:
         if self.is_inactive:
             return 0
         elif self.is_loan_limited:
@@ -85,7 +88,7 @@ class LicenseFunctions:
             return self.terms_concurrency
 
     @property
-    def currently_available_loans(self) -> int:
+    def currently_available_loans(self) -> Optional[int]:
         if self.is_inactive:
             return 0
         else:
@@ -112,7 +115,7 @@ class License(Base, LicenseFunctions):
     identifier = Column(Unicode)
     checkout_url = Column(Unicode)
     status_url = Column(Unicode)
-    status = Column(AlchemyEnum(LicenseStatus))
+    status = Column(AlchemyEnum(LicenseStatus))  # type: ignore
 
     expires = Column(DateTime(timezone=True))
 
@@ -185,6 +188,8 @@ class LicensePool(Base):
         Integer, ForeignKey("collections.id"), index=True, nullable=False
     )
 
+    collection = relationship("Collection", back_populates="licensepools")
+
     # Each LicensePool has an Edition which contains the metadata used
     # to describe this book.
     presentation_edition_id = Column(Integer, ForeignKey("editions.id"), index=True)
@@ -192,7 +197,7 @@ class LicensePool(Base):
     # If the source provides information about individual licenses, the
     # LicensePool may have many Licenses.
     licenses = relationship(
-        "License", backref="license_pool", cascade="all, delete-orphan"
+        "License", backref="license_pool", cascade="all, delete-orphan", uselist=True
     )
 
     # One LicensePool can have many Loans.
@@ -241,7 +246,7 @@ class LicensePool(Base):
 
     # This lets us cache the work of figuring out the best open access
     # link for this LicensePool.
-    _open_access_download_url = Column(Unicode, name="open_access_download_url")
+    _open_access_download_url = Column("open_access_download_url", Unicode)
 
     # A Collection can not have more than one LicensePool for a given
     # Identifier from a given DataSource.
@@ -274,22 +279,20 @@ class LicensePool(Base):
         )
 
     @hybrid_property
-    def unlimited_access(self):
+    def unlimited_access(self) -> bool:
         """Returns a Boolean value indicating whether this LicensePool allows unlimited access.
         For example, in the case of LCP books without explicit licensing information
 
         :return: Boolean value indicating whether this LicensePool allows unlimited access
-        :rtype: bool
         """
         return self.licenses_owned == self.UNLIMITED_ACCESS
 
     @unlimited_access.setter
-    def unlimited_access(self, value):
+    def unlimited_access(self, value: bool):
         """Sets value of unlimited_access property.
         If you set it to False, license_owned and license_available will be reset to 0
 
         :param value: Boolean value indicating whether this LicensePool allows unlimited access
-        :type value: bool
         """
         if value:
             self.licenses_owned = self.UNLIMITED_ACCESS
@@ -660,8 +663,20 @@ class LicensePool(Base):
         """
         _db = Session.object_session(self)
 
-        licenses_owned = sum([l.total_remaining_loans for l in self.licenses])
-        licenses_available = sum([l.currently_available_loans for l in self.licenses])
+        licenses_owned = sum(
+            [
+                l.total_remaining_loans
+                for l in self.licenses
+                if l.total_remaining_loans is not None
+            ]
+        )
+        licenses_available = sum(
+            [
+                l.currently_available_loans
+                for l in self.licenses
+                if l.currently_available_loans is not None
+            ]
+        )
 
         holds = self.get_active_holds()
 
@@ -1486,6 +1501,10 @@ class LicensePoolDeliveryMechanism(Base):
     delivery_mechanism_id = Column(
         Integer, ForeignKey("deliverymechanisms.id"), index=True, nullable=False
     )
+    delivery_mechanism = relationship(
+        "DeliveryMechanism",
+        back_populates="license_pool_delivery_mechanisms",
+    )
 
     resource_id = Column(Integer, ForeignKey("resources.id"), nullable=True)
 
@@ -1762,7 +1781,8 @@ class DeliveryMechanism(Base, HasSessionCache):
 
     license_pool_delivery_mechanisms = relationship(
         "LicensePoolDeliveryMechanism",
-        backref="delivery_mechanism",
+        back_populates="delivery_mechanism",
+        uselist=True,
     )
 
     __table_args__ = (UniqueConstraint("content_type", "drm_scheme"),)
@@ -2155,7 +2175,9 @@ class FormatPriorities:
             return sys.maxsize
         return self._prioritized_drm_schemes.get(drm_scheme, 0)
 
-    def _content_type_priority(self, content_type: str) -> int:
+    def _content_type_priority(self, content_type: Optional[str]) -> int:
         """Determine the priority of a content type. Prioritized content
         types are always of a higher priority than non-prioritized types."""
+        if content_type is None:
+            return 0
         return self._prioritized_content_types.get(content_type, 0)

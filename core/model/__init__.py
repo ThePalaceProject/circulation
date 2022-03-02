@@ -3,10 +3,12 @@
 import logging
 import os
 import warnings
+from typing import TYPE_CHECKING, Dict
 
 from psycopg2.extensions import adapt as sqlescape
 from psycopg2.extras import NumericRange
 from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError, SAWarning
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -294,7 +296,7 @@ class SessionManager(object):
     # is also defined in SQL.
     RECURSIVE_EQUIVALENTS_FUNCTION = "recursive_equivalents.sql"
 
-    engine_for_url = {}
+    engine_for_url: Dict[str, Engine] = {}
 
     @classmethod
     def engine(cls, url=None):

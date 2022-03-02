@@ -4,6 +4,7 @@
 import re
 import string
 from collections import Counter
+from typing import Any, Iterable
 
 import flask_sqlalchemy_session
 import sqlalchemy
@@ -538,14 +539,11 @@ class MoneyUtility(object):
         return Money(amount, currency)
 
 
-def is_session(value):
+def is_session(value: object) -> bool:
     """Return a boolean value indicating whether the value is a valid SQLAlchemy session.
 
     :param value: Value
-    :type value: Any
-
     :return: Boolean value indicating whether the value is a valid SQLAlchemy session or not
-    :rtype: bool
     """
     return isinstance(
         value,
@@ -553,14 +551,11 @@ def is_session(value):
     )
 
 
-def first_or_default(collection, default=None):
+def first_or_default(collection: Iterable, default: Any = None) -> Any:
     """Return first element of the specified collection or the default value if the collection is empty.
 
     :param collection: Collection
-    :type collection: Iterable
-
     :param default: Default value
-    :type default: Any
     """
     element = next(iter(collection), None)
 

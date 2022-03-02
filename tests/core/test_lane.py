@@ -2,6 +2,7 @@ import datetime
 import json
 import logging
 import random
+from typing import List
 from unittest.mock import MagicMock, call
 
 import pytest
@@ -60,7 +61,7 @@ class TestFacetsWithEntryPoint(DatabaseTest):
         but you don't care which EntryPoints are configured.
         """
 
-        entrypoints = []
+        entrypoints: List = []
 
     def test_items(self):
         ep = AudiobooksEntryPoint
@@ -1770,7 +1771,7 @@ class TestWorkList(DatabaseTest):
         # to the constructor.
         assert [1, 2, 3] == wl.entrypoints
 
-    def test_initialize_without_library(self):
+    def test_initialize_worklist_without_library(self):
         # It's possible to initialize a WorkList with no Library.
         worklist = WorkList()
         worklist.initialize(None)

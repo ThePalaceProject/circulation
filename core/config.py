@@ -328,7 +328,7 @@ class Configuration(ConfigurationConstants):
                         "key": facet,
                         "label": FacetConstants.FACET_DISPLAY_TITLES.get(facet),
                     }
-                    for facet in FacetConstants.FACETS_BY_GROUP.get(group)
+                    for facet in FacetConstants.FACETS_BY_GROUP.get(group, [])
                 ],
                 "default": FacetConstants.FACETS_BY_GROUP.get(group),
                 "category": "Lanes & Filters",
@@ -348,7 +348,7 @@ class Configuration(ConfigurationConstants):
                         "key": facet,
                         "label": FacetConstants.FACET_DISPLAY_TITLES.get(facet),
                     }
-                    for facet in FacetConstants.FACETS_BY_GROUP.get(group)
+                    for facet in FacetConstants.FACETS_BY_GROUP.get(group, [])
                 ],
                 "default": FacetConstants.DEFAULT_FACET.get(group),
                 "category": "Lanes & Filters",

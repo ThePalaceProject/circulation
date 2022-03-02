@@ -1,10 +1,12 @@
 import logging
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
+
+from sqlalchemy.orm import Session
 
 from api.lcp.hash import Hasher
 
-from ..model import Credential, DataSource
+from ..model import Credential, DataSource, Patron
 from .exceptions import LCPError
 
 
@@ -61,25 +63,19 @@ class LCPCredentialFactory:
 
     def _get_or_create_persistent_token(
         self,
-        db,
-        patron,
-        data_source_type,
-        credential_type,
+        db: Session,
+        patron: Patron,
+        data_source_type: Any,
+        credential_type: Any,
         commit: bool,
         value: Optional[str] = None,
-    ):
+    ) -> Any:
         """Gets or creates a new persistent token
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
         :param patron: Patron object
-        :type patron: core.model.patron.Patron
-
         :param commit: True if a generated identifier should be committed to the database
-
         :param value: Optional value of the token
-        :type value: Optional[string]
         """
         self._logger.info(
             'Getting or creating "{0}" credentials for {1} in "{2}" data source with value "{3}"'.format(
@@ -112,17 +108,12 @@ class LCPCredentialFactory:
 
         return credential.credential, is_new
 
-    def get_patron_id(self, db, patron):
+    def get_patron_id(self, db: Session, patron: Patron) -> str:
         """Generates a new or returns an existing patron's ID associated with an LCP license
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
         :param patron: Patron object
-        :type patron: core.model.patron.Patron
-
         :return: Newly generated or existing patron's ID associated with an LCP license
-        :rtype: string
         """
         patron_id, _ = self._get_or_create_persistent_token(
             db,
@@ -134,17 +125,14 @@ class LCPCredentialFactory:
 
         return patron_id
 
-    def get_patron_passphrase(self, db, patron) -> LCPUnhashedPassphrase:
+    def get_patron_passphrase(
+        self, db: Session, patron: Patron
+    ) -> LCPUnhashedPassphrase:
         """Generates a new or returns an existing patron's passphrase associated with an LCP license
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
         :param patron: Patron object
-        :type patron: core.model.patron.Patron
-
         :return: Newly generated or existing patron's passphrase associated with an LCP license
-        :rtype: string
         """
         patron_passphrase, _ = self._get_or_create_persistent_token(
             db,
@@ -156,17 +144,12 @@ class LCPCredentialFactory:
 
         return LCPUnhashedPassphrase(patron_passphrase)
 
-    def get_hashed_passphrase(self, db, patron) -> LCPHashedPassphrase:
+    def get_hashed_passphrase(self, db: Session, patron: Patron) -> LCPHashedPassphrase:
         """Returns an existing hashed passphrase
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
         :param patron: Patron object
-        :type patron: core.model.patron.Patron
-
         :return: Existing hashed passphrase
-        :rtype: LCPHashedPassphrase
         """
 
         # Check if a hashed passphrase already exists, and avoid committing
@@ -184,20 +167,16 @@ class LCPCredentialFactory:
 
         return LCPHashedPassphrase(hashed_passphrase)
 
-    def set_hashed_passphrase(self, db, patron, hashed_passphrase: LCPHashedPassphrase):
-        assert type(hashed_passphrase) == LCPHashedPassphrase
-
+    def set_hashed_passphrase(
+        self, db: Session, patron: Patron, hashed_passphrase: LCPHashedPassphrase
+    ) -> Any:
         """Stores the hashed passphrase as a persistent token
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
         :param patron: Patron object
-        :type patron: core.model.patron.Patron
-
         :param hashed_passphrase: Existing hashed passphrase
-        :type hashed_passphrase: string
         """
+
         self._get_or_create_persistent_token(
             db,
             patron,

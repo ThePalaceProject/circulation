@@ -720,7 +720,7 @@ class Measurement(Base):
     value = Column(Float)
 
     # The measurement normalized to a 0...1 scale.
-    _normalized_value = Column(Float, name="normalized_value")
+    _normalized_value = Column("normalized_value", Float)
 
     # How much weight should be assigned this measurement, relative to
     # other measurements of the same quantity from the same source.

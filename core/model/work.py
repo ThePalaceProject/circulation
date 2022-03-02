@@ -3,6 +3,7 @@
 
 import logging
 from collections import Counter
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import (
     Boolean,
@@ -43,6 +44,10 @@ from .datasource import DataSource
 from .edition import Edition
 from .identifier import Identifier
 from .measurement import Measurement
+
+# Import related models when doing type checking
+if TYPE_CHECKING:
+    from core.model import CachedFeed, CustomListEntry, LicensePool  # noqa: autoflake
 
 
 class WorkGenre(Base):
@@ -106,7 +111,9 @@ class Work(Base):
     id = Column(Integer, primary_key=True)
 
     # One Work may have copies scattered across many LicensePools.
-    license_pools = relationship("LicensePool", backref="work", lazy="joined")
+    license_pools = relationship(
+        "LicensePool", backref="work", lazy="joined", uselist=True
+    )
 
     # A Work takes its presentation metadata from a single Edition.
     # But this Edition is a composite of provider, metadata wrangler, admin interface, etc.-derived Editions.
@@ -264,12 +271,6 @@ class Work(Base):
         if self.presentation_edition:
             return self.presentation_edition.language
         return None
-
-    @property
-    def language_code(self):
-        if not self.presentation_edition:
-            return None
-        return self.presentation_edition.language_code
 
     @property
     def publisher(self):
@@ -885,11 +886,10 @@ class Work(Base):
         )
         return changed
 
-    def _get_default_audience(self):
+    def _get_default_audience(self) -> Optional[str]:
         """Return the default audience.
 
         :return: Default audience
-        :rtype: Optional[str]
         """
         for license_pool in self.license_pools:
             if license_pool.collection.default_audience:

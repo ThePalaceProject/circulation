@@ -53,16 +53,13 @@ class Annotator(object):
 
     opds_cache_field = Work.simple_opds_entry.name
 
-    def is_work_entry_solo(self, work):
+    def is_work_entry_solo(self, work: Work) -> bool:
         """Return a boolean value indicating whether the work's OPDS catalog entry is served by itself,
             rather than as a part of the feed.
 
         :param work: Work object
-        :type work: core.model.work.Work
-
         :return: Boolean value indicating whether the work's OPDS catalog entry is served by itself,
             rather than as a part of the feed
-        :rtype: bool
         """
         return False
 

@@ -148,15 +148,6 @@ class TestCustomListFromCSV(DatabaseTest):
         )
         assert "spa" == list_entry.edition.language
 
-    def test_non_default_language(self):
-        row = self.create_row()
-        row[self.l.language_field] = "Spanish"
-        metadata = self.l.row_to_metadata(row)
-        list_entry = self.l.metadata_to_list_entry(
-            self.custom_list, self.data_source, self.now, metadata
-        )
-        assert "spa" == list_entry.edition.language
-
     def test_overwrite_old_data(self):
         self.l.overwrite_old_data = True
         row1 = self.create_row()

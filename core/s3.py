@@ -2,6 +2,7 @@ import functools
 import logging
 from contextlib import contextmanager
 from enum import Enum
+from typing import Any, List, Optional, Tuple
 from urllib.parse import quote, unquote_plus, urlsplit
 
 import boto3
@@ -11,7 +12,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from flask_babel import lazy_gettext as _
 
 from .mirror import MirrorUploader
-from .model import ExternalIntegration
+from .model import Collection, ExternalIntegration, Representation
 from .model.configuration import (
     ConfigurationAttributeType,
     ConfigurationGrouping,
@@ -71,22 +72,20 @@ class MultipartS3Upload:
         )
 
 
-def _get_available_regions():
+def _get_available_regions() -> List[str]:
     """Returns a list of available S3 regions
 
     :return: List of available S3 regions
-    :rtype: List[string]
     """
     session = boto3.session.Session()
 
     return session.get_available_regions(service_name="s3")
 
 
-def _get_available_region_options():
+def _get_available_region_options() -> List[ConfigurationOption]:
     """Returns a list of available options for S3Uploader's Region configuration setting
 
     :return: List of available options for S3Uploader's Region configuration setting
-    :rtype: List[Dict]
     """
     available_regions = sorted(_get_available_regions())
     options = [ConfigurationOption(region, region) for region in available_regions]
@@ -270,18 +269,18 @@ class S3Uploader(MirrorUploader):
 
     SITEWIDE = True
 
-    def __init__(self, integration, client_class=None, host=S3_HOST):
+    def __init__(
+        self,
+        integration: ExternalIntegration,
+        client_class: Any = None,
+        host: str = S3_HOST,
+    ) -> None:
         """Instantiate an S3Uploader from an ExternalIntegration.
 
         :param integration: An ExternalIntegration
-        :type integration: ExternalIntegration
-
         :param client_class: Mock object (or class) to use (or instantiate)
             instead of boto3.client.
-        :type client_class: Any
-
         :param host: Host used by this integration
-        :type host: string
         """
         super(S3Uploader, self).__init__(integration, host)
 
@@ -338,17 +337,14 @@ class S3Uploader(MirrorUploader):
         # have to keep the ExternalIntegration around.
         self.buckets = dict()
         for setting in integration.settings:
-            if setting.key.endswith("_bucket"):
+            if setting.key is not None and setting.key.endswith("_bucket"):
                 self.buckets[setting.key] = setting.value
 
-    def _generate_s3_url(self, bucket, path):
+    def _generate_s3_url(self, bucket: str, path: Any) -> str:
         """Generates an S3 URL
 
         :param bucket: Bucket name
-        :type bucket: string
-
         :return: S3 URL
-        :rtype: string
         """
         key = path
 
@@ -370,20 +366,15 @@ class S3Uploader(MirrorUploader):
 
         return url
 
-    def sign_url(self, url, expiration=None):
+    def sign_url(self, url: str, expiration: Optional[int] = None) -> str:
         """Signs a URL and make it expirable
 
         :param url: URL
-        :type url: string
-
         :param expiration: (Optional) Time in seconds for the presigned URL to remain valid.
             If it's empty, S3_PRESIGNED_URL_EXPIRATION configuration setting is used
-        :type expiration: int
-
         :return: Signed expirable link
-        :rtype: string
         """
-        if not expiration:
+        if expiration is None:
             expiration = self._s3_presigned_url_expiration
 
         bucket, key = self.split_url(url)
@@ -530,17 +521,12 @@ class S3Uploader(MirrorUploader):
         parts = [time_part, lane.display_name]
         return root + self.key_join(parts) + ".mrc"
 
-    def split_url(self, url, unquote=True):
+    def split_url(self, url: str, unquote: bool = True) -> Tuple[str, str]:
         """Splits the URL into the components: bucket and file path
 
         :param url: URL
-        :type url: string
-
         :param unquote: Boolean value indicating whether it's required to unquote URL elements
-        :type unquote: bool
-
         :return: Tuple (bucket, file path)
-        :rtype: Tuple[string, string]
         """
         scheme, netloc, path, query, fragment = urlsplit(url)
 
@@ -602,17 +588,17 @@ class S3Uploader(MirrorUploader):
 
         return link
 
-    def mirror_one(self, representation, mirror_to, collection=None):
+    def mirror_one(
+        self,
+        representation: Representation,
+        mirror_to: str,
+        collection: Optional[Collection] = None,
+    ) -> Any:
         """Mirror a single representation to the given URL.
 
         :param representation: Book's representation
-        :type representation: Representation
-
         :param mirror_to: Mirror URL
-        :type mirror_to: string
-
         :param collection: Collection
-        :type collection: Optional[Collection]
         """
         # Turn the original URL into an s3.amazonaws.com URL.
         media_type = representation.external_media_type

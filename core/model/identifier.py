@@ -1,10 +1,12 @@
-# encoding: utf-8
+from __future__ import annotations
+
 # Identifier, Equivalency
 import logging
 import random
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from functools import total_ordering
+from typing import TYPE_CHECKING, Optional, Tuple
 from urllib.parse import quote, unquote
 
 import isbnlib
@@ -34,20 +36,25 @@ from .datasource import DataSource
 from .licensing import LicensePoolDeliveryMechanism, RightsStatus
 from .measurement import Measurement
 
+if TYPE_CHECKING:
+    from core.model import (  # noqa: autoflake
+        Annotation,
+        Edition,
+        Hyperlink,
+        LicensePool,
+    )
+
 
 class IdentifierParser(metaclass=ABCMeta):
     """Interface for identifier parsers."""
 
     @abstractmethod
-    def parse(self, identifier_string):
+    def parse(self, identifier_string: str) -> Optional[Tuple[str, str]]:
         """Parse a string containing an identifier, extract it and determine its type.
 
         :param identifier_string: String containing an identifier
-        :type identifier_string: str
-
         :return: 2-tuple containing the identifier's type and identifier itself or None
             if the string contains an incorrect identifier
-        :rtype: Optional[Tuple[str, str]]
         """
         raise NotImplementedError()
 
@@ -362,25 +369,20 @@ class Identifier(Base, IdentifierConstants):
 
     @classmethod
     def _parse_urn(
-        cls, _db, identifier_string, identifier_type, must_support_license_pools=False
-    ):
+        cls,
+        _db: Session,
+        identifier_string: str,
+        identifier_type: str,
+        must_support_license_pools: bool = False,
+    ) -> Tuple["Identifier", bool]:
         """Parse identifier string.
 
         :param _db: Database session
-        :type _db: sqlalchemy.orm.session.Session
-
         :param identifier_string: Identifier itself
-        :type identifier_string: str
-
         :param identifier_type: Identifier's type
-        :type identifier_type: str
-
         :param must_support_license_pools: Boolean value indicating whether there should be a DataSource that provides
             licenses for books identified by the given identifier
-        :type must_support_license_pools: bool
-
         :return: 2-tuple containing Identifier object and a boolean value indicating whether it's new
-        :rtype: Tuple[core.model.identifier.Identifier, bool]
         """
         if must_support_license_pools:
             try:
@@ -394,21 +396,19 @@ class Identifier(Base, IdentifierConstants):
         return cls.for_foreign_id(_db, identifier_type, identifier_string)
 
     @classmethod
-    def parse_urn(cls, _db, identifier_string, must_support_license_pools=False):
+    def parse_urn(
+        cls,
+        _db: Session,
+        identifier_string: str,
+        must_support_license_pools: bool = False,
+    ) -> Tuple[Identifier, bool]:
         """Parse identifier string.
 
         :param _db: Database session
-        :type _db: sqlalchemy.orm.session.Session
-
         :param identifier_string: String containing an identifier
-        :type identifier_string: str
-
         :param must_support_license_pools: Boolean value indicating whether there should be a DataSource that provides
             licenses for books identified by the given identifier
-        :type must_support_license_pools: bool
-
         :return: 2-tuple containing Identifier object and a boolean value indicating whether it's new
-        :rtype: Tuple[core.model.identifier.Identifier, bool]
         """
         identifier_type, identifier_string = cls.type_and_identifier_for_urn(
             identifier_string
@@ -419,26 +419,26 @@ class Identifier(Base, IdentifierConstants):
         )
 
     @classmethod
-    def parse(cls, _db, identifier_string, parser, must_support_license_pools=False):
+    def parse(
+        cls,
+        _db: Session,
+        identifier_string: str,
+        parser: IdentifierParser,
+        must_support_license_pools: bool = False,
+    ) -> Tuple[Identifier, bool]:
         """Parse identifier string.
 
         :param _db: Database session
-        :type _db: sqlalchemy.orm.session.Session
-
         :param identifier_string: String containing an identifier
-        :type identifier_string: str
-
         :param parser: Identifier parser
-        :type parser: IdentifierParser
-
         :param must_support_license_pools: Boolean value indicating whether there should be a DataSource that provides
             licenses for books identified by the given identifier
-        :type must_support_license_pools: bool
-
         :return: 2-tuple containing Identifier object and a boolean value indicating whether it's new
-        :rtype: Tuple[core.model.identifier.Identifier, bool]
         """
-        identifier_type, identifier_string = parser.parse(identifier_string)
+        identifier = parser.parse(identifier_string)
+        if identifier is None:
+            raise ValueError(f"Unable to parse identifier {identifier_string}.")
+        identifier_type, identifier_string = identifier
 
         return cls._parse_urn(
             _db, identifier_string, identifier_type, must_support_license_pools

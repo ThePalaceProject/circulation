@@ -843,6 +843,9 @@ class OPDS2Importer(
         :param transient: Boolean value indicating whether the failure is final or it can go away in the future
         :return: CoverageFailure object describing the error
         """
+        if identifier.identifier is None:
+            raise ValueError
+
         if identifier not in failures:
             failures[identifier.identifier] = []
 

@@ -11,6 +11,7 @@ import time
 import traceback
 from hashlib import md5
 from io import BytesIO
+from typing import TYPE_CHECKING
 from urllib.parse import quote, urlparse, urlsplit
 
 import requests
@@ -44,6 +45,9 @@ from .constants import (
 from .edition import Edition
 from .licensing import LicensePool, LicensePoolDeliveryMechanism
 
+if TYPE_CHECKING:
+    from core.model import CachedMARCFile, Work  # noqa: autoflake
+
 
 class Resource(Base):
     """An external resource that may be mirrored locally.
@@ -69,7 +73,7 @@ class Resource(Base):
     # Many Editions may choose this resource (as opposed to other
     # resources linked to them with rel="image") as their cover image.
     cover_editions = relationship(
-        "Edition", backref="cover", foreign_keys=[Edition.cover_id]
+        "Edition", backref="cover", foreign_keys=[Edition.cover_id]  # type: ignore
     )
 
     # Many Works may use this resource (as opposed to other resources
@@ -85,7 +89,7 @@ class Resource(Base):
     licensepooldeliverymechanisms = relationship(
         "LicensePoolDeliveryMechanism",
         backref="resource",
-        foreign_keys=[LicensePoolDeliveryMechanism.resource_id],
+        foreign_keys=[LicensePoolDeliveryMechanism.resource_id],  # type: ignore
     )
 
     links = relationship("Hyperlink", backref="resource")

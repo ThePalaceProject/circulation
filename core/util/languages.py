@@ -4,6 +4,7 @@
 
 import re
 from collections import defaultdict
+from typing import Dict, List, Pattern
 
 
 class LookupTable(dict):
@@ -27,9 +28,9 @@ class LanguageCodes(object):
 
     two_to_three = LookupTable()
     three_to_two = LookupTable()
-    english_names = defaultdict(list)
+    english_names: Dict[str, List[str]] = defaultdict(list)
     english_names_to_three = LookupTable()
-    native_names = defaultdict(list)
+    native_names: Dict[str, List[str]] = defaultdict(list)
 
     RAW_DATA = """aar||aa|Afar|afar
 abk||ab|Abkhazian|abkhaze
@@ -537,11 +538,15 @@ zza|||Zaza; Dimili; Dimli; Kirdki; Kirmanjki; Zazaki|zaza; dimili; dimli; kirdki
         {"code": "sv", "name": "Swedish", "nativeName": "svenska"},
     ]
 
-    for i in RAW_DATA.split("\n"):
-        (alpha_3, terminologic_code, alpha_2, names, french_names) = i.strip().split(
-            "|"
-        )
-        names = [x.strip() for x in names.split(";")]
+    for raw_name_data in RAW_DATA.split("\n"):
+        (
+            alpha_3,
+            terminologic_code,
+            alpha_2,
+            names_raw,
+            french_names,
+        ) = raw_name_data.strip().split("|")
+        names = [x.strip() for x in names_raw.split(";")]
         if alpha_2:
             three_to_two[alpha_3] = alpha_2
             english_names[alpha_2] = names
@@ -550,11 +555,10 @@ zza|||Zaza; Dimili; Dimli; Kirdki; Kirmanjki; Zazaki|zaza; dimili; dimli; kirdki
             english_names_to_three[name.lower()] = alpha_3
         english_names[alpha_3] = names
 
-    for i in NATIVE_NAMES_RAW_DATA:
-        alpha_2 = i["code"]
+    for raw_native_name_data in NATIVE_NAMES_RAW_DATA:
+        alpha_2 = raw_native_name_data["code"]
         alpha_3 = two_to_three[alpha_2]
-        names = i["nativeName"]
-        names = [x.strip() for x in names.split(",")]
+        names = [x.strip() for x in raw_native_name_data["nativeName"].split(",")]
         native_names[alpha_2] = names
         native_names[alpha_3] = names
 
@@ -633,6 +637,9 @@ class LanguageNames(object):
 
     number = re.compile("[0-9]")
     parentheses = re.compile(r"\([^)]+\)")
+
+    name_to_codes: Dict[str, List[str]]
+    name_re: Pattern
 
     @classmethod
     def _process(cls, human_readable_name, alpha):

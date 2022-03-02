@@ -2,6 +2,7 @@ import datetime
 import json
 import logging
 from threading import RLock
+from typing import Set
 from urllib.parse import quote, urlsplit, urlunsplit
 
 import isbnlib
@@ -753,7 +754,7 @@ class OverdriveRepresentationExtractor(object):
         else:
             yield result
 
-    ignorable_overdrive_formats = set([])
+    ignorable_overdrive_formats: Set[str] = set([])
 
     overdrive_role_to_simplified_role = {
         "actor": Contributor.ACTOR_ROLE,

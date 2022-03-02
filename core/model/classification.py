@@ -3,6 +3,7 @@
 
 
 import logging
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
@@ -31,6 +32,11 @@ from . import (
 )
 from .constants import DataSourceConstants
 from .hassessioncache import HasSessionCache
+
+if TYPE_CHECKING:
+    # This is needed during type checking so we have the
+    # types of related models.
+    from core.model import WorkGenre  # noqa: autoflake
 
 
 class Subject(Base):

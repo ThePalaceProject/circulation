@@ -3,6 +3,7 @@
 
 
 from collections import defaultdict
+from typing import TYPE_CHECKING
 from urllib.parse import quote, unquote
 
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, String
@@ -14,6 +15,23 @@ from . import Base, get_one, get_one_or_create
 from .constants import DataSourceConstants, IdentifierConstants
 from .hassessioncache import HasSessionCache
 from .licensing import LicensePoolDeliveryMechanism
+
+if TYPE_CHECKING:
+    # This is needed during type checking so we have the
+    # types of related models.
+    from core.model import (  # noqa: autoflake
+        Classification,
+        CoverageRecord,
+        Credential,
+        CustomList,
+        Edition,
+        Equivalency,
+        Hyperlink,
+        IntegrationClient,
+        LicensePool,
+        Measurement,
+        Resource,
+    )
 
 
 class DataSource(Base, HasSessionCache, DataSourceConstants):

@@ -55,9 +55,9 @@ from .model import (
     get_one,
     get_one_or_create,
     production_session,
-    site_configuration_has_changed,
 )
 from .model.configuration import ExternalIntegrationLink
+from .model.listeners import site_configuration_has_changed
 from .monitor import CollectionMonitor, ReaperMonitor
 from .opds_import import OPDSImporter, OPDSImportMonitor
 from .util import fast_query_count

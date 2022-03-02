@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import os
 import random
 import stat
 import tempfile
 from io import StringIO
 from pathlib import Path
+from typing import List, Type
 
 import pytest
 from parameterized import parameterized
@@ -36,6 +39,7 @@ from core.model import (
 )
 from core.model.configuration import ExternalIntegrationLink
 from core.monitor import CollectionMonitor, Monitor, ReaperMonitor
+from core.opds_import import OPDSImportMonitor
 from core.s3 import MinIOUploader, MinIOUploaderConfiguration, S3Uploader
 from core.scripts import (
     AddClassificationScript,
@@ -2209,7 +2213,7 @@ class TestCollectionArgumentsScript(DatabaseTest):
 class MockOPDSImportMonitor(object):
     """Pretend to monitor an OPDS feed for new titles."""
 
-    INSTANCES = []
+    INSTANCES: List[MockOPDSImportMonitor] = []
 
     def __init__(self, _db, collection, *args, **kwargs):
         self.collection = collection
@@ -2229,8 +2233,8 @@ class MockOPDSImporter(object):
 class MockOPDSImportScript(OPDSImportScript):
     """Actually instantiate a monitor that will pretend to do something."""
 
-    MONITOR_CLASS = MockOPDSImportMonitor
-    IMPORTER_CLASS = MockOPDSImporter
+    MONITOR_CLASS: Type[OPDSImportMonitor] = MockOPDSImportMonitor  # type: ignore
+    IMPORTER_CLASS = MockOPDSImporter  # type: ignore
 
 
 class TestOPDSImportScript(DatabaseTest):

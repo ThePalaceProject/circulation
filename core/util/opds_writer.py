@@ -59,12 +59,9 @@ class AtomFeed(object):
         "lcp": LCP_NS,
     }
 
-    default_typemap = {datetime: lambda e, v: _strftime(v)}
-    E = ElementMaker(typemap=default_typemap, nsmap=nsmap)
-    SIMPLIFIED = ElementMaker(
-        typemap=default_typemap, nsmap=nsmap, namespace=SIMPLIFIED_NS
-    )
-    SCHEMA = ElementMaker(typemap=default_typemap, nsmap=nsmap, namespace=SCHEMA_NS)
+    E = ElementMaker(nsmap=nsmap)
+    SIMPLIFIED = ElementMaker(nsmap=nsmap, namespace=SIMPLIFIED_NS)
+    SCHEMA = ElementMaker(nsmap=nsmap, namespace=SCHEMA_NS)
 
     @classmethod
     def _strftime(cls, date):

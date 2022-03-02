@@ -3,7 +3,7 @@ import logging
 import traceback
 from contextlib import contextmanager
 from io import BytesIO
-from typing import Optional
+from typing import Iterator, Optional
 from urllib.parse import quote, urljoin, urlparse
 
 import dateutil
@@ -1952,7 +1952,7 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests, HasExternalIntegration)
     @contextmanager
     def _get_configuration(
         self, db: sqlalchemy.orm.session.Session
-    ) -> ConnectionConfiguration:
+    ) -> Iterator[ConfigurationGrouping]:
         """Return the configuration object.
 
         :param db: Database session

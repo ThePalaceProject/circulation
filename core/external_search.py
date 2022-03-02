@@ -5,6 +5,7 @@ import logging
 import re
 import time
 from collections import defaultdict
+from typing import Optional
 
 from elasticsearch import Elasticsearch
 from elasticsearch.exceptions import ElasticsearchException, RequestError
@@ -828,7 +829,7 @@ class Mapping(MappingDocument):
     can change between versions without affecting anything.)
     """
 
-    VERSION_NAME = None
+    VERSION_NAME: Optional[str] = None
 
     @classmethod
     def version_name(cls):
