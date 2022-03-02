@@ -7,10 +7,10 @@ from core.model.configuration import ConfigurationAttributeType, ConfigurationMe
 class SAMLWAYFlessConfigurationTrait(ConfigurationTrait):
     IDP_PLACEHOLDER = "{idp}"
     ACQUISITION_LINK_PLACEHOLDER = "{targetUrl}"
-    WAYFLESS_URL_TEMPLATE_KEY: str = "wayfless_url_template"
+    WAYFLESS_URL_TEMPLATE_KEY: str = "saml_wayfless_url_template"
 
     wayfless_url_template = ConfigurationMetadata(
-        key="saml_wayfless_url_template",
+        key=WAYFLESS_URL_TEMPLATE_KEY,
         label=_("SAML WAYFless URL Template"),
         description=_(
             "<b>This configuration setting should be used ONLY when the authentication protocol is SAML.</b>"
