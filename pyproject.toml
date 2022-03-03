@@ -56,7 +56,13 @@ follow_imports = "skip"
 module = [
     "api.*",
     "core.classifier.*",
-    "core.model.listeners"
+]
+
+[[tool.mypy.overrides]]
+follow_imports = "silent"
+module = [
+    "core.configuration.ignored_identifier",
+    "core.model.listeners",
 ]
 
 [tool.poetry]
