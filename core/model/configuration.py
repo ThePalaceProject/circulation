@@ -17,6 +17,7 @@ from typing import (
     Optional,
     Tuple,
     Type,
+    TypeVar,
 )
 
 from flask_babel import lazy_gettext as _
@@ -1377,6 +1378,9 @@ class ConfigurationGrouping(HasConfigurationSettings):
         return list(cls.to_settings_generator())
 
 
+C = TypeVar("C", bound="ConfigurationGrouping")
+
+
 class ConfigurationFactory(object):
     """Factory creating new instances of ConfigurationGrouping class descendants."""
 
@@ -1385,8 +1389,8 @@ class ConfigurationFactory(object):
         self,
         configuration_storage: ConfigurationStorage,
         db: Session,
-        configuration_grouping_class: Type[ConfigurationGrouping],
-    ) -> Iterator[ConfigurationGrouping]:
+        configuration_grouping_class: Type[C],
+    ) -> Iterator[C]:
         """Create a new instance of ConfigurationGrouping.
 
         :param configuration_storage: ConfigurationStorage object
