@@ -82,7 +82,7 @@ class FormatPriorities:
         ):
             mechanisms_filtered.sort(
                 key=lambda mechanism: self._content_type_priority(
-                    mechanism.delivery_mechanism.content_type
+                    mechanism.delivery_mechanism.content_type or ""
                 ),
                 reverse=True,
             )
