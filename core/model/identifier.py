@@ -13,6 +13,7 @@ import isbnlib
 from sqlalchemy import (
     Boolean,
     Column,
+    Computed,
     Float,
     ForeignKey,
     Integer,
@@ -999,3 +1000,33 @@ class Equivalency(Base):
         if exclude_ids:
             q = q.filter(~Equivalency.id.in_(exclude_ids))
         return q
+
+
+class RecursiveEquivalencyCache(Base):
+    """A chain of identifiers linked to a starting "parent" identifier
+    From equivalents if there exists (10,12),(12,19)
+    then for parent 10 there should exist rows
+    (10,12,order_no=1), (10,19,order_no=2)
+    This allows for simple querying during different jobs
+    rather than doing on-the-go dynamic recursive_equivalents
+    """
+
+    __tablename__ = "recursiveequivalentscache"
+
+    id = Column(Integer, primary_key=True)
+
+    # The "parent" or the start of the chain
+    parent_identifier_id = Column(
+        Integer, ForeignKey("identifiers.id", ondelete="CASCADE")
+    )
+    parent_identifier = relationship("Identifier", foreign_keys=parent_identifier_id)
+
+    # The identifier chained to the parent
+    identifier_id = Column(Integer, ForeignKey("identifiers.id", ondelete="CASCADE"))
+    identifier = relationship("Identifier", foreign_keys=identifier_id)
+
+    # Its always important to query for the parent id chain to self first
+    # this can be easily accomplished by ORDER BY parent_identifier,is_parent DESC
+    is_parent = Column(Boolean, Computed("parent_identifier_id = identifier_id"))
+
+    __table_args__ = (UniqueConstraint(parent_identifier_id, identifier_id),)

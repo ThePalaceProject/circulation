@@ -10,7 +10,7 @@ from parameterized import parameterized
 from core.model import PresentationCalculationPolicy
 from core.model.datasource import DataSource
 from core.model.edition import Edition
-from core.model.identifier import Identifier
+from core.model.identifier import Equivalency, Identifier, RecursiveEquivalencyCache
 from core.model.resource import Hyperlink, Representation
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
@@ -756,3 +756,46 @@ class TestIdentifier(DatabaseTest):
         # NOTE: we are not interested in the result returned by repr,
         # we just want to make sure that repr doesn't throw any unexpected exceptions
         _ = repr(identifier)
+
+
+class TestRecursiveEquivalencyCache(DatabaseTest):
+    def setup_method(self):
+        super().setup_method()
+
+        self.idens = [
+            self._identifier(),
+            self._identifier(),
+            self._identifier(),
+            self._identifier(),
+        ]
+        idn = self.idens
+        self.equivalencies = [
+            Equivalency(input_id=idn[0].id, output_id=idn[1].id, strength=1),
+            Equivalency(input_id=idn[1].id, output_id=idn[2].id, strength=1),
+            Equivalency(input_id=idn[1].id, output_id=idn[0].id, strength=1),
+        ]
+        self._db.add_all(self.equivalencies)
+
+        eq = self.equivalencies[0]
+        self.rec_eq = RecursiveEquivalencyCache(
+            parent_identifier_id=eq.input_id, identifier_id=eq.output_id
+        )
+        self._db.add(self.rec_eq)
+
+        self._db.commit()
+
+    def test_is_parent(self):
+        assert self.rec_eq.is_parent == False
+
+    def test_identifier_delete_cascade_parent(self):
+        assert self.rec_eq.parent_identifier_id == self.idens[0].id
+
+        all_recursives = self._db.query(RecursiveEquivalencyCache).all()
+        assert len(all_recursives) == 1
+
+        self._db.delete(self.idens[0])
+        self._db.commit()
+
+        # RecursiveEquivalencyCache was deleted by cascade
+        all_recursives = self._db.query(RecursiveEquivalencyCache).all()
+        assert len(all_recursives) == 0

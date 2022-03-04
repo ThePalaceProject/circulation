@@ -11,6 +11,7 @@ from sqlalchemy import (
     Unicode,
     UniqueConstraint,
 )
+from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, literal, literal_column, or_
 
@@ -60,6 +61,7 @@ class BaseCoverageRecord(object):
             covered.
         :return: A clause that can be passed in to Query.filter().
         """
+
         if not count_as_covered:
             count_as_covered = cls.DEFAULT_COUNT_AS_COVERED
         elif isinstance(count_as_covered, (bytes, str)):
@@ -723,3 +725,77 @@ Index(
     WorkCoverageRecord.operation,
     WorkCoverageRecord.work_id,
 )
+
+
+class EquivalencyCoverageRecord(Base, BaseCoverageRecord):
+    """A coverage record that tracks work needs to be done
+    on identifier equivalents
+    """
+
+    RECURSIVE_EQUIVALENCY_REFRESH = "recursive-equivalency-refresh"
+    RECURSIVE_EQUIVALENCY_DELETE = (
+        "recursive-equivalency-delete"  # an identifier was deleted
+    )
+
+    __tablename__ = "equivalentscoveragerecords"
+
+    id = Column(Integer, primary_key=True)
+
+    equivalency_id = Column(Integer, ForeignKey("equivalents.id"), index=True)
+    equivalency = relationship("Equivalency", foreign_keys=equivalency_id)
+
+    operation = Column(String(255), index=True, default=None)
+
+    timestamp = Column(DateTime(timezone=True), index=True)
+
+    status = Column(BaseCoverageRecord.status_enum, index=True)
+    exception = Column(Unicode)
+
+    __table_args__ = (UniqueConstraint(equivalency_id, operation),)
+
+    @classmethod
+    def bulk_add(
+        cls,
+        _db,
+        equivalents,
+        operation,
+        status=BaseCoverageRecord.REGISTERED,
+        batch_size=100,
+    ):
+        coverages = []
+        ix = 0
+        for eq in equivalents:
+            record = EquivalencyCoverageRecord(
+                equivalency_id=eq.id,
+                operation=operation,
+                status=status,
+                timestamp=utc_now(),
+            )
+            coverages.append(record)
+            ix += 1
+            if ix == batch_size:
+                _db.bulk_save_objects(coverages)
+                _db.commit()
+                coverages = []
+                ix = 0
+
+        if ix > 0:
+            _db.bulk_save_objects(coverages)
+            _db.commit()
+
+    @classmethod
+    def add_for(
+        cls, equivalency, operation, timestamp=None, status=CoverageRecord.SUCCESS
+    ):
+        _db = Session.object_session(equivalency)
+        timestamp = timestamp or utc_now()
+        coverage_record, is_new = get_one_or_create(
+            _db,
+            cls,
+            equivalency=equivalency,
+            operation=operation,
+            on_multiple="interchangeable",
+        )
+        coverage_record.status = status
+        coverage_record.timestamp = timestamp
+        return coverage_record, is_new
