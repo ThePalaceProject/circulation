@@ -4,11 +4,12 @@ import datetime
 from core.model.coverage import (
     BaseCoverageRecord,
     CoverageRecord,
+    EquivalencyCoverageRecord,
     Timestamp,
     WorkCoverageRecord,
 )
 from core.model.datasource import DataSource
-from core.model.identifier import Identifier
+from core.model.identifier import Equivalency, Identifier
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import datetime_utc, utc_now
 
@@ -550,3 +551,46 @@ class TestWorkCoverageRecord(DatabaseTest):
         # a different operation.
         assert WorkCoverageRecord.SUCCESS == irrelevant_record.status
         assert irrelevant_record.timestamp < new_timestamp
+
+
+class TestEquivalencyCoverageRecord(DatabaseTest):
+    def setup_method(self):
+        super().setup_method()
+
+        self.idens = [
+            self._identifier(),
+            self._identifier(),
+            self._identifier(),
+            self._identifier(),
+        ]
+        idn = self.idens
+        self.equivalencies = [
+            Equivalency(input_id=idn[0].id, output_id=idn[1].id, strength=1),
+            Equivalency(input_id=idn[1].id, output_id=idn[2].id, strength=1),
+            Equivalency(input_id=idn[1].id, output_id=idn[0].id, strength=1),
+        ]
+        self._db.add_all(self.equivalencies)
+        self._db.commit()
+
+    def test_add_for(self):
+        operation = EquivalencyCoverageRecord.RECURSIVE_EQUIVALENCY_REFRESH
+
+        for eq in self.equivalencies:
+            record, is_new = EquivalencyCoverageRecord.add_for(
+                eq, operation, status=CoverageRecord.REGISTERED
+            )
+
+            assert record.equivalency_id == eq.id
+            assert record.status == CoverageRecord.REGISTERED
+            assert record.operation == operation
+
+    def test_bulk_add(self):
+        operation = EquivalencyCoverageRecord.RECURSIVE_EQUIVALENCY_REFRESH
+        EquivalencyCoverageRecord.bulk_add(self._db, self.equivalencies, operation)
+        all_records = self._db.query(EquivalencyCoverageRecord).all()
+
+        assert len(all_records) == 3
+        # All equivalencies are the same
+        assert set([r.equivalency_id for r in all_records]) == set(
+            [e.id for e in self.equivalencies]
+        )
