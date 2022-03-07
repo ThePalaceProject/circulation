@@ -3,7 +3,7 @@
 import logging
 import os
 import warnings
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING, Dict, List
 
 from psycopg2.extensions import adapt as sqlescape
 from psycopg2.extras import NumericRange
@@ -490,7 +490,7 @@ class SessionBulkOperation:
         self.bulk_method = bulk_method
         self.bulk_method_kwargs = bulk_method_kwargs or {}
         self.batch_size = batch_size
-        self._objects = []
+        self._objects: List[Base] = []
 
     def __enter__(self):
         return self
