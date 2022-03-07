@@ -1,4 +1,4 @@
-from typing import List, Set
+from typing import List, Optional, Set
 
 from sqlalchemy import delete
 from sqlalchemy.orm import joinedload
@@ -45,13 +45,13 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
 
     def _identifiers_for_coverage(
         self, records: List[EquivalencyCoverageRecord]
-    ) -> Set[int]:
+    ) -> Set[Optional[int]]:
 
         equivs = [r.equivalency for r in records]
         # process both inputs and outputs
-        identifier_ids = [eq.input_id for eq in equivs]
-        identifier_ids.extend([eq.output_id for eq in equivs])
-        identifier_ids = set(identifier_ids)
+        identifier_ids_list: List[Optional[int]] = [eq.input_id for eq in equivs]
+        identifier_ids_list.extend([eq.output_id for eq in equivs])
+        identifier_ids: Set[Optional[int]] = set(identifier_ids_list)
 
         # Any identifier found, should be recalculated
         # However we must recalculate any other chain these identifiers were part of also

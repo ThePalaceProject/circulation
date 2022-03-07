@@ -1,5 +1,7 @@
 # encoding: utf-8
 # BaseCoverageRecord, Timestamp, CoverageRecord, WorkCoverageRecord
+from typing import TYPE_CHECKING
+
 from sqlalchemy import (
     Column,
     DateTime,
@@ -17,6 +19,9 @@ from sqlalchemy.sql.expression import and_, literal, literal_column, or_
 
 from ..util.datetime_helpers import utc_now
 from . import Base, get_one, get_one_or_create
+
+if TYPE_CHECKING:
+    pass
 
 
 class BaseCoverageRecord(object):
