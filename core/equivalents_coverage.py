@@ -1,6 +1,6 @@
 from typing import List, Optional, Set
 
-from sqlalchemy import delete
+from sqlalchemy import and_, delete
 from sqlalchemy.orm import joinedload
 
 from core.coverage import BaseCoverageProvider, CoverageFailure
@@ -12,7 +12,7 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
 
     SERVICE_NAME = "Equivalent identifiers coverage provider"
 
-    DEFAULT_BATCH_SIZE = 50
+    DEFAULT_BATCH_SIZE = 200
 
     OPERATION = EquivalencyCoverageRecord.RECURSIVE_EQUIVALENCY_REFRESH
 
@@ -25,7 +25,9 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
 
     def run(self):
         self.update_missing_coverage_records()
-        return super().run()
+        ret = super().run()
+        self.update_identity_recursive_equivalents()
+        return ret
 
     def items_that_need_coverage(self, identifiers=None, **kwargs):
         qu = (
@@ -145,3 +147,37 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
         EquivalencyCoverageRecord.bulk_add(
             self._db, eqs_without_records, self.operation, batch_size=500
         )
+
+    def update_identity_recursive_equivalents(self):
+        """Update identifiers within the recursives table
+        with (id, id) in case they do not have equivalents
+        This is required so that when pulling recursives for an identifier
+        we always atleast get the identifier itself
+        NOTE: There are no coveragerecords for these
+        This might deserve its own batchable job
+        """
+        qu = (
+            self._db.query(Identifier)
+            .outerjoin(
+                RecursiveEquivalencyCache,
+                and_(
+                    RecursiveEquivalencyCache.parent_identifier_id == Identifier.id,
+                    RecursiveEquivalencyCache.is_parent == True,
+                ),
+            )
+            .filter(RecursiveEquivalencyCache.id == None)
+            .enable_eagerloads(False)
+            .yield_per(self.batch_size)
+        )
+
+        missing_identifiers = qu.all()
+
+        for identifier in missing_identifiers:
+            self._db.add(
+                RecursiveEquivalencyCache(
+                    parent_identifier_id=identifier.id, identifier_id=identifier.id
+                )
+            )
+        self._db.commit()
+
+        return missing_identifiers

@@ -234,3 +234,22 @@ class TestEquivalentCoverage(DatabaseTest):
             assert r.status == r.REGISTERED
             # identity 1 is connected only to identitity 2
             assert self.idens[1].id in (r.equivalency.input_id, r.equivalency.output_id)
+
+    def test_update_identity_recursive_equivalents(self):
+        self.provider.update_missing_coverage_records()
+        batch = self.provider.items_that_need_coverage()
+        self.provider.process_batch(batch)
+
+        missing = self.provider.update_identity_recursive_equivalents()
+
+        assert len(missing) == 1
+        assert missing[0].id == self.idens[3].id
+
+        recursives = (
+            self._db.query(RecursiveEquivalencyCache)
+            .filter(RecursiveEquivalencyCache.parent_identifier_id == self.idens[3].id)
+            .all()
+        )
+
+        assert len(recursives) == 1
+        assert recursives[0].is_parent == True
