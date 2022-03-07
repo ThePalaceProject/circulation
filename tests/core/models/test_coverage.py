@@ -594,3 +594,22 @@ class TestEquivalencyCoverageRecord(DatabaseTest):
         assert set([r.equivalency_id for r in all_records]) == set(
             [e.id for e in self.equivalencies]
         )
+
+    def test_delete_identifier(self):
+        for eq in self.equivalencies:
+            record, is_new = EquivalencyCoverageRecord.add_for(
+                eq,
+                EquivalencyCoverageRecord.RECURSIVE_EQUIVALENCY_REFRESH,
+                status=CoverageRecord.REGISTERED,
+            )
+        self._db.commit()
+
+        all_equivs = self._db.query(EquivalencyCoverageRecord).all()
+        assert len(all_equivs) == 3
+
+        self._db.delete(self.idens[0])
+        self._db.commit()
+
+        all_equivs = self._db.query(EquivalencyCoverageRecord).all()
+
+        assert len(all_equivs) == 1

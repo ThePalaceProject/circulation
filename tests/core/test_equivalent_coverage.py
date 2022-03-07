@@ -1,6 +1,11 @@
+import pytest
+import sqlalchemy
+from sqlalchemy import or_
+
 from core.equivalents_coverage import EquivalentIdentifiersCoverageProvider
 from core.model.coverage import EquivalencyCoverageRecord
 from core.model.identifier import Equivalency, RecursiveEquivalencyCache
+from core.query.coverage import EquivalencyCoverageQueries
 from core.testing import DatabaseTest
 
 
@@ -32,10 +37,6 @@ class TestEquivalentCoverage(DatabaseTest):
 
         records = self._db.query(EquivalencyCoverageRecord).all()
         assert [r.equivalency_id for r in records] == [r.id for r in self.equivalencies]
-        assert [r.input_id for r in records] == [r.input_id for r in self.equivalencies]
-        assert [r.output_id for r in records] == [
-            r.output_id for r in self.equivalencies
-        ]
         assert (
             len(
                 list(
@@ -154,6 +155,9 @@ class TestEquivalentCoverage(DatabaseTest):
         }
         assert len(self.provider._already_covered_identifiers) == 3
 
+        recursives = self._db.query(RecursiveEquivalencyCache).all()
+        assert len(recursives) == 9
+
     def test_process_batch_on_delete(self):
         self.provider.update_missing_coverage_records()
 
@@ -162,5 +166,71 @@ class TestEquivalentCoverage(DatabaseTest):
         self._db.commit()
 
         batch = self.provider.items_that_need_coverage().all()
-        assert len(batch) == 3
+        assert len(batch) == 1
+
         self.provider.process_batch(batch)
+
+        # 2 for each identifier left in the chain
+        assert len(self._db.query(RecursiveEquivalencyCache).all()) == 4
+
+    def test_on_delete_listeners(self):
+        self.provider.update_missing_coverage_records()
+        batch = self.provider.items_that_need_coverage()
+        self.provider.process_batch(batch)
+
+        all_records = self._db.query(EquivalencyCoverageRecord).all()
+        for r in all_records:
+            r.status = r.SUCCESS
+
+        self._db.commit()
+
+        target_recursives = (
+            self._db.query(RecursiveEquivalencyCache)
+            .filter(
+                or_(
+                    RecursiveEquivalencyCache.parent_identifier_id == self.idens[0].id,
+                    RecursiveEquivalencyCache.identifier_id == self.idens[0].id,
+                )
+            )
+            .all()
+        )
+
+        self._db.delete(self.idens[0])
+        self._db.commit()
+        self._db.expire_all()
+
+        all_records = self._db.query(EquivalencyCoverageRecord).all()
+        for r in all_records:
+            if self.idens[1] in (r.equivalency.input_id, r.equivalency.input_id):
+                assert r.status == r.REGISTERED
+
+        recursives_count = (
+            self._db.query(RecursiveEquivalencyCache)
+            .filter(
+                or_(
+                    RecursiveEquivalencyCache.parent_identifier_id == self.idens[0].id,
+                    RecursiveEquivalencyCache.identifier_id == self.idens[0].id,
+                )
+            )
+            .count()
+        )
+        assert recursives_count == 0
+
+        assert len(target_recursives) != 0
+        for t in target_recursives:
+            with pytest.raises(sqlalchemy.exc.InvalidRequestError):
+                self._db.refresh(t)
+
+    def test_add_coverage_for_identifiers_chain(self):
+        self.provider.update_missing_coverage_records()
+        batch = self.provider.items_that_need_coverage()
+        self.provider.process_batch(batch)
+
+        records = EquivalencyCoverageQueries.add_coverage_for_identifiers_chain(
+            [self.idens[0]]
+        )
+
+        for r in records:
+            assert r.status == r.REGISTERED
+            # identity 1 is connected only to identitity 2
+            assert self.idens[1].id in (r.equivalency.input_id, r.equivalency.output_id)

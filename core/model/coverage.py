@@ -741,7 +741,9 @@ class EquivalencyCoverageRecord(Base, BaseCoverageRecord):
 
     id = Column(Integer, primary_key=True)
 
-    equivalency_id = Column(Integer, ForeignKey("equivalents.id"), index=True)
+    equivalency_id = Column(
+        Integer, ForeignKey("equivalents.id", ondelete="CASCADE"), index=True
+    )
     equivalency = relationship("Equivalency", foreign_keys=equivalency_id)
 
     operation = Column(String(255), index=True, default=None)

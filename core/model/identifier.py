@@ -972,9 +972,9 @@ class Equivalency(Base):
 
     def __repr__(self):
         r = "[%s ->\n %s\n source=%s strength=%.2f votes=%d)]" % (
-            repr(self.input).decode("utf8"),
-            repr(self.output).decode("utf8"),
-            self.data_source.name,
+            repr(self.input),
+            repr(self.output),
+            self.data_source_id and self.data_source.name,
             self.strength,
             self.votes,
         )
