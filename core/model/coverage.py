@@ -21,7 +21,7 @@ from ..util.datetime_helpers import utc_now
 from . import Base, get_one, get_one_or_create
 
 if TYPE_CHECKING:
-    pass
+    from . import Equivalency  # noqa
 
 
 class BaseCoverageRecord(object):
