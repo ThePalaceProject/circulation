@@ -10,10 +10,10 @@ from typing import TYPE_CHECKING, Optional, Tuple
 from urllib.parse import quote, unquote
 
 import isbnlib
+from sqlalchemy import Computed  # type: ignore
 from sqlalchemy import (
     Boolean,
     Column,
-    Computed,
     Float,
     ForeignKey,
     Integer,
