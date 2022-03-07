@@ -41,8 +41,6 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
         )
         qu = qu.filter(missing)
 
-        # print ([(q.id, q.status) for q in list(qu.all())[:5]])
-
         return qu
 
     def _identifiers_for_coverage(
@@ -67,7 +65,6 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
         return identifier_ids
 
     def process_batch(self, batch):
-        # print (batch)
         completed_identifiers = set()
         identifier_ids = self._identifiers_for_coverage(batch)
 
@@ -78,10 +75,7 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
             .column(Identifier.id)
         )
 
-        # print (qu)
         chained_identifiers = self._db.execute(qu).fetchall()
-        print(chained_identifiers)
-        print(len(chained_identifiers))
 
         # We don't want to cover identifiers already looped over
         identifier_ids.difference_update(self._already_covered_identifiers)
@@ -105,8 +99,6 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
 
         self._db.add_all(recursive_equivs)
 
-        print("done")
-        # raise Exception()
         self._already_covered_identifiers.update(completed_identifiers)
 
         ret = [
@@ -116,8 +108,6 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
                 (b.equivalency.input_id, b.equivalency.output_id)
             )
         ]
-        print(len(ret))
-        # print ([r.id for r in ret])
         return ret
 
     def failure_for_ignored_item(self, equivalency):
@@ -151,7 +141,6 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
         )
 
         eqs_without_records = qu.all()
-        print("PRINT", len(eqs_without_records))
 
         EquivalencyCoverageRecord.bulk_add(
             self._db, eqs_without_records, self.operation, batch_size=500

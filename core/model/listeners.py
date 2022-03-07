@@ -7,6 +7,9 @@ from sqlalchemy import event, text
 from sqlalchemy.orm.base import NO_VALUE
 from sqlalchemy.orm.session import Session
 
+from core.model.identifier import Equivalency
+from core.query.coverage import EquivalencyCoverageQueries
+
 from ..config import Configuration
 from ..util.datetime_helpers import utc_now
 from . import Base
@@ -241,3 +244,15 @@ def last_update_time_change(target, value, oldvalue, initator):
     information changes.
     """
     target.external_index_needs_updating()
+
+
+@event.listens_for(Equivalency, "before_delete")
+def equivalency_coverage_reset_on_equivalency_delete(mapper, _db, target: Equivalency):
+    """On equivalency delete reset the coverage records of ANY ids touching
+    the deleted identifiers
+    TODO: This is a deprecated feature of listeners, we cannot write to the DB anymore
+    However we are doing this until we have a solution, ala queues
+    """
+    EquivalencyCoverageQueries.add_coverage_for_identifiers_chain(
+        [target.input, target.output]
+    )
