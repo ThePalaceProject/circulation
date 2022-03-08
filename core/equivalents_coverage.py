@@ -9,6 +9,12 @@ from core.model.identifier import Equivalency, Identifier, RecursiveEquivalencyC
 
 
 class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
+    """Computes the chain of equivalence between identifiers
+    This is a DB compute intensive operation that is currently handled by
+    all the jobs that use the recursive identifiers equivalences
+    The equivalences do not change nearly as often as the other jobs run
+    so it is prudent to pre-compute and store these values
+    """
 
     SERVICE_NAME = "Equivalent identifiers coverage provider"
 
@@ -20,7 +26,7 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
         self, _db, batch_size=None, cutoff_time=None, registered_only=False, **kwargs
     ):
         # Set of identifiers covered this run of the provider
-        self._already_covered_identifiers = set()
+        self._already_covered_identifiers: Set[int] = set()
         super().__init__(_db, batch_size, cutoff_time, registered_only)
 
     def run(self):
@@ -48,6 +54,10 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
     def _identifiers_for_coverage(
         self, records: List[EquivalencyCoverageRecord]
     ) -> Set[Optional[int]]:
+        """Get all identifiers this coverage run should recompute
+        This involves inputs and outputs, and also any parent_identifier
+        that has a direct relation with these identifiers
+        """
 
         equivs = [r.equivalency for r in records]
         # process both inputs and outputs
@@ -67,9 +77,16 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
         return identifier_ids
 
     def process_batch(self, batch):
+        """Query for and store the chain of equivalent identifiers
+        batch sizes are not exact since we pull the related identifiers into
+        the current batch too, so they would start out larger than intended
+        but towards the end of the job should be smaller than the batch size
+        There is no failure path here
+        """
         completed_identifiers = set()
         identifier_ids = self._identifiers_for_coverage(batch)
 
+        # Use the stored procedure to identify the chain of equivalency
         qu = Identifier.recursively_equivalent_identifier_ids_query(Identifier.id)
         qu = (
             qu.select_from(Identifier)
@@ -113,14 +130,12 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
         return ret
 
     def failure_for_ignored_item(self, equivalency):
-        """TODO: this method"""
-        print("RECORD FAILED IGNORE", equivalency)
-        return None
+        """Item was ignored by the batch processing"""
+        return CoverageFailure(equivalency, "Was ignored by CoverageProvider.")
 
-    def record_failure_as_coverage_record(self, failure):
-        """TODO: this method"""
-        print("RECORD FAILED", failure)
-        return CoverageFailure(failure, "Did not run")
+    def record_failure_as_coverage_record(self, failure: CoverageFailure):
+        """Convert the CoverageFailure to a EquivalencyCoverageRecord"""
+        return failure.to_equivalency_coverage_record(self.operation)
 
     def add_coverage_record_for(self, item: EquivalencyCoverageRecord):
         return EquivalencyCoverageRecord.add_for(
