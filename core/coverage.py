@@ -6,6 +6,8 @@ from sqlalchemy.orm import Load
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
 
+from core.model.coverage import EquivalencyCoverageRecord
+
 from . import log  # This sets the appropriate log format.
 from .metadata_layer import ReplacementPolicy, TimestampData
 from .model import (
@@ -71,6 +73,20 @@ class CoverageFailure(object):
     def to_work_coverage_record(self, operation):
         """Convert this failure into a WorkCoverageRecord."""
         record, ignore = WorkCoverageRecord.add_for(self.obj, operation=operation)
+        record.exception = self.exception
+        if self.transient:
+            record.status = CoverageRecord.TRANSIENT_FAILURE
+        else:
+            record.status = CoverageRecord.PERSISTENT_FAILURE
+        return record
+
+    def to_equivalency_coverage_record(
+        self, operation: str
+    ) -> EquivalencyCoverageRecord:
+        """Convert this failure into a EquivalencyCoverageRecord."""
+        record, ignore = EquivalencyCoverageRecord.add_for(
+            self.obj, operation=operation
+        )
         record.exception = self.exception
         if self.transient:
             record.status = CoverageRecord.TRANSIENT_FAILURE
