@@ -4,7 +4,6 @@ import re
 import time
 
 import pytest
-import sqlalchemy
 from elasticsearch.exceptions import ElasticsearchException
 from elasticsearch_dsl import Q
 from elasticsearch_dsl.function import RandomScore, ScriptScore
@@ -55,6 +54,7 @@ from core.model.work import Work
 from core.problem_details import INVALID_INPUT
 from core.testing import DatabaseTest, EndToEndSearchTest, ExternalSearchTest
 from core.util.datetime_helpers import datetime_utc, from_timestamp
+from tests.core.utils import DBStatementCounter, PerfTimer
 
 RESEARCH = Term(audience=Classifier.AUDIENCE_RESEARCH.lower())
 
@@ -4443,16 +4443,6 @@ class TestWorkSearchResult(DatabaseTest):
         assert work.sort_title == result.sort_title
 
 
-class PerfTimer:
-    def __enter__(self):
-        self.start = time.perf_counter()
-        self.execution_time = 0
-        return self
-
-    def __exit__(self, *args):
-        self.execution_time = time.perf_counter() - self.start
-
-
 class TestSearchIndexCoverageProvider(DatabaseTest):
     def test_operation(self):
         index = MockExternalSearchIndex()
@@ -4578,38 +4568,3 @@ class TestSearchIndexCoverageProvider(DatabaseTest):
         assert work == record.obj
         assert True == record.transient
         assert "There was an error!" == record.exception
-
-
-class DBStatementCounter(object):
-    """
-    Use as a context manager to count the number of execute()'s performed
-    against the given sqlalchemy connection.
-
-    Usage:
-        with DBStatementCounter(conn) as ctr:
-            conn.execute("SELECT 1")
-            conn.execute("SELECT 1")
-        assert ctr.get_count() == 2
-    """
-
-    def __init__(self, conn):
-        self.conn = conn
-        self.count = 0
-        # Will have to rely on this since sqlalchemy 0.8 does not support
-        # removing event listeners
-        self.do_count = False
-        sqlalchemy.event.listen(conn, "after_execute", self.callback)
-
-    def __enter__(self):
-        self.do_count = True
-        return self
-
-    def __exit__(self, *_):
-        self.do_count = False
-
-    def get_count(self):
-        return self.count
-
-    def callback(self, *_):
-        if self.do_count:
-            self.count += 1
