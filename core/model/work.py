@@ -1689,20 +1689,20 @@ class Work(Base):
             result["genres"].append(genre)
 
         result["identifiers"] = []
-        for item in doc.identifiers:
-            identifier = {}
+        for item in doc.identifiers:  # type: ignore
+            identifier: Dict = {}
             _set_value(item, "identifiers", identifier)
             result["identifiers"].append(identifier)
 
         result["classifications"] = []
-        for item in doc.classifications:
-            classification = {}
+        for item in doc.classifications:  # type: ignore
+            classification: Dict = {}
             _set_value(item, "classifications", classification)
             result["classifications"].append(classification)
 
         result["customlists"] = []
-        for item in doc.custom_list_entries:
-            customlist = {}
+        for item in doc.custom_list_entries:  # type: ignore
+            customlist: Dict = {}
             _set_value(item, "custom_list_entries", customlist)
             result["customlists"].append(customlist)
 
