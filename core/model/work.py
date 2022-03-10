@@ -5,7 +5,7 @@ import logging
 from collections import Counter
 from datetime import datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type, TypeVar, cast
 
 from sqlalchemy import (
     Boolean,
@@ -71,6 +71,9 @@ class WorkGenre(Base):
 
     def __repr__(self):
         return "%s (%d%%)" % (self.genre.name, self.affinity * 100)
+
+
+WorkTypevar = TypeVar("WorkTypevar", bound="Work")
 
 
 class Work(Base):
@@ -1433,7 +1436,9 @@ class Work(Base):
     ELASTICSEARCH_TIME_FORMAT = 'YYYY-MM-DD"T"HH24:MI:SS"."MS'
 
     @classmethod
-    def to_search_documents_in_app(cls, works, policy=None):
+    def to_search_documents_in_app(
+        cls: Type[WorkTypevar], works: List[WorkTypevar], policy=None
+    ) -> List[Dict]:
         """In app to search document need to compare speeds
         TODOS:
             Cleanup
@@ -1445,13 +1450,13 @@ class Work(Base):
         qu = qu.options(
             joinedload(Work.presentation_edition)
             .joinedload(Edition.contributions)
-            .joinedload(Contribution.contributor),
+            .joinedload(Contribution.contributor),  # type: ignore
             joinedload(Work.license_pools),
-            joinedload(Work.work_genres).joinedload(WorkGenre.genre),
+            joinedload(Work.work_genres).joinedload(WorkGenre.genre),  # type: ignore
             joinedload(Work.custom_list_entries),
         )
 
-        rows: List(Work) = qu.all()
+        rows: List[Work] = qu.all()
 
         ## IDENTIFIERS START
         ## Identifiers is a house of cards, it comes crashing down if anything is changed here
@@ -1471,7 +1476,7 @@ class Work(Base):
                 Work.id.in_((w.id for w in works)),
             )
             .select_from(
-                join(Work, Edition, Work.presentation_edition_id == Edition.id)
+                join(Work, Edition, Work.presentation_edition_id == Edition.id)  # type: ignore
             )
             .alias("works_alias")
         )
@@ -1479,7 +1484,7 @@ class Work(Base):
         equivalent_identifiers = (
             Identifier.recursively_equivalent_identifier_ids_query(
                 literal_column(
-                    works_alias.name + "." + works_alias.c.identifier_id.name
+                    str(works_alias.name) + "." + works_alias.c.identifier_id.name
                 ),
                 policy=policy,
             )
@@ -1488,7 +1493,7 @@ class Work(Base):
             .cte("equivalent_cte")
         )
 
-        identifiers = (
+        identifiers_query = (
             select(
                 [
                     equivalent_identifiers.c.work_id,
@@ -1496,14 +1501,14 @@ class Work(Base):
                     Identifier.type,
                 ]
             )
-            .select_from(Identifier)
+            .select_from(Identifier)  # type: ignore
             .where(
                 Identifier.id
                 == literal_column("equivalent_cte.fn_recursive_equivalents_1")
             )
         )
 
-        identifiers = list(_db.execute(identifiers))
+        identifiers = list(_db.execute(identifiers_query))
         ## IDENTIFIERS END
 
         ## CLASSIFICATION START
@@ -1513,7 +1518,7 @@ class Work(Base):
         ## for the entire script
         ## TODO: Improve this, maybe only run this section once a day???
         # Map our constants for Subject type to their URIs.
-        scheme_column = case(
+        scheme_column: Any = case(
             [
                 (Subject.type == key, literal_column("'%s'" % val))
                 for key, val in list(Subject.uri_lookup.items())
@@ -1552,7 +1557,7 @@ class Work(Base):
                 == literal_column("equivalent_cte.fn_recursive_equivalents_1")
             )
             .select_from(
-                join(Classification, Subject, Classification.subject_id == Subject.id)
+                join(Classification, Subject, Classification.subject_id == Subject.id)  # type: ignore
             )
         )
 
@@ -1563,17 +1568,17 @@ class Work(Base):
         # Create JSON
         results = []
         for item in rows:
-            item.identifiers = list(filter(lambda idx: idx[0] == item.id, identifiers))
-            item.classifications = list(
+            item.identifiers = list(filter(lambda idx: idx[0] == item.id, identifiers))  # type: ignore
+            item.classifications = list(  # type: ignore
                 filter(lambda idx: idx[0] == item.id, all_subjects)
             )
-            search_doc = cls.search_doc_as_dict(item)
+            search_doc = cls.search_doc_as_dict(cast(WorkTypevar, item))
             results.append(search_doc)
 
         return results
 
     @classmethod
-    def search_doc_as_dict(cls, doc):
+    def search_doc_as_dict(cls: Type[WorkTypevar], doc: WorkTypevar):
         columns = {
             "work": [
                 "fiction",
@@ -1612,7 +1617,7 @@ class Work(Base):
             "custom_list_entries": ["list_id", "featured", "first_appearance"],
         }
 
-        result = {}
+        result: Dict = {}
 
         def _convert(value):
             if isinstance(value, Decimal):
@@ -1667,14 +1672,14 @@ class Work(Base):
 
         result["contributors"] = []
         for item in doc.presentation_edition.contributions:
-            contributor = {}
+            contributor: Dict = {}
             _set_value(item.contributor, "contributor", contributor)
             _set_value(item, "contribution", contributor)
             result["contributors"].append(contributor)
 
         result["licensepools"] = []
         for item in doc.license_pools:
-            lc = {}
+            lc: Dict = {}
             _set_value(item, "licensepools", lc)
             # lc["availability_time"] = getattr(item, "availability_time").timestamp()
             lc["available"] = (
@@ -1690,7 +1695,7 @@ class Work(Base):
 
         # Extra special genre massaging
         result["genres"] = []
-        for item in doc.work_genres:
+        for item in doc.work_genres:  # type: ignore
             genre = {
                 "scheme": Subject.SIMPLIFIED_GENRE,
                 "term": item.genre.id,
@@ -1700,20 +1705,20 @@ class Work(Base):
             result["genres"].append(genre)
 
         result["identifiers"] = []
-        for item in doc.identifiers:
-            identifier = {}
+        for item in doc.identifiers:  # type: ignore
+            identifier: Dict = {}
             _set_value(item, "identifiers", identifier)
             result["identifiers"].append(identifier)
 
         result["classifications"] = []
-        for item in doc.classifications:
-            classification = {}
+        for item in doc.classifications:  # type: ignore
+            classification: Dict = {}
             _set_value(item, "classifications", classification)
             result["classifications"].append(classification)
 
         result["customlists"] = []
-        for item in doc.custom_list_entries:
-            customlist = {}
+        for item in doc.custom_list_entries:  # type: ignore
+            customlist: Dict = {}
             _set_value(item, "custom_list_entries", customlist)
             result["customlists"].append(customlist)
 
