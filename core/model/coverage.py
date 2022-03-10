@@ -1,6 +1,6 @@
 # encoding: utf-8
 # BaseCoverageRecord, Timestamp, CoverageRecord, WorkCoverageRecord
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 from sqlalchemy import (
     Column,
@@ -18,7 +18,7 @@ from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, literal, literal_column, or_
 
 from ..util.datetime_helpers import utc_now
-from . import Base, get_one, get_one_or_create
+from . import Base, SessionBulkOperation, get_one, get_one_or_create
 
 if TYPE_CHECKING:
     from . import Equivalency  # noqa
@@ -764,35 +764,28 @@ class EquivalencyCoverageRecord(Base, BaseCoverageRecord):
     def bulk_add(
         cls,
         _db,
-        equivalents,
-        operation,
+        equivalents: List["Equivalency"],
+        operation: str,
         status=BaseCoverageRecord.REGISTERED,
         batch_size=100,
     ):
-        coverages = []
-        ix = 0
-        for eq in equivalents:
-            record = EquivalencyCoverageRecord(
-                equivalency_id=eq.id,
-                operation=operation,
-                status=status,
-                timestamp=utc_now(),
-            )
-            coverages.append(record)
-            ix += 1
-            if ix == batch_size:
-                _db.bulk_save_objects(coverages)
-                _db.commit()
-                coverages = []
-                ix = 0
-
-        if ix > 0:
-            _db.bulk_save_objects(coverages)
-            _db.commit()
+        with SessionBulkOperation(_db, batch_size) as bulk:
+            for eq in equivalents:
+                record = EquivalencyCoverageRecord(
+                    equivalency_id=eq.id,
+                    operation=operation,
+                    status=status,
+                    timestamp=utc_now(),
+                )
+                bulk.add(record)
 
     @classmethod
     def add_for(
-        cls, equivalency, operation, timestamp=None, status=CoverageRecord.SUCCESS
+        cls,
+        equivalency: "Equivalency",
+        operation: str,
+        timestamp=None,
+        status=CoverageRecord.SUCCESS,
     ):
         _db = Session.object_session(equivalency)
         timestamp = timestamp or utc_now()

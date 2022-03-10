@@ -1,7 +1,7 @@
 from typing import List, Optional, Set
 
 from sqlalchemy import and_, delete
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import Query, joinedload
 
 from core.coverage import BaseCoverageProvider, CoverageFailure
 from core.model.coverage import EquivalencyCoverageRecord
@@ -35,7 +35,7 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
         self.update_identity_recursive_equivalents()
         return ret
 
-    def items_that_need_coverage(self, identifiers=None, **kwargs):
+    def items_that_need_coverage(self, identifiers=None, **kwargs) -> Query:
         qu = (
             self._db.query(EquivalencyCoverageRecord)
             .filter(EquivalencyCoverageRecord.operation == self.operation)
@@ -76,7 +76,9 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
 
         return identifier_ids
 
-    def process_batch(self, batch):
+    def process_batch(
+        self, batch: List[EquivalencyCoverageRecord]
+    ) -> List[EquivalencyCoverageRecord]:
         """Query for and store the chain of equivalent identifiers
         batch sizes are not exact since we pull the related identifiers into
         the current batch too, so they would start out larger than intended
@@ -104,7 +106,7 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
 
             # First time around we MUST delete any chains formed from this identifier before
             if parent_id not in completed_identifiers:
-                delete_stmt = delete(RecursiveEquivalencyCache).where(
+                delete_stmt = delete(RecursiveEquivalencyCache).where(  # type: ignore
                     RecursiveEquivalencyCache.parent_identifier_id == parent_id
                 )
                 self._db.execute(delete_stmt)
@@ -129,7 +131,7 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
         ]
         return ret
 
-    def failure_for_ignored_item(self, equivalency):
+    def failure_for_ignored_item(self, equivalency: Equivalency) -> CoverageFailure:
         """Item was ignored by the batch processing"""
         return CoverageFailure(equivalency, "Was ignored by CoverageProvider.")
 
@@ -137,7 +139,9 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
         """Convert the CoverageFailure to a EquivalencyCoverageRecord"""
         return failure.to_equivalency_coverage_record(self.operation)
 
-    def add_coverage_record_for(self, item: EquivalencyCoverageRecord):
+    def add_coverage_record_for(
+        self, item: EquivalencyCoverageRecord
+    ) -> EquivalencyCoverageRecord:
         return EquivalencyCoverageRecord.add_for(
             item.equivalency, operation=self.operation
         )
