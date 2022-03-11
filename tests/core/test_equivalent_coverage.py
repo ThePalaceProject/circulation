@@ -28,6 +28,11 @@ class TestEquivalentCoverage(DatabaseTest):
         self._db.commit()
         self.provider = EquivalentIdentifiersCoverageProvider(self._db)
 
+    def _drop_all_recursives(self):
+        # Remove the identity items
+        self._db.query(RecursiveEquivalencyCache).delete()
+        self._db.commit()
+
     def test_update_missing_coverage_records(self):
         assert self._db.query(EquivalencyCoverageRecord).count() == 0
 
@@ -139,6 +144,8 @@ class TestEquivalentCoverage(DatabaseTest):
         assert identifier_ids == {self.idens[1].id, self.idens[2].id, self.idens[3].id}
 
     def test_process_batch(self):
+        self._drop_all_recursives()
+
         self.provider.update_missing_coverage_records()
         batch = self.provider.items_that_need_coverage().all()
 
@@ -159,6 +166,7 @@ class TestEquivalentCoverage(DatabaseTest):
         assert len(recursives) == 9
 
     def test_process_batch_on_delete(self):
+        self._drop_all_recursives()
         self.provider.update_missing_coverage_records()
 
         # An identifier was deleted thereafter
@@ -236,6 +244,8 @@ class TestEquivalentCoverage(DatabaseTest):
             assert self.idens[1].id in (r.equivalency.input_id, r.equivalency.output_id)
 
     def test_update_identity_recursive_equivalents(self):
+        self._drop_all_recursives()
+
         self.provider.update_missing_coverage_records()
         batch = self.provider.items_that_need_coverage()
         self.provider.process_batch(batch)
@@ -253,3 +263,10 @@ class TestEquivalentCoverage(DatabaseTest):
 
         assert len(recursives) == 1
         assert recursives[0].is_parent == True
+
+    def test_newly_added_identifier(self):
+        # Identifiers and equivalencies are added but not acted upon
+        # We must still have the self recursion available, from the listener
+
+        all_recursives = self._db.query(RecursiveEquivalencyCache).all()
+        assert len(all_recursives) == 4
