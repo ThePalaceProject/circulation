@@ -133,6 +133,7 @@ class TestEquivalentCoverage(DatabaseTest):
             input_id=self.idens[2].id, output_id=self.idens[3].id, strength=1
         )
         self._db.add(eq)
+        self._db.commit()
 
         record, is_new = EquivalencyCoverageRecord.add_for(
             eq, EquivalencyCoverageRecord.RECURSIVE_EQUIVALENCY_REFRESH
