@@ -253,8 +253,10 @@ def equivalency_coverage_reset_on_equivalency_delete(mapper, _db, target: Equiva
     TODO: This is a deprecated feature of listeners, we cannot write to the DB anymore
     However we are doing this until we have a solution, ala queues
     """
+
+    session = Session(bind=_db)
     EquivalencyCoverageQueries.add_coverage_for_identifiers_chain(
-        [target.input, target.output]
+        [target.input, target.output], _db=session
     )
 
 
