@@ -4,10 +4,10 @@ import datetime
 from threading import RLock
 
 from sqlalchemy import event, text
+from sqlalchemy.orm import Session
 from sqlalchemy.orm.base import NO_VALUE
-from sqlalchemy.orm.session import Session
 
-from core.model.identifier import Equivalency
+from core.model.identifier import Equivalency, Identifier, RecursiveEquivalencyCache
 from core.query.coverage import EquivalencyCoverageQueries
 
 from ..config import Configuration
@@ -256,3 +256,17 @@ def equivalency_coverage_reset_on_equivalency_delete(mapper, _db, target: Equiva
     EquivalencyCoverageQueries.add_coverage_for_identifiers_chain(
         [target.input, target.output]
     )
+
+
+@event.listens_for(Identifier, "after_insert")
+def recursive_equivalence_on_identifier_create(mapper, connection, target: Identifier):
+    """Whenever an Identifier is created we must atleast have the 'self, self'
+    recursion available in the Recursives table else the queries will be incorrect"""
+    session = Session(bind=connection)
+    session.add(
+        RecursiveEquivalencyCache(
+            parent_identifier_id=target.id, identifier_id=target.id
+        )
+    )
+    session.commit()
+    session.close()
