@@ -203,7 +203,6 @@ class BaseCoverageProvider(object):
         self.cutoff_time = cutoff_time
         self.registered_only = registered_only
         self.collection_id = None
-        self._last_batch_id = None
 
     @property
     def log(self):
