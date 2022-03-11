@@ -9,7 +9,7 @@ from core.model.identifier import Equivalency, Identifier, RecursiveEquivalencyC
 class EquivalencyCoverageQueries:
     @classmethod
     def add_coverage_for_identifiers_chain(
-        cls, identifiers: List[Identifier]
+        cls, identifiers: List[Identifier], _db=None
     ) -> List[EquivalencyCoverageRecord]:
         """Hunt down any recursive identifiers that may be touched by these identifiers
         set all the possible coverages to reset and recompute the chain
@@ -17,7 +17,8 @@ class EquivalencyCoverageQueries:
         if not len(identifiers):
             return []
 
-        _db = Session.object_session(identifiers[0])
+        if not _db:
+            _db = Session.object_session(identifiers[0])
         ids = list((idn.id for idn in identifiers))
 
         # Any parent ids that touch these identifiers
@@ -28,14 +29,20 @@ class EquivalencyCoverageQueries:
         )
 
         # Need to be reset
-        equivs = Equivalency.for_identifiers(_db, (p[0] for p in parent_ids))
+        equivs: List[Equivalency] = Equivalency.for_identifiers(
+            _db, (p[0] for p in parent_ids)
+        )
         records = []
         for equiv in equivs:
+
             record, is_new = EquivalencyCoverageRecord.add_for(
                 equiv,
                 EquivalencyCoverageRecord.RECURSIVE_EQUIVALENCY_REFRESH,
                 status=EquivalencyCoverageRecord.REGISTERED,
             )
             records.append(record)
+
+        _db.add_all(records)
+        _db.commit()
 
         return records

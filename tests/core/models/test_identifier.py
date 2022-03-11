@@ -775,27 +775,23 @@ class TestRecursiveEquivalencyCache(DatabaseTest):
             Equivalency(input_id=idn[1].id, output_id=idn[0].id, strength=1),
         ]
         self._db.add_all(self.equivalencies)
-
-        eq = self.equivalencies[0]
-        self.rec_eq = RecursiveEquivalencyCache(
-            parent_identifier_id=eq.input_id, identifier_id=eq.output_id
-        )
-        self._db.add(self.rec_eq)
-
         self._db.commit()
 
     def test_is_parent(self):
-        assert self.rec_eq.is_parent == False
+        rec_eq = (
+            self._db.query(RecursiveEquivalencyCache)
+            .filter(RecursiveEquivalencyCache.parent_identifier_id == self.idens[0].id)
+            .first()
+        )
+        assert rec_eq.is_parent == True
 
     def test_identifier_delete_cascade_parent(self):
-        assert self.rec_eq.parent_identifier_id == self.idens[0].id
-
         all_recursives = self._db.query(RecursiveEquivalencyCache).all()
-        assert len(all_recursives) == 1
+        assert len(all_recursives) == 4  # all selfs
 
         self._db.delete(self.idens[0])
         self._db.commit()
 
         # RecursiveEquivalencyCache was deleted by cascade
         all_recursives = self._db.query(RecursiveEquivalencyCache).all()
-        assert len(all_recursives) == 0
+        assert len(all_recursives) == 3
