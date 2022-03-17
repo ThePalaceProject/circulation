@@ -947,6 +947,8 @@ class ErrorParser(BibliothecaParser):
     error_mapping = {
         "The patron does not have the book on hold": NotOnHold,
         "The patron has no eBooks checked out": NotCheckedOut,
+        "the patron document status was CAN_HOLD and not one of CAN_LOAN,RESERVATION": NotOnHold,
+        "the patron document status was HOLD and not one of CAN_LOAN,RESERVATION": NotOnHold,
     }
 
     def process_all(self, string):
