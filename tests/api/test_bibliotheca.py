@@ -358,18 +358,19 @@ class TestBibliothecaAPI(BibliothecaAPITest):
             .join(LicensePool)
             .filter(LicensePool.id == pool.id)
         )
-        assert 3 == circulation_events.count()
-        types = [e.type for e in circulation_events]
-        assert (
-            sorted(
-                [
-                    CirculationEvent.DISTRIBUTOR_LICENSE_REMOVE,
-                    CirculationEvent.DISTRIBUTOR_CHECKOUT,
-                    CirculationEvent.DISTRIBUTOR_HOLD_RELEASE,
-                ]
-            )
-            == sorted(types)
-        )
+        # No more Distributor events
+        assert 0 == circulation_events.count()
+        # types = [e.type for e in circulation_events]
+        # assert (
+        #     sorted(
+        #         [
+        #             CirculationEvent.DISTRIBUTOR_LICENSE_REMOVE,
+        #             CirculationEvent.DISTRIBUTOR_CHECKOUT,
+        #             CirculationEvent.DISTRIBUTOR_HOLD_RELEASE,
+        #         ]
+        #     )
+        #     == sorted(types)
+        # )
 
         old_last_checked = pool.last_checked
         assert old_last_checked is not None
@@ -402,7 +403,8 @@ class TestBibliothecaAPI(BibliothecaAPITest):
             .join(LicensePool)
             .filter(LicensePool.id == pool.id)
         )
-        assert 5 == circulation_events.count()
+        # No more DISTRIBUTOR events
+        assert 0 == circulation_events.count()
 
     def test_marc_request(self):
         # A request for MARC records between two dates makes an API
@@ -695,18 +697,20 @@ class TestBibliothecaCirculationSweep(BibliothecaAPITest):
             .join(LicensePool)
             .filter(LicensePool.id == pool.id)
         )
-        assert 3 == circulation_events.count()
-        types = [e.type for e in circulation_events]
-        assert (
-            sorted(
-                [
-                    CirculationEvent.DISTRIBUTOR_LICENSE_ADD,
-                    CirculationEvent.DISTRIBUTOR_TITLE_ADD,
-                    CirculationEvent.DISTRIBUTOR_CHECKIN,
-                ]
-            )
-            == sorted(types)
-        )
+
+        # DISTRIBUTOR EVENTS have been removed entirely
+        assert 0 == circulation_events.count()
+        # types = [e.type for e in circulation_events]
+        # assert (
+        #     sorted(
+        #         [
+        #             CirculationEvent.DISTRIBUTOR_LICENSE_ADD,
+        #             CirculationEvent.DISTRIBUTOR_TITLE_ADD,
+        #             CirculationEvent.DISTRIBUTOR_CHECKIN,
+        #         ]
+        #     )
+        #     == sorted(types)
+        # )
 
 
 # Tests of the various parser classes.
@@ -1378,9 +1382,10 @@ class TestBibliothecaPurchaseMonitor(BibliothecaAPITest):
 
         # An analytics event is issued to mark the time at which the
         # book was first purchased.
-        assert analytics.count == 1
-        assert analytics.event_type == "distributor_title_add"
-        assert analytics.time == purchase_time
+        # No more DISTRIBUTOR events
+        assert analytics.count == 0
+        # assert analytics.event_type == "distributor_title_add"
+        # assert analytics.time == purchase_time
 
         # If the book is already in this collection, ensure_coverage
         # is not called.
@@ -1396,9 +1401,10 @@ class TestBibliothecaPurchaseMonitor(BibliothecaAPITest):
         assert ensure_coverage.call_count == 1  # i.e. was not called again.
 
         # But an analytics event is still issued to mark the purchase.
-        assert analytics.count == 2
-        assert analytics.event_type == "distributor_title_add"
-        assert analytics.time == purchase_time
+        # No more DISTRIBUTOR events
+        assert analytics.count == 0
+        # assert analytics.event_type == "distributor_title_add"
+        # assert analytics.time == purchase_time
 
     def test_end_to_end(self, default_monitor):
         # Limited end-to-end test of the BibliothecaPurchaseMonitor.
@@ -1437,7 +1443,9 @@ class TestBibliothecaPurchaseMonitor(BibliothecaAPITest):
 
         # An analytics event was issued to commemorate the addition of
         # the book to the collection.
-        assert default_monitor.analytics.event_type == "distributor_title_add"
+        # No more DISTRIBUTOR events
+        assert default_monitor.analytics.count == 0
+        # assert default_monitor.analytics.event_type == "distributor_title_add"
 
         # The timestamp has been updated; the next time the monitor
         # runs it will ask for purchases that haven't happened yet.
@@ -1599,7 +1607,9 @@ class TestBibliothecaEventMonitor(BibliothecaAPITest):
         # In earlier versions a fourth analytics event would have been
         # issued, for the creation of a new LicensePool, but that is now
         # solely the job of the BibliothecaPurchasMonitor.
-        assert 3 == analytics.count
+        #
+        # No more DISTRIBUTOR events anymore
+        assert 0 == analytics.count
 
 
 class TestBibliothecaPurchaseMonitorWhenMultipleCollections(BibliothecaAPITest):
