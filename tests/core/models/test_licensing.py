@@ -620,13 +620,15 @@ class TestLicensePool(DatabaseTest):
         [pool] = work.license_pools
         provider = MockAnalyticsProvider()
         pool.update_availability(30, 20, 2, 0, analytics=provider)
-        count = provider.count
+        # count = provider.count
         pool.update_availability(30, 21, 2, 0, analytics=provider)
-        assert count + 1 == provider.count
-        assert CirculationEvent.DISTRIBUTOR_CHECKIN == provider.event_type
+        # No more DISTRIBUTOR events
+        assert 0 == provider.count
+        # assert CirculationEvent.DISTRIBUTOR_CHECKIN == provider.event_type
         pool.update_availability(30, 21, 2, 1, analytics=provider)
-        assert count + 2 == provider.count
-        assert CirculationEvent.DISTRIBUTOR_HOLD_PLACE == provider.event_type
+        # No more DISTRIBUTOR events
+        assert 0 == provider.count
+        # assert CirculationEvent.DISTRIBUTOR_HOLD_PLACE == provider.event_type
 
     def test_update_availability_does_nothing_if_given_no_data(self):
         """Passing an empty set of data into update_availability is
@@ -1043,7 +1045,8 @@ class TestLicensePool(DatabaseTest):
 
         # Processing triggered two analytics events -- one for creating
         # the license pool and one for making it available.
-        assert 2 == analytics.count
+        # No more DISTRIBUTOR events
+        assert 0 == analytics.count
 
         # Now the pool has a history, and we can't fit an undated
         # observation into that history, so undated observations
@@ -1057,7 +1060,8 @@ class TestLicensePool(DatabaseTest):
 
         # However, outdated events are passed on to analytics so that
         # we record the fact that they happened... at some point.
-        assert 3 == analytics.count
+        # No more DISTRIBUTOR events
+        assert 0 == analytics.count
 
         # This observation is more recent than the last time the pool
         # was checked, so it's processed and the last check time is
@@ -1066,7 +1070,8 @@ class TestLicensePool(DatabaseTest):
         assert 2 == pool.licenses_owned
         assert 1 == pool.licenses_available
         assert now == pool.last_checked
-        assert 4 == analytics.count
+        # No more DISTRIBUTOR events
+        assert 0 == analytics.count
 
         # This event is less recent than the last time the pool was
         # checked, so it's ignored. Processing it is likely to do more
@@ -1076,7 +1081,8 @@ class TestLicensePool(DatabaseTest):
         assert now == pool.last_checked
 
         # It's still logged to analytics, though.
-        assert 5 == analytics.count
+        # No more DISTRIBUTOR events
+        assert 0 == analytics.count
 
         # This event is new but does not actually cause the
         # circulation to change at all.
@@ -1085,7 +1091,8 @@ class TestLicensePool(DatabaseTest):
         assert now == pool.last_checked
 
         # We still send the analytics event.
-        assert 6 == analytics.count
+        # No more DISTRIBUTOR events
+        assert 0 == analytics.count
 
     def test_calculate_change_from_one_event(self):
         """Test the internal method called by update_availability_from_delta."""
