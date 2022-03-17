@@ -10,7 +10,6 @@ from flask_babel import lazy_gettext as _
 from core.analytics import Analytics
 from core.metadata_layer import ReplacementPolicy
 from core.model import (
-    CirculationEvent,
     Collection,
     Credential,
     DataSource,
@@ -1312,15 +1311,17 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
             if not book:
                 continue
             license_pool, is_new, is_changed = self.api.update_licensepool(book)
+
+            ## NO MORE DISTRIBUTOR EVENTS
             # Log a circulation event for this work.
-            if is_new:
-                for library in self.collection.libraries:
-                    self.analytics.collect_event(
-                        library,
-                        license_pool,
-                        CirculationEvent.DISTRIBUTOR_TITLE_ADD,
-                        license_pool.last_checked,
-                    )
+            # if is_new:
+            #     for library in self.collection.libraries:
+            #         self.analytics.collect_event(
+            #             library,
+            #             license_pool,
+            #             CirculationEvent.DISTRIBUTOR_TITLE_ADD,
+            #             license_pool.last_checked,
+            #         )
 
             self._db.commit()
             if self.should_stop(start, book, is_changed):
