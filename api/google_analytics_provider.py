@@ -138,6 +138,9 @@ class GoogleAnalyticsProvider(object):
         if library:
             fields.update({"cd15": library.short_name})
 
+        if license_pool and work and edition:
+            fields.update({"cd16": license_pool.collection.name})
+
         # urlencode doesn't like unicode strings so we convert them to utf8
         fields = {
             k: unicodedata.normalize("NFKD", str(v)).encode("utf8")
