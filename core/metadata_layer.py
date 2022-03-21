@@ -1198,21 +1198,6 @@ class CirculationData(MetaToModelUtility):
         if is_new:
             license_pool.open_access = self.has_open_access_link
             license_pool.availability_time = self.last_checked
-
-            # This is our first time seeing this LicensePool. Log its
-            # occurrence as a separate analytics event.
-            ## NO MORE DISTRIBUTOR EVENTS
-            # if analytics:
-            #     for library in collection.libraries:
-            #         analytics.collect_event(
-            #             library,
-            #             license_pool,
-            #             CirculationEvent.DISTRIBUTOR_TITLE_ADD,
-            #             self.last_checked,
-            #             old_value=0,
-            #             new_value=1,
-            #         )
-
             license_pool.last_checked = self.last_checked
 
         return license_pool, is_new

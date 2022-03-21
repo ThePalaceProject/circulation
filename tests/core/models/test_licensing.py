@@ -615,21 +615,6 @@ class TestLicensePool(DatabaseTest):
         # Updating availability also modified work.last_update_time.
         assert (utc_now() - work.last_update_time) < datetime.timedelta(seconds=2)
 
-    def test_update_availability_triggers_analytics(self):
-        work = self._work(with_license_pool=True)
-        [pool] = work.license_pools
-        provider = MockAnalyticsProvider()
-        pool.update_availability(30, 20, 2, 0, analytics=provider)
-        # count = provider.count
-        pool.update_availability(30, 21, 2, 0, analytics=provider)
-        # No more DISTRIBUTOR events
-        assert 0 == provider.count
-        # assert CirculationEvent.DISTRIBUTOR_CHECKIN == provider.event_type
-        pool.update_availability(30, 21, 2, 1, analytics=provider)
-        # No more DISTRIBUTOR events
-        assert 0 == provider.count
-        # assert CirculationEvent.DISTRIBUTOR_HOLD_PLACE == provider.event_type
-
     def test_update_availability_does_nothing_if_given_no_data(self):
         """Passing an empty set of data into update_availability is
         a no-op.

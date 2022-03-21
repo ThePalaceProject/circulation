@@ -770,19 +770,6 @@ class LicensePool(Base):
                 continue
             changes_made = True
 
-            if old_value < new_value:
-                event_name = more_event
-            else:
-                event_name = fewer_event
-
-            if not event_name:
-                continue
-
-        # No more DISTRIBUTOR events
-        #     self.collect_analytics_event(
-        #         analytics, event_name, as_of, old_value, new_value
-        #     )
-
         # Update the license pool with the latest information.
         any_data = False
         if new_licenses_owned is not None:
@@ -886,13 +873,6 @@ class LicensePool(Base):
                 analytics=analytics,
                 as_of=event_date,
             )
-
-        # No more DISTRIBUTOR events
-        # if ignore or not changes_made:
-        #     # Even if the event was ignored or didn't actually change
-        #     # availability, we want to record receipt of the event
-        #     # in the analytics.
-        #     self.collect_analytics_event(analytics, event_type, event_date, 0, 0)
 
     def _calculate_change_from_one_event(self, type, delta):
         new_licenses_owned = self.licenses_owned

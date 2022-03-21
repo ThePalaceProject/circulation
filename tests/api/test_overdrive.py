@@ -2139,13 +2139,6 @@ class TestOverdriveCirculationMonitor(OverdriveAPITest):
         #
         # No more DISTRIBUTOR events
         assert len(monitor.analytics.events) == 0
-        # [[library, licensepool, event, last_checked]] = monitor.analytics.events
-        # The event commemerates the addition of this LicensePool to the
-        # collection.
-        # assert lp1.collection.libraries == [library]
-        # assert lp1 == licensepool
-        # assert CirculationEvent.DISTRIBUTOR_TITLE_ADD == event
-        # assert lp1.last_checked == last_checked
 
         # The incoming TimestampData object was updated with
         # a summary of what happened.

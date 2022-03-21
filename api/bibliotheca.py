@@ -1279,17 +1279,6 @@ class BibliothecaCirculationSweep(IdentifierSweepMonitor):
             identifiers_not_mentioned_by_bibliotheca.remove(identifier)
 
         edition, is_new = metadata.edition(self._db)
-        pool, is_new = metadata.circulation.license_pool(self._db, self.collection)
-
-        ## NO MORE DISTRIBUTOR EVENTS
-        # if is_new:
-        #     # We didn't have a license pool for this work. That
-        #     # shouldn't happen--how did we know about the
-        #     # identifier?--but now we do.
-        #     for library in self.collection.libraries:
-        #         self.analytics.collect_event(
-        #             library, pool, CirculationEvent.DISTRIBUTOR_TITLE_ADD, utc_now()
-        #         )
 
         edition, ignore = metadata.apply(
             edition, collection=self.collection, replace=self.replacement_policy
@@ -1603,19 +1592,6 @@ class BibliothecaPurchaseMonitor(BibliothecaTimelineMonitor):
             coverage_record = self.bibliographic_coverage_provider.ensure_coverage(
                 license_pool.identifier, force=True
             )
-
-        # Record the addition of this title to the collection. Do this
-        # even if we've heard about the book before, through some
-        # other monitor. That's because this is the only Bibliotheca
-        # monitor that issues TITLE_ADD events.
-        #
-        # We know approximately when the license was purchased --
-        # potentially a long time ago -- since `start_time` is
-        # provided.
-        ## NO MORE DISTRIBUTOR EVENTS
-        # license_pool.collect_analytics_event(
-        #     self.analytics, CirculationEvent.DISTRIBUTOR_TITLE_ADD, purchase_time, 0, 1
-        # )
 
         return license_pool
 

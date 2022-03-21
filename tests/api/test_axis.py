@@ -846,12 +846,6 @@ class TestCirculationMonitor(Axis360Test):
         # Three circulation events were created, backdated to the
         # last_checked date of the license pool.
         events = license_pool.circulation_events
-        # No more distributor events
-        # assert [
-        #     "distributor_title_add",
-        #     "distributor_check_in",
-        #     "distributor_license_add",
-        # ] == [x.type for x in events]
 
         for e in events:
             assert e.start == license_pool.last_checked

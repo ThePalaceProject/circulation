@@ -845,8 +845,7 @@ class EnkiImport(CollectionMonitor, TimelineMonitor):
             presentation-ready Work will be created for the LicensePool.
         """
         availability = bibliographic.circulation
-        edition, new_edition = bibliographic.edition(self._db)
-        now = utc_now()
+        edition, _ = bibliographic.edition(self._db)
         policy = ReplacementPolicy(
             identifiers=False,
             subjects=True,
@@ -855,13 +854,6 @@ class EnkiImport(CollectionMonitor, TimelineMonitor):
         )
         bibliographic.apply(edition, self.collection, replace=policy)
         license_pool, ignore = availability.license_pool(self._db, self.collection)
-
-        ## NO MORE DISTRIBUTOR EVENTS
-        # if new_edition:
-        #     for library in self.collection.libraries:
-        #         self.analytics.collect_event(
-        #             library, license_pool, CirculationEvent.DISTRIBUTOR_TITLE_ADD, now
-        #         )
 
         return edition, license_pool
 

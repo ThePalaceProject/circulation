@@ -360,17 +360,6 @@ class TestBibliothecaAPI(BibliothecaAPITest):
         )
         # No more Distributor events
         assert 0 == circulation_events.count()
-        # types = [e.type for e in circulation_events]
-        # assert (
-        #     sorted(
-        #         [
-        #             CirculationEvent.DISTRIBUTOR_LICENSE_REMOVE,
-        #             CirculationEvent.DISTRIBUTOR_CHECKOUT,
-        #             CirculationEvent.DISTRIBUTOR_HOLD_RELEASE,
-        #         ]
-        #     )
-        #     == sorted(types)
-        # )
 
         old_last_checked = pool.last_checked
         assert old_last_checked is not None
@@ -700,17 +689,6 @@ class TestBibliothecaCirculationSweep(BibliothecaAPITest):
 
         # DISTRIBUTOR EVENTS have been removed entirely
         assert 0 == circulation_events.count()
-        # types = [e.type for e in circulation_events]
-        # assert (
-        #     sorted(
-        #         [
-        #             CirculationEvent.DISTRIBUTOR_LICENSE_ADD,
-        #             CirculationEvent.DISTRIBUTOR_TITLE_ADD,
-        #             CirculationEvent.DISTRIBUTOR_CHECKIN,
-        #         ]
-        #     )
-        #     == sorted(types)
-        # )
 
 
 # Tests of the various parser classes.
@@ -1384,8 +1362,6 @@ class TestBibliothecaPurchaseMonitor(BibliothecaAPITest):
         # book was first purchased.
         # No more DISTRIBUTOR events
         assert analytics.count == 0
-        # assert analytics.event_type == "distributor_title_add"
-        # assert analytics.time == purchase_time
 
         # If the book is already in this collection, ensure_coverage
         # is not called.
@@ -1403,8 +1379,6 @@ class TestBibliothecaPurchaseMonitor(BibliothecaAPITest):
         # But an analytics event is still issued to mark the purchase.
         # No more DISTRIBUTOR events
         assert analytics.count == 0
-        # assert analytics.event_type == "distributor_title_add"
-        # assert analytics.time == purchase_time
 
     def test_end_to_end(self, default_monitor):
         # Limited end-to-end test of the BibliothecaPurchaseMonitor.
@@ -1445,7 +1419,6 @@ class TestBibliothecaPurchaseMonitor(BibliothecaAPITest):
         # the book to the collection.
         # No more DISTRIBUTOR events
         assert default_monitor.analytics.count == 0
-        # assert default_monitor.analytics.event_type == "distributor_title_add"
 
         # The timestamp has been updated; the next time the monitor
         # runs it will ask for purchases that haven't happened yet.
