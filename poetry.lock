@@ -1614,7 +1614,7 @@ python-versions = "*"
 
 [[package]]
 name = "types-psycopg2"
-version = "2.9.7"
+version = "2.9.9"
 description = "Typing stubs for psycopg2"
 category = "dev"
 optional = false
@@ -1817,7 +1817,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.7,<4"
-content-hash = "69335c6e53720fca0c36b94b815c362daaf93e102b2078e4e485858e298709d9"
+content-hash = "234d3f2b9e2cb996a704e28caa186c78a9d426f9aa5176b62450998249f0f022"
 
 [metadata.files]
 atomicwrites = [
@@ -2827,8 +2827,8 @@ types-pillow = [
     {file = "types_Pillow-9.0.6-py3-none-any.whl", hash = "sha256:bd1e0a844fc718398aa265bf50fcad550fc520cc54f80e5ffeb7b3226b3cc507"},
 ]
 types-psycopg2 = [
-    {file = "types-psycopg2-2.9.7.tar.gz", hash = "sha256:cc876db5aa77773deb0abe2e5b088842b91163261294b36caaf7e1087e7e8cd2"},
-    {file = "types_psycopg2-2.9.7-py3-none-any.whl", hash = "sha256:90e9393c04ac29af7f000578629020b488f6435abb283d928c1bd8eabb846e14"},
+    {file = "types-psycopg2-2.9.9.tar.gz", hash = "sha256:4f9d4d52eeb343dc00fd5ed4f1513a8a5c18efba0a072eb82706d15cf4f20a2e"},
+    {file = "types_psycopg2-2.9.9-py3-none-any.whl", hash = "sha256:cec9291d4318ad70b407310f8304b3d40f6d0358f09870448f7a65e3027c80af"},
 ]
 types-python-dateutil = [
     {file = "types-python-dateutil-2.8.9.tar.gz", hash = "sha256:90f95a6b6d4faba359287f17a2cae511ccc9d4abc89b01969bdac1185815c05d"},
