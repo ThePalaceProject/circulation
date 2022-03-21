@@ -762,7 +762,7 @@ python-versions = "*"
 
 [[package]]
 name = "isbnlib"
-version = "3.10.9"
+version = "3.10.10"
 description = "Extract, clean, transform, hyphenate and metadata for ISBNs (International Standard Book Number)."
 category = "main"
 optional = false
@@ -1817,7 +1817,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.7,<4"
-content-hash = "6dd07d05861f3d18c45852772db95adde02a1ec3bd6cffa14c6131331d036158"
+content-hash = "e11508359b77dc64fe2af4ca7c9cb13efa1ff98663e9e85095f8ab43b93671e1"
 
 [metadata.files]
 atomicwrites = [
@@ -2055,8 +2055,8 @@ iniconfig = [
     {file = "iniconfig-1.1.1.tar.gz", hash = "sha256:bc3af051d7d14b2ee5ef9969666def0cd1a000e121eaea580d4a313df4b37f32"},
 ]
 isbnlib = [
-    {file = "isbnlib-3.10.9-py2.py3-none-any.whl", hash = "sha256:2189cb075be73582bc1308a559af1c7fc42ee5d276c85ab7cced48628137df20"},
-    {file = "isbnlib-3.10.9.tar.gz", hash = "sha256:3f8187eb8eb6fa027d26ff0775f2abd420e29ce332794bf552a86a6bdba470b8"},
+    {file = "isbnlib-3.10.10-py2.py3-none-any.whl", hash = "sha256:623a09329e8ec7049edf15dd412db042bf4f8236a428bf7a22d84a125584f52d"},
+    {file = "isbnlib-3.10.10.tar.gz", hash = "sha256:c9e6c1dcaa9dff195429373cf2beb3117f30b3fca43d7db5aec5a2d1f6f59784"},
 ]
 isodate = [
     {file = "isodate-0.6.1-py2.py3-none-any.whl", hash = "sha256:0751eece944162659049d35f4f549ed815792b38793f07cf73381c1c87cbed96"},
