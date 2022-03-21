@@ -129,7 +129,7 @@ Werkzeug = "1.0.1"
 [tool.poetry.dev-dependencies]
 boto3-stubs = "^1.21.22"
 botocore-stubs = "^1.24.22"
-freezegun = "~1.1"
+freezegun = "~1.2"
 Jinja2 = "2.11.3"
 markupsafe = "2.0.1"
 mypy = "^0.941"
