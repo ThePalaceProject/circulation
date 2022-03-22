@@ -1278,9 +1278,9 @@ class BibliothecaCirculationSweep(IdentifierSweepMonitor):
             # this list so we know the title is still in the collection.
             identifiers_not_mentioned_by_bibliotheca.remove(identifier)
 
-        edition, is_new = metadata.edition(self._db)
+        edition, _ = metadata.edition(self._db)
 
-        edition, ignore = metadata.apply(
+        metadata.apply(
             edition, collection=self.collection, replace=self.replacement_policy
         )
 
