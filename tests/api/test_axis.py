@@ -686,7 +686,9 @@ class TestAxis360API(Axis360Test):
         # 1. The creation of the LicensePool
         # 2. The setting of licenses_owned to 9
         # 3. The setting of licenses_available to 8
-        assert 3 == analytics.count
+        #
+        # No more DISTRIBUTOR events
+        assert 0 == analytics.count
 
         # Now change a bit of the data and call the method again.
         new_circulation = CirculationData(
@@ -715,7 +717,9 @@ class TestAxis360API(Axis360Test):
         # Two more circulation events have been sent out -- one for
         # the licenses_owned change and one for the licenses_available
         # change.
-        assert 5 == analytics.count
+        #
+        # No more DISTRIBUTOR events
+        assert 0 == analytics.count
 
     @pytest.mark.parametrize(
         ("setting", "setting_value", "attribute", "attribute_value"),
@@ -842,11 +846,7 @@ class TestCirculationMonitor(Axis360Test):
         # Three circulation events were created, backdated to the
         # last_checked date of the license pool.
         events = license_pool.circulation_events
-        assert [
-            "distributor_title_add",
-            "distributor_check_in",
-            "distributor_license_add",
-        ] == [x.type for x in events]
+
         for e in events:
             assert e.start == license_pool.last_checked
 

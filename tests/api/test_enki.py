@@ -898,7 +898,8 @@ class TestEnkiImport(BaseEnkiTest):
         assert 0 == licensepool.licenses_available
 
         # An analytics event was sent out for the newly discovered book.
-        assert 1 == analytics.count
+        # No more DISTRIBUTOR events
+        assert 0 == analytics.count
 
         # Now let's see what update_circulation does when the work
         # already exists.

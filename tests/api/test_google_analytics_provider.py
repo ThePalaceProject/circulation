@@ -130,6 +130,7 @@ class TestGoogleAnalyticsProvider(DatabaseTest):
         assert DataSource.GUTENBERG == params["cd13"][0]
         assert EditionConstants.BOOK_MEDIUM == params["cd14"][0]
         assert self._default_library.short_name == params["cd15"][0]
+        assert lp.collection.name == params["cd16"][0]
 
     def test_collect_event_without_work(self):
         integration, ignore = create(
@@ -184,6 +185,7 @@ class TestGoogleAnalyticsProvider(DatabaseTest):
         assert [source.name] == params.get("cd13")
         assert None == params.get("cd14")
         assert [self._default_library.short_name] == params.get("cd15")
+        assert None == params.get("cd16")
 
     def test_collect_event_without_license_pool(self):
         integration, ignore = create(
@@ -226,3 +228,4 @@ class TestGoogleAnalyticsProvider(DatabaseTest):
         assert None == params.get("cd13")
         assert None == params.get("cd14")
         assert [self._default_library.short_name] == params.get("cd15")
+        assert None == params.get("cd16")

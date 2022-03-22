@@ -21,7 +21,6 @@ from api.overdrive import (
 )
 from core.metadata_layer import TimestampData
 from core.model import (
-    CirculationEvent,
     ConfigurationSetting,
     DataSource,
     DeliveryMechanism,
@@ -2137,14 +2136,9 @@ class TestOverdriveCirculationMonitor(OverdriveAPITest):
 
         # A single analytics event was sent out, for the first LicensePool,
         # the one that update_licensepool said was new.
-        [[library, licensepool, event, last_checked]] = monitor.analytics.events
-
-        # The event commemerates the addition of this LicensePool to the
-        # collection.
-        assert lp1.collection.libraries == [library]
-        assert lp1 == licensepool
-        assert CirculationEvent.DISTRIBUTOR_TITLE_ADD == event
-        assert lp1.last_checked == last_checked
+        #
+        # No more DISTRIBUTOR events
+        assert len(monitor.analytics.events) == 0
 
         # The incoming TimestampData object was updated with
         # a summary of what happened.
