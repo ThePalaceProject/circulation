@@ -1,5 +1,7 @@
 # encoding: utf-8
 # BaseCoverageRecord, Timestamp, CoverageRecord, WorkCoverageRecord
+from typing import TYPE_CHECKING, List
+
 from sqlalchemy import (
     Column,
     DateTime,
@@ -11,11 +13,15 @@ from sqlalchemy import (
     Unicode,
     UniqueConstraint,
 )
+from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, literal, literal_column, or_
 
 from ..util.datetime_helpers import utc_now
-from . import Base, get_one, get_one_or_create
+from . import Base, SessionBulkOperation, get_one, get_one_or_create
+
+if TYPE_CHECKING:
+    from . import Equivalency  # noqa
 
 
 class BaseCoverageRecord(object):
@@ -60,6 +66,7 @@ class BaseCoverageRecord(object):
             covered.
         :return: A clause that can be passed in to Query.filter().
         """
+
         if not count_as_covered:
             count_as_covered = cls.DEFAULT_COUNT_AS_COVERED
         elif isinstance(count_as_covered, (bytes, str)):
@@ -723,3 +730,72 @@ Index(
     WorkCoverageRecord.operation,
     WorkCoverageRecord.work_id,
 )
+
+
+class EquivalencyCoverageRecord(Base, BaseCoverageRecord):
+    """A coverage record that tracks work needs to be done
+    on identifier equivalents
+    """
+
+    RECURSIVE_EQUIVALENCY_REFRESH = "recursive-equivalency-refresh"
+    RECURSIVE_EQUIVALENCY_DELETE = (
+        "recursive-equivalency-delete"  # an identifier was deleted
+    )
+
+    __tablename__ = "equivalentscoveragerecords"
+
+    id = Column(Integer, primary_key=True)
+
+    equivalency_id = Column(
+        Integer, ForeignKey("equivalents.id", ondelete="CASCADE"), index=True
+    )
+    equivalency = relationship("Equivalency", foreign_keys=equivalency_id)
+
+    operation = Column(String(255), index=True, default=None)
+
+    timestamp = Column(DateTime(timezone=True), index=True)
+
+    status = Column(BaseCoverageRecord.status_enum, index=True)
+    exception = Column(Unicode)
+
+    __table_args__ = (UniqueConstraint(equivalency_id, operation),)
+
+    @classmethod
+    def bulk_add(
+        cls,
+        _db,
+        equivalents: List["Equivalency"],
+        operation: str,
+        status=BaseCoverageRecord.REGISTERED,
+        batch_size=100,
+    ):
+        with SessionBulkOperation(_db, batch_size) as bulk:
+            for eq in equivalents:
+                record = EquivalencyCoverageRecord(
+                    equivalency_id=eq.id,
+                    operation=operation,
+                    status=status,
+                    timestamp=utc_now(),
+                )
+                bulk.add(record)
+
+    @classmethod
+    def add_for(
+        cls,
+        equivalency: "Equivalency",
+        operation: str,
+        timestamp=None,
+        status=CoverageRecord.SUCCESS,
+    ):
+        _db = Session.object_session(equivalency)
+        timestamp = timestamp or utc_now()
+        coverage_record, is_new = get_one_or_create(
+            _db,
+            cls,
+            equivalency=equivalency,
+            operation=operation,
+            on_multiple="interchangeable",
+        )
+        coverage_record.status = status
+        coverage_record.timestamp = timestamp
+        return coverage_record, is_new

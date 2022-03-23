@@ -3,7 +3,9 @@
 
 import logging
 from collections import Counter
-from typing import TYPE_CHECKING, Optional
+from datetime import datetime
+from decimal import Decimal
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type, TypeVar, cast
 
 from sqlalchemy import (
     Boolean,
@@ -19,10 +21,12 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import INT4RANGE
 from sqlalchemy.ext.associationproxy import association_proxy
-from sqlalchemy.orm import contains_eager, relationship
+from sqlalchemy.orm import contains_eager, joinedload, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, case, join, literal_column, or_, select
 from sqlalchemy.sql.functions import func
+
+from core.model.classification import Classification, Subject
 
 from ..classifier import Classifier, WorkClassifier
 from ..config import CannotLoadConfiguration
@@ -67,6 +71,9 @@ class WorkGenre(Base):
 
     def __repr__(self):
         return "%s (%d%%)" % (self.genre.name, self.affinity * 100)
+
+
+WorkTypevar = TypeVar("WorkTypevar", bound="Work")
 
 
 class Work(Base):
@@ -1427,6 +1434,284 @@ class Work(Base):
     # This can be used in func.to_char to convert a SQL datetime into a string
     # that Elasticsearch can parse as a date.
     ELASTICSEARCH_TIME_FORMAT = 'YYYY-MM-DD"T"HH24:MI:SS"."MS'
+
+    @classmethod
+    def to_search_documents_in_app(
+        cls: Type[WorkTypevar], works: List[WorkTypevar], policy=None
+    ) -> List[Dict]:
+        """In app to search document need to compare speeds
+        TODOS:
+            Cleanup
+            Classifications optimization
+        """
+        _db = Session.object_session(works[0])
+
+        qu = _db.query(Work).filter(Work.id.in_([w.id for w in works]))
+        qu = qu.options(
+            joinedload(Work.presentation_edition)
+            .joinedload(Edition.contributions)
+            .joinedload(Contribution.contributor),  # type: ignore
+            joinedload(Work.license_pools),
+            joinedload(Work.work_genres).joinedload(WorkGenre.genre),  # type: ignore
+            joinedload(Work.custom_list_entries),
+        )
+
+        rows: List[Work] = qu.all()
+
+        ## IDENTIFIERS START
+        ## Identifiers is a house of cards, it comes crashing down if anything is changed here
+        ## We need a WITH statement selecting the procedural function on works_alias
+        ## then proceed to select the Identifiers for each of those outcomes
+        ## but must match works to the equivalent ids for which they were chosen
+        ## The same nonsense will be required for classifications
+        ## TODO: move this equivalence code into another job based on its required frequency
+        ## Add it to another table so it becomes faster to just query the pre-computed table
+        works_alias = (
+            select(
+                [
+                    Work.id.label("work_id"),
+                    Edition.id.label("edition_id"),
+                    Edition.primary_identifier_id.label("identifier_id"),
+                ],
+                Work.id.in_((w.id for w in works)),
+            )
+            .select_from(
+                join(Work, Edition, Work.presentation_edition_id == Edition.id)  # type: ignore
+            )
+            .alias("works_alias")
+        )
+
+        equivalent_identifiers = (
+            Identifier.recursively_equivalent_identifier_ids_query(
+                literal_column(
+                    str(works_alias.name) + "." + works_alias.c.identifier_id.name
+                ),
+                policy=policy,
+            )
+            .column(works_alias.c.work_id)
+            .select_from(works_alias)
+            .cte("equivalent_cte")
+        )
+
+        identifiers_query = (
+            select(
+                [
+                    equivalent_identifiers.c.work_id,
+                    Identifier.identifier,
+                    Identifier.type,
+                ]
+            )
+            .select_from(Identifier)  # type: ignore
+            .where(
+                Identifier.id
+                == literal_column("equivalent_cte.fn_recursive_equivalents_1")
+            )
+        )
+
+        identifiers = list(_db.execute(identifiers_query))
+        ## IDENTIFIERS END
+
+        ## CLASSIFICATION START
+        ## Copied almost exactly from the previous implementation
+        ## Through trials in the local environment we find this to add
+        ## about 30% to the SQL CPU usage, this section holds back improvements
+        ## for the entire script
+        ## TODO: Improve this, maybe only run this section once a day???
+        # Map our constants for Subject type to their URIs.
+        scheme_column: Any = case(
+            [
+                (Subject.type == key, literal_column("'%s'" % val))
+                for key, val in list(Subject.uri_lookup.items())
+            ]
+        )
+
+        # If the Subject has a name, use that, otherwise use the Subject's identifier.
+        # Also, 3M's classifications have slashes, e.g. "FICTION/Adventure". Make sure
+        # we get separated words for search.
+        term_column = func.replace(
+            case([(Subject.name != None, Subject.name)], else_=Subject.identifier),
+            "/",
+            " ",
+        )
+
+        # Normalize by dividing each weight by the sum of the weights for that Identifier's Classifications.
+        weight_column = (
+            func.sum(Classification.weight)
+            / func.sum(func.sum(Classification.weight)).over()
+        )
+
+        subjects = (
+            select(
+                [
+                    equivalent_identifiers.c.work_id,
+                    scheme_column.label("scheme"),
+                    term_column.label("term"),
+                    weight_column.label("weight"),
+                ],
+                # Only include Subjects with terms that are useful for search.
+                and_(Subject.type.in_(Subject.TYPES_FOR_SEARCH), term_column != None),
+            )
+            .group_by(scheme_column, term_column, equivalent_identifiers.c.work_id)
+            .where(
+                Classification.identifier_id
+                == literal_column("equivalent_cte.fn_recursive_equivalents_1")
+            )
+            .select_from(
+                join(Classification, Subject, Classification.subject_id == Subject.id)  # type: ignore
+            )
+        )
+
+        all_subjects = list(_db.execute(subjects))
+
+        ## CLASSIFICATION END
+
+        # Create JSON
+        results = []
+        for item in rows:
+            item.identifiers = list(filter(lambda idx: idx[0] == item.id, identifiers))  # type: ignore
+            item.classifications = list(  # type: ignore
+                filter(lambda idx: idx[0] == item.id, all_subjects)
+            )
+            search_doc = cls.search_doc_as_dict(cast(WorkTypevar, item))
+            results.append(search_doc)
+
+        return results
+
+    @classmethod
+    def search_doc_as_dict(cls: Type[WorkTypevar], doc: WorkTypevar):
+        columns = {
+            "work": [
+                "fiction",
+                "audience",
+                "quality",
+                "rating",
+                "popularity",
+                "presentation_ready",
+                "last_update_time",
+            ],
+            "edition": [
+                "title",
+                "subtitle",
+                "series",
+                "series_position",
+                "language",
+                "sort_title",
+                "author",
+                "sort_author",
+                "medium",
+                "publisher",
+                "imprint",
+                "permanent_work_id",
+            ],
+            "contribution": ["role"],
+            "contributor": ["display_name", "sort_name", "family_name", "lc", "viaf"],
+            "licensepools": [
+                "data_source_id",
+                "collection_id",
+                "open_access",
+                "suppressed",
+                "availability_time",
+            ],
+            "identifiers": ["type", "identifier"],
+            "classifications": ["scheme", "term", "weight"],
+            "custom_list_entries": ["list_id", "featured", "first_appearance"],
+        }
+
+        result: Dict = {}
+
+        def _convert(value):
+            if isinstance(value, Decimal):
+                return float(value)
+            elif isinstance(value, datetime):
+                return value.timestamp()
+            return value
+
+        def _set_value(parent, key, target):
+            for c in columns[key]:
+                val = getattr(parent, c)
+                target[c] = _convert(val)
+
+        _set_value(doc, "work", result)
+        result["_id"] = getattr(doc, "id")
+        result["work_id"] = getattr(doc, "id")
+        result["summary"] = getattr(doc, "summary_text")
+        result["fiction"] = (
+            "Fiction" if getattr(doc, "fiction") is True else "Nonfiction"
+        )
+        if result["audience"]:
+            result["audience"] = result["audience"].replace(" ", "")
+
+        target_age = doc.target_age
+        result["target_age"] = {"lower": None, "upper": None}
+        if target_age and target_age.lower is not None:
+            result["target_age"]["lower"] = target_age.lower + (
+                0 if target_age.lower_inc else 1
+            )
+        if target_age and target_age.upper is not None:
+            result["target_age"]["upper"] = target_age.upper - (
+                0 if target_age.upper_inc else 1
+            )
+
+        _set_value(doc.presentation_edition, "edition", result)
+
+        result["contributors"] = []
+        for item in doc.presentation_edition.contributions:
+            contributor: Dict = {}
+            _set_value(item.contributor, "contributor", contributor)
+            _set_value(item, "contribution", contributor)
+            result["contributors"].append(contributor)
+
+        result["licensepools"] = []
+        for item in doc.license_pools:
+            lc: Dict = {}
+            _set_value(item, "licensepools", lc)
+            # lc["availability_time"] = getattr(item, "availability_time").timestamp()
+            lc["available"] = (
+                item.unlimited_access or item.self_hosted or item.licenses_available > 0
+            )
+            lc["licensed"] = (
+                item.unlimited_access or item.self_hosted or item.licenses_owned > 0
+            )
+            lc["medium"] = doc.presentation_edition.medium
+            lc["licensepool_id"] = item.id
+            lc["quality"] = doc.quality
+            result["licensepools"].append(lc)
+
+        # Extra special genre massaging
+        result["genres"] = []
+        for item in doc.work_genres:  # type: ignore
+            genre = {
+                "scheme": Subject.SIMPLIFIED_GENRE,
+                "term": item.genre.id,
+                "name": item.genre.name,
+                "weight": item.affinity,
+            }
+            result["genres"].append(genre)
+
+        result["identifiers"] = []
+        for item in doc.identifiers:  # type: ignore
+            identifier: Dict = {}
+            _set_value(item, "identifiers", identifier)
+            result["identifiers"].append(identifier)
+
+        result["classifications"] = []
+        for item in doc.classifications:  # type: ignore
+            classification: Dict = {}
+            _set_value(item, "classifications", classification)
+            result["classifications"].append(classification)
+
+        result["customlists"] = []
+        for item in doc.custom_list_entries:  # type: ignore
+            customlist: Dict = {}
+            _set_value(item, "custom_list_entries", customlist)
+            result["customlists"].append(customlist)
+
+        # No empty lists, they should be null
+        for key, val in result.items():
+            if val == []:
+                result[key] = None
+
+        return result
 
     @classmethod
     def to_search_documents(cls, works, policy=None):

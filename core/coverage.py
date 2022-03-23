@@ -2,8 +2,11 @@ import logging
 import traceback
 from typing import Optional, Union
 
+from sqlalchemy.orm import Load
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
+
+from core.model.coverage import EquivalencyCoverageRecord
 
 from . import log  # This sets the appropriate log format.
 from .metadata_layer import ReplacementPolicy, TimestampData
@@ -70,6 +73,20 @@ class CoverageFailure(object):
     def to_work_coverage_record(self, operation):
         """Convert this failure into a WorkCoverageRecord."""
         record, ignore = WorkCoverageRecord.add_for(self.obj, operation=operation)
+        record.exception = self.exception
+        if self.transient:
+            record.status = CoverageRecord.TRANSIENT_FAILURE
+        else:
+            record.status = CoverageRecord.PERSISTENT_FAILURE
+        return record
+
+    def to_equivalency_coverage_record(
+        self, operation: str
+    ) -> EquivalencyCoverageRecord:
+        """Convert this failure into a EquivalencyCoverageRecord."""
+        record, ignore = EquivalencyCoverageRecord.add_for(
+            self.obj, operation=operation
+        )
         record.exception = self.exception
         if self.transient:
             record.status = CoverageRecord.TRANSIENT_FAILURE
@@ -339,10 +356,25 @@ class BaseCoverageProvider(object):
         )
 
         qu = self.items_that_need_coverage(count_as_covered=count_as_covered)
-        self.log.info("%d items need coverage%s", qu.count(), count_as_covered_message)
-        batch = qu.limit(self.batch_size).offset(progress.offset)
 
-        if not batch.count():
+        # Running this statement only ONCE as it adds an unbounded query, very bad for the DB cluster
+        if progress.successes == 0:
+            self.log.info(
+                "%d items need coverage%s", qu.count(), count_as_covered_message
+            )
+        else:
+            self.log.info(
+                "Covering items after %d successes: %s",
+                progress.successes,
+                count_as_covered_message,
+            )
+
+        qu = qu.offset(progress.offset)
+        batch = qu.limit(self.batch_size)
+        batch_results = batch.all()
+        batch_count = len(batch_results)
+
+        if not batch_count:
             # The batch is empty. We're done.
             progress.finish = utc_now()
             return progress
@@ -351,7 +383,7 @@ class BaseCoverageProvider(object):
             successes,
             transient_failures,
             persistent_failures,
-        ), results = self.process_batch_and_handle_results(batch)
+        ), results = self.process_batch_and_handle_results(batch_results)
 
         # Update the running totals so that the service's eventual timestamp
         # will have a useful .achievements.
@@ -1448,6 +1480,8 @@ class WorkCoverageProvider(BaseCoverageProvider):
             count_as_missing_before=self.cutoff_time,
             **kwargs
         )
+        qu = qu.options(Load(Work).lazyload("*"))
+
         if identifiers:
             ids = [x.id for x in identifiers]
             qu = qu.join(Work.license_pools).filter(LicensePool.identifier_id.in_(ids))
