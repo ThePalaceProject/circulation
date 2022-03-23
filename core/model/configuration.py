@@ -972,8 +972,8 @@ class ConfigurationAttribute(Enum):
 class ConfigurationAttributeValue(Enum):
     """Enumeration of common configuration attribute values"""
 
-    YESVALUE = "YES"
-    NOVALUE = "NO"
+    YESVALUE = "yes"
+    NOVALUE = "no"
 
 
 class ConfigurationOption(object):

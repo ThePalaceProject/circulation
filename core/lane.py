@@ -29,12 +29,18 @@ from sqlalchemy.orm import (
     contains_eager,
     defer,
     joinedload,
+    query,
     relationship,
 )
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import select
 from sqlalchemy.sql.expression import Select
 
+from core.model.configuration import (
+    ConfigurationAttributeValue,
+    ConfigurationSetting,
+    ExternalIntegration,
+)
 from core.model.hybrid import hybrid_property
 
 from .classifier import Classifier
@@ -2210,7 +2216,7 @@ class DatabaseBackedWorkList(WorkList):
         # the WorkList's collections and ready to be delivered to
         # patrons.
         qu = self.only_show_ready_deliverable_works(_db, qu)
-
+        qu = self._restrict_query_for_no_hold_collections(_db, qu)
         # Apply to the database the bibliographic restrictions with
         # which this WorkList was initialized -- genre, audience, and
         # whatnot.
@@ -2237,6 +2243,50 @@ class DatabaseBackedWorkList(WorkList):
         # Allow the pagination object to modify the database query.
         if pagination is not None:
             qu = pagination.modify_database_query(_db, qu)
+
+        return qu
+
+    def _restrict_query_for_no_hold_collections(
+        self, _db: Session, qu: query.Query
+    ) -> query.Query:
+        """Restrict the query to not select works that are part of a collection
+        that dissallow holds through DONT_DISPLAY_RESERVES if they have no available copies
+        This is only meant for Bibliotheca collections, but since they're the only ones with
+        the DONT_DISPLAY_RESERVES setting it will implicitly only be active for them
+        """
+
+        # Modify the query to not show holds on collections
+        # that don't allow it
+        # This query looks like a prime candidate for some in-memory caching
+        restricted_collections = (
+            _db.query(Collection.id)
+            .join(
+                ConfigurationSetting,
+                Collection.external_integration_id
+                == ConfigurationSetting.external_integration_id,
+            )
+            .filter(
+                Collection.id.in_(self.collection_ids),
+                ConfigurationSetting.library_id == self.library_id,
+                ConfigurationSetting.key == ExternalIntegration.DONT_DISPLAY_RESERVES,
+                ConfigurationSetting.value
+                == ConfigurationAttributeValue.YESVALUE.value,
+            )
+            .all()
+        )
+        restricted_collection_ids = (r[0] for r in restricted_collections)
+
+        # If a licensepool is from a collection that restricts holds
+        # and has not available copies, then we don't want to see it
+        # Should this be a configurable feature?
+        qu = qu.filter(
+            not_(
+                and_(
+                    LicensePool.collection_id.in_(restricted_collection_ids),
+                    LicensePool.licenses_available == 0,
+                )
+            )
+        )
 
         return qu
 
