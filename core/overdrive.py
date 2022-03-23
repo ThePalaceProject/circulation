@@ -2,10 +2,11 @@ import datetime
 import json
 import logging
 from threading import RLock
-from typing import Set
+from typing import Optional, Set
 from urllib.parse import quote, urlsplit, urlunsplit
 
 import isbnlib
+from requests.adapters import CaseInsensitiveDict, Response
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 
@@ -45,7 +46,7 @@ from .util.http import HTTP, BadResponseException
 from .util.string_helpers import base64
 
 
-class OverdriveAPI(object):
+class OverdriveAPI:
 
     log = logging.getLogger("Overdrive API")
 
@@ -199,7 +200,7 @@ class OverdriveAPI(object):
         # This is set by an access to .collection_token
         self._collection_token = None
 
-    def endpoint(self, url, **kwargs):
+    def endpoint(self, url: str, **kwargs) -> str:
         """Create the URL to an Overdrive API endpoint.
 
         :param url: A template for the URL.
@@ -240,7 +241,7 @@ class OverdriveAPI(object):
         return self._collection_token
 
     @property
-    def collection(self):
+    def collection(self) -> Optional[Collection]:
         return Collection.by_id(self._db, id=self.collection_id)
 
     @property
@@ -317,11 +318,18 @@ class OverdriveAPI(object):
         self._update_credential(credential, data)
         self._token = credential.credential
 
-    def get(self, url, extra_headers, exception_on_401=False):
+    def get(
+        self, url: str, extra_headers, exception_on_401=False
+    ) -> tuple[int, CaseInsensitiveDict, bytes]:
         """Make an HTTP GET request using the active Bearer Token."""
-        headers = dict(Authorization="Bearer %s" % self.token)
-        headers.update(extra_headers)
-        status_code, headers, content = self._do_get(url, headers)
+        request_headers = dict(Authorization="Bearer %s" % self.token)
+        request_headers.update(extra_headers)
+
+        response: Response = self._do_get(url, request_headers)
+        status_code: int = response.status_code
+        headers: CaseInsensitiveDict = response.headers
+        content: bytes = response.content
+
         if status_code == 401:
             if exception_on_401:
                 # This is our second try. Give up.
@@ -338,24 +346,25 @@ class OverdriveAPI(object):
             return status_code, headers, content
 
     @property
-    def token_authorization_header(self):
+    def token_authorization_header(self) -> str:
         s = b"%s:%s" % (self.client_key, self.client_secret)
         return "Basic " + base64.standard_b64encode(s).strip()
 
-    def token_post(self, url, payload, headers={}, **kwargs):
+    def token_post(self, url: str, payload, headers={}, **kwargs) -> Response:
         """Make an HTTP POST request for purposes of getting an OAuth token."""
         headers = dict(headers)
         headers["Authorization"] = self.token_authorization_header
         return self._do_post(url, payload, headers, **kwargs)
 
-    def _update_credential(self, credential, overdrive_data):
+    @staticmethod
+    def _update_credential(credential, overdrive_data):
         """Copy Overdrive OAuth data into a Credential object."""
         credential.credential = overdrive_data["access_token"]
         expires_in = overdrive_data["expires_in"] * 0.9
         credential.expires = utc_now() + datetime.timedelta(seconds=expires_in)
 
     @property
-    def _library_endpoint(self):
+    def _library_endpoint(self) -> str:
         """Which URL should we go to to get information about this collection?
 
         If this is an ordinary Overdrive account, we get information
@@ -423,7 +432,7 @@ class OverdriveAPI(object):
                 yield i
 
     @property
-    def _all_products_link(self):
+    def _all_products_link(self) -> str:
         url = self.endpoint(
             self.ALL_PRODUCTS_ENDPOINT,
             collection_token=self.collection_token,
@@ -506,7 +515,7 @@ class OverdriveAPI(object):
         return OverdriveRepresentationExtractor.book_info_to_metadata(content)
 
     @classmethod
-    def make_link_safe(self, url):
+    def make_link_safe(cls, url: str) -> str:
         """Turn a server-provided link into a link the server will accept!
 
         The {} part is completely obnoxious and I have complained about it to
@@ -530,12 +539,12 @@ class OverdriveAPI(object):
         parts[3] = query_string
         return urlunsplit(tuple(parts))
 
-    def _do_get(self, url, headers):
+    def _do_get(self, url: str, headers, **kwargs) -> Response:
         """This method is overridden in MockOverdriveAPI."""
         url = self.endpoint(url)
-        return Representation.simple_http_get(url, headers)
+        return HTTP.get_with_timeout(url, headers=headers, **kwargs)
 
-    def _do_post(self, url, payload, headers, **kwargs):
+    def _do_post(self, url: str, payload, headers, **kwargs) -> Response:
         """This method is overridden in MockOverdriveAPI."""
         url = self.endpoint(url)
         return HTTP.post_with_timeout(url, payload, headers=headers, **kwargs)
@@ -616,9 +625,10 @@ class MockOverdriveAPI(OverdriveAPI):
         self.responses.insert(0, MockRequestsResponse(status_code, headers, content))
 
     def _do_get(self, url, *args, **kwargs):
-        """Simulate Representation.simple_http_get."""
         response = self._make_request(url, *args, **kwargs)
-        return response.status_code, response.headers, response.content
+        return MockRequestsResponse(
+            response.status_code, response.headers, response.content
+        )
 
     def _do_post(self, url, *args, **kwargs):
         return self._make_request(url, *args, **kwargs)
