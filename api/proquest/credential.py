@@ -1,9 +1,9 @@
 import datetime
-import json
 import logging
 from enum import Enum
 
-from api.saml.metadata.model import SAMLAttributeType, SAMLSubjectJSONDecoder
+from api.saml.credential import SAMLCredentialManager
+from api.saml.metadata.model import SAMLAttributeType
 from core.model import Credential, DataSource, DataSourceConstants, Patron
 from core.util import first_or_default, is_session
 
@@ -14,62 +14,14 @@ class ProQuestCredentialType(Enum):
     PROQUEST_JWT_TOKEN = "ProQuest JWT Token"
 
 
-class ProQuestCredentialManager(object):
+class ProQuestCredentialManager(SAMLCredentialManager):
     """Manages ProQuest credentials."""
 
     def __init__(self):
         """Initialize a new instance of ProQuestCredentialManager class."""
-        self._logger = logging.getLogger(__name__)
+        super().__init__()
 
-    def _extract_saml_subject(self, credential):
-        """Extract a SAML subject from SAML token.
-
-        :param credential: Credential object containing a SAML token
-        :type credential: core.model.credential.Credential
-
-        :return: SAML subject
-        :rtype: api.saml.metadata.Subject
-        """
-        self._logger.debug("Started deserializing SAML token {0}".format(credential))
-
-        subject = json.loads(credential.credential, cls=SAMLSubjectJSONDecoder)
-
-        self._logger.debug(
-            "Finished deserializing SAML token {0}: {1}".format(credential, subject)
-        )
-
-        return subject
-
-    def _lookup_saml_token(self, db, patron):
-        """Look up for a SAML token.
-
-        :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
-        :param patron: Patron object
-        :type patron: core.model.patron.Patron
-
-        :return: SAML subject (if any)
-        :rtype: Optional[api.saml.metadata.Subject]
-        """
-        self._logger.debug("Started looking up for a SAML token")
-
-        from api.authenticator import BaseSAMLAuthenticationProvider
-
-        credential = Credential.lookup_by_patron(
-            db,
-            BaseSAMLAuthenticationProvider.TOKEN_DATA_SOURCE_NAME,
-            BaseSAMLAuthenticationProvider.TOKEN_TYPE,
-            patron,
-            allow_persistent_token=False,
-            auto_create_datasource=True,
-        )
-
-        self._logger.debug(
-            "Finished looking up for a SAML token: {0}".format(credential)
-        )
-
-        return credential
+        self._logger: logging.Logger = logging.getLogger(__name__)
 
     def lookup_proquest_token(self, db, patron):
         """Look up for a JWT bearer token used required to use ProQuest API.
@@ -197,13 +149,13 @@ class ProQuestCredentialManager(object):
             )
         )
 
-        saml_credential = self._lookup_saml_token(db, patron)
+        saml_credential = self.lookup_saml_token_by_patron(db, patron)
 
         if not saml_credential:
             self._logger.debug("Patron {0} does not have a SAML token".format(patron))
             return None
 
-        saml_subject = self._extract_saml_subject(saml_credential)
+        saml_subject = self.extract_saml_token(saml_credential)
 
         self._logger.debug(
             "Patron {0} has the following SAML subject: {1}".format(

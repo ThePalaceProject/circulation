@@ -2,6 +2,7 @@ import logging
 
 from flask_babel import lazy_gettext as _
 from lxml.etree import XMLSyntaxError
+from onelogin.saml2.auth import OneLogin_Saml2_Auth
 from onelogin.saml2.constants import OneLogin_Saml2_Constants
 from onelogin.saml2.utils import OneLogin_Saml2_XML
 from onelogin.saml2.xmlparser import fromstring
@@ -697,7 +698,7 @@ class SAMLSubjectParser(object):
 
         return name_id, attribute_statement
 
-    def parse(self, auth):
+    def parse(self, auth: OneLogin_Saml2_Auth) -> SAMLSubject:
         """Parses OneLogin_Saml2_Auth object containing SAML response data into Subject
 
         :param auth: OneLogin_Saml2_Auth object containing SAML response
@@ -712,6 +713,7 @@ class SAMLSubjectParser(object):
             auth.get_nameid_spnq(),
             auth.get_nameid(),
         )
+        idp = auth.get_settings().get_idp_data()["entityId"]
         raw_attributes = auth.get_attributes()
         attribute_name_id, attribute_statement = self._parse_attributes(raw_attributes)
         valid_till = auth.get_session_expiration()
@@ -722,6 +724,6 @@ class SAMLSubjectParser(object):
         if not valid_till:
             valid_till = auth.get_last_assertion_not_on_or_after()
 
-        subject = SAMLSubject(name_id, attribute_statement, valid_till)
+        subject = SAMLSubject(idp, name_id, attribute_statement, valid_till)
 
         return subject

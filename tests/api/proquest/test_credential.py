@@ -1,16 +1,13 @@
 import datetime
-import json
 
 from parameterized import parameterized
 
-from api.authenticator import BaseSAMLAuthenticationProvider
 from api.proquest.credential import ProQuestCredentialManager, ProQuestCredentialType
 from api.saml.metadata.model import (
     SAMLAttribute,
     SAMLAttributeStatement,
     SAMLAttributeType,
     SAMLSubject,
-    SAMLSubjectJSONEncoder,
 )
 from core.model import Credential, DataSource
 from core.testing import DatabaseTest
@@ -84,6 +81,7 @@ class TestProQuestCredentialManager(DatabaseTest):
             (
                 "when_subject_does_not_contain_affiliation_id_attributes",
                 SAMLSubject(
+                    "http://idp.example.com",
                     None,
                     SAMLAttributeStatement(
                         [SAMLAttribute(SAMLAttributeType.mail.name, [fixtures.MAIL])]
@@ -94,6 +92,7 @@ class TestProQuestCredentialManager(DatabaseTest):
             (
                 "when_subject_contains_affiliation_id_attribute",
                 SAMLSubject(
+                    "http://idp.example.com",
                     None,
                     SAMLAttributeStatement(
                         [
@@ -109,6 +108,7 @@ class TestProQuestCredentialManager(DatabaseTest):
             (
                 "when_subject_contains_multiple_affiliation_id_attributes",
                 SAMLSubject(
+                    "http://idp.example.com",
                     None,
                     SAMLAttributeStatement(
                         [
@@ -124,6 +124,7 @@ class TestProQuestCredentialManager(DatabaseTest):
             (
                 "with_custom_affiliation_attributes",
                 SAMLSubject(
+                    "http://idp.example.com",
                     None,
                     SAMLAttributeStatement(
                         [
@@ -147,21 +148,7 @@ class TestProQuestCredentialManager(DatabaseTest):
         patron = self._patron()
 
         if subject:
-            expected_token = json.dumps(subject, cls=SAMLSubjectJSONEncoder)
-
-            data_source = DataSource.lookup(
-                self._db,
-                BaseSAMLAuthenticationProvider.TOKEN_DATA_SOURCE_NAME,
-                autocreate=True,
-            )
-            Credential.temporary_token_create(
-                self._db,
-                data_source,
-                BaseSAMLAuthenticationProvider.TOKEN_TYPE,
-                patron,
-                datetime.timedelta(hours=1),
-                expected_token,
-            )
+            credential_manager.create_saml_token(self._db, patron, subject, 1)
 
         # Act
         if affiliation_attributes:

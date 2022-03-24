@@ -17,6 +17,7 @@ from sqlalchemy.orm.session import Session
 from .classifier import Classifier
 from .config import CannotLoadConfiguration, IntegrationException
 from .coverage import CoverageFailure
+from .importers import BaseImporterConfiguration
 from .metadata_layer import (
     CirculationData,
     ContributorData,
@@ -90,7 +91,7 @@ def parse_identifier(db, identifier):
     return parsed_identifier
 
 
-class ConnectionConfiguration(ConfigurationGrouping):
+class OPDSImporterConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
     max_retry_count = ConfigurationMetadata(
         key="max_retry_count",
         label=_("Max retry count"),
@@ -492,7 +493,7 @@ class OPDSXMLParser(XMLParser):
     }
 
 
-class OPDSImporter(object):
+class OPDSImporter:
     """Imports editions and license pools from an OPDS feed.
     Creates Edition, LicensePool and Work rows in the database, if those
     don't already exist.
@@ -546,52 +547,58 @@ class OPDSImporter(object):
 
     # These settings are used by 'regular' OPDS but not by OPDS For
     # Distributors, which has its own way of doing authentication.
-    SETTINGS = BASE_SETTINGS + [
-        {
-            "key": ExternalIntegration.USERNAME,
-            "label": _("Username"),
-            "description": _(
-                "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the username here."
-            ),
-        },
-        {
-            "key": ExternalIntegration.PASSWORD,
-            "label": _("Password"),
-            "description": _(
-                "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the password here."
-            ),
-        },
-        {
-            "key": ExternalIntegration.CUSTOM_ACCEPT_HEADER,
-            "label": _("Custom accept header"),
-            "required": False,
-            "description": _(
-                "Some servers expect an accept header to decide which file to send. You can use */* if the server doesn't expect anything."
-            ),
-            "default": ",".join(
-                [
-                    OPDSFeed.ACQUISITION_FEED_TYPE,
-                    "application/atom+xml;q=0.9",
-                    "application/xml;q=0.8",
-                    "*/*;q=0.1",
-                ]
-            ),
-        },
-        {
-            "key": ExternalIntegration.PRIMARY_IDENTIFIER_SOURCE,
-            "label": _("Identifer"),
-            "required": False,
-            "description": _("Which book identifier to use as ID."),
-            "type": "select",
-            "options": [
-                {"key": "", "label": _("(Default) Use <id>")},
-                {
-                    "key": ExternalIntegration.DCTERMS_IDENTIFIER,
-                    "label": _("Use <dcterms:identifier> first, if not exist use <id>"),
-                },
-            ],
-        },
-    ]
+    SETTINGS = (
+        BASE_SETTINGS
+        + [
+            {
+                "key": ExternalIntegration.USERNAME,
+                "label": _("Username"),
+                "description": _(
+                    "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the username here."
+                ),
+            },
+            {
+                "key": ExternalIntegration.PASSWORD,
+                "label": _("Password"),
+                "description": _(
+                    "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the password here."
+                ),
+            },
+            {
+                "key": ExternalIntegration.CUSTOM_ACCEPT_HEADER,
+                "label": _("Custom accept header"),
+                "required": False,
+                "description": _(
+                    "Some servers expect an accept header to decide which file to send. You can use */* if the server doesn't expect anything."
+                ),
+                "default": ",".join(
+                    [
+                        OPDSFeed.ACQUISITION_FEED_TYPE,
+                        "application/atom+xml;q=0.9",
+                        "application/xml;q=0.8",
+                        "*/*;q=0.1",
+                    ]
+                ),
+            },
+            {
+                "key": ExternalIntegration.PRIMARY_IDENTIFIER_SOURCE,
+                "label": _("Identifer"),
+                "required": False,
+                "description": _("Which book identifier to use as ID."),
+                "type": "select",
+                "options": [
+                    {"key": "", "label": _("(Default) Use <id>")},
+                    {
+                        "key": ExternalIntegration.DCTERMS_IDENTIFIER,
+                        "label": _(
+                            "Use <dcterms:identifier> first, if not exist use <id>"
+                        ),
+                    },
+                ],
+            },
+        ]
+        + OPDSImporterConfiguration.to_settings()
+    )
 
     # Subclasses of OPDSImporter may define a different parser class that's
     # a subclass of OPDSXMLParser. For example, a subclass may want to use
@@ -1952,14 +1959,14 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests, HasExternalIntegration)
     @contextmanager
     def _get_configuration(
         self, db: sqlalchemy.orm.session.Session
-    ) -> Iterator[ConfigurationGrouping]:
+    ) -> Iterator[OPDSImporterConfiguration]:
         """Return the configuration object.
 
         :param db: Database session
         :return: Configuration object
         """
         with self._configuration_factory.create(
-            self._configuration_storage, db, ConnectionConfiguration
+            self._configuration_storage, db, OPDSImporterConfiguration
         ) as configuration:
             yield configuration
 

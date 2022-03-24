@@ -688,3 +688,9 @@ class Configuration(ConfigurationConstants):
 
 # Immediately load the configuration file (if any).
 Configuration.instance = Configuration.load_from_file()
+
+
+class ConfigurationTrait:
+    """An abstract class that denotes a configuration mixin/trait. Configuration
+    traits should subclass this class in order to make implementations easy to find
+    in IDEs."""

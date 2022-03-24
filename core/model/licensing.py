@@ -3,9 +3,8 @@
 # RightsStatus
 import datetime
 import logging
-import sys
 from enum import Enum as PythonEnum
-from typing import TYPE_CHECKING, List, Mapping, Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import Boolean, Column, DateTime
 from sqlalchemy import Enum as AlchemyEnum
@@ -1909,7 +1908,6 @@ Index(
 
 
 class RightsStatus(Base):
-
     """The terms under which a book has been made available to the general
     public.
     This will normally be 'in copyright', or 'public domain', or a
@@ -2065,102 +2063,3 @@ class RightsStatus(Base):
             return rights
         else:
             return RightsStatus.UNKNOWN
-
-
-class FormatPriorities:
-    """Functions for prioritizing delivery mechanisms based on content type and DRM scheme."""
-
-    PRIORITIZED_DRM_SCHEMES_KEY: str = "prioritized_drm_schemes"
-    PRIORITIZED_CONTENT_TYPES_KEY: str = "prioritized_content_types"
-
-    _prioritized_drm_schemes: Mapping[str, int]
-    _prioritized_content_types: Mapping[str, int]
-    _hidden_content_types: List[str]
-
-    def __init__(
-        self,
-        prioritized_drm_schemes: List[str],
-        prioritized_content_types: List[str],
-        hidden_content_types: List[str],
-    ):
-        """
-        :param prioritized_drm_schemes: The set of DRM schemes to prioritize; items earlier in the list are higher priority.
-        :param prioritized_content_types: The set of content types to prioritize; items earlier in the list are higher priority.
-        :param hidden_content_types: The set of content types to remove entirely
-        """
-
-        # Assign priorities to each content type and DRM scheme based on their position
-        # in the given lists. Higher priorities are assigned to items that appear earlier.
-        self._prioritized_content_types = {}
-        for index, content_type in enumerate(reversed(prioritized_content_types)):
-            self._prioritized_content_types[content_type] = index + 1
-
-        self._prioritized_drm_schemes = {}
-        for index, drm_scheme in enumerate(reversed(prioritized_drm_schemes)):
-            self._prioritized_drm_schemes[drm_scheme] = index + 1
-
-        self._hidden_content_types = hidden_content_types
-
-    def prioritize_for_pool(
-        self, pool: LicensePool
-    ) -> List[LicensePoolDeliveryMechanism]:
-        """
-        Filter and prioritize the delivery mechanisms in the given pool.
-        :param pool: The license pool
-        :return: A list of suitable delivery mechanisms in priority order, highest priority first
-        """
-        return self.prioritize_mechanisms(pool.delivery_mechanisms)
-
-    def prioritize_mechanisms(
-        self, mechanisms: List[LicensePoolDeliveryMechanism]
-    ) -> List[LicensePoolDeliveryMechanism]:
-        """
-        Filter and prioritize the delivery mechanisms in the given pool.
-        :param mechanisms: The list of delivery mechanisms
-        :return: A list of suitable delivery mechanisms in priority order, highest priority first
-        """
-
-        # First, filter out all hidden content types.
-        mechanisms_filtered: List[LicensePoolDeliveryMechanism] = []
-        for delivery in mechanisms:
-            delivery_mechanism = delivery.delivery_mechanism
-            if delivery_mechanism:
-                if delivery_mechanism.content_type not in self._hidden_content_types:
-                    mechanisms_filtered.append(delivery)
-
-        # If there are any prioritized DRM schemes or content types, then
-        # sort the list of mechanisms accordingly.
-        if (
-            len(self._prioritized_drm_schemes) != 0
-            or len(self._prioritized_content_types) != 0
-        ):
-            mechanisms_filtered.sort(
-                key=lambda mechanism: self._content_type_priority(
-                    mechanism.delivery_mechanism.content_type
-                ),
-                reverse=True,
-            )
-            mechanisms_filtered.sort(
-                key=lambda mechanism: self._drm_scheme_priority(
-                    mechanism.delivery_mechanism.drm_scheme
-                ),
-                reverse=True,
-            )
-
-        return mechanisms_filtered
-
-    def _drm_scheme_priority(self, drm_scheme: Optional[str]) -> int:
-        """Determine the priority of a DRM scheme. A lack of DRM is always
-        prioritized over having DRM, and prioritized schemes are always
-        higher priority than non-prioritized schemes."""
-
-        if not drm_scheme:
-            return sys.maxsize
-        return self._prioritized_drm_schemes.get(drm_scheme, 0)
-
-    def _content_type_priority(self, content_type: Optional[str]) -> int:
-        """Determine the priority of a content type. Prioritized content
-        types are always of a higher priority than non-prioritized types."""
-        if content_type is None:
-            return 0
-        return self._prioritized_content_types.get(content_type, 0)

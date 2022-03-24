@@ -32,7 +32,7 @@ from core.model import (
     Patron,
     Session,
 )
-from core.model.licensing import FormatPriorities
+from core.model.formats import FormatPriorities
 from core.opds import AcquisitionFeed, Annotator, UnfulfillableWork
 from core.util.datetime_helpers import from_timestamp
 from core.util.opds_writer import OPDSFeed

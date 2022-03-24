@@ -3,16 +3,16 @@ from typing import List, Set, Tuple
 
 from flask_babel import lazy_gettext as _
 
+from core.config import ConfigurationTrait
 from core.model.configuration import (
     ConfigurationAttributeType,
-    ConfigurationGrouping,
     ConfigurationMetadata,
     ConfigurationOption,
 )
 from core.model.constants import IdentifierType
 
 
-class IgnoredIdentifierConfiguration(ConfigurationGrouping):
+class IgnoredIdentifierConfiguration(ConfigurationTrait):
     """
     Configuration to allow ignored identifiers as a setting
     The purpose is to allow the collections to record identifier types

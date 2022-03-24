@@ -18,18 +18,17 @@ from webpub_manifest_parser.opds2.registry import (
 )
 from webpub_manifest_parser.utils import encode, first_or_default
 
-from core.configuration.ignored_identifier import (
-    IgnoredIdentifierConfiguration,
-    IgnoredIdentifierImporterMixin,
-)
+from core.configuration.ignored_identifier import IgnoredIdentifierImporterMixin
 from core.mirror import MirrorUploader
 from core.model.configuration import (
     ConfigurationFactory,
+    ConfigurationGrouping,
     ConfigurationStorage,
     HasExternalIntegration,
 )
 
 from .coverage import CoverageFailure
+from .importers import BaseImporterConfiguration
 from .metadata_layer import (
     CirculationData,
     ContributorData,
@@ -112,7 +111,7 @@ class RWPMManifestParser(object):
         return result
 
 
-class OPDS2ImporterConfiguration(IgnoredIdentifierConfiguration):
+class OPDS2ImporterConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
     """Contains configuration settings of OPDS2Importer.
     Currently empty, but maintaining it as a base class for others"""
 
