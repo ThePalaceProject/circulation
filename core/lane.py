@@ -2250,9 +2250,9 @@ class DatabaseBackedWorkList(WorkList):
         self, _db: Session, qu: query.Query
     ) -> query.Query:
         """Restrict the query to not select works that are part of a collection
-        that dissallow holds through DONT_DISPLAY_RESERVES if they have no available copies
+        that dissallow holds through DISPLAY_RESERVES if they have no available copies
         This is only meant for Bibliotheca collections, but since they're the only ones with
-        the DONT_DISPLAY_RESERVES setting it will implicitly only be active for them
+        the DISPLAY_RESERVES setting it will implicitly only be active for them
         """
 
         # Modify the query to not show holds on collections
@@ -2268,9 +2268,8 @@ class DatabaseBackedWorkList(WorkList):
             .filter(
                 Collection.id.in_(self.collection_ids),
                 ConfigurationSetting.library_id == self.library_id,
-                ConfigurationSetting.key == ExternalIntegration.DONT_DISPLAY_RESERVES,
-                ConfigurationSetting.value
-                == ConfigurationAttributeValue.YESVALUE.value,
+                ConfigurationSetting.key == ExternalIntegration.DISPLAY_RESERVES,
+                ConfigurationSetting.value == ConfigurationAttributeValue.NOVALUE.value,
             )
             .all()
         )

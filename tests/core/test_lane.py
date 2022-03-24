@@ -2485,8 +2485,8 @@ class TestWorkList(DatabaseTest):
         cs1 = ConfigurationSetting(
             library_id=self._default_library.id,
             external_integration_id=collection1.external_integration_id,
-            key=ExternalIntegration.DONT_DISPLAY_RESERVES,
-            value="yes",
+            key=ExternalIntegration.DISPLAY_RESERVES,
+            value="no",
         )
         self._db.add(cs1)
         self._db.commit()
@@ -2539,8 +2539,8 @@ class TestWorkList(DatabaseTest):
         cs2 = ConfigurationSetting(
             library_id=self._default_library.id,
             external_integration_id=alternate_collection.external_integration_id,
-            key=ExternalIntegration.DONT_DISPLAY_RESERVES,
-            value="yes",
+            key=ExternalIntegration.DISPLAY_RESERVES,
+            value="no",
         )
         self._db.add(cs2)
         assert [[w2], []] == m(self._db, [[hit2], [hit1]])

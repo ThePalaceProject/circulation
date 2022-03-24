@@ -290,7 +290,7 @@ class ExternalIntegration(Base):
     DCTERMS_IDENTIFIER = "first_dcterms_identifier"
 
     # If the library-collection pair should display books with holds when no loans are available
-    DONT_DISPLAY_RESERVES = "dont_display_reserves"
+    DISPLAY_RESERVES = "dont_display_reserves"
 
     __tablename__ = "externalintegrations"
     id = Column(Integer, primary_key=True)

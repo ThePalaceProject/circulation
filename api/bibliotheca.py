@@ -101,16 +101,16 @@ class BibliothecaAPI(BaseCirculationAPI, HasSelfTests):
     LIBRARY_SETTINGS = BaseCirculationAPI.LIBRARY_SETTINGS + [
         BaseCirculationAPI.DEFAULT_LOAN_DURATION_SETTING,
         {
-            "key": ExternalIntegration.DONT_DISPLAY_RESERVES,
-            "label": _("Don’t Show Titles Available to Reserve"),
+            "key": ExternalIntegration.DISPLAY_RESERVES,
+            "label": _("Show/Hide Titles with No Available Loans"),
             "required": False,
             "description": _(
-                "Titles that are only available to reserve will not be displayed in the Catalog view."
+                "Titles with no available loans will not be displayed in the Catalog view."
             ),
             "type": "select",
             "options": [
-                {"key": ConfigurationAttributeValue.NOVALUE.value, "label": "No"},
-                {"key": ConfigurationAttributeValue.YESVALUE.value, "label": "Yes"},
+                {"key": ConfigurationAttributeValue.YESVALUE.value, "label": "Show"},
+                {"key": ConfigurationAttributeValue.NOVALUE.value, "label": "Hide"},
             ],
         },
     ]
