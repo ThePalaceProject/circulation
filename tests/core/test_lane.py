@@ -2507,11 +2507,47 @@ class TestWorkList(DatabaseTest):
         hit1 = MockHit(w1)
         hit2 = MockHit(w2)
 
+        # Basic test
         # For each list of hits passed in, a corresponding list of
         # Works is returned.
         assert [[w2]] == m(self._db, [[hit2]])
         assert [[w2], []] == m(self._db, [[hit2], [hit1]])
         assert [[], [w2, w2], []] == m(self._db, [[hit1, hit1], [hit2, hit2], []])
+
+        # Restricted pool has availability
+        w1.license_pools[0].licenses_available = 1
+        assert [[w2], [w1]] == m(self._db, [[hit2], [hit1]])
+
+        # Revert back, no availablility
+        w1.license_pools[0].licenses_available = 0
+
+        # Work1 now has 2 licensepools, one of which has availability
+        alternate_collection = self._collection()
+        self._default_library.collections.append(alternate_collection)
+        alternate_w1_lp: LicensePool = self._licensepool(
+            w1.presentation_edition, collection=alternate_collection
+        )
+        alternate_w1_lp.work_id = w1.id
+        self._db.add_all([alternate_collection, alternate_w1_lp])
+        assert [[w2], [w1]] == m(self._db, [[hit2], [hit1]])
+
+        # Still show availability since alternate collection is not restricted
+        alternate_w1_lp.licenses_available = 0
+        assert [[w2], [w1]] == m(self._db, [[hit2], [hit1]])
+
+        # Now both collections are restricted and have no availability
+        cs2 = ConfigurationSetting(
+            library_id=self._default_library.id,
+            external_integration_id=alternate_collection.external_integration_id,
+            key=ExternalIntegration.DONT_DISPLAY_RESERVES,
+            value="yes",
+        )
+        self._db.add(cs2)
+        assert [[w2], []] == m(self._db, [[hit2], [hit1]])
+
+        # Both restricted but one has availability
+        alternate_w1_lp.licenses_available = 1
+        assert [[w2], [w1]] == m(self._db, [[hit2], [hit1]])
 
 
 class TestDatabaseBackedWorkList(DatabaseTest):

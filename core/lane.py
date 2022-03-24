@@ -2277,7 +2277,7 @@ class DatabaseBackedWorkList(WorkList):
         restricted_collection_ids = (r[0] for r in restricted_collections)
 
         # If a licensepool is from a collection that restricts holds
-        # and has not available copies, then we don't want to see it
+        # and has no available copies, then we don't want to see it
         # Should this be a configurable feature?
         qu = qu.filter(
             not_(
