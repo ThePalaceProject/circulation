@@ -49,6 +49,8 @@ from core.model import (
     get_one_or_create,
     tuple_to_numericrange,
 )
+from core.model.collection import Collection
+from core.model.configuration import ConfigurationSetting, ExternalIntegration
 from core.problem_details import INVALID_INPUT
 from core.testing import DatabaseTest, EndToEndSearchTest, LogCaptureHandler
 from core.util.datetime_helpers import utc_now
@@ -2469,6 +2471,84 @@ class TestWorkList(DatabaseTest):
 
         assert [] == wl.search(self._db, query, RaisesException())
 
+    def test_worklist_for_resultset_no_holds_allowed(self):
+        wl = WorkList()
+        wl.initialize(self._default_library)
+        m = wl.works_for_resultsets
+
+        # Create two works.
+        w1: Work = self._work(with_license_pool=True)
+        w2: Work = self._work(with_license_pool=True)
+
+        w1.license_pools[0].licenses_available = 0
+        collection1: Collection = w1.license_pools[0].collection
+        cs1 = ConfigurationSetting(
+            library_id=self._default_library.id,
+            external_integration_id=collection1.external_integration_id,
+            key=ExternalIntegration.DISPLAY_RESERVES,
+            value="no",
+        )
+        self._db.add(cs1)
+        self._db.commit()
+
+        class MockHit(object):
+            def __init__(self, work_id, has_last_update=False):
+                if isinstance(work_id, Work):
+                    self.work_id = work_id.id
+                else:
+                    self.work_id = work_id
+                self.has_last_update = has_last_update
+
+            def __contains__(self, k):
+                # Pretend to have the 'last_update' script field,
+                # if necessary.
+                return k == "last_update" and self.has_last_update
+
+        hit1 = MockHit(w1)
+        hit2 = MockHit(w2)
+
+        # Basic test
+        # For each list of hits passed in, a corresponding list of
+        # Works is returned.
+        assert [[w2]] == m(self._db, [[hit2]])
+        assert [[w2], []] == m(self._db, [[hit2], [hit1]])
+        assert [[], [w2, w2], []] == m(self._db, [[hit1, hit1], [hit2, hit2], []])
+
+        # Restricted pool has availability
+        w1.license_pools[0].licenses_available = 1
+        assert [[w2], [w1]] == m(self._db, [[hit2], [hit1]])
+
+        # Revert back, no availablility
+        w1.license_pools[0].licenses_available = 0
+
+        # Work1 now has 2 licensepools, one of which has availability
+        alternate_collection = self._collection()
+        self._default_library.collections.append(alternate_collection)
+        alternate_w1_lp: LicensePool = self._licensepool(
+            w1.presentation_edition, collection=alternate_collection
+        )
+        alternate_w1_lp.work_id = w1.id
+        self._db.add_all([alternate_collection, alternate_w1_lp])
+        assert [[w2], [w1]] == m(self._db, [[hit2], [hit1]])
+
+        # Still show availability since alternate collection is not restricted
+        alternate_w1_lp.licenses_available = 0
+        assert [[w2], [w1]] == m(self._db, [[hit2], [hit1]])
+
+        # Now both collections are restricted and have no availability
+        cs2 = ConfigurationSetting(
+            library_id=self._default_library.id,
+            external_integration_id=alternate_collection.external_integration_id,
+            key=ExternalIntegration.DISPLAY_RESERVES,
+            value="no",
+        )
+        self._db.add(cs2)
+        assert [[w2], []] == m(self._db, [[hit2], [hit1]])
+
+        # Both restricted but one has availability
+        alternate_w1_lp.licenses_available = 1
+        assert [[w2], [w1]] == m(self._db, [[hit2], [hit1]])
+
 
 class TestDatabaseBackedWorkList(DatabaseTest):
     def test_works_from_database(self):
@@ -2535,6 +2615,9 @@ class TestDatabaseBackedWorkList(DatabaseTest):
             def only_show_ready_deliverable_works(self, _db, qu):
                 return self._stage("only_show_ready_deliverable_works", _db, qu)
 
+            def _restrict_query_for_no_hold_collections(self, _db, qu):
+                return self._stage("_restrict_query_for_no_hold_collections", _db, qu)
+
             def bibliographic_filter_clauses(self, _db, qu):
                 # This method is a little different, so we can't use
                 # _stage().
@@ -2574,6 +2657,7 @@ class TestDatabaseBackedWorkList(DatabaseTest):
         assert [
             "base_query",
             "only_show_ready_deliverable_works",
+            "_restrict_query_for_no_hold_collections",
             "modify_database_query_hook",
         ] == result.clauses
 
@@ -2584,6 +2668,7 @@ class TestDatabaseBackedWorkList(DatabaseTest):
         assert [
             "base_query",
             "only_show_ready_deliverable_works",
+            "_restrict_query_for_no_hold_collections",
         ] == wl.bibliographic_filter_clauses_called_with.clauses
         wl.bibliographic_filter_clauses_called_with = None
 
@@ -2630,6 +2715,7 @@ class TestDatabaseBackedWorkList(DatabaseTest):
         assert [
             "base_query",
             "only_show_ready_deliverable_works",
+            "_restrict_query_for_no_hold_collections",
         ] == wl.pre_bibliographic_filter.clauses
 
         # bibliographic_filter_clauses created a brand new object,

@@ -49,6 +49,7 @@ from core.model import (
     get_one,
     get_one_or_create,
 )
+from core.model.configuration import ConfigurationAttributeValue
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
 from core.scripts import RunCollectionMonitorScript
 from core.testing import DatabaseTest
@@ -98,7 +99,20 @@ class BibliothecaAPI(BaseCirculationAPI, HasSelfTests):
     ] + BaseCirculationAPI.SETTINGS
 
     LIBRARY_SETTINGS = BaseCirculationAPI.LIBRARY_SETTINGS + [
-        BaseCirculationAPI.DEFAULT_LOAN_DURATION_SETTING
+        BaseCirculationAPI.DEFAULT_LOAN_DURATION_SETTING,
+        {
+            "key": ExternalIntegration.DISPLAY_RESERVES,
+            "label": _("Show/Hide Titles with No Available Loans"),
+            "required": False,
+            "description": _(
+                "Titles with no available loans will not be displayed in the Catalog view."
+            ),
+            "type": "select",
+            "options": [
+                {"key": ConfigurationAttributeValue.YESVALUE.value, "label": "Show"},
+                {"key": ConfigurationAttributeValue.NOVALUE.value, "label": "Hide"},
+            ],
+        },
     ]
 
     MAX_AGE = timedelta(days=730).seconds
