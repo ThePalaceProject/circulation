@@ -4530,6 +4530,21 @@ class TestSearchIndexCoverageProvider(DatabaseTest):
         # 4 queries per batch only
         assert new_counter.get_count() == 4
 
+    def test_to_search_documents_with_missing_data(self):
+        # Missing edition relationship
+        work: Work = self._work(with_license_pool=True)
+        work.presentation_edition_id = None
+        [result] = Work.to_search_documents_in_app([work])
+        assert result["identifiers"] == None
+
+        # Missing just some attributes
+        work: Work = self._work(with_license_pool=True)
+        work.presentation_edition.title = None
+        work.target_age = None
+        [result] = Work.to_search_documents_in_app([work])
+        assert result["title"] == None
+        assert result["target_age"]["lower"] == None
+
     def test_success(self):
         work = self._work()
         work.set_presentation_ready()
