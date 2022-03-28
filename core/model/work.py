@@ -1627,9 +1627,10 @@ class Work(Base):
             return value
 
         def _set_value(parent, key, target):
-            for c in columns[key]:
-                val = getattr(parent, c)
-                target[c] = _convert(val)
+            if parent:
+                for c in columns[key]:
+                    val = getattr(parent, c)
+                    target[c] = _convert(val)
 
         _set_value(doc, "work", result)
         result["_id"] = getattr(doc, "id")
@@ -1652,59 +1653,68 @@ class Work(Base):
                 0 if target_age.upper_inc else 1
             )
 
-        _set_value(doc.presentation_edition, "edition", result)
+        if doc.presentation_edition:
+            _set_value(doc.presentation_edition, "edition", result)
 
         result["contributors"] = []
-        for item in doc.presentation_edition.contributions:
-            contributor: Dict = {}
-            _set_value(item.contributor, "contributor", contributor)
-            _set_value(item, "contribution", contributor)
-            result["contributors"].append(contributor)
+        if doc.presentation_edition and doc.presentation_edition.contributions:
+            for item in doc.presentation_edition.contributions:
+                contributor: Dict = {}
+                _set_value(item.contributor, "contributor", contributor)
+                _set_value(item, "contribution", contributor)
+                result["contributors"].append(contributor)
 
         result["licensepools"] = []
-        for item in doc.license_pools:
-            lc: Dict = {}
-            _set_value(item, "licensepools", lc)
-            # lc["availability_time"] = getattr(item, "availability_time").timestamp()
-            lc["available"] = (
-                item.unlimited_access or item.self_hosted or item.licenses_available > 0
-            )
-            lc["licensed"] = (
-                item.unlimited_access or item.self_hosted or item.licenses_owned > 0
-            )
-            lc["medium"] = doc.presentation_edition.medium
-            lc["licensepool_id"] = item.id
-            lc["quality"] = doc.quality
-            result["licensepools"].append(lc)
+        if doc.license_pools:
+            for item in doc.license_pools:
+                lc: Dict = {}
+                _set_value(item, "licensepools", lc)
+                # lc["availability_time"] = getattr(item, "availability_time").timestamp()
+                lc["available"] = (
+                    item.unlimited_access
+                    or item.self_hosted
+                    or item.licenses_available > 0
+                )
+                lc["licensed"] = (
+                    item.unlimited_access or item.self_hosted or item.licenses_owned > 0
+                )
+                lc["medium"] = doc.presentation_edition.medium
+                lc["licensepool_id"] = item.id
+                lc["quality"] = doc.quality
+                result["licensepools"].append(lc)
 
         # Extra special genre massaging
         result["genres"] = []
-        for item in doc.work_genres:  # type: ignore
-            genre = {
-                "scheme": Subject.SIMPLIFIED_GENRE,
-                "term": item.genre.id,
-                "name": item.genre.name,
-                "weight": item.affinity,
-            }
-            result["genres"].append(genre)
+        if doc.work_genres:
+            for item in doc.work_genres:  # type: ignore
+                genre = {
+                    "scheme": Subject.SIMPLIFIED_GENRE,
+                    "term": item.genre.id,
+                    "name": item.genre.name,
+                    "weight": item.affinity,
+                }
+                result["genres"].append(genre)
 
         result["identifiers"] = []
-        for item in doc.identifiers:  # type: ignore
-            identifier: Dict = {}
-            _set_value(item, "identifiers", identifier)
-            result["identifiers"].append(identifier)
+        if doc.identifiers:
+            for item in doc.identifiers:  # type: ignore
+                identifier: Dict = {}
+                _set_value(item, "identifiers", identifier)
+                result["identifiers"].append(identifier)
 
         result["classifications"] = []
-        for item in doc.classifications:  # type: ignore
-            classification: Dict = {}
-            _set_value(item, "classifications", classification)
-            result["classifications"].append(classification)
+        if doc.classifications:
+            for item in doc.classifications:  # type: ignore
+                classification: Dict = {}
+                _set_value(item, "classifications", classification)
+                result["classifications"].append(classification)
 
         result["customlists"] = []
-        for item in doc.custom_list_entries:  # type: ignore
-            customlist: Dict = {}
-            _set_value(item, "custom_list_entries", customlist)
-            result["customlists"].append(customlist)
+        if doc.custom_list_entries:
+            for item in doc.custom_list_entries:  # type: ignore
+                customlist: Dict = {}
+                _set_value(item, "custom_list_entries", customlist)
+                result["customlists"].append(customlist)
 
         # No empty lists, they should be null
         for key, val in result.items():
