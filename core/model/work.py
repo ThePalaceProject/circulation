@@ -1696,14 +1696,14 @@ class Work(Base):
                 result["genres"].append(genre)
 
         result["identifiers"] = []
-        if doc.identifiers:
+        if doc.identifiers:  # type: ignore
             for item in doc.identifiers:  # type: ignore
                 identifier: Dict = {}
                 _set_value(item, "identifiers", identifier)
                 result["identifiers"].append(identifier)
 
         result["classifications"] = []
-        if doc.classifications:
+        if doc.classifications:  # type: ignore
             for item in doc.classifications:  # type: ignore
                 classification: Dict = {}
                 _set_value(item, "classifications", classification)
