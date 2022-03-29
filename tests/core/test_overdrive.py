@@ -20,10 +20,11 @@ from core.model import (
     Subject,
 )
 from core.overdrive import (
-    MockOverdriveAPI,
+    MockOverdriveCoreAPI,
     OverdriveAdvantageAccount,
-    OverdriveAPI,
     OverdriveBibliographicCoverageProvider,
+    OverdriveConfiguration,
+    OverdriveCoreAPI,
     OverdriveRepresentationExtractor,
 )
 from core.scripts import RunCollectionCoverageProviderScript
@@ -35,7 +36,7 @@ from core.util.string_helpers import base64
 class OverdriveTest(DatabaseTest):
     def setup_method(self):
         super(OverdriveTest, self).setup_method()
-        self.collection = MockOverdriveAPI.mock_collection(self._db)
+        self.collection = MockOverdriveCoreAPI.mock_collection(self._db)
         base_path = os.path.split(__file__)[0]
         self.resource_path = os.path.join(base_path, "files", "overdrive")
 
@@ -46,27 +47,27 @@ class OverdriveTest(DatabaseTest):
 
 
 class OverdriveTestWithAPI(OverdriveTest):
-    """Automatically create a MockOverdriveAPI class during setup.
+    """Automatically create a MockOverdriveCoreAPI class during setup.
 
     We don't always do this because
     TestOverdriveBibliographicCoverageProvider needs to create a
-    MockOverdriveAPI during the test, and at the moment the second
-    MockOverdriveAPI request created in a test behaves differently
+    MockOverdriveCoreAPI during the test, and at the moment the second
+    MockOverdriveCoreAPI request created in a test behaves differently
     from the first one.
     """
 
     def setup_method(self):
         super(OverdriveTestWithAPI, self).setup_method()
-        self.api = MockOverdriveAPI(self._db, self.collection)
+        self.api = MockOverdriveCoreAPI(self._db, self.collection)
 
 
-class TestOverdriveAPI(OverdriveTestWithAPI):
+class TestOverdriveCoreAPI(OverdriveTestWithAPI):
     def test_constructor_makes_no_requests(self):
-        # Invoking the OverdriveAPI constructor does not, by itself,
+        # Invoking the OverdriveCoreAPI constructor does not, by itself,
         # make any HTTP requests.
-        collection = MockOverdriveAPI.mock_collection(self._db)
+        collection = MockOverdriveCoreAPI.mock_collection(self._db)
 
-        class NoRequests(OverdriveAPI):
+        class NoRequests(OverdriveCoreAPI):
             MSG = "This is a unit test, you can't make HTTP requests!"
 
             def no_requests(self, *args, **kwargs):
@@ -87,8 +88,8 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
 
     def test_ils_name(self):
         """The 'ils_name' setting (defined in
-        MockOverdriveAPI.mock_collection) is available through
-        OverdriveAPI.ils_name().
+        MockOverdriveCoreAPI.mock_collection) is available through
+        OverdriveCoreAPI.ils_name().
         """
         assert "e" == self.api.ils_name(self._default_library)
 
@@ -99,7 +100,7 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
 
     def test_make_link_safe(self):
         # Unsafe characters are escaped.
-        assert "http://foo.com?q=%2B%3A%7B%7D" == OverdriveAPI.make_link_safe(
+        assert "http://foo.com?q=%2B%3A%7B%7D" == OverdriveCoreAPI.make_link_safe(
             "http://foo.com?q=+:{}"
         )
 
@@ -107,24 +108,24 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
         # to links to version 2.
         v1 = "https://qa.api.overdrive.com/v1/collections/abcde/products/12345/availability"
         v2 = "https://qa.api.overdrive.com/v2/collections/abcde/products/12345/availability"
-        assert v2 == OverdriveAPI.make_link_safe(v1)
+        assert v2 == OverdriveCoreAPI.make_link_safe(v1)
 
         # We also handle the case of a trailing slash, just in case Overdrive
         # starts serving links with trailing slashes.
         v1 = v1 + "/"
         v2 = v2 + "/"
-        assert v2 == OverdriveAPI.make_link_safe(v1)
+        assert v2 == OverdriveCoreAPI.make_link_safe(v1)
 
         # Links to other endpoints are not converted
         leave_alone = "https://qa.api.overdrive.com/v1/collections/abcde/products/12345"
-        assert leave_alone == OverdriveAPI.make_link_safe(leave_alone)
+        assert leave_alone == OverdriveCoreAPI.make_link_safe(leave_alone)
 
     def test_hosts(self):
-        c = OverdriveAPI
+        c = OverdriveCoreAPI
 
-        # By default, OverdriveAPI is initialized with the production
+        # By default, OverdriveCoreAPI is initialized with the production
         # set of hostnames.
-        assert self.api.hosts == c.HOSTS[c.PRODUCTION_SERVERS]
+        assert self.api.hosts() == c.HOSTS[OverdriveConfiguration.PRODUCTION_SERVERS]
 
         # You can instead initialize it to use the testing set of
         # hostnames.
@@ -133,13 +134,13 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
             integration.setting(c.SERVER_NICKNAME).value = x
             return c(self._db, self.collection)
 
-        testing = api_with_setting(c.TESTING_SERVERS)
-        assert testing.hosts == c.HOSTS[c.TESTING_SERVERS]
+        testing = api_with_setting(OverdriveConfiguration.TESTING_SERVERS)
+        assert testing.hosts() == c.HOSTS[OverdriveConfiguration.TESTING_SERVERS]
 
         # If the setting doesn't make sense, we default to production
         # hostnames.
         bad = api_with_setting("nonsensical")
-        assert bad.hosts == c.HOSTS[c.PRODUCTION_SERVERS]
+        assert bad.hosts() == c.HOSTS[OverdriveConfiguration.PRODUCTION_SERVERS]
 
     def test_endpoint(self):
         # The .endpoint() method performs string interpolation, including
@@ -151,7 +152,7 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
 
         # The host names and the 'extra' argument have been used to
         # fill in the string interpolations.
-        expect_args = dict(self.api.hosts)
+        expect_args = dict(self.api.hosts())
         expect_args["extra"] = "val"
         assert result == template % expect_args
 
@@ -175,7 +176,7 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
             self.api.token_authorization_header
             == "Basic "
             + base64.standard_b64encode(
-                b"%s:%s" % (self.api.client_key, self.api.client_secret)
+                b"%s:%s" % (self.api.client_key(), self.api.client_secret())
             )
         )
 
@@ -199,7 +200,7 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
         assert "Got status code 500" in str(excinfo.value)
 
     def test_error_getting_library(self):
-        class MisconfiguredOverdriveAPI(MockOverdriveAPI):
+        class MisconfiguredOverdriveCoreAPI(MockOverdriveCoreAPI):
             """This Overdrive client has valid credentials but the library
             can't be found -- probably because the library ID is wrong."""
 
@@ -211,7 +212,7 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
                 }
 
         # Just instantiating the API doesn't cause this error.
-        api = MisconfiguredOverdriveAPI(self._db, self.collection)
+        api = MisconfiguredOverdriveCoreAPI(self._db, self.collection)
 
         # But trying to access the collection token will cause it.
         with pytest.raises(CannotLoadConfiguration) as excinfo:
@@ -229,7 +230,7 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
         self.api.queue_response(401)
 
         # We refresh the bearer token. (This happens in
-        # MockOverdriveAPI.token_post, so we don't mock the response
+        # MockOverdriveCoreAPI.token_post, so we don't mock the response
         # in the normal way.)
         self.api.access_token_response = self.api.mock_access_token_response(
             "new bearer token"
@@ -315,7 +316,7 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
         main.external_integration.setting("ils_name").value = "default"
 
         # Here's an Overdrive API client for that collection.
-        overdrive_main = MockOverdriveAPI(self._db, main)
+        overdrive_main = MockOverdriveCoreAPI(self._db, main)
 
         # Note the "library" endpoint.
         assert (
@@ -325,7 +326,7 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
 
         # The advantage_library_id of a non-Advantage Overdrive account
         # is always -1.
-        assert "1" == overdrive_main.library_id
+        assert "1" == overdrive_main.library_id()
         assert -1 == overdrive_main.advantage_library_id
 
         # Here's an Overdrive Advantage collection associated with the
@@ -335,7 +336,7 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
             external_account_id="2",
         )
         child.parent = main
-        overdrive_child = MockOverdriveAPI(self._db, child)
+        overdrive_child = MockOverdriveCoreAPI(self._db, child)
 
         # In URL-space, the "library" endpoint for the Advantage
         # collection is beneath the the parent collection's "library"
@@ -347,7 +348,7 @@ class TestOverdriveAPI(OverdriveTestWithAPI):
 
         # The advantage_library_id of an Advantage collection is the
         # numeric value of its external_account_id.
-        assert "2" == overdrive_child.library_id
+        assert "2" == overdrive_child.library_id()
         assert 2 == overdrive_child.advantage_library_id
 
     def test__get_book_list_page(self):
@@ -432,7 +433,7 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
 
     def test_link(self):
         data, raw = self.sample_json("overdrive_book_list.json")
-        expect = OverdriveAPI.make_link_safe(
+        expect = OverdriveCoreAPI.make_link_safe(
             "http://api.overdrive.com/v1/collections/collection-id/products?limit=300&offset=0&lastupdatetime=2014-04-28%2009:25:09&sort=popularity:desc&formats=ebook-epub-open,ebook-epub-adobe,ebook-pdf-adobe,ebook-pdf-open"
         )
         assert expect == OverdriveRepresentationExtractor.link(raw, "first")
@@ -861,7 +862,7 @@ class TestOverdriveBibliographicCoverageProvider(OverdriveTest):
     def setup_method(self):
         super(TestOverdriveBibliographicCoverageProvider, self).setup_method()
         self.provider = OverdriveBibliographicCoverageProvider(
-            self.collection, api_class=MockOverdriveAPI
+            self.collection, api_class=MockOverdriveCoreAPI
         )
         self.api = self.provider.api
 
@@ -870,11 +871,13 @@ class TestOverdriveBibliographicCoverageProvider(OverdriveTest):
         the coverage provider.
         """
         script = RunCollectionCoverageProviderScript(
-            OverdriveBibliographicCoverageProvider, self._db, api_class=MockOverdriveAPI
+            OverdriveBibliographicCoverageProvider,
+            self._db,
+            api_class=MockOverdriveCoreAPI,
         )
         [provider] = script.providers
         assert isinstance(provider, OverdriveBibliographicCoverageProvider)
-        assert isinstance(provider.api, MockOverdriveAPI)
+        assert isinstance(provider.api, MockOverdriveCoreAPI)
         assert self.collection == provider.collection
 
     def test_invalid_or_unrecognized_guid(self):
