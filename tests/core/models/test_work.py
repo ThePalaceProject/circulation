@@ -8,6 +8,7 @@ import pytest
 from psycopg2.extras import NumericRange
 
 from core.classifier import Classifier, Fantasy, Romance, Science_Fiction
+from core.equivalents_coverage import EquivalentIdentifiersCoverageProvider
 from core.external_search import MockExternalSearchIndex
 from core.model import get_one_or_create, tuple_to_numericrange
 from core.model.classification import Genre, Subject
@@ -1133,7 +1134,11 @@ class TestWork(DatabaseTest):
         work.last_update_time = utc_now()
 
         # Make sure all of this will show up in a database query.
-        self._db.flush()
+        # This changes target age to [7, 9)
+        self._db.commit()
+
+        # Ensure the equivalency cache table is updated
+        EquivalentIdentifiersCoverageProvider(self._db).run()
 
         def assert_time_match(python, postgres):
             """Compare a datetime object and a Postgres
@@ -1303,7 +1308,9 @@ class TestWork(DatabaseTest):
 
         target_age_doc = search_doc["target_age"]
         assert work.target_age.lower == target_age_doc["lower"]
-        assert work.target_age.upper == target_age_doc["upper"]
+        assert (
+            work.target_age.upper - 1 == target_age_doc["upper"]
+        )  # .commit() changes this to exclusive upper
 
         # If a book stops being available through a collection
         # (because its LicensePool loses all its licenses or stops
