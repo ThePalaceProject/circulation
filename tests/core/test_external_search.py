@@ -4477,8 +4477,8 @@ class TestSearchIndexCoverageProvider(DatabaseTest):
 
         # works.extend([self._work() for i in range(500)])
 
-        result = Work.to_search_documents(works)
-        inapp = Work.to_search_documents_in_app(works)
+        result = Work.to_search_documents__DONOTUSE(works)
+        inapp = Work.to_search_documents(works)
 
         # Top level keys should be the same
         assert len(result) == len(inapp)
@@ -4522,26 +4522,26 @@ class TestSearchIndexCoverageProvider(DatabaseTest):
 
         with DBStatementCounter(self.connection) as new_counter:
             with PerfTimer() as t2:
-                inapp = Work.to_search_documents_in_app(works)
+                inapp = Work.to_search_documents(works)
 
         # Do not be 100x performance
         assert t2.execution_time < t1.execution_time * 5
 
         # 4 queries per batch only
-        assert new_counter.get_count() == 4
+        assert new_counter.get_count() <= 4
 
     def test_to_search_documents_with_missing_data(self):
         # Missing edition relationship
         work: Work = self._work(with_license_pool=True)
         work.presentation_edition_id = None
-        [result] = Work.to_search_documents_in_app([work])
+        [result] = Work.to_search_documents([work])
         assert result["identifiers"] == None
 
         # Missing just some attributes
         work: Work = self._work(with_license_pool=True)
         work.presentation_edition.title = None
         work.target_age = None
-        [result] = Work.to_search_documents_in_app([work])
+        [result] = Work.to_search_documents([work])
         assert result["title"] == None
         assert result["target_age"]["lower"] == None
 

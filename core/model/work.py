@@ -1436,13 +1436,11 @@ class Work(Base):
     ELASTICSEARCH_TIME_FORMAT = 'YYYY-MM-DD"T"HH24:MI:SS"."MS'
 
     @classmethod
-    def to_search_documents_in_app(
+    def to_search_documents(
         cls: Type[WorkTypevar], works: List[WorkTypevar], policy=None
     ) -> List[Dict]:
-        """In app to search document need to compare speeds
-        TODOS:
-            Cleanup
-            Classifications optimization
+        """In app to search documents needed to ease off the burden
+        of complex queries from the DB cluster
         """
         _db = Session.object_session(works[0])
 
@@ -1451,7 +1449,6 @@ class Work(Base):
             joinedload(Work.presentation_edition)
             .joinedload(Edition.contributions)
             .joinedload(Contribution.contributor),  # type: ignore
-            joinedload(Work.license_pools),
             joinedload(Work.work_genres).joinedload(WorkGenre.genre),  # type: ignore
             joinedload(Work.custom_list_entries),
         )
@@ -1667,6 +1664,14 @@ class Work(Base):
         result["licensepools"] = []
         if doc.license_pools:
             for item in doc.license_pools:
+                if not (
+                    item.open_access
+                    or item.unlimited_access
+                    or item.self_hosted
+                    or item.licenses_owned > 0
+                ):
+                    continue
+
                 lc: Dict = {}
                 _set_value(item, "licensepools", lc)
                 # lc["availability_time"] = getattr(item, "availability_time").timestamp()
@@ -1724,7 +1729,7 @@ class Work(Base):
         return result
 
     @classmethod
-    def to_search_documents(cls, works, policy=None):
+    def to_search_documents__DONOTUSE(cls, works, policy=None):
         """Generate search documents for these Works.
         This is done by constructing an extremely complicated
         SQL query. The code is ugly, but it's about 100 times
