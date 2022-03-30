@@ -241,9 +241,9 @@ class OverdriveCoreAPI(HasExternalIntegration):
             self.parent_library_id = None
 
         # Initialize configuration information.
-        self._configuration_storage: ConfigurationStorage = ConfigurationStorage(self)
-        self._configuration_factory: ConfigurationFactory = ConfigurationFactory()
-        self._configuration: OverdriveConfiguration = OverdriveConfiguration(
+        self._configuration_storage = ConfigurationStorage(self)
+        self._configuration_factory = ConfigurationFactory()
+        self._configuration = OverdriveConfiguration(
             configuration_storage=self._configuration_storage, db=_db
         )
 
@@ -268,7 +268,6 @@ class OverdriveCoreAPI(HasExternalIntegration):
         if server_nickname not in self.HOSTS:
             server_nickname = OverdriveConfiguration.PRODUCTION_SERVERS
 
-        # Set the hostnames we'll be using.
         return dict(self.HOSTS[server_nickname])
 
     def _migrate_configuration(
