@@ -1,7 +1,7 @@
-from core.config import ConfigurationTrait
-from core.model.configuration import ConfigurationMetadata, ConfigurationAttributeType
-
 from flask_babel import lazy_gettext as _
+
+from core.config import ConfigurationTrait
+from core.model.configuration import ConfigurationAttributeType, ConfigurationMetadata
 
 
 class ConnectionConfigurationTrait(ConfigurationTrait):
