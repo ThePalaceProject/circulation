@@ -2,7 +2,7 @@ import datetime
 import json
 import logging
 from threading import RLock
-from typing import Optional, Set
+from typing import Dict, Optional, Set, Tuple
 from urllib.parse import quote, urlsplit, urlunsplit
 
 import isbnlib
@@ -206,7 +206,7 @@ class OverdriveCoreAPI(HasExternalIntegration):
     _configuration: OverdriveConfiguration
     _external_integration: ExternalIntegration
     _db: Session
-    _hosts: dict[str, str]
+    _hosts: Dict[str, str]
     _library_id: str
     _collection_id: int
 
@@ -259,7 +259,7 @@ class OverdriveCoreAPI(HasExternalIntegration):
         # This is set by an access to .collection_token
         self._collection_token = None
 
-    def _determine_hosts(self, configuration: OverdriveConfiguration) -> dict[str, str]:
+    def _determine_hosts(self, configuration: OverdriveConfiguration) -> Dict[str, str]:
         # Figure out which hostnames we'll be using when constructing
         # endpoint URLs.
         server_nickname = (
@@ -426,7 +426,7 @@ class OverdriveCoreAPI(HasExternalIntegration):
 
     def get(
         self, url: str, extra_headers, exception_on_401=False
-    ) -> tuple[int, CaseInsensitiveDict, bytes]:
+    ) -> Tuple[int, CaseInsensitiveDict, bytes]:
         """Make an HTTP GET request using the active Bearer Token."""
         request_headers = dict(Authorization="Bearer %s" % self.token)
         request_headers.update(extra_headers)
@@ -457,7 +457,7 @@ class OverdriveCoreAPI(HasExternalIntegration):
         return "Basic " + base64.standard_b64encode(s).strip()
 
     def token_post(
-        self, url: str, payload: dict[str, str], headers={}, **kwargs
+        self, url: str, payload: Dict[str, str], headers={}, **kwargs
     ) -> Response:
         """Make an HTTP POST request for purposes of getting an OAuth token."""
         headers = dict(headers)
@@ -669,7 +669,7 @@ class OverdriveCoreAPI(HasExternalIntegration):
     def library_id(self) -> str:
         return self._library_id
 
-    def hosts(self) -> dict[str, str]:
+    def hosts(self) -> Dict[str, str]:
         return dict(self._hosts)
 
 
