@@ -82,6 +82,7 @@ class Collection(Base, HasSessionCache):
     # secret as the Overdrive collection, but it has a distinct
     # external_account_id.
     parent_id = Column(Integer, ForeignKey("collections.id"), index=True)
+    # SQLAlchemy will create a Collection-typed field called "parent".
     parent: "Collection"
 
     # When deleting a collection, this flag is set to True so that the deletion
