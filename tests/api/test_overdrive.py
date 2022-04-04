@@ -46,7 +46,7 @@ class OverdriveAPITest(DatabaseTest):
         self.circulation = CirculationAPI(
             self._db, library, api_map={ExternalIntegration.OVERDRIVE: MockOverdriveAPI}
         )
-        self.api = self.circulation.api_for_collection[self.collection.id]
+        self.api: OverdriveAPI = self.circulation.api_for_collection[self.collection.id]
 
     @classmethod
     def sample_data(self, filename):
@@ -257,7 +257,7 @@ class TestOverdriveAPI(OverdriveAPITest):
         # integration and the ILS name associated with the library
         # into the form expected by Overdrive.
         expect = "websiteid:%s authorizationname:%s" % (
-            self.api.website_id.decode("utf-8"),
+            self.api.website_id().decode("utf-8"),
             self.api.ils_name(self._default_library),
         )
         assert expect == self.api.scope_string(self._default_library)
@@ -1473,7 +1473,7 @@ class TestOverdriveAPI(OverdriveAPITest):
         assert "https://oauth-patron.overdrive.com/patrontoken" == url
         assert "barcode" == payload["username"]
         expect_scope = "websiteid:%s authorizationname:%s" % (
-            self.api.website_id.decode("utf-8"),
+            self.api.website_id().decode("utf-8"),
             self.api.ils_name(patron.library),
         )
         assert expect_scope == payload["scope"]

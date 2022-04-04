@@ -1725,17 +1725,19 @@ class SettingsController(AdminCirculationManagerController):
                             setting=setting.get("label"),
                         )
                     )
-        if (
-            not value
-            and setting.get("required")
-            and not "default" in list(setting.keys())
-        ):
-            return INCOMPLETE_CONFIGURATION.detailed(
-                _(
-                    "The configuration is missing a required setting: %(setting)s",
-                    setting=setting.get("label"),
+
+        value_missing = not value
+        value_required = setting.get("required")
+
+        if value_missing and value_required:
+            value_default = setting.get("default")
+            if not value_default:
+                return INCOMPLETE_CONFIGURATION.detailed(
+                    _(
+                        "The configuration is missing a required setting: %(setting)s",
+                        setting=setting.get("label"),
+                    )
                 )
-            )
 
         if isinstance(value, list):
             value = json.dumps(value)

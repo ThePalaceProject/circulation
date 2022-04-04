@@ -47,10 +47,8 @@ from .model import (
     get_one,
 )
 from .model.configuration import (
-    ConfigurationAttributeType,
     ConfigurationFactory,
     ConfigurationGrouping,
-    ConfigurationMetadata,
     ConfigurationStorage,
     ExternalIntegrationLink,
     HasExternalIntegration,
@@ -92,16 +90,7 @@ def parse_identifier(db, identifier):
 
 
 class OPDSImporterConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
-    max_retry_count = ConfigurationMetadata(
-        key="max_retry_count",
-        label=_("Max retry count"),
-        description=_(
-            "The maximum number of times to retry a request for certain connection-related errors."
-        ),
-        type=ConfigurationAttributeType.NUMBER,
-        required=False,
-        default=3,
-    )
+    """The basic OPDS importer configuration"""
 
 
 class AccessNotAuthenticated(Exception):
@@ -158,7 +147,6 @@ class SimplifiedOPDSLookup(object):
 
 
 class MetadataWranglerOPDSLookup(SimplifiedOPDSLookup, HasSelfTests):
-
     PROTOCOL = ExternalIntegration.METADATA_WRANGLER
     NAME = _("Palace Collection Manager Metadata Wrangler")
     CARDINALITY = 1
@@ -480,7 +468,6 @@ class MockMetadataWranglerOPDSLookup(
 
 
 class OPDSXMLParser(XMLParser):
-
     NAMESPACES = {
         "simplified": "http://librarysimplified.org/terms/",
         "app": "http://www.w3.org/2007/app",

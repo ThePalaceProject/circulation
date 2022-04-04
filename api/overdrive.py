@@ -22,10 +22,11 @@ from core.model import (
     Representation,
 )
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
-from core.overdrive import MockOverdriveAPI as BaseMockOverdriveAPI
-from core.overdrive import OverdriveAPI as BaseOverdriveAPI
 from core.overdrive import (
+    MockOverdriveCoreAPI,
     OverdriveBibliographicCoverageProvider,
+    OverdriveConfiguration,
+    OverdriveCoreAPI,
     OverdriveRepresentationExtractor,
 )
 from core.scripts import Script
@@ -61,57 +62,21 @@ class OverdriveAPIConstants(object):
 
 
 class OverdriveAPI(
-    BaseOverdriveAPI, BaseCirculationAPI, HasSelfTests, OverdriveAPIConstants
+    OverdriveCoreAPI, BaseCirculationAPI, HasSelfTests, OverdriveAPIConstants
 ):
 
     NAME = ExternalIntegration.OVERDRIVE
     DESCRIPTION = _(
         "Integrate an Overdrive collection. For an Overdrive Advantage collection, select the consortium's Overdrive collection as the parent."
     )
-    SETTINGS = [
-        {
-            "key": Collection.EXTERNAL_ACCOUNT_ID_KEY,
-            "label": _("Library ID"),
-            "required": True,
-        },
-        {
-            "key": BaseOverdriveAPI.WEBSITE_ID,
-            "label": _("Website ID"),
-            "required": True,
-        },
-        {
-            "key": ExternalIntegration.USERNAME,
-            "label": _("Client Key"),
-            "required": True,
-        },
-        {
-            "key": ExternalIntegration.PASSWORD,
-            "label": _("Client Secret"),
-            "required": True,
-        },
-        {
-            "key": BaseOverdriveAPI.SERVER_NICKNAME,
-            "label": _("Server family"),
-            "description": _(
-                "Unless you hear otherwise from Overdrive, your integration should use their production servers."
-            ),
-            "type": "select",
-            "options": [
-                dict(label=_("Production"), key=BaseOverdriveAPI.PRODUCTION_SERVERS),
-                dict(
-                    label=_("Testing"),
-                    key=BaseOverdriveAPI.TESTING_SERVERS,
-                ),
-            ],
-            "default": BaseOverdriveAPI.PRODUCTION_SERVERS,
-        },
-    ] + BaseCirculationAPI.SETTINGS
+
+    SETTINGS = OverdriveConfiguration.to_settings()
 
     LIBRARY_SETTINGS = BaseCirculationAPI.LIBRARY_SETTINGS + [
         {
-            "key": BaseOverdriveAPI.ILS_NAME_KEY,
+            "key": OverdriveCoreAPI.ILS_NAME_KEY,
             "label": _("ILS Name"),
-            "default": BaseOverdriveAPI.ILS_NAME_DEFAULT,
+            "default": OverdriveCoreAPI.ILS_NAME_DEFAULT,
             "description": _(
                 "When multiple libraries share an Overdrive account, Overdrive uses a setting called 'ILS Name' to determine which ILS to check when validating a given patron."
             ),
@@ -159,7 +124,7 @@ class OverdriveAPI(
     # use other formats.
     LOCK_IN_FORMATS = [
         x
-        for x in BaseOverdriveAPI.FORMATS
+        for x in OverdriveCoreAPI.FORMATS
         if x not in OverdriveAPIConstants.STREAMING_FORMATS
         and x not in OverdriveAPIConstants.MANIFEST_INTERNAL_FORMATS
     ]
@@ -290,7 +255,7 @@ class OverdriveAPI(
         its own Patron Authentication.
         """
         return "websiteid:%s authorizationname:%s" % (
-            self.website_id.decode("utf-8"),
+            self._configuration.website_id,
             self.ils_name(library),
         )
 
@@ -1252,7 +1217,7 @@ class MockOverdriveResponse(object):
         return json.loads(self.content)
 
 
-class MockOverdriveAPI(BaseMockOverdriveAPI, OverdriveAPI):
+class MockOverdriveAPI(MockOverdriveCoreAPI, OverdriveAPI):
 
     library_data = '{"id":1810,"name":"My Public Library (MA)","type":"Library","collectionToken":"1a09d9203","links":{"self":{"href":"http://api.overdrive.com/v1/libraries/1810","type":"application/vnd.overdrive.api+json"},"products":{"href":"http://api.overdrive.com/v1/collections/1a09d9203/products","type":"application/vnd.overdrive.api+json"},"dlrHomepage":{"href":"http://ebooks.nypl.org","type":"text/html"}},"formats":[{"id":"audiobook-wma","name":"OverDrive WMA Audiobook"},{"id":"ebook-pdf-adobe","name":"Adobe PDF eBook"},{"id":"ebook-mediado","name":"MediaDo eBook"},{"id":"ebook-epub-adobe","name":"Adobe EPUB eBook"},{"id":"ebook-kindle","name":"Kindle Book"},{"id":"audiobook-mp3","name":"OverDrive MP3 Audiobook"},{"id":"ebook-pdf-open","name":"Open PDF eBook"},{"id":"ebook-overdrive","name":"OverDrive Read"},{"id":"video-streaming","name":"Streaming Video"},{"id":"ebook-epub-open","name":"Open EPUB eBook"}]}'
 

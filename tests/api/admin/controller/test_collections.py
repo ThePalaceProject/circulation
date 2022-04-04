@@ -172,9 +172,9 @@ class TestCollectionSettings(SettingsControllerTest):
         )
 
         c2.external_account_id = "1234"
-        c2.external_integration.password = "b"
-        c2.external_integration.username = "user"
-        c2.external_integration.setting("website_id").value = "100"
+        c2.external_integration.setting("overdrive_client_secret").value = "b"
+        c2.external_integration.setting("overdrive_client_key").value = "user"
+        c2.external_integration.setting("overdrive_website_id").value = "100"
 
         c3 = self._collection(
             name="Collection 3",
@@ -243,7 +243,9 @@ class TestCollectionSettings(SettingsControllerTest):
             assert c3.external_account_id == settings3.get("external_account_id")
 
             assert c1.external_integration.password == settings1.get("password")
-            assert c2.external_integration.password == settings2.get("password")
+            assert c2.external_integration.setting(
+                "overdrive_client_secret"
+            ).value == settings2.get("overdrive_client_secret")
 
             assert c2.id == coll3.get("parent_id")
 
@@ -420,8 +422,8 @@ class TestCollectionSettings(SettingsControllerTest):
                     ("name", "collection1"),
                     ("protocol", "Overdrive"),
                     ("external_account_id", "1234"),
-                    ("username", "user"),
-                    ("password", "password"),
+                    ("overdrive_client_key", "user"),
+                    ("overdrive_client_secret", "password"),
                 ]
             )
             response = (
@@ -492,9 +494,9 @@ class TestCollectionSettings(SettingsControllerTest):
                         ),
                     ),
                     ("external_account_id", "acctid"),
-                    ("username", "username"),
-                    ("password", "password"),
-                    ("website_id", "1234"),
+                    ("overdrive_client_key", "username"),
+                    ("overdrive_client_secret", "password"),
+                    ("overdrive_website_id", "1234"),
                 ]
             )
             response = (
@@ -507,8 +509,14 @@ class TestCollectionSettings(SettingsControllerTest):
         assert collection.id == int(response.response[0])
         assert "New Collection" == collection.name
         assert "acctid" == collection.external_account_id
-        assert "username" == collection.external_integration.username
-        assert "password" == collection.external_integration.password
+        assert (
+            "username"
+            == collection.external_integration.setting("overdrive_client_key").value
+        )
+        assert (
+            "password"
+            == collection.external_integration.setting("overdrive_client_secret").value
+        )
 
         # Two libraries now have access to the collection.
         assert [collection] == l1.collections
@@ -516,8 +524,8 @@ class TestCollectionSettings(SettingsControllerTest):
         assert [] == l3.collections
 
         # Additional settings were set on the collection.
-        setting = collection.external_integration.setting("website_id")
-        assert "website_id" == setting.key
+        setting = collection.external_integration.setting("overdrive_website_id")
+        assert "overdrive_website_id" == setting.key
         assert "1234" == setting.value
 
         assert (
@@ -594,9 +602,9 @@ class TestCollectionSettings(SettingsControllerTest):
                     ("name", "Collection 1"),
                     ("protocol", ExternalIntegration.OVERDRIVE),
                     ("external_account_id", "1234"),
-                    ("username", "user2"),
-                    ("password", "password"),
-                    ("website_id", "1234"),
+                    ("overdrive_client_key", "user2"),
+                    ("overdrive_client_secret", "password"),
+                    ("overdrive_website_id", "1234"),
                     (
                         "libraries",
                         json.dumps([{"short_name": "L1", "ils_name": "the_ils"}]),
@@ -611,14 +619,17 @@ class TestCollectionSettings(SettingsControllerTest):
         assert collection.id == int(response.response[0])
 
         # The collection has been changed.
-        assert "user2" == collection.external_integration.username
+        assert (
+            "user2"
+            == collection.external_integration.setting("overdrive_client_key").value
+        )
 
         # A library now has access to the collection.
         assert [collection] == l1.collections
 
         # Additional settings were set on the collection.
-        setting = collection.external_integration.setting("website_id")
-        assert "website_id" == setting.key
+        setting = collection.external_integration.setting("overdrive_website_id")
+        assert "overdrive_website_id" == setting.key
         assert "1234" == setting.value
 
         assert (
@@ -635,9 +646,9 @@ class TestCollectionSettings(SettingsControllerTest):
                     ("name", "Collection 1"),
                     ("protocol", ExternalIntegration.OVERDRIVE),
                     ("external_account_id", "1234"),
-                    ("username", "user2"),
-                    ("password", "password"),
-                    ("website_id", "1234"),
+                    ("overdrive_client_key", "user2"),
+                    ("overdrive_client_secret", "password"),
+                    ("overdrive_website_id", "1234"),
                     ("libraries", json.dumps([])),
                 ]
             )
@@ -649,7 +660,10 @@ class TestCollectionSettings(SettingsControllerTest):
         assert collection.id == int(response.response[0])
 
         # The collection is the same.
-        assert "user2" == collection.external_integration.username
+        assert (
+            "user2"
+            == collection.external_integration.setting("overdrive_client_key").value
+        )
         assert ExternalIntegration.OVERDRIVE == collection.protocol
 
         # But the library has been removed.

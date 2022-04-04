@@ -74,6 +74,7 @@ class Collection(Base, HasSessionCache):
     external_integration_id = Column(
         Integer, ForeignKey("externalintegrations.id"), unique=True, index=True
     )
+    _external_integration: ExternalIntegration
 
     # A Collection may specialize some other Collection. For instance,
     # an Overdrive Advantage collection is a specialization of an
@@ -81,6 +82,8 @@ class Collection(Base, HasSessionCache):
     # secret as the Overdrive collection, but it has a distinct
     # external_account_id.
     parent_id = Column(Integer, ForeignKey("collections.id"), index=True)
+    # SQLAlchemy will create a Collection-typed field called "parent".
+    parent: "Collection"
 
     # When deleting a collection, this flag is set to True so that the deletion
     # script can take care of deleting it in the background. This is
@@ -382,7 +385,7 @@ class Collection(Base, HasSessionCache):
         return external_integration
 
     @property
-    def external_integration(self):
+    def external_integration(self) -> ExternalIntegration:
         """Find the external integration for this Collection, assuming
         it already exists.
 

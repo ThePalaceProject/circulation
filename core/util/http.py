@@ -1,10 +1,11 @@
 import logging
+from typing import Callable, Optional
 from urllib.parse import urlparse
 
 import requests
 from flask_babel import lazy_gettext as _
 from requests import sessions
-from requests.adapters import HTTPAdapter
+from requests.adapters import HTTPAdapter, Response
 from urllib3 import Retry
 
 from .problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
@@ -193,24 +194,26 @@ class HTTP(object):
     """A helper for the `requests` module."""
 
     @classmethod
-    def get_with_timeout(cls, url, *args, **kwargs):
+    def get_with_timeout(cls, url: str, *args, **kwargs) -> Response:
         """Make a GET request with timeout handling."""
         return cls.request_with_timeout("GET", url, *args, **kwargs)
 
     @classmethod
-    def post_with_timeout(cls, url, payload, *args, **kwargs):
+    def post_with_timeout(cls, url: str, payload, *args, **kwargs) -> Response:
         """Make a POST request with timeout handling."""
         kwargs["data"] = payload
         return cls.request_with_timeout("POST", url, *args, **kwargs)
 
     @classmethod
-    def put_with_timeout(cls, url, payload, *args, **kwargs):
+    def put_with_timeout(cls, url: str, payload, *args, **kwargs) -> Response:
         """Make a PUT request with timeout handling."""
         kwargs["data"] = payload
         return cls.request_with_timeout("PUT", url, *args, **kwargs)
 
     @classmethod
-    def request_with_timeout(cls, http_method, url, *args, **kwargs):
+    def request_with_timeout(
+        cls, http_method: str, url: str, *args, **kwargs
+    ) -> Response:
         """Call requests.request and turn a timeout into a RequestTimedOut
         exception.
         """
@@ -219,7 +222,9 @@ class HTTP(object):
         )
 
     @classmethod
-    def _request_with_timeout(cls, url, make_request_with, *args, **kwargs):
+    def _request_with_timeout(
+        cls, url: str, make_request_with: Callable[..., Response], *args, **kwargs
+    ) -> Response:
         """Call some kind of method and turn a timeout into a RequestTimedOut
         exception.
 
@@ -247,7 +252,8 @@ class HTTP(object):
         # Unicode data can't be sent over the wire. Convert it
         # to UTF-8.
         if "data" in kwargs and isinstance(kwargs["data"], str):
-            kwargs["data"] = kwargs.get("data").encode("utf8")
+            kwdata: str = kwargs["data"]
+            kwargs["data"] = kwdata.encode("utf8")
         if "headers" in kwargs:
             headers = kwargs["headers"]
             new_headers = {}
@@ -315,11 +321,11 @@ class HTTP(object):
     @classmethod
     def _process_response(
         cls,
-        url,
+        url: str,
         response,
         allowed_response_codes=None,
         disallowed_response_codes=None,
-        expected_encoding="utf-8",
+        expected_encoding: str = "utf-8",
     ):
         """Raise a RequestNetworkException if the response code indicates a
         server-side failure, or behavior so unpredictable that we can't
@@ -390,14 +396,14 @@ class HTTP(object):
         return "%sxx" % (int(status_code) // 100)
 
     @classmethod
-    def debuggable_get(cls, url, **kwargs):
+    def debuggable_get(cls, url: str, **kwargs):
         """Make a GET request that returns a detailed problem
         detail document on error.
         """
         return cls.debuggable_request("GET", url, **kwargs)
 
     @classmethod
-    def debuggable_post(cls, url, payload, **kwargs):
+    def debuggable_post(cls, url: str, payload, **kwargs):
         """Make a POST request that returns a detailed problem
         detail document on error.
         """
@@ -405,7 +411,13 @@ class HTTP(object):
         return cls.debuggable_request("POST", url, **kwargs)
 
     @classmethod
-    def debuggable_request(cls, http_method, url, make_request_with=None, **kwargs):
+    def debuggable_request(
+        cls,
+        http_method: str,
+        url: str,
+        make_request_with: Optional[Callable[..., Response]] = None,
+        **kwargs
+    ) -> Response:
         """Make a request that returns a detailed problem detail document on
         error, rather than a generic "an integration error occured"
         message.
@@ -432,7 +444,7 @@ class HTTP(object):
     @classmethod
     def process_debuggable_response(
         cls,
-        url,
+        url: str,
         response,
         disallowed_response_codes=None,
         allowed_response_codes=None,

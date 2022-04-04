@@ -11,7 +11,7 @@ import time
 import traceback
 from hashlib import md5
 from io import BytesIO
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Tuple
 from urllib.parse import quote, urlparse, urlsplit
 
 import requests
@@ -1055,7 +1055,7 @@ class Representation(Base, MediaTypes):
         return json.dumps(dict(d))
 
     @classmethod
-    def simple_http_get(cls, url, headers, **kwargs):
+    def simple_http_get(cls, url, headers, **kwargs) -> Tuple[int, Any, Any]:
         """The most simple HTTP-based GET."""
         if not "allow_redirects" in kwargs:
             kwargs["allow_redirects"] = True
