@@ -46,7 +46,7 @@ from .contributor import Contribution, Contributor
 from .coverage import CoverageRecord, WorkCoverageRecord
 from .datasource import DataSource
 from .edition import Edition
-from .identifier import Identifier
+from .identifier import Identifier, RecursiveEquivalencyCache
 from .measurement import Measurement
 
 # Import related models when doing type checking
@@ -1436,13 +1436,13 @@ class Work(Base):
     ELASTICSEARCH_TIME_FORMAT = 'YYYY-MM-DD"T"HH24:MI:SS"."MS'
 
     @classmethod
-    def to_search_documents_in_app(
-        cls: Type[WorkTypevar], works: List[WorkTypevar], policy=None
+    def to_search_documents(
+        cls: Type[WorkTypevar], works: List[WorkTypevar]
     ) -> List[Dict]:
-        """In app to search document need to compare speeds
-        TODOS:
-            Cleanup
-            Classifications optimization
+        """In app to search documents needed to ease off the burden
+        of complex queries from the DB cluster
+        No recursive identifier policy is taken here as using the
+        RecursiveEquivalentsCache implicitly has that set
         """
         _db = Session.object_session(works[0])
 
@@ -1451,7 +1451,6 @@ class Work(Base):
             joinedload(Work.presentation_edition)
             .joinedload(Edition.contributions)
             .joinedload(Contribution.contributor),  # type: ignore
-            joinedload(Work.license_pools),
             joinedload(Work.work_genres).joinedload(WorkGenre.genre),  # type: ignore
             joinedload(Work.custom_list_entries),
         )
@@ -1466,30 +1465,20 @@ class Work(Base):
         ## The same nonsense will be required for classifications
         ## TODO: move this equivalence code into another job based on its required frequency
         ## Add it to another table so it becomes faster to just query the pre-computed table
-        works_alias = (
-            select(
-                [
-                    Work.id.label("work_id"),
-                    Edition.id.label("edition_id"),
-                    Edition.primary_identifier_id.label("identifier_id"),
-                ],
-                Work.id.in_((w.id for w in works)),
-            )
-            .select_from(
-                join(Work, Edition, Work.presentation_edition_id == Edition.id)  # type: ignore
-            )
-            .alias("works_alias")
-        )
 
         equivalent_identifiers = (
-            Identifier.recursively_equivalent_identifier_ids_query(
-                literal_column(
-                    str(works_alias.name) + "." + works_alias.c.identifier_id.name
-                ),
-                policy=policy,
+            _db.query(RecursiveEquivalencyCache)
+            .join(
+                Edition,
+                Edition.primary_identifier_id
+                == RecursiveEquivalencyCache.parent_identifier_id,
             )
-            .column(works_alias.c.work_id)
-            .select_from(works_alias)
+            .join(Work, Work.presentation_edition_id == Edition.id)
+            .filter(Work.id.in_((w.id for w in works)))
+            .with_entities(
+                Work.id.label("work_id"),
+                RecursiveEquivalencyCache.identifier_id.label("equivalent_id"),
+            )
             .cte("equivalent_cte")
         )
 
@@ -1502,10 +1491,7 @@ class Work(Base):
                 ]
             )
             .select_from(Identifier)  # type: ignore
-            .where(
-                Identifier.id
-                == literal_column("equivalent_cte.fn_recursive_equivalents_1")
-            )
+            .where(Identifier.id == literal_column("equivalent_cte.equivalent_id"))
         )
 
         identifiers = list(_db.execute(identifiers_query))
@@ -1554,7 +1540,7 @@ class Work(Base):
             .group_by(scheme_column, term_column, equivalent_identifiers.c.work_id)
             .where(
                 Classification.identifier_id
-                == literal_column("equivalent_cte.fn_recursive_equivalents_1")
+                == literal_column("equivalent_cte.equivalent_id")
             )
             .select_from(
                 join(Classification, Subject, Classification.subject_id == Subject.id)  # type: ignore
@@ -1667,6 +1653,14 @@ class Work(Base):
         result["licensepools"] = []
         if doc.license_pools:
             for item in doc.license_pools:
+                if not (
+                    item.open_access
+                    or item.unlimited_access
+                    or item.self_hosted
+                    or item.licenses_owned > 0
+                ):
+                    continue
+
                 lc: Dict = {}
                 _set_value(item, "licensepools", lc)
                 # lc["availability_time"] = getattr(item, "availability_time").timestamp()
@@ -1724,7 +1718,7 @@ class Work(Base):
         return result
 
     @classmethod
-    def to_search_documents(cls, works, policy=None):
+    def to_search_documents__DONOTUSE(cls, works, policy=None):
         """Generate search documents for these Works.
         This is done by constructing an extremely complicated
         SQL query. The code is ugly, but it's about 100 times
