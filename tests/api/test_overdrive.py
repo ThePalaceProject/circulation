@@ -1,7 +1,10 @@
 # encoding: utf-8
+import base64
 import json
+import os
 import random
 from datetime import timedelta
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -47,6 +50,12 @@ class OverdriveAPITest(DatabaseTest):
             self._db, library, api_map={ExternalIntegration.OVERDRIVE: MockOverdriveAPI}
         )
         self.api: OverdriveAPI = self.circulation.api_for_collection[self.collection.id]
+        os.environ[
+            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
+        ] = "TestingKey"
+        os.environ[
+            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_SECRET_SUFFIX}"
+        ] = "TestingSecret"
 
     @classmethod
     def sample_data(self, filename):
@@ -1487,6 +1496,40 @@ class TestOverdriveAPI(OverdriveAPITest):
         assert "false" == payload["password_required"]
         assert "[ignore]" == payload["password"]
 
+    def test_refresh_patron_access_token_is_fulfillment(self):
+        """Verify that patron information is included in the request
+        when refreshing a patron access token.
+        """
+        patron = self._patron()
+        patron.authorization_identifier = "barcode"
+        credential = self._credential(patron=patron)
+        self._default_collection.external_integration.protocol = "Overdrive"
+        self._default_collection.external_account_id = 1
+
+        # Mocked testing credentials
+        encoded_auth = base64.b64encode("TestingKey:TestingSecret".encode())
+
+        # use a real Overdrive API
+        od_api = OverdriveAPI(self._db, self._default_collection)
+        # but mock the request methods
+        od_api._do_post = MagicMock()
+        od_api._do_get = MagicMock()
+        response_credential = od_api.refresh_patron_access_token(
+            credential, patron, "a pin", is_fulfillment=True
+        )
+
+        # Posted once, no gets
+        od_api._do_post.assert_called_once()
+        od_api._do_get.assert_not_called()
+
+        # What did we Post?
+        call_args = od_api._do_post.call_args[0]
+        assert "/patrontoken" in call_args[0]  # url
+        assert (
+            call_args[2]["Authorization"] == f"Basic {encoded_auth.decode()}"
+        )  # Basic header should be that of the fulfillment keys
+        assert response_credential == credential
+
 
 class TestOverdriveAPICredentials(OverdriveAPITest):
     def test_patron_correct_credentials_for_multiple_overdrive_collections(self):
@@ -1500,7 +1543,9 @@ class TestOverdriveAPICredentials(OverdriveAPITest):
             return "%s|%s|%s|%s" % (grant_type, scope, username, password)
 
         class MockAPI(MockOverdriveAPI):
-            def token_post(self, url, payload, headers={}, **kwargs):
+            def token_post(
+                self, url, payload, is_fulfillment=False, headers={}, **kwargs
+            ):
                 url = self.endpoint(url)
                 self.access_token_requests.append((url, payload, headers, kwargs))
                 token = _make_token(
@@ -1974,6 +2019,7 @@ class TestOverdriveManifestFulfillmentInfo(OverdriveAPITest):
             "http://content-link/",
             "abcd-efgh",
             "scope string",
+            "access token",
         )
         response = info.as_response
         assert 302 == response.status_code
@@ -1985,6 +2031,7 @@ class TestOverdriveManifestFulfillmentInfo(OverdriveAPITest):
         # and the scope necessary to initiate Patron Authentication for
         # it.
         assert "scope string" == headers["X-Overdrive-Scope"]
+        assert "Bearer access token" == headers["X-Overdrive-Patron-Authorization"]
         assert "http://content-link/" == headers["Location"]
 
 

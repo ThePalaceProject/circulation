@@ -11,7 +11,7 @@ from requests.adapters import CaseInsensitiveDict, Response
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 
-from .config import CannotLoadConfiguration
+from .config import CannotLoadConfiguration, Configuration
 from .coverage import BibliographicCoverageProvider
 from .importers import BaseImporterConfiguration
 from .metadata_layer import (
@@ -458,12 +458,27 @@ class OverdriveCoreAPI(HasExternalIntegration):
         s = b"%s:%s" % (self.client_key(), self.client_secret())
         return "Basic " + base64.standard_b64encode(s).strip()
 
+    @property
+    def fulfillment_authorization_header(self) -> str:
+        keys = Configuration.overdrive_fulfillment_keys()
+        s = b"%s:%s" % (keys["key"].encode(), keys["secret"].encode())
+        return "Basic " + base64.standard_b64encode(s).strip()
+
     def token_post(
-        self, url: str, payload: Dict[str, str], headers={}, **kwargs
+        self,
+        url: str,
+        payload: Dict[str, str],
+        is_fulfillment=False,
+        headers={},
+        **kwargs
     ) -> Response:
         """Make an HTTP POST request for purposes of getting an OAuth token."""
         headers = dict(headers)
-        headers["Authorization"] = self.token_authorization_header
+        headers["Authorization"] = (
+            self.token_authorization_header
+            if not is_fulfillment
+            else self.fulfillment_authorization_header
+        )
         return self._do_post(url, payload, headers, **kwargs)
 
     @staticmethod
@@ -728,7 +743,7 @@ class MockOverdriveCoreAPI(OverdriveCoreAPI):
         # queue up the response.
         self.queue_response(200, content=self.mock_collection_token("collection token"))
 
-    def token_post(self, url, payload, headers={}, **kwargs):
+    def token_post(self, url, payload, is_fulfillment=False, headers={}, **kwargs):
         """Mock the request for an OAuth token.
 
         We mock the method by looking at the access_token_response

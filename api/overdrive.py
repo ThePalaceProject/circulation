@@ -2,6 +2,7 @@ import datetime
 import json
 import re
 import urllib.parse
+from typing import Tuple, Union
 
 import dateutil
 import flask
@@ -21,6 +22,7 @@ from core.model import (
     MediaTypes,
     Representation,
 )
+from core.model.patron import Patron
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
 from core.overdrive import (
     MockOverdriveCoreAPI,
@@ -247,6 +249,26 @@ class OverdriveAPI(
             collection=self.collection,
         )
 
+    def get_fulfillment_access_token(self, patron: Patron, pin: str) -> Credential:
+        """Get the sitewide fullfilment access token
+        This DOES NOT do any patron authentication, that responsibility
+        is with the workflows that use this function"""
+        od_keys = Configuration.overdrive_fulfillment_keys()
+
+        def refresh_fulfillment_token(credential):
+            self.refresh_patron_access_token(
+                credential, patron, pin, is_fulfillment=True
+            )
+
+        return Credential.lookup(
+            self._db,
+            DataSource.OVERDRIVE,
+            "Fulfillment OAuth Token",
+            patron,
+            refresh_fulfillment_token,
+            collection=self.collection,
+        )
+
     def scope_string(self, library):
         """Create the Overdrive scope string for the given library.
 
@@ -259,7 +281,9 @@ class OverdriveAPI(
             self.ils_name(library),
         )
 
-    def refresh_patron_access_token(self, credential, patron, pin):
+    def refresh_patron_access_token(
+        self, credential, patron, pin, is_fulfillment=False
+    ):
         """Request an OAuth bearer token that allows us to act on
         behalf of a specific patron.
 
@@ -279,7 +303,9 @@ class OverdriveAPI(
             # refuse to issue a token.
             payload["password_required"] = "false"
             payload["password"] = "[ignore]"
-        response = self.token_post(self.PATRON_TOKEN_ENDPOINT, payload)
+        response = self.token_post(
+            self.PATRON_TOKEN_ENDPOINT, payload, is_fulfillment=is_fulfillment
+        )
         if response.status_code == 200:
             self._update_credential(credential, response.json())
         elif response.status_code == 400:
@@ -563,7 +589,9 @@ class OverdriveAPI(
             content_expires=None,
         )
 
-    def get_fulfillment_link(self, patron, pin, overdrive_id, format_type):
+    def get_fulfillment_link(
+        self, patron, pin, overdrive_id, format_type
+    ) -> Union["OverdriveManifestFulfillmentInfo", Tuple[str, str]]:
         """Get the link to the ACSM or manifest for an existing loan."""
         loan = self.get_loan(patron, pin, overdrive_id)
         if not loan:
@@ -612,8 +640,15 @@ class OverdriveAPI(
                 # The client must authenticate using its own
                 # credentials to fulfill this URL; we can't do it.
                 scope_string = self.scope_string(patron.library)
+                fulfillment_access_token = self.get_fulfillment_access_token(
+                    patron, pin
+                )
                 return OverdriveManifestFulfillmentInfo(
-                    self.collection, download_link, overdrive_id, scope_string
+                    self.collection,
+                    download_link,
+                    overdrive_id,
+                    scope_string,
+                    fulfillment_access_token,
                 )
 
             return self.get_fulfillment_link_from_download_link(
@@ -629,7 +664,7 @@ class OverdriveAPI(
 
     def get_fulfillment_link_from_download_link(
         self, patron, pin, download_link, fulfill_url=None
-    ):
+    ) -> Tuple[str, str]:
         # If this for Overdrive's streaming reader, and the link expires,
         # the patron can go back to the circulation manager fulfill url
         # again to get a new one.
@@ -1443,7 +1478,9 @@ class OverdriveAdvantageAccountListScript(Script):
 
 
 class OverdriveManifestFulfillmentInfo(FulfillmentInfo):
-    def __init__(self, collection, content_link, overdrive_identifier, scope_string):
+    def __init__(
+        self, collection, content_link, overdrive_identifier, scope_string, access_token
+    ):
         """Constructor.
 
         Most of the arguments to the superconstructor can be assumed,
@@ -1462,12 +1499,14 @@ class OverdriveManifestFulfillmentInfo(FulfillmentInfo):
             content_expires=None,
         )
         self.scope_string = scope_string
+        self.access_token = access_token
 
     @property
     def as_response(self):
         headers = {
             "Location": self.content_link,
             "X-Overdrive-Scope": self.scope_string,
+            "X-Overdrive-Patron-Authorization": f"Bearer {self.access_token}",
             "Content-Type": self.content_type or "text/plain",
         }
         return flask.Response("", 302, headers)

@@ -79,6 +79,12 @@ class Configuration(ConfigurationConstants):
     DATABASE_TEST_ENVIRONMENT_VARIABLE = "SIMPLIFIED_TEST_DATABASE"
     DATABASE_PRODUCTION_ENVIRONMENT_VARIABLE = "SIMPLIFIED_PRODUCTION_DATABASE"
 
+    # Environment variable for Overdrive fulfillment keys
+    OD_PREFIX_PRODUCTION_PREFIX = "SIMPLIFIED"
+    OD_PREFIX_TESTING_PREFIX = "SIMPLIFIED_TESTING"
+    OD_FULFILLMENT_CLIENT_KEY_SUFFIX = "OVERDRIVE_FULFILLMENT_CLIENT_KEY"
+    OD_FULFILLMENT_CLIENT_SECRET_SUFFIX = "OVERDRIVE_FULFILLMENT_CLIENT_SECRET"
+
     # The version of the app.
     APP_VERSION = "app_version"
     VERSION_FILENAME = ".version"
@@ -497,6 +503,19 @@ class Configuration(ConfigurationConstants):
         # Calling __to_string__ will hide the password.
         logging.info("Connecting to database: %s" % url_obj.__to_string__())
         return url
+
+    @classmethod
+    def overdrive_fulfillment_keys(cls):
+        test = os.environ.get("TESTING", False)
+        prefix = (
+            cls.OD_PREFIX_TESTING_PREFIX if test else cls.OD_PREFIX_PRODUCTION_PREFIX
+        )
+        return {
+            "key": os.environ.get(f"{prefix}_{cls.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"),
+            "secret": os.environ.get(
+                f"{prefix}_{cls.OD_FULFILLMENT_CLIENT_SECRET_SUFFIX}"
+            ),
+        }
 
     @classmethod
     def app_version(cls):
