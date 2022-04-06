@@ -932,15 +932,12 @@ class TestOverdriveBibliographicCoverageProvider(OverdriveTest):
         assert 0 == pool.licenses_owned
         [lpdm1, lpdm2] = pool.delivery_mechanisms
         names = [x.delivery_mechanism.name for x in pool.delivery_mechanisms]
-        assert (
-            sorted(
-                [
-                    "application/pdf (application/vnd.adobe.adept+xml)",
-                    "Kindle via Amazon (Kindle DRM)",
-                ]
-            )
-            == sorted(names)
-        )
+        assert sorted(
+            [
+                "application/pdf (application/vnd.adobe.adept+xml)",
+                "Kindle via Amazon (Kindle DRM)",
+            ]
+        ) == sorted(names)
 
         # A Work was created and made presentation ready.
         assert "Agile Documentation" == pool.work.title

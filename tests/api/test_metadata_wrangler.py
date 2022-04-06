@@ -476,17 +476,14 @@ class TestBaseMetadataWranglerCoverageProvider(MetadataWranglerCoverageProviderT
         """Verify all the different types of identifiers we send
         to the metadata wrangler.
         """
-        assert (
-            set(
-                [
-                    Identifier.OVERDRIVE_ID,
-                    Identifier.BIBLIOTHECA_ID,
-                    Identifier.AXIS_360_ID,
-                    Identifier.URI,
-                ]
-            )
-            == set(BaseMetadataWranglerCoverageProvider.INPUT_IDENTIFIER_TYPES)
-        )
+        assert set(
+            [
+                Identifier.OVERDRIVE_ID,
+                Identifier.BIBLIOTHECA_ID,
+                Identifier.AXIS_360_ID,
+                Identifier.URI,
+            ]
+        ) == set(BaseMetadataWranglerCoverageProvider.INPUT_IDENTIFIER_TYPES)
 
     def test_create_identifier_mapping(self):
         # Most identifiers map to themselves.

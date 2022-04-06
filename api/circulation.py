@@ -232,11 +232,14 @@ class FulfillmentInfo(CirculationInfo):
             blength = len(self.content)
         else:
             blength = 0
-        return "<FulfillmentInfo: content_link: %r, content_type: %r, content: %d bytes, expires: %r>" % (
-            self.content_link,
-            self.content_type,
-            blength,
-            self.fd(self.content_expires),
+        return (
+            "<FulfillmentInfo: content_link: %r, content_type: %r, content: %d bytes, expires: %r>"
+            % (
+                self.content_link,
+                self.content_type,
+                blength,
+                self.fd(self.content_expires),
+            )
         )
 
     @property

@@ -748,21 +748,18 @@ class TestOdiloBibliographicCoverageProvider(OdiloAPITest):
         assert 1 == pool.licenses_reserved
 
         names = [x.delivery_mechanism.name for x in pool.delivery_mechanisms]
-        assert (
-            sorted(
-                [
-                    Representation.EPUB_MEDIA_TYPE
-                    + " ("
-                    + DeliveryMechanism.ADOBE_DRM
-                    + ")",
-                    Representation.TEXT_HTML_MEDIA_TYPE
-                    + " ("
-                    + DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE
-                    + ")",
-                ]
-            )
-            == sorted(names)
-        )
+        assert sorted(
+            [
+                Representation.EPUB_MEDIA_TYPE
+                + " ("
+                + DeliveryMechanism.ADOBE_DRM
+                + ")",
+                Representation.TEXT_HTML_MEDIA_TYPE
+                + " ("
+                + DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE
+                + ")",
+            ]
+        ) == sorted(names)
 
         # Check that handle_success was called --> A Work was created and made presentation ready.
         assert True == pool.work.presentation_ready

@@ -2436,7 +2436,7 @@ class TestWhereAreMyBooksScript(DatabaseTest):
         suppressed=0,
         not_owned=0,
         in_search_index=0,
-        **kwargs
+        **kwargs,
     ):
         """Runs explain_collection() and verifies expected output."""
         script = MockWhereAreMyBooks(self._db, **kwargs)

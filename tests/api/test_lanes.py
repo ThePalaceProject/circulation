@@ -284,19 +284,16 @@ class TestLaneCreation(DatabaseTest):
         # We have five top-level lanes for the large collection,
         # a top-level lane for each small collection, and a lane
         # for everything left over.
-        assert (
-            set(
-                [
-                    "Fiction",
-                    "Nonfiction",
-                    "Young Adult Fiction",
-                    "Young Adult Nonfiction",
-                    "Children and Middle Grade",
-                    "World Languages",
-                ]
-            )
-            == set([x.display_name for x in lanes])
-        )
+        assert set(
+            [
+                "Fiction",
+                "Nonfiction",
+                "Young Adult Fiction",
+                "Young Adult Nonfiction",
+                "Children and Middle Grade",
+                "World Languages",
+            ]
+        ) == set([x.display_name for x in lanes])
 
         [english_fiction_lane] = [x for x in lanes if x.display_name == "Fiction"]
         assert 0 == english_fiction_lane.priority

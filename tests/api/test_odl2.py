@@ -121,17 +121,17 @@ class TestODL2Importer(TestODLImporter):
         assert moby_dick_edition.primary_identifier.identifier == "978-3-16-148410-0"
         assert moby_dick_edition.primary_identifier.type == "ISBN"
 
-        assert u"Moby-Dick" == moby_dick_edition.title
-        assert u"eng" == moby_dick_edition.language
-        assert u"eng" == moby_dick_edition.language
+        assert "Moby-Dick" == moby_dick_edition.title
+        assert "eng" == moby_dick_edition.language
+        assert "eng" == moby_dick_edition.language
         assert EditionConstants.BOOK_MEDIUM == moby_dick_edition.medium
-        assert u"Herman Melville" == moby_dick_edition.author
+        assert "Herman Melville" == moby_dick_edition.author
 
         assert 1 == len(moby_dick_edition.author_contributors)
         [moby_dick_author] = moby_dick_edition.author_contributors
         assert isinstance(moby_dick_author, Contributor)
-        assert u"Herman Melville" == moby_dick_author.display_name
-        assert u"Melville, Herman" == moby_dick_author.sort_name
+        assert "Herman Melville" == moby_dick_author.display_name
+        assert "Melville, Herman" == moby_dick_author.sort_name
 
         assert 1 == len(moby_dick_author.contributions)
         [moby_dick_author_author_contribution] = moby_dick_author.contributions
@@ -142,12 +142,12 @@ class TestODL2Importer(TestODLImporter):
 
         assert datasource == moby_dick_edition.data_source
 
-        assert u"Test Publisher" == moby_dick_edition.publisher
+        assert "Test Publisher" == moby_dick_edition.publisher
         assert datetime.date(2015, 9, 29) == moby_dick_edition.published
 
-        assert u"http://example.org/cover.jpg" == moby_dick_edition.cover_full_url
+        assert "http://example.org/cover.jpg" == moby_dick_edition.cover_full_url
         assert (
-            u"http://example.org/cover-small.jpg"
+            "http://example.org/cover-small.jpg"
             == moby_dick_edition.cover_thumbnail_url
         )
 

@@ -186,17 +186,14 @@ class TestNestedSubgenres(object):
         #  - Epic Fantasy
         #  - Historical Fantasy
         #  - Urban Fantasy
-        assert (
-            set(
-                [
-                    classifier.Fantasy,
-                    classifier.Epic_Fantasy,
-                    classifier.Historical_Fantasy,
-                    classifier.Urban_Fantasy,
-                ]
-            )
-            == set(list(classifier.Fantasy.self_and_subgenres))
-        )
+        assert set(
+            [
+                classifier.Fantasy,
+                classifier.Epic_Fantasy,
+                classifier.Historical_Fantasy,
+                classifier.Urban_Fantasy,
+            ]
+        ) == set(list(classifier.Fantasy.self_and_subgenres))
 
 
 class TestConsolidateWeights(object):

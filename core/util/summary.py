@@ -152,7 +152,7 @@ class SummaryEvaluator(object):
             off_from_optimal = 1.5
         if off_from_optimal:
             # This summary is too long or too short.
-            score /= off_from_optimal ** 1.5
+            score /= off_from_optimal**1.5
 
         bad_phrases = 0
         l = summary.lower()
@@ -167,7 +167,7 @@ class SummaryEvaluator(object):
         if l.count(" -- ") > 3:
             bad_phrases += l.count(" -- ") - 3
 
-        score *= 0.5 ** bad_phrases
+        score *= 0.5**bad_phrases
 
         if apply_language_penalty:
             language_difference = english_bigrams.difference_from(

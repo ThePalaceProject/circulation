@@ -2766,7 +2766,7 @@ class Filter(SearchBase):
         """
 
         exponent = 2
-        cutoff = self.minimum_featured_quality ** exponent
+        cutoff = self.minimum_featured_quality**exponent
         script = self.FEATURABLE_SCRIPT % dict(cutoff=cutoff, exponent=exponent)
         quality_field = SF("script_score", script=dict(source=script))
 
