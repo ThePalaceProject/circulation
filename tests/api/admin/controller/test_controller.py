@@ -361,28 +361,22 @@ class TestSignInController(AdminControllerTest):
             pw_admin, ignore = create(self._db, Admin, email="pw@nypl.org")
             pw_admin.password = "password"
             assert 2 == len(ctrl.admin_auth_providers)
-            assert (
-                set(
-                    [
-                        GoogleOAuthAdminAuthenticationProvider.NAME,
-                        PasswordAdminAuthenticationProvider.NAME,
-                    ]
-                )
-                == set([provider.NAME for provider in ctrl.admin_auth_providers])
-            )
+            assert set(
+                [
+                    GoogleOAuthAdminAuthenticationProvider.NAME,
+                    PasswordAdminAuthenticationProvider.NAME,
+                ]
+            ) == set([provider.NAME for provider in ctrl.admin_auth_providers])
 
             # Only an admin with a password.
             self._db.delete(self.admin)
             assert 2 == len(ctrl.admin_auth_providers)
-            assert (
-                set(
-                    [
-                        GoogleOAuthAdminAuthenticationProvider.NAME,
-                        PasswordAdminAuthenticationProvider.NAME,
-                    ]
-                )
-                == set([provider.NAME for provider in ctrl.admin_auth_providers])
-            )
+            assert set(
+                [
+                    GoogleOAuthAdminAuthenticationProvider.NAME,
+                    PasswordAdminAuthenticationProvider.NAME,
+                ]
+            ) == set([provider.NAME for provider in ctrl.admin_auth_providers])
 
             # No admins. Someone new could still log in with google if domains are
             # configured.

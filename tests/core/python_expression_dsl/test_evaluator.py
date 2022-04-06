@@ -82,8 +82,8 @@ class TestDSLEvaluator(object):
             ("multiplication_with_two_operands", "9 * 3", 9 * 3),
             ("division_with_two_operands", "9 / 3", 9 / 3),
             ("division_with_two_operands_and_remainder", "9 / 4", 9.0 / 4.0),
-            ("exponentiation_with_two_operands", "9 ** 3", 9 ** 3),
-            ("exponentiation_with_three_operands", "2 ** 3 ** 3", 2 ** 3 ** 3),
+            ("exponentiation_with_two_operands", "9 ** 3", 9**3),
+            ("exponentiation_with_three_operands", "2 ** 3 ** 3", 2**3**3),
             (
                 "associative_law_for_addition",
                 "(a + b) + c == a + (b + c)",

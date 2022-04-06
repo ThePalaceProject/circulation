@@ -40,55 +40,52 @@ class TestIndividualAdmins(SettingsControllerTest):
                 self.manager.admin_individual_admin_settings_controller.process_get()
             )
             admins = response.get("individualAdmins")
-            assert (
-                sorted(
-                    [
-                        {
-                            "email": "admin1@nypl.org",
-                            "roles": [{"role": AdminRole.SYSTEM_ADMIN}],
-                        },
-                        {
-                            "email": "admin2@nypl.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARY_MANAGER,
-                                    "library": self._default_library.short_name,
-                                },
-                                {"role": AdminRole.SITEWIDE_LIBRARIAN},
-                            ],
-                        },
-                        {
-                            "email": "admin3@nypl.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARIAN,
-                                    "library": self._default_library.short_name,
-                                }
-                            ],
-                        },
-                        {
-                            "email": "admin4@l2.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARY_MANAGER,
-                                    "library": library2.short_name,
-                                }
-                            ],
-                        },
-                        {
-                            "email": "admin5@l2.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARIAN,
-                                    "library": library2.short_name,
-                                }
-                            ],
-                        },
-                    ],
-                    key=lambda x: x["email"],
-                )
-                == sorted(admins, key=lambda x: x["email"])
-            )
+            assert sorted(
+                [
+                    {
+                        "email": "admin1@nypl.org",
+                        "roles": [{"role": AdminRole.SYSTEM_ADMIN}],
+                    },
+                    {
+                        "email": "admin2@nypl.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARY_MANAGER,
+                                "library": self._default_library.short_name,
+                            },
+                            {"role": AdminRole.SITEWIDE_LIBRARIAN},
+                        ],
+                    },
+                    {
+                        "email": "admin3@nypl.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARIAN,
+                                "library": self._default_library.short_name,
+                            }
+                        ],
+                    },
+                    {
+                        "email": "admin4@l2.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARY_MANAGER,
+                                "library": library2.short_name,
+                            }
+                        ],
+                    },
+                    {
+                        "email": "admin5@l2.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARIAN,
+                                "library": library2.short_name,
+                            }
+                        ],
+                    },
+                ],
+                key=lambda x: x["email"],
+            ) == sorted(admins, key=lambda x: x["email"])
 
         with self.request_context_with_admin("/", admin=admin2):
             # A sitewide librarian or library manager can also see all admins' roles.
@@ -96,55 +93,52 @@ class TestIndividualAdmins(SettingsControllerTest):
                 self.manager.admin_individual_admin_settings_controller.process_get()
             )
             admins = response.get("individualAdmins")
-            assert (
-                sorted(
-                    [
-                        {
-                            "email": "admin1@nypl.org",
-                            "roles": [{"role": AdminRole.SYSTEM_ADMIN}],
-                        },
-                        {
-                            "email": "admin2@nypl.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARY_MANAGER,
-                                    "library": self._default_library.short_name,
-                                },
-                                {"role": AdminRole.SITEWIDE_LIBRARIAN},
-                            ],
-                        },
-                        {
-                            "email": "admin3@nypl.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARIAN,
-                                    "library": self._default_library.short_name,
-                                }
-                            ],
-                        },
-                        {
-                            "email": "admin4@l2.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARY_MANAGER,
-                                    "library": library2.short_name,
-                                }
-                            ],
-                        },
-                        {
-                            "email": "admin5@l2.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARIAN,
-                                    "library": library2.short_name,
-                                }
-                            ],
-                        },
-                    ],
-                    key=lambda x: x["email"],
-                )
-                == sorted(admins, key=lambda x: x["email"])
-            )
+            assert sorted(
+                [
+                    {
+                        "email": "admin1@nypl.org",
+                        "roles": [{"role": AdminRole.SYSTEM_ADMIN}],
+                    },
+                    {
+                        "email": "admin2@nypl.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARY_MANAGER,
+                                "library": self._default_library.short_name,
+                            },
+                            {"role": AdminRole.SITEWIDE_LIBRARIAN},
+                        ],
+                    },
+                    {
+                        "email": "admin3@nypl.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARIAN,
+                                "library": self._default_library.short_name,
+                            }
+                        ],
+                    },
+                    {
+                        "email": "admin4@l2.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARY_MANAGER,
+                                "library": library2.short_name,
+                            }
+                        ],
+                    },
+                    {
+                        "email": "admin5@l2.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARIAN,
+                                "library": library2.short_name,
+                            }
+                        ],
+                    },
+                ],
+                key=lambda x: x["email"],
+            ) == sorted(admins, key=lambda x: x["email"])
 
         with self.request_context_with_admin("/", admin=admin3):
             # A librarian or library manager of a specific library can see all admins, but only
@@ -153,121 +147,112 @@ class TestIndividualAdmins(SettingsControllerTest):
                 self.manager.admin_individual_admin_settings_controller.process_get()
             )
             admins = response.get("individualAdmins")
-            assert (
-                sorted(
-                    [
-                        {
-                            "email": "admin1@nypl.org",
-                            "roles": [{"role": AdminRole.SYSTEM_ADMIN}],
-                        },
-                        {
-                            "email": "admin2@nypl.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARY_MANAGER,
-                                    "library": self._default_library.short_name,
-                                },
-                                {"role": AdminRole.SITEWIDE_LIBRARIAN},
-                            ],
-                        },
-                        {
-                            "email": "admin3@nypl.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARIAN,
-                                    "library": self._default_library.short_name,
-                                }
-                            ],
-                        },
-                        {"email": "admin4@l2.org", "roles": []},
-                        {"email": "admin5@l2.org", "roles": []},
-                    ],
-                    key=lambda x: x["email"],
-                )
-                == sorted(admins, key=lambda x: x["email"])
-            )
+            assert sorted(
+                [
+                    {
+                        "email": "admin1@nypl.org",
+                        "roles": [{"role": AdminRole.SYSTEM_ADMIN}],
+                    },
+                    {
+                        "email": "admin2@nypl.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARY_MANAGER,
+                                "library": self._default_library.short_name,
+                            },
+                            {"role": AdminRole.SITEWIDE_LIBRARIAN},
+                        ],
+                    },
+                    {
+                        "email": "admin3@nypl.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARIAN,
+                                "library": self._default_library.short_name,
+                            }
+                        ],
+                    },
+                    {"email": "admin4@l2.org", "roles": []},
+                    {"email": "admin5@l2.org", "roles": []},
+                ],
+                key=lambda x: x["email"],
+            ) == sorted(admins, key=lambda x: x["email"])
 
         with self.request_context_with_admin("/", admin=admin4):
             response = (
                 self.manager.admin_individual_admin_settings_controller.process_get()
             )
             admins = response.get("individualAdmins")
-            assert (
-                sorted(
-                    [
-                        {
-                            "email": "admin1@nypl.org",
-                            "roles": [{"role": AdminRole.SYSTEM_ADMIN}],
-                        },
-                        {
-                            "email": "admin2@nypl.org",
-                            "roles": [{"role": AdminRole.SITEWIDE_LIBRARIAN}],
-                        },
-                        {"email": "admin3@nypl.org", "roles": []},
-                        {
-                            "email": "admin4@l2.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARY_MANAGER,
-                                    "library": library2.short_name,
-                                }
-                            ],
-                        },
-                        {
-                            "email": "admin5@l2.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARIAN,
-                                    "library": library2.short_name,
-                                }
-                            ],
-                        },
-                    ],
-                    key=lambda x: x["email"],
-                )
-                == sorted(admins, key=lambda x: x["email"])
-            )
+            assert sorted(
+                [
+                    {
+                        "email": "admin1@nypl.org",
+                        "roles": [{"role": AdminRole.SYSTEM_ADMIN}],
+                    },
+                    {
+                        "email": "admin2@nypl.org",
+                        "roles": [{"role": AdminRole.SITEWIDE_LIBRARIAN}],
+                    },
+                    {"email": "admin3@nypl.org", "roles": []},
+                    {
+                        "email": "admin4@l2.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARY_MANAGER,
+                                "library": library2.short_name,
+                            }
+                        ],
+                    },
+                    {
+                        "email": "admin5@l2.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARIAN,
+                                "library": library2.short_name,
+                            }
+                        ],
+                    },
+                ],
+                key=lambda x: x["email"],
+            ) == sorted(admins, key=lambda x: x["email"])
 
         with self.request_context_with_admin("/", admin=admin5):
             response = (
                 self.manager.admin_individual_admin_settings_controller.process_get()
             )
             admins = response.get("individualAdmins")
-            assert (
-                sorted(
-                    [
-                        {
-                            "email": "admin1@nypl.org",
-                            "roles": [{"role": AdminRole.SYSTEM_ADMIN}],
-                        },
-                        {
-                            "email": "admin2@nypl.org",
-                            "roles": [{"role": AdminRole.SITEWIDE_LIBRARIAN}],
-                        },
-                        {"email": "admin3@nypl.org", "roles": []},
-                        {
-                            "email": "admin4@l2.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARY_MANAGER,
-                                    "library": library2.short_name,
-                                }
-                            ],
-                        },
-                        {
-                            "email": "admin5@l2.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARIAN,
-                                    "library": library2.short_name,
-                                }
-                            ],
-                        },
-                    ],
-                    key=lambda x: x["email"],
-                )
-                == sorted(admins, key=lambda x: x["email"])
-            )
+            assert sorted(
+                [
+                    {
+                        "email": "admin1@nypl.org",
+                        "roles": [{"role": AdminRole.SYSTEM_ADMIN}],
+                    },
+                    {
+                        "email": "admin2@nypl.org",
+                        "roles": [{"role": AdminRole.SITEWIDE_LIBRARIAN}],
+                    },
+                    {"email": "admin3@nypl.org", "roles": []},
+                    {
+                        "email": "admin4@l2.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARY_MANAGER,
+                                "library": library2.short_name,
+                            }
+                        ],
+                    },
+                    {
+                        "email": "admin5@l2.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARIAN,
+                                "library": library2.short_name,
+                            }
+                        ],
+                    },
+                ],
+                key=lambda x: x["email"],
+            ) == sorted(admins, key=lambda x: x["email"])
 
     def test_individual_admins_post_errors(self):
         with self.request_context_with_admin("/", method="POST"):

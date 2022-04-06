@@ -1769,7 +1769,7 @@ class TestFeaturedFacets(EndToEndSearchTest):
         # It can be high-quality enough to be featured.
         assert isinstance(featurable, ScriptScore)
         source = filter.FEATURABLE_SCRIPT % dict(
-            cutoff=f.minimum_featured_quality ** 2, exponent=2
+            cutoff=f.minimum_featured_quality**2, exponent=2
         )
         assert source == featurable.script["source"]
 

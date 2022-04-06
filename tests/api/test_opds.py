@@ -1311,16 +1311,13 @@ class TestLibraryAnnotator(VendorIDTest):
         ]
         assert 3 == len(fulfill_links)
 
-        assert (
-            set(
-                [
-                    mech1.delivery_mechanism.drm_scheme_media_type,
-                    mech2.delivery_mechanism.drm_scheme_media_type,
-                    OPDSFeed.ENTRY_TYPE,
-                ]
-            )
-            == set([link["type"] for link in fulfill_links])
-        )
+        assert set(
+            [
+                mech1.delivery_mechanism.drm_scheme_media_type,
+                mech2.delivery_mechanism.drm_scheme_media_type,
+                OPDSFeed.ENTRY_TYPE,
+            ]
+        ) == set([link["type"] for link in fulfill_links])
 
         # If one of the content types is hidden, the corresponding
         # delivery mechanism does not have a link.

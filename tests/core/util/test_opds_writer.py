@@ -47,15 +47,12 @@ class TestAtomFeed(object):
         link_child = AtomFeed.E.link_child()
         AtomFeed.add_link_to_entry(entry, [link_child], **kwargs)
 
-        assert (
-            etree.tostring(
-                etree.fromstring(
-                    '<link extra="extra info" href="url" title="1"><link_child/></link>'
-                ),
-                method="c14n2",
-            )
-            in etree.tostring(entry, method="c14n2")
-        )
+        assert etree.tostring(
+            etree.fromstring(
+                '<link extra="extra info" href="url" title="1"><link_child/></link>'
+            ),
+            method="c14n2",
+        ) in etree.tostring(entry, method="c14n2")
 
     def test_contributor(self):
         kwargs = {"{%s}role" % AtomFeed.OPF_NS: "ctb"}

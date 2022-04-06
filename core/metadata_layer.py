@@ -204,14 +204,17 @@ class ContributorData(object):
         # TODO:  consider if it's time for ContributorData to connect back to Contributions
 
     def __repr__(self):
-        return '<ContributorData sort="%s" display="%s" family="%s" wiki="%s" roles=%r lc=%s viaf=%s>' % (
-            self.sort_name,
-            self.display_name,
-            self.family_name,
-            self.wikipedia_name,
-            self.roles,
-            self.lc,
-            self.viaf,
+        return (
+            '<ContributorData sort="%s" display="%s" family="%s" wiki="%s" roles=%r lc=%s viaf=%s>'
+            % (
+                self.sort_name,
+                self.display_name,
+                self.family_name,
+                self.wikipedia_name,
+                self.roles,
+                self.lc,
+                self.viaf,
+            )
         )
 
     @classmethod

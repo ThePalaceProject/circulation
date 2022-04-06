@@ -1640,13 +1640,13 @@ class TestItemListParser(BibliothecaAPITest):
         # So, we'll test zero and one escapings here.
         authors = list(
             ItemListParser.contributors_from_string(
-                u"Raji Codell, Esmé; Raji Codell, Esm&#233;"
+                "Raji Codell, Esmé; Raji Codell, Esm&#233;"
             )
         )
         author_names = [a.sort_name for a in authors]
         assert len(authors) == 2
         assert len(set(author_names)) == 1
-        assert all(u"Raji Codell, Esmé" == name for name in author_names)
+        assert all("Raji Codell, Esmé" == name for name in author_names)
 
         # It's possible to specify some role other than AUTHOR_ROLE.
         narrators = list(
@@ -1745,17 +1745,14 @@ class TestItemListParser(BibliothecaAPITest):
             names_and_roles.append((c.sort_name, role))
 
         # We found one author and three narrators.
-        assert (
-            sorted(
-                [
-                    ("Riggs, Ransom", "Author"),
-                    ("Callow, Simon", "Narrator"),
-                    ("Mann, Bruce", "Narrator"),
-                    ("Hagon, Garrick", "Narrator"),
-                ]
-            )
-            == sorted(names_and_roles)
-        )
+        assert sorted(
+            [
+                ("Riggs, Ransom", "Author"),
+                ("Callow, Simon", "Narrator"),
+                ("Mann, Bruce", "Narrator"),
+                ("Hagon, Garrick", "Narrator"),
+            ]
+        ) == sorted(names_and_roles)
 
 
 class TestBibliographicCoverageProvider(TestBibliothecaAPI):
