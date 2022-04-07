@@ -425,7 +425,7 @@ class OverdriveCoreAPI(HasExternalIntegration):
         self._token = credential.credential
 
     def get(
-        self, url: str, extra_headers, exception_on_401=False
+        self, url: str, extra_headers={}, exception_on_401=False
     ) -> Tuple[int, CaseInsensitiveDict, bytes]:
         """Make an HTTP GET request using the active Bearer Token."""
         request_headers = dict(Authorization="Bearer %s" % self.token)

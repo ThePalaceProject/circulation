@@ -1,5 +1,6 @@
 # encoding: utf-8
 import json
+import logging
 import os
 
 import pytest
@@ -31,6 +32,7 @@ from core.scripts import RunCollectionCoverageProviderScript
 from core.testing import DatabaseTest, MockRequestsResponse
 from core.util.http import BadResponseException
 from core.util.string_helpers import base64
+from tests.core.util.test_mock_web_server import MockAPIServer, MockAPIServerResponse
 
 
 class OverdriveTest(DatabaseTest):
@@ -61,7 +63,60 @@ class OverdriveTestWithAPI(OverdriveTest):
         self.api = MockOverdriveCoreAPI(self._db, self.collection)
 
 
+@pytest.fixture
+def mock_web_server():
+    """A test fixture that yields a usable mock web server for the lifetime of the test."""
+    _server = MockAPIServer("127.0.0.1", 10256)
+    _server.start()
+    logging.info(f"starting mock web server on {_server.address()}:{_server.port()}")
+    yield _server
+    logging.info(
+        f"shutting down mock web server on {_server.address()}:{_server.port()}"
+    )
+    _server.stop()
+
+
 class TestOverdriveCoreAPI(OverdriveTestWithAPI):
+    def test_errors_not_retried(self, mock_web_server: MockAPIServer):
+        collection = MockOverdriveCoreAPI.mock_collection(self._db)
+
+        # Enqueue a response for the request that the server will make for a token.
+        _r = MockAPIServerResponse()
+        _r.status_code = 200
+        _r.set_content(
+            """{
+            "access_token": "x",
+            "expires_in": 23
+        }
+        """.encode(
+                "utf-8"
+            )
+        )
+        mock_web_server.enqueue_response("POST", "/oauth/token", _r)
+
+        api = OverdriveCoreAPI(self._db, collection)
+        api._hosts["oauth_host"] = mock_web_server.url("/oauth")
+
+        # Try a get() call for each error code
+        for code in [404]:
+            _r = MockAPIServerResponse()
+            _r.status_code = code
+            mock_web_server.enqueue_response("GET", "/a/b/c", _r)
+            _status, _, _ = api.get(mock_web_server.url("/a/b/c"))
+            assert _status == code
+
+        for code in [400, 403, 500, 501, 502, 503]:
+            _r = MockAPIServerResponse()
+            _r.status_code = code
+            mock_web_server.enqueue_response("GET", "/a/b/c", _r)
+            try:
+                api.get(mock_web_server.url("/a/b/c"))
+            except BadResponseException:
+                pass
+
+        # Exactly one request was made for each error code, plus one for a token
+        assert len(mock_web_server.requests()) == 8
+
     def test_constructor_makes_no_requests(self):
         # Invoking the OverdriveCoreAPI constructor does not, by itself,
         # make any HTTP requests.
