@@ -727,27 +727,6 @@ class TestAdobeDeviceManagement(RouteTest):
         self.assert_supported_methods(url, "DELETE")
 
 
-class TestOAuthController(RouteTest):
-    # TODO: We might be able to do a better job of checking that
-    # flask.request.args are propagated through, instead of checking
-    # an empty dict.
-    CONTROLLER_NAME = "oauth_controller"
-
-    def test_oauth_authenticate(self):
-        url = "/oauth_authenticate"
-        _db = self.manager._db
-        self.assert_request_calls(
-            url, self.controller.oauth_authentication_redirect, {}, _db
-        )
-
-    def test_oauth_callback(self):
-        url = "/oauth_callback"
-        _db = self.manager._db
-        self.assert_request_calls(
-            url, self.controller.oauth_authentication_callback, _db, {}
-        )
-
-
 class TestODLNotificationController(RouteTest):
     CONTROLLER_NAME = "odl_notification_controller"
 

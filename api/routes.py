@@ -704,26 +704,6 @@ def adobe_drm_device(device_id):
     return app.manager.adobe_device_management.device_id_handler(device_id)
 
 
-# Route that redirects to the authentication URL for an OAuth provider
-@library_route("/oauth_authenticate")
-@has_library
-@returns_problem_detail
-def oauth_authenticate():
-    return app.manager.oauth_controller.oauth_authentication_redirect(
-        flask.request.args, app.manager._db
-    )
-
-
-# Redirect URI for OAuth providers, eg. Clever
-@library_route("/oauth_callback")
-@has_library
-@returns_problem_detail
-def oauth_callback():
-    return app.manager.oauth_controller.oauth_authentication_callback(
-        app.manager._db, flask.request.args
-    )
-
-
 # Route that redirects to the authentication URL for a SAML provider
 @library_route("/saml_authenticate")
 @has_library
