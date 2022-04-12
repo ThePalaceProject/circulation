@@ -644,16 +644,6 @@ class TestWorkController(RouteTest):
             url, self.controller.related, "<identifier_type>", "<identifier>"
         )
 
-    def test_report(self):
-        url = "/works/<identifier_type>/<identifier>/report"
-        self.assert_request_calls_method_using_identifier(
-            url,
-            self.controller.report,
-            "<identifier_type>",
-            "<identifier>",
-        )
-        self.assert_supported_methods(url, "GET", "POST")
-
 
 class TestAnalyticsController(RouteTest):
     CONTROLLER_NAME = "analytics_controller"

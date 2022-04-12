@@ -68,20 +68,6 @@ METADATA_REFRESH_FAILURE = pd(
     _("Metadata could not be refreshed."),
 )
 
-UNRECOGNIZED_COMPLAINT = pd(
-    "http://librarysimplified.org/terms/problem/unrecognized-complaint",
-    status_code=404,
-    title=_("Unrecognized complaint."),
-    detail=_("The complaint you are attempting to resolve could not be found."),
-)
-
-COMPLAINT_ALREADY_RESOLVED = pd(
-    "http://librarysimplified.org/terms/problem/complaint-already-resolved",
-    status_code=409,
-    title=_("Complaint already resolved."),
-    detail=_("You can't resolve a complaint that is already resolved."),
-)
-
 GENRE_NOT_FOUND = pd(
     "http://librarysimplified.org/terms/problem/genre-not-found",
     status_code=404,

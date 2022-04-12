@@ -286,13 +286,6 @@ class TestAdminWork(AdminRouteTest):
             http_method="POST",
         )
 
-    def test_complaints(self):
-        url = "/admin/works/<identifier_type>/an/identifier/complaints"
-        self.assert_authenticated_request_calls(
-            url, self.controller.complaints, "<identifier_type>", "an/identifier"
-        )
-        self.assert_supported_methods(url, "GET")
-
     def test_custom_lists(self):
         url = "/admin/works/<identifier_type>/an/identifier/lists"
         self.assert_authenticated_request_calls(
@@ -344,16 +337,6 @@ class TestAdminWork(AdminRouteTest):
             http_method="POST",
         )
 
-    def test_resolve_complaints(self):
-        url = "/admin/works/<identifier_type>/an/identifier/resolve_complaints"
-        self.assert_authenticated_request_calls(
-            url,
-            self.controller.resolve_complaints,
-            "<identifier_type>",
-            "an/identifier",
-            http_method="POST",
-        )
-
     def test_edit_classifications(self):
         url = "/admin/works/<identifier_type>/an/identifier/edit_classifications"
         self.assert_authenticated_request_calls(
@@ -384,10 +367,6 @@ class TestAdminWork(AdminRouteTest):
 class TestAdminFeed(AdminRouteTest):
 
     CONTROLLER_NAME = "admin_feed_controller"
-
-    def test_complaints(self):
-        url = "/admin/complaints"
-        self.assert_authenticated_request_calls(url, self.controller.complaints)
 
     def test_suppressed(self):
         url = "/admin/suppressed"

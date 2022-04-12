@@ -34,7 +34,6 @@ from .model import (
     Base,
     Classification,
     Collection,
-    Complaint,
     Contributor,
     CoverageRecord,
     Credential,
@@ -680,12 +679,6 @@ class DatabaseTest(object):
             customlist.add_entry(edition, "Annotation %s" % i, first_appearance=now)
             editions.append(edition)
         return customlist, editions
-
-    def _complaint(self, license_pool, type, source, detail, resolved=None):
-        complaint, is_new = Complaint.register(
-            license_pool, type, source, detail, resolved
-        )
-        return complaint
 
     def _credential(
         self, data_source_name=DataSource.GUTENBERG, type=None, patron=None

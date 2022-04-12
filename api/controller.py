@@ -19,7 +19,7 @@ from sqlalchemy.orm import eagerload
 
 from api.saml.controller import SAMLController
 from core.analytics import Analytics
-from core.app_server import ComplaintController, HeartbeatController
+from core.app_server import HeartbeatController
 from core.app_server import URNLookupController as CoreURNLookupController
 from core.app_server import (
     cdn_url_for,
@@ -50,7 +50,6 @@ from core.model import (
     CachedFeed,
     CirculationEvent,
     Collection,
-    Complaint,
     ConfigurationSetting,
     CustomList,
     DataSource,
@@ -2267,30 +2266,6 @@ class WorkController(CirculationManagerController):
             annotator=annotator,
             search_engine=search_engine,
         )
-
-    def report(self, identifier_type, identifier):
-        """Report a problem with a book."""
-
-        # TODO: We don't have a reliable way of knowing whether the
-        # complaing is being lodged against the work or against a
-        # specific LicensePool.
-
-        # Turn source + identifier into a set of LicensePools
-        library = flask.request.library
-        pools = self.load_licensepools(library, identifier_type, identifier)
-        if isinstance(pools, ProblemDetail):
-            # Something went wrong.
-            return pools
-
-        if flask.request.method == "GET":
-            # Return a list of valid URIs to use as the type of a problem detail
-            # document.
-            data = "\n".join(Complaint.VALID_TYPES)
-            return Response(data, 200, {"Content-Type": "text/uri-list"})
-
-        data = flask.request.data
-        controller = ComplaintController()
-        return controller.register(pools[0], data)
 
     def series(self, series_name, languages, audiences, feed_class=AcquisitionFeed):
         """Serve a feed of books in a given series."""

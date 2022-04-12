@@ -12,7 +12,6 @@ from core.mock_analytics_provider import MockAnalyticsProvider
 from core.model import create
 from core.model.circulationevent import CirculationEvent
 from core.model.collection import CollectionMissing
-from core.model.complaint import Complaint
 from core.model.constants import MediaTypes
 from core.model.contributor import Contributor
 from core.model.datasource import DataSource
@@ -761,116 +760,6 @@ class TestLicensePool(DatabaseTest):
         no_resource.open_access = True
         assert True == better(no_resource, None)
         assert False == better(no_resource, gutenberg_1)
-
-    def test_with_complaint(self):
-        library = self._default_library
-        type = iter(Complaint.VALID_TYPES)
-        type1 = next(type)
-        type2 = next(type)
-        type3 = next(type)
-
-        work1 = self._work(
-            "fiction work with complaint",
-            language="eng",
-            fiction=True,
-            with_open_access_download=True,
-        )
-        lp1 = work1.license_pools[0]
-        lp1_complaint1 = self._complaint(
-            lp1, type1, "lp1 complaint1 source", "lp1 complaint1 detail"
-        )
-        lp1_complaint2 = self._complaint(
-            lp1, type1, "lp1 complaint2 source", "lp1 complaint2 detail"
-        )
-        lp1_complaint3 = self._complaint(
-            lp1, type2, "work1 complaint3 source", "work1 complaint3 detail"
-        )
-        lp1_resolved_complaint = self._complaint(
-            lp1,
-            type3,
-            "work3 resolved complaint source",
-            "work3 resolved complaint detail",
-            utc_now(),
-        )
-
-        work2 = self._work(
-            "nonfiction work with complaint",
-            language="eng",
-            fiction=False,
-            with_open_access_download=True,
-        )
-        lp2 = work2.license_pools[0]
-        lp2_complaint1 = self._complaint(
-            lp2, type2, "work2 complaint1 source", "work2 complaint1 detail"
-        )
-        lp2_resolved_complaint = self._complaint(
-            lp2,
-            type2,
-            "work2 resolved complaint source",
-            "work2 resolved complaint detail",
-            utc_now(),
-        )
-
-        work3 = self._work(
-            "fiction work without complaint",
-            language="eng",
-            fiction=True,
-            with_open_access_download=True,
-        )
-        lp3 = work3.license_pools[0]
-        lp3_resolved_complaint = self._complaint(
-            lp3,
-            type3,
-            "work3 resolved complaint source",
-            "work3 resolved complaint detail",
-            utc_now(),
-        )
-
-        work4 = self._work(
-            "nonfiction work without complaint",
-            language="eng",
-            fiction=False,
-            with_open_access_download=True,
-        )
-
-        # excludes resolved complaints by default
-        results = LicensePool.with_complaint(library).all()
-
-        assert 2 == len(results)
-        assert lp1.id == results[0][0].id
-        assert 3 == results[0][1]
-        assert lp2.id == results[1][0].id
-        assert 1 == results[1][1]
-
-        # include resolved complaints this time
-        more_results = LicensePool.with_complaint(library, resolved=None).all()
-
-        assert 3 == len(more_results)
-        assert lp1.id == more_results[0][0].id
-        assert 4 == more_results[0][1]
-        assert lp2.id == more_results[1][0].id
-        assert 2 == more_results[1][1]
-        assert lp3.id == more_results[2][0].id
-        assert 1 == more_results[2][1]
-
-        # show only resolved complaints
-        resolved_results = LicensePool.with_complaint(library, resolved=True).all()
-        lp_ids = set([result[0].id for result in resolved_results])
-        counts = set([result[1] for result in resolved_results])
-
-        assert 3 == len(resolved_results)
-        assert lp_ids == set([lp1.id, lp2.id, lp3.id])
-        assert counts == set([1])
-
-        # This library has none of the license pools that have complaints,
-        # so passing it in to with_complaint() gives no results.
-        library2 = self._library()
-        assert 0 == LicensePool.with_complaint(library2).count()
-
-        # If we add the default library's collection to this new library,
-        # we start getting the same results.
-        library2.collections.extend(library.collections)
-        assert 3 == LicensePool.with_complaint(library2, resolved=None).count()
 
     def test_set_presentation_edition(self):
         """

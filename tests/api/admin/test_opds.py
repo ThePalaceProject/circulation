@@ -2,8 +2,8 @@ import feedparser
 
 from api.admin.opds import AdminAnnotator, AdminFeed
 from api.opds import AcquisitionFeed
-from core.lane import Facets, Pagination
-from core.model import Complaint, DataSource, ExternalIntegration, Measurement
+from core.lane import Pagination
+from core.model import DataSource, ExternalIntegration, Measurement
 from core.model.configuration import ExternalIntegrationLink
 from core.testing import DatabaseTest
 
@@ -209,113 +209,6 @@ class TestOPDS(DatabaseTest):
         ]
         assert lp.identifier.identifier in change_cover_link["href"]
 
-    def test_complaints_feed(self):
-        """Test the ability to show a paginated feed of works with complaints."""
-
-        type = iter(Complaint.VALID_TYPES)
-        type1 = next(type)
-        type2 = next(type)
-
-        work1 = self._work(
-            "fiction work with complaint",
-            language="eng",
-            fiction=True,
-            with_open_access_download=True,
-        )
-        work1_complaint1 = self._complaint(
-            work1.license_pools[0],
-            type1,
-            "work1 complaint1 source",
-            "work1 complaint1 detail",
-        )
-        work1_complaint2 = self._complaint(
-            work1.license_pools[0],
-            type1,
-            "work1 complaint2 source",
-            "work1 complaint2 detail",
-        )
-        work1_complaint3 = self._complaint(
-            work1.license_pools[0],
-            type2,
-            "work1 complaint3 source",
-            "work1 complaint3 detail",
-        )
-        work2 = self._work(
-            "nonfiction work with complaint",
-            language="eng",
-            fiction=False,
-            with_open_access_download=True,
-        )
-        work2_complaint1 = self._complaint(
-            work2.license_pools[0],
-            type2,
-            "work2 complaint1 source",
-            "work2 complaint1 detail",
-        )
-        work3 = self._work(
-            "fiction work without complaint",
-            language="eng",
-            fiction=True,
-            with_open_access_download=True,
-        )
-        work4 = self._work(
-            "nonfiction work without complaint",
-            language="eng",
-            fiction=False,
-            with_open_access_download=True,
-        )
-
-        facets = Facets.default(self._default_library)
-        pagination = Pagination(size=1)
-        annotator = MockAnnotator(self._default_library)
-
-        def make_page(pagination):
-            return AdminFeed.complaints(
-                library=self._default_library,
-                title="Complaints",
-                url=self._url,
-                annotator=annotator,
-                pagination=pagination,
-            )
-
-        first_page = make_page(pagination)
-        parsed = feedparser.parse(str(first_page))
-        assert 1 == len(parsed["entries"])
-        assert work1.title == parsed["entries"][0]["title"]
-        # Verify that the entry has acquisition links.
-        links = parsed["entries"][0]["links"]
-        open_access_links = [
-            l
-            for l in links
-            if l["rel"] == "http://opds-spec.org/acquisition/open-access"
-        ]
-        assert 1 == len(open_access_links)
-
-        # Make sure the links are in place.
-        [start] = self.links(parsed, "start")
-        assert annotator.groups_url(None) == start["href"]
-        assert annotator.top_level_title() == start["title"]
-
-        [up] = self.links(parsed, "up")
-        assert annotator.groups_url(None) == up["href"]
-        assert annotator.top_level_title() == up["title"]
-
-        [next_link] = self.links(parsed, "next")
-        assert (
-            annotator.complaints_url(facets, pagination.next_page) == next_link["href"]
-        )
-
-        # This was the first page, so no previous link.
-        assert [] == self.links(parsed, "previous")
-
-        # Now get the second page and make sure it has a 'previous' link.
-        second_page = make_page(pagination.next_page)
-        parsed = feedparser.parse(str(second_page))
-        [previous] = self.links(parsed, "previous")
-        assert annotator.complaints_url(facets, pagination) == previous["href"]
-        assert 1 == len(parsed["entries"])
-        assert work2.title == parsed["entries"][0]["title"]
-
     def test_suppressed_feed(self):
         # Test the ability to show a paginated feed of suppressed works.
 
@@ -393,18 +286,8 @@ class MockAnnotator(AdminAnnotator):
             name = ""
         return "http://groups/%s" % name
 
-    def complaints_url(self, facets, pagination):
-        base = "http://complaints/"
-        sep = "?"
-        if facets:
-            base += sep + facets.query_string
-            sep = "&"
-        if pagination:
-            base += sep + pagination.query_string
-        return base
-
     def suppressed_url(self, pagination):
-        base = "http://complaints/"
+        base = "http://suppressed/"
         sep = "?"
         if pagination:
             base += sep + pagination.query_string

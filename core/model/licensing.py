@@ -12,14 +12,12 @@ from sqlalchemy import ForeignKey, Index, Integer, String, Unicode, UniqueConstr
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import or_
-from sqlalchemy.sql.functions import func
 
 from core.model.hybrid import hybrid_property
 
 from ..util.datetime_helpers import utc_now
 from . import Base, create, flush, get_one, get_one_or_create
 from .circulationevent import CirculationEvent
-from .complaint import Complaint
 from .constants import DataSourceConstants, EditionConstants, LinkRelations, MediaTypes
 from .hassessioncache import HasSessionCache
 from .patron import Hold, Loan, Patron
@@ -210,11 +208,6 @@ class LicensePool(Base):
         "CirculationEvent", backref="license_pool", cascade="all, delete-orphan"
     )
 
-    # One LicensePool can be associated with many Complaints.
-    complaints = relationship(
-        "Complaint", backref="license_pool", cascade="all, delete-orphan"
-    )
-
     # The date this LicensePool was first created in our db
     # (the date we first discovered that ​we had that book in ​our collection).
     availability_time = Column(DateTime(timezone=True), index=True)
@@ -397,39 +390,6 @@ class LicensePool(Base):
                 dm.delivery_mechanism.default_client_can_fulfill
                 for dm in self.delivery_mechanisms
             ]
-        )
-
-    @classmethod
-    def with_complaint(cls, library, resolved=False):
-        """Return query for LicensePools that have at least one Complaint."""
-        from .collection import Collection
-        from .library import Library
-
-        _db = Session.object_session(library)
-        subquery = (
-            _db.query(
-                LicensePool.id, func.count(LicensePool.id).label("complaint_count")
-            )
-            .select_from(LicensePool)
-            .join(LicensePool.collection)
-            .join(Collection.libraries)
-            .filter(Library.id == library.id)
-            .join(LicensePool.complaints)
-            .group_by(LicensePool.id)
-        )
-
-        if resolved == False:
-            subquery = subquery.filter(Complaint.resolved == None)
-        elif resolved == True:
-            subquery = subquery.filter(Complaint.resolved != None)
-
-        subquery = subquery.subquery()
-
-        return (
-            _db.query(LicensePool)
-            .join(subquery, LicensePool.id == subquery.c.id)
-            .order_by(subquery.c.complaint_count.desc())
-            .add_columns(subquery.c.complaint_count)
         )
 
     @property

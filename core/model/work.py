@@ -311,12 +311,6 @@ class Work(Base):
     def has_open_access_license(self):
         return any(x.open_access for x in self.license_pools)
 
-    @property
-    def complaints(self):
-        complaints = list()
-        [complaints.extend(pool.complaints) for pool in self.license_pools]
-        return complaints
-
     def __repr__(self):
         return '<Work #%s "%s" (by %s) %s lang=%s (%s lp)>' % (
             self.id,

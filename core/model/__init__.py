@@ -522,7 +522,6 @@ from .collection import (
     CollectionMissing,
     collections_identifiers,
 )
-from .complaint import Complaint
 from .configuration import (
     ConfigurationSetting,
     ExternalIntegration,

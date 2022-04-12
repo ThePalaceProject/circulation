@@ -3,9 +3,9 @@ from sqlalchemy import and_
 from api.config import CannotLoadConfiguration
 from api.metadata_wrangler import MetadataWranglerCollectionRegistrar
 from api.opds import LibraryAnnotator
-from core.lane import Facets, Pagination
+from core.lane import Pagination
 from core.mirror import MirrorUploader
-from core.model import DataSource, LicensePool, Session
+from core.model import DataSource, LicensePool
 from core.model.configuration import ExternalIntegrationLink
 from core.opds import AcquisitionFeed, VerboseAnnotator
 
@@ -103,11 +103,6 @@ class AdminAnnotator(LibraryAnnotator):
                 ),
             )
 
-    def complaints_url(self, facets, pagination):
-        kwargs = dict(list(facets.items()))
-        kwargs.update(dict(list(pagination.items())))
-        return self.url_for("complaints", _external=True, **kwargs)
-
     def suppressed_url(self, pagination):
         kwargs = dict(list(pagination.items()))
         return self.url_for("suppressed", _external=True, **kwargs)
@@ -122,61 +117,6 @@ class AdminAnnotator(LibraryAnnotator):
 
 
 class AdminFeed(AcquisitionFeed):
-    @classmethod
-    def complaints(cls, library, title, url, annotator, pagination=None):
-        _db = Session.object_session(library)
-        facets = Facets.default(library)
-        pagination = pagination or Pagination.default()
-
-        q = LicensePool.with_complaint(library)
-        results = pagination.modify_database_query(_db, q).all()
-
-        if len(results) > 0:
-            (pools, counts) = list(zip(*results))
-        else:
-            pools = ()
-
-        works = [pool.work for pool in pools]
-        feed = cls(_db, title, url, works, annotator)
-
-        # Render a 'start' link
-        top_level_title = annotator.top_level_title()
-        start_uri = annotator.groups_url(None)
-        AdminFeed.add_link_to_feed(
-            feed.feed, href=start_uri, rel="start", title=top_level_title
-        )
-
-        # Render an 'up' link, same as the 'start' link to indicate top-level feed
-        AdminFeed.add_link_to_feed(
-            feed.feed, href=start_uri, rel="up", title=top_level_title
-        )
-
-        if len(works) > 0:
-            # There are works in this list. Add a 'next' link.
-            AdminFeed.add_link_to_feed(
-                feed.feed,
-                rel="next",
-                href=annotator.complaints_url(facets, pagination.next_page),
-            )
-
-        if pagination.offset > 0:
-            AdminFeed.add_link_to_feed(
-                feed.feed,
-                rel="first",
-                href=annotator.complaints_url(facets, pagination.first_page),
-            )
-
-        previous_page = pagination.previous_page
-        if previous_page:
-            AdminFeed.add_link_to_feed(
-                feed.feed,
-                rel="previous",
-                href=annotator.complaints_url(facets, previous_page),
-            )
-
-        annotator.annotate_feed(feed)
-        return str(feed)
-
     @classmethod
     def suppressed(cls, _db, title, url, annotator, pagination=None):
         pagination = pagination or Pagination.default()
