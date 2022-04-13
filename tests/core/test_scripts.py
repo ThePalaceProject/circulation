@@ -20,7 +20,6 @@ from core.mirror import MirrorUploader
 from core.model import (
     CachedFeed,
     Collection,
-    Complaint,
     ConfigurationSetting,
     Contributor,
     CoverageRecord,
@@ -260,17 +259,6 @@ class TestCheckContributorNamesInDB(DatabaseTest):
         assert "Bob" == bob.sort_name
         assert "Bob Bitshifter" == bob.display_name
         assert "Bob Rocks" == edition_bob.sort_author
-
-        # and we lodged a proper complaint
-        q = self._db.query(Complaint).filter(
-            Complaint.source == CheckContributorNamesInDB.COMPLAINT_SOURCE
-        )
-        q = q.filter(Complaint.type == CheckContributorNamesInDB.COMPLAINT_TYPE).filter(
-            Complaint.license_pool == pool_bob
-        )
-        complaints = q.all()
-        assert 1 == len(complaints)
-        assert None == complaints[0].resolved
 
 
 class TestIdentifierInputScript(DatabaseTest):

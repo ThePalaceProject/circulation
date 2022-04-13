@@ -38,7 +38,6 @@ from core.model import (
     Admin,
     AdminRole,
     CirculationEvent,
-    Complaint,
     ConfigurationSetting,
     CustomList,
     CustomListEntry,
@@ -1003,46 +1002,6 @@ class TestFeedController(AdminControllerTest):
     def setup_method(self):
         super(TestFeedController, self).setup_method()
         self.admin.add_role(AdminRole.LIBRARIAN, self._default_library)
-
-    def test_complaints(self):
-        type = iter(Complaint.VALID_TYPES)
-        type1 = next(type)
-        type2 = next(type)
-
-        work1 = self._work(
-            "fiction work with complaint 1",
-            language="eng",
-            fiction=True,
-            with_open_access_download=True,
-        )
-        complaint1 = self._complaint(
-            work1.license_pools[0], type1, "complaint source 1", "complaint detail 1"
-        )
-        complaint2 = self._complaint(
-            work1.license_pools[0], type2, "complaint source 2", "complaint detail 2"
-        )
-        work2 = self._work(
-            "nonfiction work with complaint",
-            language="eng",
-            fiction=False,
-            with_open_access_download=True,
-        )
-        complaint3 = self._complaint(
-            work2.license_pools[0], type1, "complaint source 3", "complaint detail 3"
-        )
-
-        with self.request_context_with_library_and_admin("/"):
-            response = self.manager.admin_feed_controller.complaints()
-            feed = feedparser.parse(response.get_data(as_text=True))
-            entries = feed["entries"]
-
-            assert len(entries) == 2
-
-        self.admin.remove_role(AdminRole.LIBRARIAN, self._default_library)
-        with self.request_context_with_library_and_admin("/"):
-            pytest.raises(
-                AdminNotAuthorized, self.manager.admin_feed_controller.complaints
-            )
 
     def test_suppressed(self):
         suppressed_work = self._work(with_open_access_download=True)

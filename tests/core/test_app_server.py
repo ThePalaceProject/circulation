@@ -9,7 +9,6 @@ from flask_babel import Babel
 from flask_babel import lazy_gettext as _
 
 from core.app_server import (
-    ComplaintController,
     ErrorHandler,
     HeartbeatController,
     URNLookupController,
@@ -208,54 +207,6 @@ class TestURNLookupController(DatabaseTest):
             response_data = response.data.decode("utf8")
             assert identifier.urn in response_data
             assert work.title in response_data
-
-
-class TestComplaintController(DatabaseTest):
-    def setup_method(self):
-        super(TestComplaintController, self).setup_method()
-        self.controller = ComplaintController()
-        self.edition, self.pool = self._edition(with_license_pool=True)
-        self.app = Flask(__name__)
-        Babel(self.app)
-
-    def test_no_license_pool(self):
-        with self.app.test_request_context("/"):
-            response = self.controller.register(None, "{}")
-        assert response.status.startswith("400")
-        body = json.loads(response.data.decode("utf8"))
-        assert "No license pool specified" == body["title"]
-
-    def test_invalid_document(self):
-        with self.app.test_request_context("/"):
-            response = self.controller.register(self.pool, "not {a} valid document")
-        assert response.status.startswith("400")
-        body = json.loads(response.data.decode("utf8"))
-        assert "Invalid problem detail document" == body["title"]
-
-    def test_invalid_type(self):
-        data = json.dumps({"type": "http://not-a-recognized-type/"})
-        with self.app.test_request_context("/"):
-            response = self.controller.register(self.pool, data)
-        assert response.status.startswith("400")
-        body = json.loads(response.data.decode("utf8"))
-        assert (
-            "Unrecognized problem type: http://not-a-recognized-type/" == body["title"]
-        )
-
-    def test_success(self):
-        data = json.dumps(
-            {
-                "type": "http://librarysimplified.org/terms/problem/wrong-genre",
-                "source": "foo",
-                "detail": "bar",
-            }
-        )
-        with self.app.test_request_context("/"):
-            response = self.controller.register(self.pool, data)
-        assert response.status.startswith("201")
-        [complaint] = self.pool.complaints
-        assert "foo" == complaint.source
-        assert "bar" == complaint.detail
 
 
 class TestLoadMethods(DatabaseTest):

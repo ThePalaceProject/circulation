@@ -98,7 +98,6 @@ from core.model import (
     CachedMARCFile,
     CirculationEvent,
     Collection,
-    Complaint,
     ConfigurationSetting,
     DataSource,
     DeliveryMechanism,
@@ -3744,29 +3743,6 @@ class TestWorkController(CirculationControllerTest):
 
         # That's it!
         assert {} == kwargs
-
-    def test_report_problem_get(self):
-        with self.request_context_with_library("/"):
-            response = self.manager.work_controller.report(
-                self.identifier.type, self.identifier.identifier
-            )
-        assert 200 == response.status_code
-        assert "text/uri-list" == response.headers["Content-Type"]
-        for i in Complaint.VALID_TYPES:
-            assert i in response.get_data(as_text=True)
-
-    def test_report_problem_post_success(self):
-        error_type = random.choice(list(Complaint.VALID_TYPES))
-        data = json.dumps({"type": error_type, "source": "foo", "detail": "bar"})
-        with self.request_context_with_library("/", method="POST", data=data):
-            response = self.manager.work_controller.report(
-                self.identifier.type, self.identifier.identifier
-            )
-        assert 201 == response.status_code
-        [complaint] = self.lp.complaints
-        assert error_type == complaint.type
-        assert "foo" == complaint.source
-        assert "bar" == complaint.detail
 
     def test_series(self):
         # Test the ability of the series() method to generate an OPDS

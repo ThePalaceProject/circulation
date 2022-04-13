@@ -1,7 +1,6 @@
 # encoding: utf-8
 import datetime
 import os
-import random
 from unittest.mock import MagicMock
 
 import pytest
@@ -12,7 +11,6 @@ from core.equivalents_coverage import EquivalentIdentifiersCoverageProvider
 from core.external_search import MockExternalSearchIndex
 from core.model import get_one_or_create, tuple_to_numericrange
 from core.model.classification import Genre, Subject
-from core.model.complaint import Complaint
 from core.model.contributor import Contributor
 from core.model.coverage import WorkCoverageRecord
 from core.model.datasource import DataSource
@@ -26,28 +24,6 @@ from core.util.datetime_helpers import datetime_utc, from_timestamp, utc_now
 
 
 class TestWork(DatabaseTest):
-    def test_complaints(self):
-        work = self._work(with_license_pool=True)
-
-        [lp1] = work.license_pools
-        lp2 = self._licensepool(
-            edition=work.presentation_edition, data_source_name=DataSource.OVERDRIVE
-        )
-        lp2.work = work
-
-        complaint_type = random.choice(list(Complaint.VALID_TYPES))
-        complaint1, ignore = Complaint.register(lp1, complaint_type, "blah", "blah")
-        complaint2, ignore = Complaint.register(lp2, complaint_type, "blah", "blah")
-
-        # Create a complaint with no association with the work.
-        _edition, lp3 = self._edition(with_license_pool=True)
-        complaint3, ignore = Complaint.register(lp3, complaint_type, "blah", "blah")
-
-        # Only the first two complaints show up in work.complaints.
-        assert sorted([complaint1.id, complaint2.id]) == sorted(
-            [x.id for x in work.complaints]
-        )
-
     def test_all_identifier_ids(self):
         work = self._work(with_license_pool=True)
         lp = work.license_pools[0]

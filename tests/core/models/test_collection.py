@@ -13,7 +13,6 @@ from core.model.collection import (
     CollectionConfigurationStorage,
     HasExternalIntegrationPerCollection,
 )
-from core.model.complaint import Complaint
 from core.model.configuration import (
     ConfigurationSetting,
     ExternalIntegration,
@@ -900,11 +899,6 @@ class TestCollection(DatabaseTest):
         patron2 = self._patron()
         hold, is_new = pool.on_hold_to(patron2)
 
-        # And a Complaint.
-        complaint, is_new = Complaint.register(
-            pool, list(Complaint.VALID_TYPES)[0], source=None, detail=None
-        )
-
         # And a CirculationEvent.
         CirculationEvent.log(
             self._db, pool, CirculationEvent.DISTRIBUTOR_TITLE_ADD, 0, 1
@@ -948,11 +942,11 @@ class TestCollection(DatabaseTest):
         assert [] == self._default_library.collections
 
         # The deletion of the Collection's sole LicensePool has
-        # cascaded to Loan, Hold, Complaint, License, and
+        # cascaded to Loan, Hold, License, and
         # CirculationEvent.
         assert [] == patron.loans
         assert [] == patron2.holds
-        for cls in (Loan, Hold, Complaint, License, CirculationEvent):
+        for cls in (Loan, Hold, License, CirculationEvent):
             assert [] == self._db.query(cls).all()
 
         # n.b. Annotations are associated with Identifier, not

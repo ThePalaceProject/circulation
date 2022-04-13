@@ -180,16 +180,6 @@ def work_change_book_cover(identifier_type, identifier):
 
 
 @library_route(
-    "/admin/works/<identifier_type>/<path:identifier>/complaints", methods=["GET"]
-)
-@has_library
-@returns_json_or_response_or_problem_detail
-@requires_admin
-def work_complaints(identifier_type, identifier):
-    return app.manager.admin_work_controller.complaints(identifier_type, identifier)
-
-
-@library_route(
     "/admin/works/<identifier_type>/<path:identifier>/lists", methods=["GET", "POST"]
 )
 @has_library
@@ -245,20 +235,6 @@ def refresh(identifier_type, identifier):
 
 
 @library_route(
-    "/admin/works/<identifier_type>/<path:identifier>/resolve_complaints",
-    methods=["POST"],
-)
-@has_library
-@returns_problem_detail
-@requires_admin
-@requires_csrf_token
-def resolve_complaints(identifier_type, identifier):
-    return app.manager.admin_work_controller.resolve_complaints(
-        identifier_type, identifier
-    )
-
-
-@library_route(
     "/admin/works/<identifier_type>/<path:identifier>/edit_classifications",
     methods=["POST"],
 )
@@ -294,14 +270,6 @@ def media():
 @returns_json_or_response_or_problem_detail
 def rights_status():
     return app.manager.admin_work_controller.rights_status()
-
-
-@library_route("/admin/complaints")
-@has_library
-@returns_problem_detail
-@requires_admin
-def complaints():
-    return app.manager.admin_feed_controller.complaints()
 
 
 @library_route("/admin/suppressed")

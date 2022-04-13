@@ -13,16 +13,15 @@ from flask import make_response, url_for
 from flask_babel import lazy_gettext as _
 from psycopg2 import DatabaseError
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm.session import Session
 
 from .cdn import cdnify
 from .config import Configuration
 from .lane import Facets, Pagination
 from .log import LogConfiguration
-from .model import Complaint, Identifier
+from .model import Identifier
 from .opds import AcquisitionFeed, LookupAcquisitionFeed
 from .problem_details import *
-from .util.flask_util import OPDSFeedResponse, problem
+from .util.flask_util import OPDSFeedResponse
 from .util.opds_writer import OPDSMessage
 from .util.problem_detail import ProblemDetail
 
@@ -417,39 +416,3 @@ class URNLookupHandler(object):
 
         By default, does nothing.
         """
-
-
-class ComplaintController(object):
-    """A controller to register complaints against objects."""
-
-    def register(self, license_pool, raw_data):
-
-        if license_pool is None:
-            return problem(None, 400, _("No license pool specified"))
-
-        _db = Session.object_session(license_pool)
-        try:
-            data = json.loads(raw_data)
-        except ValueError as e:
-            return problem(None, 400, _("Invalid problem detail document"))
-
-        type = data.get("type")
-        source = data.get("source")
-        detail = data.get("detail")
-        if not type:
-            return problem(None, 400, _("No problem type specified."))
-        if type not in Complaint.VALID_TYPES:
-            return problem(
-                None, 400, _("Unrecognized problem type: %(type)s", type=type)
-            )
-
-        complaint = None
-        try:
-            complaint = Complaint.register(license_pool, type, source, detail)
-            _db.commit()
-        except ValueError as e:
-            return problem(
-                None, 400, _("Error registering complaint: %(error)s", error=str(e))
-            )
-
-        return make_response(str(_("Success")), 201, {"Content-Type": "text/plain"})

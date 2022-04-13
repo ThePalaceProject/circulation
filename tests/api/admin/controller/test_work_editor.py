@@ -20,7 +20,6 @@ from core.classifier import SimplifiedGenreClassifier
 from core.model import (
     AdminRole,
     Classification,
-    Complaint,
     Contributor,
     CoverageRecord,
     CustomList,
@@ -708,14 +707,6 @@ class TestWorkController(AdminControllerTest):
         broken_lp.work = self.english_1
         broken_lp.suppressed = True
 
-        # The broken LicensePool doesn't render properly.
-        Complaint.register(
-            broken_lp,
-            "http://librarysimplified.org/terms/problem/cannot-render",
-            "blah",
-            "blah",
-        )
-
         with self.request_context_with_library_and_admin("/"):
             response = self.manager.admin_work_controller.unsuppress(
                 lp.identifier.type, lp.identifier.identifier
@@ -781,109 +772,6 @@ class TestWorkController(AdminControllerTest):
                 lp.identifier.type,
                 lp.identifier.identifier,
                 provider=success_provider,
-            )
-
-    def test_complaints(self):
-        type = iter(Complaint.VALID_TYPES)
-        type1 = next(type)
-        type2 = next(type)
-
-        work = self._work(
-            "fiction work with complaint",
-            language="eng",
-            fiction=True,
-            with_open_access_download=True,
-        )
-        complaint1 = self._complaint(
-            work.license_pools[0], type1, "complaint1 source", "complaint1 detail"
-        )
-        complaint2 = self._complaint(
-            work.license_pools[0], type1, "complaint2 source", "complaint2 detail"
-        )
-        complaint3 = self._complaint(
-            work.license_pools[0], type2, "complaint3 source", "complaint3 detail"
-        )
-
-        [lp] = work.license_pools
-
-        with self.request_context_with_library_and_admin("/"):
-            response = self.manager.admin_work_controller.complaints(
-                lp.identifier.type, lp.identifier.identifier
-            )
-            assert response["book"]["identifier_type"] == lp.identifier.type
-            assert response["book"]["identifier"] == lp.identifier.identifier
-            assert response["complaints"][type1] == 2
-            assert response["complaints"][type2] == 1
-
-        self.admin.remove_role(AdminRole.LIBRARIAN, self._default_library)
-        with self.request_context_with_library_and_admin("/"):
-            pytest.raises(
-                AdminNotAuthorized,
-                self.manager.admin_work_controller.complaints,
-                lp.identifier.type,
-                lp.identifier.identifier,
-            )
-
-    def test_resolve_complaints(self):
-        type = iter(Complaint.VALID_TYPES)
-        type1 = next(type)
-        type2 = next(type)
-
-        work = self._work(
-            "fiction work with complaint",
-            language="eng",
-            fiction=True,
-            with_open_access_download=True,
-        )
-        complaint1 = self._complaint(
-            work.license_pools[0], type1, "complaint1 source", "complaint1 detail"
-        )
-        complaint2 = self._complaint(
-            work.license_pools[0], type1, "complaint2 source", "complaint2 detail"
-        )
-
-        [lp] = work.license_pools
-
-        # first attempt to resolve complaints of the wrong type
-        with self.request_context_with_library_and_admin("/"):
-            flask.request.form = ImmutableMultiDict([("type", type2)])
-            response = self.manager.admin_work_controller.resolve_complaints(
-                lp.identifier.type, lp.identifier.identifier
-            )
-            unresolved_complaints = [
-                complaint for complaint in lp.complaints if complaint.resolved == None
-            ]
-            assert response.status_code == 404
-            assert len(unresolved_complaints) == 2
-
-        # then attempt to resolve complaints of the correct type
-        with self.request_context_with_library_and_admin("/"):
-            flask.request.form = ImmutableMultiDict([("type", type1)])
-            response = self.manager.admin_work_controller.resolve_complaints(
-                lp.identifier.type, lp.identifier.identifier
-            )
-            unresolved_complaints = [
-                complaint for complaint in lp.complaints if complaint.resolved == None
-            ]
-            assert response.status_code == 200
-            assert len(unresolved_complaints) == 0
-
-        # then attempt to resolve the already-resolved complaints of the correct type
-        with self.request_context_with_library_and_admin("/"):
-            flask.request.form = ImmutableMultiDict([("type", type1)])
-            response = self.manager.admin_work_controller.resolve_complaints(
-                lp.identifier.type, lp.identifier.identifier
-            )
-            assert response.status_code == 409
-
-        self.admin.remove_role(AdminRole.LIBRARIAN, self._default_library)
-        with self.request_context_with_library_and_admin("/"):
-            flask.request.form = ImmutableMultiDict([("type", type1)])
-            pytest.raises(
-                AdminNotAuthorized,
-                self.manager.admin_work_controller.resolve_complaints,
-                lp.identifier.type,
-                lp.identifier.identifier,
             )
 
     def test_classifications(self):

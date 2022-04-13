@@ -738,23 +738,6 @@ class PatronController(AdminCirculationManagerController):
 
 
 class FeedController(AdminCirculationManagerController):
-    def complaints(self):
-        self.require_librarian(flask.request.library)
-
-        this_url = self.url_for("complaints")
-        annotator = AdminAnnotator(self.circulation, flask.request.library)
-        pagination = load_pagination_from_request()
-        if isinstance(pagination, ProblemDetail):
-            return pagination
-        opds_feed = AdminFeed.complaints(
-            library=flask.request.library,
-            title="Complaints",
-            url=this_url,
-            annotator=annotator,
-            pagination=pagination,
-        )
-        return OPDSFeedResponse(opds_feed, max_age=0)
-
     def suppressed(self):
         self.require_librarian(flask.request.library)
 

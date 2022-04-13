@@ -31,7 +31,6 @@ from .model import (
     BaseCoverageRecord,
     CachedFeed,
     Collection,
-    Complaint,
     ConfigurationSetting,
     Contributor,
     CustomList,
@@ -2783,6 +2782,10 @@ class CheckContributorNamesInDB(IdentifierInputScript):
             self._db.commit()
         self._db.commit()
 
+    def process_local_mismatch(self, **kwargs):
+        """XXX: This used to produce a Complaint, but the complaint system no longer exists..."""
+        return None
+
     def process_contribution_local(self, _db, contribution, log=None):
         if not contribution or not contribution.edition:
             return
@@ -2873,53 +2876,6 @@ class CheckContributorNamesInDB(IdentifierInputScript):
                 == contribution.contributor.display_name
             ):
                 contribution.edition.sort_author = sort_name
-
-    def process_local_mismatch(
-        self, _db, contribution, computed_sort_name, error_message_detail, log=None
-    ):
-        """
-        Determines if a problem is to be investigated further or recorded as a Complaint,
-        to be solved by a human.  In this class, it's always a complaint.  In the overridden
-        method in the child class in metadata_wrangler code, we sometimes go do a web query.
-        """
-        self.register_problem(
-            source=self.COMPLAINT_SOURCE,
-            contribution=contribution,
-            computed_sort_name=computed_sort_name,
-            error_message_detail=error_message_detail,
-            log=log,
-        )
-
-    @classmethod
-    def register_problem(
-        cls, source, contribution, computed_sort_name, error_message_detail, log=None
-    ):
-        """
-        Make a Complaint in the database, so a human can take a look at this Contributor's name
-        and resolve whatever the complex issue that got us here.
-        """
-        success = True
-        contributor = contribution.contributor
-
-        pools = contribution.edition.is_presentation_for
-        try:
-            complaint, is_new = Complaint.register(
-                pools[0], cls.COMPLAINT_TYPE, source, error_message_detail
-            )
-            output = "%s|\t%s|\t%s|\t%s|\tcomplain|\t%s" % (
-                contributor.id,
-                contributor.sort_name,
-                contributor.display_name,
-                computed_sort_name,
-                source,
-            )
-            print(output.encode("utf8"))
-        except ValueError as e:
-            # log and move on, don't stop run
-            log.error("Error registering complaint: %r", contributor, exc_info=e)
-            success = False
-
-        return success
 
 
 class Explain(IdentifierInputScript):
