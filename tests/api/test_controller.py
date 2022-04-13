@@ -7,12 +7,14 @@ import sys
 import urllib.parse
 from contextlib import contextmanager
 from decimal import Decimal
+from io import BytesIO
 from pathlib import Path
 from time import mktime
 from wsgiref.handlers import format_date_time
 
 import feedparser
 import flask
+import lxml
 import pytest
 from flask import Response as FlaskResponse
 from flask import url_for
@@ -3241,6 +3243,30 @@ class TestWorkController(CirculationControllerTest):
         assert 200 == response.status_code
         assert expect == response.get_data()
         assert OPDSFeed.ENTRY_TYPE == response.headers["Content-Type"]
+
+    def test_permalink_from_admin_web(self):
+        """Test whether the admin flag removes the borrow hrefs"""
+        with self.request_context_with_library("/"):
+            annotator = LibraryAnnotator(None, None, self._default_library)
+            expect = AcquisitionFeed.single_entry(
+                self._db, self.english_1, annotator, from_admin_web=True
+            )
+
+        dom = lxml.etree.parse(BytesIO(expect.data))
+
+        link_with_ns = "{http://www.w3.org/2005/Atom}link"
+        found_empty_href = False
+        for element in dom.iter():
+            if (
+                element.tag == link_with_ns
+                and element.get("rel") == AcquisitionFeed.BORROW_REL
+            ):
+                found_empty_href = False
+                assert element.get("href") == ""
+                found_empty_href = True
+
+        # We found only empty borrow links
+        assert found_empty_href
 
     def test_permalink_does_not_return_fulfillment_links_for_authenticated_patrons_without_loans(
         self,

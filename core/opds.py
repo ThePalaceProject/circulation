@@ -1112,6 +1112,7 @@ class AcquisitionFeed(OPDSFeed):
         force_create=False,
         raw=False,
         use_cache=True,
+        from_admin_web=False,
         **response_kwargs
     ):
         """Create a single-entry OPDS document for one specific work.
@@ -1141,6 +1142,12 @@ class AcquisitionFeed(OPDSFeed):
             force_create=force_create,
             use_cache=use_cache,
         )
+
+        # Continuing our hack for removing borrows from the admin panel
+        if from_admin_web:
+            for e in entry:  # type: lxml.etree._Element
+                if e.get("rel") == OPDSFeed.BORROW_REL:
+                    e.set("href", "")
 
         # Since this <entry> tag is going to be the root of an XML
         # document it's essential that it include an up-to-date nsmap,

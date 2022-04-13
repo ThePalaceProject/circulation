@@ -2162,8 +2162,15 @@ class WorkController(CirculationManagerController):
         else:
             annotator = self.manager.annotator(lane=None)
 
+            # Hacks for admin UI hiding the borrow links
+            from_admin_web = "/admin/web/collection" in (flask.request.referrer or "")
+
             return AcquisitionFeed.single_entry(
-                self._db, work, annotator, max_age=OPDSFeed.DEFAULT_MAX_AGE
+                self._db,
+                work,
+                annotator,
+                max_age=OPDSFeed.DEFAULT_MAX_AGE,
+                from_admin_web=from_admin_web,
             )
 
     def related(
