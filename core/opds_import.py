@@ -839,10 +839,9 @@ class OPDSImporter:
                 # Rather than scratch the whole import, treat this as a failure that only applies
                 # to this item.
                 self.log.error("Error importing an OPDS item", exc_info=e)
-                identifier, ignore = Identifier.parse_urn(self._db, key)
                 data_source = self.data_source
                 failure = CoverageFailure(
-                    identifier,
+                    metadata.primary_identifier,
                     traceback.format_exc(),
                     data_source=data_source,
                     transient=False,
