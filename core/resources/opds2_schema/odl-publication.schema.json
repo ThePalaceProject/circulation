@@ -18,6 +18,7 @@
           "rel": {
             "type": "string",
             "enum": [
+              "self",
               "http://opds-spec.org/acquisition/open-access"
             ]
           }

@@ -3,25 +3,56 @@ import os
 
 import requests
 from jsonschema import Draft7Validator, RefResolver
+from jsonschema.exceptions import ValidationError
 
+from api.odl2 import ODL2ImportMonitor
 from core.opds2_import import OPDS2ImportMonitor
 
 
-class OPDS2SchemaValidation(OPDS2ImportMonitor):
-    def import_one_feed(self, feed):
-        opds2_schema = None
-        with open("core/resources/opds2_schema/feed.schema.json") as fp:
-            opds2_schema = json.load(fp)
-
-        dir = os.path.dirname(os.path.realpath(__file__))
-
+class OPDS2SchemaValidationMixin:
+    def get_ref_resolver(self, json_schema):
+        dir_ = os.path.dirname(os.path.realpath(__file__))
         handlers = {
             "https": OPDS2RefHandler.fetch_file,
         }
 
-        resolver = RefResolver("file://" + dir + "/", opds2_schema, handlers=handlers)
+        resolver = RefResolver("file://" + dir_ + "/", json_schema, handlers=handlers)
+        return resolver
+
+    def validate_schema(self, schema_path: str, feed: dict):
+        with open(schema_path) as fp:
+            opds2_schema = json.load(fp)
+
+        resolver = self.get_ref_resolver(opds2_schema)
         schema_validator = Draft7Validator(opds2_schema, resolver=resolver)
-        schema_validator.validate(feed, opds2_schema)
+        try:
+            schema_validator.validate(feed, opds2_schema)
+        except ValidationError as e:
+            self.log.error("Validation failed for feed")
+            for attr in ["message", "path", "schema_path", "validator_value"]:
+                self.log.error(f"{attr}: {getattr(e, attr, None)}")
+            raise
+
+
+class OPDS2SchemaValidation(OPDS2ImportMonitor, OPDS2SchemaValidationMixin):
+    def import_one_feed(self, feed):
+        self.validate_schema("core/resources/opds2_schema/feed.schema.json", feed)
+        return [], []
+
+    def follow_one_link(self, url, do_get=None):
+        """We don't need all pages, the first page should be fine for validation"""
+        next_links, feed = super().follow_one_link(url, do_get)
+        return [], feed
+
+    def feed_contains_new_data(self, feed):
+        return True
+
+
+class ODL2SchemaValidation(ODL2ImportMonitor, OPDS2SchemaValidationMixin):
+    def import_one_feed(self, feed):
+        feed = json.loads(feed)
+        self.validate_schema("core/resources/opds2_schema/odl-feed.schema.json", feed)
+        return [], []
 
     def follow_one_link(self, url, do_get=None):
         """We don't need all pages, the first page should be fine for validation"""
