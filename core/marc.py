@@ -9,7 +9,6 @@ from .classifier import Classifier
 from .config import CannotLoadConfiguration
 from .external_search import ExternalSearchIndex, SortKeyPagination
 from .lane import BaseFacets, Lane
-from .mirror import MirrorUploader
 from .model import (
     CachedMARCFile,
     DeliveryMechanism,
@@ -20,9 +19,9 @@ from .model import (
     Work,
     get_one_or_create,
 )
+from .s3 import *
 from .util import LanguageCodes
 from .util.datetime_helpers import utc_now
-
 
 class Annotator(object):
     """The Annotator knows how to add information about a Work to
