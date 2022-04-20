@@ -1,0 +1,90 @@
+{
+  "$id": "https://schemas.thepalaceproject.io/customlists/1.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+
+    "document": {
+      "$comment": "The top-level container of custom lists.",
+      "type": "object",
+      "properties": {
+        "%id": {
+          "type": "string",
+          "const": "https://schemas.thepalaceproject.io/customlists/1.0"
+        },
+        "customlists": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/customlist"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%id",
+        "customlists"
+      ]
+    },
+
+    "book": {
+      "$comment": "A book within a custom list.",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "book"
+        },
+        "id": {
+          "$comment": "The primary identifier used for the book (typically an ISBN or similar)",
+          "type": "string"
+        },
+        "title": {
+          "$comment": "The book title",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%type",
+        "id",
+        "title"
+      ]
+    },
+
+    "customlist": {
+      "$comment": "A custom list.",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "customlist"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "books": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/book"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%type",
+        "id",
+        "name",
+        "books"
+      ]
+    }
+
+  },
+  "$ref": "#/$defs/document"
+}
