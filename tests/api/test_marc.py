@@ -8,6 +8,7 @@ from api.marc import LibraryAnnotator
 from api.registration.registry import Registration
 from core.config import Configuration
 from core.marc import MARCExporter
+from core.mirror import MirrorUploader
 from core.model import ConfigurationSetting, ExternalIntegration
 from core.testing import DatabaseTest
 

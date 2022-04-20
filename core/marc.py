@@ -19,7 +19,8 @@ from .model import (
     Work,
     get_one_or_create,
 )
-from .s3 import *
+from .s3 import S3Uploader,MinIOUploader # this is necessary to ensure these implementations are registered
+
 from .util import LanguageCodes
 from .util.datetime_helpers import utc_now
 
