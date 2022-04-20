@@ -59,8 +59,7 @@
           "const": "customlist"
         },
         "id": {
-          "type": "string",
-          "minLength": 1
+          "type": "number"
         },
         "name": {
           "type": "string"
