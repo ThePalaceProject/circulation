@@ -37,7 +37,7 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider):
             if match:
                 return (
                     dict(
-                        email=email,
+                        email=match.email,
                         type=self.NAME,
                     ),
                     redirect_url,

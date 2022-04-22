@@ -34,6 +34,14 @@ class TestPasswordAdminAuthenticationProvider(DatabaseTest):
         assert PasswordAdminAuthenticationProvider.NAME == admin_details.get("type")
         assert "foo" == redirect
 
+        # Case insensitive test
+        admin_details, redirect = password_auth.sign_in(
+            self._db, dict(email="ADMin2@nyPL.Org", password="pass2", redirect="foo")
+        )
+        assert "admin2@nypl.org" == admin_details.get("email")
+        assert PasswordAdminAuthenticationProvider.NAME == admin_details.get("type")
+        assert "foo" == redirect
+
         # An admin can't sign in with an incorrect password..
         admin_details, redirect = password_auth.sign_in(
             self._db,

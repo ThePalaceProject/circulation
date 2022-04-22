@@ -2,7 +2,15 @@
 # Admin, AdminRole
 
 import bcrypt
-from sqlalchemy import Column, ForeignKey, Index, Integer, Unicode, UniqueConstraint
+from sqlalchemy import (
+    Column,
+    ForeignKey,
+    Index,
+    Integer,
+    Unicode,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.orm.session import Session
 
@@ -53,13 +61,18 @@ class Admin(Base, HasSessionCache):
         return self.password_hashed == bcrypt.hashpw(password, self.password_hashed)
 
     @classmethod
-    def authenticate(cls, _db, email, password):
+    def authenticate(cls, _db, email: str, password: str):
         """Finds an authenticated Admin by email and password
         :return: Admin or None
         """
 
         def lookup_hook():
-            return get_one(_db, Admin, email=str(email)), False
+            return (
+                _db.query(Admin)
+                .filter(func.lower(Admin.email) == email.lower())
+                .first(),
+                False,
+            )
 
         match, ignore = Admin.by_cache_key(_db, str(email), lookup_hook)
         if match and not match.has_password(password):
