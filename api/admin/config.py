@@ -12,7 +12,7 @@ class Configuration:
 
     APP_NAME = "Palace Collection Manager"
     PACKAGE_NAME = "@thepalaceproject/circulation-admin"
-    PACKAGE_VERSION = "0.0.7"
+    PACKAGE_VERSION = "0.0.8"
 
     STATIC_ASSETS = {
         "admin_js": "circulation-admin.js",
