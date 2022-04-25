@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import tempfile
+from typing import List, Tuple
 from unittest.mock import ANY, MagicMock, call, create_autospec, patch
 
 import pytest
@@ -1429,3 +1430,28 @@ class TestProQuestOPDS2ImportMonitor(DatabaseTest):
 
         # Assert
         monitor._clean_removed_items.assert_not_called()
+
+    def test_that_errors_extracting_metadata_are_handled_successfully(self):
+
+        error_msg: str = "*test error*"
+        with patch(
+            "api.proquest.importer.ProQuestOPDS2Importer.import_edition_from_metadata",
+            side_effect=ValueError(error_msg),
+        ):
+            importer = ProQuestOPDS2Importer(
+                self._db,
+                self._proquest_collection,
+                RWPMManifestParser(OPDS2FeedParserFactory()),
+            )
+
+            result = importer.import_from_feed(fixtures.PROQUEST_RAW_FEED)
+            editions: List = result[0]
+            pools: List = result[1]
+            works: List = result[2]
+            failures: Tuple = result[3].items()
+            assert len(editions) == 0
+            assert len(pools) == 0
+            assert len(works) == 0
+            assert len(failures) == 2
+            for key, failure in failures:
+                assert error_msg in failure.exception
