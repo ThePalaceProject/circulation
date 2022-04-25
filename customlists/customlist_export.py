@@ -1,7 +1,14 @@
+import argparse
 import json
-from typing import IO, Iterable, List
+import logging
+import os
+import re
+from typing import IO, Iterable, List, Optional, Union
 
+import feedparser
 import jsonschema
+import requests
+from requests import Session
 
 
 class Book:
@@ -60,20 +67,50 @@ class ProblematicBook:
         }
 
 
+class ProblematicCustomList:
+    _id: int
+    _name: str
+    _error: str
+
+    def __init__(self, id: int, name: str, error: str):
+        self._id = id
+        self._name = name
+        self._error = error
+
+    def id(self) -> int:
+        return self._id
+
+    def to_dict(self) -> dict:
+        return {
+            "%type": "problematic-customlist",
+            "id": self._id,
+            "name": self._name,
+            "error": self._error,
+        }
+
+    def name(self) -> str:
+        return self._name
+
+
 class CustomList:
     _books: List[Book]
     _problematic_books: List[ProblematicBook]
     _id: int
     _name: str
+    _library_id: str
 
-    def __init__(self, id: int, name: str):
+    def __init__(self, id: int, name: str, library_id: str):
         self._books = []
         self._problematic_books = []
         self._id = id
         self._name = name
+        self._library_id = library_id
 
     def id(self) -> int:
         return self._id
+
+    def library_id(self) -> str:
+        return self._library_id
 
     def add_book(self, book: Book) -> None:
         self._books.append(book)
@@ -88,11 +125,12 @@ class CustomList:
         return {
             "%type": "customlist",
             "books": list(map(lambda b: b.to_dict(), self._books)),
+            "id": self._id,
+            "library-id": self._library_id,
+            "name": self._name,
             "problematic-books": list(
                 map(lambda b: b.to_dict(), self._problematic_books)
             ),
-            "id": self._id,
-            "name": self._name,
         }
 
     def books(self) -> Iterable[Book]:
@@ -107,17 +145,25 @@ class CustomList:
 
 class CustomListExports:
     _lists: List[CustomList]
+    _problematic_lists: List[ProblematicCustomList]
 
     def __init__(self):
         self._lists = []
+        self._problematic_lists = []
 
     def add_list(self, list: CustomList) -> None:
         self._lists.append(list)
+
+    def add_problematic_list(self, list: ProblematicCustomList) -> None:
+        self._problematic_lists.append(list)
 
     def to_dict(self) -> dict:
         return {
             "%id": "https://schemas.thepalaceproject.io/customlists/1.0",
             "customlists": list(map(lambda c: c.to_dict(), self._lists)),
+            "problematic-customlists": list(
+                map(lambda c: c.to_dict(), self._problematic_lists)
+            ),
         }
 
     def size(self) -> int:
@@ -132,8 +178,12 @@ class CustomListExports:
     def parse(cls, document: dict, schema: str) -> "CustomListExports":
         jsonschema.validate(document, schema)
         exports = CustomListExports()
+
+        # Load the lists.
         for raw_list in document["customlists"]:
-            custom_list = CustomList(raw_list["id"], raw_list["name"])
+            custom_list = CustomList(
+                raw_list["id"], raw_list["name"], raw_list["library-id"]
+            )
             for raw_book in raw_list["books"]:
                 book = Book(
                     id=raw_book["id"],
@@ -150,6 +200,13 @@ class CustomListExports:
                 custom_list.add_problematic_book(problem_book)
             exports.add_list(custom_list)
 
+        # Load the problematic lists.
+        for raw_list in document["problematic-customlists"]:
+            custom_list = ProblematicCustomList(
+                raw_list["id"], raw_list["name"], raw_list["error"]
+            )
+            exports.add_problematic_list(custom_list)
+
         return exports
 
     @classmethod
@@ -163,3 +220,166 @@ class CustomListExports:
 
     def lists(self) -> Iterable[CustomList]:
         return (cl for cl in self._lists)
+
+
+class CustomListExportFailed(Exception):
+    def __init__(self, message: str):
+        super(CustomListExportFailed, self).__init__(message)
+
+
+class CustomListExporter:
+    _session: Session
+    _logger: logging.Logger
+    _server_base: str
+    _email: str
+    _password: str
+    _output_file: str
+    _schema_file: str
+
+    def _fatal(self, message: str):
+        raise CustomListExportFailed(message)
+
+    @classmethod
+    def _parse_arguments(cls, args: List[str]) -> argparse.Namespace:
+        parser: argparse.ArgumentParser = argparse.ArgumentParser(
+            description="Fetch a custom list."
+        )
+        parser.add_argument(
+            "--schema-file", help="The path to customlists.schema.json", required=False
+        )
+        parser.add_argument("--server", help="The address of the CM", required=True)
+        parser.add_argument("--username", help="The CM admin username", required=True)
+        parser.add_argument("--password", help="The CM admin password", required=True)
+        parser.add_argument("--output", help="The output file", required=True)
+        parser.add_argument(
+            "--list-name", help="The name of the custom list", required=True
+        )
+        parser.add_argument(
+            "--verbose",
+            "-v",
+            action="count",
+            default=0,
+            help="Increase verbosity (can be specified multiple times)",
+        )
+        return parser.parse_args(args)
+
+    def _make_custom_list(
+        self, raw_list: dict
+    ) -> Union[CustomList, ProblematicCustomList]:
+        id: int = raw_list["id"]
+        name: str = raw_list["name"]
+
+        # The /admin/custom_list/ URL will yield an OPDS feed of the list contents.
+        server_list_endpoint: str = f"{self._server_base}/admin/custom_list/{id}"
+        response = self._session.get(server_list_endpoint)
+        if response.status_code >= 400:
+            self._fatal(
+                f"Failed to retrieve custom list {id}: {response.status_code} {response.reason}"
+            )
+
+        feed = feedparser.parse(url_file_stream_or_string=response.content)
+
+        # Extract the "self" link in order to determine the library identifier.
+        library_short_id: Optional[str] = None
+        for link in feed.feed.links:
+            if link.rel == "self":
+                match = re.search(f"^(.*)/(.*)/admin/custom_list/{id}(.*)", link.href)
+                if match is not None:
+                    library_short_id = match.group(2)
+                    break
+
+        # If we couldn't find a self link, then we don't know which library has this list.
+        if not library_short_id:
+            return ProblematicCustomList(
+                id, name, "Unable to locate a 'self' link in the custom list feed"
+            )
+
+        custom_list = CustomList(id=id, name=name, library_id=library_short_id)
+
+        # Now, for each book, extract the book identifier and identifier type.
+        for entry in feed.entries:
+            added = False
+            for link in entry.links:
+                if link.rel == "alternate":
+                    match = re.search("^(.*)/works/(.*)/(.*)$", link.href)
+                    if match is not None:
+                        custom_list.add_book(
+                            Book(id=entry.id, id_type=match.group(2), title=entry.title)
+                        )
+                        added = True
+            if not added:
+                custom_list.add_problematic_book(
+                    ProblematicBook(
+                        id=entry.id,
+                        title=entry.title,
+                        message=f"Could not determine the identifier type for book {entry.id}, {entry.title}",
+                    )
+                )
+
+        self._logger.info(f"retrieved {custom_list.size()} books for list {id}")
+        return custom_list
+
+    def _make_custom_lists_document(self) -> CustomListExports:
+        logging.info("Fetching lists...")
+        server_lists_endpoint: str = f"{self._server_base}/admin/custom_lists"
+        response = self._session.get(server_lists_endpoint)
+        if response.status_code >= 400:
+            self._fatal(
+                f"Failed to retrieve custom lists: {response.status_code} {response.reason}"
+            )
+
+        raw_document = json.loads(response.content)
+        raw_lists: list = raw_document["custom_lists"] or []
+
+        custom_lists = CustomListExports()
+        for raw_list in raw_lists:
+            custom_lists.add_list(self._make_custom_list(raw_list))
+
+        self._logger.info(f"retrieved {custom_lists.size()} custom lists")
+        return custom_lists
+
+    def _sign_in(self) -> None:
+        server_login_endpoint: str = f"{self._server_base}/admin/sign_in_with_password"
+        headers = {"User-Agent": "circulation-customlists-fetch/1.0"}
+        payload = {"email": self._email, "password": self._password}
+
+        logging.info("Signing in...")
+        response = self._session.post(
+            server_login_endpoint, headers=headers, data=payload, allow_redirects=False
+        )
+        if response.status_code >= 400:
+            self._fatal(f"Failed to sign in: {response.status_code} {response.reason}")
+
+    def _save_customlists_document(self, document: CustomListExports) -> None:
+        with open(self._schema_file, "rb") as schema_file:
+            schema: str = json.load(schema_file)
+
+        output_file_tmp: str = self._output_file + ".tmp"
+        serialized: str = document.serialize(schema)
+        with open(output_file_tmp, "wb") as out:
+            out.write(serialized.encode("utf-8"))
+
+        os.rename(output_file_tmp, self._output_file)
+
+    def execute(self) -> None:
+        self._sign_in()
+        document = self._make_custom_lists_document()
+        self._save_customlists_document(document)
+
+    def __init__(self, args: argparse.Namespace):
+        self._session = requests.Session()
+        self._logger = logging.getLogger("CustomListExporter")
+        self._server_base = args.server.rstrip("/")
+        self._email = args.username
+        self._password = args.password
+        self._output_file = args.output
+        self._schema_file = args.schema_file or "customlists.schema.json"
+        verbose: int = args.verbose or 0
+        if verbose > 0:
+            self._logger.setLevel(logging.INFO)
+        if verbose > 1:
+            self._logger.setLevel(logging.DEBUG)
+
+    @classmethod
+    def create(cls, args: List[str]) -> "CustomListExporter":
+        return CustomListExporter(CustomListExporter._parse_arguments(args))

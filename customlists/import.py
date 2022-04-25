@@ -13,6 +13,7 @@ from customlist_report import (
     CustomListProblemBookBrokenOnSourceCM,
     CustomListProblemBookMismatch,
     CustomListProblemBookMissing,
+    CustomListProblemBookRequestFailed,
     CustomListProblemListAlreadyExists,
     CustomListReport,
     CustomListsReport,
@@ -31,14 +32,16 @@ def fatal(message: str) -> None:
         raise RuntimeError
 
 
-def fatal_response(response: Response) -> None:
+def error_response(response: Response) -> str:
     if response.headers.get("content-type") == "application/api-problem+json":
         error_text = json.loads(response.content)
-        fatal(
-            f"{response.status_code} {response.reason}: {error_text['title']}: {error_text['detail']}"
-        )
+        return f"{response.status_code} {response.reason}: {error_text['title']}: {error_text['detail']}"
     else:
-        fatal(f"{response.status_code} {response.reason}")
+        return f"{response.status_code} {response.reason}"
+
+
+def fatal_response(response: Response) -> None:
+    fatal(error_response(response))
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -75,15 +78,20 @@ def sign_in(
     payload = {
         "email": email,
         "password": password,
-        "redirect": f"{server_base}/admin/",
+        "redirect": f"{server_base}/admin/web/",
     }
 
     logging.info("signing in...")
     response = session.post(
-        server_login_endpoint, headers=headers, data=payload, allow_redirects=False
+        server_login_endpoint, headers=headers, data=payload, allow_redirects=True
     )
     if response.status_code >= 400:
         fatal_response(response)
+
+    if not response.cookies.get("csrf_token"):
+        logger.warning(
+            "the server did not return a CSRF token; expect errors to occur!"
+        )
 
 
 def open_customlists(file: str) -> CustomListExports:
@@ -100,6 +108,7 @@ def process_check_book(
     book: Book,
     rejected_books: Set[str],
 ) -> None:
+    """Check that the book on the target CM has a matching ID and title."""
     server_work_endpoint: str = (
         f"{server_base}/admin/works/{book.id_type()}/{book.id()}"
     )
@@ -112,7 +121,13 @@ def process_check_book(
         return
 
     if response.status_code >= 400:
-        fatal_response(response)
+        problem = CustomListProblemBookRequestFailed.create(
+            id=book.id(), title=book.title(), error=error_response(response)
+        )
+        report.add_problem(problem)
+        logger.error(problem.message())
+        rejected_books.add(book.id())
+        return
 
     feed = feedparser.parse(response.content)
     for entry in feed.entries:
@@ -129,12 +144,10 @@ def process_check_book(
 
 
 def process_check_problematic_book(
-    session: requests.Session,
-    server_base: str,
     report: CustomListReport,
-    customlist: CustomList,
     book: ProblematicBook,
 ) -> None:
+    """Add all of the known problematic books to the output report."""
     report.add_problem(
         CustomListProblemBookBrokenOnSourceCM(
             id=book.id(), title=book.title(), message=book.message()
@@ -160,10 +173,7 @@ def process_customlist_check_books(
         )
     for problem_book in customlist.problematic_books():
         process_check_problematic_book(
-            session=session,
-            server_base=server_base,
             report=list_report,
-            customlist=customlist,
             book=problem_book,
         )
 
@@ -202,12 +212,16 @@ def process_customlist_update_list(
     customlist: CustomList,
     rejected_books: Set[str],
 ) -> None:
-    server_list_endpoint: str = f"{server_base}/admin/custom_lists"
     output = []
     for book in customlist.books():
         if book.id() in rejected_books:
             continue
         output.append({"id": book.id(), "title": book.title()})
+
+    # Send the new list to the server.
+    server_list_endpoint: str = (
+        f"{server_base}/{customlist.library_id()}/admin/custom_lists"
+    )
     response = session.post(
         server_list_endpoint,
         files=(

@@ -85,6 +85,31 @@ class CustomListProblemBookMissing(CustomListProblem):
         }
 
 
+class CustomListProblemBookRequestFailed(CustomListProblem):
+    def __init__(self, message: str, id: str, title: str):
+        super().__init__(message)
+        self._id = id
+        self._title = title
+
+    @classmethod
+    def create(
+        cls, id: str, title: str, error: str
+    ) -> "CustomListProblemBookRequestFailed":
+        return CustomListProblemBookRequestFailed(
+            f"A request for book '{title}' (id {id}) failed on the target CM: {error}",
+            id=id,
+            title=title,
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "%type": "problem-request-failed",
+            "id": self._id,
+            "title": self._title,
+            "message": self.message(),
+        }
+
+
 class CustomListProblemBookBrokenOnSourceCM(CustomListProblem):
     def __init__(self, message: str, id: str, title: str):
         super().__init__(message)
@@ -109,6 +134,21 @@ class CustomListProblemListAlreadyExists(CustomListProblem):
     def to_dict(self) -> dict:
         return {
             "%type": "problem-list-already-exists",
+            "id": self._id,
+            "name": self._name,
+            "message": self.message(),
+        }
+
+
+class CustomListProblemListBroken(CustomListProblem):
+    def __init__(self, message: str, id: int, name: str):
+        super().__init__(message)
+        self._id = id
+        self._name = name
+
+    def to_dict(self) -> dict:
+        return {
+            "%type": "problem-list-broken",
             "id": self._id,
             "name": self._name,
             "message": self.message(),

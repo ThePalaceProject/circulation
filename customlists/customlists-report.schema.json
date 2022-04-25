@@ -48,7 +48,9 @@
               { "$ref": "#/$defs/problem-book-mismatch" },
               { "$ref": "#/$defs/problem-book-missing" },
               { "$ref": "#/$defs/problem-book-broken-on-source" },
-              { "$ref": "#/$defs/problem-list-already-exists" }
+              { "$ref": "#/$defs/problem-book-request-failed" },
+              { "$ref": "#/$defs/problem-list-already-exists" },
+              { "$ref": "#/$defs/problem-list-broken" }
             ]
           }
         }
@@ -161,6 +163,36 @@
       ]
     },
 
+    "problem-book-request-failed": {
+      "$comment": "A book request failed on the target CM",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "problem-book-request-failed"
+        },
+        "id": {
+          "$comment": "The primary identifier used for the book (typically an ISBN or similar)",
+          "type": "string"
+        },
+        "title": {
+          "$comment": "The book title",
+          "type": "string"
+        },
+        "message": {
+          "$comment": "The error message",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%type",
+        "id",
+        "title",
+        "message"
+      ]
+    },
+
     "problem-list-already-exists": {
       "$comment": "A list already exists with the given ID and name",
       "type": "object",
@@ -168,6 +200,36 @@
         "%type": {
           "type": "string",
           "const": "problem-list-already-exists"
+        },
+        "id": {
+          "$comment": "The list ID",
+          "type": "number"
+        },
+        "name": {
+          "$comment": "The list name",
+          "type": "string"
+        },
+        "message": {
+          "$comment": "The error message",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%type",
+        "id",
+        "name",
+        "message"
+      ]
+    },
+
+    "problem-list-broken": {
+      "$comment": "A list was broken before we even tried to do anything with it.",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "problem-list-broken"
         },
         "id": {
           "$comment": "The list ID",

@@ -16,12 +16,19 @@
           "items": {
             "$ref": "#/$defs/customlist"
           }
+        },
+        "problematic-customlists": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/problematic-customlist"
+          }
         }
       },
       "additionalProperties": false,
       "required": [
         "%id",
-        "customlists"
+        "customlists",
+        "problematic-customlists"
       ]
     },
 
@@ -99,6 +106,9 @@
         "name": {
           "type": "string"
         },
+        "library-id": {
+          "type": "string"
+        },
         "description": {
           "type": "string",
           "minLength": 1
@@ -119,12 +129,41 @@
       "additionalProperties": false,
       "required": [
         "%type",
+        "books",
+        "id",
+        "library-id",
+        "name",
+        "problematic-books"
+      ]
+    },
+
+    "problematic-customlist": {
+      "$comment": "A problematic custom list.",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "problematic-customlist"
+        },
+        "id": {
+          "type": "number"
+        },
+        "name": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%type",
         "id",
         "name",
-        "books",
-        "problematic-books"
+        "error"
       ]
     }
   },
+
   "$ref": "#/$defs/document"
 }

@@ -78,7 +78,9 @@ class MockAPIServerRequestHandler(BaseHTTPRequestHandler):
             logging.error(
                 f"failed to find a response for {_request.method} {_request.path}"
             )
-            raise AssertionError("No available response!")
+            raise AssertionError(
+                f"No available response for {_request.method} {_request.path}!"
+            )
         self._send_everything(_response)
 
     def do_GET(self):
