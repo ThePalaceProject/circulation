@@ -34,14 +34,6 @@ class TestPasswordAdminAuthenticationProvider(DatabaseTest):
         assert PasswordAdminAuthenticationProvider.NAME == admin_details.get("type")
         assert "foo" == redirect
 
-        # Case insensitive test
-        admin_details, redirect = password_auth.sign_in(
-            self._db, dict(email="ADMin2@nyPL.Org", password="pass2", redirect="foo")
-        )
-        assert "admin2@nypl.org" == admin_details.get("email")
-        assert PasswordAdminAuthenticationProvider.NAME == admin_details.get("type")
-        assert "foo" == redirect
-
         # An admin can't sign in with an incorrect password..
         admin_details, redirect = password_auth.sign_in(
             self._db,
@@ -70,3 +62,27 @@ class TestPasswordAdminAuthenticationProvider(DatabaseTest):
         )
         assert INVALID_ADMIN_CREDENTIALS == admin_details
         assert None == redirect
+
+    def test_sign_in_case_insensitive(self):
+        password_auth = PasswordAdminAuthenticationProvider(None)
+
+        # There are two admins with passwords.
+        admin1, ignore = create(self._db, Admin, email="admin1@nypl.org")
+        admin1.password = "pass1"
+        admin2, ignore = create(self._db, Admin, email="ADMIN2@nypL.Org")
+        admin2.password = "pass2"
+
+        # Case insensitive test, both ways
+        admin_details, redirect = password_auth.sign_in(
+            self._db, dict(email="ADmin1@nyPL.Org", password="pass1", redirect="foo")
+        )
+        assert "admin1@nypl.org" == admin_details.get("email")
+        assert PasswordAdminAuthenticationProvider.NAME == admin_details.get("type")
+        assert "foo" == redirect
+
+        admin_details, redirect = password_auth.sign_in(
+            self._db, dict(email="admin2@nypl.org", password="pass2", redirect="foo")
+        )
+        assert "ADMIN2@nypL.Org" == admin_details.get("email")
+        assert PasswordAdminAuthenticationProvider.NAME == admin_details.get("type")
+        assert "foo" == redirect
