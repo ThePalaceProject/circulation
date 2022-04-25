@@ -69,7 +69,7 @@ class Admin(Base, HasSessionCache):
         def lookup_hook():
             return (
                 _db.query(Admin)
-                .filter(func.lower(Admin.email) == email.lower())
+                .filter(func.upper(Admin.email) == email.upper())
                 .first(),
                 False,
             )
