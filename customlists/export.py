@@ -4,11 +4,11 @@ import argparse
 import json
 import logging
 import os
-from typing import List
+import re
 
 import feedparser
-import jsonschema
 import requests
+from customlist_export import Book, CustomList, CustomListExports, ProblematicBook
 
 logging.basicConfig()
 logger = logging.getLogger()
@@ -45,8 +45,9 @@ def parse_arguments() -> argparse.Namespace:
 
 def make_custom_list(
     session: requests.Session, server_base: str, raw_list: dict
-) -> dict:
+) -> CustomList:
     id: int = raw_list["id"]
+    name: str = raw_list["name"]
     server_list_endpoint: str = f"{server_base}/admin/custom_list/{id}"
 
     response = session.get(server_list_endpoint)
@@ -55,26 +56,36 @@ def make_custom_list(
             f"failed to retrieve custom list {id}: {response.status_code} {response.reason}"
         )
 
-    books = []
+    custom_list = CustomList(id, name)
     feed = feedparser.parse(url_file_stream_or_string=response.content)
     for entry in feed.entries:
-        book = {}
-        book["%type"] = "book"
-        book["id"] = entry.id
-        book["title"] = entry.title
-        books.append(book)
+        added = False
+        for link in entry.links:
+            if added:
+                break
+            if link.rel == "alternate":
+                match = re.search("^(.*)/works/(.*)/(.*)$", link.href)
+                if match is not None:
+                    custom_list.add_book(
+                        Book(id=entry.id, id_type=match.group(2), title=entry.title)
+                    )
+                    added = True
+        if not added:
+            custom_list.add_problematic_book(
+                ProblematicBook(
+                    id=entry.id,
+                    title=entry.title,
+                    message=f"could not determine the identifier type for book {entry.id}, {entry.title}",
+                )
+            )
 
-    customlist = {
-        "%type": "customlist",
-        "books": books,
-        "id": raw_list["id"],
-        "name": raw_list["name"],
-    }
-    logger.info(f"retrieved {len(books)} books for list {id}")
-    return customlist
+    logger.info(f"retrieved {custom_list.size()} books for list {id}")
+    return custom_list
 
 
-def make_custom_lists_document(session: requests.Session, server_base: str) -> dict:
+def make_custom_lists_document(
+    session: requests.Session, server_base: str
+) -> CustomListExports:
     logging.info("fetching lists...")
     server_lists_endpoint: str = f"{server_base}/admin/custom_lists"
     response = session.get(server_lists_endpoint)
@@ -86,17 +97,12 @@ def make_custom_lists_document(session: requests.Session, server_base: str) -> d
     raw_document = json.loads(response.content)
     raw_lists: list = raw_document["custom_lists"] or []
 
-    custom_lists: List[dict] = []
-    document = {
-        "customlists": custom_lists,
-        "%id": "https://schemas.thepalaceproject.io/customlists/1.0",
-    }
-
+    custom_lists = CustomListExports()
     for raw_list in raw_lists:
-        custom_lists.append(make_custom_list(session, server_base, raw_list))
+        custom_lists.add_list(make_custom_list(session, server_base, raw_list))
 
-    logger.info(f"retrieved {len(custom_lists)} custom lists")
-    return document
+    logger.info(f"retrieved {custom_lists.size()} custom lists")
+    return custom_lists
 
 
 def sign_in(
@@ -114,16 +120,12 @@ def sign_in(
         fatal(f"failed to sign in: {response.status_code} {response.reason}")
 
 
-def save_customlists_document(document: dict, output_file: str) -> None:
+def save_customlists_document(document: CustomListExports, output_file: str) -> None:
     with open("customlists.schema.json", "rb") as schema_file:
         schema: str = json.load(schema_file)
 
-    jsonschema.validate(document, schema)
-    logger.info(f"validated output against schema")
-
     output_file_tmp: str = output_file + ".tmp"
-
-    serialized: str = json.dumps(document, sort_keys=True, indent=2)
+    serialized: str = document.serialize(schema)
     with open(output_file_tmp, "wb") as out:
         out.write(serialized.encode("utf-8"))
 

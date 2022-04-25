@@ -37,6 +37,10 @@
           "$comment": "The primary identifier used for the book (typically an ISBN or similar)",
           "type": "string"
         },
+        "id-type": {
+          "$comment": "The type of the primary identifier",
+          "type": "string"
+        },
         "title": {
           "$comment": "The book title",
           "type": "string"
@@ -46,7 +50,38 @@
       "required": [
         "%type",
         "id",
+        "id-type",
         "title"
+      ]
+    },
+
+    "problematic-book": {
+      "$comment": "A broken/problematic book within a custom list.",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "problematic-book"
+        },
+        "id": {
+          "$comment": "The primary identifier used for the book (typically an ISBN or similar)",
+          "type": "string"
+        },
+        "title": {
+          "$comment": "The book title",
+          "type": "string"
+        },
+        "message": {
+          "$comment": "The error message",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%type",
+        "id",
+        "title",
+        "message"
       ]
     },
 
@@ -73,6 +108,12 @@
           "items": {
             "$ref": "#/$defs/book"
           }
+        },
+        "problematic-books": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/problematic-book"
+          }
         }
       },
       "additionalProperties": false,
@@ -80,10 +121,10 @@
         "%type",
         "id",
         "name",
-        "books"
+        "books",
+        "problematic-books"
       ]
     }
-
   },
   "$ref": "#/$defs/document"
 }
