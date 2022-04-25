@@ -3,7 +3,7 @@ import json
 import os
 import shutil
 import tempfile
-from typing import List, Dict, Tuple
+from typing import List, Tuple
 from unittest.mock import ANY, MagicMock, call, create_autospec, patch
 
 import pytest
