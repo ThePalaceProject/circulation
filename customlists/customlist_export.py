@@ -88,6 +88,9 @@ class ProblematicCustomList:
             "error": self._error,
         }
 
+    def error(self) -> str:
+        return self._error
+
     def name(self) -> str:
         return self._name
 
@@ -113,9 +116,11 @@ class CustomList:
         return self._library_id
 
     def add_book(self, book: Book) -> None:
+        assert type(book) == Book
         self._books.append(book)
 
     def add_problematic_book(self, book: ProblematicBook) -> None:
+        assert type(book) == ProblematicBook
         self._problematic_books.append(book)
 
     def size(self) -> int:
@@ -152,9 +157,11 @@ class CustomListExports:
         self._problematic_lists = []
 
     def add_list(self, list: CustomList) -> None:
+        assert type(list) == CustomList
         self._lists.append(list)
 
     def add_problematic_list(self, list: ProblematicCustomList) -> None:
+        assert type(list) == ProblematicCustomList
         self._problematic_lists.append(list)
 
     def to_dict(self) -> dict:
@@ -221,6 +228,9 @@ class CustomListExports:
     def lists(self) -> Iterable[CustomList]:
         return (cl for cl in self._lists)
 
+    def problematic_lists(self) -> Iterable[ProblematicCustomList]:
+        return (cl for cl in self._problematic_lists)
+
 
 class CustomListExportFailed(Exception):
     def __init__(self, message: str):
@@ -273,8 +283,10 @@ class CustomListExporter:
         server_list_endpoint: str = f"{self._server_base}/admin/custom_list/{id}"
         response = self._session.get(server_list_endpoint)
         if response.status_code >= 400:
-            self._fatal(
-                f"Failed to retrieve custom list {id}: {response.status_code} {response.reason}"
+            return ProblematicCustomList(
+                id=id,
+                name=name,
+                error=f"Failed to retrieve custom list {id}: {response.status_code} {response.reason}",
             )
 
         feed = feedparser.parse(url_file_stream_or_string=response.content)
@@ -333,7 +345,11 @@ class CustomListExporter:
 
         custom_lists = CustomListExports()
         for raw_list in raw_lists:
-            custom_lists.add_list(self._make_custom_list(raw_list))
+            result_list = self._make_custom_list(raw_list)
+            if type(result_list) is ProblematicCustomList:
+                custom_lists.add_problematic_list(result_list)
+            else:
+                custom_lists.add_list(result_list)
 
         self._logger.info(f"retrieved {custom_lists.size()} custom lists")
         return custom_lists

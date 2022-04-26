@@ -108,6 +108,75 @@ class TestExports:
 
         assert 0 == exports.size()
 
+    def test_export_list_retrieval_fails(self, mock_web_server: MockAPIServer, tmpdir):
+        """If fetching the OPDS feed for a list fails, the list is marked as broken."""
+        sign_response = MockAPIServerResponse()
+        sign_response.status_code = 200
+        mock_web_server.enqueue_response(
+            "POST", "/admin/sign_in_with_password", sign_response
+        )
+
+        lists_response = MockAPIServerResponse()
+        lists_response.status_code = 200
+        lists_response.set_content(
+            """
+    {
+    "custom_lists": [
+        {
+            "collections": [
+                {
+                    "id": 864,
+                    "name": "B2",
+                    "protocol":"OPDS for Distributors"
+                }
+            ],
+            "entry_count":1,
+            "id":90,
+            "name":"Something Else"
+        }
+    ]
+    }
+        """.encode(
+                "utf-8"
+            )
+        )
+        mock_web_server.enqueue_response("GET", "/admin/custom_lists", lists_response)
+
+        list_response = MockAPIServerResponse()
+        list_response.status_code = 404
+        mock_web_server.enqueue_response("GET", "/admin/custom_list/90", list_response)
+
+        schema_path = TestExports._customlists_resource_path("customlists.schema.json")
+        output_file = tmpdir.join("output.json")
+        CustomListExporter.create(
+            [
+                "--server",
+                mock_web_server.url("/"),
+                "--username",
+                "someone@example.com",
+                "--password",
+                "12345678",
+                "--output",
+                str(output_file),
+                "--list-name",
+                "Something",
+                "--schema-file",
+                schema_path,
+                "-v",
+            ]
+        ).execute()
+
+        exports: CustomListExports
+        with open(schema_path, "rb") as schema_file:
+            schema_text = json.load(schema_file)
+            exports = CustomListExports.parse_file(file=output_file, schema=schema_text)
+
+        assert 0 == exports.size()
+        result_list = list(exports.problematic_lists())[0]
+        assert 90 == result_list.id()
+        assert "Something Else" == result_list.name()
+        assert "Failed to retrieve custom list 90: 404 Not Found" == result_list.error()
+
     def test_export_simple_collection(self, mock_web_server: MockAPIServer, tmpdir):
         """A simple collection gives the right results."""
         sign_response = MockAPIServerResponse()
