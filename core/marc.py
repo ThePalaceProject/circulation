@@ -21,11 +21,12 @@ from .model import (
 )
 
 # this is necessary to ensure these implementations are registered
-from .s3 import S3Uploader,MinIOUploader # noqa: autoflake
+from .s3 import MinIOUploader, S3Uploader  # noqa: autoflake
 
 # registered
 from .util import LanguageCodes
 from .util.datetime_helpers import utc_now
+
 
 class Annotator(object):
     """The Annotator knows how to add information about a Work to
