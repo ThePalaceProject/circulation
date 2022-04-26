@@ -168,7 +168,9 @@ class CustomListImporter:
         """Add all of the known problematic books to the output report."""
         report.add_problem(
             CustomListProblemBookBrokenOnSourceCM(
-                id=book.id(), title=book.title(), message=book.message()
+                id=book.id(),
+                title=book.title(),
+                message=f"Book was excluded from list updates due to a problem on the source CM: {book.message()}",
             )
         )
 
@@ -222,33 +224,34 @@ class CustomListImporter:
         customlist: CustomList,
         rejected_books: Set[str],
     ) -> None:
-        output = []
-        for book in customlist.books():
-            if book.id() in rejected_books:
-                continue
-            output.append({"id": book.id(), "title": book.title()})
+        if not self._dry_run:
+            output = []
+            for book in customlist.books():
+                if book.id() in rejected_books:
+                    continue
+                output.append({"id": book.id(), "title": book.title()})
 
-        # Send the new list to the server.
-        server_list_endpoint: str = (
-            f"{self._server_base}/{customlist.library_id()}/admin/custom_lists"
-        )
-        response = self._session.post(
-            server_list_endpoint,
-            files=(
-                ("name", (None, customlist.name())),
-                ("entries", (None, json.dumps(output, sort_keys=True))),
-            ),
-        )
-        if response.status_code >= 400:
-            list_report.add_problem(
-                CustomListProblemListUpdateFailed(
-                    message=CustomListImporter._error_response(
-                        "Failed to update custom list", response
-                    ),
-                    id=customlist.id(),
-                    name=customlist.name(),
-                )
+            # Send the new list to the server.
+            server_list_endpoint: str = (
+                f"{self._server_base}/{customlist.library_id()}/admin/custom_lists"
             )
+            response = self._session.post(
+                server_list_endpoint,
+                files=(
+                    ("name", (None, customlist.name())),
+                    ("entries", (None, json.dumps(output, sort_keys=True))),
+                ),
+            )
+            if response.status_code >= 400:
+                list_report.add_problem(
+                    CustomListProblemListUpdateFailed(
+                        message=CustomListImporter._error_response(
+                            "Failed to update custom list", response
+                        ),
+                        id=customlist.id(),
+                        name=customlist.name(),
+                    )
+                )
 
     def _process_customlists(
         self,
