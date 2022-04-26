@@ -103,7 +103,7 @@ class CustomListProblemBookRequestFailed(CustomListProblem):
 
     def to_dict(self) -> dict:
         return {
-            "%type": "problem-request-failed",
+            "%type": "problem-book-request-failed",
             "id": self._id,
             "title": self._title,
             "message": self.message(),
@@ -165,6 +165,47 @@ class CustomListProblemListBroken(CustomListProblem):
         return {
             "%type": "problem-list-broken",
             "id": self._id,
+            "name": self._name,
+            "message": self.message(),
+        }
+
+
+class CustomListProblemCollectionMissing(CustomListProblem):
+    def __init__(self, message: str, name: str):
+        super().__init__(message)
+        self._name = name
+
+    @classmethod
+    def create(cls, name: str) -> "CustomListProblemCollectionMissing":
+        return CustomListProblemCollectionMissing(
+            f"The collection '{name}' appears to be missing on the importing CM",
+            name=name,
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "%type": "problem-collection-missing",
+            "name": self._name,
+            "message": self.message(),
+        }
+
+
+class CustomListProblemCollectionRequestFailed(CustomListProblem):
+    def __init__(self, message: str, name: str):
+        super().__init__(message)
+        self._name = name
+
+    @classmethod
+    def create(
+        cls, name: str, error: str
+    ) -> "CustomListProblemCollectionRequestFailed":
+        return CustomListProblemCollectionRequestFailed(
+            f"The request for collection '{name}' failed: {error}", name=name
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "%type": "problem-collection-request-failed",
             "name": self._name,
             "message": self.message(),
         }
@@ -242,6 +283,14 @@ class CustomListReport:
                 expected_title=raw_problem["expected_title"],
                 received_id=raw_problem["received_id"],
                 received_title=raw_problem["received_title"],
+            )
+        if problem_type == "problem-collection-request-failed":
+            return CustomListProblemCollectionRequestFailed(
+                message=raw_problem["message"], name=raw_problem["name"]
+            )
+        if problem_type == "problem-collection-missing":
+            return CustomListProblemCollectionMissing(
+                message=raw_problem["message"], name=raw_problem["name"]
             )
         else:
             raise RuntimeError(f"Unexpected type: {problem_type}")

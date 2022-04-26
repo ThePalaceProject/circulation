@@ -19,6 +19,7 @@ from customlists.customlist_report import (
     CustomListProblemBookMismatch,
     CustomListProblemBookMissing,
     CustomListProblemBookRequestFailed,
+    CustomListProblemCollectionMissing,
     CustomListProblemListAlreadyExists,
     CustomListProblemListUpdateFailed,
     CustomListReport,
@@ -118,7 +119,7 @@ class CustomListImporter:
 
     def _open_customlists(self) -> CustomListExports:
         with open(self._schema_file, "rb") as schema_file:
-            schema: str = json.load(schema_file)
+            schema: dict = json.load(schema_file)
             return CustomListExports.parse_file(self._file, schema)
 
     def _process_check_book(
@@ -138,20 +139,22 @@ class CustomListImporter:
         )
         response = self._session.get(server_work_endpoint)
         if response.status_code == 404:
-            problem = CustomListProblemBookMissing.create(
+            problem_missing = CustomListProblemBookMissing.create(
                 id=book.id(), title=book.title()
             )
-            report.add_problem(problem)
-            self._logger.error(problem.message())
+            report.add_problem(problem_missing)
+            self._logger.error(problem_missing.message())
             rejected_books.add(book.id())
             return
 
         if response.status_code >= 400:
-            problem = CustomListProblemBookRequestFailed.create(
-                id=book.id(), title=book.title(), error=self._error_response(response)
+            problem_request = CustomListProblemBookRequestFailed.create(
+                id=book.id(),
+                title=book.title(),
+                error=self._error_response("Book request failed", response),
             )
-            report.add_problem(problem)
-            self._logger.error(problem.message())
+            report.add_problem(problem_request)
+            self._logger.error(problem_request.message())
             rejected_books.add(book.id())
             return
 
@@ -181,6 +184,39 @@ class CustomListImporter:
         )
         self._logger.error(problem.message())
         report.add_problem(problem)
+
+    def _process_customlist_check_collections(
+        self,
+        list_report: CustomListReport,
+        customlist: CustomList,
+        rejected_collections: Set[str],
+    ) -> None:
+        self._logger.info(
+            "Checking that all referenced collections exist on the target CM"
+        )
+
+        server_collections_endpoint: str = f"{self._server_base}/admin/collections"
+        response = self._session.get(server_collections_endpoint)
+        if response.status_code >= 400:
+            self._fatal_response("Unable to retrieve collections", response)
+
+        raw_content = json.loads(response.content.decode("utf-8"))
+        raw_collections = raw_content["collections"]
+
+        for collection in customlist.collections():
+            located = False
+            for raw_collection in raw_collections:
+                if collection.name() == raw_collection["name"]:
+                    located = True
+                    collection.update_id(raw_collection["id"])
+                    break
+            if not located:
+                problem_missing = CustomListProblemCollectionMissing.create(
+                    collection.name()
+                )
+                list_report.add_problem(problem_missing)
+                self._logger.error(problem_missing.message())
+                rejected_collections.add(collection.name())
 
     def _process_customlist_check_books(
         self,
@@ -235,16 +271,23 @@ class CustomListImporter:
         list_report: CustomListReport,
         customlist: CustomList,
         rejected_books: Set[str],
+        rejected_collections: Set[str],
     ) -> None:
         self._logger.info(
             f"Updating list '{customlist.name()}' ({customlist.id()}) on the target CM with {customlist.size()} books"
         )
         if not self._dry_run:
-            output = []
+            output_books: List[dict] = []
             for book in customlist.books():
                 if book.id() in rejected_books:
                     continue
-                output.append({"id": book.id(), "title": book.title()})
+                output_books.append({"id": book.id(), "title": book.title()})
+
+            output_collections: List[int] = []
+            for collection in customlist.collections():
+                if collection.name() in rejected_collections:
+                    continue
+                output_collections.append(collection.id())
 
             # We're required to manually set the X-CSRF-Token header.
             headers = {}
@@ -260,9 +303,12 @@ class CustomListImporter:
                 headers=headers,
                 files=(
                     ("name", (None, customlist.name())),
-                    ("entries", (None, json.dumps(output, sort_keys=True))),
+                    ("entries", (None, json.dumps(output_books, sort_keys=True))),
                     ("deletedEntries", (None, "[]".encode("utf-8"))),
-                    ("collections", (None, "[]".encode("utf-8"))),
+                    (
+                        "collections",
+                        (None, json.dumps(output_collections, sort_keys=True)),
+                    ),
                 ),
             )
             if response.status_code >= 400:
@@ -288,11 +334,17 @@ class CustomListImporter:
         list_reports: Dict[int, CustomListReport] = {}
         rejected_books: Set[str] = set({})
         rejected_lists: Set[int] = set({})
+        rejected_collections: Set[str] = set({})
 
         for customlist in customlists.lists():
             list_report = CustomListReport(customlist.id(), customlist.name())
             list_reports[customlist.id()] = list_report
             report.add_report(list_report)
+            self._process_customlist_check_collections(
+                list_report=list_report,
+                customlist=customlist,
+                rejected_collections=rejected_collections,
+            )
             self._process_customlist_check_books(
                 list_report=list_report,
                 customlist=customlist,
@@ -311,11 +363,12 @@ class CustomListImporter:
                 customlist=customlist,
                 list_report=list_reports[customlist.id()],
                 rejected_books=rejected_books,
+                rejected_collections=rejected_collections,
             )
 
     def _save_customlists_report(self, document: CustomListsReport) -> None:
         with open(self._schema_report_file, "rb") as schema_file:
-            schema: str = json.load(schema_file)
+            schema: dict = json.load(schema_file)
 
         output_file_tmp: str = self._output_file + ".tmp"
         serialized: str = document.serialize(schema)

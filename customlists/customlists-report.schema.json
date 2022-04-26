@@ -51,7 +51,9 @@
               { "$ref": "#/$defs/problem-book-request-failed" },
               { "$ref": "#/$defs/problem-list-already-exists" },
               { "$ref": "#/$defs/problem-list-broken" },
-              { "$ref": "#/$defs/problem-list-update-failed" }
+              { "$ref": "#/$defs/problem-list-update-failed" },
+              { "$ref": "#/$defs/problem-collection-missing" },
+              { "$ref": "#/$defs/problem-collection-request-failed" }
             ]
           }
         }
@@ -279,6 +281,56 @@
       "required": [
         "%type",
         "id",
+        "name",
+        "message"
+      ]
+    },
+
+    "problem-collection-missing": {
+      "$comment": "A list had a collection that does not exist on the target CM",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "problem-collection-missing"
+        },
+        "name": {
+          "$comment": "The collection name",
+          "type": "string"
+        },
+        "message": {
+          "$comment": "The error message",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%type",
+        "name",
+        "message"
+      ]
+    },
+
+    "problem-collection-request-failed": {
+      "$comment": "A request for a collection failed.",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "problem-collection-request-failed"
+        },
+        "name": {
+          "$comment": "The collection name",
+          "type": "string"
+        },
+        "message": {
+          "$comment": "The error message",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%type",
         "name",
         "message"
       ]

@@ -27,6 +27,14 @@
           "title": "Bad Book",
           "message": "Something went wrong on the source CM"
         }
+      ],
+      "collections": [
+        {
+          "%type": "collection",
+          "id": 864,
+          "name": "B2",
+          "protocol": "OPDS for Distributors"
+        }
       ]
     }
   ],

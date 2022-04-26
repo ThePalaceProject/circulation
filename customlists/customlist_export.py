@@ -11,6 +11,43 @@ import requests
 from requests import Session
 
 
+class CollectionReference:
+    _id: int
+    _id_updated: int
+    _name: str
+    _protocol: str
+
+    def __init__(self, id: int, name: str, protocol: str):
+        self._id = id
+        self._id_updated = id
+        self._name = name
+        self._protocol = protocol
+
+    def to_dict(self) -> dict:
+        return {
+            "%type": "collection",
+            "id": self._id,
+            "name": self._name,
+            "protocol": self._protocol,
+        }
+
+    def id_original(self) -> int:
+        return self._id
+
+    def id(self) -> int:
+        return self._id_updated
+
+    def name(self) -> str:
+        return self._name
+
+    def protocol(self) -> str:
+        return self._protocol
+
+    def update_id(self, id: int):
+        assert type(id) == int
+        self._id_updated = id
+
+
 class Book:
     _id: str
     _id_type: str
@@ -98,6 +135,7 @@ class ProblematicCustomList:
 class CustomList:
     _books: List[Book]
     _problematic_books: List[ProblematicBook]
+    _collections: List[CollectionReference]
     _id: int
     _name: str
     _library_id: str
@@ -105,6 +143,7 @@ class CustomList:
     def __init__(self, id: int, name: str, library_id: str):
         self._books = []
         self._problematic_books = []
+        self._collections = []
         self._id = id
         self._name = name
         self._library_id = library_id
@@ -114,6 +153,10 @@ class CustomList:
 
     def library_id(self) -> str:
         return self._library_id
+
+    def add_collection(self, collection: CollectionReference) -> None:
+        assert type(collection) == CollectionReference
+        self._collections.append(collection)
 
     def add_book(self, book: Book) -> None:
         assert type(book) == Book
@@ -136,6 +179,7 @@ class CustomList:
             "problematic-books": list(
                 map(lambda b: b.to_dict(), self._problematic_books)
             ),
+            "collections": list(map(lambda c: c.to_dict(), self._collections)),
         }
 
     def books(self) -> Iterable[Book]:
@@ -143,6 +187,9 @@ class CustomList:
 
     def problematic_books(self) -> Iterable[ProblematicBook]:
         return (b for b in self._problematic_books)
+
+    def collections(self) -> Iterable[CollectionReference]:
+        return (c for c in self._collections)
 
     def name(self) -> str:
         return self._name
@@ -207,14 +254,21 @@ class CustomListExports:
                     title=raw_book["title"],
                 )
                 custom_list.add_problematic_book(problem_book)
+            for raw_collection in raw_list["collections"]:
+                collection = CollectionReference(
+                    id=raw_collection["id"],
+                    name=raw_collection["name"],
+                    protocol=raw_collection["protocol"],
+                )
+                custom_list.add_collection(collection)
             exports.add_list(custom_list)
 
         # Load the problematic lists.
         for raw_list in document["problematic-customlists"]:
-            custom_list = ProblematicCustomList(
+            problem_list = ProblematicCustomList(
                 raw_list["id"], raw_list["name"], raw_list["error"]
             )
-            exports.add_problematic_list(custom_list)
+            exports.add_problematic_list(problem_list)
 
         return exports
 
@@ -336,6 +390,16 @@ class CustomListExporter:
                     )
                 )
 
+        # Extract any collection references
+        raw_collections = raw_list["collections"] or []
+        for raw_collection in raw_collections:
+            collection = CollectionReference(
+                id=raw_collection["id"],
+                name=raw_collection["name"],
+                protocol=raw_collection["protocol"],
+            )
+            custom_list.add_collection(collection)
+
         self._logger.info(f"retrieved {custom_list.size()} books for list {id}")
         return custom_list
 
@@ -357,7 +421,8 @@ class CustomListExporter:
             if type(result_list) is ProblematicCustomList:
                 custom_lists.add_problematic_list(result_list)
             else:
-                custom_lists.add_list(result_list)
+                if type(result_list) is CustomList:
+                    custom_lists.add_list(result_list)
 
         self._logger.info(f"retrieved {custom_lists.size()} custom lists")
         return custom_lists
