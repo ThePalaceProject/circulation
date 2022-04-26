@@ -246,15 +246,23 @@ class CustomListImporter:
                     continue
                 output.append({"id": book.id(), "title": book.title()})
 
+            # We're required to manually set the X-CSRF-Token header.
+            headers = {}
+            if self._session.cookies.get("csrf_token"):
+                headers["X-CSRF-Token"] = self._session.cookies.get("csrf_token")
+
             # Send the new list to the server.
             server_list_endpoint: str = (
                 f"{self._server_base}/{customlist.library_id()}/admin/custom_lists"
             )
             response = self._session.post(
                 server_list_endpoint,
+                headers=headers,
                 files=(
                     ("name", (None, customlist.name())),
                     ("entries", (None, json.dumps(output, sort_keys=True))),
+                    ("deletedEntries", (None, "[]".encode("utf-8"))),
+                    ("collections", (None, "[]".encode("utf-8"))),
                 ),
             )
             if response.status_code >= 400:

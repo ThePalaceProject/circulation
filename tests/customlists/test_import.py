@@ -81,6 +81,8 @@ class TestImports:
                 ]
             ).execute()
 
+        assert 1 == len(mock_web_server.requests())
+
     def test_import_cannot_retrieve_custom_lists(
         self, mock_web_server: MockAPIServer, tmpdir
     ):
@@ -142,6 +144,8 @@ class TestImports:
                     "-v",
                 ]
             ).execute()
+
+        assert 4 == len(mock_web_server.requests())
 
     def test_import_cannot_update_custom_list(
         self, mock_web_server: MockAPIServer, tmpdir
@@ -238,6 +242,8 @@ class TestImports:
             "Failed to update custom list: 500 Internal Server Error"
             == problems[1].message()
         )
+
+        assert 5 == len(mock_web_server.requests())
 
     def test_import_cannot_update_existing_list(
         self, mock_web_server: MockAPIServer, tmpdir
@@ -348,6 +354,8 @@ class TestImports:
             == problems[1].message()
         )
 
+        assert 4 == len(mock_web_server.requests())
+
     def test_import_dry_run(self, mock_web_server: MockAPIServer, tmpdir):
         """If --dry-run is specified, the lists aren't actually updated."""
         sign_response = MockAPIServerResponse()
@@ -432,3 +440,105 @@ class TestImports:
             "Book 'Bad Book' (urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f7) was excluded from list updates due to a problem on the source CM: Something went wrong on the source CM"
             == problems[0].message()
         )
+
+        assert 4 == len(mock_web_server.requests())
+
+    def test_import_updates_and_includes_csrf(
+        self, mock_web_server: MockAPIServer, tmpdir
+    ):
+        """If a list already exists, it isn't updated."""
+        sign_response = MockAPIServerResponse()
+        sign_response.status_code = 200
+        sign_response.headers[
+            "Set-Cookie"
+        ] = "csrf_token=DUZ8inJjpISkyCYjHx7PONZM8354pCu4; HttpOnly; Path=/"
+        mock_web_server.enqueue_response(
+            "POST", "/admin/sign_in_with_password", sign_response
+        )
+
+        work_response_0 = MockAPIServerResponse()
+        work_response_0.status_code = 200
+        mock_web_server.enqueue_response(
+            "GET",
+            "/admin/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6",
+            work_response_0,
+        )
+
+        work_response_1 = MockAPIServerResponse()
+        work_response_1.status_code = 200
+        mock_web_server.enqueue_response(
+            "GET",
+            "/admin/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
+            work_response_1,
+        )
+
+        lists_response_0 = MockAPIServerResponse()
+        lists_response_0.status_code = 200
+        lists_response_0.set_content(
+            """
+{
+    "custom_lists": []
+}
+        """.encode(
+                "utf-8"
+            )
+        )
+        mock_web_server.enqueue_response("GET", "/admin/custom_lists", lists_response_0)
+
+        update_response_0 = MockAPIServerResponse()
+        update_response_0.status_code = 200
+        mock_web_server.enqueue_response(
+            "POST", "/HAZELNUT/admin/custom_lists", update_response_0
+        )
+
+        schema_path = TestImports._customlists_resource_path("customlists.schema.json")
+        schema_report_path = TestImports._customlists_resource_path(
+            "customlists-report.schema.json"
+        )
+        input_file = TestImports._test_customlists_resource_path(
+            "example-customlists.json"
+        )
+        output_file = tmpdir.join("output.json")
+        CustomListImporter.create(
+            [
+                "--server",
+                mock_web_server.url("/"),
+                "--username",
+                "someone@example.com",
+                "--password",
+                "12345678",
+                "--schema-file",
+                str(schema_path),
+                "--schema-report-file",
+                str(schema_report_path),
+                "--file",
+                str(input_file),
+                "--output",
+                str(output_file),
+                "-v",
+            ]
+        ).execute()
+
+        report_document: CustomListsReport
+        with open(schema_report_path, "rb") as schema_file:
+            with open(output_file, "rb") as report_file:
+                schema = json.load(schema_file)
+                document = json.load(report_file)
+                report_document = CustomListsReport.parse(
+                    schema=schema, document=document
+                )
+
+        reports: List[CustomListReport] = list(report_document.reports())
+        assert 1 == len(reports)
+        report = reports[0]
+        problems: List[CustomListProblem] = list(report.problems())
+        assert 1 == len(problems)
+        assert (
+            "Book 'Bad Book' (urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f7) was excluded from list updates due to a problem on the source CM: Something went wrong on the source CM"
+            == problems[0].message()
+        )
+
+        assert 5 == len(mock_web_server.requests())
+        req = mock_web_server.requests()[4]
+        assert "/HAZELNUT/admin/custom_lists" == req.path
+        assert "DUZ8inJjpISkyCYjHx7PONZM8354pCu4" == req.headers["X-CSRF-Token"]
