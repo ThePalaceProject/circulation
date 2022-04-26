@@ -20,9 +20,9 @@ from core.model import (
     Identifier,
     LicensePool,
     MediaTypes,
+    Patron,
     Representation,
 )
-from core.model.patron import Patron
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
 from core.overdrive import (
     MockOverdriveCoreAPI,
@@ -200,12 +200,19 @@ class OverdriveAPI(
         data=None,
         exception_on_401=False,
         method=None,
+        is_fulfillment=False,
     ):
         """Make an HTTP request on behalf of a patron.
 
+        If is_fulfillment==True, then the request will be performed in the context of our
+        fulfillment client credentials. Otherwise, it will be performed in the context of
+        the collection client credentials.
+
         The results are never cached.
         """
-        patron_credential = self.get_patron_credential(patron, pin)
+        patron_credential = self.get_patron_credential(
+            patron, pin, is_fulfillment=is_fulfillment
+        )
         headers = dict(Authorization="Bearer %s" % patron_credential.credential)
         headers.update(extra_headers)
         if method and method.lower() in ("get", "post", "put", "delete"):
@@ -234,38 +241,27 @@ class OverdriveAPI(
             # self.log.debug("%s: %s", url, response.status_code)
             return response
 
-    def get_patron_credential(self, patron, pin):
-        """Create an OAuth token for the given patron."""
+    def get_patron_credential(
+        self, patron: Patron, pin: str, is_fulfillment=False
+    ) -> Credential:
+        """Create an OAuth token for the given patron.
+
+        :param patron: The patron for whom to fetch the credential.
+        :param pin: The patron's PIN or password.
+        :param is_fulfillment: Boolean indicating whether we need a fulfillment credential.
+        """
 
         def refresh(credential):
-            return self.refresh_patron_access_token(credential, patron, pin)
-
-        return Credential.lookup(
-            self._db,
-            DataSource.OVERDRIVE,
-            "OAuth Token",
-            patron,
-            refresh,
-            collection=self.collection,
-        )
-
-    def get_fulfillment_access_token(self, patron: Patron, pin: str) -> Credential:
-        """Get the sitewide fullfilment access token
-        This DOES NOT do any patron authentication, that responsibility
-        is with the workflows that use this function"""
-        od_keys = Configuration.overdrive_fulfillment_keys()
-
-        def refresh_fulfillment_token(credential):
-            self.refresh_patron_access_token(
-                credential, patron, pin, is_fulfillment=True
+            return self.refresh_patron_access_token(
+                credential, patron, pin, is_fulfillment=is_fulfillment
             )
 
         return Credential.lookup(
             self._db,
             DataSource.OVERDRIVE,
-            "Fulfillment OAuth Token",
+            "Fulfillment OAuth Token" if is_fulfillment else "OAuth Token",
             patron,
-            refresh_fulfillment_token,
+            refresh,
             collection=self.collection,
         )
 
@@ -519,9 +515,11 @@ class OverdriveAPI(
             if error in d:
                 raise d[error](message)
 
-    def get_loan(self, patron, pin, overdrive_id):
+    def get_loan(self, patron, pin, overdrive_id, is_fulfillment=False):
         url = self.CHECKOUTS_ENDPOINT + "/" + overdrive_id.upper()
-        data = self.patron_request(patron, pin, url).json()
+        data = self.patron_request(
+            patron, pin, url, is_fulfillment=is_fulfillment
+        ).json()
         self.raise_exception_on_error(data)
         return data
 
@@ -593,7 +591,7 @@ class OverdriveAPI(
         self, patron, pin, overdrive_id, format_type
     ) -> Union["OverdriveManifestFulfillmentInfo", Tuple[str, str]]:
         """Get the link to the ACSM or manifest for an existing loan."""
-        loan = self.get_loan(patron, pin, overdrive_id)
+        loan = self.get_loan(patron, pin, overdrive_id, is_fulfillment=True)
         if not loan:
             raise NoActiveLoan("Could not find active loan for %s" % overdrive_id)
         download_link = None
@@ -640,8 +638,10 @@ class OverdriveAPI(
                 # The client must authenticate using its own
                 # credentials to fulfill this URL; we can't do it.
                 scope_string = self.scope_string(patron.library)
-                fulfillment_access_token = self.get_fulfillment_access_token(
-                    patron, pin
+                fulfillment_access_token = self.get_patron_credential(
+                    patron,
+                    pin,
+                    is_fulfillment=True,
                 )
                 return OverdriveManifestFulfillmentInfo(
                     self.collection,

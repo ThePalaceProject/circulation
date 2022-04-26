@@ -460,8 +460,11 @@ class OverdriveCoreAPI(HasExternalIntegration):
 
     @property
     def fulfillment_authorization_header(self) -> str:
-        keys = Configuration.overdrive_fulfillment_keys()
-        s = b"%s:%s" % (keys["key"].encode(), keys["secret"].encode())
+        client_credentials = Configuration.overdrive_fulfillment_keys()
+        s = b"%s:%s" % (
+            client_credentials["key"].encode(),
+            client_credentials["secret"].encode(),
+        )
         return "Basic " + base64.standard_b64encode(s).strip()
 
     def token_post(
