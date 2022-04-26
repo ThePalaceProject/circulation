@@ -642,7 +642,7 @@ class OverdriveAPI(
                     patron,
                     pin,
                     is_fulfillment=True,
-                )
+                ).credential
                 return OverdriveManifestFulfillmentInfo(
                     self.collection,
                     download_link,
