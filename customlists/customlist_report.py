@@ -184,7 +184,6 @@ class CustomListReport:
         return self._id
 
     def add_problem(self, problem: CustomListProblem) -> None:
-        logger.error(problem.message())
         self._errors.append(problem)
 
     def problems(self) -> Iterable[CustomListProblem]:

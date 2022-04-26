@@ -66,12 +66,16 @@ class CustomListImporter:
         parser.add_argument("--username", help="The CM admin username", required=True)
         parser.add_argument("--password", help="The CM admin password", required=True)
         parser.add_argument(
-            "--schema-file", help="The schema file for custom lists", required=False
+            "--schema-file",
+            help="The schema file for custom lists",
+            required=False,
+            default="customlists/customlists.schema.json",
         )
         parser.add_argument(
             "--schema-report-file",
             help="The schema file for custom list reports",
             required=False,
+            default="customlists/customlists-report.schema.json",
         )
         parser.add_argument("--file", help="The customlists file", required=True)
         parser.add_argument("--output", help="The output report", required=True)
@@ -100,7 +104,7 @@ class CustomListImporter:
             "redirect": f"{self._server_base}/admin/web/",
         }
 
-        logging.info("signing in...")
+        self._logger.info("Signing in...")
         response = self._session.post(
             server_login_endpoint, headers=headers, data=payload, allow_redirects=True
         )
@@ -109,7 +113,7 @@ class CustomListImporter:
 
         if not response.cookies.get("csrf_token"):
             self._logger.warning(
-                "the server did not return a CSRF token; expect errors to occur!"
+                "The server did not return a CSRF token; expect errors to occur!"
             )
 
     def _open_customlists(self) -> CustomListExports:
@@ -124,6 +128,10 @@ class CustomListImporter:
         book: Book,
         rejected_books: Set[str],
     ) -> None:
+        self._logger.info(
+            f"Checking that book '{book.title()}' ({book.id()}) has a matching ID and title on the target CM."
+        )
+
         """Check that the book on the target CM has a matching ID and title."""
         server_work_endpoint: str = (
             f"{self._server_base}/admin/works/{book.id_type()}/{book.id()}"
@@ -150,14 +158,14 @@ class CustomListImporter:
         feed = feedparser.parse(response.content)
         for entry in feed.entries:
             if entry.id != book.id() or entry.title != book.title():
-                report.add_problem(
-                    CustomListProblemBookMismatch.create(
-                        expected_id=book.id(),
-                        expected_title=book.title(),
-                        received_id=entry.id,
-                        received_title=entry.title,
-                    )
+                problem = CustomListProblemBookMismatch.create(
+                    expected_id=book.id(),
+                    expected_title=book.title(),
+                    received_id=entry.id,
+                    received_title=entry.title,
                 )
+                self._logger.error(problem.message())
+                report.add_problem(problem)
                 rejected_books.add(book.id())
 
     def _process_check_problematic_book(
@@ -166,13 +174,13 @@ class CustomListImporter:
         book: ProblematicBook,
     ) -> None:
         """Add all of the known problematic books to the output report."""
-        report.add_problem(
-            CustomListProblemBookBrokenOnSourceCM(
-                id=book.id(),
-                title=book.title(),
-                message=f"Book was excluded from list updates due to a problem on the source CM: {book.message()}",
-            )
+        problem = CustomListProblemBookBrokenOnSourceCM(
+            id=book.id(),
+            title=book.title(),
+            message=f"Book '{book.title()}' ({book.id()}) was excluded from list updates due to a problem on the source CM: {book.message()}",
         )
+        self._logger.error(problem.message())
+        report.add_problem(problem)
 
     def _process_customlist_check_books(
         self,
@@ -199,6 +207,10 @@ class CustomListImporter:
         customlist: CustomList,
         rejected_lists: Set[int],
     ) -> None:
+        self._logger.info(
+            f"Checking that list '{customlist.name()}' ({customlist.id()}) does not exist on the target CM"
+        )
+
         server_list_endpoint: str = f"{self._server_base}/admin/custom_lists"
         response = self._session.get(server_list_endpoint)
         if response.status_code >= 400:
@@ -209,13 +221,13 @@ class CustomListImporter:
             raw_id = raw_list["id"]
             raw_name = raw_list["name"]
             if customlist.id() == raw_id and customlist.name() == raw_name:
-                list_report.add_problem(
-                    CustomListProblemListAlreadyExists(
-                        message=f"A list with id {customlist.id()} and name '{customlist.name()}' already exists and won't be modified",
-                        id=customlist.id(),
-                        name=customlist.name(),
-                    )
+                problem = CustomListProblemListAlreadyExists(
+                    message=f"A list with id {customlist.id()} and name '{customlist.name()}' already exists and won't be modified",
+                    id=customlist.id(),
+                    name=customlist.name(),
                 )
+                self._logger.error(problem.message())
+                list_report.add_problem(problem)
                 rejected_lists.add(customlist.id())
 
     def _process_customlist_update_list(
@@ -224,6 +236,9 @@ class CustomListImporter:
         customlist: CustomList,
         rejected_books: Set[str],
     ) -> None:
+        self._logger.info(
+            f"Updating list '{customlist.name()}' ({customlist.id()}) on the target CM with {customlist.size()} books"
+        )
         if not self._dry_run:
             output = []
             for book in customlist.books():
@@ -243,15 +258,19 @@ class CustomListImporter:
                 ),
             )
             if response.status_code >= 400:
-                list_report.add_problem(
-                    CustomListProblemListUpdateFailed(
-                        message=CustomListImporter._error_response(
-                            "Failed to update custom list", response
-                        ),
-                        id=customlist.id(),
-                        name=customlist.name(),
-                    )
+                problem = CustomListProblemListUpdateFailed(
+                    message=CustomListImporter._error_response(
+                        "Failed to update custom list", response
+                    ),
+                    id=customlist.id(),
+                    name=customlist.name(),
                 )
+                self._logger.error(problem.message())
+                list_report.add_problem(problem)
+        else:
+            self._logger.info(
+                f"Skipping update of list '{customlist.name()}' ({customlist.id()}) because this is a dry run"
+            )
 
     def _process_customlists(
         self,
@@ -313,10 +332,8 @@ class CustomListImporter:
         self._file = args.file
         self._output_file = args.output
         self._dry_run = args.dry_run
-        self._schema_file = args.schema_file or "customlists.schema.json"
-        self._schema_report_file = (
-            args.schema_report_file or "customlists-report.schema.json"
-        )
+        self._schema_file = args.schema_file
+        self._schema_report_file = args.schema_report_file
         verbose: int = args.verbose or 0
         if verbose > 0:
             self._logger.setLevel(logging.INFO)

@@ -231,7 +231,7 @@ class TestImports:
         problems: List[CustomListProblem] = list(report.problems())
         assert 2 == len(problems)
         assert (
-            "Book was excluded from list updates due to a problem on the source CM: Something went wrong on the source CM"
+            "Book 'Bad Book' (urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f7) was excluded from list updates due to a problem on the source CM: Something went wrong on the source CM"
             == problems[0].message()
         )
         assert (
@@ -340,7 +340,7 @@ class TestImports:
         problems: List[CustomListProblem] = list(report.problems())
         assert 2 == len(problems)
         assert (
-            "Book was excluded from list updates due to a problem on the source CM: Something went wrong on the source CM"
+            "Book 'Bad Book' (urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f7) was excluded from list updates due to a problem on the source CM: Something went wrong on the source CM"
             == problems[0].message()
         )
         assert (
@@ -429,6 +429,6 @@ class TestImports:
         problems: List[CustomListProblem] = list(report.problems())
         assert 1 == len(problems)
         assert (
-            "Book was excluded from list updates due to a problem on the source CM: Something went wrong on the source CM"
+            "Book 'Bad Book' (urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f7) was excluded from list updates due to a problem on the source CM: Something went wrong on the source CM"
             == problems[0].message()
         )

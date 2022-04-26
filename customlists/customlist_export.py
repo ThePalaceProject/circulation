@@ -260,7 +260,10 @@ class CustomListExporter:
             description="Fetch a custom list."
         )
         parser.add_argument(
-            "--schema-file", help="The path to customlists.schema.json", required=False
+            "--schema-file",
+            help="The path to customlists.schema.json",
+            required=False,
+            default="customlists/customlists.schema.json",
         )
         parser.add_argument("--server", help="The address of the CM", required=True)
         parser.add_argument("--username", help="The CM admin username", required=True)
@@ -337,7 +340,7 @@ class CustomListExporter:
         return custom_list
 
     def _make_custom_lists_document(self) -> CustomListExports:
-        logging.info("Fetching lists...")
+        self._logger.info("Fetching lists...")
         server_lists_endpoint: str = f"{self._server_base}/admin/custom_lists"
         response = self._session.get(server_lists_endpoint)
         if response.status_code >= 400:
@@ -364,7 +367,7 @@ class CustomListExporter:
         headers = {"User-Agent": "circulation-customlists-fetch/1.0"}
         payload = {"email": self._email, "password": self._password}
 
-        logging.info("Signing in...")
+        self._logger.info("Signing in...")
         response = self._session.post(
             server_login_endpoint, headers=headers, data=payload, allow_redirects=False
         )
@@ -396,7 +399,7 @@ class CustomListExporter:
         self._email = args.username
         self._password = args.password
         self._output_file = args.output
-        self._schema_file = args.schema_file or "customlists.schema.json"
+        self._schema_file = args.schema_file
         verbose: int = args.verbose or 0
         if verbose > 0:
             self._logger.setLevel(logging.INFO)
