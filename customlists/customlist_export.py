@@ -181,8 +181,10 @@ class CustomListExports:
         jsonschema.validate(document_dict, schema)
         return json.dumps(document_dict, sort_keys=True, indent=2)
 
-    @classmethod
-    def parse(cls, document: dict, schema: str) -> "CustomListExports":
+    @staticmethod
+    def parse(document: dict, schema: dict) -> "CustomListExports":
+        assert type(schema) == dict
+
         jsonschema.validate(document, schema)
         exports = CustomListExports()
 
@@ -216,12 +218,14 @@ class CustomListExports:
 
         return exports
 
-    @classmethod
-    def parse_fd(cls, file: IO[bytes], schema: str) -> "CustomListExports":
+    @staticmethod
+    def parse_fd(file: IO[bytes], schema: dict) -> "CustomListExports":
+        assert type(schema) == dict
         return CustomListExports.parse(json.load(file), schema)
 
-    @classmethod
-    def parse_file(cls, file: str, schema: str) -> "CustomListExports":
+    @staticmethod
+    def parse_file(file: str, schema: dict) -> "CustomListExports":
+        assert type(schema) == dict
         with open(file, "rb") as source_file:
             return CustomListExports.parse_fd(source_file, schema)
 
@@ -246,11 +250,12 @@ class CustomListExporter:
     _output_file: str
     _schema_file: str
 
-    def _fatal(self, message: str):
+    @staticmethod
+    def _fatal(message: str):
         raise CustomListExportFailed(message)
 
-    @classmethod
-    def _parse_arguments(cls, args: List[str]) -> argparse.Namespace:
+    @staticmethod
+    def _parse_arguments(args: List[str]) -> argparse.Namespace:
         parser: argparse.ArgumentParser = argparse.ArgumentParser(
             description="Fetch a custom list."
         )
@@ -336,7 +341,7 @@ class CustomListExporter:
         server_lists_endpoint: str = f"{self._server_base}/admin/custom_lists"
         response = self._session.get(server_lists_endpoint)
         if response.status_code >= 400:
-            self._fatal(
+            CustomListExporter._fatal(
                 f"Failed to retrieve custom lists: {response.status_code} {response.reason}"
             )
 
@@ -364,7 +369,9 @@ class CustomListExporter:
             server_login_endpoint, headers=headers, data=payload, allow_redirects=False
         )
         if response.status_code >= 400:
-            self._fatal(f"Failed to sign in: {response.status_code} {response.reason}")
+            CustomListExporter._fatal(
+                f"Failed to sign in: {response.status_code} {response.reason}"
+            )
 
     def _save_customlists_document(self, document: CustomListExports) -> None:
         with open(self._schema_file, "rb") as schema_file:
@@ -396,6 +403,6 @@ class CustomListExporter:
         if verbose > 1:
             self._logger.setLevel(logging.DEBUG)
 
-    @classmethod
-    def create(cls, args: List[str]) -> "CustomListExporter":
+    @staticmethod
+    def create(args: List[str]) -> "CustomListExporter":
         return CustomListExporter(CustomListExporter._parse_arguments(args))

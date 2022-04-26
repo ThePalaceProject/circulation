@@ -1,0 +1,34 @@
+{
+  "%id": "https://schemas.thepalaceproject.io/customlists/1.0",
+  "customlists": [
+    {
+      "%type": "customlist",
+      "books": [
+        {
+          "%type": "book",
+          "id": "urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6",
+          "id-type": "URI",
+          "title": "Chameleon"
+        },
+        {
+          "%type": "book",
+          "id": "urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
+          "id-type": "URI",
+          "title": "Chameleon"
+        }
+      ],
+      "id": 90,
+      "library-id": "HAZELNUT",
+      "name": "Something Else",
+      "problematic-books": [
+        {
+          "%type": "problematic-book",
+          "id": "urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f7",
+          "title": "Bad Book",
+          "message": "Something went wrong on the source CM"
+        }
+      ]
+    }
+  ],
+  "problematic-customlists": []
+}

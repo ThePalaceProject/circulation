@@ -45,12 +45,13 @@
           "type": "array",
           "items": {
             "oneOf": [
+              { "$ref": "#/$defs/problem-book-broken-on-source" },
               { "$ref": "#/$defs/problem-book-mismatch" },
               { "$ref": "#/$defs/problem-book-missing" },
-              { "$ref": "#/$defs/problem-book-broken-on-source" },
               { "$ref": "#/$defs/problem-book-request-failed" },
               { "$ref": "#/$defs/problem-list-already-exists" },
-              { "$ref": "#/$defs/problem-list-broken" }
+              { "$ref": "#/$defs/problem-list-broken" },
+              { "$ref": "#/$defs/problem-list-update-failed" }
             ]
           }
         }
@@ -230,6 +231,36 @@
         "%type": {
           "type": "string",
           "const": "problem-list-broken"
+        },
+        "id": {
+          "$comment": "The list ID",
+          "type": "number"
+        },
+        "name": {
+          "$comment": "The list name",
+          "type": "string"
+        },
+        "message": {
+          "$comment": "The error message",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%type",
+        "id",
+        "name",
+        "message"
+      ]
+    },
+
+    "problem-list-update-failed": {
+      "$comment": "A request to update a list on the server failed.",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "problem-list-update-failed"
         },
         "id": {
           "$comment": "The list ID",

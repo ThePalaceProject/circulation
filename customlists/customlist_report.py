@@ -140,6 +140,21 @@ class CustomListProblemListAlreadyExists(CustomListProblem):
         }
 
 
+class CustomListProblemListUpdateFailed(CustomListProblem):
+    def __init__(self, message: str, id: int, name: str):
+        super().__init__(message)
+        self._id = id
+        self._name = name
+
+    def to_dict(self) -> dict:
+        return {
+            "%type": "problem-list-update-failed",
+            "id": self._id,
+            "name": self._name,
+            "message": self.message(),
+        }
+
+
 class CustomListProblemListBroken(CustomListProblem):
     def __init__(self, message: str, id: int, name: str):
         super().__init__(message)
@@ -182,6 +197,63 @@ class CustomListReport:
             "problems": list(map(lambda p: p.to_dict(), self._errors)),
         }
 
+    @staticmethod
+    def _parse_problem(raw_problem: dict) -> CustomListProblem:
+        problem_type = raw_problem["%type"]
+        if problem_type == "problem-list-broken":
+            return CustomListProblemListBroken(
+                message=raw_problem["message"],
+                id=raw_problem["id"],
+                name=raw_problem["name"],
+            )
+        if problem_type == "problem-list-update-failed":
+            return CustomListProblemListUpdateFailed(
+                message=raw_problem["message"],
+                id=raw_problem["id"],
+                name=raw_problem["name"],
+            )
+        if problem_type == "problem-list-already-exists":
+            return CustomListProblemListAlreadyExists(
+                message=raw_problem["message"],
+                id=raw_problem["id"],
+                name=raw_problem["name"],
+            )
+        if problem_type == "problem-book-broken-on-source":
+            return CustomListProblemBookBrokenOnSourceCM(
+                message=raw_problem["message"],
+                id=raw_problem["id"],
+                title=raw_problem["title"],
+            )
+        if problem_type == "problem-book-request-failed":
+            return CustomListProblemBookRequestFailed(
+                message=raw_problem["message"],
+                id=raw_problem["id"],
+                title=raw_problem["title"],
+            )
+        if problem_type == "problem-book-missing":
+            return CustomListProblemBookMissing(
+                message=raw_problem["message"],
+                id=raw_problem["id"],
+                title=raw_problem["title"],
+            )
+        if problem_type == "problem-book-mismatch":
+            return CustomListProblemBookMismatch(
+                message=raw_problem["message"],
+                expected_id=raw_problem["expected_id"],
+                expected_title=raw_problem["expected_title"],
+                received_id=raw_problem["received_id"],
+                received_title=raw_problem["received_title"],
+            )
+        else:
+            raise RuntimeError(f"Unexpected type: {problem_type}")
+
+    @staticmethod
+    def _parse(document: dict) -> "CustomListReport":
+        report = CustomListReport(id=document["list-id"], name=document["list-name"])
+        for problem in document["problems"]:
+            report.add_problem(CustomListReport._parse_problem(problem))
+        return report
+
 
 class CustomListsReport:
     _reports: List[CustomListReport]
@@ -192,7 +264,7 @@ class CustomListsReport:
     def add_report(self, report: CustomListReport) -> None:
         self._reports.append(report)
 
-    def problems(self) -> Iterable[CustomListReport]:
+    def reports(self) -> Iterable[CustomListReport]:
         return (p for p in self._reports)
 
     def to_dict(self) -> dict:
@@ -201,7 +273,19 @@ class CustomListsReport:
             "reports": list(map(lambda p: p.to_dict(), self._reports)),
         }
 
-    def serialize(self, schema: str) -> str:
+    def serialize(self, schema: dict) -> str:
+        assert type(schema) == dict
+
         document_dict = self.to_dict()
         jsonschema.validate(document_dict, schema)
         return json.dumps(document_dict, sort_keys=True, indent=2)
+
+    @staticmethod
+    def parse(schema: dict, document: dict) -> "CustomListsReport":
+        assert type(schema) == dict
+
+        jsonschema.validate(document, schema)
+        report = CustomListsReport()
+        for raw_report in document["reports"]:
+            report.add_report(CustomListReport._parse(raw_report))
+        return report
