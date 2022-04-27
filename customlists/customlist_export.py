@@ -375,7 +375,7 @@ class CustomListExporter:
             added = False
             for link in entry.links:
                 if link.rel == "alternate":
-                    match = re.search("^(.*)/works/(.*)/(.*)$", link.href)
+                    match = re.search("^(.*)/works/([^/]+)/(.*)$", link.href)
                     if match is not None:
                         custom_list.add_book(
                             Book(id=entry.id, id_type=match.group(2), title=entry.title)
