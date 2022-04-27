@@ -332,7 +332,7 @@ class CustomListExporter:
             "-v",
             action="count",
             default=0,
-            help="Increase verbosity (can be specified multiple times)",
+            help="Increase verbosity (can be specified multiple times to export multiple lists)",
         )
         return parser.parse_args(args)
 
