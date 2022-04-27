@@ -250,6 +250,10 @@ class OverdriveCoreAPI(HasExternalIntegration):
         self._migrate_configuration(
             collection=collection, configuration=self._configuration
         )
+        self._server_nickname = (
+            self._configuration.server_nickname
+            or OverdriveConfiguration.PRODUCTION_SERVERS
+        )
         self._hosts = self._determine_hosts(configuration=self._configuration)
 
         # This is set by an access to .token, or by a call to
@@ -460,7 +464,14 @@ class OverdriveCoreAPI(HasExternalIntegration):
 
     @property
     def fulfillment_authorization_header(self) -> str:
-        client_credentials = Configuration.overdrive_fulfillment_keys()
+        is_test_mode = (
+            True
+            if self._server_nickname == OverdriveConfiguration.TESTING_SERVERS
+            else False
+        )
+        client_credentials = Configuration.overdrive_fulfillment_keys(
+            testing=is_test_mode
+        )
         s = b"%s:%s" % (
             client_credentials["key"].encode(),
             client_credentials["secret"].encode(),

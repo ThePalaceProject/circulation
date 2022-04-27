@@ -3,6 +3,7 @@ import copy
 import json
 import logging
 import os
+from typing import Dict
 
 from flask_babel import lazy_gettext as _
 from sqlalchemy.engine.url import make_url
@@ -505,10 +506,9 @@ class Configuration(ConfigurationConstants):
         return url
 
     @classmethod
-    def overdrive_fulfillment_keys(cls):
-        test = os.environ.get("TESTING", False)
+    def overdrive_fulfillment_keys(cls, testing=False) -> Dict[str, str]:
         prefix = (
-            cls.OD_PREFIX_TESTING_PREFIX if test else cls.OD_PREFIX_PRODUCTION_PREFIX
+            cls.OD_PREFIX_TESTING_PREFIX if testing else cls.OD_PREFIX_PRODUCTION_PREFIX
         )
         return {
             "key": os.environ.get(f"{prefix}_{cls.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"),
