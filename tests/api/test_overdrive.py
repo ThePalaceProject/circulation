@@ -1859,17 +1859,14 @@ class TestSyncBookshelf(OverdriveAPITest):
         # We have created previously unknown LicensePools and
         # Identifiers.
         identifiers = [loan.license_pool.identifier.identifier for loan in loans]
-        assert (
-            sorted(
-                [
-                    "a5a3d737-34d4-4d69-aad8-eba4e46019a3",
-                    "99409f99-45a5-4238-9e10-98d1435cde04",
-                    "993e4b33-823c-40af-8f61-cac54e1cba5d",
-                    "a2ec6f3a-ebfe-4c95-9638-2cb13be8de5a",
-                ]
-            )
-            == sorted(identifiers)
-        )
+        assert sorted(
+            [
+                "a5a3d737-34d4-4d69-aad8-eba4e46019a3",
+                "99409f99-45a5-4238-9e10-98d1435cde04",
+                "993e4b33-823c-40af-8f61-cac54e1cba5d",
+                "a2ec6f3a-ebfe-4c95-9638-2cb13be8de5a",
+            ]
+        ) == sorted(identifiers)
 
         # We have recorded a new DeliveryMechanism associated with
         # each loan.
