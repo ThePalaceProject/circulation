@@ -303,6 +303,7 @@ class CustomListExporter:
     _password: str
     _output_file: str
     _schema_file: str
+    _lists: List[str]
 
     @staticmethod
     def _fatal(message: str):
@@ -311,7 +312,7 @@ class CustomListExporter:
     @staticmethod
     def _parse_arguments(args: List[str]) -> argparse.Namespace:
         parser: argparse.ArgumentParser = argparse.ArgumentParser(
-            description="Fetch a custom list."
+            description="Fetch one or more custom lists."
         )
         parser.add_argument(
             "--schema-file",
@@ -324,7 +325,7 @@ class CustomListExporter:
         parser.add_argument("--password", help="The CM admin password", required=True)
         parser.add_argument("--output", help="The output file", required=True)
         parser.add_argument(
-            "--list-name", help="The name of the custom list", required=True
+            "--list", help="Only export the named list (may be repeated)", nargs="+"
         )
         parser.add_argument(
             "--verbose",
@@ -400,7 +401,7 @@ class CustomListExporter:
             )
             custom_list.add_collection(collection)
 
-        self._logger.info(f"retrieved {custom_list.size()} books for list {id}")
+        self._logger.info(f"Retrieved {custom_list.size()} books for list {id}")
         return custom_list
 
     def _make_custom_lists_document(self) -> CustomListExports:
@@ -417,6 +418,12 @@ class CustomListExporter:
 
         custom_lists = CustomListExports()
         for raw_list in raw_lists:
+            name = raw_list["name"]
+            if self._lists:
+                if name not in self._lists:
+                    self._logger.info(f"Excluding list '{name}'")
+                    continue
+
             result_list = self._make_custom_list(raw_list)
             if type(result_list) is ProblematicCustomList:
                 custom_lists.add_problematic_list(result_list)
@@ -424,7 +431,7 @@ class CustomListExporter:
                 if type(result_list) is CustomList:
                     custom_lists.add_list(result_list)
 
-        self._logger.info(f"retrieved {custom_lists.size()} custom lists")
+        self._logger.info(f"Retrieved {custom_lists.size()} custom lists")
         return custom_lists
 
     def _sign_in(self) -> None:
@@ -465,6 +472,7 @@ class CustomListExporter:
         self._password = args.password
         self._output_file = args.output
         self._schema_file = args.schema_file
+        self._lists = args.list
         verbose: int = args.verbose or 0
         if verbose > 0:
             self._logger.setLevel(logging.INFO)

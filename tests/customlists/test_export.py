@@ -40,6 +40,11 @@ class TestExports:
         resource_path = base_path / "customlists" / "files"
         return str(resource_path / name)
 
+    @staticmethod
+    def _test_customlists_resource_bytes(name) -> bytes:
+        with open(TestExports._test_customlists_resource_path(name), "rb") as f:
+            return f.read()
+
     def test_export_auth_fails(self, mock_web_server: MockAPIServer, tmpdir):
         """If the server returns a ~400 error code, signing in fails."""
         sign_response = MockAPIServerResponse()
@@ -62,8 +67,6 @@ class TestExports:
                     "12345678",
                     "--output",
                     str(output_file),
-                    "--list-name",
-                    "Something",
                     "-v",
                 ]
             ).execute()
@@ -93,8 +96,6 @@ class TestExports:
                 "12345678",
                 "--output",
                 str(output_file),
-                "--list-name",
-                "Something",
                 "--schema-file",
                 schema_path,
                 "-v",
@@ -118,27 +119,8 @@ class TestExports:
 
         lists_response = MockAPIServerResponse()
         lists_response.status_code = 200
-        lists_response.set_content(
-            """
-    {
-    "custom_lists": [
-        {
-            "collections": [
-                {
-                    "id": 864,
-                    "name": "B2",
-                    "protocol":"OPDS for Distributors"
-                }
-            ],
-            "entry_count":1,
-            "id":90,
-            "name":"Something Else"
-        }
-    ]
-    }
-        """.encode(
-                "utf-8"
-            )
+        lists_response.content = TestExports._test_customlists_resource_bytes(
+            "id90-customlists-response.json"
         )
         mock_web_server.enqueue_response("GET", "/admin/custom_lists", lists_response)
 
@@ -158,8 +140,6 @@ class TestExports:
                 "12345678",
                 "--output",
                 str(output_file),
-                "--list-name",
-                "Something",
                 "--schema-file",
                 schema_path,
                 "-v",
@@ -187,35 +167,26 @@ class TestExports:
 
         lists_response = MockAPIServerResponse()
         lists_response.status_code = 200
-        lists_response.set_content(
-            """
-{
-    "custom_lists": [
-        {
-            "collections": [
-                {
-                    "id": 864,
-                    "name": "B2",
-                    "protocol":"OPDS for Distributors"
-                }
-            ],
-            "entry_count":1,
-            "id":90,
-            "name":"Something Else"
-        }
-    ]
-}
-        """.encode(
-                "utf-8"
-            )
+        lists_response.content = TestExports._test_customlists_resource_bytes(
+            "multiple-customlists-response.json"
         )
         mock_web_server.enqueue_response("GET", "/admin/custom_lists", lists_response)
 
-        list_response = MockAPIServerResponse()
-        list_response.status_code = 200
+        list_response_0 = MockAPIServerResponse()
+        list_response_0.status_code = 200
         with open(TestExports._test_customlists_resource_path("feed90.xml")) as file:
-            list_response.set_content(file.read().encode("utf-8"))
-        mock_web_server.enqueue_response("GET", "/admin/custom_list/90", list_response)
+            list_response_0.set_content(file.read().encode("utf-8"))
+        mock_web_server.enqueue_response(
+            "GET", "/admin/custom_list/90", list_response_0
+        )
+
+        list_response_1 = MockAPIServerResponse()
+        list_response_1.status_code = 200
+        with open(TestExports._test_customlists_resource_path("feed91.xml")) as file:
+            list_response_1.set_content(file.read().encode("utf-8"))
+        mock_web_server.enqueue_response(
+            "GET", "/admin/custom_list/91", list_response_1
+        )
 
         schema_path = TestExports._customlists_resource_path("customlists.schema.json")
         output_file = tmpdir.join("output.json")
@@ -229,11 +200,75 @@ class TestExports:
                 "12345678",
                 "--output",
                 str(output_file),
-                "--list-name",
-                "Something",
                 "--schema-file",
                 schema_path,
                 "-v",
+            ]
+        ).execute()
+
+        exports: CustomListExports
+        with open(schema_path, "rb") as schema_file:
+            schema_text = json.load(schema_file)
+            exports = CustomListExports.parse_file(file=output_file, schema=schema_text)
+
+        assert 2 == exports.size()
+        result_list = list(exports.lists())[0]
+        assert 1 == result_list.size()
+        assert "HAZELNUT" == result_list.library_id()
+        assert 90 == result_list.id()
+        assert "Something Else" == result_list.name()
+
+        result_list = list(exports.lists())[1]
+        assert 1 == result_list.size()
+        assert "HAZELNUT" == result_list.library_id()
+        assert 91 == result_list.id()
+        assert "Other" == result_list.name()
+
+        book = list(result_list.books())[0]
+        assert "urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6" == book.id()
+        assert "Chameleon" == book.title()
+        assert "URI" == book.id_type()
+
+    def test_export_only_one_list(self, mock_web_server: MockAPIServer, tmpdir):
+        """A simple collection gives the right results when only asking for one list."""
+        sign_response = MockAPIServerResponse()
+        sign_response.status_code = 200
+        mock_web_server.enqueue_response(
+            "POST", "/admin/sign_in_with_password", sign_response
+        )
+
+        lists_response = MockAPIServerResponse()
+        lists_response.status_code = 200
+        lists_response.content = TestExports._test_customlists_resource_bytes(
+            "multiple-customlists-response.json"
+        )
+        mock_web_server.enqueue_response("GET", "/admin/custom_lists", lists_response)
+
+        list_response_0 = MockAPIServerResponse()
+        list_response_0.status_code = 200
+        with open(TestExports._test_customlists_resource_path("feed90.xml")) as file:
+            list_response_0.set_content(file.read().encode("utf-8"))
+        mock_web_server.enqueue_response(
+            "GET", "/admin/custom_list/90", list_response_0
+        )
+
+        schema_path = TestExports._customlists_resource_path("customlists.schema.json")
+        output_file = tmpdir.join("output.json")
+        CustomListExporter.create(
+            [
+                "--server",
+                mock_web_server.url("/"),
+                "--username",
+                "someone@example.com",
+                "--password",
+                "12345678",
+                "--output",
+                str(output_file),
+                "--schema-file",
+                schema_path,
+                "-v",
+                "--list",
+                "Something Else",
             ]
         ).execute()
 
