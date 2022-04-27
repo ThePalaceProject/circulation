@@ -9,7 +9,6 @@ from .classifier import Classifier
 from .config import CannotLoadConfiguration
 from .external_search import ExternalSearchIndex, SortKeyPagination
 from .lane import BaseFacets, Lane
-from .mirror import MirrorUploader
 from .model import (
     CachedMARCFile,
     DeliveryMechanism,
@@ -20,6 +19,11 @@ from .model import (
     Work,
     get_one_or_create,
 )
+
+# this is necessary to ensure these implementations are registered
+from .s3 import MinIOUploader, S3Uploader  # noqa: autoflake
+
+# registered
 from .util import LanguageCodes
 from .util.datetime_helpers import utc_now
 
