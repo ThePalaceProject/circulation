@@ -11,6 +11,8 @@ from requests.adapters import CaseInsensitiveDict, Response
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 
+from api.circulation_exceptions import CannotFulfill
+
 from .config import CannotLoadConfiguration, Configuration
 from .coverage import BibliographicCoverageProvider
 from .importers import BaseImporterConfiguration
@@ -469,9 +471,13 @@ class OverdriveCoreAPI(HasExternalIntegration):
             if self._server_nickname == OverdriveConfiguration.TESTING_SERVERS
             else False
         )
-        client_credentials = Configuration.overdrive_fulfillment_keys(
-            testing=is_test_mode
-        )
+        try:
+            client_credentials = Configuration.overdrive_fulfillment_keys(
+                testing=is_test_mode
+            )
+        except CannotLoadConfiguration as e:
+            raise CannotFulfill(*e.args)
+
         s = b"%s:%s" % (
             client_credentials["key"].encode(),
             client_credentials["secret"].encode(),

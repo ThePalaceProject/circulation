@@ -510,12 +510,11 @@ class Configuration(ConfigurationConstants):
         prefix = (
             cls.OD_PREFIX_TESTING_PREFIX if testing else cls.OD_PREFIX_PRODUCTION_PREFIX
         )
-        return {
-            "key": os.environ.get(f"{prefix}_{cls.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"),
-            "secret": os.environ.get(
-                f"{prefix}_{cls.OD_FULFILLMENT_CLIENT_SECRET_SUFFIX}"
-            ),
-        }
+        key = os.environ.get(f"{prefix}_{cls.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}")
+        secret = os.environ.get(f"{prefix}_{cls.OD_FULFILLMENT_CLIENT_SECRET_SUFFIX}")
+        if key is None or secret is None:
+            raise CannotLoadConfiguration("Invalid fulfillment credentials.")
+        return {"key": key, "secret": secret}
 
     @classmethod
     def app_version(cls):
