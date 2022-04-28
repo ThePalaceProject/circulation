@@ -231,17 +231,6 @@ class OverdriveCoreAPI(HasExternalIntegration):
         self._external_integration = collection.external_integration
         self._collection_id = collection.id
 
-        if collection.parent:
-            # This is an Overdrive Advantage account.
-            self.parent_library_id = collection.parent.external_account_id
-
-            # We're going to inherit all of the Overdrive credentials
-            # from the parent (the main Overdrive account), except for the
-            # library ID, which we already set.
-            collection = collection.parent
-        else:
-            self.parent_library_id = None
-
         # Initialize configuration information.
         self._configuration_storage = ConfigurationStorage(self)
         self._configuration_factory = ConfigurationFactory()
@@ -249,13 +238,34 @@ class OverdriveCoreAPI(HasExternalIntegration):
             configuration_storage=self._configuration_storage, db=_db
         )
 
-        self._migrate_configuration(
-            collection=collection, configuration=self._configuration
-        )
-        self._server_nickname = (
-            self._configuration.server_nickname
-            or OverdriveConfiguration.PRODUCTION_SERVERS
-        )
+        if collection.parent:
+            # This is an Overdrive Advantage account.
+            self.parent_library_id = collection.parent.external_account_id
+
+            # We're going to inherit all of the Overdrive credentials
+            # from the parent (the main Overdrive account), except for the
+            # library ID, which we already set.
+            parent_integration = collection.parent.external_integration
+
+            self._configuration.client_key = parent_integration.setting(
+                "overdrive_client_key"
+            )
+            self._configuration.client_password = parent_integration.setting(
+                "overdrive_client_secret"
+            )
+            self._configuration.website_id = parent_integration.setting(
+                "overdrive_website_id"
+            )
+        else:
+            self.parent_library_id = None
+
+        if not self._configuration.client_key:
+            raise ValueError("Overdrive client key is not configured")
+        if not self._configuration.client_password:
+            raise ValueError("Overdrive client password/secret is not configured")
+        if not self._configuration.website_id:
+            raise ValueError("Overdrive website ID is not configured")
+
         self._hosts = self._determine_hosts(configuration=self._configuration)
 
         # This is set by an access to .token, or by a call to
@@ -275,39 +285,6 @@ class OverdriveCoreAPI(HasExternalIntegration):
             server_nickname = OverdriveConfiguration.PRODUCTION_SERVERS
 
         return dict(self.HOSTS[server_nickname])
-
-    def _migrate_configuration(
-        self, collection: Collection, configuration: OverdriveConfiguration
-    ) -> None:
-        """Attempt to load configuration data that was saved using the old
-        external integration methods. Delete the old data when we're done."""
-        integration: ExternalIntegration = collection.external_integration
-        old_client_key: Optional[str] = integration.setting(
-            ExternalIntegration.USERNAME
-        ).value
-        if old_client_key:
-            configuration.client_key = old_client_key
-
-        old_client_secret: Optional[str] = integration.setting(
-            ExternalIntegration.PASSWORD
-        ).value
-        if old_client_secret:
-            configuration.client_password = old_client_secret
-
-        old_website_id: Optional[str] = integration.setting(self.WEBSITE_ID).value
-        if old_website_id:
-            configuration.website_id = old_website_id
-
-        old_server_nickname: Optional[str] = integration.setting(
-            self.SERVER_NICKNAME
-        ).value
-        if old_server_nickname:
-            configuration.server_nickname = old_server_nickname
-
-        integration.set_setting(ExternalIntegration.USERNAME, None)
-        integration.set_setting(ExternalIntegration.PASSWORD, None)
-        integration.set_setting(self.WEBSITE_ID, None)
-        integration.set_setting(self.SERVER_NICKNAME, None)
 
     def external_integration(self, db: Session) -> ExternalIntegration:
         return self._external_integration
@@ -739,9 +716,9 @@ class MockOverdriveCoreAPI(OverdriveCoreAPI):
         integration = collection.create_external_integration(
             protocol=ExternalIntegration.OVERDRIVE
         )
-        integration.username = client_key
-        integration.password = client_secret
-        integration.set_setting("website_id", website_id)
+        integration.set_setting("overdrive_client_key", client_key)
+        integration.set_setting("overdrive_client_secret", client_secret)
+        integration.set_setting("overdrive_website_id", website_id)
         library.collections.append(collection)
         OverdriveCoreAPI.ils_name_setting(_db, collection, library).value = ils_name
         return collection
