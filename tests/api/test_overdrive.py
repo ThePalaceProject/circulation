@@ -22,6 +22,7 @@ from api.overdrive import (
     OverdriveManifestFulfillmentInfo,
     RecentOverdriveCollectionMonitor,
 )
+from core.config import CannotLoadConfiguration
 from core.metadata_layer import TimestampData
 from core.model import (
     ConfigurationSetting,
@@ -35,6 +36,7 @@ from core.model import (
     Representation,
     RightsStatus,
 )
+from core.overdrive import OverdriveConfiguration
 from core.testing import DatabaseTest, DummyHTTPClient, MockRequestsResponse
 from core.util.datetime_helpers import datetime_utc, utc_now
 
@@ -1516,6 +1518,7 @@ class TestOverdriveAPI(OverdriveAPITest):
 
         # use a real Overdrive API
         od_api = OverdriveAPI(self._db, self._default_collection)
+        od_api._server_nickname = OverdriveConfiguration.TESTING_SERVERS
         # but mock the request methods
         od_api._do_post = MagicMock()
         od_api._do_get = MagicMock()
@@ -1534,6 +1537,33 @@ class TestOverdriveAPI(OverdriveAPITest):
             call_args[2]["Authorization"] == f"Basic {encoded_auth.decode()}"
         )  # Basic header should be that of the fulfillment keys
         assert response_credential == credential
+
+    def test_cannot_fulfill_error_audiobook(self):
+        patron = self._patron()
+        patron.authorization_identifier = "barcode"
+        self._default_collection.external_integration.protocol = "Overdrive"
+        self._default_collection.external_account_id = 1
+
+        # use a real Overdrive API
+        od_api = OverdriveAPI(self._db, self._default_collection)
+        od_api._server_nickname = OverdriveConfiguration.TESTING_SERVERS
+        od_api.get_loan = MagicMock(return_value={"isFormatLockedIn": True})
+        od_api.get_download_link = MagicMock(return_value=None)
+
+        exc = pytest.raises(
+            CannotFulfill,
+            od_api.get_fulfillment_link,
+            *(patron, "pin", "odid", "audiobook-overdrive-manifest")
+        )
+        assert exc.match("No download link for")
+
+        # Cannot fulfill error within the get auth function
+        os.environ.pop(
+            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
+        )
+        with pytest.raises(CannotFulfill):
+            od_api.fulfillment_authorization_header
+        
 
 
 class TestOverdriveAPICredentials(OverdriveAPITest):
@@ -1630,6 +1660,50 @@ class TestOverdriveAPICredentials(OverdriveAPITest):
         ):
             credential = od_apis[name].get_patron_credential(patron, pin)
             assert expected_credentials[name] == credential.credential
+
+    def test_fulfillment_credentials_testing_keys(self):
+        test_key = "tk"
+        test_secret = "ts"
+
+        os.environ[
+            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
+        ] = test_key
+        os.environ[
+            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_SECRET_SUFFIX}"
+        ] = test_secret
+
+        testing_credentials = Configuration.overdrive_fulfillment_keys(testing=True)
+        assert testing_credentials["key"] == test_key
+        assert testing_credentials["secret"] == test_secret
+
+        prod_key = "pk"
+        prod_secret = "ps"
+
+        os.environ[
+            f"{Configuration.OD_PREFIX_PRODUCTION_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
+        ] = prod_key
+        os.environ[
+            f"{Configuration.OD_PREFIX_PRODUCTION_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_SECRET_SUFFIX}"
+        ] = prod_secret
+
+        prod_credentials = Configuration.overdrive_fulfillment_keys()
+        assert prod_credentials["key"] == prod_key
+        assert prod_credentials["secret"] == prod_secret
+
+    def test_fulfillment_credentials_cannot_load(self):
+        os.environ.pop(
+            f"{Configuration.OD_PREFIX_PRODUCTION_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
+        )
+        pytest.raises(CannotLoadConfiguration, Configuration.overdrive_fulfillment_keys)
+
+        os.environ.pop(
+            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
+        )
+        pytest.raises(
+            CannotLoadConfiguration,
+            Configuration.overdrive_fulfillment_keys,
+            testing=True,
+        )
 
 
 class TestExtractData(OverdriveAPITest):
@@ -1859,14 +1933,17 @@ class TestSyncBookshelf(OverdriveAPITest):
         # We have created previously unknown LicensePools and
         # Identifiers.
         identifiers = [loan.license_pool.identifier.identifier for loan in loans]
-        assert sorted(
-            [
-                "a5a3d737-34d4-4d69-aad8-eba4e46019a3",
-                "99409f99-45a5-4238-9e10-98d1435cde04",
-                "993e4b33-823c-40af-8f61-cac54e1cba5d",
-                "a2ec6f3a-ebfe-4c95-9638-2cb13be8de5a",
-            ]
-        ) == sorted(identifiers)
+        assert (
+            sorted(
+                [
+                    "a5a3d737-34d4-4d69-aad8-eba4e46019a3",
+                    "99409f99-45a5-4238-9e10-98d1435cde04",
+                    "993e4b33-823c-40af-8f61-cac54e1cba5d",
+                    "a2ec6f3a-ebfe-4c95-9638-2cb13be8de5a",
+                ]
+            )
+            == sorted(identifiers)
+        )
 
         # We have recorded a new DeliveryMechanism associated with
         # each loan.
