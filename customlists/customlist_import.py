@@ -29,7 +29,7 @@ from customlists.customlist_report import (
 
 class CustomListImportFailed(Exception):
     def __init__(self, message: str):
-        super(CustomListImportFailed, self).__init__(message)
+        super().__init__(message)
 
 
 class CustomListImporter:

@@ -292,7 +292,7 @@ class CustomListExports:
 
 class CustomListExportFailed(Exception):
     def __init__(self, message: str):
-        super(CustomListExportFailed, self).__init__(message)
+        super().__init__(message)
 
 
 class CustomListExporter:
