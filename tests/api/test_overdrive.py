@@ -1,7 +1,10 @@
 # encoding: utf-8
+import base64
 import json
+import os
 import random
 from datetime import timedelta
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -19,6 +22,7 @@ from api.overdrive import (
     OverdriveManifestFulfillmentInfo,
     RecentOverdriveCollectionMonitor,
 )
+from core.config import CannotLoadConfiguration
 from core.metadata_layer import TimestampData
 from core.model import (
     ConfigurationSetting,
@@ -32,6 +36,7 @@ from core.model import (
     Representation,
     RightsStatus,
 )
+from core.overdrive import OverdriveConfiguration
 from core.testing import DatabaseTest, DummyHTTPClient, MockRequestsResponse
 from core.util.datetime_helpers import datetime_utc, utc_now
 
@@ -47,6 +52,12 @@ class OverdriveAPITest(DatabaseTest):
             self._db, library, api_map={ExternalIntegration.OVERDRIVE: MockOverdriveAPI}
         )
         self.api: OverdriveAPI = self.circulation.api_for_collection[self.collection.id]
+        os.environ[
+            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
+        ] = "TestingKey"
+        os.environ[
+            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_SECRET_SUFFIX}"
+        ] = "TestingSecret"
 
     @classmethod
     def sample_data(self, filename):
@@ -1039,8 +1050,8 @@ class TestOverdriveAPI(OverdriveAPITest):
         loan_info = {"isFormatLockedIn": False}
 
         class MockAPI(MockOverdriveAPI):
-            def get_loan(self, patron, pin, overdrive_id):
-                self.get_loan_called_with = (patron, pin, overdrive_id)
+            def get_loan(self, patron, pin, overdrive_id, is_fulfillment=False):
+                self.get_loan_called_with = (patron, pin, overdrive_id, is_fulfillment)
                 return loan_info
 
             def get_download_link(self, loan, format_type, error_url):
@@ -1072,7 +1083,12 @@ class TestOverdriveAPI(OverdriveAPITest):
         # let's see how we got there.
 
         # First, our mocked get_loan() was called.
-        assert (patron, "1234", "http://download-link") == api.get_loan_called_with
+        assert (
+            patron,
+            "1234",
+            "http://download-link",
+            True,
+        ) == api.get_loan_called_with
 
         # It returned a dictionary that contained no information
         # except isFormatLockedIn: false.
@@ -1487,6 +1503,67 @@ class TestOverdriveAPI(OverdriveAPITest):
         assert "false" == payload["password_required"]
         assert "[ignore]" == payload["password"]
 
+    def test_refresh_patron_access_token_is_fulfillment(self):
+        """Verify that patron information is included in the request
+        when refreshing a patron access token.
+        """
+        patron = self._patron()
+        patron.authorization_identifier = "barcode"
+        credential = self._credential(patron=patron)
+        self._default_collection.external_integration.protocol = "Overdrive"
+        self._default_collection.external_account_id = 1
+
+        # Mocked testing credentials
+        encoded_auth = base64.b64encode("TestingKey:TestingSecret".encode())
+
+        # use a real Overdrive API
+        od_api = OverdriveAPI(self._db, self._default_collection)
+        od_api._server_nickname = OverdriveConfiguration.TESTING_SERVERS
+        # but mock the request methods
+        od_api._do_post = MagicMock()
+        od_api._do_get = MagicMock()
+        response_credential = od_api.refresh_patron_access_token(
+            credential, patron, "a pin", is_fulfillment=True
+        )
+
+        # Posted once, no gets
+        od_api._do_post.assert_called_once()
+        od_api._do_get.assert_not_called()
+
+        # What did we Post?
+        call_args = od_api._do_post.call_args[0]
+        assert "/patrontoken" in call_args[0]  # url
+        assert (
+            call_args[2]["Authorization"] == f"Basic {encoded_auth.decode()}"
+        )  # Basic header should be that of the fulfillment keys
+        assert response_credential == credential
+
+    def test_cannot_fulfill_error_audiobook(self):
+        patron = self._patron()
+        patron.authorization_identifier = "barcode"
+        self._default_collection.external_integration.protocol = "Overdrive"
+        self._default_collection.external_account_id = 1
+
+        # use a real Overdrive API
+        od_api = OverdriveAPI(self._db, self._default_collection)
+        od_api._server_nickname = OverdriveConfiguration.TESTING_SERVERS
+        od_api.get_loan = MagicMock(return_value={"isFormatLockedIn": True})
+        od_api.get_download_link = MagicMock(return_value=None)
+
+        exc = pytest.raises(
+            CannotFulfill,
+            od_api.get_fulfillment_link,
+            *(patron, "pin", "odid", "audiobook-overdrive-manifest"),
+        )
+        assert exc.match("No download link for")
+
+        # Cannot fulfill error within the get auth function
+        os.environ.pop(
+            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
+        )
+        with pytest.raises(CannotFulfill):
+            od_api.fulfillment_authorization_header
+
 
 class TestOverdriveAPICredentials(OverdriveAPITest):
     def test_patron_correct_credentials_for_multiple_overdrive_collections(self):
@@ -1500,7 +1577,9 @@ class TestOverdriveAPICredentials(OverdriveAPITest):
             return "%s|%s|%s|%s" % (grant_type, scope, username, password)
 
         class MockAPI(MockOverdriveAPI):
-            def token_post(self, url, payload, headers={}, **kwargs):
+            def token_post(
+                self, url, payload, is_fulfillment=False, headers={}, **kwargs
+            ):
                 url = self.endpoint(url)
                 self.access_token_requests.append((url, payload, headers, kwargs))
                 token = _make_token(
@@ -1580,6 +1659,50 @@ class TestOverdriveAPICredentials(OverdriveAPITest):
         ):
             credential = od_apis[name].get_patron_credential(patron, pin)
             assert expected_credentials[name] == credential.credential
+
+    def test_fulfillment_credentials_testing_keys(self):
+        test_key = "tk"
+        test_secret = "ts"
+
+        os.environ[
+            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
+        ] = test_key
+        os.environ[
+            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_SECRET_SUFFIX}"
+        ] = test_secret
+
+        testing_credentials = Configuration.overdrive_fulfillment_keys(testing=True)
+        assert testing_credentials["key"] == test_key
+        assert testing_credentials["secret"] == test_secret
+
+        prod_key = "pk"
+        prod_secret = "ps"
+
+        os.environ[
+            f"{Configuration.OD_PREFIX_PRODUCTION_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
+        ] = prod_key
+        os.environ[
+            f"{Configuration.OD_PREFIX_PRODUCTION_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_SECRET_SUFFIX}"
+        ] = prod_secret
+
+        prod_credentials = Configuration.overdrive_fulfillment_keys()
+        assert prod_credentials["key"] == prod_key
+        assert prod_credentials["secret"] == prod_secret
+
+    def test_fulfillment_credentials_cannot_load(self):
+        os.environ.pop(
+            f"{Configuration.OD_PREFIX_PRODUCTION_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
+        )
+        pytest.raises(CannotLoadConfiguration, Configuration.overdrive_fulfillment_keys)
+
+        os.environ.pop(
+            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
+        )
+        pytest.raises(
+            CannotLoadConfiguration,
+            Configuration.overdrive_fulfillment_keys,
+            testing=True,
+        )
 
 
 class TestExtractData(OverdriveAPITest):
@@ -1974,6 +2097,7 @@ class TestOverdriveManifestFulfillmentInfo(OverdriveAPITest):
             "http://content-link/",
             "abcd-efgh",
             "scope string",
+            "access token",
         )
         response = info.as_response
         assert 302 == response.status_code
@@ -1985,6 +2109,7 @@ class TestOverdriveManifestFulfillmentInfo(OverdriveAPITest):
         # and the scope necessary to initiate Patron Authentication for
         # it.
         assert "scope string" == headers["X-Overdrive-Scope"]
+        assert "Bearer access token" == headers["X-Overdrive-Patron-Authorization"]
         assert "http://content-link/" == headers["Location"]
 
 

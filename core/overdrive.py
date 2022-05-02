@@ -11,7 +11,9 @@ from requests.adapters import CaseInsensitiveDict, Response
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 
-from .config import CannotLoadConfiguration
+from api.circulation_exceptions import CannotFulfill
+
+from .config import CannotLoadConfiguration, Configuration
 from .coverage import BibliographicCoverageProvider
 from .importers import BaseImporterConfiguration
 from .metadata_layer import (
@@ -250,6 +252,10 @@ class OverdriveCoreAPI(HasExternalIntegration):
         self._migrate_configuration(
             collection=collection, configuration=self._configuration
         )
+        self._server_nickname = (
+            self._configuration.server_nickname
+            or OverdriveConfiguration.PRODUCTION_SERVERS
+        )
         self._hosts = self._determine_hosts(configuration=self._configuration)
 
         # This is set by an access to .token, or by a call to
@@ -458,12 +464,41 @@ class OverdriveCoreAPI(HasExternalIntegration):
         s = b"%s:%s" % (self.client_key(), self.client_secret())
         return "Basic " + base64.standard_b64encode(s).strip()
 
+    @property
+    def fulfillment_authorization_header(self) -> str:
+        is_test_mode = (
+            True
+            if self._server_nickname == OverdriveConfiguration.TESTING_SERVERS
+            else False
+        )
+        try:
+            client_credentials = Configuration.overdrive_fulfillment_keys(
+                testing=is_test_mode
+            )
+        except CannotLoadConfiguration as e:
+            raise CannotFulfill(*e.args)
+
+        s = b"%s:%s" % (
+            client_credentials["key"].encode(),
+            client_credentials["secret"].encode(),
+        )
+        return "Basic " + base64.standard_b64encode(s).strip()
+
     def token_post(
-        self, url: str, payload: Dict[str, str], headers={}, **kwargs
+        self,
+        url: str,
+        payload: Dict[str, str],
+        is_fulfillment=False,
+        headers={},
+        **kwargs
     ) -> Response:
         """Make an HTTP POST request for purposes of getting an OAuth token."""
         headers = dict(headers)
-        headers["Authorization"] = self.token_authorization_header
+        headers["Authorization"] = (
+            self.token_authorization_header
+            if not is_fulfillment
+            else self.fulfillment_authorization_header
+        )
         return self._do_post(url, payload, headers, **kwargs)
 
     @staticmethod
@@ -728,7 +763,7 @@ class MockOverdriveCoreAPI(OverdriveCoreAPI):
         # queue up the response.
         self.queue_response(200, content=self.mock_collection_token("collection token"))
 
-    def token_post(self, url, payload, headers={}, **kwargs):
+    def token_post(self, url, payload, is_fulfillment=False, headers={}, **kwargs):
         """Mock the request for an OAuth token.
 
         We mock the method by looking at the access_token_response

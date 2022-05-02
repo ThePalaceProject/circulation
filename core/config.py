@@ -3,6 +3,7 @@ import copy
 import json
 import logging
 import os
+from typing import Dict
 
 from flask_babel import lazy_gettext as _
 from sqlalchemy.engine.url import make_url
@@ -78,6 +79,12 @@ class Configuration(ConfigurationConstants):
     # Environment variables that contain URLs to the database
     DATABASE_TEST_ENVIRONMENT_VARIABLE = "SIMPLIFIED_TEST_DATABASE"
     DATABASE_PRODUCTION_ENVIRONMENT_VARIABLE = "SIMPLIFIED_PRODUCTION_DATABASE"
+
+    # Environment variable for Overdrive fulfillment keys
+    OD_PREFIX_PRODUCTION_PREFIX = "SIMPLIFIED"
+    OD_PREFIX_TESTING_PREFIX = "SIMPLIFIED_TESTING"
+    OD_FULFILLMENT_CLIENT_KEY_SUFFIX = "OVERDRIVE_FULFILLMENT_CLIENT_KEY"
+    OD_FULFILLMENT_CLIENT_SECRET_SUFFIX = "OVERDRIVE_FULFILLMENT_CLIENT_SECRET"
 
     # The version of the app.
     APP_VERSION = "app_version"
@@ -497,6 +504,17 @@ class Configuration(ConfigurationConstants):
         # Calling __to_string__ will hide the password.
         logging.info("Connecting to database: %s" % url_obj.__to_string__())
         return url
+
+    @classmethod
+    def overdrive_fulfillment_keys(cls, testing=False) -> Dict[str, str]:
+        prefix = (
+            cls.OD_PREFIX_TESTING_PREFIX if testing else cls.OD_PREFIX_PRODUCTION_PREFIX
+        )
+        key = os.environ.get(f"{prefix}_{cls.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}")
+        secret = os.environ.get(f"{prefix}_{cls.OD_FULFILLMENT_CLIENT_SECRET_SUFFIX}")
+        if key is None or secret is None:
+            raise CannotLoadConfiguration("Invalid fulfillment credentials.")
+        return {"key": key, "secret": secret}
 
     @classmethod
     def app_version(cls):
