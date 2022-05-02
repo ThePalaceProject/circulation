@@ -1076,7 +1076,11 @@ class LanesController(AdminCirculationManagerController):
                             )
                         )
                 old_lane = get_one(
-                    self._db, Lane, display_name=display_name, parent=parent
+                    self._db,
+                    Lane,
+                    display_name=display_name,
+                    parent=parent,
+                    library=library,
                 )
                 if old_lane:
                     return LANE_WITH_PARENT_AND_DISPLAY_NAME_ALREADY_EXISTS
