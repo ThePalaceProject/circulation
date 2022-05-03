@@ -1713,7 +1713,7 @@ class SettingsController(AdminCirculationManagerController):
                         )
                     )
 
-        value_missing = not value
+        value_missing = value is None
         value_required = setting.get("required")
 
         if value_missing and value_required:

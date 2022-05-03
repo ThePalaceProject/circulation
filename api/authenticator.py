@@ -1864,7 +1864,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests):
                 {
                     "key": BARCODE_FORMAT_CODABAR,
                     "label": _(
-                        "Patron identifiers are are rendered as barcodes in Codabar format"
+                        "Patron identifiers are rendered as barcodes in Codabar format"
                     ),
                 },
                 {
