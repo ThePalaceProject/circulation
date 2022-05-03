@@ -588,7 +588,20 @@ class TestPatronAuth(SettingsControllerTest):
                 auth_service,
             ).value
         )
-        common_args = self._common_basic_auth_arguments()
+        common_args: list = self._common_basic_auth_arguments()
+
+        # test empty (BARCODE_FORMAT_NONE) values
+        for c in common_args:
+            if c[0] == BasicAuthenticationProvider.IDENTIFIER_BARCODE_FORMAT:
+                common_args.remove(c)
+                break
+
+        common_args.append(
+            (
+                BasicAuthenticationProvider.IDENTIFIER_BARCODE_FORMAT,
+                BasicAuthenticationProvider.BARCODE_FORMAT_NONE,
+            )
+        )
         with self.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
@@ -622,6 +635,12 @@ class TestPatronAuth(SettingsControllerTest):
         assert (
             "pass"
             == auth_service2.setting(BasicAuthenticationProvider.TEST_PASSWORD).value
+        )
+        assert (
+            ""
+            == auth_service2.setting(
+                BasicAuthenticationProvider.IDENTIFIER_BARCODE_FORMAT
+            ).value
         )
         assert (
             "true" == auth_service2.setting(MilleniumPatronAPI.VERIFY_CERTIFICATE).value
