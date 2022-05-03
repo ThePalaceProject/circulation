@@ -47,16 +47,14 @@ def update_key_value(db: Session, integration: int, old_key: str, new_key: str) 
     # Try to retrieve the values of any old or new keys.
     # Note that the CM's configuration complicates things by
     # having keys that may be present but with null values.
-    select_old_key = text(
+    select_key = text(
         """
 SELECT c.value FROM configurationsettings AS c
   WHERE c.key = :key
     AND c.external_integration_id = :id
     """
     )
-    result_old_key = db.execute(
-        select_old_key, {"id": f"{integration}", "key": old_key}
-    )
+    result_old_key = db.execute(select_key, {"id": f"{integration}", "key": old_key})
 
     existing_old_key_present: bool = False
     existing_old_key: Optional[str] = None
@@ -64,16 +62,7 @@ SELECT c.value FROM configurationsettings AS c
         existing_old_key_present = True
         existing_old_key = result_old_key.fetchone()[0]
 
-    select_new_key = text(
-        """
-SELECT c.value FROM configurationsettings AS c
-  WHERE c.key = :key
-    AND c.external_integration_id = :id
-    """
-    )
-    result_new_key = db.execute(
-        select_new_key, {"id": f"{integration}", "key": new_key}
-    )
+    result_new_key = db.execute(select_key, {"id": f"{integration}", "key": new_key})
 
     existing_new_key_present: bool = False
     existing_new_key: Optional[str] = None

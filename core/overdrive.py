@@ -260,11 +260,13 @@ class OverdriveCoreAPI(HasExternalIntegration):
             self.parent_library_id = None
 
         if not self._configuration.client_key:
-            raise ValueError("Overdrive client key is not configured")
+            raise CannotLoadConfiguration("Overdrive client key is not configured")
         if not self._configuration.client_password:
-            raise ValueError("Overdrive client password/secret is not configured")
+            raise CannotLoadConfiguration(
+                "Overdrive client password/secret is not configured"
+            )
         if not self._configuration.website_id:
-            raise ValueError("Overdrive website ID is not configured")
+            raise CannotLoadConfiguration("Overdrive website ID is not configured")
 
         self._hosts = self._determine_hosts(configuration=self._configuration)
 
