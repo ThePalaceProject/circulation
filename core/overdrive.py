@@ -447,7 +447,8 @@ class OverdriveCoreAPI(HasExternalIntegration):
     def fulfillment_authorization_header(self) -> str:
         is_test_mode = (
             True
-            if self._server_nickname == OverdriveConfiguration.TESTING_SERVERS
+            if self._configuration.server_nickname
+            == OverdriveConfiguration.TESTING_SERVERS
             else False
         )
         try:
