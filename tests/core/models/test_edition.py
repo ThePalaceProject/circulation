@@ -14,6 +14,9 @@ from core.util.datetime_helpers import utc_now
 
 
 class TestEdition(DatabaseTest):
+    def test_audio_mpeg_is_audiobook(self):
+        assert Edition.AUDIO_MEDIUM == Edition.medium_from_media_type("audio/mpeg")
+
     def test_medium_from_media_type(self):
         # Verify that we can guess a value for Edition.medium from a
         # media type.
