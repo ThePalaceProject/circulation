@@ -1521,9 +1521,6 @@ class TestOverdriveAPI(OverdriveAPITest):
         self._default_collection.external_integration.setting(
             "overdrive_website_id"
         ).value = "100"
-        self._default_collection.external_integration.setting(
-            "overdrive_server_nickname"
-        ).value = "testing"
 
         # Mocked testing credentials
         encoded_auth = base64.b64encode("TestingKey:TestingSecret".encode())

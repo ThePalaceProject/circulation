@@ -268,6 +268,11 @@ class OverdriveCoreAPI(HasExternalIntegration):
         if not self._configuration.website_id:
             raise CannotLoadConfiguration("Overdrive website ID is not configured")
 
+        self._server_nickname = (
+            self._configuration.server_nickname
+            or OverdriveConfiguration.PRODUCTION_SERVERS
+        )
+
         self._hosts = self._determine_hosts(configuration=self._configuration)
 
         # This is set by an access to .token, or by a call to
@@ -447,8 +452,7 @@ class OverdriveCoreAPI(HasExternalIntegration):
     def fulfillment_authorization_header(self) -> str:
         is_test_mode = (
             True
-            if self._configuration.server_nickname
-            == OverdriveConfiguration.TESTING_SERVERS
+            if self._server_nickname == OverdriveConfiguration.TESTING_SERVERS
             else False
         )
         try:
