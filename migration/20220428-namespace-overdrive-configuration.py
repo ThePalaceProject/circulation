@@ -22,8 +22,9 @@ def delete_key(db: Session, integration: int, key: str) -> None:
     delete_key = text(
         """
 DELETE FROM configurationsettings
-WHERE key = :key
-AND external_integration_id = :id
+    WHERE key = :key
+        AND external_integration_id = :id
+        AND library_id is NULL
 """
     )
     db.execute(delete_key, {"id": f"{integration}", "key": key})
@@ -33,9 +34,10 @@ def rename_key(db: Session, integration: int, old_key: str, new_key: str) -> Non
     rename_key = text(
         """
 UPDATE configurationsettings
-SET key = :new_key
-WHERE key = :old_key
-AND external_integration_id = :id
+    SET key = :new_key
+        WHERE key = :old_key
+        AND external_integration_id = :id
+        AND library_id is NULL
     """
     )
     db.execute(
@@ -52,6 +54,7 @@ def update_key_value(db: Session, integration: int, old_key: str, new_key: str) 
 SELECT c.value FROM configurationsettings AS c
   WHERE c.key = :key
     AND c.external_integration_id = :id
+    AND c.library_id is NULL
     """
     )
     result_old_key = db.execute(select_key, {"id": f"{integration}", "key": old_key})
