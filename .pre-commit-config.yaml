@@ -51,7 +51,7 @@ repos:
         files: pyproject.toml
 
   - repo: https://github.com/jackdewinter/pymarkdown
-    rev: v0.9.3
+    rev: 0.9.3
     hooks:
       - id: pymarkdown
         args: [--disable-version, -c, .pymarkdown.config.json, scan]

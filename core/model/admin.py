@@ -1,6 +1,10 @@
 # encoding: utf-8
 # Admin, AdminRole
 
+from __future__ import annotations
+
+from typing import Optional
+
 import bcrypt
 from sqlalchemy import (
     Column,
@@ -12,6 +16,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.orm import relationship, validates
+from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 
 from core.model.hybrid import hybrid_property
@@ -61,18 +66,22 @@ class Admin(Base, HasSessionCache):
         return self.password_hashed == bcrypt.hashpw(password, self.password_hashed)
 
     @classmethod
-    def authenticate(cls, _db, email: str, password: str):
+    def authenticate(cls, _db, email: str, password: str) -> Optional["Admin"]:
         """Finds an authenticated Admin by email and password
         :return: Admin or None
         """
 
         def lookup_hook():
-            return (
-                _db.query(Admin)
-                .filter(func.upper(Admin.email) == email.upper())
-                .first(),
-                False,
-            )
+            try:
+                return (
+                    _db.query(Admin)
+                    .filter(func.upper(Admin.email) == email.upper())
+                    .limit(1)
+                    .one(),
+                    False,
+                )
+            except NoResultFound:
+                return None, False
 
         match, ignore = Admin.by_cache_key(_db, str(email), lookup_hook)
         if match and not match.has_password(password):
