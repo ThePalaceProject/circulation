@@ -67,6 +67,14 @@ class OverdriveConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
     OVERDRIVE_SERVER_NICKNAME = "overdrive_server_nickname"
     OVERDRIVE_WEBSITE_ID = "overdrive_website_id"
 
+    # Note that the library ID is not included here because it is not Overdrive-specific
+    OVERDRIVE_CONFIGURATION_KEYS = {
+        OVERDRIVE_CLIENT_KEY,
+        OVERDRIVE_CLIENT_SECRET,
+        OVERDRIVE_SERVER_NICKNAME,
+        OVERDRIVE_WEBSITE_ID,
+    }
+
     library_id = ConfigurationMetadata(
         key=Collection.EXTERNAL_ACCOUNT_ID_KEY,
         label=_("Library ID"),
@@ -248,15 +256,9 @@ class OverdriveCoreAPI(HasExternalIntegration):
             # library ID, which we already set.
             parent_integration = collection.parent.external_integration
 
-            self._configuration.overdrive_client_key = parent_integration.setting(
-                OverdriveConfiguration.OVERDRIVE_CLIENT_KEY
-            )
-            self._configuration.overdrive_client_secret = parent_integration.setting(
-                OverdriveConfiguration.OVERDRIVE_CLIENT_SECRET
-            )
-            self._configuration.overdrive_website_id = parent_integration.setting(
-                OverdriveConfiguration.OVERDRIVE_WEBSITE_ID
-            )
+            for key in OverdriveConfiguration.OVERDRIVE_CONFIGURATION_KEYS:
+                parent_value = parent_integration.setting(key)
+                self._configuration.set_setting_value(key, parent_value.value)
         else:
             self.parent_library_id = None
 
