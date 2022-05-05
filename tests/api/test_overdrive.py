@@ -1513,13 +1513,13 @@ class TestOverdriveAPI(OverdriveAPITest):
         self._default_collection.external_integration.protocol = "Overdrive"
         self._default_collection.external_account_id = 1
         self._default_collection.external_integration.setting(
-            "overdrive_client_key"
+            OverdriveConfiguration.OVERDRIVE_CLIENT_KEY
         ).value = "user"
         self._default_collection.external_integration.setting(
-            "overdrive_client_secret"
+            OverdriveConfiguration.OVERDRIVE_CLIENT_SECRET
         ).value = "password"
         self._default_collection.external_integration.setting(
-            "overdrive_website_id"
+            OverdriveConfiguration.OVERDRIVE_WEBSITE_ID
         ).value = "100"
 
         # Mocked testing credentials
@@ -1553,13 +1553,13 @@ class TestOverdriveAPI(OverdriveAPITest):
         self._default_collection.external_integration.protocol = "Overdrive"
         self._default_collection.external_account_id = 1
         self._default_collection.external_integration.setting(
-            "overdrive_client_key"
+            OverdriveConfiguration.OVERDRIVE_CLIENT_KEY
         ).value = "user"
         self._default_collection.external_integration.setting(
-            "overdrive_client_secret"
+            OverdriveConfiguration.OVERDRIVE_CLIENT_SECRET
         ).value = "password"
         self._default_collection.external_integration.setting(
-            "overdrive_website_id"
+            OverdriveConfiguration.OVERDRIVE_WEBSITE_ID
         ).value = "100"
 
         # use a real Overdrive API

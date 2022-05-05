@@ -62,6 +62,11 @@ from .util.string_helpers import base64
 class OverdriveConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
     """The basic Overdrive configuration"""
 
+    OVERDRIVE_CLIENT_KEY = "overdrive_client_key"
+    OVERDRIVE_CLIENT_SECRET = "overdrive_client_secret"
+    OVERDRIVE_SERVER_NICKNAME = "overdrive_server_nickname"
+    OVERDRIVE_WEBSITE_ID = "overdrive_website_id"
+
     library_id = ConfigurationMetadata(
         key=Collection.EXTERNAL_ACCOUNT_ID_KEY,
         label=_("Library ID"),
@@ -70,21 +75,21 @@ class OverdriveConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
         required=True,
     )
     website_id = ConfigurationMetadata(
-        key="overdrive_website_id",
+        key=OVERDRIVE_WEBSITE_ID,
         label=_("Website ID"),
         type=ConfigurationAttributeType.TEXT,
         description="The web site identifier.",
         required=True,
     )
     client_key = ConfigurationMetadata(
-        key="overdrive_client_key",
+        key=OVERDRIVE_CLIENT_KEY,
         label=_("Client Key"),
         type=ConfigurationAttributeType.TEXT,
         description="The Overdrive client key.",
         required=True,
     )
     client_password = ConfigurationMetadata(
-        key="overdrive_client_secret",
+        key=OVERDRIVE_CLIENT_SECRET,
         label=_("Client Secret"),
         type=ConfigurationAttributeType.TEXT,
         description="The Overdrive client secret.",
@@ -95,7 +100,7 @@ class OverdriveConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
     TESTING_SERVERS = "testing"
 
     server_nickname = ConfigurationMetadata(
-        key="overdrive_server_nickname",
+        key=OVERDRIVE_SERVER_NICKNAME,
         label=_("Server family"),
         type=ConfigurationAttributeType.SELECT,
         required=False,
@@ -116,8 +121,6 @@ class OverdriveCoreAPI(HasExternalIntegration):
 
     # Production and testing have different host names for some of the
     # API endpoints. This is configurable on the collection level.
-    SERVER_NICKNAME = "server_nickname"
-
     HOSTS = {
         OverdriveConfiguration.PRODUCTION_SERVERS: dict(
             host="https://api.overdrive.com",
@@ -194,8 +197,6 @@ class OverdriveCoreAPI(HasExternalIntegration):
 
     TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
-    WEBSITE_ID = "website_id"
-
     # When associating an Overdrive account with a library, it's
     # necessary to also specify an "ILS name" obtained from
     # Overdrive. Components that don't authenticate patrons (such as
@@ -248,13 +249,13 @@ class OverdriveCoreAPI(HasExternalIntegration):
             parent_integration = collection.parent.external_integration
 
             self._configuration.client_key = parent_integration.setting(
-                "overdrive_client_key"
+                OverdriveConfiguration.OVERDRIVE_CLIENT_KEY
             )
             self._configuration.client_password = parent_integration.setting(
-                "overdrive_client_secret"
+                OverdriveConfiguration.OVERDRIVE_CLIENT_SECRET
             )
             self._configuration.website_id = parent_integration.setting(
-                "overdrive_website_id"
+                OverdriveConfiguration.OVERDRIVE_WEBSITE_ID
             )
         else:
             self.parent_library_id = None
@@ -723,9 +724,11 @@ class MockOverdriveCoreAPI(OverdriveCoreAPI):
         integration = collection.create_external_integration(
             protocol=ExternalIntegration.OVERDRIVE
         )
-        integration.set_setting("overdrive_client_key", client_key)
-        integration.set_setting("overdrive_client_secret", client_secret)
-        integration.set_setting("overdrive_website_id", website_id)
+        integration.set_setting(OverdriveConfiguration.OVERDRIVE_CLIENT_KEY, client_key)
+        integration.set_setting(
+            OverdriveConfiguration.OVERDRIVE_CLIENT_SECRET, client_secret
+        )
+        integration.set_setting(OverdriveConfiguration.OVERDRIVE_WEBSITE_ID, website_id)
         library.collections.append(collection)
         OverdriveCoreAPI.ils_name_setting(_db, collection, library).value = ils_name
         return collection
