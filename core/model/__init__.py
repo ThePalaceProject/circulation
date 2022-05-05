@@ -11,7 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError, SAWarning
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 from sqlalchemy.sql import compiler, select
 from sqlalchemy.sql.expression import literal_column, table
@@ -456,7 +456,7 @@ class SessionManager(object):
         return session
 
 
-def production_session(initialize_data=True):
+def production_session(initialize_data=True) -> Session:
     url = Configuration.database_url()
     if url.startswith('"'):
         url = url[1:]

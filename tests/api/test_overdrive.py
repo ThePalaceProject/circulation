@@ -1512,6 +1512,15 @@ class TestOverdriveAPI(OverdriveAPITest):
         credential = self._credential(patron=patron)
         self._default_collection.external_integration.protocol = "Overdrive"
         self._default_collection.external_account_id = 1
+        self._default_collection.external_integration.setting(
+            OverdriveConfiguration.OVERDRIVE_CLIENT_KEY
+        ).value = "user"
+        self._default_collection.external_integration.setting(
+            OverdriveConfiguration.OVERDRIVE_CLIENT_SECRET
+        ).value = "password"
+        self._default_collection.external_integration.setting(
+            OverdriveConfiguration.OVERDRIVE_WEBSITE_ID
+        ).value = "100"
 
         # Mocked testing credentials
         encoded_auth = base64.b64encode("TestingKey:TestingSecret".encode())
@@ -1543,6 +1552,15 @@ class TestOverdriveAPI(OverdriveAPITest):
         patron.authorization_identifier = "barcode"
         self._default_collection.external_integration.protocol = "Overdrive"
         self._default_collection.external_account_id = 1
+        self._default_collection.external_integration.setting(
+            OverdriveConfiguration.OVERDRIVE_CLIENT_KEY
+        ).value = "user"
+        self._default_collection.external_integration.setting(
+            OverdriveConfiguration.OVERDRIVE_CLIENT_SECRET
+        ).value = "password"
+        self._default_collection.external_integration.setting(
+            OverdriveConfiguration.OVERDRIVE_WEBSITE_ID
+        ).value = "100"
 
         # use a real Overdrive API
         od_api = OverdriveAPI(self._db, self._default_collection)

@@ -186,7 +186,7 @@ class TestOverdriveCoreAPI(OverdriveTestWithAPI):
         # hostnames.
         def api_with_setting(x):
             integration = self.collection.external_integration
-            integration.setting(c.SERVER_NICKNAME).value = x
+            integration.setting("overdrive_server_nickname").value = x
             return c(self._db, self.collection)
 
         testing = api_with_setting(OverdriveConfiguration.TESTING_SERVERS)
@@ -365,9 +365,9 @@ class TestOverdriveCoreAPI(OverdriveTestWithAPI):
             protocol=ExternalIntegration.OVERDRIVE,
             external_account_id="1",
         )
-        main.external_integration.username = "user"
-        main.external_integration.password = "password"
-        main.external_integration.setting("website_id").value = "100"
+        main.external_integration.setting("overdrive_client_key").value = "user"
+        main.external_integration.setting("overdrive_client_secret").value = "password"
+        main.external_integration.setting("overdrive_website_id").value = "100"
         main.external_integration.setting("ils_name").value = "default"
 
         # Here's an Overdrive API client for that collection.

@@ -273,7 +273,7 @@ class OverdriveAPI(
         its own Patron Authentication.
         """
         return "websiteid:%s authorizationname:%s" % (
-            self._configuration.website_id,
+            self._configuration.overdrive_website_id,
             self.ils_name(library),
         )
 
