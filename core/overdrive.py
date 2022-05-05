@@ -99,7 +99,7 @@ class OverdriveConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
     PRODUCTION_SERVERS = "production"
     TESTING_SERVERS = "testing"
 
-    server_nickname = ConfigurationMetadata(
+    overdrive_server_nickname = ConfigurationMetadata(
         key=OVERDRIVE_SERVER_NICKNAME,
         label=_("Server family"),
         type=ConfigurationAttributeType.SELECT,
@@ -270,7 +270,7 @@ class OverdriveCoreAPI(HasExternalIntegration):
             raise CannotLoadConfiguration("Overdrive website ID is not configured")
 
         self._server_nickname = (
-            self._configuration.server_nickname
+            self._configuration.overdrive_server_nickname
             or OverdriveConfiguration.PRODUCTION_SERVERS
         )
 
@@ -287,7 +287,8 @@ class OverdriveCoreAPI(HasExternalIntegration):
         # Figure out which hostnames we'll be using when constructing
         # endpoint URLs.
         server_nickname = (
-            configuration.server_nickname or OverdriveConfiguration.PRODUCTION_SERVERS
+            configuration.overdrive_server_nickname
+            or OverdriveConfiguration.PRODUCTION_SERVERS
         )
         if server_nickname not in self.HOSTS:
             server_nickname = OverdriveConfiguration.PRODUCTION_SERVERS
