@@ -74,7 +74,7 @@ class OverdriveConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
         description="The library identifier.",
         required=True,
     )
-    website_id = ConfigurationMetadata(
+    overdrive_website_id = ConfigurationMetadata(
         key=OVERDRIVE_WEBSITE_ID,
         label=_("Website ID"),
         type=ConfigurationAttributeType.TEXT,
@@ -254,7 +254,7 @@ class OverdriveCoreAPI(HasExternalIntegration):
             self._configuration.overdrive_client_secret = parent_integration.setting(
                 OverdriveConfiguration.OVERDRIVE_CLIENT_SECRET
             )
-            self._configuration.website_id = parent_integration.setting(
+            self._configuration.overdrive_website_id = parent_integration.setting(
                 OverdriveConfiguration.OVERDRIVE_WEBSITE_ID
             )
         else:
@@ -266,7 +266,7 @@ class OverdriveCoreAPI(HasExternalIntegration):
             raise CannotLoadConfiguration(
                 "Overdrive client password/secret is not configured"
             )
-        if not self._configuration.website_id:
+        if not self._configuration.overdrive_website_id:
             raise CannotLoadConfiguration("Overdrive website ID is not configured")
 
         self._server_nickname = (
@@ -684,7 +684,7 @@ class OverdriveCoreAPI(HasExternalIntegration):
         return HTTP.post_with_timeout(url, payload, headers=headers, **kwargs)
 
     def website_id(self) -> bytes:
-        return self._configuration.website_id.encode("utf-8")
+        return self._configuration.overdrive_website_id.encode("utf-8")
 
     def client_key(self) -> bytes:
         return self._configuration.overdrive_client_key.encode("utf-8")
