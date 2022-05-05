@@ -302,13 +302,13 @@ class MediaTypes(object):
         AUDIOBOOK_MANIFEST_MEDIA_TYPE,
         AUDIOBOOK_PACKAGE_MEDIA_TYPE,
         AUDIOBOOK_PACKAGE_LCP_MEDIA_TYPE,
+        MP3_MEDIA_TYPE,
     ]
 
     BOOK_MEDIA_TYPES = [
         EPUB_MEDIA_TYPE,
         PDF_MEDIA_TYPE,
         MOBI_MEDIA_TYPE,
-        MP3_MEDIA_TYPE,
         AMAZON_KF8_MEDIA_TYPE,
     ]
 
