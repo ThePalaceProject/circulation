@@ -276,7 +276,7 @@ class OverdriveCoreAPI(HasExternalIntegration):
             or OverdriveConfiguration.PRODUCTION_SERVERS
         )
 
-        self._hosts = self._determine_hosts(configuration=self._configuration)
+        self._hosts = self._determine_hosts(server_nickname=self._server_nickname)
 
         # This is set by an access to .token, or by a call to
         # check_creds() or refresh_creds().
@@ -285,13 +285,9 @@ class OverdriveCoreAPI(HasExternalIntegration):
         # This is set by an access to .collection_token
         self._collection_token = None
 
-    def _determine_hosts(self, configuration: OverdriveConfiguration) -> Dict[str, str]:
+    def _determine_hosts(self, *, server_nickname: str) -> Dict[str, str]:
         # Figure out which hostnames we'll be using when constructing
         # endpoint URLs.
-        server_nickname = (
-            configuration.overdrive_server_nickname
-            or OverdriveConfiguration.PRODUCTION_SERVERS
-        )
         if server_nickname not in self.HOSTS:
             server_nickname = OverdriveConfiguration.PRODUCTION_SERVERS
 
