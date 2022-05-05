@@ -81,14 +81,14 @@ class OverdriveConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
         description="The web site identifier.",
         required=True,
     )
-    client_key = ConfigurationMetadata(
+    overdrive_client_key = ConfigurationMetadata(
         key=OVERDRIVE_CLIENT_KEY,
         label=_("Client Key"),
         type=ConfigurationAttributeType.TEXT,
         description="The Overdrive client key.",
         required=True,
     )
-    client_password = ConfigurationMetadata(
+    overdrive_client_secret = ConfigurationMetadata(
         key=OVERDRIVE_CLIENT_SECRET,
         label=_("Client Secret"),
         type=ConfigurationAttributeType.TEXT,
@@ -248,10 +248,10 @@ class OverdriveCoreAPI(HasExternalIntegration):
             # library ID, which we already set.
             parent_integration = collection.parent.external_integration
 
-            self._configuration.client_key = parent_integration.setting(
+            self._configuration.overdrive_client_key = parent_integration.setting(
                 OverdriveConfiguration.OVERDRIVE_CLIENT_KEY
             )
-            self._configuration.client_password = parent_integration.setting(
+            self._configuration.overdrive_client_secret = parent_integration.setting(
                 OverdriveConfiguration.OVERDRIVE_CLIENT_SECRET
             )
             self._configuration.website_id = parent_integration.setting(
@@ -260,9 +260,9 @@ class OverdriveCoreAPI(HasExternalIntegration):
         else:
             self.parent_library_id = None
 
-        if not self._configuration.client_key:
+        if not self._configuration.overdrive_client_key:
             raise CannotLoadConfiguration("Overdrive client key is not configured")
-        if not self._configuration.client_password:
+        if not self._configuration.overdrive_client_secret:
             raise CannotLoadConfiguration(
                 "Overdrive client password/secret is not configured"
             )
@@ -687,10 +687,10 @@ class OverdriveCoreAPI(HasExternalIntegration):
         return self._configuration.website_id.encode("utf-8")
 
     def client_key(self) -> bytes:
-        return self._configuration.client_key.encode("utf-8")
+        return self._configuration.overdrive_client_key.encode("utf-8")
 
     def client_secret(self) -> bytes:
-        return self._configuration.client_password.encode("utf-8")
+        return self._configuration.overdrive_client_secret.encode("utf-8")
 
     def library_id(self) -> str:
         return self._library_id
