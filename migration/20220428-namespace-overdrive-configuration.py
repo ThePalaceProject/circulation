@@ -153,9 +153,11 @@ def update_configuration(db: Session, integration: int) -> None:
 
 def execute_migration(db: Session) -> None:
     select = text(
-        """
-SELECT e.id FROM externalintegrations AS e
-  WHERE e.protocol = 'Overdrive'
+    """
+    SELECT e.id
+        FROM collections c
+        JOIN externalintegrations e on c.external_integration_id = e.id
+            WHERE e.protocol = 'Overdrive' AND c.parent_id IS NULL
     """
     )
     integrations = db.execute(select).fetchall()
