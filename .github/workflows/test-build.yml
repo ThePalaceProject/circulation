@@ -73,7 +73,7 @@ jobs:
         run: git rev-parse --short HEAD > .version
 
       - name: Build base image
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v3
         with:
           context: .
           file: ./docker/Dockerfile
@@ -124,7 +124,7 @@ jobs:
         run: git rev-parse --short HEAD > .version
 
       - name: Build image
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v3
         with:
           context: .
           file: ./docker/Dockerfile
@@ -193,7 +193,7 @@ jobs:
             type=sha,priority=40
 
       - name: Push image
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v3
         with:
           context: .
           file: ./docker/Dockerfile
