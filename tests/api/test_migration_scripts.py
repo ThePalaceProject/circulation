@@ -1,6 +1,9 @@
 import json
 from importlib import import_module
 
+import pytest
+from sqlalchemy.exc import IntegrityError
+
 from core.facets import FacetConstants
 from core.lane import Facets
 from core.model import Library
@@ -89,5 +92,5 @@ class TestCreateUniqueEmailConstraint(DatabaseTest):
         self._db.add(admin)
 
         # Duplicate email exists for UPPER()
-        success = self.migration.create_unique_email_constraint(self._db)
-        assert success == False
+        with pytest.raises(IntegrityError):
+            self.migration.create_unique_email_constraint(self._db)

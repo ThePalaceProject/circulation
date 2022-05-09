@@ -4,7 +4,7 @@ import sys
 
 from contextlib2 import closing
 from sqlalchemy import Index, func
-from sqlalchemy.exc import IntegrityError, ProgrammingError
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 bin_dir = os.path.split(__file__)[0]
@@ -27,7 +27,7 @@ def create_unique_email_constraint(db: Session):
     try:
         index.create(engine)
         db.commit()
-    except (ProgrammingError, IntegrityError) as ex:
+    except ProgrammingError as ex:
         logging.getLogger().error(f"Could not create index {INDEX_NAME}")
         logging.getLogger().error(ex.args)
         return False
