@@ -9,6 +9,7 @@ from .classifier import Classifier
 from .config import CannotLoadConfiguration
 from .external_search import ExternalSearchIndex, SortKeyPagination
 from .lane import BaseFacets, Lane
+from .mirror import MirrorUploader
 from .model import (
     CachedMARCFile,
     DeliveryMechanism,
