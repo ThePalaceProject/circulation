@@ -21,6 +21,9 @@ class CustomListProblem:
 
 
 class CustomListProblemBookMismatch(CustomListProblem):
+
+    TYPE = "problem-book-mismatch"
+
     def __init__(
         self,
         message: str,
@@ -53,7 +56,7 @@ class CustomListProblemBookMismatch(CustomListProblem):
 
     def to_dict(self) -> dict:
         return {
-            "%type": "problem-book-mismatch",
+            "%type": CustomListProblemBookMismatch.TYPE,
             "expected-id": self._expected_id,
             "expected-title": self._expected_title,
             "received-id": self._received_id,
@@ -63,6 +66,9 @@ class CustomListProblemBookMismatch(CustomListProblem):
 
 
 class CustomListProblemBookMissing(CustomListProblem):
+
+    TYPE = "problem-book-missing"
+
     def __init__(self, message: str, id: str, title: str):
         super().__init__(message)
         self._id = id
@@ -78,7 +84,7 @@ class CustomListProblemBookMissing(CustomListProblem):
 
     def to_dict(self) -> dict:
         return {
-            "%type": "problem-book-missing",
+            "%type": CustomListProblemBookMissing.TYPE,
             "id": self._id,
             "title": self._title,
             "message": self.message(),
@@ -86,6 +92,9 @@ class CustomListProblemBookMissing(CustomListProblem):
 
 
 class CustomListProblemBookRequestFailed(CustomListProblem):
+
+    TYPE = "problem-book-request-failed"
+
     def __init__(self, message: str, id: str, title: str):
         super().__init__(message)
         self._id = id
@@ -103,7 +112,7 @@ class CustomListProblemBookRequestFailed(CustomListProblem):
 
     def to_dict(self) -> dict:
         return {
-            "%type": "problem-book-request-failed",
+            "%type": CustomListProblemBookRequestFailed.TYPE,
             "id": self._id,
             "title": self._title,
             "message": self.message(),
@@ -111,6 +120,9 @@ class CustomListProblemBookRequestFailed(CustomListProblem):
 
 
 class CustomListProblemBookBrokenOnSourceCM(CustomListProblem):
+
+    TYPE = "problem-book-broken-on-source"
+
     def __init__(self, message: str, id: str, title: str):
         super().__init__(message)
         self._id = id
@@ -118,7 +130,7 @@ class CustomListProblemBookBrokenOnSourceCM(CustomListProblem):
 
     def to_dict(self) -> dict:
         return {
-            "%type": "problem-book-broken-on-source",
+            "%type": CustomListProblemBookBrokenOnSourceCM.TYPE,
             "id": self._id,
             "title": self._title,
             "message": self.message(),
@@ -126,6 +138,9 @@ class CustomListProblemBookBrokenOnSourceCM(CustomListProblem):
 
 
 class CustomListProblemListAlreadyExists(CustomListProblem):
+
+    TYPE = "problem-list-already-exists"
+
     def __init__(self, message: str, id: int, name: str):
         super().__init__(message)
         self._id = id
@@ -133,7 +148,7 @@ class CustomListProblemListAlreadyExists(CustomListProblem):
 
     def to_dict(self) -> dict:
         return {
-            "%type": "problem-list-already-exists",
+            "%type": CustomListProblemListAlreadyExists.TYPE,
             "id": self._id,
             "name": self._name,
             "message": self.message(),
@@ -141,6 +156,9 @@ class CustomListProblemListAlreadyExists(CustomListProblem):
 
 
 class CustomListProblemListUpdateFailed(CustomListProblem):
+
+    TYPE = "problem-list-update-failed"
+
     def __init__(self, message: str, id: int, name: str):
         super().__init__(message)
         self._id = id
@@ -148,7 +166,7 @@ class CustomListProblemListUpdateFailed(CustomListProblem):
 
     def to_dict(self) -> dict:
         return {
-            "%type": "problem-list-update-failed",
+            "%type": CustomListProblemListUpdateFailed.TYPE,
             "id": self._id,
             "name": self._name,
             "message": self.message(),
@@ -156,6 +174,9 @@ class CustomListProblemListUpdateFailed(CustomListProblem):
 
 
 class CustomListProblemListBroken(CustomListProblem):
+
+    TYPE = "problem-list-broken"
+
     def __init__(self, message: str, id: int, name: str):
         super().__init__(message)
         self._id = id
@@ -163,7 +184,7 @@ class CustomListProblemListBroken(CustomListProblem):
 
     def to_dict(self) -> dict:
         return {
-            "%type": "problem-list-broken",
+            "%type": CustomListProblemListBroken.TYPE,
             "id": self._id,
             "name": self._name,
             "message": self.message(),
@@ -171,6 +192,9 @@ class CustomListProblemListBroken(CustomListProblem):
 
 
 class CustomListProblemCollectionMissing(CustomListProblem):
+
+    TYPE = "problem-collection-missing"
+
     def __init__(self, message: str, name: str):
         super().__init__(message)
         self._name = name
@@ -184,13 +208,16 @@ class CustomListProblemCollectionMissing(CustomListProblem):
 
     def to_dict(self) -> dict:
         return {
-            "%type": "problem-collection-missing",
+            "%type": CustomListProblemCollectionMissing.TYPE,
             "name": self._name,
             "message": self.message(),
         }
 
 
 class CustomListProblemCollectionRequestFailed(CustomListProblem):
+
+    TYPE = "problem-collection-request-failed"
+
     def __init__(self, message: str, name: str):
         super().__init__(message)
         self._name = name
@@ -205,7 +232,7 @@ class CustomListProblemCollectionRequestFailed(CustomListProblem):
 
     def to_dict(self) -> dict:
         return {
-            "%type": "problem-collection-request-failed",
+            "%type": CustomListProblemCollectionRequestFailed.TYPE,
             "name": self._name,
             "message": self.message(),
         }
@@ -240,43 +267,43 @@ class CustomListReport:
     @staticmethod
     def _parse_problem(raw_problem: dict) -> CustomListProblem:
         problem_type = raw_problem["%type"]
-        if problem_type == "problem-list-broken":
+        if problem_type == CustomListProblemListBroken.TYPE:
             return CustomListProblemListBroken(
                 message=raw_problem["message"],
                 id=raw_problem["id"],
                 name=raw_problem["name"],
             )
-        if problem_type == "problem-list-update-failed":
+        if problem_type == CustomListProblemListUpdateFailed.TYPE:
             return CustomListProblemListUpdateFailed(
                 message=raw_problem["message"],
                 id=raw_problem["id"],
                 name=raw_problem["name"],
             )
-        if problem_type == "problem-list-already-exists":
+        if problem_type == CustomListProblemListAlreadyExists.TYPE:
             return CustomListProblemListAlreadyExists(
                 message=raw_problem["message"],
                 id=raw_problem["id"],
                 name=raw_problem["name"],
             )
-        if problem_type == "problem-book-broken-on-source":
+        if problem_type == CustomListProblemBookBrokenOnSourceCM.TYPE:
             return CustomListProblemBookBrokenOnSourceCM(
                 message=raw_problem["message"],
                 id=raw_problem["id"],
                 title=raw_problem["title"],
             )
-        if problem_type == "problem-book-request-failed":
+        if problem_type == CustomListProblemBookRequestFailed.TYPE:
             return CustomListProblemBookRequestFailed(
                 message=raw_problem["message"],
                 id=raw_problem["id"],
                 title=raw_problem["title"],
             )
-        if problem_type == "problem-book-missing":
+        if problem_type == CustomListProblemBookMissing.TYPE:
             return CustomListProblemBookMissing(
                 message=raw_problem["message"],
                 id=raw_problem["id"],
                 title=raw_problem["title"],
             )
-        if problem_type == "problem-book-mismatch":
+        if problem_type == CustomListProblemBookMismatch.TYPE:
             return CustomListProblemBookMismatch(
                 message=raw_problem["message"],
                 expected_id=raw_problem["expected_id"],
@@ -284,11 +311,11 @@ class CustomListReport:
                 received_id=raw_problem["received_id"],
                 received_title=raw_problem["received_title"],
             )
-        if problem_type == "problem-collection-request-failed":
+        if problem_type == CustomListProblemCollectionRequestFailed.TYPE:
             return CustomListProblemCollectionRequestFailed(
                 message=raw_problem["message"], name=raw_problem["name"]
             )
-        if problem_type == "problem-collection-missing":
+        if problem_type == CustomListProblemCollectionMissing.TYPE:
             return CustomListProblemCollectionMissing(
                 message=raw_problem["message"], name=raw_problem["name"]
             )
