@@ -80,13 +80,13 @@ class SAMLWAYFlessAcquisitionLinkProcessor(
     def fulfill(
         self, patron, pin, licensepool, delivery_mechanism, fulfillment: FulfillmentInfo
     ) -> FulfillmentInfo:
-        db = Session.object_session(patron)
 
         self._logger.debug(
             f"WAYFless acquisition link template: {self._wayfless_url_template}"
         )
 
         if self._wayfless_url_template:
+            db = Session.object_session(patron)
             saml_credential = self._saml_credential_manager.lookup_saml_token_by_patron(
                 db, patron
             )
