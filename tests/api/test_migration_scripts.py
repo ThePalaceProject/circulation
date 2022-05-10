@@ -71,7 +71,7 @@ class TestRandomSortOptionRemover(DatabaseTest):
 
 class TestCreateUniqueEmailConstraint(DatabaseTest):
 
-    migration = import_module("migration.20220409-admin-email-unique-constraint")
+    migration = import_module("migration.20220509-admin-email-unique-constraint")
 
     def setup_method(self):
         super().setup_method()
