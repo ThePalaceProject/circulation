@@ -21,7 +21,9 @@ from api.saml.metadata.model import (
     SAMLUIInfo,
 )
 from api.saml.provider import SAML_INVALID_SUBJECT, SAMLWebSSOAuthenticationProvider
+from api.saml.wayfless import SAMLWAYFlessAcquisitionLinkProcessor
 from core.model import Credential, Library
+from core.testing import DatabaseTest
 from core.util.problem_detail import ProblemDetail
 from tests.api.saml import fixtures
 from tests.api.saml.controller_test import ControllerTest
@@ -438,3 +440,14 @@ class TestSAMLController(ControllerTest):
                 provider.saml_callback.assert_called_once_with(
                     self._db, finish_authentication_result
                 )
+
+
+class TestSAMLWAYFlessAcquisitionLinkProcessor(DatabaseTest):
+    def test_fulfill_no_wayless_template_url(self):
+        processor = SAMLWAYFlessAcquisitionLinkProcessor(self._default_collection)
+        assert processor._wayfless_url_template == None
+
+        mocked_fulfillment = MagicMock()
+        # As long as there is no template url, no actions should take place
+        response = processor.fulfill(None, None, None, None, mocked_fulfillment)
+        assert response == mocked_fulfillment
