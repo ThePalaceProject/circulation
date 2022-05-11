@@ -288,3 +288,65 @@ class TestExports:
         assert "urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6" == book.id()
         assert "Chameleon" == book.title()
         assert "URI" == book.id_type()
+
+    def test_export_multiple_alternates(self, mock_web_server: MockAPIServer, tmpdir):
+        """Multiple 'alternate' links don't confuse the exporter."""
+        sign_response = MockAPIServerResponse()
+        sign_response.status_code = 200
+        mock_web_server.enqueue_response(
+            "POST", "/admin/sign_in_with_password", sign_response
+        )
+
+        lists_response = MockAPIServerResponse()
+        lists_response.status_code = 200
+        lists_response.content = TestExports._test_customlists_resource_bytes(
+            "multiple-customlists-response.json"
+        )
+        mock_web_server.enqueue_response("GET", "/admin/custom_lists", lists_response)
+
+        list_response_0 = MockAPIServerResponse()
+        list_response_0.status_code = 200
+        with open(
+            TestExports._test_customlists_resource_path("feed90multiple_alternates.xml")
+        ) as file:
+            list_response_0.set_content(file.read().encode("utf-8"))
+        mock_web_server.enqueue_response(
+            "GET", "/admin/custom_list/90", list_response_0
+        )
+
+        schema_path = TestExports._customlists_resource_path("customlists.schema.json")
+        output_file = tmpdir.join("output.json")
+        CustomListExporter.create(
+            [
+                "--server",
+                mock_web_server.url("/"),
+                "--username",
+                "someone@example.com",
+                "--password",
+                "12345678",
+                "--output",
+                str(output_file),
+                "--schema-file",
+                schema_path,
+                "-v",
+                "--list",
+                "Something Else",
+            ]
+        ).execute()
+
+        exports: CustomListExports
+        with open(schema_path, "rb") as schema_file:
+            schema_text = json.load(schema_file)
+            exports = CustomListExports.parse_file(file=output_file, schema=schema_text)
+
+        assert 1 == exports.size()
+        result_list = list(exports.lists())[0]
+        assert 1 == result_list.size()
+        assert "HAZELNUT" == result_list.library_id()
+        assert 90 == result_list.id()
+        assert "Something Else" == result_list.name()
+
+        book = list(result_list.books())[0]
+        assert "urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6" == book.id()
+        assert "Chameleon" == book.title()
+        assert "URI" == book.id_type()

@@ -382,6 +382,7 @@ class CustomListExporter:
                             Book(id=entry.id, id_type=match.group(2), title=entry.title)
                         )
                         added = True
+                        break
             if not added:
                 custom_list.add_problematic_book(
                     ProblematicBook(
