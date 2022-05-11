@@ -1,13 +1,12 @@
-from typing import TYPE_CHECKING, TypeVar
+from typing import TypeVar, Union
 
 from sqlalchemy import Column, Enum, ForeignKey, Integer, Unicode
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import relationship
 
-from . import Base
+from core.model.patron import Patron
 
-if TYPE_CHECKING:
-    from core.model.patron import Patron
+from . import Base
 
 
 class DeviceTokenTypes:
@@ -15,7 +14,7 @@ class DeviceTokenTypes:
     FCM_IOS = "FCMiOS"
 
 
-T = TypeVar("T")
+T = TypeVar("T", bound="DeviceToken")
 
 
 class DeviceToken(Base):
@@ -37,7 +36,11 @@ class DeviceToken(Base):
 
     @classmethod
     def create(
-        cls: type[T], db, token_type: str, device_token: str, patron: "Patron|int"
+        cls: type[T],
+        db,
+        token_type: str,
+        device_token: str,
+        patron: "Union[Patron,int]",
     ) -> T:
         """Create a DeviceToken while ensuring sql issues are managed.
         Raises InvalidTokenTypeError, DuplicateDeviceTokenError"""
@@ -45,13 +48,13 @@ class DeviceToken(Base):
         if token_type not in DeviceToken.token_type_enum.enums:
             raise InvalidTokenTypeError(token_type)
 
-        kwargs = dict(device_token=device_token, token_type=token_type)
+        kwargs: dict = dict(device_token=device_token, token_type=token_type)
         if type(patron) is int:
             kwargs["patron_id"] = patron
-        else:
+        elif type(patron) is Patron:
             kwargs["patron_id"] = patron.id
 
-        device = DeviceToken(**kwargs)
+        device = cls(**kwargs)
         try:
             db.add(device)
             db.commit()
