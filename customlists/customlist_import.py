@@ -301,15 +301,15 @@ class CustomListImporter:
             response = self._session.post(
                 server_list_endpoint,
                 headers=headers,
-                files=(
-                    ("name", (None, customlist.name())),
-                    ("entries", (None, json.dumps(output_books, sort_keys=True))),
-                    ("deletedEntries", (None, "[]".encode("utf-8"))),
-                    (
-                        "collections",
-                        (None, json.dumps(output_collections, sort_keys=True)),
+                files={
+                    "name": (None, customlist.name()),
+                    "entries": (None, json.dumps(output_books, sort_keys=True)),
+                    "deletedEntries": (None, "[]".encode("utf-8")),
+                    "collections": (
+                        None,
+                        json.dumps(output_collections, sort_keys=True),
                     ),
-                ),
+                },
             )
             if response.status_code >= 400:
                 problem = CustomListProblemListUpdateFailed(
