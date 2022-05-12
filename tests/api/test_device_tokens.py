@@ -1,6 +1,4 @@
-from unittest.mock import MagicMock
-
-import flask
+from unittest.mock import MagicMock, patch
 
 from api.problem_details import (
     DEVICE_TOKEN_ALREADY_EXISTS,
@@ -11,8 +9,9 @@ from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from tests.api.test_controller import ControllerTest
 
 
+@patch("api.controller.flask")
 class TestDeviceTokens(ControllerTest):
-    def test_create_invalid_type(self):
+    def test_create_invalid_type(self, flask):
         request = MagicMock()
         request.patron = self._patron()
         request.json = {"device_token": "xx", "token_type": "aninvalidtoken"}
@@ -22,7 +21,7 @@ class TestDeviceTokens(ControllerTest):
         assert detail is DEVICE_TOKEN_TYPE_INVALID
         assert detail.status_code == 400
 
-    def test_create_token(self):
+    def test_create_token(self, flask):
         request = MagicMock()
         request.patron = self._patron()
         request.json = {
@@ -45,7 +44,7 @@ class TestDeviceTokens(ControllerTest):
         assert device.device_token == "xxx"
         assert device.token_type == DeviceTokenTypes.FCM_ANDROID
 
-    def test_get_token(self):
+    def test_get_token(self, flask):
         patron = self._patron()
         device = DeviceToken.create(
             self._db, DeviceTokenTypes.FCM_ANDROID, "xx", patron
@@ -61,7 +60,7 @@ class TestDeviceTokens(ControllerTest):
         assert response[0]["token_type"] == DeviceTokenTypes.FCM_ANDROID
         assert response[0]["device_token"] == "xx"
 
-    def test_get_token_not_found(self):
+    def test_get_token_not_found(self, flask):
         patron = self._patron()
         device = DeviceToken.create(
             self._db, DeviceTokenTypes.FCM_ANDROID, "xx", patron
@@ -75,7 +74,7 @@ class TestDeviceTokens(ControllerTest):
 
         assert detail == DEVICE_TOKEN_NOT_FOUND
 
-    def test_get_token_different_patron(self):
+    def test_get_token_different_patron(self, flask):
         patron = self._patron()
         device = DeviceToken.create(
             self._db, DeviceTokenTypes.FCM_ANDROID, "xx", patron
@@ -89,7 +88,7 @@ class TestDeviceTokens(ControllerTest):
 
         assert detail == DEVICE_TOKEN_NOT_FOUND
 
-    def test_create_duplicate_token(self):
+    def test_create_duplicate_token(self, flask):
         patron = self._patron()
         device = DeviceToken.create(self._db, DeviceTokenTypes.FCM_IOS, "xxx", patron)
 
