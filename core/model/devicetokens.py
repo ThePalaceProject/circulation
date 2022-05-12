@@ -1,4 +1,4 @@
-from typing import TypeVar, Union
+from typing import Type, TypeVar, Union
 
 from sqlalchemy import Column, Enum, ForeignKey, Integer, Unicode
 from sqlalchemy.exc import IntegrityError
@@ -36,7 +36,7 @@ class DeviceToken(Base):
 
     @classmethod
     def create(
-        cls: type[T],
+        cls: Type[T],
         db,
         token_type: str,
         device_token: str,
