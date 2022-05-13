@@ -1,8 +1,13 @@
 import json
+from importlib import import_module
+
+import pytest
+from sqlalchemy.exc import IntegrityError
 
 from core.facets import FacetConstants
 from core.lane import Facets
 from core.model import Library
+from core.model.admin import Admin
 from core.testing import DatabaseTest
 from migartion_scripts import RandomSortOptionRemover
 
@@ -62,3 +67,30 @@ class TestRandomSortOptionRemover(DatabaseTest):
         assert Facets.ORDER_RANDOM not in library.enabled_facets(
             Facets.ORDER_FACET_GROUP_NAME
         )
+
+
+class TestCreateUniqueEmailConstraint(DatabaseTest):
+
+    migration = import_module("migration.20220509-admin-email-unique-constraint")
+
+    def setup_method(self):
+        super().setup_method()
+        admin = Admin(email="test@example.com")
+        self._db.add(admin)
+
+    def test_create_unique_email_constraint(self):
+        print("migration", self.migration)
+        success = self.migration.create_unique_email_constraint(self._db)
+        assert success == True
+
+        # rerun should return false
+        success = self.migration.create_unique_email_constraint(self._db)
+        assert success == False
+
+    def test_fail_on_duplicate_email(self):
+        admin = Admin(email="TEst@example.com")
+        self._db.add(admin)
+
+        # Duplicate email exists for UPPER()
+        with pytest.raises(IntegrityError):
+            self.migration.create_unique_email_constraint(self._db)
