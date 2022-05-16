@@ -588,10 +588,15 @@ class OverdriveAPI(
         )
 
     def get_fulfillment_link(
-        self, patron, pin, overdrive_id, format_type
+        self, patron: Patron, pin: Optional[str], overdrive_id: str, format_type: str
     ) -> Union["OverdriveManifestFulfillmentInfo", Tuple[str, str]]:
         """Get the link to the ACSM or manifest for an existing loan."""
-        loan = self.get_loan(patron, pin, overdrive_id)
+        try:
+            loan = self.get_loan(patron, pin, overdrive_id)
+        except PatronAuthorizationFailedException as e:
+            message = f"Error authenticating patron for fulfillment: {e.args[0]}"
+            raise CannotFulfill(message, *e.args[1:]) from e
+
         if not loan:
             raise NoActiveLoan("Could not find active loan for %s" % overdrive_id)
         download_link = None
