@@ -513,6 +513,8 @@ class Configuration(ConfigurationConstants):
         key = os.environ.get(f"{prefix}_{cls.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}")
         secret = os.environ.get(f"{prefix}_{cls.OD_FULFILLMENT_CLIENT_SECRET_SUFFIX}")
         if key is None or secret is None:
+            raise CannotLoadConfiguration("Missing fulfillment credentials.")
+        if not key:
             raise CannotLoadConfiguration("Invalid fulfillment credentials.")
         return {"key": key, "secret": secret}
 

@@ -2,7 +2,7 @@ import datetime
 import json
 import re
 import urllib.parse
-from typing import Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import dateutil
 import flask
@@ -515,24 +515,24 @@ class OverdriveAPI(
             if error in d:
                 raise d[error](message)
 
-    def get_loan(self, patron, pin, overdrive_id, is_fulfillment=False):
-        url = self.CHECKOUTS_ENDPOINT + "/" + overdrive_id.upper()
-        data = self.patron_request(
-            patron, pin, url, is_fulfillment=is_fulfillment
-        ).json()
+    def get_loan(
+        self, patron: Patron, pin: Optional[str], overdrive_id: str
+    ) -> Dict[str, Any]:
+        """Get patron's loan information for the identified item.
+
+        :param patron: A patron.
+        :param pin: An optional PIN/password for the patron.
+        :param overdrive_id: The OverDrive identifier for an item.
+        :return: Information about the loan.
+        """
+        url = f"{self.CHECKOUTS_ENDPOINT}/{overdrive_id.upper()}"
+        data = self.patron_request(patron, pin, url, is_fulfillment=True).json()
         self.raise_exception_on_error(data)
         return data
 
     def get_hold(self, patron, pin, overdrive_id):
         url = self.endpoint(self.HOLD_ENDPOINT, product_id=overdrive_id.upper())
         data = self.patron_request(patron, pin, url).json()
-        self.raise_exception_on_error(data)
-        return data
-
-    def get_loans(self, patron, pin):
-        """Get a JSON structure describing all of a patron's outstanding
-        loans."""
-        data = self.patron_request(patron, pin, self.CHECKOUTS_ENDPOINT).json()
         self.raise_exception_on_error(data)
         return data
 
@@ -588,10 +588,15 @@ class OverdriveAPI(
         )
 
     def get_fulfillment_link(
-        self, patron, pin, overdrive_id, format_type
+        self, patron: Patron, pin: Optional[str], overdrive_id: str, format_type: str
     ) -> Union["OverdriveManifestFulfillmentInfo", Tuple[str, str]]:
         """Get the link to the ACSM or manifest for an existing loan."""
-        loan = self.get_loan(patron, pin, overdrive_id, is_fulfillment=True)
+        try:
+            loan = self.get_loan(patron, pin, overdrive_id)
+        except PatronAuthorizationFailedException as e:
+            message = f"Error authenticating patron for fulfillment: {e.args[0]}"
+            raise CannotFulfill(message, *e.args[1:]) from e
+
         if not loan:
             raise NoActiveLoan("Could not find active loan for %s" % overdrive_id)
         download_link = None
@@ -726,8 +731,18 @@ class OverdriveAPI(
         self.raise_exception_on_error(data)
         return data
 
-    def get_patron_checkouts(self, patron, pin):
-        data = self.patron_request(patron, pin, self.CHECKOUTS_ENDPOINT).json()
+    def get_patron_checkouts(
+        self, patron: Patron, pin: Optional[str]
+    ) -> Dict[str, Any]:
+        """Get information for the given patron's loans.
+
+        :param patron: A patron.
+        :param pin: An optional PIN/password for the patron.
+        :return: Information about the patron's loans.
+        """
+        data = self.patron_request(
+            patron, pin, self.CHECKOUTS_ENDPOINT, is_fulfillment=True
+        ).json()
         self.raise_exception_on_error(data)
         return data
 
@@ -793,7 +808,7 @@ class OverdriveAPI(
             )
 
     @classmethod
-    def process_checkout_data(cls, checkout, collection):
+    def process_checkout_data(cls, checkout: Dict[str, Any], collection: Collection):
         """Convert one checkout from Overdrive's list of checkouts
         into a LoanInfo object.
 
