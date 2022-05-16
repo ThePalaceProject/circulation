@@ -1051,7 +1051,7 @@ class TestOverdriveAPI(OverdriveAPITest):
 
         class MockAPI(MockOverdriveAPI):
             def get_loan(self, patron, pin, overdrive_id):
-                self.get_loan_called_with = (patron, pin, overdrive_id, is_fulfillment)
+                self.get_loan_called_with = (patron, pin, overdrive_id)
                 return loan_info
 
             def get_download_link(self, loan, format_type, error_url):
@@ -1087,7 +1087,6 @@ class TestOverdriveAPI(OverdriveAPITest):
             patron,
             "1234",
             "http://download-link",
-            True,
         ) == api.get_loan_called_with
 
         # It returned a dictionary that contained no information
