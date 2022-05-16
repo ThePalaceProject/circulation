@@ -1050,7 +1050,7 @@ class TestOverdriveAPI(OverdriveAPITest):
         loan_info = {"isFormatLockedIn": False}
 
         class MockAPI(MockOverdriveAPI):
-            def get_loan(self, patron, pin, overdrive_id, is_fulfillment=False):
+            def get_loan(self, patron, pin, overdrive_id):
                 self.get_loan_called_with = (patron, pin, overdrive_id, is_fulfillment)
                 return loan_info
 
