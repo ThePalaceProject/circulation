@@ -67,6 +67,11 @@ from core.model import (
     Session,
     get_one,
 )
+from core.model.devicetokens import (
+    DeviceToken,
+    DuplicateDeviceTokenError,
+    InvalidTokenTypeError,
+)
 from core.opds import AcquisitionFeed, NavigationFacets, NavigationFeed
 from core.opensearch import OpenSearchDocument
 from core.user_profile import ProfileController as CoreProfileController
@@ -439,6 +444,7 @@ class CirculationManager(object):
         self.work_controller = WorkController(self)
         self.analytics_controller = AnalyticsController(self)
         self.profiles = ProfileController(self)
+        self.patron_devices = DeviceTokensController(self)
         self.heartbeat = HeartbeatController()
         self.odl_notification_controller = ODLNotificationController(self)
         self.shared_collection_controller = SharedCollectionController(self)
@@ -2329,6 +2335,37 @@ class ProfileController(CirculationManagerController):
         if isinstance(result, ProblemDetail):
             return result
         return make_response(*result)
+
+
+class DeviceTokensController(CirculationManagerController):
+    def get_patron_device(self):
+        patron = flask.request.patron
+        device_token = flask.request.args["device_token"]
+        token: DeviceToken = (
+            self._db.query(DeviceToken)
+            .filter(
+                DeviceToken.patron_id == patron.id,
+                DeviceToken.device_token == device_token,
+            )
+            .first()
+        )
+        if not token:
+            return DEVICE_TOKEN_NOT_FOUND
+        return dict(token_type=token.token_type, device_token=token.device_token), 200
+
+    def create_patron_device(self):
+        patron = flask.request.patron
+        device_token = flask.request.json["device_token"]
+        token_type = flask.request.json["token_type"]
+
+        try:
+            device = DeviceToken.create(self._db, token_type, device_token, patron)
+        except InvalidTokenTypeError:
+            return DEVICE_TOKEN_TYPE_INVALID
+        except DuplicateDeviceTokenError:
+            return DEVICE_TOKEN_ALREADY_EXISTS
+
+        return "", 201
 
 
 class URNLookupController(CoreURNLookupController):

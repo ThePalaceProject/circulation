@@ -481,6 +481,24 @@ def patron_profile():
     return app.manager.profiles.protocol()
 
 
+@library_dir_route("/patrons/me/devices", methods=["GET"])
+@has_library
+@allows_patron_web
+@requires_auth
+@returns_problem_detail
+def patron_devices():
+    return app.manager.patron_devices.get_patron_device()
+
+
+@library_dir_route("/patrons/me/devices", methods=["PUT"])
+@has_library
+@allows_patron_web
+@requires_auth
+@returns_problem_detail
+def put_patron_devices():
+    return app.manager.patron_devices.create_patron_device()
+
+
 @library_dir_route("/loans", methods=["GET", "HEAD"])
 @has_library
 @allows_patron_web
