@@ -40,7 +40,7 @@ class DeviceToken(Base):
         db,
         token_type: str,
         device_token: str,
-        patron: "Union[Patron,int]",
+        patron: Union[Patron, int],
     ) -> T:
         """Create a DeviceToken while ensuring sql issues are managed.
         Raises InvalidTokenTypeError, DuplicateDeviceTokenError"""
