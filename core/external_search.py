@@ -1935,7 +1935,7 @@ class JSONQuery(Query):
         GT = "gt"
 
     _KEYWORD_ONLY = {"keyword": True}
-    FIELD_MAPPING = {
+    FIELD_MAPPING: Dict[str, Dict] = {
         "audience": _KEYWORD_ONLY,
         "author": _KEYWORD_ONLY,
         "classifications.scheme": _KEYWORD_ONLY,
@@ -1988,7 +1988,7 @@ class JSONQuery(Query):
     def _is_keyword(self, name: str) -> bool:
         return self.FIELD_MAPPING[name].get("keyword") == True
 
-    def _nested_path(self, name: str) -> str:
+    def _nested_path(self, name: str) -> str | None:
         return self.FIELD_MAPPING[name].get("path")
 
     def _parse_json_query(self, query: Dict):
