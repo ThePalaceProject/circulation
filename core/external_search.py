@@ -5,7 +5,7 @@ import logging
 import re
 import time
 from collections import defaultdict
-from typing import Optional
+from typing import Dict, Optional
 
 from elasticsearch import Elasticsearch
 from elasticsearch.exceptions import ElasticsearchException, RequestError
@@ -24,7 +24,7 @@ from elasticsearch_dsl.query import (
     Nested,
 )
 from elasticsearch_dsl.query import Query as BaseQuery
-from elasticsearch_dsl.query import Term, Terms
+from elasticsearch_dsl.query import Range, Term, Terms
 from flask_babel import lazy_gettext as _
 from spellchecker import SpellChecker
 
@@ -410,7 +410,11 @@ class ExternalSearchIndex(HasSelfTests):
 
     def create_search_doc(self, query_string, filter, pagination, debug):
 
-        query = Query(query_string, filter)
+        if filter and filter.search_type == "json":
+            query = JSONQuery(query_string, filter)
+        else:
+            query = Query(query_string, filter)
+
         search = query.build(self.search, pagination)
         if debug:
             search = search.extra(explain=True)
@@ -436,6 +440,7 @@ class ExternalSearchIndex(HasSelfTests):
         # we're asking for.
         if fields:
             search = search.source(fields)
+
         return search
 
     def query_works(self, query_string, filter=None, pagination=None, debug=False):
@@ -1911,6 +1916,138 @@ class Query(SearchBase):
         return hypotheses
 
 
+class JSONQuery(Query):
+    class Conjunctives:
+        AND = "and"
+        OR = "or"
+
+    class QueryLeaf:
+        KEY = "key"
+        VALUE = "value"
+        OP = "op"
+
+    class Operators:
+        EQ = "eq"
+        NEQ = "neq"
+        GTE = "gte"
+        LTE = "lte"
+        LT = "lt"
+        GT = "gt"
+
+    _KEYWORD_ONLY = {"keyword": True}
+    FIELD_MAPPING = {
+        "audience": _KEYWORD_ONLY,
+        "author": _KEYWORD_ONLY,
+        "classifications.scheme": _KEYWORD_ONLY,
+        "classifications.term": _KEYWORD_ONLY,
+        "contributors.display_name": {**_KEYWORD_ONLY, **dict(path="contributors")},
+        "contributors.family_name": {**_KEYWORD_ONLY, **dict(path="contributors")},
+        "contributors.lc": dict(path="contributors"),
+        "contributors.role": dict(path="contributors"),
+        "contributors.sort_name": {**_KEYWORD_ONLY, **dict(path="contributors")},
+        "contributors.viaf": dict(path="contributors"),
+        "fiction": _KEYWORD_ONLY,
+        "genres.name": dict(path="genres"),
+        "genres.scheme": dict(path="genres"),
+        "genres.term": dict(path="genres"),
+        "genres.weight": dict(path="genres"),
+        "identifiers.identifier": dict(path="identifiers"),
+        "identifiers.type": dict(path="identifiers"),
+        "imprint": _KEYWORD_ONLY,
+        "language": _KEYWORD_ONLY,
+        "licensepools.available": dict(path="licensepools"),
+        "licensepools.collection_id": dict(path="licensepools"),
+        "licensepools.data_source_id": dict(path="licensepools"),
+        "licensepools.licensed": dict(path="licensepools"),
+        "licensepools.medium": dict(path="licensepools"),
+        "licensepools.open_access": dict(path="licensepools"),
+        "licensepools.quality": dict(path="licensepools"),
+        "licensepools.suppressed": dict(path="licensepools"),
+        "medium": _KEYWORD_ONLY,
+        "presentation_ready": dict(),
+        "publisher": _KEYWORD_ONLY,
+        "quality": dict(),
+        "series": _KEYWORD_ONLY,
+        "sort_author": dict(),
+        "sort_title": dict(),
+        "subtitle": _KEYWORD_ONLY,
+        "target_age": dict(),
+        "title": _KEYWORD_ONLY,
+    }
+
+    def __init__(self, query: Dict, filter=None):
+        self.query = query
+        self.filter = filter
+
+    @property
+    def elasticsearch_query(self):
+        query = None
+        query = self._parse_json_query(self.query["query"])
+        return query
+
+    def _is_keyword(self, name: str) -> bool:
+        return self.FIELD_MAPPING[name].get("keyword") == True
+
+    def _nested_path(self, name: str) -> str:
+        return self.FIELD_MAPPING[name].get("path")
+
+    def _parse_json_query(self, query: Dict):
+        """Eventually recursive json query parser"""
+        es_query = None
+
+        leaves = {self.QueryLeaf.KEY, self.QueryLeaf.VALUE}
+        if set(query.keys()).intersection(leaves) == leaves:
+            es_query = self._parse_json_leaf(query)
+        elif {self.Conjunctives.AND, self.Conjunctives.OR}.issuperset(query.keys()):
+            es_query = self._parse_json_join(query)
+
+        return es_query
+
+    def _parse_json_leaf(self, query):
+        op = query.get(self.QueryLeaf.OP, self.Operators.EQ)
+
+        key = query[self.QueryLeaf.KEY]
+        nested_path = self._nested_path(key)
+        if self._is_keyword(key):
+            key = query[self.QueryLeaf.KEY] + ".keyword"
+
+        value = query[self.QueryLeaf.VALUE]
+
+        es_query = None
+
+        if op is self.Operators.EQ:
+            es_query = Term(**{key: value})
+        elif op is self.Operators.NEQ:
+            es_query = Bool(must_not=[Term(**{key: value})])
+        elif op in {
+            self.Operators.GT,
+            self.Operators.GTE,
+            self.Operators.LT,
+            self.Operators.LTE,
+        }:
+            es_query = Range(**{key: {op: value}})
+
+        # For nested paths
+        if nested_path:
+            es_query = Nested(path=nested_path, query=es_query)
+
+        return es_query
+
+    def _parse_json_join(self, query):
+        join = list(query.keys())[0]
+        to_join = []
+        for query_part in query[join]:
+            q = self._parse_json_query(query_part)
+            to_join.append(q)
+
+        if join == self.Conjunctives.AND:
+            joined_query = Bool(must=to_join)
+        elif join == self.Conjunctives.OR:
+            joined_query = Bool(should=to_join)
+
+        return joined_query
+
+
 class QueryParser:
     """Attempt to parse filter information out of a query string.
 
@@ -2324,8 +2461,10 @@ class Filter(SearchBase):
         if facets:
             facets.modify_search_filter(self)
             self.scoring_functions = facets.scoring_functions(self)
+            self.search_type = getattr(facets, "search_type", "default")
         else:
             self.scoring_functions = []
+            self.search_type = "default"
 
     @property
     def audiences(self):

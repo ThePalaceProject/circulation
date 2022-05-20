@@ -1,6 +1,7 @@
 import json
 import re
 import time
+import uuid
 
 import pytest
 from elasticsearch.exceptions import ElasticsearchException
@@ -18,6 +19,7 @@ from elasticsearch_dsl.query import (
 )
 from elasticsearch_dsl.query import Query as elasticsearch_dsl_query
 from elasticsearch_dsl.query import Range, Term, Terms
+from parameterized import parameterized
 from psycopg2.extras import NumericRange
 
 from core.classifier import Classifier
@@ -26,6 +28,7 @@ from core.external_search import (
     CurrentMapping,
     ExternalSearchIndex,
     Filter,
+    JSONQuery,
     MockExternalSearchIndex,
     MockSearchResult,
     Query,
@@ -4580,3 +4583,167 @@ class TestSearchIndexCoverageProvider(DatabaseTest):
         assert work == record.obj
         assert True == record.transient
         assert "There was an error!" == record.exception
+
+
+class TestJSONQuery(ExternalSearchTest):
+    def _leaf(self, key, value, op="eq"):
+        return dict(key=key, value=value, op=op)
+
+    def _jq(self, query):
+        return JSONQuery(dict(query=query))
+
+    def test_elasticsearch_query(self):
+        q = {"key": "medium", "value": "Book"}
+        q = self._jq(q)
+        q.elasticsearch_query.to_dict() == {"term": {"medium.keyword": "Book"}}
+
+        q = {"or": [self._leaf("medium", "Book"), self._leaf("medium", "Audio")]}
+        q = self._jq(q)
+        q.elasticsearch_query.to_dict() == {
+            "bool": {
+                "should": [
+                    {"term": {"medium.keyword": "Book"}},
+                    {"term": {"medium.keyword": "Audio"}},
+                ]
+            }
+        }
+
+        q = {"and": [self._leaf("medium", "Book"), self._leaf("medium", "Audio")]}
+        q = self._jq(q)
+        q.elasticsearch_query.to_dict() == {
+            "bool": {
+                "must": [
+                    {"term": {"medium.keyword": "Book"}},
+                    {"term": {"medium.keyword": "Audio"}},
+                ]
+            }
+        }
+
+        q = {
+            "and": [
+                self._leaf("title", "Title"),
+                {"or": [self._leaf("medium", "Book"), self._leaf("medium", "Audio")]},
+            ]
+        }
+        q = self._jq(q)
+        q.elasticsearch_query.to_dict() == {
+            "bool": {
+                "must": [
+                    {
+                        "bool": {
+                            "should": [
+                                {"term": {"medium.keyword": "Book"}},
+                                {"term": {"medium.keyword": "Audio"}},
+                            ]
+                        }
+                    },
+                    {"term": {"title.keyword": "Title"}},
+                ]
+            }
+        }
+
+        q = {"or": [self._leaf("medium", "Book"), self._leaf("medium", "Audio", "neq")]}
+        q = self._jq(q)
+        assert q.elasticsearch_query.to_dict() == {
+            "bool": {
+                "should": [
+                    {"term": {"medium.keyword": "Book"}},
+                    {"bool": {"must_not": [{"term": {"medium.keyword": "Audio"}}]}},
+                ]
+            }
+        }
+
+    @parameterized.expand(
+        [
+            ("target_age", 18, "lte"),
+            ("target_age", 18, "lt"),
+            ("target_age", 18, "gt"),
+            ("target_age", 18, "gte"),
+        ]
+    )
+    def test_elasticsearch_query_range(self, key, value, op):
+        q = self._leaf(key, value, op)
+        q = self._jq(q)
+        assert q.elasticsearch_query.to_dict() == {"range": {f"{key}": {op: value}}}
+
+    @parameterized.expand(
+        [
+            ("contributors.display_name", "name", True),
+            ("contributors.lc", "name", False),
+            ("genres.name", "name", False),
+            ("licensepools.open_access", True, False),
+        ]
+    )
+    def test_elasticsearch_query_nested(self, key, value, is_keyword):
+        q = self._jq(self._leaf(key, value))
+        term = key if not is_keyword else f"{key}.keyword"
+        root = key.split(".")[0]
+        assert q.elasticsearch_query.to_dict() == {
+            "nested": {"path": root, "query": {"term": {term: value}}}
+        }
+
+
+class TestExternalSearchJSONQuery(EndToEndSearchTest):
+    def _leaf(self, key, value, op="eq"):
+        return dict(key=key, value=value, op=op)
+
+    def _jq(self, query):
+        return JSONQuery(dict(query=query))
+
+    def populate_works(self):
+        self.book_work: Work = self._work(with_open_access_download=True)
+        self.book_work.presentation_edition.medium = "Book"
+
+        self.audio_work: Work = self._work(with_open_access_download=True)
+        self.audio_work.presentation_edition.medium = "Audio"
+
+        self.random_works = []
+        for i in range(4):
+            w = self._work(
+                title=uuid.uuid4(),
+                authors=[uuid.uuid4()],
+                with_open_access_download=True,
+            )
+            self.random_works.append(w)
+
+        self._db.commit()
+
+        self.facets = facets = SearchFacets(search_type="json")
+        self.filter = Filter(facets=facets)
+
+    def expect(self, partial_query, works):
+
+        query = dict(query=partial_query)
+        resp = self.search.query_works(query, self.filter)
+
+        assert len(resp.hits) == len(works)
+
+        respids = {h.work_id for h in resp.hits}
+        expectedids = {w.id for w in works}
+        assert respids == expectedids
+
+    def test_search_basic(self):
+        facets = SearchFacets(search_type="json")
+        filter = Filter(facets=facets)
+
+        self.expect(self._leaf("medium", "Audio"), [self.audio_work])
+
+        w1: Work = self.random_works[0]
+        self.expect(self._leaf("title", w1.title), [w1])
+        self.expect(
+            self._leaf(
+                "contributors.display_name",
+                w1.presentation_edition.contributions[0].contributor.display_name,
+            ),
+            [w1],
+        )
+
+        w2: Work = self.random_works[1]
+        self.expect(
+            {"or": [self._leaf("title", w1.title), self._leaf("title", w2.title)]},
+            [w1, w2],
+        )
+        self.expect(
+            {"and": [self._leaf("title", w1.title), self._leaf("title", w2.title)]},
+            [],
+        )
