@@ -1,6 +1,7 @@
 # encoding: utf-8
 import argparse
 import csv
+import json
 import logging
 import os
 import sys
@@ -1930,19 +1931,52 @@ class SharedODLImportScript(OPDSImportScript):
 class LocalAnalyticsExportScript(Script):
     """Export circulation events for a date range to a CSV file."""
 
+    STATE_FILENAME: str = "state.json"
+
     @classmethod
     def arg_parser(cls, _db):
         parser = argparse.ArgumentParser()
         parser.add_argument(
             "--start",
-            help="Include circulation events that happened at or after this time.",
-            required=True,
+            help="""Include circulation events that happened at or after this
+                 "time. (UTC with format \"yyyy-mm-dd HH:MM:SS\"""",
+            required=False,
+            default="1970-01-01 00:00:00",
         )
         parser.add_argument(
             "--end",
-            help="Include circulation events that happened before this time.",
-            required=True,
+            help="""Include circulation events that happened before this time.
+                 (UTC with format \"yyyy-mm-dd HH:MM:SS\"). In not specified,
+                 the current time is assumed to be the end time.
+                 """,
+            required=False,
         )
+
+        parser.add_argument(
+            "--keep-track-of-last",
+            action="store_true",
+            help="""Include circulation events that happened at or after this
+            time.""",
+            required=False,
+            default=False,
+        )
+
+        parser.add_argument(
+            "--output-dir",
+            help="""Target directory for output files. If not specified output
+            is directed to standard out. """,
+            required=False,
+        )
+
+        parser.add_argument(
+            "--state-dir",
+            help="""Target directory for export state info. This
+            parameter is only used if '--keep-track-of-last' option is
+            specified. The default value is the current directory.""",
+            required=False,
+            default=".local_analytics_export_state",
+        )
+
         return parser
 
     def do_run(self, output=sys.stdout, cmd_args=None, exporter=None):
@@ -1950,9 +1984,51 @@ class LocalAnalyticsExportScript(Script):
         parsed = parser.parse_args(cmd_args)
         start = parsed.start
         end = parsed.end
+        output_dir = parsed.output_dir
+        state_dir = parsed.state_dir
+        keep_track_of_last = parsed.keep_track_of_last
+        current_time = utc_now().strftime("%Y-%m-%d %H:%M:%S")
+        if end == None or end >= current_time:
+            end = current_time
 
-        exporter = exporter or LocalAnalyticsExporter()
-        output.write(exporter.export(self._db, start, end))
+        if keep_track_of_last:
+            if not os.path.exists(state_dir):
+                os.makedirs(state_dir)
+            state_file_path = os.path.join(state_dir, self.STATE_FILENAME)
+            if os.path.exists(state_file_path):
+                with open(state_file_path, "r") as state_file_output:
+                    state = json.load(state_file_output)
+                    last_completed_date = state["last_completed_date"]
+                    start = last_completed_date
+
+                    if end <= last_completed_date:
+                        return
+
+                    if end >= current_time:
+                        end = current_time
+
+        if output_dir:
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+
+            def remove_spaces(s: str):
+                return s.replace(" ", "_")
+
+            csv_filename = "local-analytics-export-{}-to-{}.csv".format(
+                remove_spaces(start), remove_spaces(end)
+            )
+            output = open(os.path.join(output_dir, csv_filename), "w")
+
+        try:
+            exporter = exporter or LocalAnalyticsExporter()
+            output.write(exporter.export(self._db, start, end))
+        finally:
+            output.close()
+
+        if keep_track_of_last:
+            state = dict(last_completed_date=end)
+            with open(os.path.join(state_dir, self.STATE_FILENAME), "w") as state_file:
+                json.dump(state, state_file)
 
 
 class GenerateShortTokenScript(LibraryInputScript):
