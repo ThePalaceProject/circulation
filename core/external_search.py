@@ -5,7 +5,7 @@ import logging
 import re
 import time
 from collections import defaultdict
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 
 from elasticsearch import Elasticsearch
 from elasticsearch.exceptions import ElasticsearchException, RequestError
@@ -1988,7 +1988,7 @@ class JSONQuery(Query):
     def _is_keyword(self, name: str) -> bool:
         return self.FIELD_MAPPING[name].get("keyword") == True
 
-    def _nested_path(self, name: str) -> str | None:
+    def _nested_path(self, name: str) -> Union[str, None]:
         return self.FIELD_MAPPING[name].get("path")
 
     def _parse_json_query(self, query: Dict):
