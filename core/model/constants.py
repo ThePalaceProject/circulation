@@ -1,4 +1,3 @@
-# encoding: utf-8
 # DataSourceConstants, EditionConstants, IdentifierConstants, LinkRelations,
 # MediaTypes
 
@@ -7,7 +6,7 @@ from collections import OrderedDict
 from enum import Enum
 
 
-class DataSourceConstants(object):
+class DataSourceConstants:
     GUTENBERG = "Gutenberg"
     OVERDRIVE = "Overdrive"
     ODILO = "Odilo"
@@ -90,7 +89,7 @@ class DataSourceConstants(object):
     COVER_IMAGE_PRIORITY = [METADATA_WRANGLER] + PRESENTATION_EDITION_PRIORITY
 
 
-class EditionConstants(object):
+class EditionConstants:
     ALL_MEDIUM = object()
     BOOK_MEDIUM = "Book"
     PERIODICAL_MEDIUM = "Periodical"
@@ -147,7 +146,7 @@ class EditionConstants(object):
     }
 
 
-class IdentifierConstants(object):
+class IdentifierConstants:
     # Common types of identifiers.
     OVERDRIVE_ID = "Overdrive ID"
     ODILO_ID = "Odilo ID"
@@ -221,7 +220,7 @@ class IdentifierType(Enum):
     PROQUEST_ID = IdentifierConstants.PROQUEST_ID
 
 
-class LinkRelations(object):
+class LinkRelations:
     # Some common link relations.
     CANONICAL = "canonical"
     GENERIC_OPDS_ACQUISITION = "http://opds-spec.org/acquisition"
@@ -262,7 +261,7 @@ class LinkRelations(object):
     SELF_HOSTED_BOOKS = list(set(CIRCULATION_ALLOWED) & set(MIRRORED))
 
 
-class MediaTypes(object):
+class MediaTypes:
     EPUB_MEDIA_TYPE = "application/epub+zip"
     PDF_MEDIA_TYPE = "application/pdf"
     MOBI_MEDIA_TYPE = "application/x-mobipocket-ebook"

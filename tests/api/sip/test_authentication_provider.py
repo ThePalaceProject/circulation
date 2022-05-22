@@ -261,7 +261,7 @@ class TestSIP2AuthenticationProvider(DatabaseTest):
 
         class CannotConnect(MockSIPClient):
             def connect(self):
-                raise IOError("Doom!")
+                raise OSError("Doom!")
 
         integration = self._external_integration(self._str)
         provider = SIP2AuthenticationProvider(
@@ -282,7 +282,7 @@ class TestSIP2AuthenticationProvider(DatabaseTest):
 
         class CannotSend(MockSIPClient):
             def do_send(self, data):
-                raise IOError("Doom!")
+                raise OSError("Doom!")
 
         integration = self._external_integration(self._str)
         integration.url = "server.local"
@@ -448,7 +448,7 @@ class TestSIP2AuthenticationProvider(DatabaseTest):
         class MockBadConnection(MockSIPClient):
             def connect(self):
                 # probably a timeout if the server or port values are not valid
-                raise IOError("Could not connect")
+                raise OSError("Could not connect")
 
         class MockSIPLogin(MockSIPClient):
             def now(self):
@@ -456,7 +456,7 @@ class TestSIP2AuthenticationProvider(DatabaseTest):
 
             def login(self):
                 if not self.login_user_id and not self.login_password:
-                    raise IOError("Error logging in")
+                    raise OSError("Error logging in")
 
             def patron_information(self, username, password):
                 return self.patron_information_parser(

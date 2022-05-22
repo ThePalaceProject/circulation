@@ -1,4 +1,3 @@
-# encoding: utf-8
 import datetime
 from unittest.mock import PropertyMock, create_autospec
 
@@ -278,16 +277,14 @@ class TestIdentifier(DatabaseTest):
         equivs = Identifier.recursively_equivalent_identifier_ids(
             self._db, [identifier.id], policy=high_levels_low_threshold
         )
-        assert set(
-            [
-                identifier.id,
-                strong_equivalent.id,
-                weak_equivalent.id,
-                level_2_equivalent.id,
-                level_3_equivalent.id,
-                level_4_equivalent.id,
-            ]
-        ) == set(equivs[identifier.id])
+        assert {
+            identifier.id,
+            strong_equivalent.id,
+            weak_equivalent.id,
+            level_2_equivalent.id,
+            level_3_equivalent.id,
+            level_4_equivalent.id,
+        } == set(equivs[identifier.id])
 
         # If we only look at one level, we don't find the level 2, 3, or 4 identifiers.
         one_level = PresentationCalculationPolicy(
@@ -296,7 +293,7 @@ class TestIdentifier(DatabaseTest):
         equivs = Identifier.recursively_equivalent_identifier_ids(
             self._db, [identifier.id], policy=one_level
         )
-        assert set([identifier.id, strong_equivalent.id, weak_equivalent.id]) == set(
+        assert {identifier.id, strong_equivalent.id, weak_equivalent.id} == set(
             equivs[identifier.id]
         )
 
@@ -307,7 +304,7 @@ class TestIdentifier(DatabaseTest):
         equivs = Identifier.recursively_equivalent_identifier_ids(
             self._db, [identifier.id], policy=one_level_high_threshold
         )
-        assert set([identifier.id, strong_equivalent.id]) == set(equivs[identifier.id])
+        assert {identifier.id, strong_equivalent.id} == set(equivs[identifier.id])
 
         # For deeper levels, the strength is the product of the strengths
         # of all the equivalencies in between the two identifiers.
@@ -324,7 +321,7 @@ class TestIdentifier(DatabaseTest):
         equivs = Identifier.recursively_equivalent_identifier_ids(
             self._db, [identifier.id], policy=high_levels_high_threshold
         )
-        assert set([identifier.id, strong_equivalent.id]) == set(equivs[identifier.id])
+        assert {identifier.id, strong_equivalent.id} == set(equivs[identifier.id])
 
         # With a threshold of 0.25, level 2 is strong enough, but level
         # 4 is too weak.
@@ -334,49 +331,45 @@ class TestIdentifier(DatabaseTest):
         equivs = Identifier.recursively_equivalent_identifier_ids(
             self._db, [identifier.id], policy=high_levels_lower_threshold
         )
-        assert set(
-            [
-                identifier.id,
-                strong_equivalent.id,
-                level_2_equivalent.id,
-                level_3_equivalent.id,
-            ]
-        ) == set(equivs[identifier.id])
+        assert {
+            identifier.id,
+            strong_equivalent.id,
+            level_2_equivalent.id,
+            level_3_equivalent.id,
+        } == set(equivs[identifier.id])
 
         # It also works if we start from other identifiers.
         equivs = Identifier.recursively_equivalent_identifier_ids(
             self._db, [strong_equivalent.id], policy=high_levels_low_threshold
         )
-        assert set(
-            [
-                identifier.id,
-                strong_equivalent.id,
-                weak_equivalent.id,
-                level_2_equivalent.id,
-                level_3_equivalent.id,
-                level_4_equivalent.id,
-            ]
-        ) == set(equivs[strong_equivalent.id])
+        assert {
+            identifier.id,
+            strong_equivalent.id,
+            weak_equivalent.id,
+            level_2_equivalent.id,
+            level_3_equivalent.id,
+            level_4_equivalent.id,
+        } == set(equivs[strong_equivalent.id])
 
         equivs = Identifier.recursively_equivalent_identifier_ids(
             self._db, [level_4_equivalent.id], policy=high_levels_low_threshold
         )
-        assert set(
-            [
-                identifier.id,
-                strong_equivalent.id,
-                level_2_equivalent.id,
-                level_3_equivalent.id,
-                level_4_equivalent.id,
-            ]
-        ) == set(equivs[level_4_equivalent.id])
+        assert {
+            identifier.id,
+            strong_equivalent.id,
+            level_2_equivalent.id,
+            level_3_equivalent.id,
+            level_4_equivalent.id,
+        } == set(equivs[level_4_equivalent.id])
 
         equivs = Identifier.recursively_equivalent_identifier_ids(
             self._db, [level_4_equivalent.id], policy=high_levels_high_threshold
         )
-        assert set(
-            [level_2_equivalent.id, level_3_equivalent.id, level_4_equivalent.id]
-        ) == set(equivs[level_4_equivalent.id])
+        assert {
+            level_2_equivalent.id,
+            level_3_equivalent.id,
+            level_4_equivalent.id,
+        } == set(equivs[level_4_equivalent.id])
 
         # A chain of very strong equivalents can keep a high strength
         # even at deep levels. This wouldn't work if we changed the strength
@@ -394,7 +387,7 @@ class TestIdentifier(DatabaseTest):
         equivs = Identifier.recursively_equivalent_identifier_ids(
             self._db, [another_identifier.id], high_levels_fairly_high_threshold
         )
-        assert set([another_identifier.id, l2.id, l3.id, l4.id]) == set(
+        assert {another_identifier.id, l2.id, l3.id, l4.id} == set(
             equivs[another_identifier.id]
         )
 
@@ -407,8 +400,8 @@ class TestIdentifier(DatabaseTest):
             [identifier.id, level_3_equivalent.id],
             policy=two_levels_high_threshold,
         )
-        assert set([identifier.id, strong_equivalent.id]) == set(equivs[identifier.id])
-        assert set([level_2_equivalent.id, level_3_equivalent.id]) == set(
+        assert {identifier.id, strong_equivalent.id} == set(equivs[identifier.id])
+        assert {level_2_equivalent.id, level_3_equivalent.id} == set(
             equivs[level_3_equivalent.id]
         )
 
@@ -445,16 +438,14 @@ class TestIdentifier(DatabaseTest):
         query = query.where(Identifier.id == identifier.id)
         results = self._db.execute(query)
         equivalent_ids = [r[0] for r in results]
-        assert set(
-            [
-                identifier.id,
-                strong_equivalent.id,
-                weak_equivalent.id,
-                level_2_equivalent.id,
-                level_3_equivalent.id,
-                level_4_equivalent.id,
-            ]
-        ) == set(equivalent_ids)
+        assert {
+            identifier.id,
+            strong_equivalent.id,
+            weak_equivalent.id,
+            level_2_equivalent.id,
+            level_3_equivalent.id,
+            level_4_equivalent.id,
+        } == set(equivalent_ids)
 
         query = Identifier.recursively_equivalent_identifier_ids_query(
             Identifier.id, policy=two_levels_high_threshold
@@ -462,14 +453,12 @@ class TestIdentifier(DatabaseTest):
         query = query.where(Identifier.id.in_([identifier.id, level_3_equivalent.id]))
         results = self._db.execute(query)
         equivalent_ids = [r[0] for r in results]
-        assert set(
-            [
-                identifier.id,
-                strong_equivalent.id,
-                level_2_equivalent.id,
-                level_3_equivalent.id,
-            ]
-        ) == set(equivalent_ids)
+        assert {
+            identifier.id,
+            strong_equivalent.id,
+            level_2_equivalent.id,
+            level_3_equivalent.id,
+        } == set(equivalent_ids)
 
     def test_licensed_through_collection(self):
         c1 = self._default_collection
@@ -541,12 +530,10 @@ class TestIdentifier(DatabaseTest):
         # We don't use the web as a source of coverage, so this will
         # return both Gutenberg records (but not the web record).
         assert [g1.primary_identifier.id, g2.primary_identifier.id] == sorted(
-            [
-                x.id
-                for x in Identifier.missing_coverage_from(
-                    self._db, [Identifier.GUTENBERG_ID], web
-                )
-            ]
+            x.id
+            for x in Identifier.missing_coverage_from(
+                self._db, [Identifier.GUTENBERG_ID], web
+            )
         )
 
     def test_missing_coverage_from_with_collection(self):

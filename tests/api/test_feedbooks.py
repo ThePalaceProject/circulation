@@ -1,4 +1,3 @@
-# encoding: utf-8
 from io import BytesIO
 from zipfile import ZipFile
 
@@ -53,7 +52,7 @@ class TestFeedbooksOPDSImporter(DatabaseTest):
         )
 
     def setup_method(self):
-        super(TestFeedbooksOPDSImporter, self).setup_method()
+        super().setup_method()
         self.http = DummyHTTPClient()
         self.metadata = DummyMetadataClient()
         self.mirrors = dict(
@@ -362,7 +361,7 @@ class TestFeedbooksOPDSImporter(DatabaseTest):
         assert False == pool.open_access
 
 
-class TestRehostingPolicy(object):
+class TestRehostingPolicy:
     def test_rights_uri(self):
         # A Feedbooks work based on a text that is in copyright in the
         # US gets a RightsStatus of IN_COPYRIGHT.  We will not be

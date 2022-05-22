@@ -130,9 +130,9 @@ class BibliothecaAPI(BaseCirculationAPI, HasSelfTests):
         (Representation.PDF_MEDIA_TYPE, adobe_drm): "PDF",
         (None, findaway_drm): "MP3",
     }
-    internal_format_to_delivery_mechanism = dict(
-        [v, k] for k, v in list(delivery_mechanism_to_internal_format.items())
-    )
+    internal_format_to_delivery_mechanism = {
+        v: k for k, v in list(delivery_mechanism_to_internal_format.items())
+    }
 
     def __init__(self, _db, collection):
 
@@ -203,7 +203,7 @@ class BibliothecaAPI(BaseCirculationAPI, HasSelfTests):
         if not path.startswith("/"):
             path = "/" + path
         if not path.startswith("/cirrus"):
-            path = "/cirrus/library/%s%s" % (self.library_id, path)
+            path = f"/cirrus/library/{self.library_id}{path}"
         return path
 
     @classmethod
@@ -277,8 +277,7 @@ class BibliothecaAPI(BaseCirculationAPI, HasSelfTests):
         response = self.request(url)
         if response.status_code != 200:
             raise ErrorParser().process_all(response.content)
-        for record in parse_xml_to_array(BytesIO(response.content)):
-            yield record
+        yield from parse_xml_to_array(BytesIO(response.content))
 
     def bibliographic_lookup_request(self, identifiers):
         """Make an HTTP request to look up current bibliographic and
@@ -351,7 +350,7 @@ class BibliothecaAPI(BaseCirculationAPI, HasSelfTests):
         """Return event objects for events between the given times."""
         start = start.strftime(self.ARGUMENT_TIME_FORMAT)
         end = end.strftime(self.ARGUMENT_TIME_FORMAT)
-        url = "data/cloudevents?startdate=%s&enddate=%s" % (start, end)
+        url = f"data/cloudevents?startdate={start}&enddate={end}"
         if cache_result:
             max_age = self.MAX_AGE
         else:
@@ -615,7 +614,7 @@ class BibliothecaAPI(BaseCirculationAPI, HasSelfTests):
         return DeliveryMechanism.FINDAWAY_DRM, str(manifest)
 
 
-class DummyBibliothecaAPIResponse(object):
+class DummyBibliothecaAPIResponse:
     def __init__(self, response_code, headers, content):
         self.status_code = response_code
         self.headers = headers
@@ -647,7 +646,7 @@ class MockBibliothecaAPI(BibliothecaAPI):
     def __init__(self, _db, collection, *args, **kwargs):
         self.responses = []
         self.requests = []
-        super(MockBibliothecaAPI, self).__init__(_db, collection, *args, **kwargs)
+        super().__init__(_db, collection, *args, **kwargs)
 
     def now(self):
         """Return an unvarying time in the format Bibliotheca expects."""
@@ -685,10 +684,9 @@ class ItemListParser(XMLParser):
     unescape_entity_references = html.unescape
 
     def parse(self, xml):
-        for i in self.process_all(xml, "//Item"):
-            yield i
+        yield from self.process_all(xml, "//Item")
 
-    parenthetical = re.compile(" \([^)]+\)$")
+    parenthetical = re.compile(r" \([^)]+\)$")
 
     format_data_for_bibliotheca_format = {
         "EPUB": (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
@@ -941,7 +939,7 @@ class WorkflowException(BibliothecaException):
         self.statuses_that_would_work = statuses_that_would_work
 
     def __str__(self):
-        return "Book status is %s, must be: %s" % (
+        return "Book status is {}, must be: {}".format(
             self.actual_status,
             ", ".join(self.statuses_that_would_work),
         )
@@ -965,7 +963,7 @@ class ErrorParser(BibliothecaParser):
 
     def process_all(self, string):
         try:
-            for i in super(ErrorParser, self).process_all(string, "//Error"):
+            for i in super().process_all(string, "//Error"):
                 return i
         except Exception as e:
             # The server sent us an error with an incorrect or
@@ -1051,7 +1049,7 @@ class PatronCirculationParser(BibliothecaParser):
     id_type = Identifier.BIBLIOTHECA_ID
 
     def __init__(self, collection, *args, **kwargs):
-        super(PatronCirculationParser, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.collection = collection
 
     def process_all(self, string):
@@ -1061,7 +1059,7 @@ class PatronCirculationParser(BibliothecaParser):
         if isinstance(string, bytes):
             string = string.decode("utf-8")
         root = etree.parse(StringIO(string), parser)
-        sup = super(PatronCirculationParser, self)
+        sup = super()
         loans = sup.process_all(root, "//Checkouts/Item", handler=self.process_one_loan)
         holds = sup.process_all(root, "//Holds/Item", handler=self.process_one_hold)
         reserves = sup.process_all(
@@ -1125,7 +1123,7 @@ class DateResponseParser(BibliothecaParser):
         if isinstance(string, bytes):
             string = string.decode("utf-8")
         root = etree.parse(StringIO(string), parser)
-        m = root.xpath("/%s/%s" % (self.RESULT_TAG_NAME, self.DATE_TAG_NAME))
+        m = root.xpath(f"/{self.RESULT_TAG_NAME}/{self.DATE_TAG_NAME}")
         if not m:
             return None
         due_date = m[0].text
@@ -1170,7 +1168,7 @@ class EventParser(BibliothecaParser):
 
     def process_all(self, string, no_events_error=False):
         has_events = False
-        for i in super(EventParser, self).process_all(string, "//CloudLibraryEvent"):
+        for i in super().process_all(string, "//CloudLibraryEvent"):
             yield i
             has_events = True
 
@@ -1233,7 +1231,7 @@ class BibliothecaCirculationSweep(IdentifierSweepMonitor):
 
     def __init__(self, _db, collection, api_class=BibliothecaAPI, **kwargs):
         _db = Session.object_session(collection)
-        super(BibliothecaCirculationSweep, self).__init__(_db, collection, **kwargs)
+        super().__init__(_db, collection, **kwargs)
         if isinstance(api_class, BibliothecaAPI):
             self.api = api_class
         else:
@@ -1319,7 +1317,7 @@ class BibliothecaTimelineMonitor(CollectionMonitor, TimelineMonitor):
         :type analytics: Optional[Analytics]
         """
         self.analytics = analytics or Analytics(_db)
-        super(BibliothecaTimelineMonitor, self).__init__(_db, collection)
+        super().__init__(_db, collection)
         if isinstance(api_class, BibliothecaAPI):
             # We were given an actual API object. Just use it.
             self.api = api_class
@@ -1381,7 +1379,7 @@ class BibliothecaPurchaseMonitor(BibliothecaTimelineMonitor):
             for an already initialized monitor.
         :type override_timestamp: bool
         """
-        super(BibliothecaPurchaseMonitor, self).__init__(
+        super().__init__(
             _db=_db, collection=collection, api_class=api_class, analytics=analytics
         )
 
@@ -1457,7 +1455,7 @@ class BibliothecaPurchaseMonitor(BibliothecaTimelineMonitor):
         and setting`timestamp.finish` to None will cause the default to
         be used.
         """
-        timestamp = super(BibliothecaPurchaseMonitor, self).timestamp()
+        timestamp = super().timestamp()
         if self.override_timestamp:
             self.log.info(
                 "Overriding timestamp and starting at %s.",
@@ -1550,8 +1548,7 @@ class BibliothecaPurchaseMonitor(BibliothecaTimelineMonitor):
         records = None
         while records is None or len(records) >= page_size:
             records = [x for x in self.api.marc_request(start, end, offset, page_size)]
-            for record in records:
-                yield record
+            yield from records
             offset += page_size
 
     def process_record(self, record, purchase_time):
@@ -1736,7 +1733,7 @@ class RunBibliothecaPurchaseMonitorScript(RunCollectionMonitorScript):
 
     @classmethod
     def arg_parser(cls):
-        parser = super(RunBibliothecaPurchaseMonitorScript, cls).arg_parser()
+        parser = super().arg_parser()
         parser.add_argument(
             "--default-start",
             metavar="DATETIME",
@@ -1756,9 +1753,7 @@ class RunBibliothecaPurchaseMonitorScript(RunCollectionMonitorScript):
 
     @classmethod
     def parse_command_line(cls, _db=None, cmd_args=None, *args, **kwargs):
-        parsed = super(RunBibliothecaPurchaseMonitorScript, cls).parse_command_line(
-            _db=_db, cmd_args=cmd_args, *args, **kwargs
-        )
+        parsed = super().parse_command_line(_db=_db, cmd_args=cmd_args, *args, **kwargs)
         if parsed.override_timestamp and not parsed.default_start:
             cls.arg_parser().error(
                 '"--override-timestamp" is valid only when "--default-start" is also specified.'
@@ -1793,9 +1788,7 @@ class BibliothecaBibliographicCoverageProvider(BibliographicCoverageProvider):
         :param input_identifiers: Passed in by RunCoverageProviderScript.
             A list of specific identifiers to get coverage for.
         """
-        super(BibliothecaBibliographicCoverageProvider, self).__init__(
-            collection, **kwargs
-        )
+        super().__init__(collection, **kwargs)
         if isinstance(api_class, BibliothecaAPI):
             # This is an already instantiated API object. Use it
             # instead of creating a new one.

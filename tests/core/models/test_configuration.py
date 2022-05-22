@@ -1,4 +1,3 @@
-# encoding: utf-8
 import json
 from enum import Enum
 from unittest.mock import MagicMock, create_autospec
@@ -253,7 +252,7 @@ class TestConfigurationSetting(DatabaseTest):
             ("no value", None, None),
             ("stringable value", 1, "1"),
             ("string value", "snowman", "snowman"),
-            ("bytes value", "☃".encode("utf8"), "☃"),
+            ("bytes value", "☃".encode(), "☃"),
         ]
     )
     def test_setter(self, _, set_to, expect):
@@ -267,7 +266,7 @@ class TestConfigurationSetting(DatabaseTest):
         bytes_setting = ConfigurationSetting.sitewide(self._db, "bytes_setting")
         assert bytes_setting.value is None
 
-        bytes_setting.value = "1234 ☃".encode("utf8")
+        bytes_setting.value = "1234 ☃".encode()
         assert "1234 ☃" == bytes_setting.value
 
         with pytest.raises(UnicodeDecodeError):
@@ -492,7 +491,7 @@ class TestExternalIntegrationLink(DatabaseTest):
 
 class TestExternalIntegration(DatabaseTest):
     def setup_method(self):
-        super(TestExternalIntegration, self).setup_method()
+        super().setup_method()
         self.external_integration, ignore = create(
             self._db, ExternalIntegration, goal=self._str, protocol=self._str
         )
@@ -532,7 +531,7 @@ class TestExternalIntegration(DatabaseTest):
         # the query starts picking it up, and one_for_library_and_goal
         # starts raising an exception.
         integration2.libraries.append(self._default_library)
-        assert set([self.external_integration, integration2]) == set(qu.all())
+        assert {self.external_integration, integration2} == set(qu.all())
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             get_one(self._db, self._default_library, goal)
         assert "Library {} defines multiple integrations with goal {}".format(
@@ -598,7 +597,7 @@ class TestExternalIntegration(DatabaseTest):
         integration2.setting("key").value = "value"
 
         # Both integrations show up.
-        assert set([integration, integration2]) == set(results())
+        assert {integration, integration2} == set(results())
 
         # If the integration's goal doesn't match, it doesn't show up.
         integration2.goal = "wrong"
@@ -872,7 +871,7 @@ class MockConfiguration2(ConfigurationGrouping):
     )
 
 
-class TestConfigurationOption(object):
+class TestConfigurationOption:
     def test_to_settings(self):
         # Arrange
         option = ConfigurationOption("key1", "value1")
@@ -902,7 +901,7 @@ class TestConfigurationOption(object):
         assert result == expected_result
 
 
-class TestConfigurationGrouping(object):
+class TestConfigurationGrouping:
     @parameterized.expand(
         [("setting1", "setting1", 12345), ("setting2", "setting2", "12345")]
     )

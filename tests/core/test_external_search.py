@@ -1,4 +1,3 @@
-# encoding: utf-8
 import json
 import re
 import time
@@ -353,7 +352,7 @@ class TestExternalSearch(ExternalSearchTest):
         assert {collection.name: 1} == result
 
 
-class TestCurrentMapping(object):
+class TestCurrentMapping:
     def test_character_filters(self):
         # Verify the functionality of the regular expressions we tell
         # Elasticsearch to use when normalizing fields that will be used
@@ -1907,7 +1906,7 @@ class TestFeaturedFacets(EndToEndSearchTest):
         )
 
 
-class TestSearchBase(object):
+class TestSearchBase:
     def test__boost(self):
         # Verify that _boost() converts a regular query (or list of queries)
         # into a boosted query.
@@ -2057,7 +2056,7 @@ class TestQuery(DatabaseTest):
         # Elasticsearch Search object, complete with (if necessary)
         # subqueries, sort ordering, and script fields.
 
-        class MockSearch(object):
+        class MockSearch:
             """A mock of the Elasticsearch-DSL `Search` object.
 
             Calls to Search methods tend to create a new Search object
@@ -2128,7 +2127,7 @@ class TestQuery(DatabaseTest):
             def elasticsearch_query(self):
                 return Q("simple_query_string", query=self.query_string)
 
-        class MockPagination(object):
+        class MockPagination:
             def modify_search_query(self, search):
                 return search.filter(name_or_query="pagination modified")
 
@@ -2137,7 +2136,7 @@ class TestQuery(DatabaseTest):
         # universal_nested_filters() methods. These methods queue up
         # all kinds of modifications to queries, so it's better to
         # replace them with simpler versions.
-        class MockFilter(object):
+        class MockFilter:
 
             universal_base_term = Q("term", universal_base_called=True)
             universal_nested_term = Q("term", universal_nested_called=True)
@@ -2563,7 +2562,7 @@ class TestQuery(DatabaseTest):
             STEMMABLE_FIELDS = ["stemmable_field"]
 
             def __init__(self, *args, **kwargs):
-                super(Mock, self).__init__(*args, **kwargs)
+                super().__init__(*args, **kwargs)
                 self.fuzzy_calls = {}
 
             def _fuzzy_matches(self, field_name, **kwargs):
@@ -2675,7 +2674,7 @@ class TestQuery(DatabaseTest):
         # where most of the work happens.
         class Mock(Query):
             def _author_field_must_match(self, base_field, query_string=None):
-                yield "%s must match %s" % (base_field, query_string)
+                yield f"{base_field} must match {query_string}"
 
         query = Mock("ursula le guin")
         hypotheses = list(query.match_author_hypotheses)
@@ -2702,7 +2701,7 @@ class TestQuery(DatabaseTest):
     def test__author_field_must_match(self):
         class Mock(Query):
             def match_one_field_hypotheses(self, field_name, query_string):
-                hypothesis = "maybe %s matches %s" % (field_name, query_string)
+                hypothesis = f"maybe {field_name} matches {query_string}"
                 yield hypothesis, 6
 
             def _role_must_also_match(self, hypothesis):
@@ -3066,7 +3065,7 @@ class TestQueryParser(DatabaseTest):
 
 class TestFilter(DatabaseTest):
     def setup_method(self):
-        super(TestFilter, self).setup_method()
+        super().setup_method()
 
         # Look up three Genre objects which can be used to make filters.
         self.literary_fiction, ignore = Genre.lookup(self._db, "Literary Fiction")
@@ -3211,7 +3210,7 @@ class TestFilter(DatabaseTest):
 
         # If you pass in a Facets object, its modify_search_filter()
         # and scoring_functions() methods are called.
-        class Mock(object):
+        class Mock:
             def modify_search_filter(self, filter):
                 self.modify_search_filter_called_with = filter
 
@@ -3251,7 +3250,7 @@ class TestFilter(DatabaseTest):
         parent.media = Edition.AUDIO_MEDIUM
         parent.languages = ["eng", "fra"]
         parent.fiction = True
-        parent.audiences = set([Classifier.AUDIENCE_CHILDREN])
+        parent.audiences = {Classifier.AUDIENCE_CHILDREN}
         parent.target_age = NumericRange(10, 11, "[]")
         parent.genres = [self.horror, self.fantasy]
         parent.customlists = [self.best_sellers]
@@ -3262,7 +3261,7 @@ class TestFilter(DatabaseTest):
         inherits.genres = [self.literary_fiction]
         inherits.customlists = [self.staff_picks]
 
-        class Mock(object):
+        class Mock:
             def modify_search_filter(self, filter):
                 self.called_with = filter
 
@@ -4210,7 +4209,7 @@ class TestSortKeyPagination(DatabaseTest):
         )
 
     def test_modify_search_query(self):
-        class MockSearch(object):
+        class MockSearch:
             update_from_dict_called_with = "not called"
             getitem_called_with = "not called"
 
@@ -4270,11 +4269,11 @@ class TestSortKeyPagination(DatabaseTest):
 
         # Mock an Elasticsearch 'hit' object -- we'll be accessing
         # hit.meta.sort.
-        class MockMeta(object):
+        class MockMeta:
             def __init__(self, sort_key):
                 self.sort = sort_key
 
-        class MockItem(object):
+        class MockItem:
             def __init__(self, sort_key):
                 self.meta = MockMeta(sort_key)
 
@@ -4344,22 +4343,20 @@ class TestBulkUpdate(DatabaseTest):
 
         # All three works are regarded as successes, because their
         # state was successfully mirrored to the index.
-        assert set([w1, w2, w3]) == set(successes)
+        assert {w1, w2, w3} == set(successes)
         assert [] == failures
 
         # All three works were inserted into the index, even the one
         # that's not presentation-ready.
-        ids = set(x[-1] for x in list(index.docs.keys()))
-        assert set([w1.id, w2.id, w3.id]) == ids
+        ids = {x[-1] for x in list(index.docs.keys())}
+        assert {w1.id, w2.id, w3.id} == ids
 
         # If a work stops being presentation-ready, it is kept in the
         # index.
         w2.presentation_ready = False
         successes, failures = index.bulk_update([w1, w2, w3])
-        assert set([w1.id, w2.id, w3.id]) == set(
-            [x[-1] for x in list(index.docs.keys())]
-        )
-        assert set([w1, w2, w3]) == set(successes)
+        assert {w1.id, w2.id, w3.id} == {x[-1] for x in list(index.docs.keys())}
+        assert {w1, w2, w3} == set(successes)
         assert [] == failures
 
 

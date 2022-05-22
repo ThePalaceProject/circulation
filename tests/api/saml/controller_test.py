@@ -6,7 +6,7 @@ from tests.api.test_controller import ControllerTest as BaseControllerTest
 class ControllerTest(BaseControllerTest):
     def setup_method(self):
         self._integration = None
-        super(ControllerTest, self).setup_method()
+        super().setup_method()
 
         self._integration = self._external_integration(
             protocol=SAMLWebSSOAuthenticationProvider.NAME,

@@ -30,7 +30,7 @@ from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import OPDSFeed
 
 
-class BaseOPDSForDistributorsTest(object):
+class BaseOPDSForDistributorsTest:
     base_path = os.path.split(__file__)[0]
     resource_path = os.path.join(base_path, "files", "opds_for_distributors")
 
@@ -42,7 +42,7 @@ class BaseOPDSForDistributorsTest(object):
 
 class TestOPDSForDistributorsAPI(DatabaseTest):
     def setup_method(self):
-        super(TestOPDSForDistributorsAPI, self).setup_method()
+        super().setup_method()
         self.collection = MockOPDSForDistributorsAPI.mock_collection(self._db)
         self.api = MockOPDSForDistributorsAPI(self._db, self.collection)
 
@@ -416,9 +416,10 @@ class TestOPDSForDistributorsAPI(DatabaseTest):
         [l1, l2] = activity
         assert l1.collection_id == self.collection.id
         assert l2.collection_id == self.collection.id
-        assert set([l1.identifier, l2.identifier]) == set(
-            [p1.identifier.identifier, p2.identifier.identifier]
-        )
+        assert {l1.identifier, l2.identifier} == {
+            p1.identifier.identifier,
+            p2.identifier.identifier,
+        }
 
 
 class TestOPDSForDistributorsImporter(DatabaseTest, BaseOPDSForDistributorsTest):
@@ -431,7 +432,7 @@ class TestOPDSForDistributorsImporter(DatabaseTest, BaseOPDSForDistributorsTest)
             Collection.DATA_SOURCE_NAME_SETTING, data_source.name
         )
 
-        class MockMetadataClient(object):
+        class MockMetadataClient:
             def canonicalize_author_name(self, identifier, working_display_name):
                 return working_display_name
 

@@ -9,7 +9,7 @@ class ProQuestOPDS2ImportScript(OPDSImportScript):
     """Runs a ProQuestOPDS2ImportMonitor."""
 
     def __init__(self, *args, **kwargs):
-        super(ProQuestOPDS2ImportScript, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self._logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class ProQuestOPDS2ImportScript(OPDSImportScript):
             raise ValueError()
 
         self._logger.info(
-            "Started running ProQuestOPDS2ImportScript for collection {0}".format(
+            "Started running ProQuestOPDS2ImportScript for collection {}".format(
                 collection
             )
         )
@@ -58,7 +58,7 @@ class ProQuestOPDS2ImportScript(OPDSImportScript):
         monitor.run()
 
         self._logger.info(
-            "Finished running ProQuestOPDS2ImportScript for collection {0}".format(
+            "Finished running ProQuestOPDS2ImportScript for collection {}".format(
                 collection
             )
         )

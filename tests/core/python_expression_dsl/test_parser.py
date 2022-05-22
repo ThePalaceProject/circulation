@@ -4,7 +4,7 @@ from parameterized import parameterized
 from core.python_expression_dsl.parser import DSLParseError, DSLParser
 
 
-class TestDSLParser(object):
+class TestDSLParser:
     @parameterized.expand(
         [
             ("incorrect_expression", "?", "Unexpected symbol '?' at position 0"),

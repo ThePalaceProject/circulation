@@ -66,7 +66,7 @@ class CannotCreateLocalPatron(Exception):
     """
 
 
-class PatronData(object):
+class PatronData:
     """A container for basic information about a patron.
 
     Like Metadata and CirculationData, this offers a layer of
@@ -79,7 +79,7 @@ class PatronData(object):
 
     # Used to distinguish between "value has been unset" and "value
     # has not changed".
-    class NoValue(object):
+    class NoValue:
         def __bool__(self):
             """We want this object to act like None or False."""
             return False
@@ -442,7 +442,7 @@ class PatronData(object):
             personal_name=self.personal_name,
             email_address=self.email_address,
         )
-        data = dict((k, scrub(v)) for k, v in list(data.items()))
+        data = {k: scrub(v) for k, v in list(data.items())}
 
         # Handle the data items that aren't just strings.
 
@@ -489,7 +489,7 @@ class CirculationPatronProfileStorage(PatronProfileStorage):
 
     @property
     def profile_document(self):
-        doc = super(CirculationPatronProfileStorage, self).profile_document
+        doc = super().profile_document
         drm = []
         links = []
         device_link = {}
@@ -532,7 +532,7 @@ class CirculationPatronProfileStorage(PatronProfileStorage):
         return doc
 
 
-class Authenticator(object):
+class Authenticator:
     """Route requests to the appropriate LibraryAuthenticator."""
 
     log = logging.getLogger("api.authenticator.Authenticator")
@@ -592,7 +592,7 @@ class Authenticator(object):
         return self.invoke_authenticator_method("decode_bearer_token", *args, **kwargs)
 
 
-class LibraryAuthenticator(object):
+class LibraryAuthenticator:
     """Use the registered AuthenticationProviders to turn incoming
     credentials into Patron objects.
     """
@@ -846,10 +846,8 @@ class LibraryAuthenticator(object):
         """An iterator over all registered AuthenticationProviders."""
         if self.basic_auth_provider:
             yield self.basic_auth_provider
-        for provider in list(self.oauth_providers_by_name.values()):
-            yield provider
-        for provider in list(self.saml_providers_by_name.values()):
-            yield provider
+        yield from list(self.oauth_providers_by_name.values())
+        yield from list(self.saml_providers_by_name.values())
 
     def authenticated_patron(self, _db, header):
         """Go from an Authorization header value to a Patron object.
@@ -1955,9 +1953,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests):
         object! It's associated with a scoped database session. Just
         pull normal Python objects out of it.
         """
-        super(BasicAuthenticationProvider, self).__init__(
-            library, integration, analytics
-        )
+        super().__init__(library, integration, analytics)
         identifier_regular_expression = (
             integration.setting(self.IDENTIFIER_REGULAR_EXPRESSION).value
             or self.DEFAULT_IDENTIFIER_REGULAR_EXPRESSION
@@ -2392,7 +2388,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests):
         return flow_doc
 
 
-class BearerTokenSigner(object):
+class BearerTokenSigner:
     """Mixin class used for storing a secret used for signing Bearer tokens"""
 
     # Name of the site-wide ConfigurationSetting containing the secret
@@ -2491,9 +2487,7 @@ class OAuthAuthenticationProvider(AuthenticationProvider, BearerTokenSigner):
             we ask the patron to go through the OAuth validation
             process again.
         """
-        super(OAuthAuthenticationProvider, self).__init__(
-            library, integration, analytics
-        )
+        super().__init__(library, integration, analytics)
         self.client_id = integration.username
         self.client_secret = integration.password
         self.token_expiration_days = (
@@ -2691,7 +2685,7 @@ class OAuthAuthenticationProvider(AuthenticationProvider, BearerTokenSigner):
         return get_one_or_create(_db, DataSource, name=self.TOKEN_DATA_SOURCE_NAME)
 
 
-class OAuthController(object):
+class OAuthController:
 
     """A controller for handling requests that are part of the OAuth
     credential dance.

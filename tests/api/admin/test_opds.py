@@ -277,7 +277,7 @@ class TestOPDS(DatabaseTest):
 
 class MockAnnotator(AdminAnnotator):
     def __init__(self, library):
-        super(MockAnnotator, self).__init__(None, library, test_mode=True)
+        super().__init__(None, library, test_mode=True)
 
     def groups_url(self, lane):
         if lane:
@@ -294,4 +294,4 @@ class MockAnnotator(AdminAnnotator):
         return base
 
     def annotate_feed(self, feed):
-        super(MockAnnotator, self).annotate_feed(feed)
+        super().annotate_feed(feed)

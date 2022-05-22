@@ -9,7 +9,7 @@ from core.selftest import HasSelfTests
 
 class CollectionSelfTestsController(SelfTestsController):
     def __init__(self, manager):
-        super(CollectionSelfTestsController, self).__init__(manager)
+        super().__init__(manager)
         self.type = _("collection")
         self.protocols = self._get_collection_protocols(self.PROVIDER_APIS)
 

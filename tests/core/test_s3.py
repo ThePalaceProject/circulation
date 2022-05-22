@@ -1,4 +1,3 @@
-# encoding: utf-8
 import functools
 import os
 import sys
@@ -78,7 +77,7 @@ class S3UploaderTest(DatabaseTest):
         uploader_class=None,
         region=None,
         addressing_style=None,
-        **settings
+        **settings,
     ):
         """Creates a new instance of S3 uploader
 
@@ -135,7 +134,7 @@ class S3UploaderIntegrationTest(S3UploaderTest):
     @classmethod
     def setup_class(cls):
         """Initializes the test suite by creating a boto3 client set up with MinIO credentials"""
-        super(S3UploaderIntegrationTest, cls).setup_class()
+        super().setup_class()
 
         cls.minio_s3_client = boto3.client(
             "s3",
@@ -172,7 +171,7 @@ class S3UploaderIntegrationTest(S3UploaderTest):
         uploader_class=None,
         region=None,
         addressing_style=None,
-        **settings
+        **settings,
     ):
         """Creates a new instance of S3 uploader
 
@@ -205,7 +204,7 @@ class S3UploaderIntegrationTest(S3UploaderTest):
         if not client_class:
             client_class = self.s3_client_class
 
-        return super(S3UploaderIntegrationTest, self)._create_s3_uploader(
+        return super()._create_s3_uploader(
             client_class, uploader_class, region, addressing_style, **settings
         )
 
@@ -974,7 +973,9 @@ class TestS3Uploader(S3UploaderTest):
         # Mock final_mirror_url so we can verify that it's called with
         # the right arguments
         def mock_final_mirror_url(bucket, key):
-            return "final_mirror_url was called with bucket %s, key %s" % (bucket, key)
+            return "final_mirror_url was called with bucket {}, key {}".format(
+                bucket, key
+            )
 
         s3.final_mirror_url = mock_final_mirror_url
 
@@ -1177,7 +1178,7 @@ class TestS3Uploader(S3UploaderTest):
         region = "us-east-1"
         bucket = "bucket"
         filename = "filename"
-        url = "https://{0}.s3.{1}.amazonaws.com/{2}".format(bucket, region, filename)
+        url = f"https://{bucket}.s3.{region}.amazonaws.com/{filename}"
         expected_url = url + "?AWSAccessKeyId=KEY&Expires=1&Signature=S"
         settings = expiration_settings if expiration_settings else {}
         s3_uploader = self._create_s3_uploader(region=region, **settings)
@@ -1366,4 +1367,4 @@ class TestS3UploaderIntegration(S3UploaderIntegrationTest):
 
         [object] = response["Contents"]
 
-        assert object["Key"] == "ISBN/{0}.epub".format(book_title)
+        assert object["Key"] == f"ISBN/{book_title}.epub"

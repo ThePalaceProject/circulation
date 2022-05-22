@@ -23,7 +23,7 @@ from core.util.problem_detail import ProblemDetail
 
 class TestRemoteRegistry(DatabaseTest):
     def setup_method(self):
-        super(TestRemoteRegistry, self).setup_method()
+        super().setup_method()
 
         # Create an ExternalIntegration that can be used as the basis for
         # a RemoteRegistry.
@@ -260,9 +260,7 @@ class TestRemoteRegistry(DatabaseTest):
 
         def data_link(data, type="text/html"):
             encoded = base64.b64encode(data.encode("utf-8")).decode("utf-8")
-            return dict(
-                rel="terms-of-service", href="data:%s;base64,%s" % (type, encoded)
-            )
+            return dict(rel="terms-of-service", href=f"data:{type};base64,{encoded}")
 
         class Mock(RemoteRegistry):
             @classmethod
@@ -321,7 +319,7 @@ class TestRemoteRegistry(DatabaseTest):
 
         def data_url(data, type="text/html"):
             encoded = base64.b64encode(data.encode("utf-8")).decode("utf-8")
-            return "data:%s;base64,%s" % (type, encoded)
+            return f"data:{type};base64,{encoded}"
 
         # HTML is okay.
         html = data_url("some <strong>HTML</strong>", "text/html;charset=utf-8")
@@ -367,7 +365,7 @@ class TestRemoteRegistry(DatabaseTest):
 
 class TestRegistration(DatabaseTest):
     def setup_method(self):
-        super(TestRegistration, self).setup_method()
+        super().setup_method()
 
         # Create a RemoteRegistry.
         self.integration = self._external_integration(
@@ -384,7 +382,7 @@ class TestRegistration(DatabaseTest):
         assert self._default_library == reg.library
 
         settings = [x for x in reg.integration.settings if x.library is not None]
-        assert set([reg.status_field, reg.stage_field, reg.web_client_field]) == set(
+        assert {reg.status_field, reg.stage_field, reg.web_client_field} == set(
             settings
         )
         assert Registration.FAILURE_STATUS == reg.status_field.value
@@ -608,7 +606,7 @@ class TestRegistration(DatabaseTest):
 
         # Mock url_for to create good-looking callback URLs.
         def url_for(controller, library_short_name):
-            return "http://server/%s/%s" % (library_short_name, controller)
+            return f"http://server/{library_short_name}/{controller}"
 
         # First, test with no configuration contact configured for the
         # library.
@@ -646,7 +644,7 @@ class TestRegistration(DatabaseTest):
         assert expect_headers == m()
 
     def test__send_registration_request(self):
-        class Mock(object):
+        class Mock:
             def __init__(self, response):
                 self.response = response
 
@@ -753,7 +751,7 @@ class TestRegistration(DatabaseTest):
         class Mock(Registration):
             def _decrypt_shared_secret(self, encryptor, shared_secret):
                 self._decrypt_shared_secret_called_with = (encryptor, shared_secret)
-                return "👉 cleartext 👈".encode("utf8")
+                return "👉 cleartext 👈".encode()
 
         reg = Mock(self.registry, self._default_library)
         catalog = dict(
@@ -795,7 +793,7 @@ class TestRegistration(DatabaseTest):
 class TestLibraryRegistrationScript(DatabaseTest):
     def setup_method(self):
         """Make sure there's a base URL for url_for to use."""
-        super(TestLibraryRegistrationScript, self).setup_method()
+        super().setup_method()
 
     def test_do_run(self):
         class Mock(LibraryRegistrationScript):
@@ -845,7 +843,7 @@ class TestLibraryRegistrationScript(DatabaseTest):
         app = script.do_run(cmd_args=[], in_unit_test=True)
 
         # Every library was processed.
-        assert set([library, library2]) == set([x[0].library for x in script.processed])
+        assert {library, library2} == {x[0].library for x in script.processed}
 
         for i in script.processed:
             # Since no stage was provided, each library was registered

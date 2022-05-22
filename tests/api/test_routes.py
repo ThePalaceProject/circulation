@@ -14,7 +14,7 @@ from core.app_server import ErrorHandler
 from .test_controller import ControllerTest
 
 
-class MockApp(object):
+class MockApp:
     """Pretends to be a Flask application with a configured
     CirculationManager.
     """
@@ -23,20 +23,20 @@ class MockApp(object):
         self.manager = MockManager()
 
 
-class MockManager(object):
+class MockManager:
     """Pretends to be a CirculationManager with configured controllers."""
 
     def __init__(self):
         self._cache = {}
 
         # This is used by the allows_patron_web annotator.
-        self.patron_web_domains = set(["http://patron/web"])
+        self.patron_web_domains = {"http://patron/web"}
 
     def __getattr__(self, controller_name):
         return self._cache.setdefault(controller_name, MockController(controller_name))
 
 
-class MockControllerMethod(object):
+class MockControllerMethod:
     """Pretends to be one of the methods of a controller class."""
 
     def __init__(self, controller, name):
@@ -62,7 +62,7 @@ class MockControllerMethod(object):
         return response
 
     def __repr__(self):
-        return "<MockControllerMethod %s.%s>" % (self.controller.name, self.name)
+        return f"<MockControllerMethod {self.controller.name}.{self.name}>"
 
 
 class MockController(MockControllerMethod):
@@ -110,7 +110,7 @@ class MockController(MockControllerMethod):
         return "<MockControllerMethod %s>" % self.name
 
 
-class RouteTestFixtures(object):
+class RouteTestFixtures:
     def request(self, url, method="GET"):
         """Simulate a request to a URL without triggering any code outside
         routes.py.
@@ -212,7 +212,7 @@ class RouteTestFixtures(object):
         # The simplest way to do this seems to be to try each of the
         # other potential methods and verify that MethodNotAllowed is
         # raised each time.
-        check = set(["GET", "POST", "PUT", "DELETE"]) - set(methods)
+        check = {"GET", "POST", "PUT", "DELETE"} - set(methods)
         # Treat HEAD specially. Any controller that supports GET
         # automatically supports HEAD. So we only assert that HEAD
         # fails if the method supports neither GET nor HEAD.
@@ -239,12 +239,12 @@ class RouteTest(ControllerTest, RouteTestFixtures):
     # routes.py.
     @classmethod
     def setup_class(cls):
-        super(RouteTest, cls).setup_class()
+        super().setup_class()
         cls.REAL_CIRCULATION_MANAGER = None
 
     def setup_method(self):
         self.setup_circulation_manager = False
-        super(RouteTest, self).setup_method()
+        super().setup_method()
         if not self.REAL_CIRCULATION_MANAGER:
             library = self._default_library
             # Set up the necessary configuration so that when we
@@ -279,11 +279,11 @@ class RouteTest(ControllerTest, RouteTestFixtures):
         self.routes.app = app
 
     def teardown_method(self):
-        super(RouteTest, self).teardown_method()
+        super().teardown_method()
         self.routes.app = self.original_app
 
 
-class TestAppConfiguration(object):
+class TestAppConfiguration:
 
     # Test the configuration of the real Flask app.
     def test_configuration(self):
@@ -777,7 +777,7 @@ class TestExceptionHandler(RouteTest):
         # Temporarily replace the ErrorHandler used by the
         # exception_handler function -- this is what we imported as
         # error_handler_object.
-        class MockErrorHandler(object):
+        class MockErrorHandler:
             def handle(self, exception):
                 self.handled = exception
                 return Response("handled it", 500)

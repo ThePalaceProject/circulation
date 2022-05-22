@@ -66,7 +66,7 @@ class LoanReaper(LoanlikeReaperMonitor):
         """
         start_field = self.MODEL_CLASS.start
         end_field = self.MODEL_CLASS.end
-        superclause = super(LoanReaper, self).where_clause
+        superclause = super().where_clause
         now = utc_now()
         expired = end_field < now
         very_old_with_no_clear_end_date = and_(
@@ -94,7 +94,7 @@ class HoldReaper(LoanlikeReaperMonitor):
         """
         start_field = self.MODEL_CLASS.start
         end_field = self.MODEL_CLASS.end
-        superclause = super(HoldReaper, self).where_clause
+        superclause = super().where_clause
         end_date_in_past = end_field < utc_now()
         probably_abandoned = and_(
             start_field < self.cutoff, or_(end_field == None, end_date_in_past)
@@ -119,7 +119,7 @@ class IdlingAnnotationReaper(ReaperMonitor):
         for 60 days), and must not be associated with one of the
         patron's active loans or holds.
         """
-        superclause = super(IdlingAnnotationReaper, self).where_clause
+        superclause = super().where_clause
 
         restrictions = []
         for t in Loan, Hold:

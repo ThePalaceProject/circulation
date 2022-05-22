@@ -1,4 +1,3 @@
-# coding=utf-8
 import base64
 import datetime
 import json
@@ -47,7 +46,7 @@ from .circulation_exceptions import *
 from .selftest import HasSelfTests, SelfTestResult
 
 
-class OdiloRepresentationExtractor(object):
+class OdiloRepresentationExtractor:
     """Extract useful information from Odilo's JSON representations."""
 
     log = logging.getLogger("OdiloRepresentationExtractor")
@@ -588,7 +587,7 @@ class OdiloAPI(BaseCirculationAPI, HasSelfTests):
 
     def token_post(self, url, payload, headers={}, **kwargs):
         """Make an HTTP POST request for purposes of getting an OAuth token."""
-        s = "%s:%s" % (self.client_key, self.client_secret)
+        s = f"{self.client_key}:{self.client_secret}"
         auth = base64.standard_b64encode(s).strip()
         headers = dict(headers)
         headers["Authorization"] = "Basic %s" % auth
@@ -642,7 +641,7 @@ class OdiloAPI(BaseCirculationAPI, HasSelfTests):
         # TODO: we need to improve this at the API and use an error code
         elif response.status_code == 400:
             raise NoAcceptableFormat(
-                "record_id: %s, format: %s" % (record_id, internal_format)
+                f"record_id: {record_id}, format: {internal_format}"
             )
 
         raise CannotLoan(
@@ -712,7 +711,9 @@ class OdiloAPI(BaseCirculationAPI, HasSelfTests):
                 return checkout
 
         raise NotFoundOnRemote(
-            "Could not find active loan for patron %s, record %s" % (patron, record_id)
+            "Could not find active loan for patron {}, record {}".format(
+                patron, record_id
+            )
         )
 
     def get_hold(self, patron, pin, record_id):
@@ -725,7 +726,9 @@ class OdiloAPI(BaseCirculationAPI, HasSelfTests):
                 return hold
 
         raise NotFoundOnRemote(
-            "Could not find active hold for patron %s, record %s" % (patron, record_id)
+            "Could not find active hold for patron {}, record {}".format(
+                patron, record_id
+            )
         )
 
     def fulfill(self, patron, pin, licensepool, internal_format, **kwargs):
@@ -998,7 +1001,7 @@ class OdiloCirculationMonitor(CollectionMonitor, TimelineMonitor):
 
     def __init__(self, _db, collection, api_class=OdiloAPI):
         """Constructor."""
-        super(OdiloCirculationMonitor, self).__init__(_db, collection)
+        super().__init__(_db, collection)
         self.api = api_class(_db, collection)
 
     def catch_up_from(self, start, cutoff, progress):
@@ -1091,7 +1094,7 @@ class OdiloCirculationMonitor(CollectionMonitor, TimelineMonitor):
     def get_url(self, limit, modification_date, offset):
         url = "%s?limit=%i&offset=%i" % (self.api.ALL_PRODUCTS_ENDPOINT, limit, offset)
         if modification_date:
-            url = "%s&modificationDate=%s" % (url, modification_date)
+            url = f"{url}&modificationDate={modification_date}"
 
         return url
 
@@ -1138,7 +1141,7 @@ class MockOdiloAPI(OdiloAPI):
         self.responses = []
 
         self.access_token_response = self.mock_access_token_response("bearer token")
-        super(MockOdiloAPI, self).__init__(_db, collection, *args, **kwargs)
+        super().__init__(_db, collection, *args, **kwargs)
 
     def token_post(self, url, payload, headers={}, **kwargs):
         """Mock the request for an OAuth token."""
@@ -1194,7 +1197,7 @@ class OdiloBibliographicCoverageProvider(BibliographicCoverageProvider):
         :param api_class: Instantiate this class with the given Collection,
             rather than instantiating OdiloAPI.
         """
-        super(OdiloBibliographicCoverageProvider, self).__init__(collection, **kwargs)
+        super().__init__(collection, **kwargs)
         if isinstance(api_class, OdiloAPI):
             # Use a previously instantiated OdiloAPI instance
             # rather than creating a new one.

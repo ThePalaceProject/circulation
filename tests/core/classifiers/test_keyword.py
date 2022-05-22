@@ -4,7 +4,7 @@ from core.classifier.keyword import KeywordBasedClassifier as Keyword
 from core.classifier.keyword import LCSHClassifier as LCSH
 
 
-class TestLCSH(object):
+class TestLCSH:
     def test_is_fiction(self):
         def fic(lcsh):
             return LCSH.is_fiction(None, LCSH.scrub_name(lcsh))
@@ -37,7 +37,7 @@ class TestLCSH(object):
         assert None == aud("Humor")
 
 
-class TestKeyword(object):
+class TestKeyword:
     def genre(self, keyword):
         scrub = Keyword.scrub_identifier(keyword)
         fiction = Keyword.is_fiction(None, scrub)

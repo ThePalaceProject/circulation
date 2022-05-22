@@ -1,4 +1,3 @@
-# encoding: utf-8
 import datetime
 
 import pytest
@@ -12,7 +11,7 @@ from core.util.flask_util import OPDSFeedResponse
 from core.util.opds_writer import OPDSFeed
 
 
-class MockFeedGenerator(object):
+class MockFeedGenerator:
     def __init__(self):
         self.calls = []
 
@@ -408,13 +407,13 @@ class TestCachedFeed(DatabaseTest):
         # Verify that a WorkList or a Facets object can determine the
         # value to be stored in CachedFeed.type, with Facets taking
         # priority.
-        class DontCare(object):
+        class DontCare:
             CACHED_FEED_TYPE = None
 
-        class WorkList(object):
+        class WorkList:
             CACHED_FEED_TYPE = "from worklist"
 
-        class Facets(object):
+        class Facets:
             CACHED_FEED_TYPE = "from facets"
 
         m = CachedFeed.feed_type
@@ -440,7 +439,7 @@ class TestCachedFeed(DatabaseTest):
         assert 60 == m(None, None, None, datetime.timedelta(minutes=1))
 
         # Otherwise, the faceting object gets a chance to weigh in.
-        class MockFacets(object):
+        class MockFacets:
             max_cache_age = 22
 
         facets = MockFacets()
@@ -450,7 +449,7 @@ class TestCachedFeed(DatabaseTest):
         # care, CachedFeed.max_cache_age depends on
         # WorkList.max_cache_age. This method can return a few
         # different data types.
-        class MockWorklist(object):
+        class MockWorklist:
             def max_cache_age(self, type):
                 return dict(
                     number=1,
@@ -491,10 +490,10 @@ class TestCachedFeed(DatabaseTest):
                 cls.feed_type_called_with = (worklist, facets)
                 return "mock type"
 
-        class MockFacets(object):
+        class MockFacets:
             query_string = b"facets query string"
 
-        class MockPagination(object):
+        class MockPagination:
             query_string = b"pagination query string"
 
         m = MockCachedFeed._prepare_keys
@@ -562,7 +561,7 @@ class TestCachedFeed(DatabaseTest):
         # If there's no CachedFeed, we must always refresh.
         assert True == m(None, object())
 
-        class MockCachedFeed(object):
+        class MockCachedFeed:
             def __init__(self, timestamp):
                 self.timestamp = timestamp
 

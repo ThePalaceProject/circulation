@@ -12,16 +12,14 @@ from core.opds import AcquisitionFeed, VerboseAnnotator
 
 class AdminAnnotator(LibraryAnnotator):
     def __init__(self, circulation, library, test_mode=False):
-        super(AdminAnnotator, self).__init__(
-            circulation, None, library, test_mode=test_mode
-        )
+        super().__init__(circulation, None, library, test_mode=test_mode)
         self.opds_cache_field = None
 
     def annotate_work_entry(
         self, work, active_license_pool, edition, identifier, feed, entry
     ):
 
-        super(AdminAnnotator, self).annotate_work_entry(
+        super().annotate_work_entry(
             work, active_license_pool, edition, identifier, feed, entry
         )
         VerboseAnnotator.add_ratings(work, entry)

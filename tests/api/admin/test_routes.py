@@ -13,7 +13,7 @@ from ..test_controller import ControllerTest
 from ..test_routes import MockApp, MockController, MockManager, RouteTestFixtures
 
 
-class MockAdminApp(object):
+class MockAdminApp:
     """Pretends to be a Flask application with a configured
     CirculationManager and Admin routes.
     """
@@ -67,12 +67,12 @@ class AdminRouteTest(ControllerTest, RouteTestFixtures):
     # routes.py.
     @classmethod
     def setup_class(cls):
-        super(AdminRouteTest, cls).setup_class()
+        super().setup_class()
         cls.REAL_CIRCULATION_MANAGER = None
 
     def setup_method(self):
         self.setup_circulation_manager = False
-        super(AdminRouteTest, self).setup_method()
+        super().setup_method()
         if not self.REAL_CIRCULATION_MANAGER:
             library = self._default_library
             # Set up the necessary configuration so that when we

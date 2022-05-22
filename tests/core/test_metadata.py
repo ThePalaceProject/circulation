@@ -49,7 +49,7 @@ from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
 from core.util.http import RemoteIntegrationException
 
 
-class TestIdentifierData(object):
+class TestIdentifierData:
     def test_constructor(self):
         data = IdentifierData(Identifier.ISBN, "foo", 0.5)
         assert Identifier.ISBN == data.type
@@ -126,7 +126,7 @@ class TestMetadataImporter(DatabaseTest):
         # The old classification from source #2 has been destroyed.
         # The old classification from source #1 is still there.
         assert ["i will conquer", "i will persist"] == sorted(
-            [x.subject.identifier for x in identifier.classifications]
+            x.subject.identifier for x in identifier.classifications
         )
 
     def test_classifications_with_missing_subject_name_and_ident(self):
@@ -765,7 +765,7 @@ class TestMetadataImporter(DatabaseTest):
         # The mirror url is set.
         assert "Gutenberg" in representation.mirror_url
         assert representation.mirror_url.endswith(
-            "%s/%s.epub" % (edition.primary_identifier.identifier, edition.title)
+            f"{edition.primary_identifier.identifier}/{edition.title}.epub"
         )
 
         # Content isn't there since it was mirrored.
@@ -821,7 +821,7 @@ class TestMetadataImporter(DatabaseTest):
         # The mirror url is set.
         assert "Gutenberg" in representation.mirror_url
         assert representation.mirror_url.endswith(
-            "%s/%s.epub" % (edition.primary_identifier.identifier, edition.title)
+            f"{edition.primary_identifier.identifier}/{edition.title}.epub"
         )
 
         # Content isn't there since it was mirrored.
@@ -1672,7 +1672,7 @@ class TestCirculationData(DatabaseTest):
         identifier = self._identifier()
         collection = self._default_collection
 
-        class MockLicensePool(object):
+        class MockLicensePool:
             # A LicensePool-like object that tracks how its
             # update_availability() method was called.
             delivery_mechanisms = []
@@ -1946,7 +1946,7 @@ class TestAssociateWithIdentifiersBasedOnPermanentWorkID(DatabaseTest):
 
 class TestMARCExtractor(DatabaseTest):
     def setup_method(self):
-        super(TestMARCExtractor, self).setup_method()
+        super().setup_method()
         base_path = os.path.split(__file__)[0]
         self.resource_path = os.path.join(base_path, "files", "marc")
 

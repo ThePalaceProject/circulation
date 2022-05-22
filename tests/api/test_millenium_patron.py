@@ -15,7 +15,7 @@ from core.util.datetime_helpers import utc_now
 from . import sample_data
 
 
-class MockResponse(object):
+class MockResponse:
     def __init__(self, content):
         self.status_code = 200
         self.content = content
@@ -23,7 +23,7 @@ class MockResponse(object):
 
 class MockAPI(MilleniumPatronAPI):
     def __init__(self, library_id, integration):
-        super(MockAPI, self).__init__(library_id, integration)
+        super().__init__(library_id, integration)
         self.queue = []
         self.requests_made = []
 
@@ -88,7 +88,7 @@ class TestMilleniumPatronAPI(DatabaseTest):
         return MockAPI(self._default_library, integration)
 
     def setup_method(self):
-        super(TestMilleniumPatronAPI, self).setup_method()
+        super().setup_method()
         self.api = self.mock_api("http://url/")
 
     def test_constructor(self):
@@ -214,7 +214,9 @@ class TestMilleniumPatronAPI(DatabaseTest):
         [args, kwargs] = self.api.requests_made.pop()
         [url] = args
         assert kwargs == {}
-        assert url == "http://url/%s/%s/pintest" % (barcode, parse.quote(pin, safe=""))
+        assert url == "http://url/{}/{}/pintest".format(
+            barcode, parse.quote(pin, safe="")
+        )
 
         # In particular, verify that the slash character in the PIN was encoded;
         # by default, parse.quote leaves it alone.

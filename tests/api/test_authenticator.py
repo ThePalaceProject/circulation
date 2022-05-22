@@ -59,7 +59,7 @@ from core.util.http import IntegrationException
 from .test_controller import ControllerTest
 
 
-class MockAuthenticationProvider(object):
+class MockAuthenticationProvider:
     """An AuthenticationProvider that always authenticates requests for
     the given Patron and always returns the given PatronData when
     asked to look up data.
@@ -90,9 +90,7 @@ class MockBasicAuthenticationProvider(
         *args,
         **kwargs
     ):
-        super(MockBasicAuthenticationProvider, self).__init__(
-            library, integration, analytics, *args, **kwargs
-        )
+        super().__init__(library, integration, analytics, *args, **kwargs)
         self.patron = patron
         self.patrondata = patrondata
 
@@ -124,7 +122,7 @@ class MockBasic(BasicAuthenticationProvider):
         *args,
         **kwargs
     ):
-        super(MockBasic, self).__init__(library, integration, analytics)
+        super().__init__(library, integration, analytics)
         self.patrondata = patrondata
         self.remote_patron_lookup_patrondata = remote_patron_lookup_patrondata
 
@@ -166,7 +164,7 @@ class MockOAuth(OAuthAuthenticationProvider):
     def __init__(self, library, name="Mock OAuth", integration=None, analytics=None):
         _db = Session.object_session(library)
         integration = integration or self._mock_integration(_db, name)
-        super(MockOAuth, self).__init__(library, integration, analytics)
+        super().__init__(library, integration, analytics)
 
     @classmethod
     def _mock_integration(self, _db, name):
@@ -197,7 +195,7 @@ class AuthenticatorTest(DatabaseTest):
 
 class TestPatronData(AuthenticatorTest):
     def setup_method(self):
-        super(TestPatronData, self).setup_method()
+        super().setup_method()
         self.expiration_time = utc_now()
         self.data = PatronData(
             permanent_id="1",
@@ -487,7 +485,7 @@ class MockAuthenticator(Authenticator):
 
     def __init__(self, current_library, authenticators, analytics=None):
         _db = Session.object_session(current_library)
-        super(MockAuthenticator, self).__init__(_db, analytics)
+        super().__init__(_db, analytics)
         self.current_library_name = current_library.short_name
         self.library_authenticators = authenticators
 
@@ -678,7 +676,7 @@ class TestLibraryAuthenticator(AuthenticatorTest):
         """
         mock_catalog = object()
 
-        class MockCustomPatronCatalog(object):
+        class MockCustomPatronCatalog:
             @classmethod
             def for_library(self, library):
                 self.called_with = library
@@ -893,7 +891,7 @@ class TestLibraryAuthenticator(AuthenticatorTest):
 
         # This LibraryAuthenticator has two Authenticators, but
         # neither of them identify patrons as individuals.
-        class MockAuthenticator(object):
+        class MockAuthenticator:
             NAME = "mock"
             IDENTIFIES_INDIVIDUALS = False
 
@@ -1180,7 +1178,7 @@ class TestLibraryAuthenticator(AuthenticatorTest):
             bearer_token_signing_secret="secret",
         )
 
-        class MockAuthenticationDocumentAnnotator(object):
+        class MockAuthenticationDocumentAnnotator:
             def annotate_authentication_document(self, library, doc, url_for):
                 self.called_with = library, doc, url_for
                 doc["modified"] = "Kilroy was here"
@@ -1448,7 +1446,7 @@ class TestLibraryAuthenticator(AuthenticatorTest):
 
             # The response contains a Link header pointing to the authentication
             # document
-            expect = "<%s>; rel=%s" % (
+            expect = "<{}>; rel={}".format(
                 authenticator.authentication_document_url(self._default_library),
                 AuthenticationForOPDSDocument.LINK_RELATION,
             )
@@ -2032,7 +2030,7 @@ class TestBasicAuthenticationProvider(AuthenticatorTest):
                 self._authenticated_patron_returns = kwargs.pop(
                     "_authenticated_patron_returns", None
                 )
-                super(MockAuthenticatedPatron, self).__init__(*args, **kwargs)
+                super().__init__(*args, **kwargs)
 
             def authenticated_patron(self, *args, **kwargs):
                 return self._authenticated_patron_returns
@@ -2861,11 +2859,11 @@ class TestOAuthAuthenticationProvider(AuthenticatorTest):
 
 class TestOAuthController(AuthenticatorTest):
     def setup_method(self):
-        super(TestOAuthController, self).setup_method()
+        super().setup_method()
 
         class MockOAuthWithExternalAuthenticateURL(MockOAuth):
             def __init__(self, library, _db, external_authenticate_url, patron):
-                super(MockOAuthWithExternalAuthenticateURL, self).__init__(
+                super().__init__(
                     library,
                 )
                 self.url = external_authenticate_url

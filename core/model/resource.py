@@ -1,4 +1,3 @@
-# encoding: utf-8
 # Resource, ResourceTransformation, Hyperlink, Representation
 
 
@@ -1427,13 +1426,13 @@ class Representation(Base, MediaTypes):
 
         try:
             image.thumbnail(*args)
-        except IOError as e:
+        except OSError as e:
             # I'm not sure why, but sometimes just trying
             # it again works.
             original_exception = traceback.format_exc()
             try:
                 image.thumbnail(*args)
-            except IOError as e:
+            except OSError as e:
                 self.scale_exception = original_exception
                 self.scaled_at = None
                 return self, False

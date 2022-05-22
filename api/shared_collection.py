@@ -12,7 +12,7 @@ from .circulation_exceptions import *
 from .config import Configuration
 
 
-class SharedCollectionAPI(object):
+class SharedCollectionAPI:
     """Logic for circulating books to patrons of libraries on other
     circulation managers. This can be used for something like ODL where the
     circulation manager is responsible for managing loans and holds rather
@@ -211,7 +211,7 @@ class SharedCollectionAPI(object):
         return api.release_hold_from_external_library(client, hold)
 
 
-class BaseSharedCollectionAPI(object):
+class BaseSharedCollectionAPI:
     """APIs that permit external circulation managers to access their collections
     should extend this class."""
 

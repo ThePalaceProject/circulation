@@ -7,7 +7,7 @@ from lxml import etree
 from .http import HTTP
 
 
-class EpubAccessor(object):
+class EpubAccessor:
 
     CONTAINER_FILE = "META-INF/container.xml"
     IDPF_NAMESPACE = "http://www.idpf.org/2007/opf"
@@ -71,7 +71,7 @@ class EpubAccessor(object):
             package = package_file.read()
             for element_tag in element_tags:
                 element = etree.fromstring(package).find(
-                    "{%s}%s" % (cls.IDPF_NAMESPACE, element_tag)
+                    f"{{{cls.IDPF_NAMESPACE}}}{element_tag}"
                 )
                 if element is None:
                     raise ValueError(

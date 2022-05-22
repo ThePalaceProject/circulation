@@ -13,7 +13,7 @@ from core.util.datetime_helpers import (
 )
 
 
-class TestDatetimeUTC(object):
+class TestDatetimeUTC:
     @parameterized.expand(
         [
             ([2021, 1, 1], "2021-01-01T00:00:00", "2021-01-01T00:00:00+00:00"),
@@ -46,7 +46,7 @@ class TestDatetimeUTC(object):
         assert util_dt.day == time[2]
 
 
-class TestFromTimestamp(object):
+class TestFromTimestamp:
     def test_from_timestamp(self):
         """`from_timestamp` is a wrapper around `datetime.fromtimestamp`
         that also includes UTC information.
@@ -65,7 +65,7 @@ class TestFromTimestamp(object):
         assert util_from_ts.tzinfo == pytz.UTC
 
 
-class TestUTCNow(object):
+class TestUTCNow:
     def test_utc_now(self):
         """`utc_now` is a wrapper around `datetime.now` but it also includes
         UTC information.
@@ -80,7 +80,7 @@ class TestUTCNow(object):
         assert util_now.tzinfo == pytz.UTC
 
 
-class TestToUTC(object):
+class TestToUTC:
     def test_to_utc(self):
         # `utc` marks a naive datetime object as being UTC, or
         # converts a timezone-aware datetime object to UTC.

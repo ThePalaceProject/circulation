@@ -177,7 +177,7 @@ class TestRunSelfTestsScript(DatabaseTest):
         library2 = self._library(name="library2")
         out = StringIO()
 
-        class MockParsed(object):
+        class MockParsed:
             pass
 
         class MockScript(RunSelfTestsScript):
@@ -194,7 +194,7 @@ class TestRunSelfTestsScript(DatabaseTest):
         script = MockScript(self._db, out)
         script.do_run()
         # Both libraries were tested.
-        assert out.getvalue() == "Testing %s\nTesting %s\n" % (
+        assert out.getvalue() == "Testing {}\nTesting {}\n".format(
             library1.name,
             library2.name,
         )
@@ -255,7 +255,7 @@ class TestRunSelfTestsScript(DatabaseTest):
         # HasSelfTests class, the class's run_self_tests class method
         # is invoked. Any extra arguments found in the extra_args dictionary
         # are passed in to run_self_tests.
-        class MockHasSelfTests(object):
+        class MockHasSelfTests:
             @classmethod
             def run_self_tests(cls, _db, constructor_method, *constructor_args):
                 cls.run_self_tests_called_with = (_db, constructor_method)

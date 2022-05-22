@@ -87,9 +87,7 @@ class ProQuestAPIInvalidJSONResponseError(BaseError):
         :param response: Response object
         :type response: requests.models.Response
         """
-        super(ProQuestAPIInvalidJSONResponseError, self).__init__(
-            "Response body does not contain a valid JSON document"
-        )
+        super().__init__("Response body does not contain a valid JSON document")
 
         self._response = response
 
@@ -116,7 +114,7 @@ class ProQuestAPIMissingJSONPropertyError(ProQuestAPIInvalidJSONResponseError):
         :type missing_property: str
         """
         super(ProQuestAPIInvalidJSONResponseError, self).__init__(
-            "JSON document does not contain required property '{0}'".format(
+            "JSON document does not contain required property '{}'".format(
                 missing_property
             ),
             response,
@@ -134,7 +132,7 @@ class ProQuestAPIMissingJSONPropertyError(ProQuestAPIInvalidJSONResponseError):
         return self._missing_property
 
 
-class ProQuestBook(object):
+class ProQuestBook:
     """POCO class containing information about a ProQuest book."""
 
     def __init__(self, link=None, content=None, content_type=None):
@@ -210,7 +208,7 @@ class ProQuestBook(object):
         return self._content_type
 
 
-class ProQuestAPIClient(object):
+class ProQuestAPIClient:
     """ProQuest API client."""
 
     MAX_PAGE_INDEX = 32766
@@ -257,9 +255,9 @@ class ProQuestAPIClient(object):
         headers = {"Content-Type": "application/json"}
 
         if token:
-            headers["Authorization"] = "Bearer {0}".format(token)
+            headers["Authorization"] = f"Bearer {token}"
 
-        self._logger.debug("Headers: {0}".format(headers))
+        self._logger.debug(f"Headers: {headers}")
 
         return headers
 
@@ -270,7 +268,7 @@ class ProQuestAPIClient(object):
         if configuration.https_proxy_url:
             proxies["https"] = configuration.https_proxy_url
 
-        self._logger.debug("Proxies: {0}".format(proxies))
+        self._logger.debug(f"Proxies: {proxies}")
 
         return proxies
 
@@ -298,7 +296,7 @@ class ProQuestAPIClient(object):
         request = Request(method, url, params=query_parameters, headers=headers)
 
         self._logger.debug(
-            "Finished creating a new request: {0} ({1})".format(request, request.url)
+            f"Finished creating a new request: {request} ({request.url})"
         )
 
         return request
@@ -338,7 +336,7 @@ class ProQuestAPIClient(object):
         response_json = self._try_to_extract_json_from_response(response)
 
         if response.status_code != requests.codes.ok and response_json:
-            self._logger.error("Request failed: {0}".format(response_json))
+            self._logger.error(f"Request failed: {response_json}")
 
         response.raise_for_status()
 
@@ -357,7 +355,7 @@ class ProQuestAPIClient(object):
 
         if status_code != requests.codes.ok:
             raise HTTPError(
-                "Request failed with {0} code".format(status_code), response=response
+                f"Request failed with {status_code} code", response=response
             )
 
         return response, response_json
@@ -384,7 +382,7 @@ class ProQuestAPIClient(object):
         :return: 2-tuple containing the response and the JSON document containing in it (if any)
         """
         self._logger.debug(
-            "Started sending {0} HTTP request to {1} with the following parameters: {2}".format(
+            "Started sending {} HTTP request to {} with the following parameters: {}".format(
                 method, url, query_parameters
             )
         )
@@ -401,12 +399,12 @@ class ProQuestAPIClient(object):
             request = session.prepare_request(request)
             response = session.send(request, proxies=proxies)
 
-        self._logger.debug("Received the following response: {0}".format(response))
+        self._logger.debug(f"Received the following response: {response}")
 
         response, response_json = self._parse_response(response, response_must_be_json)
 
         self._logger.debug(
-            "Finished sending {0} HTTP request to {1} with the following parameters: {2}".format(
+            "Finished sending {} HTTP request to {} with the following parameters: {}".format(
                 method, url, query_parameters
             )
         )
@@ -429,7 +427,7 @@ class ProQuestAPIClient(object):
         :rtype: dict
         """
         self._logger.info(
-            "Started downloading page # {0} ({1} hits) of a paginated OPDS 2.0 feed from {2}".format(
+            "Started downloading page # {} ({} hits) of a paginated OPDS 2.0 feed from {}".format(
                 page, hits_per_page, configuration.books_catalog_service_url
             )
         )
@@ -445,7 +443,7 @@ class ProQuestAPIClient(object):
         )
 
         self._logger.info(
-            "Finished downloading page # {0} ({1} hits) of a paginated OPDS 2.0 feed from {2}".format(
+            "Finished downloading page # {} ({} hits) of a paginated OPDS 2.0 feed from {}".format(
                 page, hits_per_page, configuration.books_catalog_service_url
             )
         )
@@ -511,7 +509,7 @@ class ProQuestAPIClient(object):
             raise ValueError('"page" argument must be an integer')
         if page < 0 or page > self.MAX_PAGE_INDEX:
             raise ValueError(
-                "Page argument must a non-negative number less than {0}".format(
+                "Page argument must a non-negative number less than {}".format(
                     self.MAX_PAGE_INDEX
                 )
             )
@@ -519,13 +517,13 @@ class ProQuestAPIClient(object):
             raise ValueError('"hits_per_page" argument must be an integer')
         if hits_per_page < 0 or hits_per_page > self.MAX_PAGE_SIZE:
             raise ValueError(
-                "Hits per page argument must a non-negative number less than {0}".format(
+                "Hits per page argument must a non-negative number less than {}".format(
                     self.MAX_PAGE_SIZE
                 )
             )
 
         self._logger.info(
-            "Started downloading page # {0} ({1} hits) of a paginated OPDS 2.0 feed ".format(
+            "Started downloading page # {} ({} hits) of a paginated OPDS 2.0 feed ".format(
                 page, hits_per_page
             )
         )
@@ -534,7 +532,7 @@ class ProQuestAPIClient(object):
             feed = self._download_feed_page(configuration, page, hits_per_page)
 
             self._logger.info(
-                "Finished downloading page # {0} ({1} hits) of a paginated OPDS 2.0 feed".format(
+                "Finished downloading page # {} ({} hits) of a paginated OPDS 2.0 feed".format(
                     page, hits_per_page
                 )
             )
@@ -574,7 +572,7 @@ class ProQuestAPIClient(object):
                     yield feed
                 except HTTPError as error:
                     self._logger.debug(
-                        "Got an HTTP error {0}, assuming we reached the end of the feed".format(
+                        "Got an HTTP error {}, assuming we reached the end of the feed".format(
                             error
                         )
                     )
@@ -607,7 +605,7 @@ class ProQuestAPIClient(object):
             raise ValueError('"affiliation_id" argument must be a non-empty string')
 
         self._logger.info(
-            "Started creating a new JWT bearer token for affiliation ID {0}".format(
+            "Started creating a new JWT bearer token for affiliation ID {}".format(
                 affiliation_id
             )
         )
@@ -623,7 +621,7 @@ class ProQuestAPIClient(object):
             )
 
             self._logger.info(
-                "Finished creating a new JWT bearer token for affiliation ID {0}: {1}".format(
+                "Finished creating a new JWT bearer token for affiliation ID {}: {}".format(
                     affiliation_id, response_json
                 )
             )
@@ -661,7 +659,7 @@ class ProQuestAPIClient(object):
             raise ValueError('"document_id" must be a non-empty string')
 
         self._logger.info(
-            "Started fetching a book link for Doc ID {0} using JWT token {1}".format(
+            "Started fetching a book link for Doc ID {} using JWT token {}".format(
                 document_id, token
             )
         )
@@ -678,7 +676,7 @@ class ProQuestAPIClient(object):
 
             if response_json:
                 self._logger.info(
-                    "Finished fetching a download link for Doc ID {0} using JWT token {1}: {2}".format(
+                    "Finished fetching a download link for Doc ID {} using JWT token {}: {}".format(
                         document_id, token, response_json
                     )
                 )
@@ -712,7 +710,7 @@ class ProQuestAPIClient(object):
                 )
 
                 self._logger.info(
-                    "Finished fetching an ACSM file for Doc ID {0} using JWT token {1}".format(
+                    "Finished fetching an ACSM file for Doc ID {} using JWT token {}".format(
                         document_id, token
                     )
                 )
@@ -723,7 +721,7 @@ class ProQuestAPIClient(object):
                 )
             else:
                 self._logger.info(
-                    "Finished fetching an open-access book for Doc ID {0} using JWT token {1}".format(
+                    "Finished fetching an open-access book for Doc ID {} using JWT token {}".format(
                         document_id, token
                     )
                 )
@@ -731,7 +729,7 @@ class ProQuestAPIClient(object):
                 return ProQuestBook(content=bytes(response.content))
 
 
-class ProQuestAPIClientFactory(object):
+class ProQuestAPIClientFactory:
     """Factory used for creating ProQuestAPIClient instances."""
 
     def create(self, integration_association):

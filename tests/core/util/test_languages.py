@@ -1,11 +1,10 @@
-# encoding: utf-8
 """Test language lookup capabilities."""
 import pytest
 
 from core.util.languages import LanguageCodes, LanguageNames, LookupTable
 
 
-class TestLookupTable(object):
+class TestLookupTable:
     def test_lookup(self):
         d = LookupTable()
         d["key"] = "value"
@@ -15,7 +14,7 @@ class TestLookupTable(object):
         assert None == d["missing"]
 
 
-class TestLanguageCodes(object):
+class TestLanguageCodes:
     def test_lookups(self):
         c = LanguageCodes
 
@@ -77,7 +76,7 @@ class TestLanguageCodes(object):
         pytest.raises(ValueError, m, ["eng, nxx"])
 
 
-class TestLanguageNames(object):
+class TestLanguageNames:
     """Test our (very rough) ability to map from natural-language names
     of languages to ISO-639-2 language codes.
     """
@@ -90,7 +89,7 @@ class TestLanguageNames(object):
         def coded(name, code):
             # In almost all cases, a human-readable language name maps to
             # a set containing a single ISO-639-2 language code.
-            assert set([code]) == d[name]
+            assert {code} == d[name]
 
         # English-language names work.
         coded("english", "eng")
@@ -125,7 +124,7 @@ class TestLanguageNames(object):
         # is the only way to distinguish them. For now, we map 'tonga'
         # to both ISO codes. (This is why name_to_codes is called that
         # rather than name_to_code.)
-        assert set(["ton", "tog"]) == d["tonga"]
+        assert {"ton", "tog"} == d["tonga"]
 
         # Language families such as "Himacahli languages" can be
         # looked up without the " languages".

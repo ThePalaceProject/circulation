@@ -1,5 +1,3 @@
-# encoding: utf-8
-
 from core.external_list import (
     ClassificationBasedMembershipManager,
     CustomListFromCSV,
@@ -12,7 +10,7 @@ from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
 
 class TestCustomListFromCSV(DatabaseTest):
     def setup_method(self):
-        super(TestCustomListFromCSV, self).setup_method()
+        super().setup_method()
         self.data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
         self.metadata = DummyMetadataClient()
         self.metadata.lookups["Octavia Butler"] = "Butler, Octavia"

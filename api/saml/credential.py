@@ -15,7 +15,7 @@ from api.saml.metadata.model import (
 from core.model import Credential, DataSource, Patron, get_one_or_create
 
 
-class SAMLCredentialManager(object):
+class SAMLCredentialManager:
     """Manages SAML tokens.
 
     By SAML tokens we may mean two different things:
@@ -72,13 +72,11 @@ class SAMLCredentialManager(object):
         :param credential: Credential object containing a SAML token
         :return: SAML subject
         """
-        self._logger.debug("Started deserializing SAML token {0}".format(credential))
+        self._logger.debug(f"Started deserializing SAML token {credential}")
 
         subject = json.loads(credential.credential, cls=SAMLSubjectJSONDecoder)
 
-        self._logger.debug(
-            "Finished deserializing SAML token {0}: {1}".format(credential, subject)
-        )
+        self._logger.debug(f"Finished deserializing SAML token {credential}: {subject}")
 
         return subject
 
@@ -131,9 +129,7 @@ class SAMLCredentialManager(object):
             auto_create_datasource=True,
         )
 
-        self._logger.debug(
-            "Finished looking up for a SAML token: {0}".format(credential)
-        )
+        self._logger.debug(f"Finished looking up for a SAML token: {credential}")
 
         return credential
 
@@ -152,8 +148,6 @@ class SAMLCredentialManager(object):
             db, self._get_token_data_source(db), self.TOKEN_TYPE, token
         )
 
-        self._logger.debug(
-            "Finished looking up for a SAML token: {0}".format(credential)
-        )
+        self._logger.debug(f"Finished looking up for a SAML token: {credential}")
 
         return credential

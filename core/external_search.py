@@ -667,7 +667,7 @@ class ExternalSearchIndex(HasSelfTests):
         # The self-tests:
 
         def _search_for_term():
-            titles = [("%s (%s)" % (x.sort_title, x.sort_author)) for x in _works()]
+            titles = [(f"{x.sort_title} ({x.sort_author})") for x in _works()]
             return titles
 
         yield self.run_test(
@@ -724,7 +724,7 @@ class ExternalSearchIndex(HasSelfTests):
         yield self.run_test("Total number of documents per collection:", _collections)
 
 
-class MappingDocument(object):
+class MappingDocument:
     """This class knows a lot about how the 'properties' section of an
     Elasticsearch mapping document (or one of its subdocuments) is
     created.
@@ -849,10 +849,10 @@ class Mapping(MappingDocument):
         this application*, which may implement the same script
         differently, on this Elasticsearch server).
         """
-        return "simplified.%s.%s" % (base_name, cls.version_name())
+        return f"simplified.{base_name}.{cls.version_name()}"
 
     def __init__(self):
-        super(Mapping, self).__init__()
+        super().__init__()
         self.filters = {}
         self.char_filters = {}
         self.normalizers = {}
@@ -951,7 +951,7 @@ class CurrentMapping(Mapping):
         AUTHOR_CHAR_FILTER_NAMES.append(name)
 
     def __init__(self):
-        super(CurrentMapping, self).__init__()
+        super().__init__()
 
         # Set up character filters.
         #
@@ -1174,7 +1174,7 @@ return champion;
 """
 
 
-class SearchBase(object):
+class SearchBase:
     """A superclass containing helper methods for creating and modifying
     Elasticsearch-dsl Query-type objects.
     """
@@ -1743,8 +1743,7 @@ class Query(SearchBase):
 
         # Ask Elasticsearch to match what was typed against
         # contributors.display_name.
-        for x in self._author_field_must_match("display_name", self.query_string):
-            yield x
+        yield from self._author_field_must_match("display_name", self.query_string)
 
         # Although almost nobody types a sort name into a search box,
         # they may copy-and-paste one. Furthermore, we may only know
@@ -1753,8 +1752,7 @@ class Query(SearchBase):
         # that against contributors.sort_name.
         sort_name = display_name_to_sort_name(self.query_string)
         if sort_name:
-            for x in self._author_field_must_match("sort_name", sort_name):
-                yield x
+            yield from self._author_field_must_match("sort_name", sort_name)
 
     def _author_field_must_match(self, base_field, query_string=None):
         """Yield queries that match either the keyword or minimally stemmed
@@ -1913,7 +1911,7 @@ class Query(SearchBase):
         return hypotheses
 
 
-class QueryParser(object):
+class QueryParser:
     """Attempt to parse filter information out of a query string.
 
     This class is where we make sense of queries like the following:
@@ -2168,7 +2166,7 @@ class Filter(SearchBase):
         customlist_restriction_sets=None,
         facets=None,
         script_fields=None,
-        **kwargs
+        **kwargs,
     ):
         """Constructor.
 
@@ -3023,7 +3021,7 @@ class SortKeyPagination(Pagination):
             search = search.update_from_dict(
                 dict(search_after=self.last_item_on_previous_page)
             )
-        return super(SortKeyPagination, self).modify_search_query(search)
+        return super().modify_search_query(search)
 
     @property
     def previous_page(self):
@@ -3061,7 +3059,7 @@ class SortKeyPagination(Pagination):
 
         :param page: A list of elasticsearch-dsl Hit objects.
         """
-        super(SortKeyPagination, self).page_loaded(page)
+        super().page_loaded(page)
         if page:
             last_item = page[-1]
             values = list(last_item.meta.sort)
@@ -3072,7 +3070,7 @@ class SortKeyPagination(Pagination):
         self.last_item_on_this_page = values
 
 
-class WorkSearchResult(object):
+class WorkSearchResult:
     """Wraps a Work object to give extra information obtained from
     ElasticSearch.
 
@@ -3196,7 +3194,7 @@ class MockMeta(dict):
         return self["_sort"]
 
 
-class MockSearchResult(object):
+class MockSearchResult:
     def __init__(self, sort_title, sort_author, meta, id):
         self.sort_title = sort_title
         self.sort_author = sort_author
@@ -3230,7 +3228,7 @@ class SearchIndexCoverageProvider(WorkPresentationProvider):
 
     def __init__(self, *args, **kwargs):
         search_index_client = kwargs.pop("search_index_client", None)
-        super(SearchIndexCoverageProvider, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.search_index_client = search_index_client or ExternalSearchIndex(self._db)
 
     def process_batch(self, works):

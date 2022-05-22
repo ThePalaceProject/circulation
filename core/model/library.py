@@ -1,4 +1,3 @@
-# encoding: utf-8
 # Library
 import logging
 from collections import Counter
@@ -228,8 +227,7 @@ class Library(Base, HasSessionCache):
     def all_collections(self):
         for collection in self.collections:
             yield collection
-            for parent in collection.parents:
-                yield parent
+            yield from collection.parents
 
     # Some specific per-library configuration settings.
 
@@ -445,7 +443,7 @@ class Library(Base, HasSessionCache):
             lines.append("-----------------------")
         for setting in settings:
             if (include_secrets or not setting.is_secret) and setting.value is not None:
-                lines.append("%s='%s'" % (setting.key, setting.value))
+                lines.append(f"{setting.key}='{setting.value}'")
 
         integrations = list(self.integrations)
         if integrations:

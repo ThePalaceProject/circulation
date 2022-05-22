@@ -20,7 +20,7 @@ from .test_controller import SettingsControllerTest
 class TestAdminAuthServices(SettingsControllerTest):
     @classmethod
     def setup_class(cls):
-        super(TestAdminAuthServices, cls).setup_class()
+        super().setup_class()
 
         initialize_database(autoinitialize=False)
 
@@ -33,7 +33,7 @@ class TestAdminAuthServices(SettingsControllerTest):
 
             # All the protocols in ExternalIntegration.ADMIN_AUTH_PROTOCOLS
             # are supported by the admin interface.
-            assert sorted([p.get("name") for p in response.get("protocols")]) == sorted(
+            assert sorted(p.get("name") for p in response.get("protocols")) == sorted(
                 ExternalIntegration.ADMIN_AUTH_PROTOCOLS
             )
 

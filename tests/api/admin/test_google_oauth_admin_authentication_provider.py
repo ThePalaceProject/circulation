@@ -20,7 +20,7 @@ from core.util.problem_detail import ProblemDetail
 
 class TestGoogleOAuthAdminAuthenticationProvider(DatabaseTest):
     def test_callback(self):
-        super(TestGoogleOAuthAdminAuthenticationProvider, self).setup_method()
+        super().setup_method()
         auth_integration, ignore = create(
             self._db,
             ExternalIntegration,
@@ -79,7 +79,7 @@ class TestGoogleOAuthAdminAuthenticationProvider(DatabaseTest):
         assert None == redirect
 
     def test_domains(self):
-        super(TestGoogleOAuthAdminAuthenticationProvider, self).setup_method()
+        super().setup_method()
         auth_integration, ignore = create(
             self._db,
             ExternalIntegration,
@@ -104,11 +104,11 @@ class TestGoogleOAuthAdminAuthenticationProvider(DatabaseTest):
             self._db, "domains", l2, auth_integration
         ).value = json.dumps(["nypl.org", "l2.org"])
 
-        assert set([self._default_library, l2]) == set(google.domains["nypl.org"])
+        assert {self._default_library, l2} == set(google.domains["nypl.org"])
         assert [l2] == google.domains["l2.org"]
 
     def test_staff_email(self):
-        super(TestGoogleOAuthAdminAuthenticationProvider, self).setup_method()
+        super().setup_method()
         auth_integration, ignore = create(
             self._db,
             ExternalIntegration,

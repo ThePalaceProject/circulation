@@ -1,4 +1,3 @@
-# encoding: utf-8
 import json
 from collections import Counter
 from unittest.mock import MagicMock
@@ -180,7 +179,7 @@ class TestLaneCreation(DatabaseTest):
         # from all three languages mentioned in its children.
         top_level = self._db.query(Lane).filter(Lane.parent == None).one()
         assert "World Languages" == top_level.display_name
-        assert set(["spa", "fre", "eng"]) == top_level.languages
+        assert {"spa", "fre", "eng"} == top_level.languages
 
         # It has two children -- one for the small English collection and
         # one for the tiny Spanish/French collection.,
@@ -217,9 +216,9 @@ class TestLaneCreation(DatabaseTest):
             assert [Edition.BOOK_MEDIUM] == x.media
 
         assert [
-            set(["All Ages", "Adults Only", "Adult"]),
-            set(["All Ages", "Adults Only", "Adult"]),
-            set(["Young Adult", "Children"]),
+            {"All Ages", "Adults Only", "Adult"},
+            {"All Ages", "Adults Only", "Adult"},
+            {"Young Adult", "Children"},
         ] == [set(x.audiences) for x in sublanes]
         assert [True, False, None] == [x.fiction for x in sublanes]
 
@@ -284,16 +283,14 @@ class TestLaneCreation(DatabaseTest):
         # We have five top-level lanes for the large collection,
         # a top-level lane for each small collection, and a lane
         # for everything left over.
-        assert set(
-            [
-                "Fiction",
-                "Nonfiction",
-                "Young Adult Fiction",
-                "Young Adult Nonfiction",
-                "Children and Middle Grade",
-                "World Languages",
-            ]
-        ) == set([x.display_name for x in lanes])
+        assert {
+            "Fiction",
+            "Nonfiction",
+            "Young Adult Fiction",
+            "Young Adult Nonfiction",
+            "Children and Middle Grade",
+            "World Languages",
+        } == {x.display_name for x in lanes}
 
         [english_fiction_lane] = [x for x in lanes if x.display_name == "Fiction"]
         assert 0 == english_fiction_lane.priority
@@ -322,8 +319,8 @@ class TestLaneCreation(DatabaseTest):
             tiny=base * 0.01,
         )
         large, small, tiny = m(holdings)
-        assert set(["large1", "large2"]) == set(large)
-        assert set(["small1", "small2"]) == set(small)
+        assert {"large1", "large2"} == set(large)
+        assert {"small1", "small2"} == set(small)
         assert ["tiny"] == tiny
 
 
@@ -370,7 +367,7 @@ class TestWorkBasedLane(DatabaseTest):
             )
             return child
 
-        child1, child2 = [make_child() for i in range(2)]
+        child1, child2 = (make_child() for i in range(2))
 
         # The WorkBasedLane's restrictions are propagated to children
         # passed in to the constructor.
@@ -442,7 +439,7 @@ class TestWorkBasedLane(DatabaseTest):
 
 class TestRelatedBooksLane(DatabaseTest):
     def setup_method(self):
-        super(TestRelatedBooksLane, self).setup_method()
+        super().setup_method()
         self.work = self._work(
             with_license_pool=True, audience=Classifier.AUDIENCE_YOUNG_ADULT
         )
@@ -545,7 +542,7 @@ class TestRelatedBooksLane(DatabaseTest):
         assert 2 == len(result.children)
         sublane_contributors = list()
         [sublane_contributors.append(c.contributor) for c in result.children]
-        assert set([lane, original]) == set(sublane_contributors)
+        assert {lane, original} == set(sublane_contributors)
 
         # When there are no AUTHOR_ROLES present, contributors in
         # displayable secondary roles appear.
@@ -600,7 +597,7 @@ class LaneTest(DatabaseTest):
 
 class TestRecommendationLane(LaneTest):
     def setup_method(self):
-        super(TestRecommendationLane, self).setup_method()
+        super().setup_method()
         self.work = self._work(with_license_pool=True)
 
     def generate_mock_api(self):
@@ -748,7 +745,7 @@ class TestContributorLane(LaneTest):
         assert CachedFeed.CONTRIBUTOR_TYPE == ContributorLane.CACHED_FEED_TYPE
 
     def setup_method(self):
-        super(TestContributorLane, self).setup_method()
+        super().setup_method()
         self.contributor, i = self._contributor(
             "Lane, Lois", **dict(viaf="7", display_name="Lois Lane")
         )
@@ -865,7 +862,7 @@ class TestCrawlableCollectionBasedLane(DatabaseTest):
         lane = CrawlableCollectionBasedLane()
         lane.initialize(library)
         assert "Crawlable feed: %s" % library.name == lane.display_name
-        assert set([x.id for x in library.collections]) == set(lane.collection_ids)
+        assert {x.id for x in library.collections} == set(lane.collection_ids)
 
         # A lane for specific collection, regardless of their library
         # affiliation.
@@ -876,7 +873,7 @@ class TestCrawlableCollectionBasedLane(DatabaseTest):
             % tuple(sorted([unused_collection.name, other_library_collection.name]))
             == lane.display_name
         )
-        assert set([unused_collection.id, other_library_collection.id]) == set(
+        assert {unused_collection.id, other_library_collection.id} == set(
             lane.collection_ids
         )
 

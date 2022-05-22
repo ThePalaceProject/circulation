@@ -1,4 +1,3 @@
-# encoding: utf-8
 import datetime
 import os
 from unittest.mock import MagicMock
@@ -39,7 +38,7 @@ class TestWork(DatabaseTest):
 
         all_identifier_ids = work.all_identifier_ids()
         assert 3 == len(all_identifier_ids)
-        expect_all_ids = set([lp.identifier.id, lp2.identifier.id, identifier.id])
+        expect_all_ids = {lp.identifier.id, lp2.identifier.id, identifier.id}
 
         assert expect_all_ids == all_identifier_ids
 
@@ -273,18 +272,16 @@ class TestWork(DatabaseTest):
 
         wcr = WorkCoverageRecord
         success = wcr.SUCCESS
-        expect = set(
-            [
-                (wcr.CHOOSE_EDITION_OPERATION, success),
-                (wcr.CLASSIFY_OPERATION, success),
-                (wcr.SUMMARY_OPERATION, success),
-                (wcr.QUALITY_OPERATION, success),
-                (wcr.GENERATE_OPDS_OPERATION, success),
-                (wcr.GENERATE_MARC_OPERATION, success),
-                (wcr.UPDATE_SEARCH_INDEX_OPERATION, wcr.REGISTERED),
-            ]
-        )
-        assert expect == set([(x.operation, x.status) for x in records])
+        expect = {
+            (wcr.CHOOSE_EDITION_OPERATION, success),
+            (wcr.CLASSIFY_OPERATION, success),
+            (wcr.SUMMARY_OPERATION, success),
+            (wcr.QUALITY_OPERATION, success),
+            (wcr.GENERATE_OPDS_OPERATION, success),
+            (wcr.GENERATE_MARC_OPERATION, success),
+            (wcr.UPDATE_SEARCH_INDEX_OPERATION, wcr.REGISTERED),
+        }
+        assert expect == {(x.operation, x.status) for x in records}
 
         # Now mark the pool with the presentation edition as suppressed.
         # work.calculate_presentation() will call work.mark_licensepools_as_superceded(),
@@ -1159,9 +1156,9 @@ class TestWork(DatabaseTest):
         # the 'licensepools' section.
         licensepools = search_doc["licensepools"]
         assert 2 == len(licensepools)
-        assert set([x.id for x in work.license_pools]) == set(
-            [x["licensepool_id"] for x in licensepools]
-        )
+        assert {x.id for x in work.license_pools} == {
+            x["licensepool_id"] for x in licensepools
+        }
 
         # Each item in the 'licensepools' section has a variety of useful information
         # about the corresponding LicensePool.
@@ -1305,9 +1302,9 @@ class TestWork(DatabaseTest):
         pool.open_access = True
         self._db.commit()
         search_doc = work.to_search_document()
-        assert set([collection1.id, collection2.id]) == set(
-            [x["collection_id"] for x in search_doc["licensepools"]]
-        )
+        assert {collection1.id, collection2.id} == {
+            x["collection_id"] for x in search_doc["licensepools"]
+        }
 
     def test_age_appropriate_for_patron(self):
         work = self._work()
@@ -2175,20 +2172,15 @@ class TestWorkConsolidation(DatabaseTest):
         # with two different PWIDs are associated with the same work.
         work = self._work(with_license_pool=True)
         [lp1] = work.license_pools
-        assert set([lp1.presentation_edition.permanent_work_id]) == work.pwids
+        assert {lp1.presentation_edition.permanent_work_id} == work.pwids
         edition, lp2 = self._edition(with_license_pool=True)
         work.license_pools.append(lp2)
 
         # Work.pwids finds both PWIDs.
-        assert (
-            set(
-                [
-                    lp1.presentation_edition.permanent_work_id,
-                    lp2.presentation_edition.permanent_work_id,
-                ]
-            )
-            == work.pwids
-        )
+        assert {
+            lp1.presentation_edition.permanent_work_id,
+            lp2.presentation_edition.permanent_work_id,
+        } == work.pwids
 
     def test_open_access_for_permanent_work_id_no_licensepools(self):
         # There are no LicensePools, which short-circuilts
@@ -2337,7 +2329,7 @@ class TestWorkConsolidation(DatabaseTest):
         # Both LicensePools show up in the list of LicensePools that
         # should be grouped together, and both LicensePools are
         # associated with the same Work.
-        poolset = set([lp1, lp2])
+        poolset = {lp1, lp2}
         assert poolset == pools
         assert {w1: 2} == counts
 
@@ -2385,7 +2377,7 @@ class TestWorkConsolidation(DatabaseTest):
             # the set and will not be counted towards the total of eligible
             # LicensePools for its Work.
             pools, counts = m()
-            assert set([lp2]) == pools
+            assert {lp2} == pools
             assert {w1: 1} == counts
 
         # It has to be open-access.
@@ -2470,7 +2462,7 @@ class TestWorkConsolidation(DatabaseTest):
         assert [abcd_oa] == work1.license_pools
 
         # Both open-access "efgh" books are now associated with work2.
-        assert set([efgh_1, efgh_2]) == set(work2.license_pools)
+        assert {efgh_1, efgh_2} == set(work2.license_pools)
 
         # A third work has been created for the commercial edition of "abcd".
         assert abcd_commercial.work not in (work1, work2)
@@ -2676,7 +2668,7 @@ class TestWorkConsolidation(DatabaseTest):
             self._db, "abcd", Edition.BOOK_MEDIUM, "eng"
         )
         assert True == is_new
-        assert set([abcd_1, abcd_2]) == set(abcd_new.license_pools)
+        assert {abcd_1, abcd_2} == set(abcd_new.license_pools)
 
         # The old abcd_work now contains only the 'efgh' LicensePool
         # that didn't fit.
@@ -2691,7 +2683,7 @@ class TestWorkConsolidation(DatabaseTest):
             self._db, "efgh", Edition.BOOK_MEDIUM, "eng"
         )
         assert False == is_new
-        assert set([efgh_1, efgh_2]) == set(efgh_new.license_pools)
+        assert {efgh_1, efgh_2} == set(efgh_new.license_pools)
         assert efgh_new in (abcd_work, efgh_work)
 
         # The Work that was not chosen for consolidation now has no

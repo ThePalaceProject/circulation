@@ -1,9 +1,6 @@
-# encoding: utf-8
 # Admin, AdminRole
 
 from __future__ import annotations
-
-from typing import Optional
 
 import bcrypt
 from sqlalchemy import (
@@ -66,7 +63,7 @@ class Admin(Base, HasSessionCache):
         return self.password_hashed == bcrypt.hashpw(password, self.password_hashed)
 
     @classmethod
-    def authenticate(cls, _db, email: str, password: str) -> Optional["Admin"]:
+    def authenticate(cls, _db, email: str, password: str) -> Admin | None:
         """Finds an authenticated Admin by email and password
         :return: Admin or None
         """
@@ -260,7 +257,7 @@ class AdminRole(Base, HasSessionCache):
         return dict(role=self.role)
 
     def __repr__(self):
-        return "<AdminRole: role=%s library=%s admin=%s>" % (
+        return "<AdminRole: role={} library={} admin={}>".format(
             self.role,
             (self.library and self.library.short_name),
             self.admin.email,

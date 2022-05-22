@@ -24,7 +24,7 @@ from core.selftest import HasSelfTests
 from .config import CannotLoadConfiguration, IntegrationException
 
 
-class NYTAPI(object):
+class NYTAPI:
 
     DATE_FORMAT = "%Y-%m-%d"
 
@@ -147,7 +147,7 @@ class NYTBestSellerAPI(NYTAPI, HasSelfTests):
             content = json.loads(representation.content)
             return content
 
-        diagnostic = "Response from %s was: %r" % (
+        diagnostic = "Response from {} was: {!r}".format(
             url,
             representation.content.decode("utf-8") if representation.content else "",
         )
@@ -368,6 +368,4 @@ class NYTBestSellerListTitle(TitleFromExternalList):
             identifiers=other_isbns,
         )
 
-        super(NYTBestSellerListTitle, self).__init__(
-            metadata, first_appearance, most_recent_appearance, annotation
-        )
+        super().__init__(metadata, first_appearance, most_recent_appearance, annotation)

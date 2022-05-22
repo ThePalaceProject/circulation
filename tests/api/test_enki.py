@@ -45,7 +45,7 @@ class BaseEnkiTest(DatabaseTest):
         return open(path).read()
 
     def setup_method(self):
-        super(BaseEnkiTest, self).setup_method()
+        super().setup_method()
         self.api = MockEnkiAPI(self._db)
         self.collection = self.api.collection
 
@@ -696,7 +696,7 @@ class TestEnkiImport(BaseEnkiTest):
         it returns nothing, and processes every book it receives.
         """
 
-        class MockAPI(object):
+        class MockAPI:
             def __init__(self, pages):
                 """Act like an Enki API with predefined pages of results."""
                 self.pages = pages
@@ -734,7 +734,7 @@ class TestEnkiImport(BaseEnkiTest):
         EnkiAPI.updated_titles(), and then calls update_circulation().
         """
 
-        class MockAPI(object):
+        class MockAPI:
             def updated_titles(self, since):
                 self.updated_titles_called_with = since
                 yield 1
@@ -769,7 +769,7 @@ class TestEnkiImport(BaseEnkiTest):
         # circulation events encountered.
         class Mock(EnkiImport):
             def __init__(self, *args, **kwargs):
-                super(Mock, self).__init__(*args, **kwargs)
+                super().__init__(*args, **kwargs)
                 self._update_circulation_called_with = []
                 self.sizes = [1, 2]
 

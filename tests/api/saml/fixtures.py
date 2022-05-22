@@ -138,24 +138,24 @@ INCORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_SSO_SERVICE = """<?xml version="1.0"
   xmlns:shibmd="urn:mace:shibboleth:metadata:1.0"
   xmlns:xml="http://www.w3.org/XML/1998/namespace"
   xmlns:mdui="urn:oasis:names:tc:SAML:metadata:ui"
-  entityID="{0}">
+  entityID="{}">
     <IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol urn:oasis:names:tc:SAML:1.1:protocol urn:mace:shibboleth:1.0">
         <Extensions>
             <shibmd:Scope regexp="false">example.org</shibmd:Scope>
             <mdui:UIInfo>
-                <mdui:DisplayName xml:lang="en">{1}</mdui:DisplayName>
-                <mdui:DisplayName xml:lang="es">{2}</mdui:DisplayName>
-                <mdui:Description xml:lang="en">{3}</mdui:Description>
-                <mdui:InformationURL xml:lang="en">{4}</mdui:InformationURL>
-                <mdui:PrivacyStatementURL xml:lang="en">{5}</mdui:PrivacyStatementURL>
-                <mdui:Logo height="10" width="10">{6}</mdui:Logo>
+                <mdui:DisplayName xml:lang="en">{}</mdui:DisplayName>
+                <mdui:DisplayName xml:lang="es">{}</mdui:DisplayName>
+                <mdui:Description xml:lang="en">{}</mdui:Description>
+                <mdui:InformationURL xml:lang="en">{}</mdui:InformationURL>
+                <mdui:PrivacyStatementURL xml:lang="en">{}</mdui:PrivacyStatementURL>
+                <mdui:Logo height="10" width="10">{}</mdui:Logo>
             </mdui:UIInfo>
         </Extensions>
         <KeyDescriptor use="signing">
             <ds:KeyInfo>
                     <ds:X509Data>
                         <ds:X509Certificate>
-{7}
+{}
                         </ds:X509Certificate>
                     </ds:X509Data>
             </ds:KeyInfo>
@@ -164,13 +164,13 @@ INCORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_SSO_SERVICE = """<?xml version="1.0"
             <ds:KeyInfo>
                     <ds:X509Data>
                         <ds:X509Certificate>
-{8}
+{}
                         </ds:X509Certificate>
                     </ds:X509Data>
             </ds:KeyInfo>
         </KeyDescriptor>
-        <NameIDFormat>{9}</NameIDFormat>
-        <NameIDFormat>{10}</NameIDFormat>
+        <NameIDFormat>{}</NameIDFormat>
+        <NameIDFormat>{}</NameIDFormat>
     </IDPSSODescriptor>
 </EntityDescriptor>
 """.format(
@@ -200,24 +200,24 @@ INCORRECT_XML_WITH_ONE_IDP_METADATA_WITH_SSO_SERVICE_WITH_WRONG_BINDING = """<?x
   xmlns:shibmd="urn:mace:shibboleth:metadata:1.0"
   xmlns:xml="http://www.w3.org/XML/1998/namespace"
   xmlns:mdui="urn:oasis:names:tc:SAML:metadata:ui"
-  entityID="{0}">
+  entityID="{}">
     <IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol urn:oasis:names:tc:SAML:1.1:protocol urn:mace:shibboleth:1.0">
         <Extensions>
             <shibmd:Scope regexp="false">example.org</shibmd:Scope>
             <mdui:UIInfo>
-                <mdui:DisplayName xml:lang="en">{1}</mdui:DisplayName>
-                <mdui:DisplayName xml:lang="es">{2}</mdui:DisplayName>
-                <mdui:Description xml:lang="en">{3}</mdui:Description>
-                <mdui:InformationURL xml:lang="en">{4}</mdui:InformationURL>
-                <mdui:PrivacyStatementURL xml:lang="en">{5}</mdui:PrivacyStatementURL>
-                <mdui:Logo height="10" width="10">{6}</mdui:Logo>
+                <mdui:DisplayName xml:lang="en">{}</mdui:DisplayName>
+                <mdui:DisplayName xml:lang="es">{}</mdui:DisplayName>
+                <mdui:Description xml:lang="en">{}</mdui:Description>
+                <mdui:InformationURL xml:lang="en">{}</mdui:InformationURL>
+                <mdui:PrivacyStatementURL xml:lang="en">{}</mdui:PrivacyStatementURL>
+                <mdui:Logo height="10" width="10">{}</mdui:Logo>
             </mdui:UIInfo>
         </Extensions>
         <KeyDescriptor use="signing">
             <ds:KeyInfo>
                     <ds:X509Data>
                         <ds:X509Certificate>
-{7}
+{}
                         </ds:X509Certificate>
                     </ds:X509Data>
             </ds:KeyInfo>
@@ -226,16 +226,16 @@ INCORRECT_XML_WITH_ONE_IDP_METADATA_WITH_SSO_SERVICE_WITH_WRONG_BINDING = """<?x
             <ds:KeyInfo>
                     <ds:X509Data>
                         <ds:X509Certificate>
-{8}
+{}
                         </ds:X509Certificate>
                     </ds:X509Data>
             </ds:KeyInfo>
         </KeyDescriptor>
-        <NameIDFormat>{9}</NameIDFormat>
-        <NameIDFormat>{10}</NameIDFormat>
+        <NameIDFormat>{}</NameIDFormat>
+        <NameIDFormat>{}</NameIDFormat>
         <SingleSignOnService
-            Binding="{11}"
-            Location="{12}"/>
+            Binding="{}"
+            Location="{}"/>
     </IDPSSODescriptor>
 </EntityDescriptor>
 """.format(
@@ -267,13 +267,13 @@ CORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_DISPLAY_NAMES = """<?xml version="1.0"
   xmlns:shibmd="urn:mace:shibboleth:metadata:1.0"
   xmlns:xml="http://www.w3.org/XML/1998/namespace"
   xmlns:mdui="urn:oasis:names:tc:SAML:metadata:ui"
-  entityID="{0}">
+  entityID="{}">
     <IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol urn:oasis:names:tc:SAML:1.1:protocol urn:mace:shibboleth:1.0">
         <KeyDescriptor use="signing">
             <ds:KeyInfo>
                     <ds:X509Data>
                         <ds:X509Certificate>
-{1}
+{}
                         </ds:X509Certificate>
                     </ds:X509Data>
             </ds:KeyInfo>
@@ -282,16 +282,16 @@ CORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_DISPLAY_NAMES = """<?xml version="1.0"
             <ds:KeyInfo>
                     <ds:X509Data>
                         <ds:X509Certificate>
-{2}
+{}
                         </ds:X509Certificate>
                     </ds:X509Data>
             </ds:KeyInfo>
         </KeyDescriptor>
-        <NameIDFormat>{3}</NameIDFormat>
-        <NameIDFormat>{4}</NameIDFormat>
+        <NameIDFormat>{}</NameIDFormat>
+        <NameIDFormat>{}</NameIDFormat>
         <SingleSignOnService
-            Binding="{5}"
-            Location="{6}"/>
+            Binding="{}"
+            Location="{}"/>
     </IDPSSODescriptor>
 </EntityDescriptor>
 """.format(
@@ -317,24 +317,24 @@ CORRECT_XML_WITH_IDP_1 = """<?xml version="1.0" encoding="UTF-8"?>
   xmlns:shibmd="urn:mace:shibboleth:metadata:1.0"
   xmlns:xml="http://www.w3.org/XML/1998/namespace"
   xmlns:mdui="urn:oasis:names:tc:SAML:metadata:ui"
-  entityID="{0}">
+  entityID="{}">
     <IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol urn:oasis:names:tc:SAML:1.1:protocol urn:mace:shibboleth:1.0">
         <Extensions>
             <shibmd:Scope regexp="false">example.org</shibmd:Scope>
             <mdui:UIInfo>
-                <mdui:DisplayName xml:lang="en">{1}</mdui:DisplayName>
-                <mdui:DisplayName xml:lang="es">{2}</mdui:DisplayName>
-                <mdui:Description xml:lang="en">{3}</mdui:Description>
-                <mdui:InformationURL xml:lang="en">{4}</mdui:InformationURL>
-                <mdui:PrivacyStatementURL xml:lang="en">{5}</mdui:PrivacyStatementURL>
-                <mdui:Logo height="10" width="10" xml:lang="en">{6}</mdui:Logo>
+                <mdui:DisplayName xml:lang="en">{}</mdui:DisplayName>
+                <mdui:DisplayName xml:lang="es">{}</mdui:DisplayName>
+                <mdui:Description xml:lang="en">{}</mdui:Description>
+                <mdui:InformationURL xml:lang="en">{}</mdui:InformationURL>
+                <mdui:PrivacyStatementURL xml:lang="en">{}</mdui:PrivacyStatementURL>
+                <mdui:Logo height="10" width="10" xml:lang="en">{}</mdui:Logo>
             </mdui:UIInfo>
         </Extensions>
         <KeyDescriptor use="signing">
             <ds:KeyInfo>
                     <ds:X509Data>
                         <ds:X509Certificate>
-{7}
+{}
                         </ds:X509Certificate>
                     </ds:X509Data>
             </ds:KeyInfo>
@@ -343,27 +343,27 @@ CORRECT_XML_WITH_IDP_1 = """<?xml version="1.0" encoding="UTF-8"?>
             <ds:KeyInfo>
                     <ds:X509Data>
                         <ds:X509Certificate>
-{8}
+{}
                         </ds:X509Certificate>
                     </ds:X509Data>
             </ds:KeyInfo>
         </KeyDescriptor>
-        <NameIDFormat>{9}</NameIDFormat>
-        <NameIDFormat>{10}</NameIDFormat>
+        <NameIDFormat>{}</NameIDFormat>
+        <NameIDFormat>{}</NameIDFormat>
         <SingleSignOnService
             Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST-SimpleSign"
             Location="http://idp.hilbertteam.net/idp/profile/SAML2/POST-SimpleSign/SSO"/>
         <SingleSignOnService
-            Binding="{11}"
-            Location="{12}"/>
+            Binding="{}"
+            Location="{}"/>
     </IDPSSODescriptor>
     <Organization>
-      <OrganizationName xml:lang="en">{13}</OrganizationName>
-      <OrganizationName xml:lang="es">{14}</OrganizationName>
-      <OrganizationDisplayName xml:lang="en">{15}</OrganizationDisplayName>
-      <OrganizationDisplayName xml:lang="es">{16}</OrganizationDisplayName>
-      <OrganizationURL xml:lang="en">{17}</OrganizationURL>
-      <OrganizationURL xml:lang="es">{18}</OrganizationURL>
+      <OrganizationName xml:lang="en">{}</OrganizationName>
+      <OrganizationName xml:lang="es">{}</OrganizationName>
+      <OrganizationDisplayName xml:lang="en">{}</OrganizationDisplayName>
+      <OrganizationDisplayName xml:lang="es">{}</OrganizationDisplayName>
+      <OrganizationURL xml:lang="en">{}</OrganizationURL>
+      <OrganizationURL xml:lang="es">{}</OrganizationURL>
     </Organization>
 </EntityDescriptor>
 """.format(
@@ -401,24 +401,24 @@ CORRECT_XML_WITH_IDP_2 = """<?xml version="1.0" encoding="UTF-8"?>
   xmlns:shibmd="urn:mace:shibboleth:metadata:1.0"
   xmlns:xml="http://www.w3.org/XML/1998/namespace"
   xmlns:mdui="urn:oasis:names:tc:SAML:metadata:ui"
-  entityID="{0}">
+  entityID="{}">
     <IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol urn:oasis:names:tc:SAML:1.1:protocol urn:mace:shibboleth:1.0">
         <Extensions>
             <shibmd:Scope regexp="false">example.org</shibmd:Scope>
             <mdui:UIInfo>
-                <mdui:DisplayName xml:lang="en">{1}</mdui:DisplayName>
-                <mdui:DisplayName xml:lang="es">{2}</mdui:DisplayName>
-                <mdui:Description xml:lang="en">{3}</mdui:Description>
-                <mdui:InformationURL xml:lang="en">{4}</mdui:InformationURL>
-                <mdui:PrivacyStatementURL xml:lang="en">{5}</mdui:PrivacyStatementURL>
-                <mdui:Logo height="10" width="10">{6}</mdui:Logo>
+                <mdui:DisplayName xml:lang="en">{}</mdui:DisplayName>
+                <mdui:DisplayName xml:lang="es">{}</mdui:DisplayName>
+                <mdui:Description xml:lang="en">{}</mdui:Description>
+                <mdui:InformationURL xml:lang="en">{}</mdui:InformationURL>
+                <mdui:PrivacyStatementURL xml:lang="en">{}</mdui:PrivacyStatementURL>
+                <mdui:Logo height="10" width="10">{}</mdui:Logo>
             </mdui:UIInfo>
         </Extensions>
         <KeyDescriptor use="signing">
             <ds:KeyInfo>
                     <ds:X509Data>
                         <ds:X509Certificate>
-{7}
+{}
                         </ds:X509Certificate>
                     </ds:X509Data>
             </ds:KeyInfo>
@@ -427,27 +427,27 @@ CORRECT_XML_WITH_IDP_2 = """<?xml version="1.0" encoding="UTF-8"?>
             <ds:KeyInfo>
                     <ds:X509Data>
                         <ds:X509Certificate>
-{8}
+{}
                         </ds:X509Certificate>
                     </ds:X509Data>
             </ds:KeyInfo>
         </KeyDescriptor>
-        <NameIDFormat>{9}</NameIDFormat>
-        <NameIDFormat>{10}</NameIDFormat>
+        <NameIDFormat>{}</NameIDFormat>
+        <NameIDFormat>{}</NameIDFormat>
         <SingleSignOnService
             Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST-SimpleSign"
             Location="http://idp.hilbertteam.net/idp/profile/SAML2/POST-SimpleSign/SSO"/>
         <SingleSignOnService
-            Binding="{11}"
-            Location="{12}"/>
+            Binding="{}"
+            Location="{}"/>
     </IDPSSODescriptor>
     <Organization>
-      <OrganizationName xml:lang="en">{13}</OrganizationName>
-      <OrganizationName xml:lang="es">{14}</OrganizationName>
-      <OrganizationDisplayName xml:lang="en">{15}</OrganizationDisplayName>
-      <OrganizationDisplayName xml:lang="es">{16}</OrganizationDisplayName>
-      <OrganizationURL xml:lang="en">{17}</OrganizationURL>
-      <OrganizationURL xml:lang="es">{18}</OrganizationURL>
+      <OrganizationName xml:lang="en">{}</OrganizationName>
+      <OrganizationName xml:lang="es">{}</OrganizationName>
+      <OrganizationDisplayName xml:lang="en">{}</OrganizationDisplayName>
+      <OrganizationDisplayName xml:lang="es">{}</OrganizationDisplayName>
+      <OrganizationURL xml:lang="en">{}</OrganizationURL>
+      <OrganizationURL xml:lang="es">{}</OrganizationURL>
     </Organization>
 </EntityDescriptor>
 """.format(
@@ -485,24 +485,24 @@ CORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_NAME_ID_FORMAT = """<?xml version="1.0
   xmlns:shibmd="urn:mace:shibboleth:metadata:1.0"
   xmlns:xml="http://www.w3.org/XML/1998/namespace"
   xmlns:mdui="urn:oasis:names:tc:SAML:metadata:ui"
-  entityID="{0}">
+  entityID="{}">
     <IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol urn:oasis:names:tc:SAML:1.1:protocol urn:mace:shibboleth:1.0">
         <Extensions>
             <shibmd:Scope regexp="false">example.org</shibmd:Scope>
             <mdui:UIInfo>
-                <mdui:DisplayName xml:lang="en">{1}</mdui:DisplayName>
-                <mdui:DisplayName xml:lang="es">{2}</mdui:DisplayName>
-                <mdui:Description xml:lang="en">{3}</mdui:Description>
-                <mdui:InformationURL xml:lang="en">{4}</mdui:InformationURL>
-                <mdui:PrivacyStatementURL xml:lang="en">{5}</mdui:PrivacyStatementURL>
-                <mdui:Logo height="10" width="10" xml:lang="en">{6}</mdui:Logo>
+                <mdui:DisplayName xml:lang="en">{}</mdui:DisplayName>
+                <mdui:DisplayName xml:lang="es">{}</mdui:DisplayName>
+                <mdui:Description xml:lang="en">{}</mdui:Description>
+                <mdui:InformationURL xml:lang="en">{}</mdui:InformationURL>
+                <mdui:PrivacyStatementURL xml:lang="en">{}</mdui:PrivacyStatementURL>
+                <mdui:Logo height="10" width="10" xml:lang="en">{}</mdui:Logo>
             </mdui:UIInfo>
         </Extensions>
         <KeyDescriptor use="signing">
             <ds:KeyInfo>
                     <ds:X509Data>
                         <ds:X509Certificate>
-{7}
+{}
                         </ds:X509Certificate>
                     </ds:X509Data>
             </ds:KeyInfo>
@@ -511,7 +511,7 @@ CORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_NAME_ID_FORMAT = """<?xml version="1.0
             <ds:KeyInfo>
                     <ds:X509Data>
                         <ds:X509Certificate>
-{8}
+{}
                         </ds:X509Certificate>
                     </ds:X509Data>
             </ds:KeyInfo>
@@ -520,16 +520,16 @@ CORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_NAME_ID_FORMAT = """<?xml version="1.0
             Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST-SimpleSign"
             Location="http://idp.hilbertteam.net/idp/profile/SAML2/POST-SimpleSign/SSO"/>
         <SingleSignOnService
-            Binding="{9}"
-            Location="{10}"/>
+            Binding="{}"
+            Location="{}"/>
     </IDPSSODescriptor>
     <Organization>
-      <OrganizationName xml:lang="en">{11}</OrganizationName>
-      <OrganizationName xml:lang="es">{12}</OrganizationName>
-      <OrganizationDisplayName xml:lang="en">{13}</OrganizationDisplayName>
-      <OrganizationDisplayName xml:lang="es">{14}</OrganizationDisplayName>
-      <OrganizationURL xml:lang="en">{15}</OrganizationURL>
-      <OrganizationURL xml:lang="es">{16}</OrganizationURL>
+      <OrganizationName xml:lang="en">{}</OrganizationName>
+      <OrganizationName xml:lang="es">{}</OrganizationName>
+      <OrganizationDisplayName xml:lang="en">{}</OrganizationDisplayName>
+      <OrganizationDisplayName xml:lang="es">{}</OrganizationDisplayName>
+      <OrganizationURL xml:lang="en">{}</OrganizationURL>
+      <OrganizationURL xml:lang="es">{}</OrganizationURL>
     </Organization>
 </EntityDescriptor>
 """.format(
@@ -565,44 +565,44 @@ CORRECT_XML_WITH_ONE_IDP_METADATA_WITH_ONE_CERTIFICATE = """<?xml version="1.0" 
   xmlns:shibmd="urn:mace:shibboleth:metadata:1.0"
   xmlns:xml="http://www.w3.org/XML/1998/namespace"
   xmlns:mdui="urn:oasis:names:tc:SAML:metadata:ui"
-  entityID="{0}">
+  entityID="{}">
     <IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol urn:oasis:names:tc:SAML:1.1:protocol urn:mace:shibboleth:1.0">
         <Extensions>
             <shibmd:Scope regexp="false">example.org</shibmd:Scope>
             <mdui:UIInfo>
-                <mdui:DisplayName xml:lang="en">{1}</mdui:DisplayName>
-                <mdui:DisplayName xml:lang="es">{2}</mdui:DisplayName>
-                <mdui:Description xml:lang="en">{3}</mdui:Description>
-                <mdui:InformationURL xml:lang="en">{4}</mdui:InformationURL>
-                <mdui:PrivacyStatementURL xml:lang="en">{5}</mdui:PrivacyStatementURL>
-                <mdui:Logo height="10" width="10" xml:lang="en">{6}</mdui:Logo>
+                <mdui:DisplayName xml:lang="en">{}</mdui:DisplayName>
+                <mdui:DisplayName xml:lang="es">{}</mdui:DisplayName>
+                <mdui:Description xml:lang="en">{}</mdui:Description>
+                <mdui:InformationURL xml:lang="en">{}</mdui:InformationURL>
+                <mdui:PrivacyStatementURL xml:lang="en">{}</mdui:PrivacyStatementURL>
+                <mdui:Logo height="10" width="10" xml:lang="en">{}</mdui:Logo>
             </mdui:UIInfo>
         </Extensions>
         <KeyDescriptor>
             <ds:KeyInfo>
                     <ds:X509Data>
                         <ds:X509Certificate>
-{7}
+{}
                         </ds:X509Certificate>
                     </ds:X509Data>
             </ds:KeyInfo>
         </KeyDescriptor>
-        <NameIDFormat>{8}</NameIDFormat>
-        <NameIDFormat>{9}</NameIDFormat>
+        <NameIDFormat>{}</NameIDFormat>
+        <NameIDFormat>{}</NameIDFormat>
         <SingleSignOnService
             Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST-SimpleSign"
             Location="http://idp.hilbertteam.net/idp/profile/SAML2/POST-SimpleSign/SSO"/>
         <SingleSignOnService
-            Binding="{10}"
-            Location="{11}"/>
+            Binding="{}"
+            Location="{}"/>
     </IDPSSODescriptor>
     <Organization>
-      <OrganizationName xml:lang="en">{12}</OrganizationName>
-      <OrganizationName xml:lang="es">{13}</OrganizationName>
-      <OrganizationDisplayName xml:lang="en">{14}</OrganizationDisplayName>
-      <OrganizationDisplayName xml:lang="es">{15}</OrganizationDisplayName>
-      <OrganizationURL xml:lang="en">{16}</OrganizationURL>
-      <OrganizationURL xml:lang="es">{17}</OrganizationURL>
+      <OrganizationName xml:lang="en">{}</OrganizationName>
+      <OrganizationName xml:lang="es">{}</OrganizationName>
+      <OrganizationDisplayName xml:lang="en">{}</OrganizationDisplayName>
+      <OrganizationDisplayName xml:lang="es">{}</OrganizationDisplayName>
+      <OrganizationURL xml:lang="en">{}</OrganizationURL>
+      <OrganizationURL xml:lang="es">{}</OrganizationURL>
     </Organization>
 </EntityDescriptor>
 """.format(
@@ -639,20 +639,20 @@ CORRECT_XML_WITH_MULTIPLE_IDPS = """<?xml version="1.0" encoding="UTF-8"?>
     xmlns:shibmd="urn:mace:shibboleth:metadata:1.0"
     xmlns:xml="http://www.w3.org/XML/1998/namespace"
     xmlns:mdui="urn:oasis:names:tc:SAML:metadata:ui"
-    entityID="{0}">
+    entityID="{}">
     <IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol urn:oasis:names:tc:SAML:1.1:protocol urn:mace:shibboleth:1.0">
       <Extensions>
         <shibmd:Scope regexp="false">example.org</shibmd:Scope>
         <mdui:UIInfo>
-          <mdui:DisplayName xml:lang="en">{1}</mdui:DisplayName>
-          <mdui:DisplayName xml:lang="es">{2}</mdui:DisplayName>
+          <mdui:DisplayName xml:lang="en">{}</mdui:DisplayName>
+          <mdui:DisplayName xml:lang="es">{}</mdui:DisplayName>
         </mdui:UIInfo>
       </Extensions>
       <KeyDescriptor use="signing">
         <ds:KeyInfo>
           <ds:X509Data>
             <ds:X509Certificate>
-{3}
+{}
             </ds:X509Certificate>
           </ds:X509Data>
         </ds:KeyInfo>
@@ -661,27 +661,27 @@ CORRECT_XML_WITH_MULTIPLE_IDPS = """<?xml version="1.0" encoding="UTF-8"?>
         <ds:KeyInfo>
           <ds:X509Data>
             <ds:X509Certificate>
-{4}
+{}
             </ds:X509Certificate>
           </ds:X509Data>
         </ds:KeyInfo>
       </KeyDescriptor>
-      <NameIDFormat>{5}</NameIDFormat>
-      <NameIDFormat>{6}</NameIDFormat>
+      <NameIDFormat>{}</NameIDFormat>
+      <NameIDFormat>{}</NameIDFormat>
       <SingleSignOnService
         Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST-SimpleSign"
         Location="http://idp.hilbertteam.net/idp/profile/SAML2/POST-SimpleSign/SSO"/>
       <SingleSignOnService
-        Binding="{7}"
-        Location="{8}"/>
+        Binding="{}"
+        Location="{}"/>
     </IDPSSODescriptor>
     <Organization>
-      <OrganizationName xml:lang="en">{9}</OrganizationName>
-      <OrganizationName xml:lang="es">{10}</OrganizationName>
-      <OrganizationDisplayName xml:lang="en">{11}</OrganizationDisplayName>
-      <OrganizationDisplayName xml:lang="es">{12}</OrganizationDisplayName>
-      <OrganizationURL xml:lang="en">{13}</OrganizationURL>
-      <OrganizationURL xml:lang="es">{14}</OrganizationURL>
+      <OrganizationName xml:lang="en">{}</OrganizationName>
+      <OrganizationName xml:lang="es">{}</OrganizationName>
+      <OrganizationDisplayName xml:lang="en">{}</OrganizationDisplayName>
+      <OrganizationDisplayName xml:lang="es">{}</OrganizationDisplayName>
+      <OrganizationURL xml:lang="en">{}</OrganizationURL>
+      <OrganizationURL xml:lang="es">{}</OrganizationURL>
     </Organization>
   </EntityDescriptor>
   <EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata"
@@ -689,20 +689,20 @@ CORRECT_XML_WITH_MULTIPLE_IDPS = """<?xml version="1.0" encoding="UTF-8"?>
     xmlns:shibmd="urn:mace:shibboleth:metadata:1.0"
     xmlns:xml="http://www.w3.org/XML/1998/namespace"
     xmlns:mdui="urn:oasis:names:tc:SAML:metadata:ui"
-    entityID="{15}">
+    entityID="{}">
     <IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol urn:oasis:names:tc:SAML:1.1:protocol urn:mace:shibboleth:1.0">
       <Extensions>
         <shibmd:Scope regexp="false">example.org</shibmd:Scope>
         <mdui:UIInfo>
-          <mdui:DisplayName xml:lang="en">{16}</mdui:DisplayName>
-          <mdui:DisplayName xml:lang="es">{17}</mdui:DisplayName>
+          <mdui:DisplayName xml:lang="en">{}</mdui:DisplayName>
+          <mdui:DisplayName xml:lang="es">{}</mdui:DisplayName>
         </mdui:UIInfo>
       </Extensions>
       <KeyDescriptor use="signing">
         <ds:KeyInfo>
           <ds:X509Data>
             <ds:X509Certificate>
-{18}
+{}
             </ds:X509Certificate>
           </ds:X509Data>
         </ds:KeyInfo>
@@ -711,27 +711,27 @@ CORRECT_XML_WITH_MULTIPLE_IDPS = """<?xml version="1.0" encoding="UTF-8"?>
         <ds:KeyInfo>
           <ds:X509Data>
             <ds:X509Certificate>
-{19}
+{}
             </ds:X509Certificate>
           </ds:X509Data>
         </ds:KeyInfo>
       </KeyDescriptor>
-      <NameIDFormat>{20}</NameIDFormat>
-      <NameIDFormat>{21}</NameIDFormat>
+      <NameIDFormat>{}</NameIDFormat>
+      <NameIDFormat>{}</NameIDFormat>
       <SingleSignOnService
         Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST-SimpleSign"
         Location="http://idp.hilbertteam.net/idp/profile/SAML2/POST-SimpleSign/SSO"/>
       <SingleSignOnService
-        Binding="{22}"
-        Location="{23}"/>
+        Binding="{}"
+        Location="{}"/>
     </IDPSSODescriptor>
     <Organization>
-      <OrganizationName xml:lang="en">{24}</OrganizationName>
-      <OrganizationName xml:lang="es">{25}</OrganizationName>
-      <OrganizationDisplayName xml:lang="en">{26}</OrganizationDisplayName>
-      <OrganizationDisplayName xml:lang="es">{27}</OrganizationDisplayName>
-      <OrganizationURL xml:lang="en">{28}</OrganizationURL>
-      <OrganizationURL xml:lang="es">{29}</OrganizationURL>
+      <OrganizationName xml:lang="en">{}</OrganizationName>
+      <OrganizationName xml:lang="es">{}</OrganizationName>
+      <OrganizationDisplayName xml:lang="en">{}</OrganizationDisplayName>
+      <OrganizationDisplayName xml:lang="es">{}</OrganizationDisplayName>
+      <OrganizationURL xml:lang="en">{}</OrganizationURL>
+      <OrganizationURL xml:lang="es">{}</OrganizationURL>
     </Organization>
   </EntityDescriptor>
 </EntityDescriptors>
@@ -774,13 +774,13 @@ INCORRECT_XML_WITH_ONE_SP_METADATA_WITHOUT_ACS_SERVICE = """<EntityDescriptor
     xmlns:shibmd="urn:mace:shibboleth:metadata:1.0"
     xmlns:xml="http://www.w3.org/XML/1998/namespace"
     xmlns:mdui="urn:oasis:names:tc:SAML:metadata:ui"
-    entityID="{0}">
+    entityID="{}">
   <SPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol urn:oasis:names:tc:SAML:1.1:protocol urn:oasis:names:tc:SAML:1.0:protocol">
     <KeyDescriptor>
       <ds:KeyInfo>
         <ds:X509Data>
           <ds:X509Certificate>
-{1}
+{}
           </ds:X509Certificate>
         </ds:X509Data>
       </ds:KeyInfo>
@@ -903,7 +903,7 @@ FEDERATED_METADATA_WITH_VALID_UNTIL_ATTRIBUTE = """<?xml version="1.0" encoding=
     xmlns:shibmd="urn:mace:shibboleth:metadata:1.0"
     xmlns:xml="http://www.w3.org/XML/1998/namespace"
     xmlns:mdui="urn:oasis:names:tc:SAML:metadata:ui"
-    validUntil="{0}">
+    validUntil="{}">
 </EntitiesDescriptor>
 """.format(
     FEDERATED_METADATA_VALID_UNTIL.strftime(OneLogin_Saml2_Utils.TIME_FORMAT)

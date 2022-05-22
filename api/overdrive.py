@@ -46,14 +46,15 @@ from .circulation_exceptions import *
 from .selftest import HasSelfTests, SelfTestResult
 
 
-class OverdriveAPIConstants(object):
+class OverdriveAPIConstants:
     # These are not real Overdrive formats; we use them internally so
     # we can distinguish between (e.g.) using "audiobook-overdrive"
     # to get into Overdrive Read, and using it to get a link to a
     # manifest file.
-    MANIFEST_INTERNAL_FORMATS = set(
-        ["audiobook-overdrive-manifest", "ebook-overdrive-manifest"]
-    )
+    MANIFEST_INTERNAL_FORMATS = {
+        "audiobook-overdrive-manifest",
+        "ebook-overdrive-manifest",
+    }
 
     # These formats can be delivered either as manifest files or as
     # links to websites that stream the content.
@@ -143,7 +144,7 @@ class OverdriveAPI(
     }
 
     def __init__(self, _db, collection):
-        super(OverdriveAPI, self).__init__(_db, collection)
+        super().__init__(_db, collection)
         self.overdrive_bibliographic_coverage_provider = (
             OverdriveBibliographicCoverageProvider(collection, api_class=self)
         )
@@ -272,7 +273,7 @@ class OverdriveAPI(
         generating the X-Overdrive-Scope header used by SimplyE to set up
         its own Patron Authentication.
         """
-        return "websiteid:%s authorizationname:%s" % (
+        return "websiteid:{} authorizationname:{}".format(
             self._configuration.overdrive_website_id,
             self.ils_name(library),
         )
@@ -622,7 +623,7 @@ class OverdriveAPI(
                 download_link = self.extract_download_link(
                     response, self.DEFAULT_ERROR_URL
                 )
-            except IOError as e:
+            except OSError as e:
                 # Get the loan fresh and see if that solves the problem.
                 loan = self.get_loan(patron, pin, overdrive_id)
 
@@ -635,7 +636,9 @@ class OverdriveAPI(
             )
             if not download_link:
                 raise CannotFulfill(
-                    "No download link for %s, format %s" % (overdrive_id, format_type)
+                    "No download link for {}, format {}".format(
+                        overdrive_id, format_type
+                    )
                 )
 
         if download_link:
@@ -891,9 +894,9 @@ class OverdriveAPI(
         # intention of actually using the result. This is a
         # per-library default that trashes all of its input, and
         # Overdrive has a better solution.
-        trash_everything_address = super(
-            OverdriveAPI, self
-        ).default_notification_email_address(patron, pin)
+        trash_everything_address = super().default_notification_email_address(
+            patron, pin
+        )
 
         # Instead, we will ask _Overdrive_ if this patron has a
         # preferred email address for notifications.
@@ -1213,13 +1216,13 @@ class OverdriveAPI(
 
         format_type = format.get("formatType", "(unknown)")
         if not "linkTemplates" in format:
-            raise IOError("No linkTemplates for format %s" % format_type)
+            raise OSError("No linkTemplates for format %s" % format_type)
         templates = format["linkTemplates"]
         if not "downloadLink" in templates:
-            raise IOError("No downloadLink for format %s" % format_type)
+            raise OSError("No downloadLink for format %s" % format_type)
         download_link_data = templates["downloadLink"]
         if not "href" in download_link_data:
-            raise IOError("No downloadLink href for format %s" % format_type)
+            raise OSError("No downloadLink href for format %s" % format_type)
         download_link = download_link_data["href"]
         if download_link:
             if fetch_manifest:
@@ -1244,7 +1247,7 @@ class OverdriveAPI(
         """
         # Remove any Overdrive Read authentication URL and error URL.
         for argument_name in ("odreadauthurl", "errorpageurl"):
-            argument_re = re.compile("%s={%s}&?" % (argument_name, argument_name))
+            argument_re = re.compile(f"{argument_name}={{{argument_name}}}&?")
             link = argument_re.sub("", link)
 
         # Add the contentfile=true argument.
@@ -1257,7 +1260,7 @@ class OverdriveAPI(
         return link
 
 
-class MockOverdriveResponse(object):
+class MockOverdriveResponse:
     def __init__(self, status_code, headers, content):
         self.status_code = status_code
         self.headers = headers
@@ -1301,7 +1304,7 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
         self, _db, collection, api_class=OverdriveAPI, analytics_class=Analytics
     ):
         """Constructor."""
-        super(OverdriveCirculationMonitor, self).__init__(_db, collection)
+        super().__init__(_db, collection)
         self.api = api_class(_db, collection)
         self.analytics = analytics_class(_db)
 
@@ -1386,7 +1389,7 @@ class OverdriveCollectionReaper(IdentifierSweepMonitor):
     PROTOCOL = ExternalIntegration.OVERDRIVE
 
     def __init__(self, _db, collection, api_class=OverdriveAPI):
-        super(OverdriveCollectionReaper, self).__init__(_db, collection)
+        super().__init__(_db, collection)
         self.api = api_class(_db, collection)
 
     def process_item(self, identifier):
@@ -1406,7 +1409,7 @@ class RecentOverdriveCollectionMonitor(OverdriveCirculationMonitor):
     MAXIMUM_CONSECUTIVE_UNCHANGED_BOOKS = 100
 
     def __init__(self, *args, **kwargs):
-        super(RecentOverdriveCollectionMonitor, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.consecutive_unchanged_books = 0
 
     def should_stop(self, start, api_description, is_changed):
@@ -1439,7 +1442,7 @@ class OverdriveFormatSweep(IdentifierSweepMonitor):
     PROTOCOL = ExternalIntegration.OVERDRIVE
 
     def __init__(self, _db, collection, api_class=OverdriveAPI):
-        super(OverdriveFormatSweep, self).__init__(_db, collection)
+        super().__init__(_db, collection)
         self.api = api_class(_db, collection)
 
     def process_item(self, identifier):
@@ -1503,7 +1506,7 @@ class OverdriveManifestFulfillmentInfo(FulfillmentInfo):
         overrides the normal process by which a FulfillmentInfo becomes
         a Flask response.
         """
-        super(OverdriveManifestFulfillmentInfo, self).__init__(
+        super().__init__(
             collection=collection,
             data_source_name=DataSource.OVERDRIVE,
             identifier_type=Identifier.OVERDRIVE_ID,

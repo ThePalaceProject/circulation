@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Test functionality of util/ that doesn't have its own module."""
 from collections import defaultdict
 
@@ -18,13 +17,13 @@ from core.util import (
 from core.util.median import median
 
 
-class DummyAuthor(object):
+class DummyAuthor:
     def __init__(self, name, aliases=[]):
         self.name = name
         self.aliases = aliases
 
 
-class TestMetadataSimilarity(object):
+class TestMetadataSimilarity:
     def test_identity(self):
         """Verify that we ignore the order of words in titles,
         as well as non-alphanumeric characters."""
@@ -136,7 +135,7 @@ class TestMetadataSimilarity(object):
 
     def _arrange_by_confidence_level(self, title, *other_titles):
         matches = defaultdict(list)
-        stopwords = set(["the", "a", "an"])
+        stopwords = {"the", "a", "an"}
         for other_title in other_titles:
             distance = MetadataSimilarity.histogram_distance(
                 [title], [other_title], stopwords
@@ -292,7 +291,7 @@ class TestMetadataSimilarity(object):
         assert 1 == MetadataSimilarity.author_similarity([], [])
 
 
-class TestTitleProcessor(object):
+class TestTitleProcessor:
     def test_title_processor(self):
         p = TitleProcessor.sort_title_for
         assert None == p(None)
@@ -322,7 +321,7 @@ class TestTitleProcessor(object):
         assert None == p(core_title, full_title)
 
 
-class TestEnglishDetector(object):
+class TestEnglishDetector:
     def test_proportional_bigram_difference(self):
         dutch_text = "Op haar nieuwe school leert de 17-jarige Bella (ik-figuur) een mysterieuze jongen kennen op wie ze ogenblikkelijk verliefd wordt. Hij blijkt een groot geheim te hebben. Vanaf ca. 14 jaar."
         dutch = Bigrams.from_string(dutch_text)
@@ -351,7 +350,7 @@ class TestEnglishDetector(object):
         assert round(diff, 7) == 0
 
 
-class TestMedian(object):
+class TestMedian:
     def test_median(self):
         test_set = [
             228.56,
@@ -415,7 +414,7 @@ class TestFastQueryCount(DatabaseTest):
         assert qu3.count() == fast_query_count(qu3)
 
 
-class TestSlugify(object):
+class TestSlugify:
     def test_slugify(self):
 
         # text are slugified.
@@ -432,7 +431,7 @@ class TestSlugify(object):
         assert "already-slugified" == slugify("already-slugified")
 
 
-class TestMoneyUtility(object):
+class TestMoneyUtility:
     def test_parse(self):
         p = MoneyUtility.parse
         assert Money("0", "USD") == p(None)

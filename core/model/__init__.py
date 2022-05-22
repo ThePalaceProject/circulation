@@ -1,5 +1,3 @@
-# encoding: utf-8
-
 import logging
 import os
 import warnings
@@ -129,7 +127,7 @@ def numericrange_to_string(r):
         lower += 1
     if upper == lower:
         return str(lower)
-    return "%s-%s" % (lower, upper)
+    return f"{lower}-{upper}"
 
 
 def numericrange_to_tuple(r):
@@ -152,7 +150,7 @@ def tuple_to_numericrange(t):
     return NumericRange(t[0], t[1], "[]")
 
 
-class PresentationCalculationPolicy(object):
+class PresentationCalculationPolicy:
     """Which parts of the Work or Edition's presentation
     are we actually looking to update?
     """
@@ -290,7 +288,7 @@ def dump_query(query):
 DEBUG = False
 
 
-class SessionManager(object):
+class SessionManager:
 
     # A function that calculates recursively equivalent identifiers
     # is also defined in SQL.
@@ -355,7 +353,7 @@ class SessionManager(object):
                 cls.resource_directory(), cls.RECURSIVE_EQUIVALENTS_FUNCTION
             )
             if not os.path.exists(resource_file):
-                raise IOError(
+                raise OSError(
                     "Could not load recursive equivalents function from %s: file does not exist."
                     % resource_file
                 )

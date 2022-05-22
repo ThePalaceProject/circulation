@@ -24,7 +24,7 @@ from tests.api.lcp.database_test import DatabaseTest
 
 class TestLCPServer(DatabaseTest):
     def setup_method(self):
-        super(TestLCPServer, self).setup_method()
+        super().setup_method()
 
         self._lcp_collection = self._collection(protocol=ExternalIntegration.LCP)
         self._integration = self._lcp_collection.external_integration
@@ -85,7 +85,7 @@ class TestLCPServer(DatabaseTest):
 
             with requests_mock.Mocker() as request_mock:
                 url = urllib.parse.urljoin(
-                    fixtures.LCPSERVER_URL, "/contents/{0}".format(fixtures.CONTENT_ID)
+                    fixtures.LCPSERVER_URL, f"/contents/{fixtures.CONTENT_ID}"
                 )
                 request_mock.put(url)
 
@@ -198,7 +198,7 @@ class TestLCPServer(DatabaseTest):
             with requests_mock.Mocker() as request_mock:
                 url = urllib.parse.urljoin(
                     fixtures.LCPSERVER_URL,
-                    "/contents/{0}/license".format(fixtures.CONTENT_ID),
+                    f"/contents/{fixtures.CONTENT_ID}/license",
                 )
                 request_mock.post(url, json=fixtures.LCPSERVER_LICENSE)
 

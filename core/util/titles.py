@@ -50,7 +50,7 @@ def unfluff_title(title):
         linted_title = matched_pattern.group(1)
 
     # now strip non-word characters
-    title_fluff = re.compile("[\W_]+")
+    title_fluff = re.compile(r"[\W_]+")
     linted_title = title_fluff.sub(" ", linted_title)
     # and remove double spacing that may result
     title_fluff = re.compile("[  ]+")

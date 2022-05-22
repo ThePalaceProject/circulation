@@ -56,7 +56,7 @@ _strftime = AtomFeed._strftime
 
 class TestCirculationManagerAnnotator(DatabaseTest):
     def setup_method(self):
-        super(TestCirculationManagerAnnotator, self).setup_method()
+        super().setup_method()
         self.work = self._work(with_open_access_download=True)
         self.lane = self._lane(display_name="Fantasy")
         self.annotator = CirculationManagerAnnotator(
@@ -258,7 +258,7 @@ class TestCirculationManagerAnnotator(DatabaseTest):
         # time is used. This value isn't always present -- it's only
         # calculated when the list is being _ordered_ by 'update time'.
         # Otherwise it's too slow to bother.
-        class MockHit(object):
+        class MockHit:
             def __init__(self, last_update):
                 # Store the time the way we get it from ElasticSearch --
                 # as a single-element list containing seconds since epoch.
@@ -319,7 +319,7 @@ class TestCirculationManagerAnnotator(DatabaseTest):
 
 class TestLibraryAnnotator(VendorIDTest):
     def setup_method(self):
-        super(TestLibraryAnnotator, self).setup_method()
+        super().setup_method()
         self.work = self._work(with_open_access_download=True)
 
         parent = self._lane(display_name="Fiction", languages=["eng"], fiction=True)
@@ -409,15 +409,15 @@ class TestLibraryAnnotator(VendorIDTest):
 
         # There are three help links using different protocols.
         help_links = [x.attrib["href"] for x in mock_feed if x.attrib["rel"] == "help"]
-        assert set(["mailto:help@me", "http://help/", "uri:help"]) == set(help_links)
+        assert {"mailto:help@me", "http://help/", "uri:help"} == set(help_links)
 
         # There are two navigation links.
         navigation_links = [x for x in mock_feed if x.attrib["rel"] == "related"]
-        assert set(["navigation"]) == set([x.attrib["role"] for x in navigation_links])
-        assert set(["http://example.com/1", "http://example.com/2"]) == set(
-            [x.attrib["href"] for x in navigation_links]
-        )
-        assert set(["one", "two"]) == set([x.attrib["title"] for x in navigation_links])
+        assert {"navigation"} == {x.attrib["role"] for x in navigation_links}
+        assert {"http://example.com/1", "http://example.com/2"} == {
+            x.attrib["href"] for x in navigation_links
+        }
+        assert {"one", "two"} == {x.attrib["title"] for x in navigation_links}
 
     def test_top_level_title(self):
         assert "Test Top Level Title" == self.annotator.top_level_title()
@@ -754,7 +754,7 @@ class TestLibraryAnnotator(VendorIDTest):
             annotator.annotate_work_entry(work, pool, edition, identifier, feed, entry)
             parsed = feedparser.parse(etree.tostring(entry))
             [entry_parsed] = parsed["entries"]
-            linksets.append(set([x["rel"] for x in entry_parsed["links"]]))
+            linksets.append({x["rel"] for x in entry_parsed["links"]})
 
         with_auth, no_auth = linksets
 
@@ -791,7 +791,7 @@ class TestLibraryAnnotator(VendorIDTest):
         annotator.annotate_work_entry(work, None, edition, identifier, feed, entry)
         parsed = feedparser.parse(etree.tostring(entry))
         [entry_parsed] = parsed["entries"]
-        links = set([x["rel"] for x in entry_parsed["links"]])
+        links = {x["rel"] for x in entry_parsed["links"]}
 
         # These links are still present.
         for expect in [
@@ -1311,13 +1311,11 @@ class TestLibraryAnnotator(VendorIDTest):
         ]
         assert 3 == len(fulfill_links)
 
-        assert set(
-            [
-                mech1.delivery_mechanism.drm_scheme_media_type,
-                mech2.delivery_mechanism.drm_scheme_media_type,
-                OPDSFeed.ENTRY_TYPE,
-            ]
-        ) == set([link["type"] for link in fulfill_links])
+        assert {
+            mech1.delivery_mechanism.drm_scheme_media_type,
+            mech2.delivery_mechanism.drm_scheme_media_type,
+            OPDSFeed.ENTRY_TYPE,
+        } == {link["type"] for link in fulfill_links}
 
         # If one of the content types is hidden, the corresponding
         # delivery mechanism does not have a link.
@@ -1326,9 +1324,10 @@ class TestLibraryAnnotator(VendorIDTest):
         feed_obj = LibraryLoanAndHoldAnnotator.active_loans_for(
             None, patron, test_mode=True
         )
-        assert set(
-            [mech2.delivery_mechanism.drm_scheme_media_type, OPDSFeed.ENTRY_TYPE]
-        ) == set([link["type"] for link in fulfill_links])
+        assert {
+            mech2.delivery_mechanism.drm_scheme_media_type,
+            OPDSFeed.ENTRY_TYPE,
+        } == {link["type"] for link in fulfill_links}
         setting.value = None
 
         # When the loan is fulfilled, there are only fulfill links for that mechanism
@@ -1350,9 +1349,10 @@ class TestLibraryAnnotator(VendorIDTest):
         ]
         assert 2 == len(fulfill_links)
 
-        assert set(
-            [mech1.delivery_mechanism.drm_scheme_media_type, OPDSFeed.ENTRY_TYPE]
-        ) == set([link["type"] for link in fulfill_links])
+        assert {
+            mech1.delivery_mechanism.drm_scheme_media_type,
+            OPDSFeed.ENTRY_TYPE,
+        } == {link["type"] for link in fulfill_links}
 
     def test_incomplete_catalog_entry_contains_an_alternate_link_to_the_complete_entry(
         self,
@@ -1805,7 +1805,7 @@ class TestLibraryAnnotator(VendorIDTest):
 
         # The vendor API for LicensePools of this type requires that a
         # delivery mechanism be chosen at the point of borrowing.
-        class MockAPI(object):
+        class MockAPI:
             SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.BORROW_STEP
 
         # This means that two different acquisition links will be
@@ -1974,7 +1974,7 @@ class TestLibraryLoanAndHoldAnnotator(DatabaseTest):
 
 class TestSharedCollectionAnnotator(DatabaseTest):
     def setup_method(self):
-        super(TestSharedCollectionAnnotator, self).setup_method()
+        super().setup_method()
         self.work = self._work(with_open_access_download=True)
         self.collection = self._collection()
         self.lane = self._lane(display_name="Fantasy")

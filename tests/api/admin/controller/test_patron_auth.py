@@ -520,11 +520,11 @@ class TestPatronAuth(SettingsControllerTest):
         class Mock(PatronAuthServicesController):
             def __init__(self, manager):
                 self.validate_formats_call_count = 0
-                super(Mock, self).__init__(manager)
+                super().__init__(manager)
 
             def validate_formats(self, settings=None, validator=None):
                 self.validate_formats_call_count += 1
-                super(Mock, self).validate_formats()
+                super().validate_formats()
 
         self.manager.admin_patron_auth_services_controller = Mock(manager)
         return self.manager.admin_patron_auth_services_controller

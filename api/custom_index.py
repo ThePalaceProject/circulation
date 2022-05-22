@@ -19,7 +19,7 @@ from core.util.opds_writer import OPDSFeed
 from .config import CannotLoadConfiguration
 
 
-class CustomIndexView(object):
+class CustomIndexView:
     """A custom view that replaces the default OPDS view for a
     library.
 

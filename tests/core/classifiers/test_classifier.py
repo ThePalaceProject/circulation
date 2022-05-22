@@ -31,7 +31,7 @@ genres = dict()
 GenreData.populate(globals(), genres, fiction_genres, nonfiction_genres)
 
 
-class TestLowercased(object):
+class TestLowercased:
     def test_constructor(self):
 
         l = Lowercased("A string")
@@ -54,7 +54,7 @@ class TestLowercased(object):
         assert "A string." == l.original
 
 
-class TestGenreData(object):
+class TestGenreData:
     def test_fiction_default(self):
         # In general, genres are restricted to either fiction or
         # nonfiction.
@@ -62,7 +62,7 @@ class TestGenreData(object):
         assert False == Science.is_fiction
 
 
-class TestClassifier(object):
+class TestClassifier:
     def test_default_target_age_for_audience(self):
 
         assert (None, None) == Classifier.default_target_age_for_audience(
@@ -162,7 +162,7 @@ class TestClassifier(object):
         assert Lowercased("Foo") == m("Foo")
 
 
-class TestClassifierLookup(object):
+class TestClassifierLookup:
     def test_lookup(self):
         assert DDC == Classifier.lookup(Classifier.DDC)
         assert LCC == Classifier.lookup(Classifier.LCC)
@@ -174,7 +174,7 @@ class TestClassifierLookup(object):
         assert None == Classifier.lookup("no-such-key")
 
 
-class TestNestedSubgenres(object):
+class TestNestedSubgenres:
     def test_parents(self):
         assert [classifier.Romance] == list(classifier.Romantic_Suspense.parents)
 
@@ -186,17 +186,15 @@ class TestNestedSubgenres(object):
         #  - Epic Fantasy
         #  - Historical Fantasy
         #  - Urban Fantasy
-        assert set(
-            [
-                classifier.Fantasy,
-                classifier.Epic_Fantasy,
-                classifier.Historical_Fantasy,
-                classifier.Urban_Fantasy,
-            ]
-        ) == set(list(classifier.Fantasy.self_and_subgenres))
+        assert {
+            classifier.Fantasy,
+            classifier.Epic_Fantasy,
+            classifier.Historical_Fantasy,
+            classifier.Urban_Fantasy,
+        } == set(list(classifier.Fantasy.self_and_subgenres))
 
 
-class TestConsolidateWeights(object):
+class TestConsolidateWeights:
     def test_consolidate(self):
         # Asian History is a subcategory of the top-level category History.
         weights = dict()
@@ -302,7 +300,7 @@ class TestFreeformAudienceClassifier(DatabaseTest):
 
 class TestWorkClassifier(DatabaseTest):
     def setup_method(self):
-        super(TestWorkClassifier, self).setup_method()
+        super().setup_method()
         self.work = self._work(with_license_pool=True)
         self.identifier = self.work.presentation_edition.primary_identifier
         self.classifier = WorkClassifier(self.work, test_session=self._db)
@@ -798,7 +796,7 @@ class TestWorkClassifier(DatabaseTest):
         self.classifier.genre_weights[sf] = 18
 
         [[g1, weight], [g2, weight]] = list(self.classifier.genres(True).items())
-        assert set([g1, g2]) == set([romance.genredata, sf.genredata])
+        assert {g1, g2} == {romance.genredata, sf.genredata}
 
     def test_classify_sets_minimum_age_high_if_minimum_lower_than_maximum(self):
 
@@ -887,12 +885,12 @@ class TestWorkClassifier(DatabaseTest):
         assert set() == WorkClassifier.top_tier_values(c)
 
         c = Counter(["a"])
-        assert set(["a"]) == WorkClassifier.top_tier_values(c)
+        assert {"a"} == WorkClassifier.top_tier_values(c)
 
         c = Counter([1, 1, 1, 2, 2, 3, 4, 4, 4])
-        assert set([1, 4]) == WorkClassifier.top_tier_values(c)
+        assert {1, 4} == WorkClassifier.top_tier_values(c)
         c = Counter([1, 1, 1, 2])
-        assert set([1]) == WorkClassifier.top_tier_values(c)
+        assert {1} == WorkClassifier.top_tier_values(c)
 
     def test_duplicate_classification_ignored(self):
         """A given classification is only used once from

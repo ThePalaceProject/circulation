@@ -22,7 +22,7 @@ def wrap_func_bytes_unicode(func):
     return wrapped
 
 
-class UnicodeAwareBase64(object):
+class UnicodeAwareBase64:
     """Simulate the interface of the base64 module, but make it look as
     though base64-encoding and -decoding works on Unicode strings.
 

@@ -16,7 +16,7 @@ from api.saml.metadata.federations.validator import (
 from core.util.datetime_helpers import datetime_utc, utc_now
 
 
-class TestSAMLFederatedMetadataExpirationValidator(object):
+class TestSAMLFederatedMetadataExpirationValidator:
     @parameterized.expand(
         [
             (
@@ -91,7 +91,7 @@ class TestSAMLFederatedMetadataExpirationValidator(object):
                 validator.validate(federation, metadata)
 
 
-class TestSAMLMetadataSignatureValidator(object):
+class TestSAMLMetadataSignatureValidator:
     @parameterized.expand(
         [
             (

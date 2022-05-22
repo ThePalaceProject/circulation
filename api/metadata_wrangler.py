@@ -34,7 +34,7 @@ class MetadataWranglerCollectionMonitor(CollectionMonitor):
     """
 
     def __init__(self, _db, collection, lookup=None):
-        super(MetadataWranglerCollectionMonitor, self).__init__(_db, collection)
+        super().__init__(_db, collection)
         self.lookup = lookup or MetadataWranglerOPDSLookup.from_config(
             self._db, collection=collection
         )
@@ -213,7 +213,7 @@ class MWAuxiliaryMetadataMonitor(MetadataWranglerCollectionMonitor):
     DEFAULT_START_TIME = CollectionMonitor.NEVER
 
     def __init__(self, _db, collection, lookup=None, provider=None):
-        super(MWAuxiliaryMetadataMonitor, self).__init__(_db, collection, lookup=lookup)
+        super().__init__(_db, collection, lookup=lookup)
         self.parser = OPDSXMLParser()
         self.provider = provider or MetadataUploadCoverageProvider(
             collection, lookup_client=lookup
@@ -317,9 +317,7 @@ class BaseMetadataWranglerCoverageProvider(OPDSImportCoverageProvider):
         lookup_client = lookup_client or MetadataWranglerOPDSLookup.from_config(
             _db, collection=collection
         )
-        super(BaseMetadataWranglerCoverageProvider, self).__init__(
-            collection, lookup_client, **kwargs
-        )
+        super().__init__(collection, lookup_client, **kwargs)
         if not self.lookup_client.authenticated:
             raise CannotLoadConfiguration(
                 "Authentication for the Palace Collection Manager Metadata Wrangler "
@@ -367,9 +365,7 @@ class MetadataWranglerCollectionRegistrar(BaseMetadataWranglerCoverageProvider):
 
         # Start with all items in this Collection that have not been
         # registered.
-        uncovered = super(
-            MetadataWranglerCollectionRegistrar, self
-        ).items_that_need_coverage(identifiers, **kwargs)
+        uncovered = super().items_that_need_coverage(identifiers, **kwargs)
         # Make sure they're actually available through this
         # collection.
         uncovered = uncovered.filter(
@@ -487,7 +483,7 @@ class MetadataWranglerCollectionReaper(BaseMetadataWranglerCoverageProvider):
         # Delete all 'import' CoverageRecords that have been reaped.
         for record in qu:
             self._db.delete(record)
-        super(MetadataWranglerCollectionReaper, self).finalize_batch()
+        super().finalize_batch()
 
 
 class MetadataUploadCoverageProvider(BaseMetadataWranglerCoverageProvider):
@@ -502,7 +498,7 @@ class MetadataUploadCoverageProvider(BaseMetadataWranglerCoverageProvider):
 
     def __init__(self, *args, **kwargs):
         kwargs["registered_only"] = kwargs.get("registered_only", True)
-        super(MetadataUploadCoverageProvider, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def process_batch(self, batch):
         """Create an OPDS feed from a batch and upload it to the metadata client."""

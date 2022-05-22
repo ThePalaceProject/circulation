@@ -28,7 +28,7 @@ from core.testing import DatabaseTest
 from core.util.opds_writer import OPDSFeed, OPDSMessage
 
 
-class TestHeartbeatController(object):
+class TestHeartbeatController:
     def test_heartbeat(self):
         app = Flask(__name__)
         controller = HeartbeatController()
@@ -67,7 +67,7 @@ class TestHeartbeatController(object):
 
 class TestURNLookupHandler(DatabaseTest):
     def setup_method(self):
-        super(TestURNLookupHandler, self).setup_method()
+        super().setup_method()
         self.handler = URNLookupHandler(self._db)
 
     def assert_one_message(self, urn, code, message):
@@ -146,7 +146,7 @@ class TestURNLookupHandler(DatabaseTest):
 
 class TestURNLookupController(DatabaseTest):
     def setup_method(self):
-        super(TestURNLookupController, self).setup_method()
+        super().setup_method()
         self.controller = URNLookupController(self._db)
 
     # Set up a mock Flask app for testing the controller methods.
@@ -211,7 +211,7 @@ class TestURNLookupController(DatabaseTest):
 
 class TestLoadMethods(DatabaseTest):
     def setup_method(self):
-        super(TestLoadMethods, self).setup_method()
+        super().setup_method()
         self.app = Flask(__name__)
         Babel(self.app)
 
@@ -268,7 +268,7 @@ class TestLoadMethods(DatabaseTest):
         than Facets to call from_request() on.
         """
 
-        class MockFacets(object):
+        class MockFacets:
             @classmethod
             def from_request(*args, **kwargs):
                 facets = MockFacets()
@@ -288,7 +288,7 @@ class TestLoadMethods(DatabaseTest):
         # Verify that load_pagination_from_request insantiates a
         # pagination object of the specified class (Pagination, by
         # default.)
-        class Mock(object):
+        class Mock:
             DEFAULT_SIZE = 22
 
             @classmethod
@@ -340,9 +340,9 @@ class CanBeProblemDetailDocument(Exception):
 
 class TestErrorHandler(DatabaseTest):
     def setup_method(self):
-        super(TestErrorHandler, self).setup_method()
+        super().setup_method()
 
-        class MockManager(object):
+        class MockManager:
             """Simulate an application manager object such as
             the circulation manager's CirculationManager.
 
@@ -429,7 +429,7 @@ class TestErrorHandler(DatabaseTest):
             )
 
 
-class TestCompressibleAnnotator(object):
+class TestCompressibleAnnotator:
     """Test the @compressible annotator."""
 
     def setup_class(self):

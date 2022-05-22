@@ -1,4 +1,3 @@
-# encoding: utf-8
 import datetime
 import logging
 import time
@@ -207,7 +206,7 @@ class FacetsWithEntryPoint(BaseFacets):
             entrypoint=entrypoint,
             entrypoint_is_default=False,
             max_cache_age=self.max_cache_age,
-            **self.constructor_kwargs
+            **self.constructor_kwargs,
         )
 
     @classmethod
@@ -219,7 +218,7 @@ class FacetsWithEntryPoint(BaseFacets):
         get_header,
         worklist,
         default_entrypoint=None,
-        **extra_kwargs
+        **extra_kwargs,
     ):
         """Load a faceting object from an HTTP request.
 
@@ -254,7 +253,7 @@ class FacetsWithEntryPoint(BaseFacets):
             get_header,
             worklist,
             default_entrypoint,
-            **extra_kwargs
+            **extra_kwargs,
         )
 
     @classmethod
@@ -265,7 +264,7 @@ class FacetsWithEntryPoint(BaseFacets):
         get_header,
         worklist,
         default_entrypoint=None,
-        **extra_kwargs
+        **extra_kwargs,
     ):
         """Load a faceting object from an HTTP request.
 
@@ -291,7 +290,7 @@ class FacetsWithEntryPoint(BaseFacets):
             entrypoint=entrypoint,
             entrypoint_is_default=is_default,
             max_cache_age=max_cache_age,
-            **extra_kwargs
+            **extra_kwargs,
         )
 
     @classmethod
@@ -491,7 +490,7 @@ class Facets(FacetsWithEntryPoint):
         get_header,
         worklist,
         default_entrypoint=None,
-        **extra
+        **extra,
     ):
         """Load a faceting object from an HTTP request."""
 
@@ -515,7 +514,7 @@ class Facets(FacetsWithEntryPoint):
         enabled_facets=None,
         entrypoint=None,
         entrypoint_is_default=False,
-        **constructor_kwargs
+        **constructor_kwargs,
     ):
         """Constructor.
 
@@ -526,9 +525,7 @@ class Facets(FacetsWithEntryPoint):
         facet group is configured on a per-WorkList basis rather than
         a per-library basis.
         """
-        super(Facets, self).__init__(
-            entrypoint, entrypoint_is_default, **constructor_kwargs
-        )
+        super().__init__(entrypoint, entrypoint_is_default, **constructor_kwargs)
         collection = collection or self.default_facet(
             library, self.COLLECTION_FACET_GROUP_NAME
         )
@@ -580,8 +577,7 @@ class Facets(FacetsWithEntryPoint):
         )
 
     def items(self):
-        for k, v in list(super(Facets, self).items()):
-            yield k, v
+        yield from list(super().items())
         if self.order:
             yield (self.ORDER_FACET_GROUP_NAME, self.order)
         if self.availability:
@@ -669,7 +665,7 @@ class Facets(FacetsWithEntryPoint):
         Elasticsearch implementation of (e.g.) the meaning of the
         different availabilty statuses is kept in Filter.build().
         """
-        super(Facets, self).modify_search_filter(filter)
+        super().modify_search_filter(filter)
 
         if self.library:
             filter.minimum_featured_quality = self.library.minimum_featured_quality
@@ -696,7 +692,7 @@ class Facets(FacetsWithEntryPoint):
         """
 
         # Apply any superclass criteria
-        qu = super(Facets, self).modify_database_query(_db, qu)
+        qu = super().modify_database_query(_db, qu)
 
         available_now = or_(
             LicensePool.open_access == True,
@@ -749,9 +745,7 @@ class DefaultSortOrderFacets(Facets):
         in the list of available sort orders.
         """
         if facet_group_name != cls.ORDER_FACET_GROUP_NAME:
-            return super(DefaultSortOrderFacets, cls).available_facets(
-                config, facet_group_name
-            )
+            return super().available_facets(config, facet_group_name)
         default = config.enabled_facets(facet_group_name)
 
         # Promote the default sort order to the front of the list,
@@ -765,9 +759,7 @@ class DefaultSortOrderFacets(Facets):
     def default_facet(cls, config, facet_group_name):
         if facet_group_name == cls.ORDER_FACET_GROUP_NAME:
             return cls.DEFAULT_SORT_ORDER
-        return super(DefaultSortOrderFacets, cls).default_facet(
-            config, facet_group_name
-        )
+        return super().default_facet(config, facet_group_name)
 
 
 class DatabaseBackedFacets(Facets):
@@ -799,9 +791,7 @@ class DatabaseBackedFacets(Facets):
     @classmethod
     def default_facet(cls, config, facet_group_name):
         """Exclude search orders not available through database queries."""
-        standard_default = super(DatabaseBackedFacets, cls).default_facet(
-            config, facet_group_name
-        )
+        standard_default = super().default_facet(config, facet_group_name)
         if facet_group_name != cls.ORDER_FACET_GROUP_NAME:
             return standard_default
         if standard_default in cls.ORDER_FACET_TO_DATABASE_FIELD:
@@ -852,7 +842,7 @@ class DatabaseBackedFacets(Facets):
         """
 
         # Filter by facet criteria
-        qu = super(DatabaseBackedFacets, self).modify_database_query(_db, qu)
+        qu = super().modify_database_query(_db, qu)
 
         # Set the ORDER BY clause.
         order_by, order_distinct = self.order_by()
@@ -882,7 +872,7 @@ class FeaturedFacets(FacetsWithEntryPoint):
         :param kwargs: Other arguments may be supplied based on user
             input, but the default implementation is to ignore them.
         """
-        super(FeaturedFacets, self).__init__(entrypoint=entrypoint, **kwargs)
+        super().__init__(entrypoint=entrypoint, **kwargs)
         self.minimum_featured_quality = minimum_featured_quality
         self.random_seed = random_seed
 
@@ -914,7 +904,7 @@ class FeaturedFacets(FacetsWithEntryPoint):
         )
 
     def modify_search_filter(self, filter):
-        super(FeaturedFacets, self).modify_search_filter(filter)
+        super().modify_search_filter(filter)
         filter.minimum_featured_quality = self.minimum_featured_quality
 
     def scoring_functions(self, filter):
@@ -962,7 +952,7 @@ class SearchFacets(Facets):
             default_min_score = self.DEFAULT_MIN_SCORE
         self.min_score = kwargs.pop("min_score", default_min_score)
 
-        super(SearchFacets, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         if media == Edition.ALL_MEDIUM:
             self.media = media
         else:
@@ -1006,7 +996,7 @@ class SearchFacets(Facets):
         get_header,
         worklist,
         default_entrypoint=EverythingEntryPoint,
-        **extra
+        **extra,
     ):
 
         values = cls._values_from_request(config, get_argument, get_header)
@@ -1073,7 +1063,7 @@ class SearchFacets(Facets):
         """Modify the given external_search.Filter object
         so that it reflects this SearchFacets object.
         """
-        super(SearchFacets, self).modify_search_filter(filter)
+        super().modify_search_filter(filter)
 
         if filter.order is not None and filter.min_score is None:
             # The user wants search results to be ordered by one of
@@ -1116,8 +1106,7 @@ class SearchFacets(Facets):
         This means the EntryPoint (handled by the superclass)
         as well as possible settings for 'media' and "min_score".
         """
-        for k, v in list(super(SearchFacets, self).items()):
-            yield k, v
+        yield from list(super().items())
         if self.media_argument:
             yield ("media", self.media_argument)
 
@@ -1126,12 +1115,12 @@ class SearchFacets(Facets):
 
     def navigate(self, **kwargs):
         min_score = kwargs.pop("min_score", self.min_score)
-        new_facets = super(SearchFacets, self).navigate(**kwargs)
+        new_facets = super().navigate(**kwargs)
         new_facets.min_score = min_score
         return new_facets
 
 
-class Pagination(object):
+class Pagination:
 
     DEFAULT_SIZE = 50
     DEFAULT_SEARCH_SIZE = 10
@@ -1274,7 +1263,7 @@ class Pagination(object):
         self.page_has_loaded = True
 
 
-class WorkList(object):
+class WorkList:
     """An object that can obtain a list of Work objects for use
     in generating an OPDS feed.
 
@@ -1528,7 +1517,7 @@ class WorkList(object):
         feed for that WorkList.
         """
         return sorted(
-            [x for x in self.children if x.visible],
+            (x for x in self.children if x.visible),
             key=lambda x: (x.priority, x.display_name or ""),
         )
 
@@ -1661,7 +1650,9 @@ class WorkList(object):
         This is used when caching feeds for this WorkList. For Lanes,
         the lane_id is used instead.
         """
-        return "%s-%s-%s" % (self.display_name, self.language_key, self.audience_key)
+        return "{}-{}-{}".format(
+            self.display_name, self.language_key, self.audience_key
+        )
 
     def accessible_to(self, patron):
         """As a matter of library policy, is the given `Patron` allowed
@@ -1787,7 +1778,7 @@ class WorkList(object):
         pagination=None,
         search_engine=None,
         debug=False,
-        **kwargs
+        **kwargs,
     ):
 
         """Use a search engine to obtain Work or Work-like objects that belong
@@ -2079,13 +2070,12 @@ class WorkList(object):
                 # likely because this 'lane' is a WorkList and not a
                 # Lane at all. Do a whole separate query and plug it
                 # in at this point.
-                for x in lane.groups(
+                yield from lane.groups(
                     _db,
                     include_sublanes=False,
                     pagination=pagination,
                     facets=facets,
-                ):
-                    yield x
+                )
 
     def _featured_works_with_lanes(
         self, _db, lanes, pagination, facets, search_engine, debug=False
@@ -2157,7 +2147,7 @@ class HierarchyWorkList(WorkList):
         """
 
         # All the rules of WorkList apply.
-        if not super(HierarchyWorkList, self).accessible_to(patron):
+        if not super().accessible_to(patron):
             return False
 
         if patron is None:
@@ -2512,7 +2502,7 @@ class SpecificWorkList(DatabaseBackedWorkList):
     """A WorkList that only finds specific works, identified by ID."""
 
     def __init__(self, work_ids):
-        super(SpecificWorkList, self).__init__()
+        super().__init__()
         self.work_ids = work_ids
 
     def modify_database_query_hook(self, _db, qu):
@@ -2730,7 +2720,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
             parent = Session.object_session(self).merge(parent)
 
         yield parent
-        seen = set([self, parent])
+        seen = {self, parent}
         for grandparent in parent.parentage:
             if grandparent in seen:
                 raise ValueError("Lane parentage loop detected")
@@ -2743,7 +2733,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         :param ancestor: A WorkList.
         :return: A boolean.
         """
-        if super(Lane, self).is_self_or_descendant(ancestor):
+        if super().is_self_or_descendant(ancestor):
             return True
 
         # A TopLevelWorkList won't show up in a Lane's parentage,
@@ -2902,7 +2892,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
             return CachedFeed.CACHE_FOREVER
 
         # Other than that, we have no opinion -- use the default.
-        return super(Lane, self).max_cache_age(type)
+        return super().max_cache_age(type)
 
     def update_size(self, _db, search_engine=None):
         """Update the stored estimate of the number of Works in this Lane."""
@@ -2968,7 +2958,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
             # No genres have been explicitly included, so this lane
             # includes all genres that aren't excluded.
             _db = Session.object_session(self)
-            included_ids = set([genre.id for genre in _db.query(Genre)])
+            included_ids = {genre.id for genre in _db.query(Genre)}
         genre_ids = included_ids - excluded_ids
         if not genre_ids:
             # This can happen if you create a lane where 'Epic
@@ -3174,7 +3164,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
 
         if search_target == self:
             # The actual implementation happens in WorkList.
-            m = super(Lane, self).search
+            m = super().search
         else:
             # Searches in this Lane actually go against some other WorkList.
             # Tell that object to run the search.
@@ -3188,9 +3178,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         lines.append("ID: %s" % self.id)
         lines.append("Library: %s" % self.library.short_name)
         if self.parent:
-            lines.append(
-                "Parent ID: %s (%s)" % (self.parent.id, self.parent.display_name)
-            )
+            lines.append(f"Parent ID: {self.parent.id} ({self.parent.display_name})")
         lines.append("Priority: %s" % self.priority)
         lines.append("Display name: %s" % self.display_name)
         return lines

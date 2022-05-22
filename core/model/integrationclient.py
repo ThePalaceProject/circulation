@@ -1,4 +1,3 @@
-# encoding: utf-8
 # IntegrationClient
 
 import re
@@ -43,7 +42,7 @@ class IntegrationClient(Base):
     holds = relationship("Hold", backref="integration_client")
 
     def __repr__(self):
-        return "<IntegrationClient: URL=%s ID=%s>" % (self.url, self.id)
+        return f"<IntegrationClient: URL={self.url} ID={self.id}>"
 
     @classmethod
     def for_url(cls, _db, url):

@@ -1,4 +1,3 @@
-# encoding: utf-8
 import logging
 from collections import defaultdict
 
@@ -37,7 +36,7 @@ class CustomListFromCSV(CSVMetadataImporter):
         first_appearance_field="timestamp",
         **kwargs
     ):
-        super(CustomListFromCSV, self).__init__(data_source_name, **kwargs)
+        super().__init__(data_source_name, **kwargs)
         self.foreign_identifier = list_name
         self.list_name = list_name
         self.overwrite_old_data = overwrite_old_data
@@ -143,7 +142,7 @@ class CustomListFromCSV(CSVMetadataImporter):
         return None
 
 
-class TitleFromExternalList(object):
+class TitleFromExternalList:
 
     """This class helps you convert data from external lists into Simplified
     Edition and CustomListEntry objects.
@@ -248,7 +247,7 @@ class TitleFromExternalList(object):
         return edition
 
 
-class MembershipManager(object):
+class MembershipManager:
     """Manage the membership of a custom list based on some criteria."""
 
     def __init__(self, custom_list, log=None):
@@ -308,7 +307,7 @@ class ClassificationBasedMembershipManager(MembershipManager):
     """
 
     def __init__(self, custom_list, subject_fragments):
-        super(ClassificationBasedMembershipManager, self).__init__(custom_list)
+        super().__init__(custom_list)
         self.subject_fragments = subject_fragments
 
     @property

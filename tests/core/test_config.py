@@ -21,13 +21,13 @@ class TestConfiguration(DatabaseTest):
     VERSION_FILENAME = os.path.join(root_dir, Conf.VERSION_FILENAME)
 
     def setup_method(self):
-        super(TestConfiguration, self).setup_method()
+        super().setup_method()
         self.Conf.instance = dict()
 
     def teardown_method(self):
         if os.path.exists(self.VERSION_FILENAME):
             os.remove(self.VERSION_FILENAME)
-        super(TestConfiguration, self).teardown_method()
+        super().teardown_method()
 
     def create_version_file(self, content):
         with open(self.VERSION_FILENAME, "w") as f:

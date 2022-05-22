@@ -1,5 +1,3 @@
-# coding=utf-8
-
 import datetime
 
 from webpub_manifest_parser.core.ast import (

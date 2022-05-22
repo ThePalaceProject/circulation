@@ -7,7 +7,7 @@ from api.lcp.importer import LCPImporter
 from api.lcp.server import LCPServer
 
 
-class TestLCPImporter(object):
+class TestLCPImporter:
     def test_import_book(self):
         # Arrange
         file_path = "/opt/readium/raw_books/book.epub"

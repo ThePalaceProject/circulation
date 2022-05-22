@@ -23,7 +23,7 @@ from tests.api.saml.controller_test import ControllerTest
 class TestSAMLSettingsValidator(ControllerTest):
     @classmethod
     def setup_class(cls):
-        super(TestSAMLSettingsValidator, cls).setup_class()
+        super().setup_class()
 
         initialize_database(autoinitialize=False)
 
@@ -163,7 +163,7 @@ class TestSAMLSettingsValidator(ControllerTest):
             assert expected_validation_result == result
 
 
-class TestSAMLSettingsValidatorFactory(object):
+class TestSAMLSettingsValidatorFactory:
     @parameterized.expand([("validator_using_factory_method", "api.saml.provider")])
     def test_create_can_create(self, _, protocol):
         # Arrange

@@ -1,4 +1,3 @@
-# encoding: utf-8
 import json
 
 import pytest
@@ -37,7 +36,7 @@ class OdiloAPITest(DatabaseTest):
     RECORD_ID = "00010982"
 
     def setup_method(self):
-        super(OdiloAPITest, self).setup_method()
+        super().setup_method()
         library = self._default_library
         self.patron = self._patron()
         self.patron.authorization_identifier = "0001000265"
@@ -719,7 +718,7 @@ class TestOdiloDiscoveryAPI(OdiloAPITest):
 
 class TestOdiloBibliographicCoverageProvider(OdiloAPITest):
     def setup_method(self):
-        super(TestOdiloBibliographicCoverageProvider, self).setup_method()
+        super().setup_method()
         self.provider = OdiloBibliographicCoverageProvider(
             self.collection, api_class=MockOdiloAPI
         )

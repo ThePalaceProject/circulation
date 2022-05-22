@@ -153,7 +153,7 @@ class TestLoanlikeReaperMonitor(DatabaseTest):
         # which will never be reaped.
         #
         # Holds are unaffected.
-        assert set([open_access_loan, sot_loan]) == set(inactive_patron.loans)
+        assert {open_access_loan, sot_loan} == set(inactive_patron.loans)
         assert 3 == len(inactive_patron.holds)
 
         # The active patron's loans and holds are unaffected, either

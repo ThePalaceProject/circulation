@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Test functionality of util/flask_util.py."""
 
 import datetime
@@ -12,7 +11,7 @@ from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse, Response
 from core.util.opds_writer import OPDSFeed
 
 
-class TestResponse(object):
+class TestResponse:
     def test_constructor(self):
         response = Response(
             "content",
@@ -97,7 +96,7 @@ class TestResponse(object):
         assert "some data" == str(obj)
 
 
-class TestOPDSFeedResponse(object):
+class TestOPDSFeedResponse:
     """Test the OPDS feed-specific specialization of Response."""
 
     def test_defaults(self):
@@ -129,7 +128,7 @@ class TestOPDSFeedResponse(object):
         assert 0 == do_not_cache.max_age
 
 
-class TestOPDSEntryResponse(object):
+class TestOPDSEntryResponse:
     """Test the OPDS entry-specific specialization of Response."""
 
     def test_defaults(self):

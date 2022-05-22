@@ -15,7 +15,7 @@ class BaseError(Exception):
         if inner_exception and not message:
             message = str(inner_exception)
 
-        super(BaseError, self).__init__(message)
+        super().__init__(message)
 
         self._inner_exception = str(inner_exception) if inner_exception else None
 
@@ -42,6 +42,6 @@ class BaseError(Exception):
         return str(self) == str(other)
 
     def __repr__(self):
-        return "<BaseError(message={0}, inner_exception={1})>".format(
+        return "<BaseError(message={}, inner_exception={})>".format(
             (self), self.inner_exception
         )

@@ -52,7 +52,7 @@ class ProQuestCredentialManager(SAMLCredentialManager):
         )
 
         self._logger.debug(
-            "Finished looking up for a ProQuest JWT token: {0}".format(credential)
+            f"Finished looking up for a ProQuest JWT token: {credential}"
         )
 
         if credential:
@@ -89,9 +89,7 @@ class ProQuestCredentialManager(SAMLCredentialManager):
         if not isinstance(token, str) or not token:
             raise ValueError('"token" argument must be a non-empty string')
 
-        self._logger.debug(
-            "Started saving a ProQuest JWT bearer token {0}".format(token)
-        )
+        self._logger.debug(f"Started saving a ProQuest JWT bearer token {token}")
 
         data_source = DataSource.lookup(
             db, DataSourceConstants.PROQUEST, autocreate=True
@@ -106,7 +104,7 @@ class ProQuestCredentialManager(SAMLCredentialManager):
         )
 
         self._logger.debug(
-            "Finished saving a ProQuest JWT bearer token {0}: {1} (new = {2})".format(
+            "Finished saving a ProQuest JWT bearer token {}: {} (new = {})".format(
                 token, credential, is_new
             )
         )
@@ -144,7 +142,7 @@ class ProQuestCredentialManager(SAMLCredentialManager):
             raise ValueError('"affiliation_attributes" argument must be a tuple')
 
         self._logger.debug(
-            "Started looking for SAML affiliation ID in for patron {0} in {1}".format(
+            "Started looking for SAML affiliation ID in for patron {} in {}".format(
                 patron, affiliation_attributes
             )
         )
@@ -152,27 +150,25 @@ class ProQuestCredentialManager(SAMLCredentialManager):
         saml_credential = self.lookup_saml_token_by_patron(db, patron)
 
         if not saml_credential:
-            self._logger.debug("Patron {0} does not have a SAML token".format(patron))
+            self._logger.debug(f"Patron {patron} does not have a SAML token")
             return None
 
         saml_subject = self.extract_saml_token(saml_credential)
 
         self._logger.debug(
-            "Patron {0} has the following SAML subject: {1}".format(
-                patron, saml_subject
-            )
+            f"Patron {patron} has the following SAML subject: {saml_subject}"
         )
 
         affiliation_id = None
 
         for attribute_name in affiliation_attributes:
-            self._logger.debug("Trying to find attribute {0}".format(attribute_name))
+            self._logger.debug(f"Trying to find attribute {attribute_name}")
 
             if attribute_name in saml_subject.attribute_statement.attributes:
                 attribute = saml_subject.attribute_statement.attributes[attribute_name]
 
                 self._logger.debug(
-                    "Found {0} with the following values: {1}".format(
+                    "Found {} with the following values: {}".format(
                         attribute, attribute.values
                     )
                 )
@@ -181,7 +177,7 @@ class ProQuestCredentialManager(SAMLCredentialManager):
                 break
 
         self._logger.debug(
-            "Finished looking for SAML affiliation ID in for patron {0} in {1}: {2}".format(
+            "Finished looking for SAML affiliation ID in for patron {} in {}: {}".format(
                 patron, affiliation_attributes, affiliation_id
             )
         )

@@ -46,7 +46,7 @@ class UnfulfillableWork(Exception):
     """
 
 
-class Annotator(object):
+class Annotator:
     """The Annotator knows how to present an OPDS feed in a specific
     application context.
     """
@@ -456,7 +456,7 @@ class VerboseAnnotator(Annotator):
     def annotate_work_entry(
         self, work, active_license_pool, edition, identifier, feed, entry
     ):
-        super(VerboseAnnotator, self).annotate_work_entry(
+        super().annotate_work_entry(
             work, active_license_pool, edition, identifier, feed, entry
         )
         self.add_ratings(work, entry)
@@ -511,7 +511,7 @@ class VerboseAnnotator(Annotator):
         by_scheme = defaultdict(list)
         for (scheme, term), value in list(by_scheme_and_term.items()):
             by_scheme[scheme].append(value)
-        by_scheme.update(super(VerboseAnnotator, cls).categories(work))
+        by_scheme.update(super().categories(work))
         return by_scheme
 
     @classmethod
@@ -571,7 +571,7 @@ class AcquisitionFeed(OPDSFeed):
         max_age=None,
         search_engine=None,
         search_debug=False,
-        **response_kwargs
+        **response_kwargs,
     ):
         """The acquisition feed for 'featured' items from a given lane's
         sublanes, organized into per-lane groups.
@@ -612,7 +612,7 @@ class AcquisitionFeed(OPDSFeed):
             facets=facets,
             refresher_method=refresh,
             max_age=max_age,
-            **response_kwargs
+            **response_kwargs,
         )
 
     @classmethod
@@ -715,7 +715,7 @@ class AcquisitionFeed(OPDSFeed):
         max_age=None,
         search_engine=None,
         search_debug=False,
-        **response_kwargs
+        **response_kwargs,
     ):
         """Create a feed representing one page of works from a given lane.
 
@@ -749,7 +749,7 @@ class AcquisitionFeed(OPDSFeed):
             pagination=pagination,
             facets=facets,
             refresher_method=refresh,
-            **response_kwargs
+            **response_kwargs,
         )
 
     @classmethod
@@ -1023,7 +1023,7 @@ class AcquisitionFeed(OPDSFeed):
         pagination=None,
         facets=None,
         annotator=None,
-        **response_kwargs
+        **response_kwargs,
     ):
         """Run a search against the given search engine and return
         the results as a Flask Response.
@@ -1112,7 +1112,7 @@ class AcquisitionFeed(OPDSFeed):
         force_create=False,
         raw=False,
         use_cache=True,
-        **response_kwargs
+        **response_kwargs,
     ):
         """Create a single-entry OPDS document for one specific work.
 
@@ -1214,7 +1214,7 @@ class AcquisitionFeed(OPDSFeed):
             annotator = annotator()
         self.annotator = annotator
 
-        super(AcquisitionFeed, self).__init__(title, url)
+        super().__init__(title, url)
 
         for work in works:
             self.add_entry(work)
@@ -1901,7 +1901,7 @@ class NavigationFeed(OPDSFeed):
         annotator,
         facets=None,
         max_age=None,
-        **response_kwargs
+        **response_kwargs,
     ):
         """The navigation feed with links to a given lane's sublanes.
 
@@ -1925,7 +1925,7 @@ class NavigationFeed(OPDSFeed):
             facets=facets,
             refresher_method=refresh,
             max_age=max_age,
-            **response_kwargs
+            **response_kwargs,
         )
 
     @classmethod
@@ -2018,7 +2018,7 @@ class MockAnnotator(Annotator):
         else:
             facet_string = ""
 
-        return "http://groups/%s%s" % (identifier, facet_string)
+        return f"http://groups/{identifier}{facet_string}"
 
     @classmethod
     def default_lane_url(cls):
@@ -2027,7 +2027,7 @@ class MockAnnotator(Annotator):
     @classmethod
     def facet_url(cls, facets):
         return "http://facet/" + "&".join(
-            ["%s=%s" % (k, v) for k, v in sorted(facets.items())]
+            [f"{k}={v}" for k, v in sorted(facets.items())]
         )
 
     @classmethod

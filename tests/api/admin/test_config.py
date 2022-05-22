@@ -7,7 +7,7 @@ from api.admin.config import Configuration as AdminConfig
 from api.admin.config import OperationalMode
 
 
-class TestAdminUI(object):
+class TestAdminUI:
     @staticmethod
     def _set_env(monkeypatch, key: str, value: Optional[str]):
         if value:

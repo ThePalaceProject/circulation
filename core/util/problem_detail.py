@@ -23,7 +23,7 @@ def json(type, status, title, detail=None, instance=None, debug_message=None):
     return j.dumps(d)
 
 
-class ProblemDetail(object):
+class ProblemDetail:
 
     """A common type of problem."""
 
@@ -105,7 +105,7 @@ class ProblemDetail(object):
         )
 
     def __repr__(self):
-        return "<ProblemDetail(uri={0}, title={1}, status_code={2}, detail={3}, instance={4}, debug_message={5}".format(
+        return "<ProblemDetail(uri={}, title={}, status_code={}, detail={}, instance={}, debug_message={}".format(
             self.uri,
             self.title,
             self.status_code,

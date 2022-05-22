@@ -41,7 +41,7 @@ class OPDSImportCoverageProvider(CollectionCoverageProvider):
 
         :param lookup_client: A SimplifiedOPDSLookup object.
         """
-        super(OPDSImportCoverageProvider, self).__init__(collection, **kwargs)
+        super().__init__(collection, **kwargs)
         self.lookup_client = lookup_client
 
     def process_batch(self, batch):
@@ -148,9 +148,7 @@ class MockOPDSImportCoverageProvider(OPDSImportCoverageProvider):
     DATA_SOURCE_NAME = DataSource.OA_CONTENT_SERVER
 
     def __init__(self, collection, *args, **kwargs):
-        super(MockOPDSImportCoverageProvider, self).__init__(
-            collection, None, *args, **kwargs
-        )
+        super().__init__(collection, None, *args, **kwargs)
         self.batches = []
         self.finalized = []
         self.import_results = []
@@ -160,7 +158,7 @@ class MockOPDSImportCoverageProvider(OPDSImportCoverageProvider):
 
     def finalize_license_pool(self, license_pool):
         self.finalized.append(license_pool)
-        super(MockOPDSImportCoverageProvider, self).finalize_license_pool(license_pool)
+        super().finalize_license_pool(license_pool)
 
     def lookup_and_import_batch(self, batch):
         self.batches.append(batch)

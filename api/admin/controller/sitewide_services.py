@@ -122,7 +122,7 @@ class LoggingServicesController(SitewideServicesController):
 
 class SearchServicesController(SitewideServicesController):
     def __init__(self, manager):
-        super(SearchServicesController, self).__init__(manager)
+        super().__init__(manager)
         self.type = _("search service")
 
     def process_services(self):

@@ -19,7 +19,7 @@ class EquivalencyCoverageQueries:
 
         if not _db:
             _db = Session.object_session(identifiers[0])
-        ids = list((idn.id for idn in identifiers))
+        ids = list(idn.id for idn in identifiers)
 
         # Any parent ids that touch these identifiers
         parent_ids = (

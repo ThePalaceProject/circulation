@@ -414,7 +414,7 @@ class TestOPDS(DatabaseTest):
         return r
 
     def setup_method(self):
-        super(TestOPDS, self).setup_method()
+        super().setup_method()
 
         self.fiction = self._lane("Fiction")
         self.fiction.fiction = True
@@ -817,11 +817,7 @@ class TestOPDS(DatabaseTest):
             (scheme + "Romance", "Romance"),
             (scheme + "Science%20Fiction", "Science Fiction"),
         ] == sorted(
-            [
-                (x["term"], x["label"])
-                for x in entries[0]["tags"]
-                if x["scheme"] == scheme
-            ]
+            (x["term"], x["label"]) for x in entries[0]["tags"] if x["scheme"] == scheme
         )
 
     def test_acquisition_feed_omits_works_with_no_active_license_pool(self):
@@ -844,7 +840,7 @@ class TestOPDS(DatabaseTest):
         # We have two entries...
         assert 2 == len(by_title["entries"])
         assert ["not open access", "open access"] == sorted(
-            [x["title"] for x in by_title["entries"]]
+            x["title"] for x in by_title["entries"]
         )
 
         # ...and two messages.
@@ -860,7 +856,7 @@ class TestOPDS(DatabaseTest):
 
         feed = feedparser.parse(str(work.simple_opds_entry))
         links = sorted(
-            [x["href"] for x in feed["entries"][0]["links"] if "image" in x["rel"]]
+            x["href"] for x in feed["entries"][0]["links"] if "image" in x["rel"]
         )
         assert ["http://full/a", "http://thumbnail/b"] == links
 
@@ -880,7 +876,7 @@ class TestOPDS(DatabaseTest):
 
         feed = feedparser.parse(work.simple_opds_entry)
         links = sorted(
-            [x["href"] for x in feed["entries"][0]["links"] if "image" in x["rel"]]
+            x["href"] for x in feed["entries"][0]["links"] if "image" in x["rel"]
         )
         assert ["http://bar/a", "http://foo/b"] == links
 
@@ -1170,7 +1166,7 @@ class TestOPDS(DatabaseTest):
         e1, e2, e3 = parsed["entries"]
 
         # Each entry has one and only one link.
-        [l1], [l2], [l3] = [x["links"] for x in parsed["entries"]]
+        [l1], [l2], [l3] = (x["links"] for x in parsed["entries"])
 
         # Those links are 'collection' links that classify the
         # works under their subgenres.
@@ -1449,7 +1445,7 @@ class TestAcquisitionFeed(DatabaseTest):
 
         old_entrypoint_link = AcquisitionFeed._entrypoint_link
 
-        class Mock(object):
+        class Mock:
             attrs = dict(href="the response")
 
             def __init__(self):
@@ -1920,9 +1916,7 @@ class TestAcquisitionFeed(DatabaseTest):
 
         class MockFeed(AcquisitionFeed):
             def __init__(self):
-                super(MockFeed, self).__init__(
-                    _db, "", "", [], annotator=MockAnnotator()
-                )
+                super().__init__(_db, "", "", [], annotator=MockAnnotator())
                 self.feed = []
 
         lane = self._lane(display_name="lane")
@@ -2150,11 +2144,11 @@ class TestAcquisitionFeed(DatabaseTest):
         # facet groups or facets not known to the current version of
         # the system, because it doesn't know what the links should look
         # like.
-        class MockAnnotator(object):
+        class MockAnnotator:
             def facet_url(self, new_facets):
                 return "url: " + new_facets
 
-        class MockFacets(object):
+        class MockFacets:
             @property
             def facet_groups(self):
                 """Yield a facet group+facet 4-tuple that passes the test we're
@@ -2378,10 +2372,10 @@ class TestEntrypointLinkInsertion(DatabaseTest):
     """
 
     def setup_method(self):
-        super(TestEntrypointLinkInsertion, self).setup_method()
+        super().setup_method()
 
         # Mock for AcquisitionFeed.add_entrypoint_links
-        class Mock(object):
+        class Mock:
             def add_entrypoint_links(self, *args):
                 self.called_with = args
 
@@ -2419,7 +2413,7 @@ class TestEntrypointLinkInsertion(DatabaseTest):
         AcquisitionFeed.add_entrypoint_links = self.mock.add_entrypoint_links
 
     def teardown_method(self):
-        super(TestEntrypointLinkInsertion, self).teardown_method()
+        super().teardown_method()
         AcquisitionFeed.add_entrypoint_links = self.old_add_entrypoint_links
 
     def test_groups(self):
@@ -2583,7 +2577,7 @@ class TestEntrypointLinkInsertion(DatabaseTest):
         assert first_page_url == make_link(EbooksEntryPoint)
 
 
-class TestNavigationFacets(object):
+class TestNavigationFacets:
     def test_feed_type(self):
         # If a navigation feed is built via CachedFeed.fetch, it will be
         # filed as a navigation feed.
@@ -2592,7 +2586,7 @@ class TestNavigationFacets(object):
 
 class TestNavigationFeed(DatabaseTest):
     def setup_method(self):
-        super(TestNavigationFeed, self).setup_method()
+        super().setup_method()
         self.fiction = self._lane("Fiction")
         self.fantasy = self._lane("Fantasy", parent=self.fiction)
         self.romance = self._lane("Romance", parent=self.fiction)

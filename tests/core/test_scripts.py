@@ -6,7 +6,6 @@ import stat
 import tempfile
 from io import StringIO
 from pathlib import Path
-from typing import List, Type
 
 import pytest
 from parameterized import parameterized
@@ -291,7 +290,7 @@ class TestIdentifierInputScript(DatabaseTest):
         lp2 = self._licensepool(None, data_source_name=DataSource.FEEDBOOKS)
         lp3 = self._licensepool(None, data_source_name=DataSource.FEEDBOOKS)
 
-        i1, i2, i3 = [lp.identifier for lp in [lp1, lp2, lp3]]
+        i1, i2, i3 = (lp.identifier for lp in [lp1, lp2, lp3])
         i1.type = i2.type = Identifier.URI
         source = DataSource.lookup(self._db, DataSource.FEEDBOOKS)
 
@@ -358,7 +357,7 @@ class OPDSCollectionMonitor(CollectionMonitor):
 
     def __init__(self, _db, test_argument=None, **kwargs):
         self.test_argument = test_argument
-        super(OPDSCollectionMonitor, self).__init__(_db, **kwargs)
+        super().__init__(_db, **kwargs)
 
     def run_once(self, progress):
         self.collection.ran_with_argument = self.test_argument
@@ -495,7 +494,7 @@ class TestRunCollectionMonitorScript(DatabaseTest):
         # is unaffected.
         monitors = script.monitors()
         collections = [x.collection for x in monitors]
-        assert set(collections) == set([o1, o2, o3])
+        assert set(collections) == {o1, o2, o3}
         for monitor in monitors:
             assert isinstance(monitor, OPDSCollectionMonitor)
 
@@ -658,7 +657,7 @@ class TestLaneSweeperScript(DatabaseTest):
     def test_process_library(self):
         class Mock(LaneSweeperScript):
             def __init__(self, _db):
-                super(Mock, self).__init__(_db)
+                super().__init__(_db)
                 self.considered = []
                 self.processed = []
 
@@ -681,15 +680,15 @@ class TestLaneSweeperScript(DatabaseTest):
         worklist = script.considered.pop(0)
         assert self._default_library == worklist.get_library(self._db)
         assert self._default_library.name == worklist.display_name
-        assert set([good, bad]) == set(worklist.children)
+        assert {good, bad} == set(worklist.children)
 
         # After that, every lane was considered for processing, with
         # top-level lanes considered first.
-        assert set([good, bad, good_child]) == set(script.considered)
+        assert {good, bad, good_child} == set(script.considered)
 
         # But a lane was processed only if should_process_lane
         # returned True.
-        assert set([good, good_child]) == set(script.processed)
+        assert {good, good_child} == set(script.processed)
 
 
 class TestRunCoverageProviderScript(DatabaseTest):
@@ -815,14 +814,14 @@ class TestWorkProcessingScript(DatabaseTest):
         standard_ebooks = self._work(presentation_edition=se_edition)
 
         everything = WorkProcessingScript.make_query(self._db, None, None, None)
-        assert set([g1, g2, overdrive_work, unglue_it, standard_ebooks]) == set(
+        assert {g1, g2, overdrive_work, unglue_it, standard_ebooks} == set(
             everything.all()
         )
 
         all_gutenberg = WorkProcessingScript.make_query(
             self._db, Identifier.GUTENBERG_ID, [], None
         )
-        assert set([g1, g2]) == set(all_gutenberg.all())
+        assert {g1, g2} == set(all_gutenberg.all())
 
         one_gutenberg = WorkProcessingScript.make_query(
             self._db, Identifier.GUTENBERG_ID, [g1.license_pools[0].identifier], None
@@ -991,7 +990,7 @@ class DatabaseMigrationScriptTest(DatabaseTest):
         self._db.query(Timestamp).filter(
             Timestamp.service.like("%Database Migration%")
         ).delete(synchronize_session=False)
-        super(DatabaseMigrationScriptTest, self).teardown_method()
+        super().teardown_method()
 
 
 class TestDatabaseMigrationScript(DatabaseMigrationScriptTest):
@@ -1336,11 +1335,9 @@ class TestDatabaseMigrationScript(DatabaseMigrationScriptTest):
         # confirming that the test Python files created by
         # migrations fixture have been run.
         test_generated_files = sorted(
-            [
-                f.name
-                for f in tmp_path.iterdir()
-                if f.name.startswith(("CORE", "SERVER")) and f.is_file()
-            ]
+            f.name
+            for f in tmp_path.iterdir()
+            if f.name.startswith(("CORE", "SERVER")) and f.is_file()
         )
         assert 2 == len(test_generated_files)
 
@@ -1373,11 +1370,9 @@ class TestDatabaseMigrationScript(DatabaseMigrationScriptTest):
         test_dir = os.path.split(__file__)[0]
         all_files = os.listdir(test_dir)
         test_generated_files = sorted(
-            [
-                f.name
-                for f in tmp_path.iterdir()
-                if f.name.startswith(("CORE", "SERVER")) and f.is_file()
-            ]
+            f.name
+            for f in tmp_path.iterdir()
+            if f.name.startswith(("CORE", "SERVER")) and f.is_file()
         )
 
         assert 2 == len(test_generated_files)
@@ -1644,7 +1639,7 @@ class TestConfigureSiteScript(DatabaseTest):
         assert "value1" == ConfigurationSetting.sitewide(self._db, "setting1").value
 
     def test_settings(self):
-        class TestConfig(object):
+        class TestConfig:
             SITEWIDE_SETTINGS = [
                 {"key": "setting1"},
                 {"key": "setting2"},
@@ -2198,10 +2193,10 @@ class TestCollectionArgumentsScript(DatabaseTest):
 
 
 # Mock classes used by TestOPDSImportScript
-class MockOPDSImportMonitor(object):
+class MockOPDSImportMonitor:
     """Pretend to monitor an OPDS feed for new titles."""
 
-    INSTANCES: List[MockOPDSImportMonitor] = []
+    INSTANCES: list[MockOPDSImportMonitor] = []
 
     def __init__(self, _db, collection, *args, **kwargs):
         self.collection = collection
@@ -2214,14 +2209,14 @@ class MockOPDSImportMonitor(object):
         self.was_run = True
 
 
-class MockOPDSImporter(object):
+class MockOPDSImporter:
     """Pretend to import titles from an OPDS feed."""
 
 
 class MockOPDSImportScript(OPDSImportScript):
     """Actually instantiate a monitor that will pretend to do something."""
 
-    MONITOR_CLASS: Type[OPDSImportMonitor] = MockOPDSImportMonitor  # type: ignore
+    MONITOR_CLASS: type[OPDSImportMonitor] = MockOPDSImportMonitor  # type: ignore
     IMPORTER_CLASS = MockOPDSImporter  # type: ignore
 
 
@@ -2275,7 +2270,7 @@ class MockWhereAreMyBooks(WhereAreMyBooksScript):
         # In most tests an empty mock will do for `search`.
         search = search or MockExternalSearchIndex()
 
-        super(MockWhereAreMyBooks, self).__init__(_db, output, search)
+        super().__init__(_db, output, search)
         self.output = []
 
     def out(self, s, *args):
@@ -2310,7 +2305,7 @@ class TestWhereAreMyBooksScript(DatabaseTest):
             """Used to verify that the correct methods are called."""
 
             def __init__(self, *args, **kwargs):
-                super(Mock, self).__init__(*args, **kwargs)
+                super().__init__(*args, **kwargs)
                 self.delete_cached_feeds_called = False
                 self.checked_libraries = []
                 self.explained_collections = []
@@ -2346,13 +2341,13 @@ class TestWhereAreMyBooksScript(DatabaseTest):
         script.run()
 
         # Every library in the collection was checked.
-        assert set([library1, library2]) == set(script.checked_libraries)
+        assert {library1, library2} == set(script.checked_libraries)
 
         # delete_cached_feeds() was called.
         assert True == script.delete_cached_feeds_called
 
         # Every collection in the database was explained.
-        assert set([collection1, collection2]) == set(script.explained_collections)
+        assert {collection1, collection2} == set(script.explained_collections)
 
         # There only output were the newlines after the five method
         # calls. All other output happened inside the methods we
@@ -2578,7 +2573,7 @@ class TestListCollectionMetadataIdentifiersScript(DatabaseTest):
         script.do_run()
 
         def expected(c):
-            return "(%s) %s/%s => %s\n" % (
+            return "({}) {}/{} => {}\n".format(
                 str(c.id),
                 c.name,
                 c.protocol,
@@ -2835,7 +2830,7 @@ class TestMirrorResourcesScript(DatabaseTest):
 
         # Every time process_item() is called, it's either going to ask
         # this thing to mirror the item, or it's going to decide not to.
-        class MockMirrorUtility(object):
+        class MockMirrorUtility:
             def __init__(self):
                 self.mirrored = []
 
@@ -2857,11 +2852,11 @@ class TestMirrorResourcesScript(DatabaseTest):
 
         # Resource and Hyperlink are a pain to use for real, so here
         # are some cheap mocks.
-        class MockResource(object):
+        class MockResource:
             def __init__(self, url):
                 self.url = url
 
-        class MockLink(object):
+        class MockLink:
             def __init__(self, rel, href, identifier):
                 self.rel = rel
                 self.resource = MockResource(href)
@@ -2925,7 +2920,7 @@ class TestMirrorResourcesScript(DatabaseTest):
 
 class TestRebuildSearchIndexScript(DatabaseTest):
     def test_do_run(self):
-        class MockSearchIndex(object):
+        class MockSearchIndex:
             def setup_index(self):
                 # This is where the search index is deleted and recreated.
                 self.setup_index_called = True
@@ -2956,7 +2951,7 @@ class TestRebuildSearchIndexScript(DatabaseTest):
 
         # The mock methods were called with the values we expect.
         assert True == index.setup_index_called
-        assert set([work, work2]) == set(index.bulk_update_called_with)
+        assert {work, work2} == set(index.bulk_update_called_with)
 
         # The script returned a list containing a single
         # CoverageProviderProgress object containing accurate
@@ -3028,25 +3023,25 @@ class TestUpdateCustomListSizeScript(DatabaseTest):
         assert 1 == customlist.size
 
 
-class TestWorkConsolidationScript(object):
+class TestWorkConsolidationScript:
     """TODO"""
 
 
-class TestWorkPresentationScript(object):
+class TestWorkPresentationScript:
     """TODO"""
 
 
-class TestWorkClassificationScript(object):
+class TestWorkClassificationScript:
     """TODO"""
 
 
-class TestWorkOPDSScript(object):
+class TestWorkOPDSScript:
     """TODO"""
 
 
-class TestCustomListManagementScript(object):
+class TestCustomListManagementScript:
     """TODO"""
 
 
-class TestNYTBestSellerListsScript(object):
+class TestNYTBestSellerListsScript:
     """TODO"""

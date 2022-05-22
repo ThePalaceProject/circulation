@@ -4,7 +4,7 @@ from core.lcp.credential import LCPCredentialFactory
 from core.model.configuration import ConfigurationFactory, ConfigurationStorage
 
 
-class LCPServerFactory(object):
+class LCPServerFactory:
     """Creates a new instance of LCPServer"""
 
     def create(self, integration_association):

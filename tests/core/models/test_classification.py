@@ -1,4 +1,3 @@
-# encoding: utf-8
 import pytest
 from psycopg2.extras import NumericRange
 from sqlalchemy.exc import IntegrityError

@@ -30,7 +30,7 @@ def get_target_extension(input_extension):
     elif input_extension == ".audiobook":
         target_extension = ".audiobook"
     else:
-        raise LCPError('Unknown extension "{0}"'.format(input_extension))
+        raise LCPError(f'Unknown extension "{input_extension}"')
 
     return target_extension
 

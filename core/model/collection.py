@@ -1,4 +1,3 @@
-# encoding: utf-8
 # Collection, CollectionIdentifier, CollectionMissing
 import logging
 from abc import ABCMeta, abstractmethod
@@ -187,7 +186,7 @@ class Collection(Base, HasSessionCache):
                 # The collection already exists, it just uses a different
                 # protocol than the one we asked about.
                 raise ValueError(
-                    'Collection "%s" does not use protocol "%s".' % (name, protocol)
+                    f'Collection "{name}" does not use protocol "{protocol}".'
                 )
             integration = collection.create_external_integration(protocol=protocol)
             collection.external_integration.protocol = protocol
@@ -473,8 +472,7 @@ class Collection(Base, HasSessionCache):
             _db = Session.object_session(self)
             parent = Collection.by_id(_db, self.parent_id)
             yield parent
-            for collection in parent.parents:
-                yield collection
+            yield from parent.parents
 
     @property
     def metadata_identifier(self):
@@ -607,7 +605,7 @@ class Collection(Base, HasSessionCache):
             lines.append('External account ID: "%s"' % self.external_account_id)
         for setting in sorted(integration.settings, key=lambda x: x.key):
             if (include_secrets or not setting.is_secret) and setting.value is not None:
-                lines.append('Setting "%s": "%s"' % (setting.key, setting.value))
+                lines.append(f'Setting "{setting.key}": "{setting.value}"')
         return lines
 
     def catalog_identifier(self, identifier):
@@ -908,7 +906,7 @@ collections_identifiers = Table(
 
 # Create an ORM model for the collections_identifiers join table
 # so it can be used in a bulk_insert_mappings call.
-class CollectionIdentifier(object):
+class CollectionIdentifier:
     pass
 
 

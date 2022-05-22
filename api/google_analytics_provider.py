@@ -11,7 +11,7 @@ from core.util.http import HTTP
 from .config import CannotLoadConfiguration
 
 
-class GoogleAnalyticsProvider(object):
+class GoogleAnalyticsProvider:
 
     NAME = _("Google Analytics")
     DESCRIPTION = _("How to Configure a Google Analytics Integration")

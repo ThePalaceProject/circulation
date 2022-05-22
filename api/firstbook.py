@@ -48,9 +48,7 @@ class FirstBookAuthenticationAPI(BasicAuthenticationProvider):
     log = logging.getLogger("First Book authentication API")
 
     def __init__(self, library_id, integration, analytics=None, root=None):
-        super(FirstBookAuthenticationAPI, self).__init__(
-            library_id, integration, analytics
-        )
+        super().__init__(library_id, integration, analytics)
         if not root:
             url = integration.url
             key = integration.password
@@ -111,7 +109,7 @@ class FirstBookAuthenticationAPI(BasicAuthenticationProvider):
         return requests.get(url)
 
 
-class MockFirstBookResponse(object):
+class MockFirstBookResponse:
     def __init__(self, status_code, content):
         self.status_code = status_code
         # Guarantee that the response content is always a bytestring,
@@ -134,9 +132,7 @@ class MockFirstBookAuthenticationAPI(FirstBookAuthenticationAPI):
         bad_connection=False,
         failure_status_code=None,
     ):
-        super(MockFirstBookAuthenticationAPI, self).__init__(
-            library, integration, root="http://example.com/"
-        )
+        super().__init__(library, integration, root="http://example.com/")
         self.identifier_re = None
         self.password_re = None
         self.valid = valid

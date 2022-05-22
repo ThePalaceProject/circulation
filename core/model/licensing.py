@@ -1,4 +1,3 @@
-# encoding: utf-8
 # PolicyException LicensePool, LicensePoolDeliveryMechanism, DeliveryMechanism,
 # RightsStatus
 import datetime
@@ -255,7 +254,9 @@ class LicensePool(Base):
 
     def __repr__(self):
         if self.identifier:
-            identifier = "%s/%s" % (self.identifier.type, self.identifier.identifier)
+            identifier = "{}/{}".format(
+                self.identifier.type, self.identifier.identifier
+            )
         else:
             identifier = "unknown identifier"
         return (
@@ -623,18 +624,14 @@ class LicensePool(Base):
         _db = Session.object_session(self)
 
         licenses_owned = sum(
-            [
-                l.total_remaining_loans
-                for l in self.licenses
-                if l.total_remaining_loans is not None
-            ]
+            l.total_remaining_loans
+            for l in self.licenses
+            if l.total_remaining_loans is not None
         )
         licenses_available = sum(
-            [
-                l.currently_available_loans
-                for l in self.licenses
-                if l.currently_available_loans is not None
-            ]
+            l.currently_available_loans
+            for l in self.licenses
+            if l.currently_available_loans is not None
         )
 
         holds = self.get_active_holds()
@@ -1213,7 +1210,7 @@ class LicensePool(Base):
             licensepools_changed = True
 
         # All LicensePools with a given Identifier must share a work.
-        existing_works = set([x.work for x in self.identifier.licensed_through])
+        existing_works = {x.work for x in self.identifier.licensed_through}
         if len(existing_works) > 1:
             logging.warning(
                 "LicensePools for %r have more than one Work between them. Removing them all and starting over.",
@@ -1307,8 +1304,7 @@ class LicensePool(Base):
         q = Identifier.resources_for_identifier_ids(
             _db, [self.identifier.id], open_access
         )
-        for resource in q:
-            yield resource
+        yield from q
 
     @property
     def open_access_download_url(self):
@@ -1604,7 +1600,7 @@ class LicensePoolDeliveryMechanism(Base):
         )
 
     def __repr__(self):
-        return "<LicensePoolDeliveryMechanism: data_source={0}, identifier={1}, mechanism={2}>".format(
+        return "<LicensePoolDeliveryMechanism: data_source={}, identifier={}, mechanism={}>".format(
             str(self.data_source), repr(self.identifier), repr(self.delivery_mechanism)
         )
 
@@ -1700,19 +1696,17 @@ class DeliveryMechanism(Base, HasSessionCache):
     #
     # This is primarily used when deciding which books can be imported
     # from an OPDS For Distributors collection.
-    default_client_can_fulfill_lookup = set(
-        [
-            # EPUB books
-            (MediaTypes.EPUB_MEDIA_TYPE, NO_DRM),
-            (MediaTypes.EPUB_MEDIA_TYPE, ADOBE_DRM),
-            # PDF books
-            (MediaTypes.PDF_MEDIA_TYPE, NO_DRM),
-            # Various audiobook formats
-            (None, FINDAWAY_DRM),
-            (MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, NO_DRM),
-            (MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE, LIBBY_DRM),
-        ]
-    )
+    default_client_can_fulfill_lookup = {
+        # EPUB books
+        (MediaTypes.EPUB_MEDIA_TYPE, NO_DRM),
+        (MediaTypes.EPUB_MEDIA_TYPE, ADOBE_DRM),
+        # PDF books
+        (MediaTypes.PDF_MEDIA_TYPE, NO_DRM),
+        # Various audiobook formats
+        (None, FINDAWAY_DRM),
+        (MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, NO_DRM),
+        (MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE, LIBBY_DRM),
+    }
 
     # If the default client supports a given media type with no DRM,
     # we can infer that the client _also_ supports that media type via
@@ -1735,7 +1729,7 @@ class DeliveryMechanism(Base, HasSessionCache):
             drm_scheme = "DRM-free"
         else:
             drm_scheme = self.drm_scheme
-        return "%s (%s)" % (self.content_type, drm_scheme)
+        return f"{self.content_type} ({drm_scheme})"
 
     def cache_key(self):
         return (self.content_type, self.drm_scheme)
@@ -1747,7 +1741,7 @@ class DeliveryMechanism(Base, HasSessionCache):
         else:
             fulfillable = "not fulfillable"
 
-        return "<Delivery mechanism: %s, %s)>" % (self.name, fulfillable)
+        return f"<Delivery mechanism: {self.name}, {fulfillable})>"
 
     @classmethod
     def lookup(cls, _db, content_type, drm_scheme):

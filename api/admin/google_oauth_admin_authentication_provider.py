@@ -81,7 +81,7 @@ class GoogleOAuthAdminAuthenticationProvider(AdminAuthenticationProvider):
     )
 
     def __init__(self, integration, redirect_uri, test_mode=False):
-        super(GoogleOAuthAdminAuthenticationProvider, self).__init__(integration)
+        super().__init__(integration)
         self.redirect_uri = redirect_uri
         self.test_mode = test_mode
         if self.test_mode:
@@ -191,12 +191,12 @@ class GoogleOAuthAdminAuthenticationProvider(AdminAuthenticationProvider):
         ]
 
 
-class DummyGoogleClient(object):
+class DummyGoogleClient:
     """Mock Google OAuth client for testing"""
 
     expired = False
 
-    class Credentials(object):
+    class Credentials:
         """Mock OAuth2Credentials object for testing"""
 
         access_token_expired = False

@@ -34,7 +34,7 @@ class TestProQuestOPDS2ImportScript(DatabaseTest):
         return None
 
     def setup_method(self, mock_search=True):
-        super(TestProQuestOPDS2ImportScript, self).setup_method()
+        super().setup_method()
 
         self._proquest_data_source = DataSource.lookup(
             self._db, DataSource.PROQUEST, autocreate=True

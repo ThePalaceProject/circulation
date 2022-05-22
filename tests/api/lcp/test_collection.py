@@ -21,7 +21,7 @@ from tests.api.lcp.database_test import DatabaseTest
 
 class TestLCPAPI(DatabaseTest):
     def setup_method(self, mock_search=True):
-        super(TestLCPAPI, self).setup_method()
+        super().setup_method()
 
         self._lcp_collection = self._collection(protocol=ExternalIntegration.LCP)
         self._integration = self._lcp_collection.external_integration

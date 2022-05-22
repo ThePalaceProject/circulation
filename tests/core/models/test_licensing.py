@@ -1,4 +1,3 @@
-# encoding: utf-8
 import datetime
 import json
 from typing import Callable, Optional
@@ -34,7 +33,7 @@ from core.util.datetime_helpers import utc_now
 
 class TestDeliveryMechanism(DatabaseTest):
     def setup_method(self):
-        super(TestDeliveryMechanism, self).setup_method()
+        super().setup_method()
         self.epub_no_drm, ignore = DeliveryMechanism.lookup(
             self._db, Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM
         )
@@ -228,7 +227,7 @@ class TestRightsStatus(DatabaseTest):
 
 class TestLicense(DatabaseTest):
     def setup_method(self):
-        super(TestLicense, self).setup_method()
+        super().setup_method()
         self.pool = self._licensepool(None)
 
         now = utc_now()
@@ -676,7 +675,7 @@ class TestLicensePool(DatabaseTest):
         self._db.commit()
 
         # Only the two open-access download links show up.
-        assert set([oa1, oa2]) == set(pool.open_access_links)
+        assert {oa1, oa2} == set(pool.open_access_links)
 
     def test_better_open_access_pool_than(self):
         gutenberg_1 = self._licensepool(
@@ -835,7 +834,7 @@ class TestLicensePool(DatabaseTest):
 
         # The old contributor has been removed from the presentation
         # edition, and the new contributor added.
-        assert set([jane]) == presentation.contributors
+        assert {jane} == presentation.contributors
 
     def test_circulation_changelog(self):
         edition, pool = self._edition(with_license_pool=True)
@@ -1386,7 +1385,7 @@ class TestLicensePoolDeliveryMechanism(DatabaseTest):
         # DeliveryMechanism, passing in the second DeliveryMechanism
         # plus the answer to 'are both LicensePoolDeliveryMechanisms
         # open-access?'
-        class Mock(object):
+        class Mock:
             called_with = None
 
             @classmethod

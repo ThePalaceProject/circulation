@@ -38,7 +38,7 @@ from .config import Configuration
 from .util.patron import PatronUtility
 
 
-class CirculationInfo(object):
+class CirculationInfo:
     def __init__(self, collection, data_source_name, identifier_type, identifier):
         """A loan, hold, or whatever.
 
@@ -219,9 +219,7 @@ class FulfillmentInfo(CirculationInfo):
         :param content_expires: A time after which the "next step"
             link or content will no longer be usable.
         """
-        super(FulfillmentInfo, self).__init__(
-            collection, data_source_name, identifier_type, identifier
-        )
+        super().__init__(collection, data_source_name, identifier_type, identifier)
         self.content_link = content_link
         self.content_type = content_type
         self.content = content
@@ -348,9 +346,7 @@ class LoanInfo(CirculationInfo):
         :param locked_to: A DeliveryMechanismInfo object representing the
             delivery mechanism to which this loan is 'locked'.
         """
-        super(LoanInfo, self).__init__(
-            collection, data_source_name, identifier_type, identifier
-        )
+        super().__init__(collection, data_source_name, identifier_type, identifier)
         self.start_date = start_date
         self.end_date = end_date
         self.fulfillment_info = fulfillment_info
@@ -363,7 +359,7 @@ class LoanInfo(CirculationInfo):
         else:
             fulfillment = ""
         f = "%Y/%m/%d"
-        return "<LoanInfo for %s/%s, start=%s end=%s>%s" % (
+        return "<LoanInfo for {}/{}, start={} end={}>{}".format(
             self.identifier_type,
             self.identifier,
             self.fd(self.start_date),
@@ -395,16 +391,14 @@ class HoldInfo(CirculationInfo):
         hold_position,
         external_identifier=None,
     ):
-        super(HoldInfo, self).__init__(
-            collection, data_source_name, identifier_type, identifier
-        )
+        super().__init__(collection, data_source_name, identifier_type, identifier)
         self.start_date = start_date
         self.end_date = end_date
         self.hold_position = hold_position
         self.external_identifier = external_identifier
 
     def __repr__(self):
-        return "<HoldInfo for %s/%s, start=%s end=%s, position=%s>" % (
+        return "<HoldInfo for {}/{}, start={} end={}, position={}>".format(
             self.identifier_type,
             self.identifier,
             self.fd(self.start_date),
@@ -413,7 +407,7 @@ class HoldInfo(CirculationInfo):
         )
 
 
-class BaseCirculationAPI(object):
+class BaseCirculationAPI:
     """Encapsulates logic common to all circulation APIs."""
 
     # Add to LIBRARY_SETTINGS if your circulation API is for a
@@ -669,7 +663,7 @@ class CirculationFulfillmentPostProcessor(ABC):
         raise NotImplementedError()
 
 
-class CirculationAPI(object):
+class CirculationAPI:
     """Implement basic circulation logic and abstract away the details
     between different circulation APIs behind generic operations like
     'borrow'.
@@ -739,7 +733,7 @@ class CirculationAPI(object):
                     api = api_map[collection.protocol](db, collection)
                 except CannotLoadConfiguration as exception:
                     self.log.exception(
-                        "Error loading configuration for {0}: {1}".format(
+                        "Error loading configuration for {}: {}".format(
                             collection.name, str(exception)
                         )
                     )
@@ -859,7 +853,7 @@ class CirculationAPI(object):
             signed_url = mirror.sign_url(fulfillment.content_link)
 
             self.log.info(
-                "Fulfillment link {0} has been signed and translated into {1}".format(
+                "Fulfillment link {} has been signed and translated into {}".format(
                     fulfillment.content_link, signed_url
                 )
             )
@@ -1612,7 +1606,7 @@ class CirculationAPI(object):
                 self.activity = None
                 self.exception = None
                 self.trace = None
-                super(PatronActivityThread, self).__init__()
+                super().__init__()
 
             def run(self):
                 before = time.time()

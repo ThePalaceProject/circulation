@@ -1,5 +1,3 @@
-# encoding: utf-8
-
 import pytest
 
 from core.model import get_one_or_create
@@ -232,7 +230,7 @@ class TestCustomList(DatabaseTest):
         assert w2.presentation_edition == entry2.edition
 
         assert entry1 != entry2
-        assert set([entry1, entry2]) == set(custom_list.entries)
+        assert {entry1, entry2} == set(custom_list.entries)
 
         # Adding the exact same work again won't result in a third entry.
         entry3, is_new3 = custom_list.add_entry(w1)
@@ -262,7 +260,7 @@ class TestCustomList(DatabaseTest):
         assert w2.presentation_edition == entry2.edition
 
         assert entry1 != entry2
-        assert set([entry1, entry2]) == set(custom_list.entries)
+        assert {entry1, entry2} == set(custom_list.entries)
 
         # Adding the exact same work again won't result in a third entry.
         entry3, is_new3 = custom_list.add_entry(w1)
@@ -278,9 +276,7 @@ class TestCustomList(DatabaseTest):
         first.work.coverage_records = []
         custom_list.remove_entry(first)
         assert 2 == len(custom_list.entries)
-        assert set([second, third]) == set(
-            [entry.edition for entry in custom_list.entries]
-        )
+        assert {second, third} == {entry.edition for entry in custom_list.entries}
         # And CustomList.updated and size are changed.
         assert True == (custom_list.updated > now)
         assert 2 == custom_list.size
@@ -347,7 +343,7 @@ class TestCustomList(DatabaseTest):
         edition.primary_identifier.equivalent_to(
             not_yet_equivalent.data_source, not_yet_equivalent.primary_identifier, 1
         )
-        assert set([entry, other_entry]) == set(
+        assert {entry, other_entry} == set(
             custom_list.entries_for_work(not_yet_equivalent)
         )
 

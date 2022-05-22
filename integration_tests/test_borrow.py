@@ -14,7 +14,7 @@ class TestBorrow(CirculationIntegrationTest):
         else:
             # Fifty Shades of Grey has a large number of copies available
             overdrive_id = "82cdd641-857a-45ca-8775-34eede35b238"
-        borrow_url = "%sworks/Overdrive/%s/borrow" % (self.url, overdrive_id)
+        borrow_url = f"{self.url}works/Overdrive/{overdrive_id}/borrow"
         borrow_response = requests.get(
             borrow_url, auth=HTTPBasicAuth(self.test_username, self.test_password)
         )

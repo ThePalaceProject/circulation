@@ -1,7 +1,7 @@
 from urllib.parse import ParseResult, urlencode, urlparse
 
 
-class URLUtility(object):
+class URLUtility:
     """Contains different helper methods simplifying URL construction."""
 
     @staticmethod

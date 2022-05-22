@@ -1,4 +1,3 @@
-# encoding: utf-8
 import datetime
 
 from core.model.coverage import (
@@ -591,9 +590,9 @@ class TestEquivalencyCoverageRecord(DatabaseTest):
 
         assert len(all_records) == 3
         # All equivalencies are the same
-        assert set([r.equivalency_id for r in all_records]) == set(
-            [e.id for e in self.equivalencies]
-        )
+        assert {r.equivalency_id for r in all_records} == {
+            e.id for e in self.equivalencies
+        }
 
     def test_delete_identifier(self):
         for eq in self.equivalencies:

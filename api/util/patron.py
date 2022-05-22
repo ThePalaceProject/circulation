@@ -10,7 +10,7 @@ from core.util import MoneyUtility
 from core.util.datetime_helpers import utc_now
 
 
-class PatronUtility(object):
+class PatronUtility:
     """Apply circulation-specific logic to Patron model objects."""
 
     @classmethod

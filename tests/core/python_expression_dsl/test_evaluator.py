@@ -9,7 +9,7 @@ from core.python_expression_dsl.evaluator import (
 from core.python_expression_dsl.parser import DSLParseError, DSLParser
 
 
-class Subject(object):
+class Subject:
     """Dummy object designed for testing DSLEvaluator."""
 
     def __init__(self, attributes):
@@ -41,7 +41,7 @@ class Subject(object):
         return self._attributes[index]
 
 
-class TestDSLEvaluator(object):
+class TestDSLEvaluator:
     @parameterized.expand(
         [
             ("incorrect_expression", "?", None, None, None, DSLParseError),

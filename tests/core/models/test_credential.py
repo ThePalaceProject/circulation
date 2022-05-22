@@ -1,4 +1,3 @@
-# encoding: utf-8
 import datetime
 
 import pytest
@@ -296,7 +295,7 @@ class TestDelegatedPatronIdentifier(DatabaseTest):
 
 class TestUniquenessConstraints(DatabaseTest):
     def setup_method(self):
-        super(TestUniquenessConstraints, self).setup_method()
+        super().setup_method()
         self.data_source = DataSource.lookup(self._db, DataSource.OVERDRIVE)
         self.type = "a credential type"
         self.patron = self._patron()
@@ -368,7 +367,7 @@ class TestUniquenessConstraints(DatabaseTest):
 
 class TestDRMDeviceIdentifier(DatabaseTest):
     def setup_method(self):
-        super(TestDRMDeviceIdentifier, self).setup_method()
+        super().setup_method()
         self.data_source = DataSource.lookup(self._db, DataSource.ADOBE)
         self.patron = self._patron()
         self.credential, ignore = Credential.persistent_token_create(
@@ -387,9 +386,7 @@ class TestDRMDeviceIdentifier(DatabaseTest):
 
         device_id_3, new = self.credential.register_drm_device_identifier("bar")
 
-        assert set([device_id_1, device_id_3]) == set(
-            self.credential.drm_device_identifiers
-        )
+        assert {device_id_1, device_id_3} == set(self.credential.drm_device_identifiers)
 
     def test_deregister(self):
         device, new = self.credential.register_drm_device_identifier("foo")

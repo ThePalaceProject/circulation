@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, Dict, Optional, Tuple, Type
+from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
 from .config import CannotLoadConfiguration
@@ -23,7 +23,7 @@ class MirrorUploader(metaclass=ABCMeta):
     # sitewide() or for_collection(). A subclass that wants to take
     # advantage of this should add a mapping here from its .protocol
     # to itself.
-    IMPLEMENTATION_REGISTRY: Dict[str, Type[MirrorUploader]] = {}
+    IMPLEMENTATION_REGISTRY: dict[str, type[MirrorUploader]] = {}
 
     @classmethod
     def mirror(cls, _db, storage_name=None, integration=None):
@@ -121,7 +121,7 @@ class MirrorUploader(metaclass=ABCMeta):
         self,
         representation: Representation,
         mirror_to: str,
-        collection: Optional[Collection] = None,
+        collection: Collection | None = None,
     ):
         """Mirror a single Representation.
 
@@ -192,7 +192,7 @@ class MirrorUploader(metaclass=ABCMeta):
             return False
 
     @abstractmethod
-    def split_url(self, url: str, unquote: bool = True) -> Tuple[str, str]:
+    def split_url(self, url: str, unquote: bool = True) -> tuple[str, str]:
         """Splits the URL into the components: container (bucket) and file path
 
         :param url: URL

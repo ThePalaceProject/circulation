@@ -42,19 +42,17 @@ from . import sample_data
 
 class InstrumentedMWCollectionUpdateMonitor(MWCollectionUpdateMonitor):
     def __init__(self, *args, **kwargs):
-        super(InstrumentedMWCollectionUpdateMonitor, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.imports = []
 
     def import_one_feed(self, timestamp, url):
         self.imports.append((timestamp, url))
-        return super(InstrumentedMWCollectionUpdateMonitor, self).import_one_feed(
-            timestamp, url
-        )
+        return super().import_one_feed(timestamp, url)
 
 
 class TestMWCollectionUpdateMonitor(MonitorTest):
     def setup_method(self):
-        super(TestMWCollectionUpdateMonitor, self).setup_method()
+        super().setup_method()
         self._external_integration(
             ExternalIntegration.METADATA_WRANGLER,
             ExternalIntegration.METADATA_GOAL,
@@ -76,7 +74,7 @@ class TestMWCollectionUpdateMonitor(MonitorTest):
         )
 
     def test_monitor_requires_authentication(self):
-        class Mock(object):
+        class Mock:
             authenticated = False
 
         self.monitor.lookup = Mock()
@@ -167,7 +165,7 @@ class TestMWCollectionUpdateMonitor(MonitorTest):
         assert mw_source == quality.data_source
 
         # Check the URLs we processed.
-        url1, url2 = [x[0] for x in self.lookup.requests]
+        url1, url2 = (x[0] for x in self.lookup.requests)
 
         # The first URL processed was the default one for the
         # MetadataWranglerOPDSLookup.
@@ -278,7 +276,7 @@ class TestMWCollectionUpdateMonitor(MonitorTest):
 
 class TestMWAuxiliaryMetadataMonitor(MonitorTest):
     def setup_method(self):
-        super(TestMWAuxiliaryMetadataMonitor, self).setup_method()
+        super().setup_method()
 
         self._external_integration(
             ExternalIntegration.METADATA_WRANGLER,
@@ -303,7 +301,7 @@ class TestMWAuxiliaryMetadataMonitor(MonitorTest):
         )
 
     def test_monitor_requires_authentication(self):
-        class Mock(object):
+        class Mock:
             authenticated = False
 
         self.monitor.lookup = Mock()
@@ -411,7 +409,7 @@ class MetadataWranglerCoverageProviderTest(DatabaseTest):
         return self.TEST_CLASS(self.collection, lookup, **kwargs)
 
     def setup_method(self):
-        super(MetadataWranglerCoverageProviderTest, self).setup_method()
+        super().setup_method()
         self.integration = self._external_integration(
             ExternalIntegration.METADATA_WRANGLER,
             goal=ExternalIntegration.METADATA_GOAL,
@@ -462,7 +460,7 @@ class TestBaseMetadataWranglerCoverageProvider(MetadataWranglerCoverageProviderT
         with the metadata wrangler.
         """
 
-        class UnauthenticatedLookupClient(object):
+        class UnauthenticatedLookupClient:
             authenticated = False
 
         with pytest.raises(CannotLoadConfiguration) as excinfo:
@@ -476,14 +474,12 @@ class TestBaseMetadataWranglerCoverageProvider(MetadataWranglerCoverageProviderT
         """Verify all the different types of identifiers we send
         to the metadata wrangler.
         """
-        assert set(
-            [
-                Identifier.OVERDRIVE_ID,
-                Identifier.BIBLIOTHECA_ID,
-                Identifier.AXIS_360_ID,
-                Identifier.URI,
-            ]
-        ) == set(BaseMetadataWranglerCoverageProvider.INPUT_IDENTIFIER_TYPES)
+        assert {
+            Identifier.OVERDRIVE_ID,
+            Identifier.BIBLIOTHECA_ID,
+            Identifier.AXIS_360_ID,
+            Identifier.URI,
+        } == set(BaseMetadataWranglerCoverageProvider.INPUT_IDENTIFIER_TYPES)
 
     def test_create_identifier_mapping(self):
         # Most identifiers map to themselves.
@@ -812,7 +808,7 @@ class TestMetadataWranglerCollectionRegistrar(MetadataWranglerCoverageProviderTe
 
 class MetadataWranglerCollectionManagerTest(DatabaseTest):
     def setup_method(self):
-        super(MetadataWranglerCollectionManagerTest, self).setup_method()
+        super().setup_method()
         self.integration = self._external_integration(
             ExternalIntegration.METADATA_WRANGLER,
             goal=ExternalIntegration.METADATA_GOAL,
@@ -959,7 +955,7 @@ class TestMetadataUploadCoverageProvider(DatabaseTest):
         return MetadataUploadCoverageProvider(self.collection, upload_client, **kwargs)
 
     def setup_method(self):
-        super(TestMetadataUploadCoverageProvider, self).setup_method()
+        super().setup_method()
         self.integration = self._external_integration(
             ExternalIntegration.METADATA_WRANGLER,
             goal=ExternalIntegration.METADATA_GOAL,
@@ -1009,7 +1005,7 @@ class TestMetadataUploadCoverageProvider(DatabaseTest):
         assert [edition.primary_identifier] == items
 
     def test_process_batch_uploads_metadata(self):
-        class MockMetadataClient(object):
+        class MockMetadataClient:
             metadata_feed = None
             authenticated = True
 

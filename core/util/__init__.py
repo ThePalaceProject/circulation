@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Miscellaneous utilities"""
 
 import re
@@ -73,7 +72,7 @@ def slugify(text, length_limit=None):
     return str(slug)
 
 
-class MetadataSimilarity(object):
+class MetadataSimilarity:
     """Estimate how similar two bits of metadata are."""
 
     SEPARATOR = re.compile(r"\W")
@@ -129,7 +128,7 @@ class MetadataSimilarity(object):
 
         """
         if not stopwords:
-            stopwords = set(["the", "a", "an"])
+            stopwords = {"the", "a", "an"}
 
         histogram_1 = cls.histogram(strings_1, stopwords=stopwords)
         histogram_2 = cls.histogram(strings_2, stopwords=stopwords)
@@ -204,7 +203,7 @@ class MetadataSimilarity(object):
         if title1 == None or title2 == None:
             return 0
         b1, b2, proportion = cls._word_match_proportion(
-            title1, title2, set(["a", "the", "an"])
+            title1, title2, {"a", "the", "an"}
         )
         if not b1.union(b2) in (b1, b2):
             # Penalize titles where one title is not a subset of the
@@ -227,11 +226,11 @@ class MetadataSimilarity(object):
         are present in both sets?
         """
         return cls._proportion(
-            set([x.sort_name for x in authors1]), set([x.sort_name for x in authors2])
+            {x.sort_name for x in authors1}, {x.sort_name for x in authors2}
         )
 
 
-class TitleProcessor(object):
+class TitleProcessor:
 
     title_stopwords = ["The ", "A ", "An "]
 
@@ -263,7 +262,7 @@ class TitleProcessor(object):
         return subtitle
 
 
-class Bigrams(object):
+class Bigrams:
 
     all_letters = re.compile("^[a-z]+$")
 
@@ -522,7 +521,7 @@ english_bigrams = Bigrams(Counter())
 english_bigrams.proportional = Counter(english_bigram_frequencies)
 
 
-class MoneyUtility(object):
+class MoneyUtility:
 
     DEFAULT_CURRENCY = "USD"
 

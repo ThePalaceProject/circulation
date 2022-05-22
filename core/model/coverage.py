@@ -1,4 +1,3 @@
-# encoding: utf-8
 # BaseCoverageRecord, Timestamp, CoverageRecord, WorkCoverageRecord
 from typing import TYPE_CHECKING, List
 
@@ -24,7 +23,7 @@ if TYPE_CHECKING:
     from . import Equivalency  # noqa
 
 
-class BaseCoverageRecord(object):
+class BaseCoverageRecord:
     """Contains useful constants used by both CoverageRecord and
     WorkCoverageRecord.
     """
@@ -169,7 +168,7 @@ class Timestamp(Base):
         else:
             collection = None
 
-        message = "<Timestamp %s: collection=%s, start=%s finish=%s counter=%s>" % (
+        message = "<Timestamp {}: collection={}, start={} finish={} counter={}>".format(
             self.service,
             collection,
             start,

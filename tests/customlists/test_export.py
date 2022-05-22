@@ -81,7 +81,7 @@ class TestExports:
 
         list_response = MockAPIServerResponse()
         list_response.status_code = 200
-        list_response.set_content('{"custom_lists":[]}'.encode("utf-8"))
+        list_response.set_content(b'{"custom_lists":[]}')
         mock_web_server.enqueue_response("GET", "/admin/custom_lists", list_response)
 
         schema_path = TestExports._customlists_resource_path("customlists.schema.json")

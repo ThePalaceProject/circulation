@@ -31,7 +31,7 @@ DOWNLOAD_LINK_SERVICE_URL = "https://proquest.com/lib/nyulibrary-ebooks/Download
 
 class TestProQuestAPIClient(DatabaseTest):
     def setup_method(self, mock_search=True):
-        super(TestProQuestAPIClient, self).setup_method()
+        super().setup_method()
 
         self._proquest_collection = self._collection(
             protocol=ExternalIntegration.PROQUEST

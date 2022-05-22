@@ -15,10 +15,10 @@ class TestCustomIndexView(DatabaseTest):
         old_registry = c.BY_PROTOCOL
         c.BY_PROTOCOL = {}
 
-        class Mock1(object):
+        class Mock1:
             PROTOCOL = "A protocol"
 
-        class Mock2(object):
+        class Mock2:
             PROTOCOL = "A protocol"
 
         c.register(Mock1)
@@ -38,7 +38,7 @@ class TestCustomIndexView(DatabaseTest):
 
         # Set up a mock CustomView so we can watch it being
         # instantiated.
-        class MockCustomIndexView(object):
+        class MockCustomIndexView:
             PROTOCOL = self._str
 
             def __init__(self, library, integration):
@@ -66,7 +66,7 @@ class TestCustomIndexView(DatabaseTest):
 
 class TestCOPPAGate(DatabaseTest):
     def setup_method(self):
-        super(TestCOPPAGate, self).setup_method()
+        super().setup_method()
         # Configure a COPPAGate for the default library.
         self.integration = self._external_integration(
             COPPAGate.PROTOCOL, CustomIndexView.GOAL, libraries=[self._default_library]
@@ -100,9 +100,7 @@ class TestCOPPAGate(DatabaseTest):
         self._db.commit()
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             COPPAGate(self._default_library, self.integration)
-        assert "Lane {} is for the wrong library".format(self.lane1.id) in str(
-            excinfo.value
-        )
+        assert f"Lane {self.lane1.id} is for the wrong library" in str(excinfo.value)
         self.lane1.library_id = self._default_library.id
 
         # If the lane ID doesn't correspond to a real lane, the
@@ -141,7 +139,7 @@ class TestCOPPAGate(DatabaseTest):
     def test__navigation_feed(self):
         """Test the code that builds an OPDS navigation feed."""
 
-        class MockAnnotator(object):
+        class MockAnnotator:
             """This annotator will have its chance to annotate
             the feed before it's finalized.
             """
@@ -156,8 +154,8 @@ class TestCOPPAGate(DatabaseTest):
         def mock_url_for(controller, library_short_name, **kwargs):
             """Create a real-looking URL for any random controller."""
             url_for_calls.append((controller, library_short_name, kwargs))
-            query = "&".join(["%s=%s" % (k, v) for k, v in sorted(kwargs.items())])
-            return "http://%s/%s?%s" % (library_short_name, controller, query)
+            query = "&".join([f"{k}={v}" for k, v in sorted(kwargs.items())])
+            return f"http://{library_short_name}/{controller}?{query}"
 
         navigation_entry_calls = []
         gate_tag_calls = []

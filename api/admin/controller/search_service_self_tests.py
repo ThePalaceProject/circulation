@@ -8,7 +8,7 @@ from core.testing import ExternalSearchTest
 
 class SearchServiceSelfTestsController(SelfTestsController, ExternalSearchTest):
     def __init__(self, manager):
-        super(SearchServiceSelfTestsController, self).__init__(manager)
+        super().__init__(manager)
         self.type = _("search service")
 
     def process_search_service_self_tests(self, identifier):

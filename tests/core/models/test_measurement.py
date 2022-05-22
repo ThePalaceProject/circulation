@@ -5,7 +5,7 @@ from core.util.datetime_helpers import datetime_utc
 
 class TestMeasurement(DatabaseTest):
     def setup_method(self):
-        super(TestMeasurement, self).setup_method()
+        super().setup_method()
         self.SOURCE_NAME = "Test Data Source"
 
         # Create a test DataSource

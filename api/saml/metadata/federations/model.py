@@ -67,7 +67,7 @@ class SAMLFederation(Base):
         :return: String representation
         :rtype: str
         """
-        return "<SAMLFederation(id={0}, type={1}, idp_metadata_service_url={2}, last_updated_at={3}".format(
+        return "<SAMLFederation(id={}, type={}, idp_metadata_service_url={}, last_updated_at={}".format(
             self.id, self.type, self.idp_metadata_service_url, self.last_updated_at
         )
 
@@ -103,7 +103,7 @@ class SAMLFederatedIdentityProvider(Base):
         """
         if not isinstance(federation, SAMLFederation):
             raise ValueError(
-                "Argument 'federation' must be an instance of {0} class".format(
+                "Argument 'federation' must be an instance of {} class".format(
                     SAMLFederation
                 )
             )
@@ -144,6 +144,6 @@ class SAMLFederatedIdentityProvider(Base):
         :return: String representation
         :rtype: str
         """
-        return "<SAMLFederatedIdentityProvider(id={0}, federation={1}, entity_id={2}, display_name={3}".format(
+        return "<SAMLFederatedIdentityProvider(id={}, federation={}, entity_id={}, display_name={}".format(
             self.id, self.federation, self.entity_id, self.display_name
         )

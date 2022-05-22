@@ -33,7 +33,7 @@ SAML_INVALID_RESPONSE = pd(
 )
 
 
-class SAMLController(object):
+class SAMLController:
     """Controller used for handing SAML 2.0 authentication requests"""
 
     ERROR = "error"
@@ -185,7 +185,7 @@ class SAMLController(object):
 
         if not parameter:
             return SAML_INVALID_REQUEST.detailed(
-                _("Required parameter {0} is missing".format(name))
+                _(f"Required parameter {name} is missing")
             )
 
         return parameter
@@ -205,7 +205,7 @@ class SAMLController(object):
         """
         if name not in relay_parameters:
             return SAML_INVALID_RESPONSE.detailed(
-                _("Required parameter {0} is missing from RelayState".format(name))
+                _(f"Required parameter {name} is missing from RelayState")
             )
 
         return relay_parameters[name][0]
@@ -309,7 +309,7 @@ class SAMLController(object):
         if self.RELAY_STATE not in request.form:
             return SAML_INVALID_RESPONSE.detailed(
                 _(
-                    "Required parameter {0} is missing from the response body".format(
+                    "Required parameter {} is missing from the response body".format(
                         self.RELAY_STATE
                     )
                 )

@@ -22,7 +22,7 @@ from core.util.problem_detail import ProblemDetail
 
 class PatronAuthServicesController(SettingsController):
     def __init__(self, manager):
-        super(PatronAuthServicesController, self).__init__(manager)
+        super().__init__(manager)
         self.provider_apis = [
             SimpleAuthenticationProvider,
             MilleniumPatronAPI,

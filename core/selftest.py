@@ -9,7 +9,7 @@ from .util.http import IntegrationException
 from .util.opds_writer import AtomFeed
 
 
-class SelfTestResult(object):
+class SelfTestResult:
     """The result of running a single self-test.
 
     HasSelfTest.run_self_tests() returns a list of these
@@ -79,7 +79,7 @@ class SelfTestResult(object):
     def __repr__(self):
         if self.exception:
             if isinstance(self.exception, IntegrationException):
-                exception = " exception=%r debug=%r" % (
+                exception = " exception={!r} debug={!r}".format(
                     str(self.exception),
                     self.debug_message,
                 )
@@ -91,7 +91,7 @@ class SelfTestResult(object):
             collection = " collection=%r" % self.collection.name
         else:
             collection = ""
-        return "<SelfTestResult: name=%r%s duration=%.2fsec success=%r%s result=%r>" % (
+        return "<SelfTestResult: name={!r}{} duration={:.2f}sec success={!r}{} result={!r}>".format(
             self.name,
             collection,
             self.duration,
@@ -115,7 +115,7 @@ class SelfTestResult(object):
         return getattr(self.exception, "debug_message", None)
 
 
-class HasSelfTests(object):
+class HasSelfTests:
     """An object capable of verifying its own setup by running a
     series of self-tests.
     """

@@ -21,7 +21,7 @@ class CollectionLibraryRegistrationsController(SettingsController):
     # TODO: This controller can share some code with DiscoveryServiceLibraryRegistrationsController.
 
     def __init__(self, manager):
-        super(CollectionLibraryRegistrationsController, self).__init__(manager)
+        super().__init__(manager)
         self.shared_collection_provider_apis = [SharedODLAPI]
 
     def process_collection_library_registrations(

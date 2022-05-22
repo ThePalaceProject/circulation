@@ -1,4 +1,3 @@
-# coding=utf-8
 from parameterized import parameterized
 
 from api.saml.metadata.model import (
@@ -13,7 +12,7 @@ from api.saml.metadata.model import (
 from tests.api.saml import fixtures
 
 
-class TestAttributeStatement(object):
+class TestAttributeStatement:
     def test_init_accepts_list_of_attributes(self):
         # Arrange
         attributes = [
@@ -42,7 +41,7 @@ class TestAttributeStatement(object):
         )
 
 
-class TestSAMLSubjectPatronIDExtractor(object):
+class TestSAMLSubjectPatronIDExtractor:
     @parameterized.expand(
         [
             (

@@ -43,7 +43,7 @@ class IntegrationException(Exception):
         be correct but the API provider might not have granted that
         key enough permissions.
         """
-        super(IntegrationException, self).__init__(message)
+        super().__init__(message)
         self.debug_message = debug_message
 
 
@@ -73,10 +73,10 @@ class RemoteIntegrationException(IntegrationException):
             self.url = self.service = url_or_service
         if not debug_message:
             debug_message = self.internal_message % (self.url, message)
-        super(RemoteIntegrationException, self).__init__(message, debug_message)
+        super().__init__(message, debug_message)
 
     def __str__(self):
-        message = super(RemoteIntegrationException, self).__str__()
+        message = super().__str__()
         return self.internal_message % (self.url, message)
 
     def document_detail(self, debug=True):
@@ -116,9 +116,7 @@ class BadResponseException(RemoteIntegrationException):
         `param url_or_service` The name of the service that failed
            (e.g. "Overdrive"), or the specific URL that had the problem.
         """
-        super(BadResponseException, self).__init__(
-            url_or_service, message, debug_message
-        )
+        super().__init__(url_or_service, message, debug_message)
         # to be set to 500, etc.
         self.status_code = status_code
 
@@ -190,7 +188,7 @@ class RequestTimedOut(RequestNetworkException, requests.exceptions.Timeout):
     internal_message = "Timeout accessing %s: %s"
 
 
-class HTTP(object):
+class HTTP:
     """A helper for the `requests` module."""
 
     @classmethod

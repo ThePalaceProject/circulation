@@ -69,7 +69,7 @@ from . import sample_data
 
 class Axis360Test(DatabaseTest):
     def setup_method(self):
-        super(Axis360Test, self).setup_method()
+        super().setup_method()
         self.collection = MockAxis360API.mock_collection(self._db)
         self.api = MockAxis360API(self._db, self.collection)
 
@@ -358,7 +358,7 @@ class TestAxis360API(Axis360Test):
         [url, args, kwargs] = request
         data = kwargs.pop("data")
         assert kwargs["method"] == "GET"
-        expect = "/EarlyCheckInTitle/v3?itemID=%s&patronID=%s" % (
+        expect = "/EarlyCheckInTitle/v3?itemID={}&patronID={}".format(
             pool.identifier.identifier,
             barcode,
         )
@@ -826,7 +826,7 @@ class TestCirculationMonitor(Axis360Test):
         assert "9780375504587" == isbn.identifier
 
         assert ["McCain, John", "Salter, Mark"] == sorted(
-            [x.sort_name for x in edition.contributors]
+            x.sort_name for x in edition.contributors
         )
 
         subs = sorted(
@@ -1003,7 +1003,7 @@ class TestParsers(Axis360Test):
             Subject.AXIS_360_AUDIENCE,
         ] == [x.type for x in subjects]
         general_fiction, women_sleuths, romantic_suspense = sorted(
-            [x.name for x in subjects if x.type == Subject.BISAC]
+            x.name for x in subjects if x.type == Subject.BISAC
         )
         assert "FICTION / General" == general_fiction
         assert "FICTION / Mystery & Detective / Women Sleuths" == women_sleuths
@@ -1151,7 +1151,7 @@ class TestParsers(Axis360Test):
         assert 0 == av1.patrons_in_hold_queue
 
 
-class BaseParserTest(object):
+class BaseParserTest:
     @classmethod
     def sample_data(cls, filename):
         return sample_data(filename, "axis")
@@ -1163,7 +1163,7 @@ class TestResponseParser(BaseParserTest):
         # these classes, but we do need to test that whatever object
         # we _claim_ is a Collection will have its id put into the
         # right spot of HoldInfo and LoanInfo objects.
-        class MockCollection(object):
+        class MockCollection:
             pass
 
         self._default_collection = MockCollection()
@@ -1373,7 +1373,7 @@ class TestAvailabilityResponseParser(Axis360Test, BaseParserTest):
         assert self.api == fulfillment.api
 
 
-class TestJSONResponseParser(object):
+class TestJSONResponseParser:
     def test__required_key(self):
         m = JSONResponseParser._required_key
         parsed = dict(key="value")
@@ -1687,7 +1687,7 @@ class TestAxis360FulfillmentInfo(Axis360Test):
         assert datetime_utc(2018, 9, 29, 18, 34) == fulfillment.content_expires
 
 
-class TestAxisNowManifest(object):
+class TestAxisNowManifest:
     """Test the simple data format used to communicate an entry point into
     AxisNow."""
 
@@ -1701,7 +1701,7 @@ class TestAxis360BibliographicCoverageProvider(Axis360Test):
     """Test the code that looks up bibliographic information from Axis 360."""
 
     def setup_method(self):
-        super(TestAxis360BibliographicCoverageProvider, self).setup_method()
+        super().setup_method()
         self.provider = Axis360BibliographicCoverageProvider(
             self.collection, api_class=MockAxis360API
         )

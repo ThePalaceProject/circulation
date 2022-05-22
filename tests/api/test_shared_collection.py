@@ -46,7 +46,7 @@ class MockAPI(BaseSharedCollectionAPI):
 
 class TestSharedCollectionAPI(DatabaseTest):
     def setup_method(self):
-        super(TestSharedCollectionAPI, self).setup_method()
+        super().setup_method()
         self.collection = self._collection(protocol="Mock")
         self.shared_collection = SharedCollectionAPI(
             self._db, api_map={"Mock": MockAPI}
@@ -63,7 +63,7 @@ class TestSharedCollectionAPI(DatabaseTest):
         [self.delivery_mechanism] = self.pool.delivery_mechanisms
 
     def test_initialization_exception(self):
-        class MisconfiguredAPI(object):
+        class MisconfiguredAPI:
             def __init__(self, _db, collection):
                 raise CannotLoadConfiguration("doomed!")
 
