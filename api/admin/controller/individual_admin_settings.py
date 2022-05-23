@@ -20,6 +20,13 @@ class IndividualAdminSettingsController(SettingsController):
             return self.process_post()
 
     def process_get(self):
+        logged_in_admin = flask.request.admin
+        for role in logged_in_admin.roles:
+            if role.role in (AdminRole.SYSTEM_ADMIN, AdminRole.LIBRARY_MANAGER):
+                break
+        else:
+            return FORBIDDEN_BY_POLICY
+
         admins = []
         for admin in self._db.query(Admin).order_by(Admin.email):
             roles = []
