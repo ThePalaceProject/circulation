@@ -1,4 +1,3 @@
-# encoding=utf8
 import datetime
 import email
 import json
@@ -151,7 +150,7 @@ class ControllerTest(VendorIDTest):
     valid_credentials = dict(username="unittestuser", password="unittestpassword")
 
     def setup_method(self):
-        super(ControllerTest, self).setup_method()
+        super().setup_method()
         self.app = app
 
         if not hasattr(self, "setup_circulation_manager"):
@@ -310,7 +309,7 @@ class CirculationControllerTest(ControllerTest):
     ]
 
     def setup_method(self):
-        super(CirculationControllerTest, self).setup_method()
+        super().setup_method()
         self.works = []
         for (variable_name, title, author, language, fiction) in self.BOOKS:
             work = self._work(
@@ -474,10 +473,7 @@ class TestCirculationManager(CirculationControllerTest):
 
         # So have the patron web domains, and their paths have been
         # removed.
-        assert (
-            set(["http://sitewide", "http://registration"])
-            == manager.patron_web_domains
-        )
+        assert {"http://sitewide", "http://registration"} == manager.patron_web_domains
 
         # The authentication document cache has been rebuilt with a
         # new max_age.
@@ -495,24 +491,19 @@ class TestCirculationManager(CirculationControllerTest):
             self._db, Configuration.PATRON_WEB_HOSTNAMES
         ).value = "*"
         self.manager.load_settings()
-        assert set(["*", "http://registration"]) == manager.patron_web_domains
+        assert {"*", "http://registration"} == manager.patron_web_domains
 
         # The sitewide patron web domain can have pipe separated domains, and will get spaces stripped
         ConfigurationSetting.sitewide(
             self._db, Configuration.PATRON_WEB_HOSTNAMES
         ).value = "https://1.com|http://2.com |  http://subdomain.3.com|4.com"
         self.manager.load_settings()
-        assert (
-            set(
-                [
-                    "https://1.com",
-                    "http://2.com",
-                    "http://subdomain.3.com",
-                    "http://registration",
-                ]
-            )
-            == manager.patron_web_domains
-        )
+        assert {
+            "https://1.com",
+            "http://2.com",
+            "http://subdomain.3.com",
+            "http://registration",
+        } == manager.patron_web_domains
 
         # Restore the CustomIndexView.for_library implementation
         CustomIndexView.for_library = old_for_library
@@ -632,7 +623,7 @@ class TestCirculationManager(CirculationControllerTest):
 
         # Any extra positional or keyword arguments passed into annotator()
         # are propagated to the Annotator constructor.
-        class MockAnnotator(object):
+        class MockAnnotator:
             def __init__(self, *args, **kwargs):
                 self.positional = args
                 self.keyword = kwargs
@@ -683,7 +674,7 @@ class TestCirculationManager(CirculationControllerTest):
     def test_load_facets_from_request_disable_caching(self):
         # Only an authenticated admin can ask to disable caching,
         # and load_facets_from_request is where we enforce this.
-        class MockAdminSignInController(object):
+        class MockAdminSignInController:
             # Pretend to be able to find (or not) an Admin authenticated
             # to make the current request.
             admin = None
@@ -1424,7 +1415,7 @@ class TestIndexController(CirculationControllerTest):
         it is called instead of the normal IndexController code.
         """
 
-        class MockCustomIndexView(object):
+        class MockCustomIndexView:
             def __call__(self, library, annotator):
                 self.called_with = (library, annotator)
                 return "fake response"
@@ -1661,7 +1652,7 @@ class TestMultipleLibraries(CirculationControllerTest):
 
 class TestLoanController(CirculationControllerTest):
     def setup_method(self):
-        super(TestLoanController, self).setup_method()
+        super().setup_method()
         self.pool = self.english_1.license_pools[0]
         [self.mech1] = self.pool.delivery_mechanisms
         self.mech2 = self.pool.set_delivery_mechanism(
@@ -1692,7 +1683,7 @@ class TestLoanController(CirculationControllerTest):
         # _may_ be possible, but
         # CirculationAPI.can_fulfill_without_loan also has to say it's
         # okay.
-        class MockLibraryAuthenticator(object):
+        class MockLibraryAuthenticator:
             identifies_individuals = False
 
         self.manager.auth.library_authenticators[
@@ -2223,7 +2214,7 @@ class TestLoanController(CirculationControllerTest):
     def test_fulfill(self):
         # Verify that arguments to the fulfill() method are propagated
         # correctly to the CirculationAPI.
-        class MockCirculationAPI(object):
+        class MockCirculationAPI:
             def fulfill(
                 self,
                 patron,
@@ -2293,8 +2284,8 @@ class TestLoanController(CirculationControllerTest):
             # patron authentication without it.
             expected_path = urllib.parse.urlparse(expect).path
             part_url_path = urllib.parse.urlparse(part_url).path
-            assert expected_path.startswith("/{}/".format(library_short_name))
-            assert part_url_path.startswith("/{}/".format(library_short_name))
+            assert expected_path.startswith(f"/{library_short_name}/")
+            assert part_url_path.startswith(f"/{library_short_name}/")
 
     @pytest.mark.parametrize(
         "as_response_value",
@@ -2316,7 +2307,7 @@ class TestLoanController(CirculationControllerTest):
             def as_response(self):
                 return as_response_value
 
-        class MockCirculationAPI(object):
+        class MockCirculationAPI:
             def fulfill(slf, *args, **kwargs):
                 return MockFulfillmentInfo(
                     self._default_collection, None, None, None, None, None, None, None
@@ -2728,7 +2719,7 @@ class TestLoanController(CirculationControllerTest):
 
 class TestAnnotationController(CirculationControllerTest):
     def setup_method(self):
-        super(TestAnnotationController, self).setup_method()
+        super().setup_method()
         self.pool = self.english_1.license_pools[0]
         self.edition = self.pool.presentation_edition
         self.identifier = self.edition.primary_identifier
@@ -3004,7 +2995,7 @@ class TestAnnotationController(CirculationControllerTest):
 
 class TestWorkController(CirculationControllerTest):
     def setup_method(self):
-        super(TestWorkController, self).setup_method()
+        super().setup_method()
         [self.lp] = self.english_1.license_pools
         self.edition = self.lp.presentation_edition
         self.datasource = self.lp.data_source.name
@@ -3103,7 +3094,7 @@ class TestWorkController(CirculationControllerTest):
         # from the search engine are converted into an OPDS feed. Now
         # we verify that an incoming request results in the objects
         # we'd expect to use to generate the feed for that request.
-        class Mock(object):
+        class Mock:
             @classmethod
             def page(cls, **kwargs):
                 self.called_with = kwargs
@@ -3172,7 +3163,7 @@ class TestWorkController(CirculationControllerTest):
                 route,
                 lane_identifier=None,
                 library_short_name=library.short_name,
-                **url_kwargs
+                **url_kwargs,
             )
         assert kwargs.pop("url") == expect_url
 
@@ -3485,7 +3476,7 @@ class TestWorkController(CirculationControllerTest):
 
         # Now let's pass in a mocked AcquisitionFeed so we can check
         # the arguments used to invoke page().
-        class Mock(object):
+        class Mock:
             @classmethod
             def page(cls, **kwargs):
                 cls.called_with = kwargs
@@ -3667,13 +3658,13 @@ class TestWorkController(CirculationControllerTest):
             "Similar titles recommended by NoveList"
         ]
         assert "Same author and series" == recommended_entry["title"]
-        work_url = "/works/%s/%s/" % (identifier.type, identifier.identifier)
+        work_url = f"/works/{identifier.type}/{identifier.identifier}/"
         expected = urllib.parse.quote(work_url + "recommendations")
         assert True == recommended_href.endswith(expected)
 
         # Finally, let's pass in a mock feed class so we can look at the
         # objects passed into AcquisitionFeed.groups().
-        class Mock(object):
+        class Mock:
             @classmethod
             def groups(cls, **kwargs):
                 cls.called_with = kwargs
@@ -3737,7 +3728,7 @@ class TestWorkController(CirculationControllerTest):
                 route,
                 lane_identifier=None,
                 library_short_name=library.short_name,
-                **url_kwargs
+                **url_kwargs,
             )
         assert kwargs.pop("url") == expect_url
 
@@ -3834,7 +3825,7 @@ class TestWorkController(CirculationControllerTest):
         # from the search engine are converted into an OPDS feed. Now
         # we verify that an incoming request results in the objects
         # we'd expect to use to generate the feed for that request.
-        class Mock(object):
+        class Mock:
             @classmethod
             def page(cls, **kwargs):
                 self.called_with = kwargs
@@ -3993,9 +3984,9 @@ class TestOPDSFeedController(CirculationControllerTest):
                 "max-age=%d" % Lane.MAX_CACHE_AGE in response.headers["Cache-Control"]
             )
             feed = feedparser.parse(response.data)
-            assert set([x.title for x in self.works]) == set(
-                [x["title"] for x in feed["entries"]]
-            )
+            assert {x.title for x in self.works} == {
+                x["title"] for x in feed["entries"]
+            }
 
             # But the rest of the feed looks good.
             links = feed["feed"]["links"]
@@ -4051,7 +4042,7 @@ class TestOPDSFeedController(CirculationControllerTest):
 
         # Now let's take a closer look at what this controller method
         # passes into AcquisitionFeed.page(), by mocking page().
-        class Mock(object):
+        class Mock:
             @classmethod
             def page(cls, **kwargs):
                 self.called_with = kwargs
@@ -4155,7 +4146,7 @@ class TestOPDSFeedController(CirculationControllerTest):
         # test for those error conditions.
 
         # Now let's see what goes into groups()
-        class Mock(object):
+        class Mock:
             @classmethod
             def groups(cls, **kwargs):
                 # This method ends up being called most of the time
@@ -4370,7 +4361,7 @@ class TestOPDSFeedController(CirculationControllerTest):
         # just going to test that appropriate values are passed into that
         # method:
 
-        class Mock(object):
+        class Mock:
             @classmethod
             def search(cls, **kwargs):
                 self.called_with = kwargs
@@ -4430,7 +4421,7 @@ class TestOPDSFeedController(CirculationControllerTest):
                 lane_identifier=None,
                 library_short_name=library.short_name,
                 **dict(list(facets.items())),
-                q=query
+                q=query,
             )
         assert expect_url == kwargs.pop("url")
 
@@ -4839,7 +4830,7 @@ class TestCrawlableFeed(CirculationControllerTest):
         # Test the helper method called by all other feed methods.
         self.page_called_with = None
 
-        class MockFeed(object):
+        class MockFeed:
             @classmethod
             def page(cls, **kwargs):
                 self.page_called_with = kwargs
@@ -5097,7 +5088,7 @@ class TestMARCRecordController(CirculationControllerTest):
 
 class TestAnalyticsController(CirculationControllerTest):
     def setup_method(self):
-        super(TestAnalyticsController, self).setup_method()
+        super().setup_method()
         [self.lp] = self.english_1.license_pools
         self.identifier = self.lp.identifier
 
@@ -5162,7 +5153,7 @@ class TestAnalyticsController(CirculationControllerTest):
 
 class TestDeviceManagementProtocolController(ControllerTest):
     def setup_method(self):
-        super(TestDeviceManagementProtocolController, self).setup_method()
+        super().setup_method()
         self.initialize_adobe(self.library, self.libraries)
         self.auth = dict(Authorization=self.valid_auth)
 
@@ -5388,7 +5379,7 @@ class TestSharedCollectionController(ControllerTest):
 
     def setup_method(self):
         self.setup_circulation_manager = False
-        super(TestSharedCollectionController, self).setup_method()
+        super().setup_method()
         from api.odl import ODLAPI
 
         self.collection = self._collection(protocol=ODLAPI.NAME)
@@ -5552,7 +5543,7 @@ class TestSharedCollectionController(ControllerTest):
                 if link.get("rel") == "http://librarysimplified.org/terms/rel/revoke"
             ]
             assert (
-                "/collections/%s/loans/%s/revoke" % (self.collection.name, loan.id)
+                f"/collections/{self.collection.name}/loans/{loan.id}/revoke"
                 in revoke_url
             )
             [fulfill_url] = [
@@ -5574,7 +5565,7 @@ class TestSharedCollectionController(ControllerTest):
                 for link in entry.get("links")
                 if link.get("rel") == "self"
             ]
-            assert "/collections/%s/loans/%s" % (self.collection.name, loan.id)
+            assert f"/collections/{self.collection.name}/loans/{loan.id}"
 
     def test_borrow(self):
         now = utc_now()
@@ -5667,7 +5658,7 @@ class TestSharedCollectionController(ControllerTest):
                 if link.get("rel") == "http://librarysimplified.org/terms/rel/revoke"
             ]
             assert (
-                "/collections/%s/loans/%s/revoke" % (self.collection.name, loan.id)
+                f"/collections/{self.collection.name}/loans/{loan.id}/revoke"
                 in revoke_url
             )
             [fulfill_url] = [
@@ -5689,7 +5680,7 @@ class TestSharedCollectionController(ControllerTest):
                 for link in entry.get("links")
                 if link.get("rel") == "self"
             ]
-            assert "/collections/%s/loans/%s" % (self.collection.name, loan.id)
+            assert f"/collections/{self.collection.name}/loans/{loan.id}"
 
             # Now try to borrow when we already have a previous hold.
             api.queue_borrow(AuthorizationFailedException())
@@ -5740,7 +5731,7 @@ class TestSharedCollectionController(ControllerTest):
                 if link.get("rel") == "http://librarysimplified.org/terms/rel/revoke"
             ]
             assert (
-                "/collections/%s/loans/%s/revoke" % (self.collection.name, loan.id)
+                f"/collections/{self.collection.name}/loans/{loan.id}/revoke"
                 in revoke_url
             )
             [fulfill_url] = [
@@ -5762,7 +5753,7 @@ class TestSharedCollectionController(ControllerTest):
                 for link in entry.get("links")
                 if link.get("rel") == "self"
             ]
-            assert "/collections/%s/loans/%s" % (self.collection.name, loan.id)
+            assert f"/collections/{self.collection.name}/loans/{loan.id}"
 
             # Now try to borrow, but actually get a hold.
             api.queue_borrow(hold)
@@ -5789,7 +5780,7 @@ class TestSharedCollectionController(ControllerTest):
                 if link.get("rel") == "http://librarysimplified.org/terms/rel/revoke"
             ]
             assert (
-                "/collections/%s/holds/%s/revoke" % (self.collection.name, hold.id)
+                f"/collections/{self.collection.name}/holds/{hold.id}/revoke"
                 in revoke_url
             )
             assert [] == [
@@ -5802,7 +5793,7 @@ class TestSharedCollectionController(ControllerTest):
                 for link in entry.get("links")
                 if link.get("rel") == "self"
             ]
-            assert "/collections/%s/holds/%s" % (self.collection.name, hold.id)
+            assert f"/collections/{self.collection.name}/holds/{hold.id}"
 
     def test_revoke_loan(self):
         now = utc_now()
@@ -6050,7 +6041,7 @@ class TestSharedCollectionController(ControllerTest):
                 if link.get("rel") == "http://librarysimplified.org/terms/rel/revoke"
             ]
             assert (
-                "/collections/%s/holds/%s/revoke" % (self.collection.name, hold.id)
+                f"/collections/{self.collection.name}/holds/{hold.id}/revoke"
                 in revoke_url
             )
             assert [] == [
@@ -6063,7 +6054,7 @@ class TestSharedCollectionController(ControllerTest):
                 for link in entry.get("links")
                 if link.get("rel") == "self"
             ]
-            assert "/collections/%s/holds/%s" % (self.collection.name, hold.id)
+            assert f"/collections/{self.collection.name}/holds/{hold.id}"
 
     def test_revoke_hold(self):
         now = utc_now()
@@ -6172,7 +6163,7 @@ class TestProfileController(ControllerTest):
     """
 
     def setup_method(self):
-        super(TestProfileController, self).setup_method()
+        super().setup_method()
 
         # Nothing will happen to this patron. This way we can verify
         # that a patron can only see/modify their own profile.
@@ -6293,7 +6284,7 @@ class TestScopedSession(ControllerTest):
         # because we want objects like Libraries to be created in the
         # scoped session.
         self.setup_circulation_manager = False
-        super(TestScopedSession, self).setup_method()
+        super().setup_method()
         self.set_base_url(app._db)
 
     def make_default_libraries(self, _db):

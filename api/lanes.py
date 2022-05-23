@@ -980,7 +980,7 @@ class WorkBasedLane(DynamicLane):
 
         children = children or list()
 
-        super(WorkBasedLane, self).initialize(
+        super().initialize(
             library, display_name=display_name, children=children, **kwargs
         )
 
@@ -1007,7 +1007,7 @@ class WorkBasedLane(DynamicLane):
         """Add another Worklist as a child of this one and change its
         configuration to make sure its results fit in with this lane.
         """
-        super(WorkBasedLane, self).append_child(worklist)
+        super().append_child(worklist)
         worklist.languages = self.languages
         worklist.audiences = self.audiences
 
@@ -1019,7 +1019,7 @@ class WorkBasedLane(DynamicLane):
         :param patron: A Patron
         :return: A boolean
         """
-        superclass_ok = super(WorkBasedLane, self).accessible_to(patron)
+        superclass_ok = super().accessible_to(patron)
         return superclass_ok and (
             not self.work or self.work.age_appropriate_for_patron(patron)
         )
@@ -1044,7 +1044,7 @@ class RecommendationLane(WorkBasedLane):
         :raises: CannotLoadConfiguration if `novelist_api` is not provided
         and no Novelist integration is configured for this library.
         """
-        super(RecommendationLane, self).__init__(
+        super().__init__(
             library,
             work,
             display_name=display_name,
@@ -1126,7 +1126,7 @@ class SeriesLane(DynamicLane):
     def __init__(self, library, series_name, parent=None, **kwargs):
         if not series_name:
             raise ValueError("SeriesLane can't be created without series")
-        super(SeriesLane, self).initialize(library, display_name=series_name, **kwargs)
+        super().initialize(library, display_name=series_name, **kwargs)
         self.series = series_name
         if parent:
             parent.append_child(self)
@@ -1202,7 +1202,7 @@ class ContributorLane(DynamicLane):
         self.contributor_key = (
             self.contributor.display_name or self.contributor.sort_name
         )
-        super(ContributorLane, self).initialize(
+        super().initialize(
             library,
             display_name=self.contributor_key,
             audiences=audiences,
@@ -1260,7 +1260,7 @@ class RelatedBooksLane(WorkBasedLane):
     )
 
     def __init__(self, library, work, display_name=None, novelist_api=None):
-        super(RelatedBooksLane, self).__init__(
+        super().__init__(
             library,
             work,
             display_name=display_name,
@@ -1269,7 +1269,9 @@ class RelatedBooksLane(WorkBasedLane):
         sublanes = self._get_sublanes(_db, novelist_api)
         if not sublanes:
             raise ValueError(
-                "No related books for %s by %s" % (self.work.title, self.work.author)
+                "No related books for {} by {}".format(
+                    self.work.title, self.work.author
+                )
             )
         self.children = sublanes
 
@@ -1398,12 +1400,12 @@ class CrawlableCollectionBasedLane(CrawlableLane):
             # to the libraries that might use them.
             library = None
             collections = library_or_collections
-            identifier = " / ".join(sorted([x.name for x in collections]))
+            identifier = " / ".join(sorted(x.name for x in collections))
             if len(collections) == 1:
                 self.collection_feed = True
                 self.collection_name = collections[0].name
 
-        super(CrawlableCollectionBasedLane, self).initialize(
+        super().initialize(
             library,
             "Crawlable feed: %s" % identifier,
         )
@@ -1433,7 +1435,7 @@ class CrawlableCustomListBasedLane(CrawlableLane):
 
     def initialize(self, library, customlist):
         self.customlist_name = customlist.name
-        super(CrawlableCustomListBasedLane, self).initialize(
+        super().initialize(
             library,
             "Crawlable feed: %s" % self.customlist_name,
             customlists=[customlist],
@@ -1456,7 +1458,7 @@ class KnownOverviewFacetsWorkList(WorkList):
         :param facets: A Facets object to be used when generating a grouped
            feed.
         """
-        super(KnownOverviewFacetsWorkList, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.facets = facets
 
     def overview_facets(self, _db, facets):
@@ -1479,13 +1481,13 @@ class JackpotFacets(Facets):
     @classmethod
     def default_facet(cls, config, facet_group_name):
         if facet_group_name != cls.AVAILABILITY_FACET_GROUP_NAME:
-            return super(JackpotFacets, cls).default_facet(config, facet_group_name)
+            return super().default_facet(config, facet_group_name)
         return cls.AVAILABLE_NOW
 
     @classmethod
     def available_facets(cls, config, facet_group_name):
         if facet_group_name != cls.AVAILABILITY_FACET_GROUP_NAME:
-            return super(JackpotFacets, cls).available_facets(config, facet_group_name)
+            return super().available_facets(config, facet_group_name)
 
         return [
             cls.AVAILABLE_NOW,
@@ -1518,7 +1520,7 @@ class JackpotWorkList(WorkList):
         :param library: A Library
         :param facets: A Facets object.
         """
-        super(JackpotWorkList, self).initialize(library)
+        super().initialize(library)
 
         # Initialize a list of child Worklists; one for each test that
         # a client might need to run.

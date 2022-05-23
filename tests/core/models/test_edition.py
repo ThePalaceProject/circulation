@@ -1,5 +1,3 @@
-# encoding: utf-8
-
 from core.model import PresentationCalculationPolicy, get_one_or_create
 from core.model.constants import MediaTypes
 from core.model.contributor import Contributor
@@ -44,7 +42,7 @@ class TestEdition(DatabaseTest):
         assert lp1.identifier == lp2.identifier
 
         # Edition.license_pools contains both.
-        assert set([lp1, lp2]) == set(edition.license_pools)
+        assert {lp1, lp2} == set(edition.license_pools)
 
     def test_author_contributors(self):
         data_source = DataSource.lookup(self._db, DataSource.GUTENBERG)
@@ -64,7 +62,7 @@ class TestEdition(DatabaseTest):
         edition.add_contributor(bob, [Contributor.ILLUSTRATOR_ROLE])
 
         # Both contributors show up in .contributors.
-        assert set([alice, bob]) == edition.contributors
+        assert {alice, bob} == edition.contributors
 
         # Only the author shows up in .author_contributors, and she
         # only shows up once.
@@ -145,7 +143,7 @@ class TestEdition(DatabaseTest):
         # We don't use the web as a source of coverage, so this will
         # return both Gutenberg records (but not the web record).
         assert [g1.id, g2.id] == sorted(
-            [x.id for x in Edition.missing_coverage_from(self._db, gutenberg, web)]
+            x.id for x in Edition.missing_coverage_from(self._db, gutenberg, web)
         )
 
     def test_sort_by_priority(self):
@@ -193,12 +191,12 @@ class TestEdition(DatabaseTest):
         identifier.equivalent_to(data_source, edition.primary_identifier, 0.6)
 
         policy = PresentationCalculationPolicy(equivalent_identifier_threshold=0.5)
-        assert set([identifier, edition.primary_identifier]) == set(
+        assert {identifier, edition.primary_identifier} == set(
             edition.equivalent_identifiers(policy=policy)
         )
 
         policy.equivalent_identifier_threshold = 0.7
-        assert set([edition.primary_identifier]) == set(
+        assert {edition.primary_identifier} == set(
             edition.equivalent_identifiers(policy=policy)
         )
 
@@ -371,7 +369,7 @@ class TestEdition(DatabaseTest):
         ids = [e.primary_identifier.id]
         champ1, resources = Identifier.evaluate_summary_quality(self._db, ids)
 
-        assert set([overdrive_resource, oclc_resource]) == set(resources)
+        assert {overdrive_resource, oclc_resource} == set(resources)
         assert oclc_resource == champ1
 
         # But if we say that Overdrive is the privileged data source, it wins
@@ -390,7 +388,7 @@ class TestEdition(DatabaseTest):
         champ3, resources3 = Identifier.evaluate_summary_quality(
             self._db, ids, [threem]
         )
-        assert set([overdrive_resource, oclc_resource]) == set(resources3)
+        assert {overdrive_resource, oclc_resource} == set(resources3)
         assert oclc_resource == champ3
 
         # If there are two privileged data sources and there's no
@@ -505,13 +503,11 @@ class TestEdition(DatabaseTest):
 
         # One for setting the Edition metadata and one for choosing
         # the Edition's cover.
-        expect = set(
-            [
-                CoverageRecord.SET_EDITION_METADATA_OPERATION,
-                CoverageRecord.CHOOSE_COVER_OPERATION,
-            ]
-        )
-        assert expect == set([x.operation for x in records])
+        expect = {
+            CoverageRecord.SET_EDITION_METADATA_OPERATION,
+            CoverageRecord.CHOOSE_COVER_OPERATION,
+        }
+        assert expect == {x.operation for x in records}
 
         # We know the records are associated with this specific
         # Edition, not just the Identifier, because each

@@ -17,7 +17,7 @@ class SAMLMetadataLoadingError(BaseError):
     """Raised in the case of any errors occurred during loading of SAML metadata from a remote source"""
 
 
-class SAMLMetadataLoader(object):
+class SAMLMetadataLoader:
     """Loads SAML metadata from a remote source (e.g. InCommon Metadata Service)"""
 
     def __init__(self):
@@ -36,19 +36,19 @@ class SAMLMetadataLoader(object):
 
         :raise: MetadataLoadError
         """
-        self._logger.info("Started loading IdP XML metadata from {0}".format(url))
+        self._logger.info(f"Started loading IdP XML metadata from {url}")
 
         try:
             xml_metadata = OneLogin_Saml2_IdPMetadataParser.get_metadata(url)
         except Exception as exception:
             raise SAMLMetadataLoadingError(inner_exception=exception)
 
-        self._logger.info("Finished loading IdP XML metadata from {0}".format(url))
+        self._logger.info(f"Finished loading IdP XML metadata from {url}")
 
         return xml_metadata
 
 
-class SAMLFederatedIdentityProviderLoader(object):
+class SAMLFederatedIdentityProviderLoader:
     """Loads metadata of federated IdPs from the specified metadata service."""
 
     ENGLISH_LANGUAGE_CODES = ("en", "eng")
@@ -67,19 +67,19 @@ class SAMLFederatedIdentityProviderLoader(object):
         """
         if not isinstance(loader, SAMLMetadataLoader):
             raise ValueError(
-                "Argument 'loader' must be an instance of {0} class".format(
+                "Argument 'loader' must be an instance of {} class".format(
                     SAMLMetadataLoader
                 )
             )
         if not isinstance(validator, SAMLFederatedMetadataValidator):
             raise ValueError(
-                "Argument 'validator' must be an instance of {0} class".format(
+                "Argument 'validator' must be an instance of {} class".format(
                     SAMLFederatedMetadataValidator
                 )
             )
         if not isinstance(parser, SAMLMetadataParser):
             raise ValueError(
-                "Argument 'parser' must be an instance of {0} class".format(
+                "Argument 'parser' must be an instance of {} class".format(
                     SAMLMetadataParser
                 )
             )
@@ -119,12 +119,12 @@ class SAMLFederatedIdentityProviderLoader(object):
         """
         if not isinstance(federation, SAMLFederation):
             raise ValueError(
-                "Argument 'federation' must be an instance of {0} class".format(
+                "Argument 'federation' must be an instance of {} class".format(
                     SAMLFederation
                 )
             )
 
-        self._logger.info("Started loading federated IdP's for {0}".format(federation))
+        self._logger.info(f"Started loading federated IdP's for {federation}")
 
         federated_idps = []
         metadata = self._loader.load_idp_metadata(federation.idp_metadata_service_url)
@@ -159,7 +159,7 @@ class SAMLFederatedIdentityProviderLoader(object):
             federated_idps.append(federated_idp)
 
         self._logger.info(
-            "Finished loading {0} federated IdP's for {1}".format(
+            "Finished loading {} federated IdP's for {}".format(
                 len(federated_idps), federation
             )
         )

@@ -66,7 +66,7 @@ class MockMonitor(Monitor):
     SERVICE_NAME = "Dummy monitor for test"
 
     def __init__(self, _db, collection=None):
-        super(MockMonitor, self).__init__(_db, collection)
+        super().__init__(_db, collection)
         self.run_records = []
         self.cleanup_records = []
 
@@ -494,7 +494,7 @@ class MockSweepMonitor(SweepMonitor):
     DEFAULT_BATCH_SIZE = 2
 
     def __init__(self, _db, **kwargs):
-        super(MockSweepMonitor, self).__init__(_db, **kwargs)
+        super().__init__(_db, **kwargs)
         self.cleanup_called = []
         self.batches = []
         self.processed = []
@@ -504,7 +504,7 @@ class MockSweepMonitor(SweepMonitor):
 
     def process_batch(self, batch):
         self.batches.append(batch)
-        return super(MockSweepMonitor, self).process_batch(batch)
+        return super().process_batch(batch)
 
     def process_item(self, item):
         self.processed.append(item)
@@ -515,7 +515,7 @@ class MockSweepMonitor(SweepMonitor):
 
 class TestSweepMonitor(DatabaseTest):
     def setup_method(self):
-        super(TestSweepMonitor, self).setup_method()
+        super().setup_method()
         self.monitor = MockSweepMonitor(self._db)
 
     def test_model_class_is_required(self):
@@ -546,7 +546,7 @@ class TestSweepMonitor(DatabaseTest):
 
     def test_run_sweeps_entire_table(self):
         # Three Identifiers -- the batch size is 2.
-        i1, i2, i3 = [self._identifier() for i in range(3)]
+        i1, i2, i3 = (self._identifier() for i in range(3))
         assert 2 == self.monitor.batch_size
 
         # Run the monitor.
@@ -569,7 +569,7 @@ class TestSweepMonitor(DatabaseTest):
 
     def test_run_starts_at_previous_counter(self):
         # Two Identifiers.
-        i1, i2 = [self._identifier() for i in range(2)]
+        i1, i2 = (self._identifier() for i in range(2))
 
         # The monitor was just run, but it was not able to proceed past
         # i1.
@@ -594,14 +594,14 @@ class TestSweepMonitor(DatabaseTest):
     def test_exception_interrupts_run(self):
 
         # Four Identifiers.
-        i1, i2, i3, i4 = [self._identifier() for i in range(4)]
+        i1, i2, i3, i4 = (self._identifier() for i in range(4))
 
         # This monitor will never be able to process the fourth one.
         class IHateI4(MockSweepMonitor):
             def process_item(self, item):
                 if item is i4:
                     raise Exception("HOW DARE YOU")
-                super(IHateI4, self).process_item(item)
+                super().process_item(item)
 
         monitor = IHateI4(self._db)
 
@@ -771,7 +771,7 @@ class TestWorkSweepMonitors(DatabaseTest):
 
         # Three Works with LicensePools. Only one is presentation
         # ready.
-        w1, w2, w3 = [self._work(with_license_pool=True) for i in range(3)]
+        w1, w2, w3 = (self._work(with_license_pool=True) for i in range(3))
 
         # Another Work that's presentation ready but has no
         # LicensePool.
@@ -849,7 +849,7 @@ class TestPermanentWorkIDRefresh(DatabaseTest):
 
 class TestMakePresentationReadyMonitor(DatabaseTest):
     def setup_method(self):
-        super(TestMakePresentationReadyMonitor, self).setup_method()
+        super().setup_method()
 
         # This CoverageProvider will always succeed.
         class MockProvider1(AlwaysSuccessfulCoverageProvider):
@@ -998,7 +998,7 @@ class TestReaperMonitor(DatabaseTest):
         # The expired credentials have been reaped; the others
         # are still in the database.
         remaining = set(self._db.query(Credential).all())
-        assert set([active, eternal]) == remaining
+        assert {active, eternal} == remaining
 
     def test_reap_patrons(self):
         m = PatronRecordReaper(self._db)
@@ -1137,7 +1137,7 @@ class TestCollectionReaper(DatabaseTest):
         # Unlike most ReaperMonitors, CollectionReaper.delete()
         # is overridden to call delete() on the object it was passed,
         # rather than just doing a database delete.
-        class MockCollection(object):
+        class MockCollection:
             def delete(self):
                 self.was_called = True
 

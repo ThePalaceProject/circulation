@@ -1,4 +1,3 @@
-# encoding: utf-8
 import json
 import logging
 import os
@@ -37,7 +36,7 @@ from tests.core.util.test_mock_web_server import MockAPIServer, MockAPIServerRes
 
 class OverdriveTest(DatabaseTest):
     def setup_method(self):
-        super(OverdriveTest, self).setup_method()
+        super().setup_method()
         self.collection = MockOverdriveCoreAPI.mock_collection(self._db)
         base_path = os.path.split(__file__)[0]
         self.resource_path = os.path.join(base_path, "files", "overdrive")
@@ -59,7 +58,7 @@ class OverdriveTestWithAPI(OverdriveTest):
     """
 
     def setup_method(self):
-        super(OverdriveTestWithAPI, self).setup_method()
+        super().setup_method()
         self.api = MockOverdriveCoreAPI(self._db, self.collection)
 
 
@@ -84,13 +83,11 @@ class TestOverdriveCoreAPI(OverdriveTestWithAPI):
         _r = MockAPIServerResponse()
         _r.status_code = 200
         _r.set_content(
-            """{
+            b"""{
             "access_token": "x",
             "expires_in": 23
         }
-        """.encode(
-                "utf-8"
-            )
+        """
         )
         mock_web_server.enqueue_response("POST", "/oauth/token", _r)
 
@@ -410,7 +407,7 @@ class TestOverdriveCoreAPI(OverdriveTestWithAPI):
         # Test the internal method that retrieves a list of books and
         # preprocesses it.
 
-        class MockExtractor(object):
+        class MockExtractor:
             def link(self, content, rel_to_follow):
                 self.link_called_with = (content, rel_to_follow)
                 return "http://next-page/"
@@ -525,7 +522,7 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         assert 2 == consortial_data.licenses_owned
         assert 2 == consortial_data.licenses_available
 
-        class MockAPI(object):
+        class MockAPI:
             # Pretend to be an API for an Overdrive Advantage collection with
             # library ID 61.
             advantage_library_id = 61
@@ -548,7 +545,7 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         # TODO: It would probably be better not to return a
         # CirculationData object at all, but this shouldn't happen in
         # a real scenario.
-        class MockAPI(object):
+        class MockAPI:
             # Pretend to be an API for an Overdrive Advantage collection with
             # library ID 62.
             advantage_library_id = 62
@@ -752,7 +749,7 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
 
         grade_levels = sorted(
-            [x.identifier for x in metadata.subjects if x.type == Subject.GRADE_LEVEL]
+            x.identifier for x in metadata.subjects if x.type == Subject.GRADE_LEVEL
         )
         assert ["Grade 4", "Grade 5", "Grade 6", "Grade 7", "Grade 8"] == grade_levels
 
@@ -908,14 +905,14 @@ class TestOverdriveAdvantageAccount(OverdriveTestWithAPI):
 
         # To ensure uniqueness, the collection was named after its
         # parent.
-        assert "%s / %s" % (parent.name, account.name) == collection.name
+        assert f"{parent.name} / {account.name}" == collection.name
 
 
 class TestOverdriveBibliographicCoverageProvider(OverdriveTest):
     """Test the code that looks up bibliographic information from Overdrive."""
 
     def setup_method(self):
-        super(TestOverdriveBibliographicCoverageProvider, self).setup_method()
+        super().setup_method()
         self.provider = OverdriveBibliographicCoverageProvider(
             self.collection, api_class=MockOverdriveCoreAPI
         )

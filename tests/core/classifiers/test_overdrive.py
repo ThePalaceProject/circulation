@@ -1,9 +1,8 @@
-# encoding: utf-8
 from core.classifier import *
 from core.classifier.overdrive import OverdriveClassifier as Overdrive
 
 
-class TestOverdriveClassifier(object):
+class TestOverdriveClassifier:
     def test_lookup(self):
         assert Overdrive == Classifier.lookup(Classifier.OVERDRIVE)
 

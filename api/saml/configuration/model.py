@@ -222,7 +222,7 @@ class SAMLConfiguration(ConfigurationGrouping):
         :param metadata_parser: SAML metadata parser
         :type metadata_parser: SAMLMetadataParser
         """
-        super(SAMLConfiguration, self).__init__(configuration_storage, db)
+        super().__init__(configuration_storage, db)
 
         self._metadata_parser = metadata_parser
 
@@ -428,7 +428,7 @@ class SAMLConfigurationFactory(ConfigurationFactory):
         """
         if not isinstance(parser, SAMLMetadataParser):
             raise ValueError(
-                "Argument 'parser' must be an instance of {0} class".format(
+                "Argument 'parser' must be an instance of {} class".format(
                     SAMLMetadataParser
                 )
             )
@@ -453,7 +453,7 @@ class SAMLConfigurationFactory(ConfigurationFactory):
         """
         if not issubclass(configuration_grouping_class, SAMLConfiguration):
             raise ValueError(
-                "Argument 'configuration_grouping_class' must be a subclass of {0} class".format(
+                "Argument 'configuration_grouping_class' must be a subclass of {} class".format(
                     SAMLConfiguration
                 )
             )
@@ -464,7 +464,7 @@ class SAMLConfigurationFactory(ConfigurationFactory):
             yield configuration_bucket
 
 
-class SAMLOneLoginConfiguration(object):
+class SAMLOneLoginConfiguration:
     """Converts metadata objects to the OneLogin's SAML Toolkit format"""
 
     DEBUG = "debug"
@@ -612,7 +612,7 @@ class SAMLOneLoginConfiguration(object):
         if not identity_providers:
             raise SAMLConfigurationError(
                 _(
-                    "There is no identity provider with entityID = {0}".format(
+                    "There is no identity provider with entityID = {}".format(
                         idp_entity_id
                     )
                 )
@@ -621,7 +621,7 @@ class SAMLOneLoginConfiguration(object):
         if len(identity_providers) > 1:
             raise SAMLConfigurationError(
                 _(
-                    "There are multiple identity providers with entityID = {0}".format(
+                    "There are multiple identity providers with entityID = {}".format(
                         idp_entity_id
                     )
                 )

@@ -112,7 +112,7 @@ class RunSelfTestsScript(LibraryInputScript):
     """
 
     def __init__(self, _db=None, output=sys.stdout):
-        super(RunSelfTestsScript, self).__init__(_db)
+        super().__init__(_db)
         self.out = output
 
     def do_run(self, *args, **kwargs):
@@ -157,7 +157,7 @@ class RunSelfTestsScript(LibraryInputScript):
             success = "SUCCESS"
         else:
             success = "FAILURE"
-        self.out.write("  %s %s (%.1fsec)\n" % (success, result.name, result.duration))
+        self.out.write(f"  {success} {result.name} ({result.duration:.1f}sec)\n")
         if isinstance(result.result, (bytes, str)):
             self.out.write("   Result: %s\n" % result.result)
         if result.exception:
@@ -186,7 +186,7 @@ class HasCollectionSelfTests(HasSelfTests):
             else:
                 title = "[title unknown]"
             identifier = lp.identifier.identifier
-            titles.append("%s (ID: %s)" % (title, identifier))
+            titles.append(f"{title} (ID: {identifier})")
 
         if titles:
             return titles

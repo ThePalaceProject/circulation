@@ -1,4 +1,3 @@
-# encoding: utf-8
 import datetime
 from unittest.mock import MagicMock, call
 
@@ -787,16 +786,13 @@ class TestPatron(DatabaseTest):
 
 class TestPatronProfileStorage(DatabaseTest):
     def setup_method(self):
-        super(TestPatronProfileStorage, self).setup_method()
+        super().setup_method()
         self.patron = self._patron()
         self.store = PatronProfileStorage(self.patron)
 
     def test_writable_setting_names(self):
         """Only one setting is currently writable."""
-        assert (
-            set([self.store.SYNCHRONIZE_ANNOTATIONS])
-            == self.store.writable_setting_names
-        )
+        assert {self.store.SYNCHRONIZE_ANNOTATIONS} == self.store.writable_setting_names
 
     def test_profile_document(self):
         # synchronize_annotations always shows up as settable, even if

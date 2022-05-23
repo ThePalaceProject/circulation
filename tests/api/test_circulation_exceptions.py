@@ -7,7 +7,7 @@ from core.testing import DatabaseTest
 from core.util.problem_detail import ProblemDetail
 
 
-class TestCirculationExceptions(object):
+class TestCirculationExceptions:
     def test_as_problem_detail_document(self):
         """Verify that circulation exceptions can be turned into ProblemDetail
         documents.

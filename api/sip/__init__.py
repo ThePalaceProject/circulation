@@ -167,9 +167,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
         during testing.
 
         """
-        super(SIP2AuthenticationProvider, self).__init__(
-            library, integration, analytics
-        )
+        super().__init__(library, integration, analytics)
 
         self.server = integration.url
         self.port = integration.setting(self.PORT).int_value
@@ -229,7 +227,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
             sip.disconnect()
             return info
 
-        except IOError as e:
+        except OSError as e:
             raise RemoteIntegrationException(self.server or "unknown server", str(e))
 
     def _remote_patron_lookup(self, patron_or_patrondata):
@@ -278,8 +276,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
             results = [
                 r for r in super(SIP2AuthenticationProvider, self)._run_self_tests(_db)
             ]
-            for result in results:
-                yield result
+            yield from results
 
             if results[0].success:
 

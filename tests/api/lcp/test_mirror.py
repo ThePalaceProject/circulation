@@ -9,7 +9,7 @@ from tests.api.lcp.database_test import DatabaseTest
 
 class TestLCPMirror(DatabaseTest):
     def setup_method(self):
-        super(TestLCPMirror, self).setup_method()
+        super().setup_method()
 
         settings = {
             S3UploaderConfiguration.PROTECTED_CONTENT_BUCKET_KEY: "encrypted-books",

@@ -30,7 +30,7 @@ from api.saml.metadata.parser import (
 from tests.api.saml import fixtures
 
 
-class TestSAMLMetadataParser(object):
+class TestSAMLMetadataParser:
     def test_parse_raises_exception_when_xml_metadata_has_incorrect_format(self):
         # Arrange
         metadata_parser = SAMLMetadataParser()
@@ -592,7 +592,7 @@ class TestSAMLMetadataParser(object):
         )
 
 
-class TestSAMLSubjectParser(object):
+class TestSAMLSubjectParser:
     @parameterized.expand(
         [
             (

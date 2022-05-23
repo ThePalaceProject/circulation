@@ -107,7 +107,7 @@ IDENTITY_PROVIDER_WITHOUT_DISPLAY_NAMES = SAMLIdentityProviderMetadata(
 
 class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
     def setup_method(self, _db=None, set_up_circulation_manager=True):
-        super(TestSAMLWebSSOAuthenticationProvider, self).setup_method()
+        super().setup_method()
 
         metadata_parser = SAMLMetadataParser()
 

@@ -15,7 +15,7 @@ from . import SitewideRegistrationController
 
 class MetadataServicesController(SitewideRegistrationController):
     def __init__(self, manager):
-        super(MetadataServicesController, self).__init__(manager)
+        super().__init__(manager)
         self.provider_apis = [
             NYTBestSellerAPI,
             NoveListAPI,

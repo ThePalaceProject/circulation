@@ -3,7 +3,7 @@ from __future__ import annotations
 # Credential, DRMDeviceIdentifier, DelegatedPatronIdentifier
 import datetime
 import uuid
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Column,
@@ -99,7 +99,7 @@ class Credential(Base):
     @classmethod
     def _filter_invalid_credential(
         cls, credential: Credential, allow_persistent_token: bool
-    ) -> Optional[Credential]:
+    ) -> Credential | None:
         """Filter out invalid credentials based on their expiration time and persistence.
 
         :param credential: Credential object
@@ -181,7 +181,7 @@ class Credential(Base):
         patron: Patron,
         allow_persistent_token: bool = False,
         auto_create_datasource: bool = True,
-    ) -> Optional[Credential]:
+    ) -> Credential | None:
         """Look up a unique token.
         Lookup will fail on expired tokens. Unless persistent tokens
         are specifically allowed, lookup will fail on persistent tokens.
@@ -291,12 +291,12 @@ class Credential(Base):
     def __repr__(self):
         return (
             "<Credential("
-            "data_source_id={0}, "
-            "patron_id={1}, "
-            "collection_id={2}, "
-            "type={3}, "
-            "credential={4}, "
-            "expires={5}>)".format(
+            "data_source_id={}, "
+            "patron_id={}, "
+            "collection_id={}, "
+            "type={}, "
+            "credential={}, "
+            "expires={}>)".format(
                 self.data_source_id,
                 self.patron_id,
                 self.collection_id,

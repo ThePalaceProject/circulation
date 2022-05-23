@@ -87,7 +87,7 @@ class TestOPDS2Importer(OPDS2Test):
         return open(os.path.join(resource_path, filename)).read()
 
     def setup_method(self):
-        super(TestOPDS2Importer, self).setup_method()
+        super().setup_method()
 
         self._collection: Collection = self._default_collection
         self._data_source: DataSource = DataSource.lookup(

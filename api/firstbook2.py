@@ -54,9 +54,7 @@ class FirstBookAuthenticationAPI(BasicAuthenticationProvider):
     log = logging.getLogger("First Book JWT authentication API")
 
     def __init__(self, library_id, integration, analytics=None, root=None, secret=None):
-        super(FirstBookAuthenticationAPI, self).__init__(
-            library_id, integration, analytics
-        )
+        super().__init__(library_id, integration, analytics)
         root = root or integration.url
         secret = secret or integration.password
         if not (root and secret):
@@ -123,7 +121,7 @@ class FirstBookAuthenticationAPI(BasicAuthenticationProvider):
         return requests.get(url)
 
 
-class MockFirstBookResponse(object):
+class MockFirstBookResponse:
     def __init__(self, status_code, content):
         self.status_code = status_code
         # Guarantee that the response content is always a bytestring,
@@ -146,7 +144,7 @@ class MockFirstBookAuthenticationAPI(FirstBookAuthenticationAPI):
         bad_connection=False,
         failure_status_code=None,
     ):
-        super(MockFirstBookAuthenticationAPI, self).__init__(
+        super().__init__(
             library, integration, root="http://example.com/", secret="secret"
         )
         self.identifier_re = None

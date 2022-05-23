@@ -3,7 +3,7 @@ from core.classifier import *
 from core.classifier.ddc import DeweyDecimalClassifier as DDC
 
 
-class TestDewey(object):
+class TestDewey:
     def test_name_for(self):
         assert "General statistics of Europe" == DDC.name_for("314")
         assert "Biography" == DDC.name_for("B")

@@ -1,4 +1,3 @@
-# encoding: utf-8
 from core.cdn import cdnify
 from core.config import Configuration, temp_config
 from core.model import ExternalIntegration

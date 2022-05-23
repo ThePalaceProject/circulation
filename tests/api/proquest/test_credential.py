@@ -16,7 +16,7 @@ from tests.api.saml import fixtures
 
 class TestProQuestCredentialManager(DatabaseTest):
     def setup_method(self):
-        super(TestProQuestCredentialManager, self).setup_method()
+        super().setup_method()
 
         self._data_source = DataSource.lookup(
             self._db, DataSource.PROQUEST, autocreate=True

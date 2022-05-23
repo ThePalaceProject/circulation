@@ -1,4 +1,3 @@
-# encoding: utf-8
 import csv
 import os
 import re
@@ -7,7 +6,7 @@ from . import *
 from .keyword import KeywordBasedClassifier
 
 
-class CustomMatchToken(object):
+class CustomMatchToken:
     """A custom token used in matching rules."""
 
     def matches(self, subject_token):
@@ -37,7 +36,7 @@ class Interchangeable(CustomMatchToken):
 
     def __init__(self, *choices):
         """All of these strings are interchangeable for matching purposes."""
-        self.choices = set([Lowercased(x) for x in choices])
+        self.choices = {Lowercased(x) for x in choices}
 
     def matches(self, subject_token):
         return Lowercased(subject_token) in self.choices
@@ -77,7 +76,7 @@ special_variables = {
 }
 
 
-class MatchingRule(object):
+class MatchingRule:
     """A rule that takes a list of subject parts and returns
     an appropriate classification.
     """

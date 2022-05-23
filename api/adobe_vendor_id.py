@@ -37,7 +37,7 @@ from .config import CannotLoadConfiguration, Configuration
 from .problem_details import *
 
 
-class AdobeVendorIDController(object):
+class AdobeVendorIDController:
 
     """Flask controllers that implement the Account Service and
     Authorization Service portions of the Adobe Vendor ID protocol.
@@ -165,7 +165,7 @@ class DeviceManagementProtocolController(BaseCirculationManagerController):
         return Response(output, 200, self.PLAIN_TEXT_HEADERS)
 
 
-class AdobeVendorIDRequestHandler(object):
+class AdobeVendorIDRequestHandler:
 
     """Standalone class that can be tested without bringing in Flask or
     the database schema.
@@ -249,7 +249,7 @@ class AdobeVendorIDRequestHandler(object):
         )
 
 
-class DeviceManagementRequestHandler(object):
+class DeviceManagementRequestHandler:
     """Handle incoming requests for the DRM Device Management Protocol."""
 
     def __init__(self, credential):
@@ -335,7 +335,7 @@ class AdobeAccountInfoRequestParser(AdobeRequestParser):
         return data
 
 
-class AdobeVendorIDModel(object):
+class AdobeVendorIDModel:
 
     """Implement Adobe Vendor ID within the Simplified database
     model.
@@ -604,7 +604,7 @@ class AdobeVendorIDModel(object):
         return patron_identifier_credential
 
 
-class AuthdataUtility(object):
+class AuthdataUtility:
 
     """Generate authdata JWTs as per the Vendor ID Service spec:
     https://docs.google.com/document/d/1j8nWPVmy95pJ_iU4UTC-QgHK2QhDUSdQ0OQTFR2NE_0
@@ -1047,9 +1047,7 @@ class AuthdataUtility(object):
         now = utc_now()
         expiration = self.EPOCH + datetime.timedelta(seconds=expiration)
         if expiration < now:
-            raise ValueError(
-                "Token %s expired at %s (now is %s)." % (token, expiration, now)
-            )
+            raise ValueError(f"Token {token} expired at {expiration} (now is {now}).")
 
         # Sign the token and check against the provided signature.
         key = self.short_token_signer.prepare_key(secret)

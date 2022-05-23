@@ -13,10 +13,10 @@ class TestCustomPatronCatalog(DatabaseTest):
         old_registry = c.BY_PROTOCOL
         c.BY_PROTOCOL = {}
 
-        class Mock1(object):
+        class Mock1:
             PROTOCOL = "A protocol"
 
-        class Mock2(object):
+        class Mock2:
             PROTOCOL = "A protocol"
 
         c.register(Mock1)
@@ -39,7 +39,7 @@ class TestCustomPatronCatalog(DatabaseTest):
 
         # Set up a mock CustomPatronCatalog so we can watch it being
         # instantiated.
-        class MockCustomPatronCatalog(object):
+        class MockCustomPatronCatalog:
             PROTOCOL = self._str
 
             def __init__(self, library, integration):
@@ -107,7 +107,7 @@ class TestCustomRootLane(DatabaseTest):
     """Test a CustomPatronCatalog which modifies the 'start' URL."""
 
     def setup_method(self):
-        super(TestCustomRootLane, self).setup_method()
+        super().setup_method()
         # Configure a CustomRootLane for the default library.
         self.integration = self._external_integration(
             CustomRootLane.PROTOCOL,
@@ -166,7 +166,7 @@ class TestCustomRootLane(DatabaseTest):
 
 class TestCOPPAGate(DatabaseTest):
     def setup_method(self):
-        super(TestCOPPAGate, self).setup_method()
+        super().setup_method()
         # Configure a COPPAGate for the default library.
         self.integration = self._external_integration(
             COPPAGate.PROTOCOL,

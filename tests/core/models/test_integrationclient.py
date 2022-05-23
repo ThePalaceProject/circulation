@@ -1,4 +1,3 @@
-# encoding: utf-8
 import datetime
 
 import pytest
@@ -10,7 +9,7 @@ from core.util.datetime_helpers import utc_now
 
 class TestIntegrationClient(DatabaseTest):
     def setup_method(self):
-        super(TestIntegrationClient, self).setup_method()
+        super().setup_method()
         self.client = self._integration_client()
 
     def test_for_url(self):

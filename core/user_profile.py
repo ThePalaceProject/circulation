@@ -5,7 +5,7 @@ from flask_babel import lazy_gettext as _
 from .problem_details import *
 
 
-class ProfileController(object):
+class ProfileController:
     """Implement the User Profile Management Protocol.
 
     https://github.com/NYPL-Simplified/Simplified/wiki/User-Profile-Management-Protocol
@@ -94,7 +94,7 @@ class ProfileController(object):
         return body, 200, {"Content-Type": "text/plain"}
 
 
-class ProfileStorage(object):
+class ProfileStorage:
     """An abstract class defining a specific user's profile.
 
     Subclasses should get profile information from somewhere specific,

@@ -1,4 +1,3 @@
-# encoding: utf-8
 # CustomList, CustomListEntry
 
 import logging
@@ -395,7 +394,7 @@ class CustomListEntry(Base):
         equivalent_entries = list(set(equivalent_entries))
 
         # Confirm that all the entries are from the same CustomList.
-        list_ids = set([e.list_id for e in equivalent_entries])
+        list_ids = {e.list_id for e in equivalent_entries}
         if not len(list_ids) == 1:
             raise ValueError("Cannot combine entries on different CustomLists.")
 
@@ -407,7 +406,7 @@ class CustomListEntry(Base):
                 raise ValueError(error)
 
         # And get a Work if one exists.
-        works = set([])
+        works = set()
         for e in equivalent_entries:
             work = e.edition.work
             if work:
@@ -420,9 +419,9 @@ class CustomListEntry(Base):
                 raise ValueError(error)
             [work] = works
 
-        self.first_appearance = min([e.first_appearance for e in equivalent_entries])
+        self.first_appearance = min(e.first_appearance for e in equivalent_entries)
         self.most_recent_appearance = max(
-            [e.most_recent_appearance for e in equivalent_entries]
+            e.most_recent_appearance for e in equivalent_entries
         )
 
         annotations = [str(e.annotation) for e in equivalent_entries if e.annotation]

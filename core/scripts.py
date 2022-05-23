@@ -65,7 +65,7 @@ from .util.personal_names import contributor_name_match_ratio, display_name_to_s
 from .util.worker_pools import DatabasePool
 
 
-class Script(object):
+class Script:
     @property
     def _db(self):
         if not hasattr(self, "_session"):
@@ -162,7 +162,7 @@ class TimestampScript(Script):
     """A script that automatically records a timestamp whenever it runs."""
 
     def __init__(self, *args, **kwargs):
-        super(TimestampScript, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.timestamp_collection = None
 
     def update_timestamp(self, timestamp_data, start, exception):
@@ -194,7 +194,7 @@ class TimestampScript(Script):
 
 class RunMonitorScript(Script):
     def __init__(self, monitor, _db=None, **kwargs):
-        super(RunMonitorScript, self).__init__(_db)
+        super().__init__(_db)
         if issubclass(monitor, CollectionMonitor):
             self.collection_monitor = monitor
             self.collection_monitor_kwargs = kwargs
@@ -236,7 +236,7 @@ class RunMultipleMonitorsScript(Script):
         :param kwargs: Keyword arguments to pass into the `monitors` method
             when building the Monitor objects.
         """
-        super(RunMultipleMonitorsScript, self).__init__(_db)
+        super().__init__(_db)
         self.kwargs = kwargs
 
     def monitors(self, **kwargs):
@@ -280,7 +280,7 @@ class RunCoverageProvidersScript(Script):
     """Alternate between multiple coverage providers."""
 
     def __init__(self, providers, _db=None):
-        super(RunCoverageProvidersScript, self).__init__(_db=_db)
+        super().__init__(_db=_db)
         self.providers = []
         for i in providers:
             if callable(i):
@@ -323,7 +323,7 @@ class RunCollectionCoverageProviderScript(RunCoverageProvidersScript):
         providers = providers or list()
         if provider_class:
             providers += self.get_providers(_db, provider_class, **kwargs)
-        super(RunCollectionCoverageProviderScript, self).__init__(providers, _db=_db)
+        super().__init__(providers, _db=_db)
 
     def get_providers(self, _db, provider_class, **kwargs):
         return list(provider_class.all(_db, **kwargs))
@@ -335,7 +335,7 @@ class RunThreadedCollectionCoverageProviderScript(Script):
     DEFAULT_WORKER_SIZE = 5
 
     def __init__(self, provider_class, worker_size=None, _db=None, **provider_kwargs):
-        super(RunThreadedCollectionCoverageProviderScript, self).__init__(_db)
+        super().__init__(_db)
 
         self.worker_size = worker_size or self.DEFAULT_WORKER_SIZE
         self.session_factory = SessionManager.sessionmaker(session=self._db)
@@ -632,14 +632,12 @@ class PatronInputScript(LibraryInputScript):
         parsed = parser.parse_args(cmd_args)
         if stdin:
             stdin = cls.read_stdin_lines(stdin)
-        parsed = super(PatronInputScript, cls).look_up_libraries(
-            _db, parsed, *args, **kwargs
-        )
+        parsed = super().look_up_libraries(_db, parsed, *args, **kwargs)
         return cls.look_up_patrons(_db, parsed, stdin, *args, **kwargs)
 
     @classmethod
     def arg_parser(cls, _db):
-        parser = super(PatronInputScript, cls).arg_parser(_db, multiple_libraries=False)
+        parser = super().arg_parser(_db, multiple_libraries=False)
         parser.add_argument(
             "identifiers",
             help="A specific patron identifier to process.",
@@ -801,7 +799,7 @@ class RunCoverageProviderScript(IdentifierInputScript):
         self, provider, _db=None, cmd_args=None, *provider_args, **provider_kwargs
     ):
 
-        super(RunCoverageProviderScript, self).__init__(_db)
+        super().__init__(_db)
         parsed_args = self.parse_command_line(self._db, cmd_args)
         if parsed_args.identifier_type:
             self.identifier_type = parsed_args.identifier_type
@@ -912,7 +910,7 @@ class ConfigureSiteScript(ConfigurationSettingScript):
 
     def __init__(self, _db=None, config=Configuration):
         self.config = config
-        super(ConfigureSiteScript, self).__init__(_db=_db)
+        super().__init__(_db=_db)
 
     @classmethod
     def arg_parser(cls):
@@ -1453,7 +1451,7 @@ class AddClassificationScript(IdentifierInputScript):
         return parser
 
     def __init__(self, _db=None, cmd_args=None, stdin=sys.stdin):
-        super(AddClassificationScript, self).__init__(_db=_db)
+        super().__init__(_db=_db)
         args = self.parse_command_line(self._db, cmd_args=cmd_args, stdin=stdin)
         self.identifier_type = args.identifier_type
         self.identifiers = args.identifiers
@@ -1510,7 +1508,7 @@ class WorkProcessingScript(IdentifierInputScript):
     def __init__(
         self, force=False, batch_size=10, _db=None, cmd_args=None, stdin=sys.stdin
     ):
-        super(WorkProcessingScript, self).__init__(_db=_db)
+        super().__init__(_db=_db)
 
         args = self.parse_command_line(self._db, cmd_args=cmd_args, stdin=stdin)
         self.identifier_type = args.identifier_type
@@ -1602,7 +1600,7 @@ class WorkConsolidationScript(WorkProcessingScript):
         licensepool.calculate_work()
 
     def do_run(self):
-        super(WorkConsolidationScript, self).do_run()
+        super().do_run()
         qu = (
             self._db.query(Work)
             .outerjoin(Work.license_pools)
@@ -1796,7 +1794,7 @@ class RunCollectionMonitorScript(RunMultipleMonitorsScript, CollectionArgumentsS
             constructor each time it's called.
 
         """
-        super(RunCollectionMonitorScript, self).__init__(_db, **kwargs)
+        super().__init__(_db, **kwargs)
         self.monitor_class = monitor_class
         self.name = self.monitor_class.SERVICE_NAME
         parsed = vars(self.parse_command_line(self._db, cmd_args=cmd_args))
@@ -1826,7 +1824,7 @@ class OPDSImportScript(CollectionInputScript):
         *args,
         **kwargs,
     ):
-        super(OPDSImportScript, self).__init__(_db, *args, **kwargs)
+        super().__init__(_db, *args, **kwargs)
         self.importer_class = importer_class or self.IMPORTER_CLASS
         self.monitor_class = monitor_class or self.MONITOR_CLASS
         self.protocol = protocol or self.PROTOCOL
@@ -1973,9 +1971,7 @@ class MirrorResourcesScript(CollectionInputScript):
             # this particular resource, but if every
             # LicensePoolDeliveryMechanism has the same rights
             # status, we can assume it's that one.
-            statuses = list(
-                set([x.rights_status for x in license_pool.delivery_mechanisms])
-            )
+            statuses = list({x.rights_status for x in license_pool.delivery_mechanisms})
             if len(statuses) == 1:
                 [rights_status] = statuses
         if rights_status:
@@ -2055,7 +2051,7 @@ class DatabaseMigrationScript(Script):
     TRANSACTION_PER_STATEMENT = "SIMPLYE_MIGRATION_TRANSACTION_PER_STATEMENT"
     DO_NOT_EXECUTE = "SIMPLYE_MIGRATION_DO_NOT_EXECUTE"
 
-    class TimestampInfo(object):
+    class TimestampInfo:
         """Act like a ORM Timestamp object, but with no database connection."""
 
         @classmethod
@@ -2151,7 +2147,7 @@ class DatabaseMigrationScript(Script):
             _db.execute(text(sql), values)
             _db.flush()
 
-            message = "%s Timestamp stamped at %s" % (
+            message = "{} Timestamp stamped at {}".format(
                 self.service,
                 self.finish.strftime("%Y-%m-%d"),
             )
@@ -2284,7 +2280,7 @@ class DatabaseMigrationScript(Script):
         return self.TimestampInfo.find(self, self.PY_TIMESTAMP_SERVICE_NAME)
 
     def __init__(self, *args, **kwargs):
-        super(DatabaseMigrationScript, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.python_only = False
 
     def load_configuration(self):
@@ -2633,7 +2629,7 @@ class DatabaseMigrationInitializationScript(DatabaseMigrationScript):
 
     @classmethod
     def arg_parser(cls):
-        parser = super(DatabaseMigrationInitializationScript, cls).arg_parser()
+        parser = super().arg_parser()
         parser.add_argument(
             "-f",
             "--force",
@@ -2722,7 +2718,7 @@ class CheckContributorNamesInDB(IdentifierInputScript):
     COMPLAINT_TYPE = "http://librarysimplified.org/terms/problem/wrong-author"
 
     def __init__(self, _db=None, cmd_args=None, stdin=sys.stdin):
-        super(CheckContributorNamesInDB, self).__init__(_db=_db)
+        super().__init__(_db=_db)
 
         self.parsed_args = self.parse_command_line(
             _db=self._db, cmd_args=cmd_args, stdin=stdin
@@ -2848,7 +2844,7 @@ class CheckContributorNamesInDB(IdentifierInputScript):
                     )
                 else:
                     # we can fix it!
-                    output = "%s|\t%s|\t%s|\t%s|\tlocal_fix" % (
+                    output = "{}|\t{}|\t{}|\t{}|\tlocal_fix".format(
                         contributor.id,
                         contributor.sort_name,
                         contributor.display_name,
@@ -2912,7 +2908,7 @@ class Explain(IdentifierInputScript):
             return
 
         # Tell about the Edition record.
-        output = "%s (%s, %s) according to %s" % (
+        output = "{} ({}, {}) according to {}".format(
             edition.title,
             edition.author,
             edition.medium,
@@ -3029,7 +3025,7 @@ class Explain(IdentifierInputScript):
                     fulfillable = "Fulfillable"
                 else:
                     fulfillable = "Unfulfillable"
-                self.write("  %s %s/%s" % (fulfillable, dm.content_type, dm.drm_scheme))
+                self.write(f"  {fulfillable} {dm.content_type}/{dm.drm_scheme}")
         else:
             self.write(" No delivery mechanisms.")
         self.write(
@@ -3066,7 +3062,7 @@ class Explain(IdentifierInputScript):
                 collection = pool.collection.name
             else:
                 collection = "!collection"
-            self.write("  %s: %r %s" % (active, pool.identifier, collection))
+            self.write(f"  {active}: {pool.identifier!r} {collection}")
         wcrs = sorted(work.coverage_records, key=lambda x: x.timestamp)
         if wcrs:
             self.write(" %s work coverage records" % len(wcrs))
@@ -3100,7 +3096,9 @@ class Explain(IdentifierInputScript):
         else:
             exception = ""
         self.write(
-            "   %s | %s%s%s%s" % (timestamp, data_source, operation, status, exception)
+            "   {} | {}{}{}{}".format(
+                timestamp, data_source, operation, status, exception
+            )
         )
 
 
@@ -3113,7 +3111,7 @@ class WhereAreMyBooksScript(CollectionInputScript):
 
     def __init__(self, _db=None, output=None, search=None):
         _db = _db or self._db
-        super(WhereAreMyBooksScript, self).__init__(_db)
+        super().__init__(_db)
         self.output = output or sys.stdout
         try:
             self.search = search or ExternalSearchIndex(_db)
@@ -3243,7 +3241,7 @@ class ListCollectionMetadataIdentifiersScript(CollectionInputScript):
 
     def __init__(self, _db=None, output=None):
         _db = _db or self._db
-        super(ListCollectionMetadataIdentifiersScript, self).__init__(_db)
+        super().__init__(_db)
         self.output = output or sys.stdout
 
     def run(self, cmd_args=None):
@@ -3263,7 +3261,7 @@ class ListCollectionMetadataIdentifiersScript(CollectionInputScript):
         self.output.write("=" * 50 + "\n")
 
         def add_line(id, name, protocol, metadata_identifier):
-            line = "(%s) %s/%s => %s\n" % (id, name, protocol, metadata_identifier)
+            line = f"({id}) {name}/{protocol} => {metadata_identifier}\n"
             self.output.write(line)
 
         count = 0
@@ -3301,7 +3299,7 @@ class UpdateCustomListSizeScript(CustomListSweeperScript):
         custom_list.update_size()
 
 
-class RemovesSearchCoverage(object):
+class RemovesSearchCoverage:
     """Mix-in class for a script that might remove all coverage records
     for the search engine.
     """
@@ -3339,9 +3337,7 @@ class RebuildSearchIndexScript(RunWorkCoverageProviderScript, RemovesSearchCover
     def __init__(self, *args, **kwargs):
         search = kwargs.get("search_index_client", None)
         self.search = search or ExternalSearchIndex(self._db)
-        super(RebuildSearchIndexScript, self).__init__(
-            SearchIndexCoverageProvider, *args, **kwargs
-        )
+        super().__init__(SearchIndexCoverageProvider, *args, **kwargs)
 
     def do_run(self):
         # Calling setup_index will destroy the index and recreate it
@@ -3354,7 +3350,7 @@ class RebuildSearchIndexScript(RunWorkCoverageProviderScript, RemovesSearchCover
         self.log.info("Deleted %d search coverage records.", count)
 
         # Now let the SearchIndexCoverageProvider do its thing.
-        return super(RebuildSearchIndexScript, self).do_run()
+        return super().do_run()
 
 
 class SearchIndexCoverageRemover(TimestampScript, RemovesSearchCoverage):
@@ -3371,7 +3367,7 @@ class SearchIndexCoverageRemover(TimestampScript, RemovesSearchCoverage):
         )
 
 
-class MockStdin(object):
+class MockStdin:
     """Mock a list of identifiers passed in on standard input."""
 
     def __init__(self, *lines):

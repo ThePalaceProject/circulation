@@ -1,4 +1,3 @@
-# encoding: utf-8
 # Contributor, Contribution
 
 
@@ -87,7 +86,7 @@ class Contributor(Base):
     COPYRIGHT_HOLDER_ROLE = "Copyright holder"
     TRANSCRIBER_ROLE = "Transcriber"
     DESIGNER_ROLE = "Designer"
-    AUTHOR_ROLES = set([PRIMARY_AUTHOR_ROLE, AUTHOR_ROLE])
+    AUTHOR_ROLES = {PRIMARY_AUTHOR_ROLE, AUTHOR_ROLE}
 
     # Map our recognized roles to MARC relators.
     # https://www.loc.gov/marc/relators/relaterm.html

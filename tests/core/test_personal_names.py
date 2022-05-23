@@ -1,5 +1,3 @@
-# encoding: utf-8
-
 from core.testing import DatabaseTest
 from core.util.personal_names import display_name_to_sort_name
 

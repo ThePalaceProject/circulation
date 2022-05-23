@@ -9,7 +9,7 @@ from api.sip.client import MockSIPClient, SIPClient
 from api.sip.dialect import AutoGraphicsVerso, GenericILS
 
 
-class MockSocket(object):
+class MockSocket:
     def __init__(self, *args, **kwargs):
         self.data = b""
         self.args = args
@@ -34,7 +34,7 @@ class MockSocket(object):
         return block
 
 
-class MockWrapSocket(object):
+class MockWrapSocket:
     def __init__(self):
         self.called_with = None
 
@@ -43,7 +43,7 @@ class MockWrapSocket(object):
         return connection
 
 
-class TestSIPClient(object):
+class TestSIPClient:
     """Test the real SIPClient class without allowing it to make
     network connections.
     """
@@ -104,7 +104,7 @@ class TestSIPClient(object):
             with_cert.connect()
             connection, kwargs = wrap_socket.called_with
             assert isinstance(connection, MockSocket)
-            assert set(["keyfile", "certfile"]) == set(kwargs.keys())
+            assert {"keyfile", "certfile"} == set(kwargs.keys())
             for tmpfile in list(kwargs.values()):
                 tmpfile = os.path.abspath(tmpfile)
                 assert os.path.basename(tmpfile).startswith("tmp")
@@ -157,7 +157,7 @@ class TestSIPClient(object):
             socket.socket = old_socket
 
 
-class TestBasicProtocol(object):
+class TestBasicProtocol:
     def test_login_message(self):
         sip = MockSIPClient()
         message = sip.login_message("user_id", "password")
@@ -222,7 +222,7 @@ class TestBasicProtocol(object):
         assert sip.MAXIMUM_RETRIES == len(sip.requests)
 
 
-class TestLogin(object):
+class TestLogin:
     def test_login_success(self):
         sip = MockSIPClient(login_user_id="user_id", login_password="password")
         sip.queue_response("941")
@@ -312,7 +312,7 @@ class TestLogin(object):
         assert "12345" == response["patron_identifier"]
 
 
-class TestPatronResponse(object):
+class TestPatronResponse:
     def setup_method(self):
         self.sip = MockSIPClient()
 
@@ -485,7 +485,7 @@ class TestPatronResponse(object):
             assert parsed[no] == False
 
 
-class TestClientDialects(object):
+class TestClientDialects:
     def setup_method(self):
         self.sip = MockSIPClient()
 

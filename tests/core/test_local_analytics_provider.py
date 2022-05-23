@@ -43,7 +43,7 @@ class TestInitializeLocalAnalyticsProvider(DatabaseTest):
 
 class TestLocalAnalyticsProvider(DatabaseTest):
     def setup_method(self):
-        super(TestLocalAnalyticsProvider, self).setup_method()
+        super().setup_method()
         self.integration, ignore = create(
             self._db,
             ExternalIntegration,

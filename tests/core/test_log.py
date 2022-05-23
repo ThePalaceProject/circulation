@@ -1,4 +1,3 @@
-# encoding: utf-8
 import json
 import logging
 import sys
@@ -21,7 +20,7 @@ from core.model import ConfigurationSetting, ExternalIntegration
 from core.testing import DatabaseTest
 
 
-class TestJSONFormatter(object):
+class TestJSONFormatter:
     def test_format(self):
         formatter = JSONFormatter("some app")
         assert "some app" == formatter.app_name

@@ -242,7 +242,7 @@ class Axis360API(
             )
 
         # Run the tests defined by HasCollectionSelfTests
-        for result in super(Axis360API, self)._run_self_tests():
+        for result in super()._run_self_tests():
             yield result
 
     def refresh_bearer_token(self):
@@ -261,7 +261,7 @@ class Axis360API(
         data=None,
         params=None,
         exception_on_401=False,
-        **kwargs
+        **kwargs,
     ):
         """Make an HTTP request, acquiring/refreshing a bearer token
         if necessary.
@@ -282,7 +282,7 @@ class Axis360API(
             data=data,
             params=params,
             disallowed_response_codes=disallowed_response_codes,
-            **kwargs
+            **kwargs,
         )
         if response.status_code == 401:
             # This must be our first 401, since our second 401 will
@@ -297,7 +297,7 @@ class Axis360API(
                 data=data,
                 params=params,
                 exception_on_401=True,
-                **kwargs
+                **kwargs,
             )
         else:
             return response
@@ -350,7 +350,7 @@ class Axis360API(
 
     def _checkin(self, title_id, patron_id):
         """Make a request to the EarlyCheckInTitle endpoint."""
-        url = self.base_url + "EarlyCheckInTitle/v3?itemID=%s&patronID=%s" % (
+        url = self.base_url + "EarlyCheckInTitle/v3?itemID={}&patronID={}".format(
             urllib.parse.quote(title_id),
             urllib.parse.quote(patron_id),
         )
@@ -570,10 +570,7 @@ class Axis360API(
         """
         availability = self.availability(since=since)
         content = availability.content
-        for bibliographic, circulation in BibliographicParser(
-            self.collection
-        ).process_all(content):
-            yield bibliographic, circulation
+        yield from BibliographicParser(self.collection).process_all(content)
 
     @classmethod
     def create_identifier_strings(cls, identifiers):
@@ -612,7 +609,7 @@ class Axis360CirculationMonitor(CollectionMonitor, TimelineMonitor):
     DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
 
     def __init__(self, _db, collection, api_class=Axis360API):
-        super(Axis360CirculationMonitor, self).__init__(_db, collection)
+        super().__init__(_db, collection)
         if isinstance(api_class, Axis360API):
             # Use a preexisting Axis360API instance rather than
             # creating a new one.
@@ -686,7 +683,7 @@ class MockAxis360API(Axis360API):
             it already has a valid token, and will not go through
             the motions of negotiating one with the mock server.
         """
-        super(MockAxis360API, self).__init__(_db, collection, **kwargs)
+        super().__init__(_db, collection, **kwargs)
         if with_token:
             self.token = "mock token"
         self.responses = []
@@ -731,7 +728,7 @@ class Axis360BibliographicCoverageProvider(BibliographicCoverageProvider):
         :param api_class: Instantiate this class with the given Collection,
             rather than instantiating Axis360API.
         """
-        super(Axis360BibliographicCoverageProvider, self).__init__(collection, **kwargs)
+        super().__init__(collection, **kwargs)
         if isinstance(api_class, Axis360API):
             # We were given a specific Axis360API instance to use.
             self.api = api_class
@@ -791,7 +788,7 @@ class AxisCollectionReaper(IdentifierSweepMonitor):
     PROTOCOL = ExternalIntegration.AXIS_360
 
     def __init__(self, _db, collection, api_class=Axis360API):
-        super(AxisCollectionReaper, self).__init__(_db, collection)
+        super().__init__(_db, collection)
         if isinstance(api_class, Axis360API):
             # Use a preexisting Axis360API instance rather than
             # creating a new one.
@@ -861,10 +858,7 @@ class BibliographicParser(Axis360Parser):
         self.include_bibliographic = include_bibliographic
 
     def process_all(self, string):
-        for i in super(BibliographicParser, self).process_all(
-            string, "//axis:title", self.NS
-        ):
-            yield i
+        yield from super().process_all(string, "//axis:title", self.NS)
 
     def extract_availability(self, circulation_data, element, ns):
         identifier = self.text_of_subtag(element, "axis:titleId", ns)
@@ -1301,9 +1295,7 @@ class ResponseParser(Axis360Parser):
 
 class CheckinResponseParser(ResponseParser):
     def process_all(self, string):
-        for i in super(CheckinResponseParser, self).process_all(
-            string, "//axis:EarlyCheckinRestResult", self.NS
-        ):
+        for i in super().process_all(string, "//axis:EarlyCheckinRestResult", self.NS):
             return i
 
     def process_one(self, e, namespaces):
@@ -1314,9 +1306,7 @@ class CheckinResponseParser(ResponseParser):
 
 class CheckoutResponseParser(ResponseParser):
     def process_all(self, string):
-        for i in super(CheckoutResponseParser, self).process_all(
-            string, "//axis:checkoutResult", self.NS
-        ):
+        for i in super().process_all(string, "//axis:checkoutResult", self.NS):
             return i
 
     def process_one(self, e, namespaces):
@@ -1350,9 +1340,7 @@ class CheckoutResponseParser(ResponseParser):
 
 class HoldResponseParser(ResponseParser):
     def process_all(self, string):
-        for i in super(HoldResponseParser, self).process_all(
-            string, "//axis:addtoholdResult", self.NS
-        ):
+        for i in super().process_all(string, "//axis:addtoholdResult", self.NS):
             return i
 
     def process_one(self, e, namespaces):
@@ -1389,13 +1377,11 @@ class HoldResponseParser(ResponseParser):
 
 class HoldReleaseResponseParser(ResponseParser):
     def process_all(self, string):
-        for i in super(HoldReleaseResponseParser, self).process_all(
-            string, "//axis:removeholdResult", self.NS
-        ):
+        for i in super().process_all(string, "//axis:removeholdResult", self.NS):
             return i
 
     def post_process(self, i):
-        """Unlike other ResponseParser subclasses, we don't return any type of
+        r"""Unlike other ResponseParser subclasses, we don't return any type of
         \*Info object, so there's no need to do any post-processing.
         """
         return i
@@ -1421,12 +1407,10 @@ class AvailabilityResponseParser(ResponseParser):
         """
         self.api = api
         self.internal_format = internal_format
-        super(AvailabilityResponseParser, self).__init__(api.collection)
+        super().__init__(api.collection)
 
     def process_all(self, string):
-        for info in super(AvailabilityResponseParser, self).process_all(
-            string, "//axis:title", self.NS
-        ):
+        for info in super().process_all(string, "//axis:title", self.NS):
             # Filter out books where nothing in particular is
             # happening.
             if info:
@@ -1473,7 +1457,7 @@ class AvailabilityResponseParser(ResponseParser):
                     content=None,
                     content_expires=None,
                     verify=self.api.verify_certificate,
-                    **kwargs
+                    **kwargs,
                 )
             elif transaction_id:
                 # We will eventually need to make a request to the
@@ -1607,7 +1591,7 @@ class Axis360FulfillmentInfoResponseParser(JSONResponseParser):
         a fulfillment document triggers additional API requests.
         """
         self.api = api
-        super(Axis360FulfillmentInfoResponseParser, self).__init__(self.api.collection)
+        super().__init__(self.api.collection)
 
     def _parse(self, parsed, license_pool):
         """Extract all useful information from a parsed FulfillmentInfo
@@ -1700,7 +1684,7 @@ class AudiobookMetadataParser(JSONResponseParser):
         return SpineItem(title, duration, part_number, sequence)
 
 
-class AxisNowManifest(object):
+class AxisNowManifest:
     """A simple media type for conveying an entry point into the AxisNow access control
     system.
     """
@@ -1821,12 +1805,12 @@ class Axis360AcsFulfillmentInfo(FulfillmentInfo):
             )
         except socket.timeout:
             return self.problem_detail_document(
-                "Error connecting to {}. Timeout occurred.".format(service_name)
+                f"Error connecting to {service_name}. Timeout occurred."
             )
         except (urllib.error.URLError, ssl.SSLError) as e:
             reason = getattr(e, "reason", e.__class__.__name__)
             return self.problem_detail_document(
-                "Error connecting to {}. {}.".format(service_name, reason)
+                f"Error connecting to {service_name}. {reason}."
             )
 
         return Response(response=content, status=status, headers=headers)

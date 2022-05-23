@@ -1,4 +1,3 @@
-# encoding: utf-8
 import pytest
 
 from core.model import create
@@ -8,7 +7,7 @@ from core.testing import DatabaseTest
 
 class TestAdmin(DatabaseTest):
     def setup_method(self):
-        super(TestAdmin, self).setup_method()
+        super().setup_method()
         self.admin, ignore = create(self._db, Admin, email="admin@nypl.org")
         self.admin.password = "password"
 
@@ -30,7 +29,7 @@ class TestAdmin(DatabaseTest):
         assert [admin] == Admin.with_password(self._db).all()
 
         admin2.password = "password2"
-        assert set([admin, admin2]) == set(Admin.with_password(self._db).all())
+        assert {admin, admin2} == set(Admin.with_password(self._db).all())
 
     def test_with_email_spaces(self):
         admin_spaces, ignore = create(self._db, Admin, email="test@email.com ")

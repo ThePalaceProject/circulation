@@ -279,9 +279,9 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
 
     def test__data_url_for_image(self, logo_properties):
         """"""
-        image, expected_data_url = [
+        image, expected_data_url = (
             logo_properties[key] for key in ("image", "data_url")
-        ]
+        )
         data_url = LibrarySettingsController._data_url_for_image(image)
         assert expected_data_url == data_url
 
@@ -290,9 +290,9 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
             headers = {"Content-Type": "image/png"}
 
         # Pull needed properties from logo fixture
-        image_data, expected_logo_data_url, image = [
+        image_data, expected_logo_data_url, image = (
             logo_properties[key] for key in ("raw_bytes", "data_url", "image")
-        ]
+        )
         # LibrarySettingsController scales down images that are too large,
         # so we fail here if our test fixture image is large enough to cause
         # a mismatch between the expected data URL and the one configured.
@@ -570,7 +570,7 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
         ]
 
         # format1 has a custom validation class; format2 does not.
-        class MockValidator(object):
+        class MockValidator:
             def format_as_string(self, value):
                 self.format_as_string_called_with = value
                 return value + ", formatted for storage"
@@ -617,7 +617,7 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
 
         # Each (validated and formatted) value was written to the
         # database.
-        setting1, setting2 = [library.setting(x["key"]) for x in settings]
+        setting1, setting2 = (library.setting(x["key"]) for x in settings)
         assert "validated %s, formatted for storage" % setting1.key == setting1.value
         assert "validated %s" % setting2.key == setting2.value
 
@@ -744,7 +744,7 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
         )
 
         # A list of geographic places
-        class MockGeographicValidator(object):
+        class MockGeographicValidator:
             value = "validated value"
 
             def validate_geographic_areas(self, value, _db):
@@ -768,7 +768,7 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
         )
 
         # A list of announcements.
-        class MockAnnouncementValidator(object):
+        class MockAnnouncementValidator:
             value = "validated value"
 
             def validate_announcements(self, value):
@@ -793,7 +793,7 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
 
         # When there is a validator, its format_as_string method is
         # called, and its return value is used as the formatted value.
-        class MockValidator(object):
+        class MockValidator:
             def format_as_string(self, value):
                 self.called_with = value
                 return "formatted value"

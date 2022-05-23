@@ -1,4 +1,3 @@
-# encoding: utf-8
 import datetime
 import json
 from unittest.mock import MagicMock, create_autospec
@@ -32,7 +31,7 @@ from core.util.string_helpers import base64
 
 class TestCollection(DatabaseTest):
     def setup_method(self):
-        super(TestCollection, self).setup_method()
+        super().setup_method()
         self.collection = self._collection(
             name="test collection", protocol=ExternalIntegration.OVERDRIVE
         )
@@ -90,11 +89,11 @@ class TestCollection(DatabaseTest):
         c1 = self._collection(self._str, protocol=overdrive)
         c1.parent = self.collection
         c2 = self._collection(self._str, protocol=bibliotheca)
-        assert set([self.collection, c1]) == set(
+        assert {self.collection, c1} == set(
             Collection.by_protocol(self._db, overdrive).all()
         )
         assert ([c2]) == Collection.by_protocol(self._db, bibliotheca).all()
-        assert set([self.collection, c1, c2]) == set(
+        assert {self.collection, c1, c2} == set(
             Collection.by_protocol(self._db, None).all()
         )
 
@@ -108,13 +107,13 @@ class TestCollection(DatabaseTest):
         c2 = self._collection(data_source_name=DataSource.OVERDRIVE)
 
         # Using the DataSource name
-        assert set([c1]) == set(
+        assert {c1} == set(
             Collection.by_datasource(self._db, DataSource.GUTENBERG).all()
         )
 
         # Using the DataSource itself
         overdrive = DataSource.lookup(self._db, DataSource.OVERDRIVE)
-        assert set([c2]) == set(Collection.by_datasource(self._db, overdrive).all())
+        assert {c2} == set(Collection.by_datasource(self._db, overdrive).all())
 
         # A collection marked for deletion is filtered out.
         c2.marked_for_deletion = True
@@ -914,7 +913,7 @@ class TestCollection(DatabaseTest):
 
         # Finally, here's a mock ExternalSearchIndex so we can track when
         # Works are removed from the search index.
-        class MockExternalSearchIndex(object):
+        class MockExternalSearchIndex:
             removed = []
 
             def remove_work(self, work):

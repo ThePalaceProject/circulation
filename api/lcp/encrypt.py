@@ -31,7 +31,7 @@ class LCPEncryptionConfiguration(ConfigurationGrouping):
         label=_("lcpencrypt's location"),
         description=_(
             "Full path to the local lcpencrypt binary. "
-            "The default value is {0}".format(DEFAULT_LCPENCRYPT_LOCATION)
+            "The default value is {}".format(DEFAULT_LCPENCRYPT_LOCATION)
         ),
         type=ConfigurationAttributeType.TEXT,
         required=False,
@@ -50,7 +50,7 @@ class LCPEncryptionConfiguration(ConfigurationGrouping):
     )
 
 
-class LCPEncryptionResult(object):
+class LCPEncryptionResult:
     """Represents an output sent by lcpencrypt"""
 
     CONTENT_ID = "content-id"
@@ -226,13 +226,13 @@ class LCPEncryptionResult(object):
         """
         return (
             "<LCPEncryptor.Result("
-            "content_id={0}, "
-            "content_encryption_key={1}, "
-            "protected_content_location={2}, "
-            "protected_content_length={3}, "
-            "protected_content_sha256={4}, "
-            "protected_content_disposition={5}, "
-            "protected_content_type={6})>".format(
+            "content_id={}, "
+            "content_encryption_key={}, "
+            "protected_content_location={}, "
+            "protected_content_length={}, "
+            "protected_content_sha256={}, "
+            "protected_content_disposition={}, "
+            "protected_content_type={})>".format(
                 self.content_id,
                 self.content_encryption_key,
                 self.protected_content_location,
@@ -272,10 +272,10 @@ class LCPEncryptorResultJSONEncoder(JSONEncoder):
         return result
 
 
-class LCPEncryptor(object):
+class LCPEncryptor:
     """Wrapper around lcpencrypt tool containing logic to run it locally and in a Docker container"""
 
-    class Parameters(object):
+    class Parameters:
         """Parses input parameters for lcpencrypt"""
 
         def __init__(self, file_path, identifier, configuration):
@@ -447,7 +447,7 @@ class LCPEncryptor(object):
         :rtype: LCPEncryptionResult
         """
         self._logger.info(
-            "Started running a local lcpencrypt binary. File path: {0}. Identifier: {1}".format(
+            "Started running a local lcpencrypt binary. File path: {}. Identifier: {}".format(
                 file_path, identifier
             )
         )
@@ -457,7 +457,7 @@ class LCPEncryptor(object):
         try:
             if parameters.output_file_path:
                 self._logger.info(
-                    "Creating a directory tree for {0}".format(
+                    "Creating a directory tree for {}".format(
                         parameters.output_file_path
                     )
                 )
@@ -468,13 +468,13 @@ class LCPEncryptor(object):
                     os.makedirs(output_directory)
 
                 self._logger.info(
-                    "Directory tree {0} has been successfully created".format(
+                    "Directory tree {} has been successfully created".format(
                         output_directory
                     )
                 )
 
             self._logger.info(
-                "Running lcpencrypt using the following parameters: {0}".format(
+                "Running lcpencrypt using the following parameters: {}".format(
                     parameters.to_array()
                 )
             )
@@ -489,7 +489,7 @@ class LCPEncryptor(object):
             raise LCPEncryptionException(str(exception), inner_exception=exception)
 
         self._logger.info(
-            "Finished running a local lcpencrypt binary. File path: {0}. Identifier: {1}. Result: {2}".format(
+            "Finished running a local lcpencrypt binary. File path: {}. Identifier: {}. Result: {}".format(
                 file_path, identifier, result
             )
         )

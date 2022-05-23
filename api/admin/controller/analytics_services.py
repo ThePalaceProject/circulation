@@ -12,7 +12,7 @@ from . import SettingsController
 
 class AnalyticsServicesController(SettingsController):
     def __init__(self, manager):
-        super(AnalyticsServicesController, self).__init__(manager)
+        super().__init__(manager)
         provider_apis = [
             GoogleAnalyticsProvider,
             LocalAnalyticsProvider,

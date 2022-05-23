@@ -17,7 +17,7 @@ class TestNoveListAPI(DatabaseTest):
     """Tests the NoveList API service object"""
 
     def setup_method(self):
-        super(TestNoveListAPI, self).setup_method()
+        super().setup_method()
         self.integration = self._external_integration(
             ExternalIntegration.NOVELIST,
             ExternalIntegration.METADATA_GOAL,
@@ -29,7 +29,7 @@ class TestNoveListAPI(DatabaseTest):
 
     def teardown_method(self):
         NoveListAPI.IS_CONFIGURED = None
-        super(TestNoveListAPI, self).teardown_method()
+        super().teardown_method()
 
     def sample_data(self, filename):
         return sample_data(filename, "novelist")

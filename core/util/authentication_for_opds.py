@@ -1,7 +1,7 @@
 from typing import Optional
 
 
-class OPDSAuthenticationFlow(object):
+class OPDSAuthenticationFlow:
     """An object that can be represented as an Authentication Flow
     in an Authentication For OPDS document.
     """
@@ -26,7 +26,7 @@ class OPDSAuthenticationFlow(object):
         raise NotImplementedError()
 
 
-class AuthenticationForOPDSDocument(object):
+class AuthenticationForOPDSDocument:
     """A data structure that can become an Authentication For OPDS
     document.
     """

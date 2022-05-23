@@ -128,7 +128,7 @@ from .shared_collection import SharedCollectionAPI
 from .testing import MockCirculationAPI, MockSharedCollectionAPI
 
 
-class CirculationManager(object):
+class CirculationManager:
     log = logging.getLogger("api.controller.CirculationManager")
 
     def __init__(self, _db, testing=False):
@@ -138,9 +138,7 @@ class CirculationManager(object):
             try:
                 self.config = Configuration.load(_db)
             except CannotLoadConfiguration as exception:
-                self.log.exception(
-                    "Could not load configuration file: {0}".format(exception)
-                )
+                self.log.exception(f"Could not load configuration file: {exception}")
                 sys.exit()
 
         self.testing = testing
@@ -584,7 +582,7 @@ class CirculationManager(object):
             library_identifies_patrons=library_identifies_patrons,
             facets=facets,
             *args,
-            **kwargs
+            **kwargs,
         )
 
     @property
@@ -1255,7 +1253,7 @@ class OPDSFeedController(CirculationManagerController):
             "lane_search",
             lane_identifier=lane_identifier,
             library_short_name=library_short_name,
-            **make_url_kwargs
+            **make_url_kwargs,
         )
         if not query:
             # Send the search form
@@ -1433,7 +1431,7 @@ class MARCRecordController(CirculationManagerController):
                     "Full file - last updated %(update_time)s",
                     update_time=file.end_time.strftime(time_format),
                 )
-                body += '<a href="%s">%s</a>' % (
+                body += '<a href="{}">{}</a>'.format(
                     files.get("full").representation.mirror_url,
                     full_label,
                 )
@@ -1449,7 +1447,7 @@ class MARCRecordController(CirculationManagerController):
                             start_time=update.start_time.strftime(time_format),
                             end_time=update.end_time.strftime(time_format),
                         )
-                        body += '<li><a href="%s">%s</a></li>' % (
+                        body += '<li><a href="{}">{}</a></li>'.format(
                             update_url,
                             update_label,
                         )
@@ -2186,7 +2184,7 @@ class WorkController(CirculationManagerController):
             return search_engine
 
         try:
-            lane_name = "Books Related to %s by %s" % (work.title, work.author)
+            lane_name = f"Books Related to {work.title} by {work.author}"
             lane = RelatedBooksLane(library, work, lane_name, novelist_api=novelist_api)
         except ValueError as e:
             # No related books were found.
@@ -2232,7 +2230,7 @@ class WorkController(CirculationManagerController):
         if isinstance(search_engine, ProblemDetail):
             return search_engine
 
-        lane_name = "Recommendations for %s by %s" % (work.title, work.author)
+        lane_name = f"Recommendations for {work.title} by {work.author}"
         try:
             lane = RecommendationLane(
                 library=library,
@@ -2371,7 +2369,7 @@ class DeviceTokensController(CirculationManagerController):
 class URNLookupController(CoreURNLookupController):
     def __init__(self, manager):
         self.manager = manager
-        super(URNLookupController, self).__init__(manager._db)
+        super().__init__(manager._db)
 
     def work_lookup(self, route_name):
         """Build a CirculationManagerAnnotor based on the current library's
@@ -2381,7 +2379,7 @@ class URNLookupController(CoreURNLookupController):
         library = flask.request.library
         top_level_worklist = self.manager.top_level_lanes[library.id]
         annotator = CirculationManagerAnnotator(top_level_worklist)
-        return super(URNLookupController, self).work_lookup(annotator, route_name)
+        return super().work_lookup(annotator, route_name)
 
 
 class AnalyticsController(CirculationManagerController):

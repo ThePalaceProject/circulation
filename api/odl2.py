@@ -98,7 +98,7 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
         :param mirrors: A dictionary of different MirrorUploader objects for different purposes
         :type mirrors: Dict[MirrorUploader]
         """
-        super(ODL2Importer, self).__init__(
+        super().__init__(
             db,
             collection,
             parser if parser else RWPMManifestParser(ODLFeedParserFactory()),
@@ -146,7 +146,7 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
         :return: Publication's metadata
         :rtype: Metadata
         """
-        metadata = super(ODL2Importer, self)._extract_publication_metadata(
+        metadata = super()._extract_publication_metadata(
             feed, publication, data_source_name
         )
         formats = []

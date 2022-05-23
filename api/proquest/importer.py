@@ -78,12 +78,12 @@ def parse_identifier(db, identifier):
 
 class CannotCreateProQuestTokenError(BaseError):
     def __init__(self, inner_exception):
-        message = "{0}: {1}".format(
+        message = "{}: {}".format(
             _("Can not create a ProQuest JWT bearer token"),
             str(inner_exception),
         )
 
-        super(CannotCreateProQuestTokenError, self).__init__(message, inner_exception)
+        super().__init__(message, inner_exception)
 
 
 class ProQuestOPDS2ImporterConfiguration(OPDS2ImporterConfiguration):
@@ -233,7 +233,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         :param mirrors: A dictionary of different MirrorUploader objects for different purposes
         :type mirrors: Dict[MirrorUploader]
         """
-        super(ProQuestOPDS2Importer, self).__init__(
+        super().__init__(
             db,
             collection,
             parser if parser else RWPMManifestParser(OPDS2FeedParserFactory()),
@@ -287,7 +287,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         )
 
         self._logger.info(
-            "Patron {0} has the following SAML affiliation ID: {1}".format(
+            "Patron {} has the following SAML affiliation ID: {}".format(
                 patron, affiliation_id
             )
         )
@@ -297,7 +297,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
 
             if not affiliation_id:
                 self._logger.error(
-                    "Patron {0} does not have neither real affiliation ID "
+                    "Patron {} does not have neither real affiliation ID "
                     "nor test affiliation ID set up as a configuration setting".format(
                         patron
                     )
@@ -360,9 +360,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         """
         token = self._credential_manager.lookup_proquest_token(self._db, patron)
 
-        self._logger.info(
-            "Patron {0} has the following token: {1}".format(patron, token)
-        )
+        self._logger.info(f"Patron {patron} has the following token: {token}")
 
         if not token:
             token = self._create_proquest_token(patron, configuration)
@@ -415,7 +413,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         :rtype: List[LinkData]
         """
         self._logger.debug(
-            "Started extracting image links from {0}".format(encode(publication.images))
+            f"Started extracting image links from {encode(publication.images)}"
         )
 
         image_links = []
@@ -438,7 +436,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
             image_links.append(cover_link)
 
         self._logger.debug(
-            "Finished extracting image links from {0}: {1}".format(
+            "Finished extracting image links from {}: {}".format(
                 encode(publication.images), encode(image_links)
             )
         )
@@ -477,7 +475,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         :rtype: List[Tuple[str, str]]
         """
         self._logger.debug(
-            "Started extracting media types and a DRM scheme from {0}".format(
+            "Started extracting media types and a DRM scheme from {}".format(
                 encode(link)
             )
         )
@@ -512,7 +510,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
                 )
 
         self._logger.debug(
-            "Finished extracting media types and a DRM scheme from {0}: {1}".format(
+            "Finished extracting media types and a DRM scheme from {}: {}".format(
                 encode(link), encode(media_types_and_drm_scheme)
             )
         )
@@ -626,7 +624,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         - or a SAML affiliation ID which will be used to create a new ProQuest JWT bearer token.
         """
         self._logger.info(
-            "Started checking out '{0}' for patron {1}".format(internal_format, patron)
+            f"Started checking out '{internal_format}' for patron {patron}"
         )
 
         try:
@@ -648,7 +646,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
                 )
 
                 self._logger.info(
-                    "Finished checking out {0} for patron {1}: {2}".format(
+                    "Finished checking out {} for patron {}: {}".format(
                         internal_format, patron, loan
                     )
                 )
@@ -673,9 +671,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
         - an active ProQuest JWT bearer token
         - or a SAML affiliation ID which will be used to create a new ProQuest JWT bearer token.
         """
-        self._logger.info(
-            "Started fulfilling '{0}' for patron {1}".format(internal_format, patron)
-        )
+        self._logger.info(f"Started fulfilling '{internal_format}' for patron {patron}")
 
         try:
             with self._get_configuration(self._db) as configuration:
@@ -719,7 +715,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
                     )
 
                 self._logger.info(
-                    "Finished fulfilling {0} for patron {1}: {2}".format(
+                    "Finished fulfilling {} for patron {}: {}".format(
                         internal_format, patron, fulfillment_info
                     )
                 )
@@ -752,7 +748,7 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
         parser,
         force_reimport=False,
         process_removals=False,
-        **import_class_kwargs
+        **import_class_kwargs,
     ):
         """Initialize a new instance of ProQuestOPDS2ImportMonitor class.
 
@@ -781,14 +777,12 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
         """
         if not isinstance(parser, RWPMManifestParser):
             raise ValueError(
-                "Argument 'parser' must be an instance of {0}".format(
-                    RWPMManifestParser
-                )
+                f"Argument 'parser' must be an instance of {RWPMManifestParser}"
             )
 
         import_class_kwargs["parser"] = parser
 
-        super(ProQuestOPDS2ImportMonitor, self).__init__(
+        super().__init__(
             db, collection, import_class, force_reimport, **import_class_kwargs
         )
 
@@ -822,14 +816,12 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
         :rtype: Iterable[opds2_ast.OPDS2Publication]
         """
         if feed.publications:
-            for publication in feed.publications:
-                yield publication
+            yield from feed.publications
 
         if feed.groups:
             for group in feed.groups:
                 if group.publications:
-                    for publication in group.publications:
-                        yield publication
+                    yield from group.publications
 
     def _download_feed_pages(self, feed_pages_directory):
         """Download all the pages of the ProQuest OPDS feed.
@@ -875,9 +867,7 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
                 )
                 raise
 
-        self._logger.info(
-            "Finished downloading {0} feed pages".format(len(feed_page_files))
-        )
+        self._logger.info(f"Finished downloading {len(feed_page_files)} feed pages")
 
         return feed_page_files
 
@@ -893,7 +883,7 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
         :return: Parsed OPDS feed page
         :rtype: opds2_ast.OPDS2Feed
         """
-        self._logger.info("Page # {0}. Started parsing the feed".format(page))
+        self._logger.info(f"Page # {page}. Started parsing the feed")
 
         with codecs.open(
             feed_page_file, "r", encoding="utf-8"
@@ -903,7 +893,7 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
         parser_result = self._parser.parse_manifest(feed)
         feed = parser_result.root
 
-        self._logger.info("Page # {0}. Finished parsing the feed".format(page))
+        self._logger.info(f"Page # {page}. Finished parsing the feed")
 
         return feed
 
@@ -986,7 +976,7 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
                 )
 
                 self._logger.info(
-                    "Page # {0}. Processed {1} items out of {2} ({3:.2f}%)".format(
+                    "Page # {}. Processed {} items out of {} ({:.2f}%)".format(
                         page,
                         processed_number_of_items,
                         total_number_of_items,
@@ -998,9 +988,7 @@ class ProQuestOPDS2ImportMonitor(OPDS2ImportMonitor, HasExternalIntegration):
 
                 yield None, feed
 
-            self._logger.info(
-                "Finished processing {0} feed pages".format(len(feed_page_files))
-            )
+            self._logger.info(f"Finished processing {len(feed_page_files)} feed pages")
         except Exception:
             self._logger.exception(
                 "An unexpected exception occurred during fetching ProQuest paged OPDS 2.0 feeds"

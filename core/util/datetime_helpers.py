@@ -57,7 +57,5 @@ def strptime_utc(date_string, format):
         present in `date_string`.
     """
     if "%Z" in format or "%z" in format:
-        raise ValueError(
-            "Cannot use strptime_utc with timezone-aware format {}".format(format)
-        )
+        raise ValueError(f"Cannot use strptime_utc with timezone-aware format {format}")
     return to_utc(datetime.datetime.strptime(date_string, format))

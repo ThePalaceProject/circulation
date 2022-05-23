@@ -35,7 +35,7 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
     EMAIL_ADDRESS_FIELD = "EMAIL ADDR[pz]"
     EXPIRATION_DATE_FORMAT = "%m-%d-%y"
 
-    MULTIVALUE_FIELDS = set(["NOTE[px]", BARCODE_FIELD])
+    MULTIVALUE_FIELDS = {"NOTE[px]", BARCODE_FIELD}
 
     DEFAULT_CURRENCY = "USD"
 
@@ -57,13 +57,11 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
     NO_NEIGHBORHOOD_MODE = "disabled"
     HOME_BRANCH_NEIGHBORHOOD_MODE = "home_branch"
     POSTAL_CODE_NEIGHBORHOOD_MODE = "postal_code"
-    NEIGHBORHOOD_MODES = set(
-        [
-            NO_NEIGHBORHOOD_MODE,
-            HOME_BRANCH_NEIGHBORHOOD_MODE,
-            POSTAL_CODE_NEIGHBORHOOD_MODE,
-        ]
-    )
+    NEIGHBORHOOD_MODES = {
+        NO_NEIGHBORHOOD_MODE,
+        HOME_BRANCH_NEIGHBORHOOD_MODE,
+        POSTAL_CODE_NEIGHBORHOOD_MODE,
+    }
 
     # The field to use when seeing which values of MBLOCK[p56] mean a patron
     # is blocked. By default, any value other than '-' indicates a block.
@@ -168,7 +166,7 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
             LIBRARY_SETTINGS.append(setting)
 
     def __init__(self, library, integration, analytics=None):
-        super(MilleniumPatronAPI, self).__init__(library, integration, analytics)
+        super().__init__(library, integration, analytics)
         url = integration.url
         if not url:
             raise CannotLoadConfiguration("Millenium Patron API server not configured.")

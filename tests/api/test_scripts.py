@@ -108,7 +108,7 @@ class TestAdobeAccountIDResetScript(DatabaseTest):
 
 class TestLaneScript(DatabaseTest):
     def setup_method(self):
-        super(TestLaneScript, self).setup_method()
+        super().setup_method()
         base_url_setting = ConfigurationSetting.sitewide(
             self._db, Configuration.BASE_URL_KEY
         )
@@ -171,7 +171,7 @@ class TestCacheRepresentationPerLane(TestLaneScript):
         # process_lane() calls do_generate() once for every
         # combination of items yielded by facets() and pagination().
 
-        class MockFacets(object):
+        class MockFacets:
             def __init__(self, query):
                 self.query = query
 
@@ -207,7 +207,7 @@ class TestCacheRepresentationPerLane(TestLaneScript):
         generated = script.process_lane(lane)
         assert generated == script.generated
 
-        c1, c2, c3, c4 = [x.value for x in script.generated]
+        c1, c2, c3, c4 = (x.value for x in script.generated)
         assert (lane, facets1, page1) == c1
         assert (lane, facets1, page2) == c2
         assert (lane, facets2, page1) == c3
@@ -309,7 +309,7 @@ class TestCacheFacetListsPerLane(TestLaneScript):
     def test_do_generate(self):
         # When it's time to generate a feed, AcquisitionFeed.page
         # is called with the right arguments.
-        class MockAcquisitionFeed(object):
+        class MockAcquisitionFeed:
             called_with = None
 
             @classmethod
@@ -381,7 +381,7 @@ class TestCacheOPDSGroupFeedPerLane(TestLaneScript):
         # When it's time to generate a feed, AcquisitionFeed.groups
         # is called with the right arguments.
 
-        class MockAcquisitionFeed(object):
+        class MockAcquisitionFeed:
             called_with = None
 
             @classmethod
@@ -734,7 +734,7 @@ class TestLanguageListScript(DatabaseTest):
 
 class TestShortClientTokenLibraryConfigurationScript(DatabaseTest):
     def setup_method(self):
-        super(TestShortClientTokenLibraryConfigurationScript, self).setup_method()
+        super().setup_method()
         self._default_library.setting(Configuration.WEBSITE_URL).value = "http://foo/"
         self.script = ShortClientTokenLibraryConfigurationScript(self._db)
 
@@ -792,7 +792,7 @@ class MockDirectoryImportScript(DirectoryImportScript):
     """Mock a filesystem to make it easier to test DirectoryInputScript."""
 
     def __init__(self, _db, mock_filesystem={}):
-        super(MockDirectoryImportScript, self).__init__(_db)
+        super().__init__(_db)
         self.mock_filesystem = mock_filesystem
         self._locate_file_args = None
 
@@ -821,7 +821,7 @@ class TestDirectoryImportScript(DatabaseTest):
                 "--ebook-directory=ebooks",
                 "--rights-uri=rights",
                 "--dry-run",
-                "--default-medium-type={0}".format(EditionConstants.AUDIO_MEDIUM),
+                f"--default-medium-type={EditionConstants.AUDIO_MEDIUM}",
             ]
         )
         assert {
@@ -1019,7 +1019,7 @@ class TestDirectoryImportScript(DatabaseTest):
 
             def annotate_metadata(self, collection_type, metadata, *args, **kwargs):
                 metadata.annotated = True
-                return super(Mock, self).annotate_metadata(
+                return super().annotate_metadata(
                     collection_type, metadata, *args, **kwargs
                 )
 
@@ -1428,7 +1428,7 @@ class TestNovelistSnapshotScript(DatabaseTest):
 
 class TestLocalAnalyticsExportScript(DatabaseTest):
     def test_do_run(self):
-        class MockLocalAnalyticsExporter(object):
+        class MockLocalAnalyticsExporter:
             def export(self, _db, start, end):
                 self.called_with = [start, end]
                 return "test"
@@ -1490,7 +1490,7 @@ class TestGenerateShortTokenScript(DatabaseTest):
     def test_run_days(self, script, output, authdata, patron):
         # Test with --days
         cmd_args = [
-            "--barcode={}".format(patron.authorization_identifier),
+            f"--barcode={patron.authorization_identifier}",
             "--days=2",
             self._default_library.short_name,
         ]
@@ -1506,7 +1506,7 @@ class TestGenerateShortTokenScript(DatabaseTest):
     def test_run_minutes(self, script, output, authdata, patron):
         # Test with --minutes
         cmd_args = [
-            "--barcode={}".format(patron.authorization_identifier),
+            f"--barcode={patron.authorization_identifier}",
             "--minutes=20",
             self._default_library.short_name,
         ]
@@ -1516,7 +1516,7 @@ class TestGenerateShortTokenScript(DatabaseTest):
     def test_run_hours(self, script, output, authdata, patron):
         # Test with --hours
         cmd_args = [
-            "--barcode={}".format(patron.authorization_identifier),
+            f"--barcode={patron.authorization_identifier}",
             "--hours=4",
             self._default_library.short_name,
         ]
@@ -1525,7 +1525,7 @@ class TestGenerateShortTokenScript(DatabaseTest):
 
     def test_no_registry(self, script, output, patron):
         cmd_args = [
-            "--barcode={}".format(patron.authorization_identifier),
+            f"--barcode={patron.authorization_identifier}",
             "--minutes=20",
             self._default_library.short_name,
         ]
@@ -1550,8 +1550,8 @@ class TestGenerateShortTokenScript(DatabaseTest):
         barcode, pin = authentication_provider
         # Test running when the patron does not exist
         cmd_args = [
-            "--barcode={}".format(barcode),
-            "--pin={}".format(pin),
+            f"--barcode={barcode}",
+            f"--pin={pin}",
             "--hours=4",
             self._default_library.short_name,
         ]
@@ -1564,7 +1564,7 @@ class TestGenerateShortTokenScript(DatabaseTest):
         barcode = "nonexistent"
         # Test running when the patron does not exist
         cmd_args = [
-            "--barcode={}".format(barcode),
+            f"--barcode={barcode}",
             "--hours=4",
             self._default_library.short_name,
         ]

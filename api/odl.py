@@ -281,7 +281,7 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
         username = self.username
         password = self.password
         headers = dict(headers or {})
-        auth_header = "Basic %s" % base64.b64encode("%s:%s" % (username, password))
+        auth_header = "Basic %s" % base64.b64encode(f"{username}:{password}")
         headers["Authorization"] = auth_header
 
         return HTTP.get_with_timeout(url, headers=headers)
@@ -462,7 +462,7 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
     def _checkout(self, patron_or_client, licensepool, hold=None):
         _db = Session.object_session(patron_or_client)
 
-        if not any((l for l in licensepool.licenses if not l.is_inactive)):
+        if not any(l for l in licensepool.licenses if not l.is_inactive):
             raise NoLicenses()
 
         # Make sure pool info is updated.
@@ -932,7 +932,7 @@ class ODLImporter(OPDSImporter):
     # about the license.
     LICENSE_INFO_DOCUMENT_MEDIA_TYPE = "application/vnd.odl.info+json"
 
-    FEEDBOOKS_AUDIO = "{0}; protection={1}".format(
+    FEEDBOOKS_AUDIO = "{}; protection={}".format(
         MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
         DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
     )
@@ -1236,7 +1236,7 @@ class ODLHoldReaper(CollectionMonitor):
     PROTOCOL = ODLAPI.NAME
 
     def __init__(self, _db, collection=None, api=None, **kwargs):
-        super(ODLHoldReaper, self).__init__(_db, collection, **kwargs)
+        super().__init__(_db, collection, **kwargs)
         self.api = api or ODLAPI(_db, collection)
 
     def run_once(self, progress):
@@ -1858,7 +1858,7 @@ class MockSharedODLAPI(SharedODLAPI):
         self.responses = []
         self.requests = []
         self.request_args = []
-        super(MockSharedODLAPI, self).__init__(_db, collection, *args, **kwargs)
+        super().__init__(_db, collection, *args, **kwargs)
 
     def queue_response(self, status_code, headers={}, content=None):
         self.responses.insert(0, MockRequestsResponse(status_code, headers, content))

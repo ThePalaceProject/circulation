@@ -58,7 +58,7 @@ from core.util.opds_writer import OPDSFeed
 
 
 class TestFacetsWithEntryPoint(DatabaseTest):
-    class MockFacetConfig(object):
+    class MockFacetConfig:
         """Pass this in when you call FacetsWithEntryPoint.from_request
         but you don't care which EntryPoints are configured.
         """
@@ -80,7 +80,7 @@ class TestFacetsWithEntryPoint(DatabaseTest):
         assert expect_items == list(f.items())
 
     def test_modify_database_query(self):
-        class MockEntryPoint(object):
+        class MockEntryPoint:
             def modify_database_query(self, _db, qu):
                 self.called_with = (_db, qu)
 
@@ -318,7 +318,7 @@ class TestFacetsWithEntryPoint(DatabaseTest):
         the worklist's entrypoints.
         """
 
-        class MockWorkList(object):
+        class MockWorkList:
             def __init__(self, entrypoints):
                 self.entrypoints = entrypoints
 
@@ -381,7 +381,7 @@ class TestFacets(DatabaseTest):
 
         # available=all, collection=full, and order=title are the selected
         # facets.
-        selected = sorted([x[:2] for x in all_groups if x[-1] == True])
+        selected = sorted(x[:2] for x in all_groups if x[-1] == True)
         assert [
             ("available", "all"),
             ("collection", "full"),
@@ -409,7 +409,7 @@ class TestFacets(DatabaseTest):
         # 'Sort by title' was selected, and it shows up as the selected
         # item in this facet group.
         expect = [["order", "title", True], ["order", "work_id", False]]
-        assert expect == sorted([list(x[:2]) + [x[-1]] for x in all_groups])
+        assert expect == sorted(list(x[:2]) + [x[-1]] for x in all_groups)
 
     def test_default(self):
         # Calling Facets.default() is like calling the constructor with
@@ -430,7 +430,7 @@ class TestFacets(DatabaseTest):
         # By definition, the default facet must be enabled. So if the
         # default facet for a given facet group is not enabled by the
         # current configuration, it's added to the beginning anyway.
-        class MockConfiguration(object):
+        class MockConfiguration:
             def enabled_facets(self, facet_group_name):
                 self.called_with = facet_group_name
                 return ["facet1", "facet2"]
@@ -527,7 +527,7 @@ class TestFacets(DatabaseTest):
         )
         all_groups = list(facets.facet_groups)
         expect = [["order", "author", False], ["order", "title", True]]
-        assert expect == sorted([list(x[:2]) + [x[-1]] for x in all_groups])
+        assert expect == sorted(list(x[:2]) + [x[-1]] for x in all_groups)
 
     def test_facets_dont_need_a_library(self):
         enabled_facets = {
@@ -548,7 +548,7 @@ class TestFacets(DatabaseTest):
         )
         all_groups = list(facets.facet_groups)
         expect = [["order", "author", False], ["order", "title", True]]
-        assert expect == sorted([list(x[:2]) + [x[-1]] for x in all_groups])
+        assert expect == sorted(list(x[:2]) + [x[-1]] for x in all_groups)
 
     def test_items(self):
         """Verify that Facets.items() returns all information necessary
@@ -582,7 +582,7 @@ class TestFacets(DatabaseTest):
 
         # But the time-based facets are ordered descending by default
         # (newest->oldest)
-        assert set([Facets.ORDER_ADDED_TO_COLLECTION, Facets.ORDER_LAST_UPDATE]) == set(
+        assert {Facets.ORDER_ADDED_TO_COLLECTION, Facets.ORDER_LAST_UPDATE} == set(
             Facets.ORDER_DESCENDING_BY_DEFAULT
         )
         for order in Facets.ORDER_DESCENDING_BY_DEFAULT:
@@ -852,9 +852,9 @@ class TestFacets(DatabaseTest):
 
             facets = Facets(self._default_library, None, availability, None)
             modified = facets.modify_database_query(self._db, qu)
-            assert (availability, sorted([x.title for x in modified])) == (
+            assert (availability, sorted(x.title for x in modified)) == (
                 availability,
-                sorted([x.title for x in expect]),
+                sorted(x.title for x in expect),
             )
 
         # Setting the 'featured' collection includes only known
@@ -870,15 +870,15 @@ class TestFacets(DatabaseTest):
                 self._default_library, collection, Facets.AVAILABLE_NOW, None
             )
             modified = facets.modify_database_query(self._db, qu)
-            assert (collection, sorted([x.title for x in modified])) == (
+            assert (collection, sorted(x.title for x in modified)) == (
                 collection,
-                sorted([x.title for x in expect]),
+                sorted(x.title for x in expect),
             )
 
 
 class TestDefaultSortOrderFacets(DatabaseTest):
     def setup_method(self):
-        super(TestDefaultSortOrderFacets, self).setup_method()
+        super().setup_method()
         self.config = self._default_library
 
     def _check_other_groups_not_changed(self, cls):
@@ -996,7 +996,7 @@ class TestDatabaseBackedFacets(DatabaseTest):
         # In this bizarre library, the default sort order is 'time
         # added to collection' -- an order not supported by
         # DatabaseBackedFacets.
-        class Mock(object):
+        class Mock:
             enabled = [
                 FacetConstants.ORDER_ADDED_TO_COLLECTION,
                 FacetConstants.ORDER_TITLE,
@@ -1320,7 +1320,7 @@ class TestSearchFacets(DatabaseTest):
                 get_argument,
                 get_header,
                 unused,
-                **extra
+                **extra,
             )
 
         facets = from_request(extra="value")
@@ -1401,7 +1401,7 @@ class TestSearchFacets(DatabaseTest):
                 get_argument,
                 get_header,
                 unused,
-                **extra
+                **extra,
             )
 
         facets = from_request(extra="value")
@@ -1414,7 +1414,7 @@ class TestSearchFacets(DatabaseTest):
         is added for search purposes.
         """
 
-        class MockWorkList(object):
+        class MockWorkList:
             def __init__(self):
                 self.entrypoints = None
 
@@ -1697,7 +1697,7 @@ class TestPagination(DatabaseTest):
         assert o[2 : 2 + 3] == pagination.modify_search_query(o)
 
 
-class MockWork(object):
+class MockWork:
     """Acts enough like a Work to trick code that doesn't need to make
     database requests.
     """
@@ -1758,13 +1758,13 @@ class TestWorkList(DatabaseTest):
 
         # The Collections associated with the WorkList are those associated
         # with the Library.
-        assert set(wl.collection_ids) == set(
-            [x.id for x in self._default_library.collections]
-        )
+        assert set(wl.collection_ids) == {
+            x.id for x in self._default_library.collections
+        }
 
         # The Genres associated with the WorkList are the ones passed
         # in on the constructor.
-        assert set(wl.genre_ids) == set([x.id for x in [sf, romance]])
+        assert set(wl.genre_ids) == {x.id for x in [sf, romance]}
 
         # The WorkList's child is the WorkList passed in to the constructor.
         assert [child] == wl.visible_children
@@ -1825,7 +1825,7 @@ class TestWorkList(DatabaseTest):
 
         # The Genres associated with the WorkList are the ones passed
         # in on the constructor.
-        assert set(wl.genre_ids) == set([x.id for x in [sf, romance]])
+        assert set(wl.genre_ids) == {x.id for x in [sf, romance]}
 
     def test_initialize_uses_append_child_hook_method(self):
         # When a WorkList is initialized with children, the children
@@ -1836,7 +1836,7 @@ class TestWorkList(DatabaseTest):
 
             def append_child(self, child):
                 self.append_child_calls.append(child)
-                return super(Mock, self).append_child(child)
+                return super().append_child(child)
 
         child = WorkList()
         parent = Mock()
@@ -1931,7 +1931,7 @@ class TestWorkList(DatabaseTest):
         child_wl = WorkList()
         child_wl.initialize(self._default_library)
         wl.initialize(self._default_library, children=[visible, invisible, child_wl])
-        assert set([child_wl, visible]) == set(wl.visible_children)
+        assert {child_wl, visible} == set(wl.visible_children)
 
     def test_visible_children_sorted(self):
         """Visible children are sorted by priority and then by display name."""
@@ -2128,7 +2128,7 @@ class TestWorkList(DatabaseTest):
         w2 = MockWork(2)
         w3 = MockWork(3)
 
-        class MockWorkList(object):
+        class MockWorkList:
             def __init__(self, works):
                 self._works = works
                 self.visible = True
@@ -2179,7 +2179,7 @@ class TestWorkList(DatabaseTest):
                 relevant_lanes,
                 pagination,
                 facets,
-                **kwargs
+                **kwargs,
             ):
                 self._groups_for_lanes_called_with = (pagination, facets)
                 return []
@@ -2229,7 +2229,7 @@ class TestWorkList(DatabaseTest):
         # Test the method that uses the search index to fetch a list of
         # results appropriate for a given WorkList.
 
-        class MockSearchClient(object):
+        class MockSearchClient:
             """Respond to search requests with some fake work IDs."""
 
             fake_work_ids = [1, 10, 100, 1000]
@@ -2319,7 +2319,7 @@ class TestWorkList(DatabaseTest):
         w1 = self._work(with_license_pool=True)
         w2 = self._work(with_license_pool=True)
 
-        class MockHit(object):
+        class MockHit:
             def __init__(self, work_id, has_last_update=False):
                 if isinstance(work_id, Work):
                     self.work_id = work_id.id
@@ -2389,7 +2389,7 @@ class TestWorkList(DatabaseTest):
         wl.initialize(self._default_library, audiences=[Classifier.AUDIENCE_CHILDREN])
         query = "a query"
 
-        class MockSearchClient(object):
+        class MockSearchClient:
             def query_works(self, query, filter, pagination, debug):
                 self.query_works_called_with = (query, filter, pagination, debug)
                 return "A bunch of work IDs"
@@ -2457,7 +2457,7 @@ class TestWorkList(DatabaseTest):
         assert [] == wl.search(self._db, query, None)
 
         # If the SearchClient returns nothing, there are no results.
-        class NoResults(object):
+        class NoResults:
             def query_works(self, *args, **kwargs):
                 return None
 
@@ -2465,7 +2465,7 @@ class TestWorkList(DatabaseTest):
 
         # If there's an ElasticSearch exception during the query,
         # there are no results.
-        class RaisesException(object):
+        class RaisesException:
             def query_works(self, *args, **kwargs):
                 raise ElasticsearchException("oh no")
 
@@ -2491,7 +2491,7 @@ class TestWorkList(DatabaseTest):
         self._db.add(cs1)
         self._db.commit()
 
-        class MockHit(object):
+        class MockHit:
             def __init__(self, work_id, has_last_update=False):
                 if isinstance(work_id, Work):
                     self.work_id = work_id.id
@@ -2554,7 +2554,7 @@ class TestDatabaseBackedWorkList(DatabaseTest):
     def test_works_from_database(self):
         # Verify that the works_from_database() method calls the
         # methods we expect, in the right order.
-        class MockQuery(object):
+        class MockQuery:
             # Simulates the behavior of a database Query object
             # without the need to pass around actual database clauses.
             #
@@ -2580,7 +2580,7 @@ class TestDatabaseBackedWorkList(DatabaseTest):
 
         class MockWorkList(DatabaseBackedWorkList):
             def __init__(self, _db):
-                super(MockWorkList, self).__init__()
+                super().__init__()
                 self._db = _db  # We'll be using this in assertions.
                 self.stages = []
 
@@ -2700,7 +2700,7 @@ class TestDatabaseBackedWorkList(DatabaseTest):
                 self.wl.stages.append(distinct)
                 return distinct
 
-        class MockPagination(object):
+        class MockPagination:
             def __init__(self, wl):
                 self.wl = wl
 
@@ -2881,7 +2881,7 @@ class TestDatabaseBackedWorkList(DatabaseTest):
             """
 
             def __init__(self, parent):
-                super(MockWorkList, self).__init__()
+                super().__init__()
                 self._parent = parent
                 self._inherit_parent_restrictions = False
 
@@ -2909,7 +2909,7 @@ class TestDatabaseBackedWorkList(DatabaseTest):
             def inherit_parent_restrictions(self):
                 return self._inherit_parent_restrictions
 
-        class MockParent(object):
+        class MockParent:
             bibliographic_filter_clauses_called_with = None
 
             def bibliographic_filter_clauses(self, _db, qu):
@@ -3027,8 +3027,8 @@ class TestDatabaseBackedWorkList(DatabaseTest):
                 worklist.initialize(self._default_library, **initialize_kwargs)
             qu, clauses = worklist.bibliographic_filter_clauses(self._db, original_qu)
             qu = qu.filter(and_(*clauses))
-            expect_titles = sorted([x.sort_title for x in expect_books])
-            actual_titles = sorted([x.sort_title for x in qu])
+            expect_titles = sorted(x.sort_title for x in expect_books)
+            actual_titles = sorted(x.sort_title for x in qu)
             assert expect_titles == actual_titles
 
         # A WorkList will find a book only if all restrictions
@@ -3211,7 +3211,7 @@ class TestDatabaseBackedWorkList(DatabaseTest):
         assert [children] == for_audiences(Classifier.AUDIENCE_CHILDREN)
 
         # If no particular audiences are specified, no books are filtered.
-        assert set([adult, children]) == set(for_audiences())
+        assert {adult, children} == set(for_audiences())
 
     def test_customlist_filter_clauses(self):
         # Standalone test of customlist_filter_clauses
@@ -3430,7 +3430,7 @@ class TestLane(DatabaseTest):
         assert source.id == lane.list_datasource_id
 
         # The lane is now based on two CustomLists instead of one.
-        assert set([customlist1.id, customlist2.id]) == set(lane.customlist_ids)
+        assert {customlist1.id, customlist2.id} == set(lane.customlist_ids)
 
     def test_set_audiences(self):
         """Setting Lane.audiences to a single value will
@@ -3441,7 +3441,7 @@ class TestLane(DatabaseTest):
         assert [Classifier.AUDIENCE_ADULT] == lane.audiences
 
     def test_update_size(self):
-        class Mock(object):
+        class Mock:
             # Mock the ExternalSearchIndex.count_works() method to
             # return specific values without consulting an actual
             # search index.
@@ -3517,8 +3517,7 @@ class TestLane(DatabaseTest):
         assert [] == list(lane.parentage)
         assert [lane] == list(child_lane.parentage)
         assert (
-            "%s / %s" % (lane.library.short_name, lane.display_name)
-            == lane.full_identifier
+            f"{lane.library.short_name} / {lane.display_name}" == lane.full_identifier
         )
 
         assert (
@@ -3786,7 +3785,7 @@ class TestLane(DatabaseTest):
         fantasy.add_genre("Science Fiction", inclusive=False, recursive=True)
 
         # That eliminates everything.
-        assert set([]) == fantasy.genre_ids
+        assert set() == fantasy.genre_ids
 
         # NOTE: We don't have any doubly nested subgenres, so we can't
         # test the case where a genre is included recursively but one
@@ -3823,7 +3822,7 @@ class TestLane(DatabaseTest):
         # that data source.
         has_list_source = self._lane()
         has_list_source.list_datasource = DataSource.lookup(self._db, DataSource.NYT)
-        assert set([nyt1.id, nyt2.id]) == set(has_list_source.customlist_ids)
+        assert {nyt1.id, nyt2.id} == set(has_list_source.customlist_ids)
 
         # If there are no CustomLists from that data source, an empty
         # list is returned.
@@ -3967,7 +3966,7 @@ class TestLane(DatabaseTest):
         its search target.
         """
 
-        class Mock(object):
+        class Mock:
             def search(self, *args, **kwargs):
                 self.called_with = kwargs["facets"]
 
@@ -4326,7 +4325,7 @@ class TestWorkListGroupsEndToEnd(EndToEndSearchTest):
         # WorkList containing two different lanes, and call groups() on
         # the WorkList.
 
-        class MockWorkList(object):
+        class MockWorkList:
 
             display_name = "Mock"
             visible = True
@@ -4355,7 +4354,7 @@ class TestWorkListGroupsEndToEnd(EndToEndSearchTest):
 
 class TestWorkListGroups(DatabaseTest):
     def setup_method(self):
-        super(TestWorkListGroups, self).setup_method()
+        super().setup_method()
 
         # Make sure random selections and range generations go the
         # same way every time.
@@ -4375,7 +4374,7 @@ class TestWorkListGroups(DatabaseTest):
                     pagination,
                     facets,
                 )
-                return super(MockParent, self)._featured_works_with_lanes(
+                return super()._featured_works_with_lanes(
                     _db, lanes, pagination, facets, *args, **kwargs
                 )
 
@@ -4383,7 +4382,7 @@ class TestWorkListGroups(DatabaseTest):
             def __init__(self, work):
                 self.work = work
                 self.id = work.title
-                super(MockChild, self).__init__()
+                super().__init__()
 
             def overview_facets(self, _db, facets):
                 self.overview_facets_called_with = (_db, facets)
@@ -4464,7 +4463,7 @@ class TestWorkListGroups(DatabaseTest):
                 # Track all the times overview_facets is called (it
                 # should be called twice), plus works_for_resultsets
                 # (which should only be called once).
-                super(MockWorkList, self).__init__(*args, **kwargs)
+                super().__init__(*args, **kwargs)
                 self.works_for_resultsets_calls = []
                 self.overview_facets_calls = []
 
@@ -4475,7 +4474,7 @@ class TestWorkListGroups(DatabaseTest):
                 # object so it can be turned into a Filter.
                 assert isinstance(facets, FeaturedFacets)
                 self.overview_facets_calls.append((_db, facets))
-                return super(MockWorkList, self).overview_facets(_db, facets)
+                return super().overview_facets(_db, facets)
 
             def works_for_resultsets(self, _db, resultsets, facets=None):
                 # Take some lists of (mocked) of search results and turn
@@ -4484,7 +4483,7 @@ class TestWorkListGroups(DatabaseTest):
                 one_lane_worth = [["Here is", "one lane", "of works"]]
                 return one_lane_worth * len(resultsets)
 
-        class MockSearchEngine(object):
+        class MockSearchEngine:
             """Mock a multi-query call to an Elasticsearch server."""
 
             def __init__(self):
@@ -4594,7 +4593,7 @@ class TestWorkListGroups(DatabaseTest):
         lane = self._lane()
         m = lane._size_for_facets
 
-        ebooks, audio, everything, nothing = [
+        ebooks, audio, everything, nothing = (
             FeaturedFacets(minimum_featured_quality=0.5, entrypoint=x)
             for x in (
                 EbooksEntryPoint,
@@ -4602,7 +4601,7 @@ class TestWorkListGroups(DatabaseTest):
                 EverythingEntryPoint,
                 None,
             )
-        ]
+        )
 
         # When Lane.size_by_entrypoint is not set, Lane.size is used.
         # This should only happen immediately after a site is upgraded.

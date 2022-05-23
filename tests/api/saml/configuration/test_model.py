@@ -71,7 +71,7 @@ IDENTITY_PROVIDERS = [
 
 class TestSAMLConfiguration(DatabaseTest):
     def setup_method(self):
-        super(TestSAMLConfiguration, self).setup_method()
+        super().setup_method()
 
         self._saml_provider_integration = self._external_integration(
             "api.saml.provider", ExternalIntegration.PATRON_AUTH_GOAL
@@ -364,7 +364,7 @@ class TestSAMLSettings(DatabaseTest):
         assert 1 == len(federated_identity_provider_entity_ids["options"])
 
 
-class TestSAMLOneLoginConfiguration(object):
+class TestSAMLOneLoginConfiguration:
     def test_get_identity_provider_settings_returns_correct_result(self):
         # Arrange
         configuration = create_autospec(spec=SAMLConfiguration)

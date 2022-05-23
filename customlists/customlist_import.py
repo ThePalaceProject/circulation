@@ -305,7 +305,7 @@ class CustomListImporter:
                 files=(  # type: ignore
                     ("name", (None, customlist.name())),
                     ("entries", (None, json.dumps(output_books, sort_keys=True))),
-                    ("deletedEntries", (None, "[]".encode("utf-8"))),
+                    ("deletedEntries", (None, b"[]")),
                     (
                         "collections",
                         (None, json.dumps(output_collections, sort_keys=True)),

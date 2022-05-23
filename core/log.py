@@ -19,7 +19,7 @@ class JSONFormatter(logging.Formatter):
         hostname = fqdn
 
     def __init__(self, app_name):
-        super(JSONFormatter, self).__init__()
+        super().__init__()
         self.app_name = app_name or LogConfiguration.DEFAULT_APP_NAME
 
     def format(self, record):
@@ -35,7 +35,7 @@ class JSONFormatter(logging.Formatter):
         message = ensure_str(record.msg)
 
         if record.args:
-            record_args = tuple([ensure_str(arg) for arg in record.args])
+            record_args = tuple(ensure_str(arg) for arg in record.args)
             try:
                 message = message % record_args
             except Exception as e:
@@ -66,11 +66,11 @@ class StringFormatter(logging.Formatter):
     """Encode all output as a string."""
 
     def format(self, record):
-        data = super(StringFormatter, self).format(record)
+        data = super().format(record)
         return str(data)
 
 
-class Logger(object):
+class Logger:
     """Abstract base class for logging"""
 
     DEFAULT_APP_NAME = "simplified"
@@ -391,7 +391,7 @@ class CloudwatchLogs(Logger):
         return handler
 
 
-class LogConfiguration(object):
+class LogConfiguration:
     """Configures the active Python logging handlers based on logging
     configuration from the database.
     """
@@ -543,6 +543,6 @@ class LogConfiguration(object):
                 if handler:
                     handlers.append(handler)
             except Exception as e:
-                errors.append("Error creating logger %s %s" % (logger.NAME, str(e)))
+                errors.append(f"Error creating logger {logger.NAME} {str(e)}")
 
         return log_level, database_log_level, handlers, errors

@@ -1,10 +1,9 @@
-# encoding: utf-8
 import json
 
 from core.util.problem_detail import ProblemDetail
 
 
-class TestProblemDetail(object):
+class TestProblemDetail:
     def test_with_debug(self):
         detail = ProblemDetail("http://uri/", title="Title", detail="Detail")
         with_debug = detail.with_debug("Debug Message")

@@ -6,7 +6,7 @@ import random
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from functools import total_ordering
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import TYPE_CHECKING
 from urllib.parse import quote, unquote
 
 import isbnlib
@@ -50,7 +50,7 @@ class IdentifierParser(metaclass=ABCMeta):
     """Interface for identifier parsers."""
 
     @abstractmethod
-    def parse(self, identifier_string: str) -> Optional[Tuple[str, str]]:
+    def parse(self, identifier_string: str) -> tuple[str, str] | None:
         """Parse a string containing an identifier, extract it and determine its type.
 
         :param identifier_string: String containing an identifier
@@ -92,7 +92,7 @@ class Identifier(Base, IdentifierConstants):
             title = ' prim_ed=%d ("%s")' % (records[0].id, records[0].title)
         else:
             title = ""
-        return "%s/%s ID=%s%s" % (self.type, self.identifier, self.id, title)
+        return f"{self.type}/{self.identifier} ID={self.id}{title}"
 
     # One Identifier may serve as the primary identifier for
     # several Editions.
@@ -179,9 +179,7 @@ class Identifier(Base, IdentifierConstants):
             foreign_identifier = foreign_identifier.lower()
 
         if not cls.valid_as_foreign_identifier(foreign_type, foreign_identifier):
-            raise ValueError(
-                '"%s" is not a valid %s.' % (foreign_identifier, foreign_type)
-            )
+            raise ValueError(f'"{foreign_identifier}" is not a valid {foreign_type}.')
 
         return (foreign_type, foreign_identifier)
 
@@ -221,7 +219,9 @@ class Identifier(Base, IdentifierConstants):
             return self.GUTENBERG_URN_SCHEME_PREFIX + identifier_text
         else:
             identifier_type = quote(self.type)
-            return self.URN_SCHEME_PREFIX + "%s/%s" % (identifier_type, identifier_text)
+            return self.URN_SCHEME_PREFIX + "{}/{}".format(
+                identifier_type, identifier_text
+            )
 
     @property
     def work(self):
@@ -350,7 +350,7 @@ class Identifier(Base, IdentifierConstants):
         # Find any identifier details that don't correspond to an existing
         # identifier. Try to create them.
         new_identifiers = list()
-        new_identifiers_details = set([])
+        new_identifiers_details = set()
         for urn, details in list(identifier_details.items()):
             if details in new_identifiers_details:
                 # For some reason, this identifier is here twice.
@@ -375,7 +375,7 @@ class Identifier(Base, IdentifierConstants):
         identifier_string: str,
         identifier_type: str,
         must_support_license_pools: bool = False,
-    ) -> Tuple["Identifier", bool]:
+    ) -> tuple[Identifier, bool]:
         """Parse identifier string.
 
         :param _db: Database session
@@ -402,7 +402,7 @@ class Identifier(Base, IdentifierConstants):
         _db: Session,
         identifier_string: str,
         must_support_license_pools: bool = False,
-    ) -> Tuple[Identifier, bool]:
+    ) -> tuple[Identifier, bool]:
         """Parse identifier string.
 
         :param _db: Database session
@@ -426,7 +426,7 @@ class Identifier(Base, IdentifierConstants):
         identifier_string: str,
         parser: IdentifierParser,
         must_support_license_pools: bool = False,
-    ) -> Tuple[Identifier, bool]:
+    ) -> tuple[Identifier, bool]:
         """Parse identifier string.
 
         :param _db: Database session

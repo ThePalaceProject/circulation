@@ -133,7 +133,7 @@ class CirculationManagerAnnotator(Annotator):
                 v = ""
             v = urllib.parse.quote(str(v))
             k = urllib.parse.quote(str(k))
-            url += connector + "%s=%s" % (k, v)
+            url += connector + f"{k}={v}"
             connector = "&"
         return url
 
@@ -181,7 +181,7 @@ class CirculationManagerAnnotator(Annotator):
         else:
             # There is no active loan. Use the default logic for
             # determining the active license pool.
-            return super(CirculationManagerAnnotator, self).active_licensepool_for(work)
+            return super().active_licensepool_for(work)
 
     @staticmethod
     def _prioritized_formats_for_pool(
@@ -249,7 +249,7 @@ class CirculationManagerAnnotator(Annotator):
                 # important to the import process than an up-to-date
                 # 'last update' value.
 
-        super(CirculationManagerAnnotator, self).annotate_work_entry(
+        super().annotate_work_entry(
             work, active_license_pool, edition, identifier, feed, entry, updated
         )
         active_loan = self.active_loans_by_work.get(work)
@@ -586,7 +586,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
           added, for direct acquisition of titles that would normally
           require a loan.
         """
-        super(LibraryAnnotator, self).__init__(
+        super().__init__(
             lane,
             active_loans_by_work=active_loans_by_work,
             active_holds_by_work=active_holds_by_work,
@@ -653,7 +653,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             lane_identifier=lane_identifier,
             library_short_name=self.library.short_name,
             _external=True,
-            **kwargs
+            **kwargs,
         )
 
     def default_lane_url(self, facets=None):
@@ -663,9 +663,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         extra_kwargs = dict()
         if self.library:
             extra_kwargs["library_short_name"] = self.library.short_name
-        return super(LibraryAnnotator, self).feed_url(
-            lane, facets, pagination, default_route, extra_kwargs
-        )
+        return super().feed_url(lane, facets, pagination, default_route, extra_kwargs)
 
     def search_url(self, lane, query, pagination, facets=None):
         lane_identifier = self._lane_identifier(lane)
@@ -679,7 +677,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             lane_identifier=lane_identifier,
             library_short_name=self.library.short_name,
             _external=True,
-            **kwargs
+            **kwargs,
         )
 
     def group_uri(self, work, license_pool, identifier):
@@ -753,7 +751,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             ),
         )
 
-        super(LibraryAnnotator, self).annotate_work_entry(
+        super().annotate_work_entry(
             work, active_license_pool, edition, identifier, feed, entry
         )
 
@@ -964,7 +962,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                 lane_identifier=lane_identifier,
                 library_short_name=self.library.short_name,
                 _external=True,
-                **search_facet_kwargs
+                **search_facet_kwargs,
             )
             search_link = dict(
                 rel="search",
@@ -1124,7 +1122,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             # borrow link and figure out the rest later.
             set_mechanism_at_borrow = False
 
-        return super(LibraryAnnotator, self).acquisition_links(
+        return super().acquisition_links(
             active_license_pool,
             active_loan,
             active_hold,
@@ -1261,7 +1259,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         return link_tag
 
     def open_access_link(self, pool, lpdm):
-        link_tag = super(LibraryAnnotator, self).open_access_link(pool, lpdm)
+        link_tag = super().open_access_link(pool, lpdm)
         fulfill_url = self.url_for(
             "fulfill",
             license_pool_id=pool.id,
@@ -1431,7 +1429,7 @@ class SharedCollectionAnnotator(CirculationManagerAnnotator):
         active_fulfillments_by_work={},
         test_mode=False,
     ):
-        super(SharedCollectionAnnotator, self).__init__(
+        super().__init__(
             lane,
             active_loans_by_work=active_loans_by_work,
             active_holds_by_work=active_holds_by_work,
@@ -1451,9 +1449,7 @@ class SharedCollectionAnnotator(CirculationManagerAnnotator):
 
     def feed_url(self, lane, facets=None, pagination=None, default_route="feed"):
         extra_kwargs = dict(collection_name=self.collection.name)
-        return super(SharedCollectionAnnotator, self).feed_url(
-            lane, facets, pagination, default_route, extra_kwargs
-        )
+        return super().feed_url(lane, facets, pagination, default_route, extra_kwargs)
 
     def acquisition_links(
         self,
@@ -1465,7 +1461,7 @@ class SharedCollectionAnnotator(CirculationManagerAnnotator):
         identifier,
     ):
         """Generate a number of <link> tags that enumerate all acquisition methods."""
-        links = super(SharedCollectionAnnotator, self).acquisition_links(
+        links = super().acquisition_links(
             active_license_pool,
             active_loan,
             active_hold,
@@ -1659,7 +1655,7 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
         fulfillment=None,
         test_mode=False,
         feed_class=AcquisitionFeed,
-        **response_kwargs
+        **response_kwargs,
     ):
         """Construct a response containing a single OPDS entry representing an active loan
         or hold.
@@ -1686,7 +1682,7 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
             library = item.library
         else:
             raise ValueError(
-                "Argument 'item' must be an instance of {0}, {1}, or {2} classes".format(
+                "Argument 'item' must be an instance of {}, {}, or {} classes".format(
                     Loan, Hold, LicensePool
                 )
             )
@@ -1761,7 +1757,7 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
         """Annotate the feed with top-level DRM device registration tags
         and a link to the User Profile Management Protocol endpoint.
         """
-        super(LibraryLoanAndHoldAnnotator, self).annotate_feed(feed, lane)
+        super().annotate_feed(feed, lane)
         if self.patron:
             tags = self.drm_device_registration_feed_tags(self.patron)
             tags.append(self.user_profile_management_protocol_link)
@@ -1778,7 +1774,7 @@ class SharedCollectionLoanAndHoldAnnotator(SharedCollectionAnnotator):
         fulfillment=None,
         test_mode=False,
         feed_class=AcquisitionFeed,
-        **response_kwargs
+        **response_kwargs,
     ):
         """Create an OPDS entry representing a single loan or hold.
 

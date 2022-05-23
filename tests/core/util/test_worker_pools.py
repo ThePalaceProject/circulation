@@ -5,7 +5,7 @@ from core.testing import DatabaseTest
 from core.util.worker_pools import DatabaseJob, DatabasePool, Pool, Queue, Worker
 
 
-class TestPool(object):
+class TestPool:
     def test_initializes_with_active_workers(self):
         original_thread_count = threading.active_count()
         with Pool(3) as pool:
@@ -86,7 +86,7 @@ class MockQueue(Queue):
         self.error_count += 1
 
 
-class TestWorker(object):
+class TestWorker:
     def test_factory(self):
         mock_queue = object()
         result = Worker.factory(mock_queue)
@@ -116,7 +116,7 @@ class TestWorker(object):
 
         original = ["Who Can I * To", "* To You", "Water *s Dry", "* The World"]
 
-        class MockJob(object):
+        class MockJob:
             def __init__(self, idx):
                 self.idx = idx
 

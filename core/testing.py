@@ -114,7 +114,7 @@ class LogCaptureHandler(logging.Handler):
         if item in self.LEVEL_NAMES:
             return self._records[item]
         else:
-            message = "'%s' object has no attribute '%s'" % (
+            message = "'{}' object has no attribute '{}'".format(
                 self.__class__.__name__,
                 item,
             )
@@ -124,7 +124,7 @@ class LogCaptureHandler(logging.Handler):
         return self.__getitem__(item)
 
 
-class DatabaseTest(object):
+class DatabaseTest:
 
     engine = None
     connection = None
@@ -915,12 +915,12 @@ class DatabaseTest(object):
             print("NO Work found")
         for wCount, work in enumerate(works):
             # pipe character at end of line helps see whitespace issues
-            print("Work[%s]=%s|" % (wCount, work))
+            print(f"Work[{wCount}]={work}|")
 
             if not work.license_pools:
                 print("    NO Work.LicensePool found")
             for lpCount, license_pool in enumerate(work.license_pools):
-                print("    Work.LicensePool[%s]=%s|" % (lpCount, license_pool))
+                print(f"    Work.LicensePool[{lpCount}]={license_pool}|")
 
             print("    Work.presentation_edition=%s|" % work.presentation_edition)
 
@@ -928,14 +928,14 @@ class DatabaseTest(object):
         if not identifiers:
             print("NO Identifier found")
         for iCount, identifier in enumerate(identifiers):
-            print("Identifier[%s]=%s|" % (iCount, identifier))
+            print(f"Identifier[{iCount}]={identifier}|")
             print("    Identifier.licensed_through=%s|" % identifier.licensed_through)
 
         print("__________________________________________________________________\n")
         if not license_pools:
             print("NO LicensePool found")
         for index, license_pool in enumerate(license_pools):
-            print("LicensePool[%s]=%s|" % (index, license_pool))
+            print(f"LicensePool[{index}]={license_pool}|")
             print("    LicensePool.work_id=%s|" % license_pool.work_id)
             print("    LicensePool.data_source_id=%s|" % license_pool.data_source_id)
             print("    LicensePool.identifier_id=%s|" % license_pool.identifier_id)
@@ -951,7 +951,7 @@ class DatabaseTest(object):
             print("NO Edition found")
         for index, edition in enumerate(editions):
             # pipe character at end of line helps see whitespace issues
-            print("Edition[%s]=%s|" % (index, edition))
+            print(f"Edition[{index}]={edition}|")
             print(
                 "    Edition.primary_identifier_id=%s|" % edition.primary_identifier_id
             )
@@ -980,7 +980,7 @@ class DatabaseTest(object):
         if not data_sources:
             print("NO DataSource found")
         for index, data_source in enumerate(data_sources):
-            print("DataSource[%s]=%s|" % (index, data_source))
+            print(f"DataSource[{index}]={data_source}|")
             print("    DataSource.id=%s|" % data_source.id)
             print("    DataSource.name=%s|" % data_source.name)
             print("    DataSource.offers_licenses=%s|" % data_source.offers_licenses)
@@ -992,7 +992,7 @@ class DatabaseTest(object):
         if not representations:
             print("NO Representation found")
         for index, representation in enumerate(representations):
-            print("Representation[%s]=%s|" % (index, representation))
+            print(f"Representation[{index}]={representation}|")
             print("    Representation.id=%s|" % representation.id)
             print("    Representation.url=%s|" % representation.url)
             print("    Representation.mirror_url=%s|" % representation.mirror_url)
@@ -1143,9 +1143,7 @@ class SearchClientForTesting(ExternalSearchIndex):
     """
 
     def setup_index(self, new_index=None):
-        return super(SearchClientForTesting, self).setup_index(
-            new_index, number_of_shards=1, number_of_replicas=0
-        )
+        return super().setup_index(new_index, number_of_shards=1, number_of_replicas=0)
 
 
 @pytest.mark.elasticsearch
@@ -1165,7 +1163,7 @@ class ExternalSearchTest(DatabaseTest):
 
     def setup_method(self):
 
-        super(ExternalSearchTest, self).setup_method()
+        super().setup_method()
 
         # Track the indexes created so they can be torn down at the
         # end of the test.
@@ -1204,7 +1202,7 @@ class ExternalSearchTest(DatabaseTest):
             for index in self.indexes:
                 self.search.indices.delete(index, ignore=[404])
             ExternalSearchIndex.reset()
-        super(ExternalSearchTest, self).teardown_method()
+        super().teardown_method()
 
     def default_work(self, *args, **kwargs):
         """Convenience method to create a work with a license pool
@@ -1223,7 +1221,7 @@ class EndToEndSearchTest(ExternalSearchTest):
     """
 
     def setup_method(self):
-        super(EndToEndSearchTest, self).setup_method()
+        super().setup_method()
 
         # Create some works.
         if not self.search:
@@ -1351,7 +1349,7 @@ class EndToEndSearchTest(ExternalSearchTest):
             assert count == len(expect)
 
 
-class MockCoverageProvider(object):
+class MockCoverageProvider:
     """Mixin class for mock CoverageProviders that defines common constants."""
 
     SERVICE_NAME: Optional[str] = "Generic mock CoverageProvider"
@@ -1375,7 +1373,7 @@ class InstrumentedCoverageProvider(MockCoverageProvider, IdentifierCoverageProvi
     """
 
     def __init__(self, *args, **kwargs):
-        super(InstrumentedCoverageProvider, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.attempts = []
 
     def process_item(self, item):
@@ -1389,7 +1387,7 @@ class InstrumentedWorkCoverageProvider(MockCoverageProvider, WorkCoverageProvide
     """
 
     def __init__(self, _db, *args, **kwargs):
-        super(InstrumentedWorkCoverageProvider, self).__init__(_db, *args, **kwargs)
+        super().__init__(_db, *args, **kwargs)
         self.attempts = []
 
     def process_item(self, item):
@@ -1443,7 +1441,7 @@ class NeverSuccessfulCoverageProvider(InstrumentedCoverageProvider):
     SERVICE_NAME = "Never successful"
 
     def __init__(self, *args, **kwargs):
-        super(NeverSuccessfulCoverageProvider, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.transient = kwargs.get("transient") or False
 
     def process_item(self, item):
@@ -1508,7 +1506,7 @@ class TaskIgnoringCoverageProvider(InstrumentedCoverageProvider):
         return []
 
 
-class DummyCanonicalizeLookupResponse(object):
+class DummyCanonicalizeLookupResponse:
     @classmethod
     def success(cls, result):
         r = cls()
@@ -1524,7 +1522,7 @@ class DummyCanonicalizeLookupResponse(object):
         return r
 
 
-class DummyMetadataClient(object):
+class DummyMetadataClient:
     def __init__(self):
         self.lookups = {}
 
@@ -1535,7 +1533,7 @@ class DummyMetadataClient(object):
             return DummyCanonicalizeLookupResponse.failure()
 
 
-class DummyHTTPClient(object):
+class DummyHTTPClient:
     def __init__(self):
         self.responses = []
         self.requests = []
@@ -1577,7 +1575,7 @@ class DummyHTTPClient(object):
         return self.responses.pop(0)
 
 
-class MockRequestsRequest(object):
+class MockRequestsRequest:
     """A mock object that simulates an HTTP request from the
     `requests` library.
     """
@@ -1588,7 +1586,7 @@ class MockRequestsRequest(object):
         self.headers = headers or dict()
 
 
-class MockRequestsResponse(object):
+class MockRequestsResponse:
     """A mock object that simulates an HTTP response from the
     `requests` library.
     """

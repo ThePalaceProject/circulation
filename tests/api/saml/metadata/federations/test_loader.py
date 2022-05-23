@@ -14,7 +14,7 @@ from api.saml.metadata.parser import SAMLMetadataParser
 from tests.api.saml import fixtures
 
 
-class TestSAMLMetadataLoader(object):
+class TestSAMLMetadataLoader:
     @patch("urllib.request.urlopen")
     def test_load_idp_metadata_raises_error_when_xml_is_incorrect(self, urlopen_mock):
         # Arrange
@@ -64,7 +64,7 @@ class TestSAMLMetadataLoader(object):
         assert fixtures.CORRECT_XML_WITH_MULTIPLE_IDPS == xml_metadata
 
 
-class TestSAMLFederatedIdentityProviderLoader(object):
+class TestSAMLFederatedIdentityProviderLoader:
     def test_load(self):
         # Arrange
         federation_type = incommon.FEDERATION_TYPE

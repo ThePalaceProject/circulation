@@ -1,4 +1,3 @@
-# encoding: utf-8
 from core.model import get_one_or_create
 from core.model.contributor import Contributor
 from core.model.datasource import DataSource

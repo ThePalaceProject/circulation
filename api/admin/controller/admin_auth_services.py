@@ -14,7 +14,7 @@ from . import SettingsController
 
 class AdminAuthServicesController(SettingsController):
     def __init__(self, manager):
-        super(AdminAuthServicesController, self).__init__(manager)
+        super().__init__(manager)
         provider_apis = [GoogleOAuthAdminAuthenticationProvider]
         self.protocols = self._get_integration_protocols(
             provider_apis, protocol_name_attr="NAME"

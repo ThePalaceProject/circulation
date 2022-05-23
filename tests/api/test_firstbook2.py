@@ -11,7 +11,7 @@ from core.testing import DatabaseTest
 
 class TestFirstBook(DatabaseTest):
     def setup_method(self):
-        super(TestFirstBook, self).setup_method()
+        super().setup_method()
         self.integration = self._external_integration(
             ExternalIntegration.PATRON_AUTH_GOAL
         )

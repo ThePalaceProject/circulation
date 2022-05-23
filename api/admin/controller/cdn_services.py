@@ -11,7 +11,7 @@ from . import SettingsController
 
 class CDNServicesController(SettingsController):
     def __init__(self, manager):
-        super(CDNServicesController, self).__init__(manager)
+        super().__init__(manager)
         self.protocols = [
             {
                 "name": ExternalIntegration.CDN,

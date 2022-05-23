@@ -106,14 +106,14 @@ class DSLEvaluationVisitor(Visitor):
         if isinstance(obj, dict):
             if attribute not in obj:
                 raise DSLEvaluationError(
-                    "Cannot find attribute '{0}' in {1}".format(attribute, obj)
+                    f"Cannot find attribute '{attribute}' in {obj}"
                 )
 
             return obj[attribute]
         else:
             if not hasattr(obj, attribute):
                 raise DSLEvaluationError(
-                    "Cannot find attribute '{0}' in {1}".format(attribute, obj)
+                    f"Cannot find attribute '{attribute}' in {obj}"
                 )
 
             return getattr(obj, attribute)
@@ -134,7 +134,7 @@ class DSLEvaluationVisitor(Visitor):
 
         if unary_expression.operator not in available_operators:
             raise DSLEvaluationError(
-                "Wrong operator {0}. Was expecting one of {1}".format(
+                "Wrong operator {}. Was expecting one of {}".format(
                     unary_expression.operator, list(available_operators.keys())
                 )
             )
@@ -161,7 +161,7 @@ class DSLEvaluationVisitor(Visitor):
 
         if binary_expression.operator not in available_operators:
             raise DSLEvaluationError(
-                "Wrong operator {0}. Was expecting one of {1}".format(
+                "Wrong operator {}. Was expecting one of {}".format(
                     binary_expression.operator, list(available_operators.keys())
                 )
             )
@@ -353,7 +353,7 @@ class DSLEvaluationVisitor(Visitor):
 
         if function_class and function_class not in self.safe_classes:
             raise DSLEvaluationError(
-                "Function {0} defined in a not-safe class {1} and cannot be called".format(
+                "Function {} defined in a not-safe class {} and cannot be called".format(
                     function, function_class
                 )
             )
@@ -363,7 +363,7 @@ class DSLEvaluationVisitor(Visitor):
         return result
 
 
-class DSLEvaluator(object):
+class DSLEvaluator:
     """Evaluates the expression."""
 
     def __init__(self, parser: DSLParser, visitor: DSLEvaluationVisitor):
@@ -374,11 +374,11 @@ class DSLEvaluator(object):
         """
         if not isinstance(parser, DSLParser):
             raise ValueError(
-                "Argument 'parser' must be an instance of {0} class".format(DSLParser)
+                f"Argument 'parser' must be an instance of {DSLParser} class"
             )
         if not isinstance(visitor, DSLEvaluationVisitor):
             raise ValueError(
-                "Argument 'visitor' must be an instance of {0} class".format(
+                "Argument 'visitor' must be an instance of {} class".format(
                     DSLEvaluationVisitor
                 )
             )

@@ -29,7 +29,7 @@ class SAMLMetadataParsingError(BaseError):
     """Raised in the case of any errors occurred during parsing of SAML metadata"""
 
 
-class SAMLMetadataParsingResult(object):
+class SAMLMetadataParsingResult:
     def __init__(self, provider, xml_node):
         """Initialize a new instance of SAMLMetadataParsingResult class.
 
@@ -61,7 +61,7 @@ class SAMLMetadataParsingResult(object):
         return self._xml_node
 
 
-class SAMLMetadataParser(object):
+class SAMLMetadataParser:
     """Parses SAML metadata"""
 
     def __init__(self, skip_incorrect_providers=False):
@@ -134,9 +134,7 @@ class SAMLMetadataParser(object):
         """
         certificates = []
 
-        self._logger.debug(
-            "Started parsing {0} certificates".format(len(certificate_nodes))
-        )
+        self._logger.debug(f"Started parsing {len(certificate_nodes)} certificates")
 
         try:
             for certificate_node in certificate_nodes:
@@ -144,16 +142,14 @@ class SAMLMetadataParser(object):
                     OneLogin_Saml2_XML.element_text(certificate_node).split()
                 )
 
-                self._logger.debug(
-                    "Found the following certificate: {0}".format(certificate)
-                )
+                self._logger.debug(f"Found the following certificate: {certificate}")
 
                 certificates.append(certificate)
         except XMLSyntaxError as exception:
             raise SAMLMetadataParsingError(inner_exception=exception)
 
         self._logger.debug(
-            "Finished parsing {0} certificates: {1}".format(
+            "Finished parsing {} certificates: {}".format(
                 len(certificate_nodes), certificates
             )
         )
@@ -228,7 +224,7 @@ class SAMLMetadataParser(object):
             localizable_metadata_tag_name = xpath[last_slash_index + 1 :]
 
             raise SAMLMetadataParsingError(
-                _("{0} tag is missing".format(localizable_metadata_tag_name))
+                _(f"{localizable_metadata_tag_name} tag is missing")
             )
 
         localizable_items = None
@@ -382,7 +378,7 @@ class SAMLMetadataParser(object):
         else:
             raise SAMLMetadataParsingError(
                 _(
-                    "Missing {0} SingleSignOnService service declaration".format(
+                    "Missing {} SingleSignOnService service declaration".format(
                         required_sso_binding.value
                     )
                 )
@@ -474,7 +470,7 @@ class SAMLMetadataParser(object):
         else:
             raise SAMLMetadataParsingError(
                 _(
-                    "Missing {0} AssertionConsumerService".format(
+                    "Missing {} AssertionConsumerService".format(
                         required_acs_binding.value
                     )
                 )
@@ -619,7 +615,7 @@ class SAMLMetadataParser(object):
         return parsing_results
 
 
-class SAMLSubjectParser(object):
+class SAMLSubjectParser:
     """Parses SAML response into Subject object"""
 
     def _parse_name_id(self, name_id_attributes):

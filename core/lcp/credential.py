@@ -78,7 +78,7 @@ class LCPCredentialFactory:
         :param value: Optional value of the token
         """
         self._logger.info(
-            'Getting or creating "{0}" credentials for {1} in "{2}" data source with value "{3}"'.format(
+            'Getting or creating "{}" credentials for {} in "{}" data source with value "{}"'.format(
                 credential_type, patron, data_source_type, value
             )
         )
@@ -96,7 +96,7 @@ class LCPCredentialFactory:
             transaction.rollback()
 
         self._logger.info(
-            'Successfully {0} "{1}" {2} for {3} in "{4}" data source with value "{5}"'.format(
+            'Successfully {} "{}" {} for {} in "{}" data source with value "{}"'.format(
                 "created new" if is_new else "fetched existing",
                 credential_type,
                 credential,

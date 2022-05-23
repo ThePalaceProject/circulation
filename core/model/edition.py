@@ -1,4 +1,3 @@
-# encoding: utf-8
 # Edition
 
 
@@ -114,7 +113,7 @@ class Edition(Base, EditionConstants):
 
     def __repr__(self):
         id_repr = repr(self.primary_identifier)
-        return "Edition %s [%r] (%s/%s/%s)" % (
+        return "Edition {} [{!r}] ({}/{}/{})".format(
             self.id,
             id_repr,
             self.title,
@@ -128,7 +127,7 @@ class Edition(Base, EditionConstants):
 
     @property
     def contributors(self):
-        return set([x.contributor for x in self.contributions])
+        return {x.contributor for x in self.contributions}
 
     @property
     def author_contributors(self):

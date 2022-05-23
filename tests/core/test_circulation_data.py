@@ -198,11 +198,9 @@ class TestCirculationData(DatabaseTest):
         circulation_data.apply(self._db, pool.collection, replacement_policy)
 
         assert 2 == len(pool.delivery_mechanisms)
-        assert set(
-            [Representation.PDF_MEDIA_TYPE, Representation.EPUB_MEDIA_TYPE]
-        ) == set(
-            [lpdm.delivery_mechanism.content_type for lpdm in pool.delivery_mechanisms]
-        )
+        assert {Representation.PDF_MEDIA_TYPE, Representation.EPUB_MEDIA_TYPE} == {
+            lpdm.delivery_mechanism.content_type for lpdm in pool.delivery_mechanisms
+        }
         assert old_lpdm == loan.fulfillment
 
         # But if we make formats true in the policy, we'll delete the old format
@@ -759,14 +757,16 @@ class TestMetaToModelUtility(DatabaseTest):
         assert book.mirror_url.startswith(
             "https://test-content-bucket.s3.amazonaws.com/"
         )
-        expect = "/%s/%s.epub" % (edition.primary_identifier.identifier, edition.title)
+        expect = "/{}/{}.epub".format(
+            edition.primary_identifier.identifier, edition.title
+        )
         assert book.mirror_url.endswith(expect)
 
         # make sure the mirrored link is safely on edition
         sorted_edition_links = sorted(pool.identifier.links, key=lambda x: x.rel)
-        unmirrored_representation, mirrored_representation = [
+        unmirrored_representation, mirrored_representation = (
             edlink.resource.representation for edlink in sorted_edition_links
-        ]
+        )
         assert mirrored_representation.mirror_url.startswith(
             "https://test-content-bucket.s3.amazonaws.com/"
         )

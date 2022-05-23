@@ -41,7 +41,7 @@ from core.util.datetime_helpers import utc_now
 # documents.
 
 
-class fixed(object):
+class fixed:
     """A fixed-width field in a SIP2 response."""
 
     def __init__(self, internal_name, length):
@@ -82,7 +82,7 @@ fixed._add("login_ok", 1)
 fixed._add("end_session", 1)
 
 
-class named(object):
+class named:
     """A variable-length field in a SIP2 response."""
 
     def __init__(
@@ -187,7 +187,7 @@ class RequestResend(IOError):
     """
 
 
-class Constants(object):
+class Constants:
     UNKNOWN_LANGUAGE = "000"
     ENGLISH = "001"
 
@@ -329,7 +329,7 @@ class SIPClient(Constants):
                 self.location_code,
             )
             if response["login_ok"] != "1":
-                raise IOError("Error logging in: %r" % response)
+                raise OSError("Error logging in: %r" % response)
             return response
 
     def patron_information(self, *args, **kwargs):
@@ -338,7 +338,7 @@ class SIPClient(Constants):
             self.patron_information_request,
             self.patron_information_parser,
             *args,
-            **kwargs
+            **kwargs,
         )
 
     def end_session(self, *args, **kwargs):
@@ -348,7 +348,7 @@ class SIPClient(Constants):
                 self.end_session_message,
                 self.end_session_response_parser,
                 *args,
-                **kwargs
+                **kwargs,
             )
         else:
             return None
@@ -366,8 +366,8 @@ class SIPClient(Constants):
 
             self.connection.settimeout(12)
             self.connection.connect((self.target_server, self.target_port))
-        except socket.error as message:
-            raise IOError(
+        except OSError as message:
+            raise OSError(
                 "Could not connect to %s:%s - %s"
                 % (self.target_server, self.target_port, message)
             )
@@ -440,7 +440,7 @@ class SIPClient(Constants):
             if retries >= self.MAXIMUM_RETRIES:
                 # Only retry MAXIMUM_RETRIES times in case we we are sending
                 # a message the ILS doesn't like, so we don't retry forever
-                raise IOError("Maximum SIP retries reached")
+                raise OSError("Maximum SIP retries reached")
             self.send(message_with_checksum)
             response = self.read_message()
             try:
@@ -769,7 +769,7 @@ class SIPClient(Constants):
             if status_code == "96":  # Request SC Resend
                 raise RequestResend()
             else:
-                raise IOError("Unexpected status code %s: %s" % (status_code, data))
+                raise OSError(f"Unexpected status code {status_code}: {data}")
         return data[2:]
 
     @classmethod
@@ -851,11 +851,11 @@ class SIPClient(Constants):
             tmp = self.connection.recv(4096)
             data = data + tmp
             if not tmp:
-                raise IOError("No data read from socket.")
+                raise OSError("No data read from socket.")
             if data[-1] == 13 or data[-1] == 10:
                 done = True
             if len(data) > max_size:
-                raise IOError("SIP2 response too large.")
+                raise OSError("SIP2 response too large.")
         return data
 
     def append_checksum(self, text, include_sequence_number=True):
@@ -910,7 +910,7 @@ class MockSIPClient(SIPClient):
         # make requests.
         kwargs["target_server"] = None
         kwargs["target_port"] = None
-        super(MockSIPClient, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.read_count = 0
         self.write_count = 0
@@ -947,7 +947,7 @@ class MockSIPClient(SIPClient):
         pass
 
 
-class MockSIPClientFactory(object):
+class MockSIPClientFactory:
     """Pass this into SIP2AuthenticationProvider to instantiate a
     MockSIPClient based on its configuration, _and_ to use that
     MockSIPClient every single time; normally

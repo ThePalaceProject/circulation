@@ -9,7 +9,7 @@ from core.model import Representation
 from core.util import LanguageCodes
 
 
-class Validator(object):
+class Validator:
     def validate(self, settings, content):
         validators = [
             self.validate_email,
@@ -69,7 +69,7 @@ class Validator(object):
 
     def _is_email(self, email):
         """Email addresses must be in the format 'x@y.z'."""
-        email_format = ".+\@.+\..+"
+        email_format = r".+\@.+\..+"
         return re.search(email_format, email)
 
     def validate_url(self, settings, content):
@@ -205,7 +205,7 @@ class Validator(object):
         return [x for x in value if x != None and x != ""]
 
 
-class PatronAuthenticationValidatorFactory(object):
+class PatronAuthenticationValidatorFactory:
     """Creates Validator instances for particular authentication protocols"""
 
     VALIDATOR_CLASS_NAME = "Validator"
@@ -260,11 +260,7 @@ class PatronAuthenticationValidatorFactory(object):
                 return validator
         except:
             self._logger.warning(
-                _(
-                    "Could not load a validator defined in {0} module".format(
-                        module_name
-                    )
-                )
+                _(f"Could not load a validator defined in {module_name} module")
             )
 
         return None

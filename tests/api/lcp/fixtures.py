@@ -16,7 +16,7 @@ PROTECTED_CONTENT_SHA256 = (
 
 
 LCPENCRYPT_NOT_EXISTING_DIRECTORY_RESULT = """Error opening input file, for more information type 'lcpencrypt -help' ; level 30
-open {0}: no such file or directory
+open {}: no such file or directory
 """.format(
     NOT_EXISTING_BOOK_FILE_PATH
 )

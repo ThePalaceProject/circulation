@@ -5,7 +5,7 @@ from core.testing import DatabaseTest as BaseDatabaseTest
 
 class DatabaseTest(BaseDatabaseTest):
     def setup_method(self):
-        super(DatabaseTest, self).setup_method()
+        super().setup_method()
 
         self._integration = self._external_integration(
             protocol=SAMLWebSSOAuthenticationProvider.NAME,

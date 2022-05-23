@@ -1,4 +1,3 @@
-# encoding: utf-8
 import pytest
 
 from core.model.configuration import ConfigurationSetting
@@ -106,7 +105,7 @@ class TestLibrary(DatabaseTest):
         self._default_collection.parent_id = parent.id
 
         assert [self._default_collection] == library.collections
-        assert set([self._default_collection, parent]) == set(library.all_collections)
+        assert {self._default_collection, parent} == set(library.all_collections)
 
     def test_estimated_holdings_by_language(self):
         library = self._default_library

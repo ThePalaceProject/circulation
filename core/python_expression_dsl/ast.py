@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
 from enum import Enum
-from typing import List
 
 
 class Visitor(metaclass=ABCMeta):
@@ -82,7 +81,7 @@ class Expression(Node):
 class DotExpression(Expression):
     """Represents a dotted expression."""
 
-    def __init__(self, expressions: List[Expression]):
+    def __init__(self, expressions: list[Expression]):
         """Initialize a new instance of DotExpression class.
 
         :param expressions: List of nested expressions
@@ -90,7 +89,7 @@ class DotExpression(Expression):
         self._expressions = expressions
 
     @property
-    def expressions(self) -> List[Expression]:
+    def expressions(self) -> list[Expression]:
         """Return the list of nested expressions.
 
         :return: List of nested expressions
@@ -166,7 +165,7 @@ class BinaryExpression(Expression):
         """
         if not isinstance(operator, Operator):
             raise ValueError(
-                "Argument 'operator' must be an instance of {0} class".format(Operator)
+                f"Argument 'operator' must be an instance of {Operator} class"
             )
 
         self._operator = operator
@@ -250,7 +249,7 @@ class SliceExpression(Expression):
 class FunctionCallExpression(Expression):
     """Represents a function call expression."""
 
-    def __init__(self, function: Identifier, arguments: List[Expression]):
+    def __init__(self, function: Identifier, arguments: list[Expression]):
         """Initialize a new instance of FunctionCallExpression class.
 
         :param function: Function
@@ -268,7 +267,7 @@ class FunctionCallExpression(Expression):
         return self._function
 
     @property
-    def arguments(self) -> List[Expression]:
+    def arguments(self) -> list[Expression]:
         """Return a list of arguments.
 
         :return: List of arguments

@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Data and functions for dealing with language names and codes."""
 
 
@@ -14,12 +13,12 @@ class LookupTable(dict):
 
     def __getitem__(self, k):
         if k in self:
-            return super(LookupTable, self).__getitem__(k)
+            return super().__getitem__(k)
         else:
             return None
 
 
-class LanguageCodes(object):
+class LanguageCodes:
     """Convert between ISO-639-2 and ISO-693-1 language codes.
 
     The data file comes from
@@ -620,7 +619,7 @@ zza|||Zaza; Dimili; Dimli; Kirdki; Kirmanjki; Zazaki|zaza; dimili; dimli; kirdki
         return "/".join(all_names)
 
 
-class LanguageNames(object):
+class LanguageNames:
     """Utilities for converting between human-readable language names and codes.
 
     LanguageNames.name_re is a regular expression that matches the
@@ -633,7 +632,7 @@ class LanguageNames(object):
 
     irrelevant_suffixes = [" languages"]
 
-    ignore = set(["No linguistic content", "Not applicable", "Uncoded"])
+    ignore = {"No linguistic content", "Not applicable", "Uncoded"}
 
     number = re.compile("[0-9]")
     parentheses = re.compile(r"\([^)]+\)")

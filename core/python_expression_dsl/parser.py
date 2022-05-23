@@ -36,7 +36,7 @@ class DSLParseError(BaseError):
     """Raised when expression has an incorrect format."""
 
 
-class DSLParser(object):
+class DSLParser:
     """Parses expressions into AST objects."""
 
     PARSE_ERROR_MESSAGE_REGEX = re.compile(
@@ -178,7 +178,7 @@ class DSLParser(object):
         found = match.group(2).strip("'")
         position = match.group(3)
 
-        return "Unexpected symbol '{0}' at position {1}".format(found, position)
+        return f"Unexpected symbol '{found}' at position {position}"
 
     def parse(self, expression: str) -> Node:
         """Parse the expression and transform it into AST.

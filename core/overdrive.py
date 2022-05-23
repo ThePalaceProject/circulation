@@ -192,14 +192,17 @@ class OverdriveCoreAPI(HasExternalIntegration):
     )
 
     # The formats that can be read by the default Library Simplified reader.
-    DEFAULT_READABLE_FORMATS = set(
-        ["ebook-epub-open", "ebook-epub-adobe", "ebook-pdf-open", "audiobook-overdrive"]
-    )
+    DEFAULT_READABLE_FORMATS = {
+        "ebook-epub-open",
+        "ebook-epub-adobe",
+        "ebook-pdf-open",
+        "audiobook-overdrive",
+    }
 
     # The formats that indicate the book has been fulfilled on an
     # incompatible platform and just can't be fulfilled on Simplified
     # in any format.
-    INCOMPATIBLE_PLATFORM_FORMATS = set(["ebook-kindle"])
+    INCOMPATIBLE_PLATFORM_FORMATS = {"ebook-kindle"}
 
     OVERDRIVE_READ_FORMAT = "ebook-overdrive"
 
@@ -557,8 +560,7 @@ class OverdriveCoreAPI(HasExternalIntegration):
         while next_link:
             page_inventory, next_link = self._get_book_list_page(next_link, "next")
 
-            for i in page_inventory:
-                yield i
+            yield from page_inventory
 
     @property
     def _all_products_link(self) -> str:
@@ -617,8 +619,7 @@ class OverdriveCoreAPI(HasExternalIntegration):
             # because we don't know if anything changed, but we will
             # be putting them on the list of inventory items to
             # refresh. At that point we will send out events.
-            for i in page_inventory:
-                yield i
+            yield from page_inventory
 
     def metadata_lookup(self, identifier):
         """Look up metadata for an Overdrive identifier."""
@@ -741,7 +742,7 @@ class MockOverdriveCoreAPI(OverdriveCoreAPI):
         # set the response that will be returned if an attempt is
         # made.
         self.access_token_response = self.mock_access_token_response("bearer token")
-        super(MockOverdriveCoreAPI, self).__init__(_db, collection, *args, **kwargs)
+        super().__init__(_db, collection, *args, **kwargs)
 
     def queue_collection_token(self):
         # Many tests immediately try to access the
@@ -795,7 +796,7 @@ class MockOverdriveCoreAPI(OverdriveCoreAPI):
         )
 
 
-class OverdriveRepresentationExtractor(object):
+class OverdriveRepresentationExtractor:
     """Extract useful information from Overdrive's JSON representations."""
 
     log = logging.getLogger("Overdrive representation extractor")
@@ -908,12 +909,11 @@ class OverdriveRepresentationExtractor(object):
         if not result:
             return
         if isinstance(result, list):
-            for i in result:
-                yield i
+            yield from result
         else:
             yield result
 
-    ignorable_overdrive_formats: Set[str] = set([])
+    ignorable_overdrive_formats: Set[str] = set()
 
     overdrive_role_to_simplified_role = {
         "actor": Contributor.ACTOR_ROLE,
@@ -1361,7 +1361,7 @@ class OverdriveRepresentationExtractor(object):
         return metadata
 
 
-class OverdriveAdvantageAccount(object):
+class OverdriveAdvantageAccount:
     """Holder and parser for data associated with Overdrive Advantage."""
 
     def __init__(self, parent_library_id, library_id, name):
@@ -1455,9 +1455,7 @@ class OverdriveBibliographicCoverageProvider(BibliographicCoverageProvider):
         :param api_class: Instantiate this class with the given Collection,
             rather than instantiating OverdriveAPI.
         """
-        super(OverdriveBibliographicCoverageProvider, self).__init__(
-            collection, **kwargs
-        )
+        super().__init__(collection, **kwargs)
         if isinstance(api_class, OverdriveCoreAPI):
             # Use a previously instantiated OverdriveAPI instance
             # rather than creating a new one.

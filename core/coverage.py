@@ -29,7 +29,7 @@ from .util.datetime_helpers import utc_now
 from .util.worker_pools import DatabaseJob
 
 
-class CoverageFailure(object):
+class CoverageFailure:
     """Object representing the failure to provide coverage."""
 
     def __init__(
@@ -46,7 +46,7 @@ class CoverageFailure(object):
             data_source = self.data_source.name
         else:
             data_source = None
-        return "<CoverageFailure: obj=%r data_source=%r transient=%r exception=%r>" % (
+        return "<CoverageFailure: obj={!r} data_source={!r} transient={!r} exception={!r}>".format(
             self.obj,
             data_source,
             self.transient,
@@ -102,7 +102,7 @@ class CoverageProviderProgress(TimestampData):
     """
 
     def __init__(self, *args, **kwargs):
-        super(CoverageProviderProgress, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # The offset is distinct from the counter, in that it's not written
         # to the database -- it's used to track state that's necessary within
@@ -133,7 +133,7 @@ class CoverageProviderProgress(TimestampData):
         pass
 
 
-class BaseCoverageProvider(object):
+class BaseCoverageProvider:
 
     """Run certain objects through an algorithm. If the algorithm returns
     success, add a coverage record for that object, so the object
@@ -658,7 +658,7 @@ class IdentifierCoverageProvider(BaseCoverageProvider):
         :param replacement_policy: Optional. A ReplacementPolicy to use
            when updating local data with data from the third party.
         """
-        super(IdentifierCoverageProvider, self).__init__(_db, **kwargs)
+        super().__init__(_db, **kwargs)
 
         # We store the collection ID rather than the Collection to
         # avoid breakage if an app server with a scoped session ever
@@ -1141,7 +1141,7 @@ class CollectionCoverageProvider(IdentifierCoverageProvider):
                 % (collection.protocol, self.PROTOCOL)
             )
         _db = Session.object_session(collection)
-        super(CollectionCoverageProvider, self).__init__(_db, collection, **kwargs)
+        super().__init__(_db, collection, **kwargs)
 
     def _default_replacement_policy(self, _db):
         """Unless told otherwise, assume that we are getting
@@ -1177,15 +1177,13 @@ class CollectionCoverageProvider(IdentifierCoverageProvider):
 
     def run_once(self, *args, **kwargs):
         self.log.info("Considering collection %s", self.collection.name)
-        return super(CollectionCoverageProvider, self).run_once(*args, **kwargs)
+        return super().run_once(*args, **kwargs)
 
     def items_that_need_coverage(self, identifiers=None, **kwargs):
         """Find all Identifiers associated with this Collection but lacking
         coverage through this CoverageProvider.
         """
-        qu = super(CollectionCoverageProvider, self).items_that_need_coverage(
-            identifiers, **kwargs
-        )
+        qu = super().items_that_need_coverage(identifiers, **kwargs)
         qu = qu.join(Identifier.licensed_through).filter(
             LicensePool.collection_id == self.collection_id
         )
@@ -1531,9 +1529,7 @@ class PresentationReadyWorkCoverageProvider(WorkCoverageProvider):
     """A WorkCoverageProvider that only covers presentation-ready works."""
 
     def items_that_need_coverage(self, identifiers=None, **kwargs):
-        qu = super(
-            PresentationReadyWorkCoverageProvider, self
-        ).items_that_need_coverage(identifiers, **kwargs)
+        qu = super().items_that_need_coverage(identifiers, **kwargs)
         qu = qu.filter(Work.presentation_ready == True)
         return qu
 

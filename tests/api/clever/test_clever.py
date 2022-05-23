@@ -19,7 +19,7 @@ from core.util.problem_detail import ProblemDetail
 
 class MockAPI(CleverAuthenticationAPI):
     def __init__(self, *args, **kwargs):
-        super(MockAPI, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.queue = []
 
     def queue_response(self, response):
@@ -69,7 +69,7 @@ class TestClever:
 
 class TestCleverAuthenticationAPI(DatabaseTest):
     def setup_method(self):
-        super(TestCleverAuthenticationAPI, self).setup_method()
+        super().setup_method()
         self.api = MockAPI(self._default_library, self.mock_integration)
         os.environ["AUTOINITIALIZE"] = "False"
         from api.app import app

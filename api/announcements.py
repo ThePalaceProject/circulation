@@ -5,7 +5,7 @@ from core.util.problem_detail import ProblemDetail
 from .admin.announcement_list_validator import AnnouncementListValidator
 
 
-class Announcements(object):
+class Announcements:
     """Data model class for a library's announcements.
 
     This entire list is stored as a single
@@ -49,7 +49,7 @@ class Announcements(object):
                 yield a
 
 
-class Announcement(object):
+class Announcement:
     """Data model class for a single library-wide announcement."""
 
     def __init__(self, **kwargs):

@@ -63,9 +63,7 @@ class SimpleAuthenticationProvider(BasicAuthenticationProvider):
     ]
 
     def __init__(self, library, integration, analytics=None):
-        super(SimpleAuthenticationProvider, self).__init__(
-            library, integration, analytics
-        )
+        super().__init__(library, integration, analytics)
 
         self.test_password = integration.setting(self.TEST_PASSWORD).value
         test_identifier = integration.setting(self.TEST_IDENTIFIER).value

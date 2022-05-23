@@ -16,7 +16,7 @@ from core.util.http import (
 from core.util.problem_detail import ProblemDetail
 
 
-class TestHTTP(object):
+class TestHTTP:
     def test_series(self):
         m = HTTP.series
         assert "2xx" == m(201)
@@ -168,7 +168,7 @@ class TestHTTP(object):
         converted to UTF-8.
         """
 
-        class ResponseGenerator(object):
+        class ResponseGenerator:
             def __init__(self):
                 self.requests = []
 
@@ -251,7 +251,7 @@ class TestHTTP(object):
         assert error == m("url", error, allowed_response_codes=["4xx"])
 
 
-class TestRemoteIntegrationException(object):
+class TestRemoteIntegrationException:
     def test_with_service_name(self):
         """You don't have to provide a URL when creating a
         RemoteIntegrationException; you can just provide the service
@@ -273,7 +273,7 @@ class TestRemoteIntegrationException(object):
         )
 
 
-class TestBadResponseException(object):
+class TestBadResponseException:
     def test_helper_constructor(self):
         response = MockRequestsResponse(102, content="nonsense")
         exc = BadResponseException.from_response(
@@ -327,7 +327,7 @@ class TestBadResponseException(object):
         )
 
 
-class TestRequestTimedOut(object):
+class TestRequestTimedOut:
     def test_as_problem_detail_document(self):
         exception = RequestTimedOut("http://url/", "I give up")
 
@@ -351,7 +351,7 @@ class TestRequestTimedOut(object):
         assert 502 == status_code
 
 
-class TestRequestNetworkException(object):
+class TestRequestNetworkException:
     def test_as_problem_detail_document(self):
         exception = RequestNetworkException("http://url/", "Colossal failure")
 

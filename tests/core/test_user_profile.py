@@ -3,7 +3,7 @@ import json
 from core.user_profile import MockProfileStorage, ProfileController
 
 
-class TestProfileController(object):
+class TestProfileController:
     def setup_method(self):
         self.read_only_settings = dict(key="value")
         self.writable_settings = dict(writable_key="old_value")

@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Type
 
-
-class EntryPoint(object):
+class EntryPoint:
 
     """A EntryPoint is a top-level entry point into a library's Lane structure
     that may apply additional filters to the Lane structure.
@@ -26,14 +24,14 @@ class EntryPoint(object):
     # enabled.
     ENABLED_SETTING = "enabled_entry_points"
 
-    ENTRY_POINTS: List[Type[EntryPoint]] = []
-    DEFAULT_ENABLED: List[Type[EntryPoint]] = []
-    DISPLAY_TITLES: Dict[Type[EntryPoint], str] = {}
-    BY_INTERNAL_NAME: Dict[str, Type[EntryPoint]] = {}
+    ENTRY_POINTS: list[type[EntryPoint]] = []
+    DEFAULT_ENABLED: list[type[EntryPoint]] = []
+    DISPLAY_TITLES: dict[type[EntryPoint], str] = {}
+    BY_INTERNAL_NAME: dict[str, type[EntryPoint]] = {}
 
     # A distinctive URI designating the sort of thing found through this
     # EntryPoint.
-    URI: Optional[str] = None
+    URI: str | None = None
     INTERNAL_NAME: str
 
     @classmethod

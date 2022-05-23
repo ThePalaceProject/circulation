@@ -639,7 +639,7 @@ class TestMARCExporter(DatabaseTest):
 
         title_fields = [record.get_fields("245") for record in records]
         titles = [fields[0].get_subfields("a")[0] for fields in title_fields]
-        assert set([w1.title, w2.title]) == set(titles)
+        assert {w1.title, w2.title} == set(titles)
 
         assert w1.title in w1.marc_record
         assert w2.title in w2.marc_record
@@ -752,7 +752,7 @@ class TestMARCExporter(DatabaseTest):
         self._db.delete(cache)
 
 
-class TestMARCExporterFacets(object):
+class TestMARCExporterFacets:
     def test_modify_search_filter(self):
         # A facet object.
         facets = MARCExporterFacets("some start time")

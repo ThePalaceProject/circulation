@@ -9,7 +9,7 @@ from .circulation_exceptions import *
 from .problem_details import *
 
 
-class BaseCirculationManagerController(object):
+class BaseCirculationManagerController:
     """Define minimal standards for a circulation manager controller,
     mainly around authentication.
     """

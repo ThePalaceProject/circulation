@@ -4,7 +4,7 @@ from api.proquest.identifier import ProQuestIdentifierParser
 from core.model import Identifier
 
 
-class TestProQuestIdentifierParser(object):
+class TestProQuestIdentifierParser:
     @parameterized.expand(
         [
             (

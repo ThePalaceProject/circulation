@@ -4,7 +4,7 @@ from sqlalchemy.orm.session import Session
 from .model import CirculationEvent, ExternalIntegration, create, get_one
 
 
-class LocalAnalyticsProvider(object):
+class LocalAnalyticsProvider:
     NAME = _("Local Analytics")
 
     DESCRIPTION = _("Store analytics events in the 'circulationevents' database table.")

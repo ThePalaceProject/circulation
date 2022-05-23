@@ -36,7 +36,7 @@ def load_document(url, *args, **kargs):
 jsonld.set_document_loader(load_document)
 
 
-class AnnotationWriter(object):
+class AnnotationWriter:
 
     CONTENT_TYPE = 'application/ld+json; profile="http://www.w3.org/ns/anno.jsonld"'
 
@@ -148,7 +148,7 @@ class AnnotationWriter(object):
         return item
 
 
-class AnnotationParser(object):
+class AnnotationParser:
     @classmethod
     def parse(cls, _db, data, patron):
         if patron.synchronize_annotations != True:

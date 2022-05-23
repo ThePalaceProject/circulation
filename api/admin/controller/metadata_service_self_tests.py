@@ -10,7 +10,7 @@ class MetadataServiceSelfTestsController(
     MetadataServicesController, SelfTestsController
 ):
     def __init__(self, manager):
-        super(MetadataServiceSelfTestsController, self).__init__(manager)
+        super().__init__(manager)
         self.type = _("metadata service")
 
     def process_metadata_service_self_tests(self, identifier):

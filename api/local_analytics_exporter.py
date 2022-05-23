@@ -15,7 +15,7 @@ from core.model import (
 )
 
 
-class LocalAnalyticsExporter(object):
+class LocalAnalyticsExporter:
     """Export large numbers of analytics events in CSV format."""
 
     def export(self, _db, start, end, locations=None, library=None):

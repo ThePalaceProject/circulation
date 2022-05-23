@@ -555,7 +555,7 @@ class WorkController(AdminCirculationManagerController):
 
             # Create a new classification with a high weight - higher than audience
             if new_target_age_min and new_target_age_max:
-                age_range_identifier = "%s-%s" % (
+                age_range_identifier = "{}-{}".format(
                     new_target_age_min,
                     new_target_age_max,
                 )

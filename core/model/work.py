@@ -1,4 +1,3 @@
-# encoding: utf-8
 # WorkGenre, Work
 
 import logging
@@ -312,7 +311,7 @@ class Work(Base):
         return any(x.open_access for x in self.license_pools)
 
     def __repr__(self):
-        return '<Work #%s "%s" (by %s) %s lang=%s (%s lp)>' % (
+        return '<Work #{} "{}" (by {}) {} lang={} ({} lp)>'.format(
             self.id,
             self.title,
             self.author,
@@ -1085,7 +1084,7 @@ class Work(Base):
     @property
     def detailed_representation(self):
         """A description of this work more detailed than repr()"""
-        l = ["%s (by %s)" % (self.title, self.author)]
+        l = [f"{self.title} (by {self.author})"]
         l.append(" language=%s" % self.language)
         l.append(" quality=%s" % self.quality)
 
@@ -1148,7 +1147,7 @@ class Work(Base):
 
         if self.summary and self.summary.representation:
             snippet = _ensure(self.summary.representation.content)[:100]
-            d = " Description (%.2f) %s" % (self.summary.quality, snippet)
+            d = f" Description ({self.summary.quality:.2f}) {snippet}"
             l.append(d)
 
         l = [_ensure(s) for s in l]
@@ -1305,9 +1304,7 @@ class Work(Base):
         # and quality, plus any quantity that might be mapppable to the 0..1
         # range -- ratings, and measurements with an associated percentile
         # score.
-        quantities = set(
-            [Measurement.POPULARITY, Measurement.QUALITY, Measurement.RATING]
-        )
+        quantities = {Measurement.POPULARITY, Measurement.QUALITY, Measurement.RATING}
         quantities = quantities.union(list(Measurement.PERCENTILE_SCALES.keys()))
         measurements = (
             _db.query(Measurement)
@@ -1468,7 +1465,7 @@ class Work(Base):
                 == RecursiveEquivalencyCache.parent_identifier_id,
             )
             .join(Work, Work.presentation_edition_id == Edition.id)
-            .filter(Work.id.in_((w.id for w in works)))
+            .filter(Work.id.in_(w.id for w in works))
             .with_entities(
                 Work.id.label("work_id"),
                 RecursiveEquivalencyCache.identifier_id.label("equivalent_id"),
@@ -1770,7 +1767,7 @@ class Work(Base):
                         Work.last_update_time,
                     ).label("last_update_time"),
                 ],
-                Work.id.in_((w.id for w in works)),
+                Work.id.in_(w.id for w in works),
             )
             .select_from(
                 join(Work, Edition, Work.presentation_edition_id == Edition.id)

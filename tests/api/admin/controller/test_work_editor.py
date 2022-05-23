@@ -51,7 +51,7 @@ class TestWorkController(AdminControllerTest):
     BOOKS = CirculationControllerTest.BOOKS
 
     def setup_method(self):
-        super(TestWorkController, self).setup_method()
+        super().setup_method()
         self.admin.add_role(AdminRole.LIBRARIAN, self._default_library)
 
     def test_details(self):

@@ -52,7 +52,7 @@ from .util.median import median
 from .util.personal_names import display_name_to_sort_name, name_tidy
 
 
-class ReplacementPolicy(object):
+class ReplacementPolicy:
     """How serious should we be about overwriting old metadata with
     this new metadata?
     """
@@ -142,7 +142,7 @@ class ReplacementPolicy(object):
         )
 
 
-class SubjectData(object):
+class SubjectData:
     def __init__(self, type, identifier, name=None, weight=1):
         self.type = type
 
@@ -172,7 +172,7 @@ class SubjectData(object):
         )
 
 
-class ContributorData(object):
+class ContributorData:
     def __init__(
         self,
         sort_name=None,
@@ -487,14 +487,14 @@ class ContributorData(object):
         return sort_name
 
 
-class IdentifierData(object):
+class IdentifierData:
     def __init__(self, type, identifier, weight=1):
         self.type = type
         self.weight = weight
         self.identifier = identifier
 
     def __repr__(self):
-        return '<IdentifierData type="%s" identifier="%s" weight="%s">' % (
+        return '<IdentifierData type="{}" identifier="{}" weight="{}">'.format(
             self.type,
             self.identifier,
             self.weight,
@@ -504,7 +504,7 @@ class IdentifierData(object):
         return Identifier.for_foreign_id(_db, self.type, self.identifier)
 
 
-class LinkData(object):
+class LinkData:
     def __init__(
         self,
         rel,
@@ -561,7 +561,7 @@ class LinkData(object):
             thumbnail = ", has thumbnail"
         else:
             thumbnail = ""
-        return '<LinkData: rel="%s" href="%s" media_type=%r%s%s>' % (
+        return '<LinkData: rel="{}" href="{}" media_type={!r}{}{}>'.format(
             self.rel,
             self.href,
             self.media_type,
@@ -580,7 +580,7 @@ class LinkData(object):
             return ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS
 
 
-class MeasurementData(object):
+class MeasurementData:
     def __init__(self, quantity_measured, value, weight=1, taken_at=None):
         if not quantity_measured:
             raise ValueError("quantity_measured is required.")
@@ -602,7 +602,7 @@ class MeasurementData(object):
         )
 
 
-class FormatData(object):
+class FormatData:
     def __init__(self, content_type, drm_scheme, link=None, rights_uri=None):
         self.content_type = content_type
         self.drm_scheme = drm_scheme
@@ -650,7 +650,7 @@ class LicenseData(LicenseFunctions):
         return license_obj
 
 
-class TimestampData(object):
+class TimestampData:
 
     CLEAR_VALUE = Timestamp.CLEAR_VALUE
 
@@ -764,7 +764,7 @@ class TimestampData(object):
         )
 
 
-class MetaToModelUtility(object):
+class MetaToModelUtility:
     """
     Contains functionality common to both CirculationData and Metadata.
     """
@@ -787,9 +787,7 @@ class MetaToModelUtility(object):
             return
 
         if link.rights_uri and link.rights_uri == RightsStatus.IN_COPYRIGHT:
-            self.log.info(
-                "Not mirroring %s: rights status=%s" % (link.href, link.rights_uri)
-            )
+            self.log.info(f"Not mirroring {link.href}: rights status={link.rights_uri}")
             return
 
         mirror_type = link.mirror_type()
@@ -1889,7 +1887,7 @@ class Metadata(MetaToModelUtility):
 
         new_subjects = {}
         if self.subjects:
-            new_subjects = dict((subject.key, subject) for subject in self.subjects)
+            new_subjects = {subject.key: subject for subject in self.subjects}
         if replace.subjects:
             # Remove any old Subjects from this data source, unless they
             # are also in the list of new subjects.
@@ -2263,7 +2261,7 @@ class CSVFormatError(csv.Error):
     pass
 
 
-class CSVMetadataImporter(object):
+class CSVMetadataImporter:
 
     """Turn a CSV file into a list of Metadata objects."""
 
@@ -2435,8 +2433,7 @@ class CSVMetadataImporter(object):
             field_names = self.identifier_fields.get(identifier_type, [])
             if isinstance(field_names, (bytes, str)):
                 field_names = [field_names]
-            for field_name in field_names:
-                yield field_name
+            yield from field_names
 
     def list_field(self, row, names):
         """Parse a string into a list by splitting on commas."""
@@ -2482,7 +2479,7 @@ class CSVMetadataImporter(object):
         return value
 
 
-class MARCExtractor(object):
+class MARCExtractor:
 
     """Transform a MARC file into a list of Metadata objects.
 

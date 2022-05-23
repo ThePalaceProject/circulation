@@ -57,7 +57,7 @@ class LCPMirror(MinIOUploader, HasExternalIntegrationPerCollection):
         :param integration: External integration containing mirror's properties
         :type integration: ExternalIntegration
         """
-        super(LCPMirror, self).__init__(integration)
+        super().__init__(integration)
 
         self._lcp_importer_instance = None
 

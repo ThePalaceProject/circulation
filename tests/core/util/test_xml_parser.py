@@ -1,6 +1,3 @@
-# encoding: utf-8
-
-
 from core.util.xmlparser import XMLParser
 
 
@@ -11,7 +8,7 @@ class MockParser(XMLParser):
         return tag
 
 
-class TestXMLParser(object):
+class TestXMLParser:
     def test_process_all(self):
         # Verify that process_all can handle either XML markup
         # or an already-parsed tag object.

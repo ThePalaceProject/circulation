@@ -202,7 +202,7 @@ def setup_admin_controllers(manager):
     manager.admin_catalog_services_controller = CatalogServicesController(manager)
 
 
-class AdminController(object):
+class AdminController:
     def __init__(self, manager):
         self.manager = manager
         self._db = self.manager._db
@@ -1363,37 +1363,27 @@ class DashboardController(AdminCirculationManagerController):
             )
 
         total_patrons = sum(
-            [
-                stats.get("patrons", {}).get("total", 0)
-                for stats in list(library_stats.values())
-            ]
+            stats.get("patrons", {}).get("total", 0)
+            for stats in list(library_stats.values())
         )
         total_with_active_loans = sum(
-            [
-                stats.get("patrons", {}).get("with_active_loans", 0)
-                for stats in list(library_stats.values())
-            ]
+            stats.get("patrons", {}).get("with_active_loans", 0)
+            for stats in list(library_stats.values())
         )
         total_with_active_loans_or_holds = sum(
-            [
-                stats.get("patrons", {}).get("with_active_loans_or_holds", 0)
-                for stats in list(library_stats.values())
-            ]
+            stats.get("patrons", {}).get("with_active_loans_or_holds", 0)
+            for stats in list(library_stats.values())
         )
 
         # TODO: show shared collection loans and holds for libraries outside this
         # circ manager?
         total_loans = sum(
-            [
-                stats.get("patrons", {}).get("loans", 0)
-                for stats in list(library_stats.values())
-            ]
+            stats.get("patrons", {}).get("loans", 0)
+            for stats in list(library_stats.values())
         )
         total_holds = sum(
-            [
-                stats.get("patrons", {}).get("holds", 0)
-                for stats in list(library_stats.values())
-            ]
+            stats.get("patrons", {}).get("holds", 0)
+            for stats in list(library_stats.values())
         )
 
         library_stats["total"] = dict(
@@ -2032,8 +2022,7 @@ class SettingsController(AdminCirculationManagerController):
             elif url.startswith(http):
                 protocol_variant = url.replace(http, https, 1)
             if protocol_variant:
-                for v in cls.url_variants(protocol_variant, False):
-                    yield v
+                yield from cls.url_variants(protocol_variant, False)
 
     def check_url_unique(self, new_service, url, protocol, goal):
         """Enforce a rule that a given circulation manager can only have

@@ -1,4 +1,3 @@
-# encoding: utf-8
 # Subject, Classification, Genre
 
 
@@ -170,7 +169,7 @@ class Subject(Base):
             age_range = " " + self.target_age_string
         else:
             age_range = ""
-        a = "[%s:%s%s%s%s%s%s]" % (
+        a = "[{}:{}{}{}{}{}{}]".format(
             self.type,
             self.identifier,
             name,
@@ -372,7 +371,7 @@ class Classification(Base):
     # This goes into Classification rather than Subject because it's
     # possible that one particular data source could use a certain
     # subject type in an unreliable way.
-    _juvenile_subject_types = set([Subject.LCC])
+    _juvenile_subject_types = {Subject.LCC}
 
     _quality_as_indicator_of_target_age = {
         # Not all classifications are equally reliable as indicators

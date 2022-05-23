@@ -1,7 +1,7 @@
 from core.classifier import *
 
 
-class TestSimplifiedGenreClassifier(object):
+class TestSimplifiedGenreClassifier:
     def test_scrub_identifier(self):
         """The URI for a Library Simplified genre is treated the same as
         the genre itself.

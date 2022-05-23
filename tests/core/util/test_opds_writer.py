@@ -7,7 +7,7 @@ from parameterized import parameterized
 from core.util.opds_writer import AtomFeed, OPDSMessage
 
 
-class TestOPDSMessage(object):
+class TestOPDSMessage:
     def test_equality(self):
 
         a = OPDSMessage("urn", 200, "message")
@@ -40,7 +40,7 @@ class TestOPDSMessage(object):
         assert text.endswith("</simplified:message>")
 
 
-class TestAtomFeed(object):
+class TestAtomFeed:
     def test_add_link_to_entry(self):
         kwargs = dict(title=1, href="url", extra="extra info")
         entry = AtomFeed.E.entry()

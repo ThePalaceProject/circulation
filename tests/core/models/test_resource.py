@@ -1,4 +1,3 @@
-# encoding: utf-8
 import os
 
 import pytest
@@ -681,7 +680,7 @@ class TestRepresentation(DatabaseTest):
         # Verify our ability to store a Resource under a URL other than
         # the exact URL used to make the HTTP request.
 
-        class Normalizer(object):
+        class Normalizer:
             called_with = None
 
             def normalize(self, url):

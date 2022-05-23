@@ -22,9 +22,7 @@ class ProQuestIdentifierParser(IdentifierParser):
             if the string contains an incorrect identifier
         :rtype: Optional[Tuple[str, str]]
         """
-        self._logger.debug(
-            'Started parsing identifier string "{0}"'.format(identifier_string)
-        )
+        self._logger.debug(f'Started parsing identifier string "{identifier_string}"')
 
         match = self.PROQUEST_ID_REGEX.match(identifier_string)
 
@@ -33,7 +31,7 @@ class ProQuestIdentifierParser(IdentifierParser):
             result = Identifier.PROQUEST_ID, document_id
 
             self._logger.debug(
-                'Finished parsing identifier string "{0}". Result: {1}'.format(
+                'Finished parsing identifier string "{}". Result: {}'.format(
                     document_id, result
                 )
             )
@@ -41,7 +39,7 @@ class ProQuestIdentifierParser(IdentifierParser):
             return result
 
         self._logger.debug(
-            'Finished parsing identifier string "{0}". It does not contain a ProQuest Doc ID'.format(
+            'Finished parsing identifier string "{}". It does not contain a ProQuest Doc ID'.format(
                 identifier_string
             )
         )

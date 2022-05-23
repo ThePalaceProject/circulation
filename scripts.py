@@ -1,4 +1,3 @@
-# encoding: utf-8
 import argparse
 import csv
 import logging
@@ -328,7 +327,7 @@ class CacheRepresentationPerLane(TimestampScript, LaneSweeperScript):
         :param **kwargs: Keyword arguments to pass to the superconstructor.
         """
 
-        super(CacheRepresentationPerLane, self).__init__(_db, *args, **kwargs)
+        super().__init__(_db, *args, **kwargs)
         self.parse_args(cmd_args)
         if not manager:
             manager = CirculationManager(self._db, testing=testing)
@@ -402,7 +401,7 @@ class CacheRepresentationPerLane(TimestampScript, LaneSweeperScript):
         client = self.app.test_client()
         ctx = self.app.test_request_context(base_url=self.base_url)
         ctx.push()
-        super(CacheRepresentationPerLane, self).process_library(library)
+        super().process_library(library)
         ctx.pop()
         end = time.time()
         self.log.info(
@@ -520,7 +519,7 @@ class CacheFacetListsPerLane(CacheRepresentationPerLane):
         return parser
 
     def parse_args(self, cmd_args=None):
-        parsed = super(CacheFacetListsPerLane, self).parse_args(cmd_args)
+        parsed = super().parse_args(cmd_args)
         self.orders = parsed.order
         self.availabilities = parsed.availability
         self.collections = parsed.collection
@@ -715,7 +714,7 @@ class CacheMARCFiles(LaneSweeperScript):
         return parser
 
     def __init__(self, _db=None, cmd_args=None, *args, **kwargs):
-        super(CacheMARCFiles, self).__init__(_db, *args, **kwargs)
+        super().__init__(_db, *args, **kwargs)
         self.parse_args(cmd_args)
 
     def parse_args(self, cmd_args=None):
@@ -736,7 +735,7 @@ class CacheMARCFiles(LaneSweeperScript):
 
     def process_library(self, library):
         if self.should_process_library(library):
-            super(CacheMARCFiles, self).process_library(library)
+            super().process_library(library)
             self.log.info("Processed library %s" % library.name)
 
     def should_process_lane(self, lane):
@@ -821,7 +820,7 @@ class CacheMARCFiles(LaneSweeperScript):
 class AdobeAccountIDResetScript(PatronInputScript):
     @classmethod
     def arg_parser(cls, _db):
-        parser = super(AdobeAccountIDResetScript, cls).arg_parser(_db)
+        parser = super().arg_parser(_db)
         parser.add_argument(
             "--delete",
             help="Actually delete credentials as opposed to showing what would happen.",
@@ -997,7 +996,7 @@ class InstanceInitializationScript(TimestampScript):
             _db.close()
 
         if results is None:
-            super(InstanceInitializationScript, self).run(*args, **kwargs)
+            super().run(*args, **kwargs)
         else:
             self.log.error(
                 "I think this site has already been initialized; doing nothing."
@@ -1065,7 +1064,7 @@ class LoanReaperScript(TimestampScript):
                 .filter(obj.start < older_than)
                 .filter(LicensePool.open_access == False)
             )
-            explain = "%s older than %s" % (what, older_than.strftime("%Y-%m-%d"))
+            explain = "{} older than {}".format(what, older_than.strftime("%Y-%m-%d"))
             self._reap(qu, explain)
 
     def _reap(self, qu, what):
@@ -1194,7 +1193,7 @@ class DisappearingBookReportScript(Script):
             licensepool
         )
 
-        data = ["%s %s" % (identifier.type, identifier.identifier)]
+        data = [f"{identifier.type} {identifier.identifier}"]
         if edition:
             data.extend([edition.title, edition.author])
         if licensepool.availability_time:
@@ -1212,7 +1211,7 @@ class DisappearingBookReportScript(Script):
 
         license_removals = []
         for event in license_removal_events:
-            description = "%s: %s→%s" % (
+            description = "{}: {}→{}".format(
                 event.start.strftime(self.format),
                 event.old_value,
                 event.new_value,
@@ -1233,7 +1232,7 @@ class NYTBestSellerListsScript(TimestampScript):
     name = "Update New York Times best-seller lists"
 
     def __init__(self, include_history=False):
-        super(NYTBestSellerListsScript, self).__init__()
+        super().__init__()
         self.include_history = include_history
 
     def do_run(self):
@@ -1338,7 +1337,7 @@ class DirectoryImportScript(TimestampScript):
         parser.add_argument(
             "--default-medium-type",
             help="Default medium type used in the case when it's not explicitly specified in a metadata file. "
-            "Valid values are: {0}.".format(
+            "Valid values are: {}.".format(
                 ", ".join(EditionConstants.FULFILLABLE_MEDIA)
             ),
             type=str,
@@ -1546,9 +1545,7 @@ class DirectoryImportScript(TimestampScript):
         work, ignore = pool.calculate_work()
         if work:
             work.set_presentation_ready()
-            self.log.info(
-                "FINALIZED %s/%s/%s" % (work.title, work.author, work.sort_author)
-            )
+            self.log.info(f"FINALIZED {work.title}/{work.author}/{work.sort_author}")
         return work, pool
 
     def annotate_metadata(
@@ -1963,9 +1960,7 @@ class GenerateShortTokenScript(LibraryInputScript):
 
     @classmethod
     def arg_parser(cls, _db):
-        parser = super(GenerateShortTokenScript, cls).arg_parser(
-            _db, multiple_libraries=False
-        )
+        parser = super().arg_parser(_db, multiple_libraries=False)
         parser.add_argument(
             "--barcode",
             help="The patron barcode.",
@@ -2013,7 +2008,7 @@ class GenerateShortTokenScript(LibraryInputScript):
                 _db, credentials={"username": args.barcode, "password": args.pin}
             )
             if not isinstance(patron, Patron):
-                output.write("Patron not found {}!\n".format(args.barcode))
+                output.write(f"Patron not found {args.barcode}!\n")
                 sys.exit(-1)
 
         authdata = authdata or AuthdataUtility.from_config(library, _db)
@@ -2034,7 +2029,7 @@ class GenerateShortTokenScript(LibraryInputScript):
         )
         username, password = token.rsplit("|", 1)
 
-        output.write("Vendor ID: {}\n".format(vendor_id))
-        output.write("Token: {}\n".format(token))
-        output.write("Username: {}\n".format(username))
-        output.write("Password: {}\n".format(password))
+        output.write(f"Vendor ID: {vendor_id}\n")
+        output.write(f"Token: {token}\n")
+        output.write(f"Username: {username}\n")
+        output.write(f"Password: {password}\n")

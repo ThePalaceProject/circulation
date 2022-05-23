@@ -35,7 +35,7 @@ class TestVendorIDModel(VendorIDTest):
     credentials = dict(username="validpatron", password="password")
 
     def setup_method(self):
-        super(TestVendorIDModel, self).setup_method()
+        super().setup_method()
 
         # This library is going to act as the Vendor ID server.
         self.vendor_id_library = self._default_library
@@ -427,7 +427,7 @@ class TestVendorIDModel(VendorIDTest):
         assert "Delegated account ID %s" % urn == label
 
 
-class TestVendorIDRequestParsers(object):
+class TestVendorIDRequestParsers:
 
     username_sign_in_request = """<signInRequest method="standard" xmlns="http://ns.adobe.com/adept">
 <username>Vendor username</username>
@@ -468,7 +468,7 @@ class TestVendorIDRequestParsers(object):
         } == data
 
 
-class TestVendorIDRequestHandler(object):
+class TestVendorIDRequestHandler:
 
     username_sign_in_request = """<signInRequest method="standard" xmlns="http://ns.adobe.com/adept">
 <username>%(username)s</username>
@@ -610,7 +610,7 @@ class TestVendorIDRequestHandler(object):
 
 class TestAuthdataUtility(VendorIDTest):
     def setup_method(self):
-        super(TestAuthdataUtility, self).setup_method()
+        super().setup_method()
         self.authdata = AuthdataUtility(
             vendor_id="The Vendor ID",
             library_uri="http://my-library.org/",
@@ -1070,7 +1070,7 @@ class TestAuthdataUtility(VendorIDTest):
         assert value == AuthdataUtility.adobe_base64_decode(encoded).decode("utf-8")
 
     def test__encode_short_client_token_uses_adobe_base64_encoding(self):
-        class MockSigner(object):
+        class MockSigner:
             def sign(self, value, key):
                 """Always return the same signature, crafted to contain a
                 plus sign, a slash and an equal sign when base64-encoded.
@@ -1145,7 +1145,7 @@ class TestAuthdataUtility(VendorIDTest):
 
         # The patron now has _two_ Credentials -- the old one
         # containing the Adobe ID, and a new one.
-        assert set([new_credential, adobe_id]) == set(patron.credentials)
+        assert {new_credential, adobe_id} == set(patron.credentials)
 
         # The new credential contains an anonymized patron identifier
         # used solely to connect the patron to their Adobe ID.

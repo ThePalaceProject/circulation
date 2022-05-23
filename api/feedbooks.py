@@ -94,27 +94,25 @@ class FeedbooksOPDSImporter(OPDSImporter):
 
         self.language = collection.external_account_id
 
-        super(FeedbooksOPDSImporter, self).__init__(_db, collection, **kwargs)
+        super().__init__(_db, collection, **kwargs)
 
         self.new_css = None
         if new_css_url and self.http_get:
             status_code, headers, content = self.http_get(new_css_url, {})
             if status_code != 200:
-                raise IOError(
+                raise OSError(
                     "Replacement stylesheet URL returned %r response code."
                     % status_code
                 )
             content_type = headers.get("content-type", "")
             if not content_type.startswith("text/css"):
-                raise IOError(
+                raise OSError(
                     "Replacement stylesheet is %r, not a CSS document." % content_type
                 )
             self.new_css = content
 
     def extract_feed_data(self, feed, feed_url=None):
-        metadata, failures = super(FeedbooksOPDSImporter, self).extract_feed_data(
-            feed, feed_url
-        )
+        metadata, failures = super().extract_feed_data(feed, feed_url)
         for id, m in list(metadata.items()):
             self.improve_description(id, m)
         return metadata, failures
@@ -157,7 +155,7 @@ class FeedbooksOPDSImporter(OPDSImporter):
         public domain in the United States) is not available through
         Feedparser.
         """
-        detail = super(FeedbooksOPDSImporter, cls)._detail_for_elementtree_entry(
+        detail = super()._detail_for_elementtree_entry(
             parser, entry_tag, feed_url, do_get=do_get
         )
         rights_uri = cls.rights_uri_from_entry_tag(entry_tag)
@@ -186,9 +184,7 @@ class FeedbooksOPDSImporter(OPDSImporter):
                 # Act as if there was no link.
                 return None
 
-        return super(FeedbooksOPDSImporter, cls).make_link_data(
-            rel, href, media_type, rights_uri, content
-        )
+        return super().make_link_data(rel, href, media_type, rights_uri, content)
 
     def improve_description(self, id, metadata):
         """Improve the description associated with a book,
@@ -291,7 +287,7 @@ class FeedbooksOPDSImporter(OPDSImporter):
                 )
             except ValueError as e:
                 # Invalid EPUB
-                self.log.warning("%s: %s" % (representation.url, str(e)))
+                self.log.warning(f"{representation.url}: {str(e)}")
                 return
 
             css_paths = []
@@ -313,7 +309,7 @@ class FeedbooksOPDSImporter(OPDSImporter):
         representation.content = new_zip_content.getvalue()
 
 
-class RehostingPolicy(object):
+class RehostingPolicy:
     """Determining the precise copyright status of the underlying text
     is not directly useful, because Feedbooks has made derivative
     works and relicensed under CC-BY-NC. So that's going to be the
@@ -346,36 +342,32 @@ class RehostingPolicy(object):
 
     # Feedbooks rights statuses indicating books that can be rehosted
     # in the US.
-    CAN_REHOST_IN_US = set(
-        [
-            "This work was published before 1923 and is in the public domain in the USA only.",
-            "This work is available for countries where copyright is Life+70 and in the USA.",
-            "This work is available for countries where copyright is Life+50 or in the USA (published before 1923).",
-            "Attribution (cc by)",
-            "Attribution Non-Commercial (cc by-nc)",
-            "Attribution Share Alike (cc by-sa)",
-            "Attribution Non-Commercial No Derivatives (cc by-nc-nd)",
-            "Attribution Non-Commercial Share Alike (cc by-nc-sa)",
-        ]
-    )
+    CAN_REHOST_IN_US = {
+        "This work was published before 1923 and is in the public domain in the USA only.",
+        "This work is available for countries where copyright is Life+70 and in the USA.",
+        "This work is available for countries where copyright is Life+50 or in the USA (published before 1923).",
+        "Attribution (cc by)",
+        "Attribution Non-Commercial (cc by-nc)",
+        "Attribution Share Alike (cc by-sa)",
+        "Attribution Non-Commercial No Derivatives (cc by-nc-nd)",
+        "Attribution Non-Commercial Share Alike (cc by-nc-sa)",
+    }
 
     RIGHTS_UNKNOWN = "Please read the legal notice included in this e-book and/or check the copyright status in your country."
 
     # These websites are hosted in the US and specialize in
     # open-access content. We will accept all FeedBooks titles taken
     # from these sites, even post-1923 titles.
-    US_SITES = set(
-        [
-            "archive.org",
-            "craphound.com",
-            "en.wikipedia.org",
-            "en.wikisource.org",
-            "futurismic.com",
-            "gutenberg.org",
-            "project gutenberg",
-            "shakespeare.mit.edu",
-        ]
-    )
+    US_SITES = {
+        "archive.org",
+        "craphound.com",
+        "en.wikipedia.org",
+        "en.wikisource.org",
+        "futurismic.com",
+        "gutenberg.org",
+        "project gutenberg",
+        "shakespeare.mit.edu",
+    }
 
     @classmethod
     def rights_uri(cls, rights, source, publication_year):

@@ -35,9 +35,7 @@ class KansasAuthenticationAPI(BasicAuthenticationProvider):
     log = logging.getLogger("Kansas authentication API")
 
     def __init__(self, library_id, integration, analytics=None, base_url=None):
-        super(KansasAuthenticationAPI, self).__init__(
-            library_id, integration, analytics
-        )
+        super().__init__(library_id, integration, analytics)
         if base_url is None:
             base_url = integration.url
         if not base_url:

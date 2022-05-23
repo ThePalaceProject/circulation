@@ -1,4 +1,3 @@
-# encoding: utf-8
 import functools
 
 from parameterized import parameterized
@@ -18,7 +17,7 @@ from core.util.datetime_helpers import utc_now
 
 
 class TestSiteConfigurationHasChanged(DatabaseTest):
-    class MockSiteConfigurationHasChanged(object):
+    class MockSiteConfigurationHasChanged:
         """Keep track of whether site_configuration_has_changed was
         ever called.
         """
@@ -39,7 +38,7 @@ class TestSiteConfigurationHasChanged(DatabaseTest):
             assert not self.was_called
 
     def setup_method(self):
-        super(TestSiteConfigurationHasChanged, self).setup_method()
+        super().setup_method()
 
         # Mock model.site_configuration_has_changed
         self.old_site_configuration_has_changed = (
@@ -50,7 +49,7 @@ class TestSiteConfigurationHasChanged(DatabaseTest):
             module.site_configuration_has_changed = self.mock.run
 
     def teardown_method(self):
-        super(TestSiteConfigurationHasChanged, self).teardown_method()
+        super().teardown_method()
         for module in model.listeners, lane:
             module.site_configuration_has_changed = (
                 self.old_site_configuration_has_changed

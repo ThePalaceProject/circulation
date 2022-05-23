@@ -42,7 +42,7 @@ class TestEntryPoint(DatabaseTest):
         assert filter == EverythingEntryPoint.modify_search_filter(filter)
 
     def test_register(self):
-        class Mock(object):
+        class Mock:
             pass
 
         args = [Mock, "Mock!"]
@@ -71,7 +71,7 @@ class TestEntryPoint(DatabaseTest):
 
         # Can't register two different entry points with the same
         # display name.
-        class Mock2(object):
+        class Mock2:
             INTERNAL_NAME = "mock2"
 
         with pytest.raises(ValueError) as excinfo:

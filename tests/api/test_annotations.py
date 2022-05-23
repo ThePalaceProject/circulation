@@ -15,7 +15,7 @@ from .test_controller import ControllerTest
 class AnnotationTest(DatabaseTest):
     def _patron(self):
         """Create a test patron who has opted in to annotation sync."""
-        patron = super(AnnotationTest, self)._patron()
+        patron = super()._patron()
         patron.synchronize_annotations = True
         return patron
 
@@ -50,7 +50,7 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
         )
 
         # The patron has two annotations for different identifiers.
-        assert set([annotation, annotation2]) == set(
+        assert {annotation, annotation2} == set(
             AnnotationWriter.annotations_for(patron)
         )
         assert [annotation] == AnnotationWriter.annotations_for(patron, identifier)
@@ -62,13 +62,12 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
         with self.app.test_request_context("/"):
             container, timestamp = AnnotationWriter.annotation_container_for(patron)
 
-            assert set(
-                [AnnotationWriter.JSONLD_CONTEXT, AnnotationWriter.LDP_CONTEXT]
-            ) == set(container["@context"])
+            assert {
+                AnnotationWriter.JSONLD_CONTEXT,
+                AnnotationWriter.LDP_CONTEXT,
+            } == set(container["@context"])
             assert "annotations" in container["id"]
-            assert set(["BasicContainer", "AnnotationCollection"]) == set(
-                container["type"]
-            )
+            assert {"BasicContainer", "AnnotationCollection"} == set(container["type"])
             assert 0 == container["total"]
 
             first_page = container["first"]
@@ -97,14 +96,13 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
             container, timestamp = AnnotationWriter.annotation_container_for(patron)
 
             # The context, type, and id stay the same.
-            assert set(
-                [AnnotationWriter.JSONLD_CONTEXT, AnnotationWriter.LDP_CONTEXT]
-            ) == set(container["@context"])
+            assert {
+                AnnotationWriter.JSONLD_CONTEXT,
+                AnnotationWriter.LDP_CONTEXT,
+            } == set(container["@context"])
             assert "annotations" in container["id"]
             assert identifier.identifier not in container["id"]
-            assert set(["BasicContainer", "AnnotationCollection"]) == set(
-                container["type"]
-            )
+            assert {"BasicContainer", "AnnotationCollection"} == set(container["type"])
 
             # But now there is one item.
             assert 1 == container["total"]
@@ -136,14 +134,13 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
                 patron, identifier
             )
 
-            assert set(
-                [AnnotationWriter.JSONLD_CONTEXT, AnnotationWriter.LDP_CONTEXT]
-            ) == set(container["@context"])
+            assert {
+                AnnotationWriter.JSONLD_CONTEXT,
+                AnnotationWriter.LDP_CONTEXT,
+            } == set(container["@context"])
             assert "annotations" in container["id"]
             assert identifier.identifier in container["id"]
-            assert set(["BasicContainer", "AnnotationCollection"]) == set(
-                container["type"]
-            )
+            assert {"BasicContainer", "AnnotationCollection"} == set(container["type"])
             assert 0 == container["total"]
 
             first_page = container["first"]
@@ -181,14 +178,13 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
             )
 
             # The context, type, and id stay the same.
-            assert set(
-                [AnnotationWriter.JSONLD_CONTEXT, AnnotationWriter.LDP_CONTEXT]
-            ) == set(container["@context"])
+            assert {
+                AnnotationWriter.JSONLD_CONTEXT,
+                AnnotationWriter.LDP_CONTEXT,
+            } == set(container["@context"])
             assert "annotations" in container["id"]
             assert identifier.identifier in container["id"]
-            assert set(["BasicContainer", "AnnotationCollection"]) == set(
-                container["type"]
-            )
+            assert {"BasicContainer", "AnnotationCollection"} == set(container["type"])
 
             # But now there is one item.
             assert 1 == container["total"]
@@ -361,7 +357,7 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
 
 class TestAnnotationParser(AnnotationTest):
     def setup_method(self):
-        super(TestAnnotationParser, self).setup_method()
+        super().setup_method()
         self.pool = self._licensepool(None)
         self.identifier = self.pool.identifier
         self.patron = self._patron()

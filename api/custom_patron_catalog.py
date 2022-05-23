@@ -12,7 +12,7 @@ from core.util.opds_writer import OPDSFeed
 from .config import CannotLoadConfiguration
 
 
-class CustomPatronCatalog(object):
+class CustomPatronCatalog:
     """An annotator for a library's authentication document.
 
     Any subclass of this class must define PROTOCOL and must be

@@ -23,7 +23,7 @@ class DiscoveryServiceLibraryRegistrationsController(SettingsController):
     """
 
     def __init__(self, manager):
-        super(DiscoveryServiceLibraryRegistrationsController, self).__init__(manager)
+        super().__init__(manager)
         self.goal = ExternalIntegration.DISCOVERY_GOAL
 
     def process_discovery_service_library_registrations(

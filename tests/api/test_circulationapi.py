@@ -51,7 +51,7 @@ class TestCirculationAPI(DatabaseTest):
     IN_TWO_WEEKS = utc_now() + timedelta(days=14)
 
     def setup_method(self):
-        super(TestCirculationAPI, self).setup_method()
+        super().setup_method()
         self.collection = MockBibliothecaAPI.mock_collection(self._db)
         edition, self.pool = self._edition(
             data_source_name=DataSource.BIBLIOTHECA,
@@ -572,7 +572,7 @@ class TestCirculationAPI(DatabaseTest):
 
         class MockCirculationAPI(CirculationAPI):
             def __init__(self, *args, **kwargs):
-                super(MockCirculationAPI, self).__init__(*args, **kwargs)
+                super().__init__(*args, **kwargs)
                 self.enforce_limits_calls = []
 
             def enforce_limits(self, patron, licensepool):
@@ -677,7 +677,7 @@ class TestCirculationAPI(DatabaseTest):
         # Verify that enforce_limits works whether the patron is at one, both,
         # or neither of their loan limits.
 
-        class MockVendorAPI(object):
+        class MockVendorAPI:
             # Simulate a vendor API so we can watch license pool
             # availability being updated.
             def __init__(self):
@@ -701,7 +701,7 @@ class TestCirculationAPI(DatabaseTest):
             # Mock the loan and hold limit settings, and return a mock
             # CirculationAPI as needed.
             def __init__(self, *args, **kwargs):
-                super(Mock, self).__init__(*args, **kwargs)
+                super().__init__(*args, **kwargs)
                 self.api = api
                 self.api_for_license_pool_calls = []
                 self.patron_at_loan_limit_calls = []
@@ -1102,7 +1102,7 @@ class TestCirculationAPI(DatabaseTest):
         # Test the _collect_event method, which gathers information
         # from the current request and sends out the appropriate
         # circulation events.
-        class MockAnalytics(object):
+        class MockAnalytics:
             def __init__(self):
                 self.events = []
 
@@ -1546,7 +1546,7 @@ class TestBaseCirculationAPI(DatabaseTest):
         # This OAuth authentication provider doesn't implement
         # remote_patron_lookup (it raises NotImplementedError),
         # so it's no help.
-        class MockOAuth(object):
+        class MockOAuth:
             NAME = "mock oauth"
 
             def remote_patron_lookup(self, patron):
@@ -1565,7 +1565,7 @@ class TestBaseCirculationAPI(DatabaseTest):
         # This basic authentication provider _does_ implement
         # remote_patron_lookup, but doesn't provide the crucial
         # information, so still no help.
-        class MockBasic(object):
+        class MockBasic:
             def remote_patron_lookup(self, patron):
                 self.called_with = patron
                 return PatronData(authorization_identifier="patron")
@@ -1579,7 +1579,7 @@ class TestBaseCirculationAPI(DatabaseTest):
 
         # This basic authentication provider gives us the information
         # we're after.
-        class MockBasic(object):
+        class MockBasic:
             def remote_patron_lookup(self, patron):
                 self.called_with = patron
                 return PatronData(email_address="me@email")
@@ -1669,7 +1669,7 @@ class TestDeliveryMechanismInfo(DatabaseTest):
 
 
 class TestConfigurationFailures(DatabaseTest):
-    class MisconfiguredAPI(object):
+    class MisconfiguredAPI:
         def __init__(self, _db, collection):
             raise CannotLoadConfiguration("doomed!")
 
@@ -1717,7 +1717,7 @@ class TestAPIAwareFulfillmentInfo(DatabaseTest):
         def do_fetch(self):
             return self.api.do_fetch()
 
-    class MockAPI(object):
+    class MockAPI:
         """An API class that sets a flag when do_fetch()
         is called.
         """
@@ -1730,7 +1730,7 @@ class TestAPIAwareFulfillmentInfo(DatabaseTest):
             self.fetch_happened = True
 
     def setup_method(self):
-        super(TestAPIAwareFulfillmentInfo, self).setup_method()
+        super().setup_method()
         self.collection = self._default_collection
 
         # Create a bunch of mock objects which will be used to initialize

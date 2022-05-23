@@ -60,9 +60,7 @@ class LicenseHelper:
         :param concurrency: Number of concurrent checkouts allowed
         :param expires: Date & time when a license expires
         """
-        self.identifier: str = (
-            identifier if identifier else "urn:uuid:{}".format(uuid.uuid1())
-        )
+        self.identifier: str = identifier if identifier else f"urn:uuid:{uuid.uuid1()}"
         self.checkouts: Optional[int] = checkouts
         self.concurrency: Optional[int] = concurrency
         if isinstance(expires, datetime.datetime):
@@ -113,7 +111,7 @@ class BaseODLTest:
     @classmethod
     def get_data(cls, filename):
         path = os.path.join(cls.resource_path, filename)
-        return open(path, "r").read()
+        return open(path).read()
 
     @pytest.fixture()
     def db(self):
@@ -198,9 +196,9 @@ class BaseODLAPITest(BaseODLTest):
 
         def _url_for(self, *args, **kwargs):
             del kwargs["_external"]
-            return "http://%s?%s" % (
+            return "http://{}?{}".format(
                 "/".join(args),
-                "&".join(["%s=%s" % (key, val) for key, val in list(kwargs.items())]),
+                "&".join([f"{key}={val}" for key, val in list(kwargs.items())]),
             )
 
         monkeypatch.setattr(ODLAPI, "_get", _get)
@@ -1619,7 +1617,7 @@ class TestODLImporter(DatabaseTest, BaseODLTest):
         def add(self, item):
             return self.responses.append(item)
 
-    class MockMetadataClient(object):
+    class MockMetadataClient:
         def canonicalize_author_name(self, identifier, working_display_name):
             return working_display_name
 
@@ -1891,9 +1889,9 @@ class TestODLImporter(DatabaseTest, BaseODLTest):
         assert False == midnight_pool.open_access
         lpdms = midnight_pool.delivery_mechanisms
         assert 2 == len(lpdms)
-        assert set(
-            [Representation.EPUB_MEDIA_TYPE, Representation.PDF_MEDIA_TYPE]
-        ) == set([lpdm.delivery_mechanism.content_type for lpdm in lpdms])
+        assert {Representation.EPUB_MEDIA_TYPE, Representation.PDF_MEDIA_TYPE} == {
+            lpdm.delivery_mechanism.content_type for lpdm in lpdms
+        }
         assert [DeliveryMechanism.ADOBE_DRM, DeliveryMechanism.ADOBE_DRM] == [
             lpdm.delivery_mechanism.drm_scheme for lpdm in lpdms
         ]
@@ -2117,8 +2115,8 @@ class TestODLImporter(DatabaseTest, BaseODLTest):
         assert imported_pool.licenses_available == 6
 
         # Correct number of active and inactive licenses
-        assert sum([not l.is_inactive for l in imported_pool.licenses]) == len(active)
-        assert sum([l.is_inactive for l in imported_pool.licenses]) == len(inactive)
+        assert sum(not l.is_inactive for l in imported_pool.licenses) == len(active)
+        assert sum(l.is_inactive for l in imported_pool.licenses) == len(inactive)
 
     def test_odl_importer_reimport_multiple_licenses(self, import_templated):
         """Ensure ODLImporter correctly imports licenses that have already been imported."""
@@ -2159,7 +2157,7 @@ class TestODLImporter(DatabaseTest, BaseODLTest):
             assert imported_pool.licenses_owned == 7
 
             # No licenses are expired
-            assert sum([not l.is_inactive for l in imported_pool.licenses]) == len(
+            assert sum(not l.is_inactive for l in imported_pool.licenses) == len(
                 licenses
             )
 
@@ -2192,10 +2190,10 @@ class TestODLImporter(DatabaseTest, BaseODLTest):
             assert imported_pool.licenses_owned == 1
 
             # One license not expired
-            assert sum([not l.is_inactive for l in imported_pool.licenses]) == 1
+            assert sum(not l.is_inactive for l in imported_pool.licenses) == 1
 
             # Two licenses expired
-            assert sum([l.is_inactive for l in imported_pool.licenses]) == 2
+            assert sum(l.is_inactive for l in imported_pool.licenses) == 2
 
 
 class TestODLHoldReaper(DatabaseTest, BaseODLAPITest):
@@ -2249,7 +2247,7 @@ class TestODLHoldReaper(DatabaseTest, BaseODLAPITest):
 
 class TestSharedODLAPI(DatabaseTest, BaseODLTest):
     def setup_method(self):
-        super(TestSharedODLAPI, self).setup_method()
+        super().setup_method()
         self.collection = MockSharedODLAPI.mock_collection(self._db)
         self.collection.external_integration.set_setting(
             Collection.DATA_SOURCE_NAME_SETTING, "Feedbooks"
@@ -2722,7 +2720,7 @@ class TestSharedODLImporter(DatabaseTest, BaseODLTest):
             Collection.DATA_SOURCE_NAME_SETTING, data_source.name
         )
 
-        class MockMetadataClient(object):
+        class MockMetadataClient:
             def canonicalize_author_name(self, identifier, working_display_name):
                 return working_display_name
 

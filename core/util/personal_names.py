@@ -1,6 +1,5 @@
 import re
 import unicodedata
-from builtins import str
 
 from fuzzywuzzy import fuzz
 from nameparser import HumanName

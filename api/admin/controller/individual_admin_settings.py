@@ -141,7 +141,7 @@ class IndividualAdminSettingsController(SettingsController):
             user = flask.request.admin
 
         old_roles = admin.roles
-        old_roles_set = set((role.role, role.library) for role in old_roles)
+        old_roles_set = {(role.role, role.library) for role in old_roles}
 
         for role in roles:
             error = self.validate_role_exists(role)
@@ -164,7 +164,7 @@ class IndividualAdminSettingsController(SettingsController):
                 self.require_sitewide_library_manager()
             admin.add_role(role.get("role"), library)
 
-        new_roles = set((role.get("role"), role.get("library")) for role in roles)
+        new_roles = {(role.get("role"), role.get("library")) for role in roles}
         for role in old_roles:
             library = None
             if role.library:

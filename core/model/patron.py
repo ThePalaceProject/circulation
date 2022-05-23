@@ -1,4 +1,3 @@
-# encoding: utf-8
 # LoanAndHoldMixin, Patron, Loan, Hold, Annotation, PatronProfileStorage
 
 import datetime
@@ -30,7 +29,7 @@ from . import Base, get_one_or_create, numericrange_to_tuple
 from .credential import Credential
 
 
-class LoanAndHoldMixin(object):
+class LoanAndHoldMixin:
     @property
     def work(self):
         """Try to find the corresponding work for this Loan/Hold."""
@@ -183,7 +182,7 @@ class Patron(Base):
                 return d.date()
             return d
 
-        return "<Patron authentication_identifier=%s expires=%s sync=%s>" % (
+        return "<Patron authentication_identifier={} expires={} sync={}>".format(
             self.authorization_identifier,
             date(self.authorization_expires),
             date(self.last_external_sync),
@@ -722,7 +721,7 @@ class PatronProfileStorage(ProfileStorage):
     @property
     def writable_setting_names(self):
         """Return the subset of settings that are considered writable."""
-        return set([self.SYNCHRONIZE_ANNOTATIONS])
+        return {self.SYNCHRONIZE_ANNOTATIONS}
 
     @property
     def profile_document(self):

@@ -20,9 +20,9 @@ class IgnoredIdentifierConfiguration(ConfigurationTrait):
     """
 
     KEY = "IGNORED_IDENTIFIER_TYPE"
-    ALL_IGNORED_IDENTIFIER_TYPES = set(
-        [identifier_type.value for identifier_type in IdentifierType]
-    )
+    ALL_IGNORED_IDENTIFIER_TYPES = {
+        identifier_type.value for identifier_type in IdentifierType
+    }
 
     ignored_identifier_types = ConfigurationMetadata(
         key=KEY,

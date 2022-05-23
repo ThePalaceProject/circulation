@@ -11,7 +11,7 @@ from core.util.datetime_helpers import datetime_utc
 from . import sample_data
 
 
-class TestONIXExtractor(object):
+class TestONIXExtractor:
     def sample_data(self, filename):
         return sample_data(filename, "onix")
 

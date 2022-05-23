@@ -7,7 +7,7 @@ from core.classifier.age import (
 )
 
 
-class TestTargetAge(object):
+class TestTargetAge:
     def test_range_tuple_swaps_mismatched_ages(self):
         """If for whatever reason a Classifier decides that something is from
         ages 6 to 5, the Classifier.range_tuple() method will automatically
@@ -161,7 +161,7 @@ class TestTargetAge(object):
         assert (9, 12) == f("Ages 9-12")
 
 
-class TestInterestLevelClassifier(object):
+class TestInterestLevelClassifier:
     def test_audience(self):
         def f(t):
             return InterestLevelClassifier.audience(t, None)

@@ -12,7 +12,7 @@ from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvalua
 from core.python_expression_dsl.parser import DSLParser
 
 
-class TestSAMLSubjectFilter(object):
+class TestSAMLSubjectFilter:
     @parameterized.expand(
         [
             (

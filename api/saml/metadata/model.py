@@ -11,7 +11,7 @@ from onelogin.saml2.constants import OneLogin_Saml2_Constants
 from core.util.datetime_helpers import from_timestamp, utc_now
 
 
-class SAMLLocalizedMetadataItem(object):
+class SAMLLocalizedMetadataItem:
     """Represents md:localizedNameType."""
 
     def __init__(self, value, language=None):
@@ -48,7 +48,7 @@ class SAMLLocalizedMetadataItem(object):
         :return: String representation
         :rtype: str
         """
-        return "<SAMLLocalizableMetadataItem(value={0}, language={1})>".format(
+        return "<SAMLLocalizableMetadataItem(value={}, language={})>".format(
             self.value, self.language
         )
 
@@ -71,7 +71,7 @@ class SAMLLocalizedMetadataItem(object):
         return self._language
 
 
-class SAMLOrganization(object):
+class SAMLOrganization:
     """Represents md:Organization and contains basic information about an organization
     responsible for a SAML entity or role.
     """
@@ -100,7 +100,7 @@ class SAMLOrganization(object):
             for organization_name in organization_names:
                 if not isinstance(organization_name, SAMLLocalizedMetadataItem):
                     raise ValueError(
-                        'Argument "organization_name" must be an instance of {0} class'.format(
+                        'Argument "organization_name" must be an instance of {} class'.format(
                             SAMLLocalizedMetadataItem
                         )
                     )
@@ -109,7 +109,7 @@ class SAMLOrganization(object):
             for organization_display_name in organization_display_names:
                 if not isinstance(organization_display_name, SAMLLocalizedMetadataItem):
                     raise ValueError(
-                        'Argument "organization_display_name" must be an instance of {0} class'.format(
+                        'Argument "organization_display_name" must be an instance of {} class'.format(
                             SAMLLocalizedMetadataItem
                         )
                     )
@@ -118,7 +118,7 @@ class SAMLOrganization(object):
             for organization_url in organization_urls:
                 if not isinstance(organization_url, SAMLLocalizedMetadataItem):
                     raise ValueError(
-                        'Argument "organization_url" must be an instance of {0} class'.format(
+                        'Argument "organization_url" must be an instance of {} class'.format(
                             SAMLLocalizedMetadataItem
                         )
                     )
@@ -177,7 +177,7 @@ class SAMLOrganization(object):
         return self._organization_urls
 
 
-class SAMLUIInfo(object):
+class SAMLUIInfo:
     """Represents mdui:UIInfoType and contains values that can be shown in the UI to describe IdPs/SPs."""
 
     def __init__(
@@ -209,7 +209,7 @@ class SAMLUIInfo(object):
             for display_name in display_names:
                 if not isinstance(display_name, SAMLLocalizedMetadataItem):
                     raise ValueError(
-                        'Argument "display_names" must be an instance of {0} class'.format(
+                        'Argument "display_names" must be an instance of {} class'.format(
                             SAMLLocalizedMetadataItem
                         )
                     )
@@ -218,7 +218,7 @@ class SAMLUIInfo(object):
             for description in descriptions:
                 if not isinstance(description, SAMLLocalizedMetadataItem):
                     raise ValueError(
-                        'Argument "description" must be an instance of {0} class'.format(
+                        'Argument "description" must be an instance of {} class'.format(
                             SAMLLocalizedMetadataItem
                         )
                     )
@@ -227,7 +227,7 @@ class SAMLUIInfo(object):
             for information_url in information_urls:
                 if not isinstance(information_url, SAMLLocalizedMetadataItem):
                     raise ValueError(
-                        'Argument "information_url" must be an instance of {0} class'.format(
+                        'Argument "information_url" must be an instance of {} class'.format(
                             SAMLLocalizedMetadataItem
                         )
                     )
@@ -236,7 +236,7 @@ class SAMLUIInfo(object):
             for privacy_statement_url in privacy_statement_urls:
                 if not isinstance(privacy_statement_url, SAMLLocalizedMetadataItem):
                     raise ValueError(
-                        'Argument "privacy_statement_url" must be an instance of {0} class'.format(
+                        'Argument "privacy_statement_url" must be an instance of {} class'.format(
                             SAMLLocalizedMetadataItem
                         )
                     )
@@ -344,7 +344,7 @@ class SAMLNameIDFormat(Enum):
     ENCRYPTED = "urn:oasis:names:tc:SAML:2.0:nameid-format:encrypted"
 
 
-class SAMLService(object):
+class SAMLService:
     """Represents a service: IdP's SingleSignOnService, SingleLogOutService, SP's AssertionConsumerService"""
 
     def __init__(self, url, binding):
@@ -397,7 +397,7 @@ class SAMLService(object):
         return self._binding
 
 
-class SAMLProviderMetadata(object):
+class SAMLProviderMetadata:
     """Base class for IdentityProvider and ServiceProvider classes"""
 
     def __init__(
@@ -545,9 +545,7 @@ class SAMLIdentityProviderMetadata(SAMLProviderMetadata):
         :param encryption_certificates: (Optional) Certificate in X.509 format used for encrypting <AuthnResponse>
         :type encryption_certificates: Optional[List[string]]
         """
-        super(SAMLIdentityProviderMetadata, self).__init__(
-            entity_id, ui_info, organization, name_id_format
-        )
+        super().__init__(entity_id, ui_info, organization, name_id_format)
 
         if not isinstance(sso_service, SAMLService):
             raise ValueError("sso_service must have type Service")
@@ -574,7 +572,7 @@ class SAMLIdentityProviderMetadata(SAMLProviderMetadata):
         :return: Boolean value indicating whether two items are equal
         :rtype: bool
         """
-        if not super(SAMLIdentityProviderMetadata, self).__eq__(other):
+        if not super().__eq__(other):
             return False
 
         if not isinstance(other, SAMLIdentityProviderMetadata):
@@ -685,9 +683,7 @@ class SAMLServiceProviderMetadata(SAMLProviderMetadata):
         :param private_key: (Optional) Private key used for encrypting SAML requests
         :type private_key: string
         """
-        super(SAMLServiceProviderMetadata, self).__init__(
-            entity_id, ui_info, organization, name_id_format
-        )
+        super().__init__(entity_id, ui_info, organization, name_id_format)
 
         if not isinstance(acs_service, SAMLService):
             raise ValueError("acs_service must have type Service")
@@ -708,7 +704,7 @@ class SAMLServiceProviderMetadata(SAMLProviderMetadata):
         :return: Boolean value indicating whether two items are equal
         :rtype: bool
         """
-        if not super(SAMLServiceProviderMetadata, self).__eq__(other):
+        if not super().__eq__(other):
             return False
 
         if not isinstance(other, SAMLServiceProviderMetadata):
@@ -784,7 +780,7 @@ class SAMLServiceProviderMetadata(SAMLProviderMetadata):
         self._private_key = value
 
 
-class SAMLNameID(object):
+class SAMLNameID:
     """Represents saml2:NameID"""
 
     def __init__(
@@ -832,7 +828,7 @@ class SAMLNameID(object):
 
         :return: String representation
         """
-        return "<NameID(name_format={0}, name_qualifier={1}, sp_name_qualifier={2}, name_id={3})>".format(
+        return "<NameID(name_format={}, name_qualifier={}, sp_name_qualifier={}, name_id={})>".format(
             self.name_format, self.name_qualifier, self.sp_name_qualifier, self.name_id
         )
 
@@ -907,7 +903,7 @@ class SAMLAttributeType(Enum):
     eduOrgWhitePagesURI = "urn:oid:1.3.6.1.4.1.5923.1.2.1.6"
 
 
-class SAMLAttribute(object):
+class SAMLAttribute:
     """Represents saml2:Attribute"""
 
     def __init__(self, name, values, friendly_name=None, name_format=None):
@@ -955,8 +951,10 @@ class SAMLAttribute(object):
         :return: String representation
         :rtype: str
         """
-        return "<Attribute(name={0}, friendly_name={1}, name_format={2}, values={3})>".format(
-            self.name, self.friendly_name, self.name_format, self.values
+        return (
+            "<Attribute(name={}, friendly_name={}, name_format={}, values={})>".format(
+                self.name, self.friendly_name, self.name_format, self.values
+            )
         )
 
     @property
@@ -996,7 +994,7 @@ class SAMLAttribute(object):
         return self._values
 
 
-class SAMLAttributeStatement(object):
+class SAMLAttributeStatement:
     """Represents saml2:AttributeStatement"""
 
     def __init__(self, attributes):
@@ -1030,7 +1028,7 @@ class SAMLAttributeStatement(object):
         :return: String representation
         :rtype: str
         """
-        return "<AttributeStatement(attributes={0})>".format(self.attributes)
+        return f"<AttributeStatement(attributes={self.attributes})>"
 
     @property
     def attributes(self):
@@ -1042,7 +1040,7 @@ class SAMLAttributeStatement(object):
         return self._attributes
 
 
-class SAMLSubject(object):
+class SAMLSubject:
     """Contains a name ID and a attribute statement"""
 
     def __init__(
@@ -1102,7 +1100,7 @@ class SAMLSubject(object):
         :return: String representation
         :rtype: str
         """
-        return "<SAMLSubject(idp={0}, name_id={1}, attribute_statement={2}, valid_till={3})>".format(
+        return "<SAMLSubject(idp={}, name_id={}, attribute_statement={}, valid_till={})>".format(
             self.idp, self.name_id, self.attribute_statement, self.valid_till
         )
 
@@ -1131,7 +1129,7 @@ class SAMLSubject(object):
         """
         if value and not isinstance(value, SAMLNameID):
             raise ValueError(
-                "Argument 'value' must be either None or an instance of {0} class".format(
+                "Argument 'value' must be either None or an instance of {} class".format(
                     SAMLNameID
                 )
             )
@@ -1208,7 +1206,7 @@ class SAMLSubjectJSONDecoder(JSONDecoder):
         :return: Subject object
         :rtype: api.saml.metadata.Subject
         """
-        raw_subject = super(SAMLSubjectJSONDecoder, self).decode(raw_subject, _w)
+        raw_subject = super().decode(raw_subject, _w)
         attribute_statement = None
         name_id = None
         idp = raw_subject.get("idp", None)
@@ -1240,7 +1238,7 @@ class SAMLSubjectJSONDecoder(JSONDecoder):
         return subject
 
 
-class SAMLSubjectPatronIDExtractor(object):
+class SAMLSubjectPatronIDExtractor:
     """Extracts a unique patron ID from SAML subjects.
 
     This class accepts several parameters in its constructor, allowing it to override its behavior.
@@ -1356,9 +1354,7 @@ class SAMLSubjectPatronIDExtractor(object):
         :return: Unique patron ID if any
         :rtype: Optional[str]
         """
-        self._logger.info(
-            "Trying to extract a unique patron ID from {0}".format(repr(subject))
-        )
+        self._logger.info(f"Trying to extract a unique patron ID from {repr(subject)}")
 
         patron_id = None
 
@@ -1382,7 +1378,7 @@ class SAMLSubjectPatronIDExtractor(object):
                 patron_id = self._extract_patron_id(patron_id_candidate)
 
         self._logger.info(
-            "Extracted a unique patron ID from {0}: {1}".format(
+            "Extracted a unique patron ID from {}: {}".format(
                 repr(subject),
                 patron_id if patron_id else "",
             )

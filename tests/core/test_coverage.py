@@ -102,7 +102,7 @@ class TestCoverageFailure(DatabaseTest):
         assert "Bah forever!" == rec.exception
 
 
-class TestCoverageProviderProgress(object):
+class TestCoverageProviderProgress:
     def test_achievements(self):
         progress = CoverageProviderProgress()
         progress.successes = 1
@@ -536,7 +536,7 @@ class TestBaseCoverageProvider(CoverageProviderTest):
         assert [CoverageRecord.SUCCESS] * 2 == [x.status for x in successes]
 
         # Each associated with one of the identifiers...
-        assert set([i1, i2]) == set([x.identifier for x in successes])
+        assert {i1, i2} == {x.identifier for x in successes}
 
         # ...and with the coverage provider's operation.
         assert ["i succeed"] * 2 == [x.operation for x in successes]
@@ -601,7 +601,7 @@ class TestBaseCoverageProvider(CoverageProviderTest):
             SERVICE_NAME = "Some succeed, some fail."
 
             def __init__(self, *args, **kwargs):
-                super(Mock, self).__init__(*args, **kwargs)
+                super().__init__(*args, **kwargs)
                 self.processed = []
                 self.successes = []
 
@@ -662,7 +662,7 @@ class TestBaseCoverageProvider(CoverageProviderTest):
 
 class TestIdentifierCoverageProvider(CoverageProviderTest):
     def setup_method(self):
-        super(TestIdentifierCoverageProvider, self).setup_method()
+        super().setup_method()
         self.identifier = self._identifier()
 
     def test_input_identifier_types(self):
@@ -914,7 +914,7 @@ class TestIdentifierCoverageProvider(CoverageProviderTest):
         assert "bar" == coverage2.operation
 
         # There are now two CoverageRecords, one for each operation.
-        assert set([coverage1, coverage2]) == set(self._db.query(CoverageRecord))
+        assert {coverage1, coverage2} == set(self._db.query(CoverageRecord))
 
         # If we try to ensure coverage again, no work is done and we
         # get the old coverage record back.
@@ -1116,7 +1116,7 @@ class TestIdentifierCoverageProvider(CoverageProviderTest):
 
         # Only the identifiers in to_be_tested were covered.
         assert all(isinstance(x, CoverageRecord) for x in records)
-        assert set(to_be_tested) == set([x.identifier for x in records])
+        assert set(to_be_tested) == {x.identifier for x in records}
         for i in to_be_tested:
             assert i in provider.attempts
         for i in not_to_be_tested:
@@ -1497,8 +1497,8 @@ class TestCollectionCoverageProvider(CoverageProviderTest):
         # The providers were returned in a random order, but there's one
         # for each collection that supports the 'OPDS Import' protocol.
         assert 2 == len(providers)
-        collections = set([x.collection for x in providers])
-        assert set([opds1, opds2]) == collections
+        collections = {x.collection for x in providers}
+        assert {opds1, opds2} == collections
 
         # The providers are of the appropriate type and the keyword arguments
         # passed into all() were propagated to the constructor.
@@ -1630,7 +1630,7 @@ class TestCollectionCoverageProvider(CoverageProviderTest):
         [mirrored] = mirrors[mirror_type].uploaded
         assert "http://foo.com/" == mirrored.url
         assert mirrored.mirror_url.endswith(
-            "/%s/%s.epub" % (identifier.identifier, edition.title)
+            f"/{identifier.identifier}/{edition.title}.epub"
         )
 
         # The book content was removed from the db after it was
@@ -1941,7 +1941,7 @@ class TestBibliographicCoverageProvider(CoverageProviderTest):
     """Test the features specific to BibliographicCoverageProvider."""
 
     def setup_method(self):
-        super(TestBibliographicCoverageProvider, self).setup_method()
+        super().setup_method()
         self.work = self._work(with_license_pool=True, with_open_access_download=True)
         self.work.presentation_ready = False
         [self.pool] = self.work.license_pools
@@ -1973,7 +1973,7 @@ class TestBibliographicCoverageProvider(CoverageProviderTest):
 
 class TestWorkCoverageProvider(DatabaseTest):
     def setup_method(self):
-        super(TestWorkCoverageProvider, self).setup_method()
+        super().setup_method()
         self.work = self._work()
 
     def test_success(self):
@@ -2084,7 +2084,7 @@ class TestWorkCoverageProvider(DatabaseTest):
 
         # By default, items_that_need_coverage returns the two
         # works that don't have coverage.
-        assert set([w1, w3]) == set(provider.items_that_need_coverage().all())
+        assert {w1, w3} == set(provider.items_that_need_coverage().all())
 
         # If we pass in a list of Identifiers we further restrict
         # items_that_need_coverage to Works whose LicensePools have an
@@ -2097,7 +2097,7 @@ class TestWorkCoverageProvider(DatabaseTest):
         # WorkCoverageRecord was created, then that work starts
         # showing up again as needing coverage.
         provider.cutoff_time = record.timestamp + datetime.timedelta(seconds=1)
-        assert set([w2, w3]) == set(provider.items_that_need_coverage([i2, i3]).all())
+        assert {w2, w3} == set(provider.items_that_need_coverage([i2, i3]).all())
 
     def test_failure_for_ignored_item(self):
         class MockProvider(NeverSuccessfulWorkCoverageProvider):
@@ -2139,7 +2139,7 @@ class TestPresentationReadyWorkCoverageProvider(DatabaseTest):
         assert [work] == provider.items_that_need_coverage().all()
 
 
-class MockWork(object):
+class MockWork:
     """A Work-like object that keeps track of the policy that was used
     to recalculate its presentation.
     """

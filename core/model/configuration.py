@@ -7,18 +7,7 @@ import logging
 from abc import ABCMeta, abstractmethod
 from contextlib import contextmanager
 from enum import Enum
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Dict,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
-    Tuple,
-    Type,
-    TypeVar,
-)
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, TypeVar
 
 from flask_babel import lazy_gettext as _
 from sqlalchemy import Column, ForeignKey, Index, Integer, Unicode
@@ -51,13 +40,13 @@ class ExternalIntegrationLink(Base, HasSessionCache):
     # These string literals may be stored in the database, so changes to them
     # may need to be accompanied by a DB migration.
     COVERS = "covers_mirror"
-    COVERS_KEY = "{0}_integration_id".format(COVERS)
+    COVERS_KEY = f"{COVERS}_integration_id"
 
     OPEN_ACCESS_BOOKS = "books_mirror"
-    OPEN_ACCESS_BOOKS_KEY = "{0}_integration_id".format(OPEN_ACCESS_BOOKS)
+    OPEN_ACCESS_BOOKS_KEY = f"{OPEN_ACCESS_BOOKS}_integration_id"
 
     PROTECTED_ACCESS_BOOKS = "protected_access_books_mirror"
-    PROTECTED_ACCESS_BOOKS_KEY = "{0}_integration_id".format(PROTECTED_ACCESS_BOOKS)
+    PROTECTED_ACCESS_BOOKS_KEY = f"{PROTECTED_ACCESS_BOOKS}_integration_id"
 
     MARC = "MARC_mirror"
 
@@ -100,10 +89,10 @@ class ExternalIntegrationLink(Base, HasSessionCache):
 
         settings.append(
             {
-                "key": "{0}_integration_id".format(mirror_type.lower()),
+                "key": f"{mirror_type.lower()}_integration_id",
                 "label": _(mirror_label),
                 "description": _(
-                    "Any {0} encountered while importing content from this collection "
+                    "Any {} encountered while importing content from this collection "
                     "can be mirrored to a server you control.".format(
                         mirror_description_type
                     )
@@ -112,9 +101,7 @@ class ExternalIntegrationLink(Base, HasSessionCache):
                 "options": [
                     {
                         "key": NO_MIRROR_INTEGRATION,
-                        "label": _(
-                            "None - Do not mirror {0}".format(mirror_description_type)
-                        ),
+                        "label": _(f"None - Do not mirror {mirror_description_type}"),
                     }
                 ],
             }
@@ -400,9 +387,7 @@ class ExternalIntegration(Base):
 
         integrations = integrations.all()
         if len(integrations) > 1:
-            logging.warning(
-                "Multiple integrations found for '%s'/'%s'" % (protocol, goal)
-            )
+            logging.warning(f"Multiple integrations found for '{protocol}'/'{goal}'")
 
         if [i for i in integrations if i.libraries] and not library:
             raise ValueError(
@@ -543,7 +528,7 @@ class ExternalIntegration(Base):
         lines.append("ID: %s" % self.id)
         if self.name:
             lines.append("Name: %s" % self.name)
-        lines.append("Protocol/Goal: %s/%s" % (self.protocol, self.goal))
+        lines.append(f"Protocol/Goal: {self.protocol}/{self.goal}")
 
         def key(setting):
             if setting.library:
@@ -558,9 +543,9 @@ class ExternalIntegration(Base):
             if setting.value is None:
                 # The setting has no value. Ignore it.
                 continue
-            explanation = "%s='%s'" % (setting.key, setting.value)
+            explanation = f"{setting.key}='{setting.value}'"
             if setting.library:
-                explanation = "%s (applies only to %s)" % (
+                explanation = "{} (applies only to {})".format(
                     explanation,
                     setting.library.name,
                 )
@@ -673,7 +658,7 @@ class ConfigurationSetting(Base, HasSessionCache):
         for setting in sorted(site_wide_settings, key=lambda s: s.key):
             if setting.value is None:
                 continue
-            lines.append("%s='%s'" % (setting.key, setting.value))
+            lines.append(f"{setting.key}='{setting.value}'")
         return lines
 
     @classmethod
@@ -797,7 +782,7 @@ class ConfigurationSetting(Base, HasSessionCache):
             self.value = default
         return self.value
 
-    MEANS_YES = set(["true", "t", "yes", "y"])
+    MEANS_YES = {"true", "t", "yes", "y"}
 
     @property
     def bool_value(self):
@@ -843,7 +828,7 @@ class ConfigurationSetting(Base, HasSessionCache):
     # As of this release of the software, this is our best guess as to
     # which data sources should have their audiobooks excluded from
     # lanes.
-    EXCLUDED_AUDIO_DATA_SOURCES_DEFAULT: List[str] = []
+    EXCLUDED_AUDIO_DATA_SOURCES_DEFAULT: list[str] = []
 
     @classmethod
     def excluded_audio_data_sources(cls, _db):
@@ -942,7 +927,7 @@ class ConfigurationAttributeType(Enum):
     LIST = "list"
     MENU = "menu"
 
-    def to_control_type(self) -> Optional[str]:
+    def to_control_type(self) -> str | None:
         """Converts the value to a attribute type understandable by circulation-admin
 
         :return: String representation of attribute's type
@@ -977,7 +962,7 @@ class ConfigurationAttributeValue(Enum):
     NOVALUE = "no"
 
 
-class ConfigurationOption(object):
+class ConfigurationOption:
     """Key-value pair containing information about configuration attribute option"""
 
     def __init__(self, key: str, label: str) -> None:
@@ -1017,7 +1002,7 @@ class ConfigurationOption(object):
         """
         return self._label
 
-    def to_settings(self) -> Dict[str, str]:
+    def to_settings(self) -> dict[str, str]:
         """Returns a dictionary containing option metadata in the SETTINGS format
 
         :return: Dictionary containing option metadata in the SETTINGS format
@@ -1025,7 +1010,7 @@ class ConfigurationOption(object):
         return {"key": self.key, "label": self.label}
 
     @staticmethod
-    def from_enum(cls: Type[Enum]) -> List[ConfigurationOption]:
+    def from_enum(cls: type[Enum]) -> list[ConfigurationOption]:
         """Convers Enum to a list of options in the SETTINGS format
 
         :param cls: Enum type
@@ -1062,7 +1047,7 @@ class HasConfigurationSettings(metaclass=ABCMeta):
         raise NotImplementedError()
 
 
-class ConfigurationMetadata(object):
+class ConfigurationMetadata:
     """Contains configuration metadata"""
 
     _counter = 0
@@ -1074,9 +1059,9 @@ class ConfigurationMetadata(object):
         description: str,
         type: ConfigurationAttributeType,
         required: bool = False,
-        default: Optional[Any] = None,
-        options: List[ConfigurationOption] = None,
-        category: Optional[str] = None,
+        default: Any | None = None,
+        options: list[ConfigurationOption] = None,
+        category: str | None = None,
         format=None,
         index=None,
     ):
@@ -1109,8 +1094,8 @@ class ConfigurationMetadata(object):
 
     def __get__(
         self,
-        owner_instance: Optional[HasConfigurationSettings],
-        owner_type: Optional[Type],
+        owner_instance: HasConfigurationSettings | None,
+        owner_type: type | None,
     ) -> Any:
         """Returns a value of the setting
 
@@ -1157,7 +1142,7 @@ class ConfigurationMetadata(object):
         return setting_value
 
     def __set__(
-        self, owner_instance: Optional[HasConfigurationSettings], value: Any
+        self, owner_instance: HasConfigurationSettings | None, value: Any
     ) -> Any:
         """Updates the setting's value
 
@@ -1213,7 +1198,7 @@ class ConfigurationMetadata(object):
         return self._required
 
     @property
-    def default(self) -> Optional[Any]:
+    def default(self) -> Any | None:
         """Returns the setting's default value
 
         :return: Setting's default value
@@ -1221,7 +1206,7 @@ class ConfigurationMetadata(object):
         return self._default
 
     @property
-    def options(self) -> Optional[List[ConfigurationOption]]:
+    def options(self) -> list[ConfigurationOption] | None:
         """Returns the setting's options (used in the case of select)
 
         :return: Setting's options (used in the case of select)
@@ -1229,7 +1214,7 @@ class ConfigurationMetadata(object):
         return self._options
 
     @property
-    def category(self) -> Optional[str]:
+    def category(self) -> str | None:
         """Returns the setting's category
 
         :return: Setting's category
@@ -1249,7 +1234,7 @@ class ConfigurationMetadata(object):
         return self._index
 
     @staticmethod
-    def get_configuration_metadata(cls) -> List[Tuple[str, ConfigurationMetadata]]:
+    def get_configuration_metadata(cls) -> list[tuple[str, ConfigurationMetadata]]:
         """Returns a list of 2-tuples containing information ConfigurationMetadata properties in the specified class
 
         :param cls: Class
@@ -1336,7 +1321,7 @@ class ConfigurationGrouping(HasConfigurationSettings):
         self._configuration_storage.save(self._db, setting_name, setting_value)
 
     @classmethod
-    def to_settings_generator(cls) -> Iterable[Dict]:
+    def to_settings_generator(cls) -> Iterable[dict]:
         """Return a generator object returning settings in a format understandable by circulation-admin.
 
         :return: list of settings in a format understandable by circulation-admin.
@@ -1380,7 +1365,7 @@ class ConfigurationGrouping(HasConfigurationSettings):
             }
 
     @classmethod
-    def to_settings(cls) -> List[Dict]:
+    def to_settings(cls) -> list[dict]:
         """Return a list of settings in a format understandable by circulation-admin.
 
         :return: list of settings in a format understandable by circulation-admin.
@@ -1391,7 +1376,7 @@ class ConfigurationGrouping(HasConfigurationSettings):
 C = TypeVar("C", bound="ConfigurationGrouping")
 
 
-class ConfigurationFactory(object):
+class ConfigurationFactory:
     """Factory creating new instances of ConfigurationGrouping class descendants."""
 
     @contextmanager
@@ -1399,7 +1384,7 @@ class ConfigurationFactory(object):
         self,
         configuration_storage: ConfigurationStorage,
         db: Session,
-        configuration_grouping_class: Type[C],
+        configuration_grouping_class: type[C],
     ) -> Iterator[C]:
         """Create a new instance of ConfigurationGrouping.
 

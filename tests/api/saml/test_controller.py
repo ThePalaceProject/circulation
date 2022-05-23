@@ -71,7 +71,7 @@ class TestSAMLController(ControllerTest):
                 None,
                 None,
                 SAML_INVALID_REQUEST.detailed(
-                    "Required parameter {0} is missing".format(
+                    "Required parameter {} is missing".format(
                         SAMLController.PROVIDER_NAME
                     )
                 ),
@@ -83,7 +83,7 @@ class TestSAMLController(ControllerTest):
                 None,
                 None,
                 SAML_INVALID_REQUEST.detailed(
-                    "Required parameter {0} is missing".format(
+                    "Required parameter {} is missing".format(
                         SAMLController.IDP_ENTITY_ID
                     )
                 ),
@@ -95,7 +95,7 @@ class TestSAMLController(ControllerTest):
                 IDENTITY_PROVIDERS[0].entity_id,
                 None,
                 SAML_INVALID_REQUEST.detailed(
-                    "Required parameter {0} is missing".format(
+                    "Required parameter {} is missing".format(
                         SAMLController.REDIRECT_URI
                     )
                 ),
@@ -244,7 +244,7 @@ class TestSAMLController(ControllerTest):
                 None,
                 None,
                 SAML_INVALID_RESPONSE.detailed(
-                    "Required parameter {0} is missing from the response body".format(
+                    "Required parameter {} is missing from the response body".format(
                         SAMLController.RELAY_STATE
                     )
                 ),
@@ -257,7 +257,7 @@ class TestSAMLController(ControllerTest):
                 None,
                 None,
                 SAML_INVALID_RESPONSE.detailed(
-                    "Required parameter {0} is missing from RelayState".format(
+                    "Required parameter {} is missing from RelayState".format(
                         SAMLController.LIBRARY_SHORT_NAME
                     )
                 ),
@@ -273,7 +273,7 @@ class TestSAMLController(ControllerTest):
                 None,
                 None,
                 SAML_INVALID_RESPONSE.detailed(
-                    "Required parameter {0} is missing from RelayState".format(
+                    "Required parameter {} is missing from RelayState".format(
                         SAMLController.PROVIDER_NAME
                     )
                 ),
@@ -294,7 +294,7 @@ class TestSAMLController(ControllerTest):
                 None,
                 None,
                 SAML_INVALID_RESPONSE.detailed(
-                    "Required parameter {0} is missing from RelayState".format(
+                    "Required parameter {} is missing from RelayState".format(
                         SAMLController.IDP_ENTITY_ID
                     )
                 ),

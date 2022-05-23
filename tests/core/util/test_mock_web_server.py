@@ -33,7 +33,7 @@ class MockAPIServerResponse:
 
     def __init__(self):
         self.status_code = 200
-        self.content = "".encode("utf-8")
+        self.content = b""
         self.headers = {}
         self.close_obnoxiously = False
 
@@ -106,9 +106,7 @@ class MockAPIInternalServer(HTTPServer):
     mock_api_server: "MockAPIServer"
 
     def __init__(self, server_address: Tuple[str, int], bind_and_activate: bool):
-        super(MockAPIInternalServer, self).__init__(
-            server_address, MockAPIServerRequestHandler, bind_and_activate
-        )
+        super().__init__(server_address, MockAPIServerRequestHandler, bind_and_activate)
         self.allow_reuse_address = True
 
 
@@ -193,7 +191,7 @@ class TestMockAPIServer:
         url = mock_web_server.url("/x/y/z")
         response = HTTP.request_with_timeout("GET", url)
         assert response.status_code == 200
-        assert response.content == "".encode("utf-8")
+        assert response.content == b""
 
         requests = mock_web_server.requests()
         assert len(requests) == 1
@@ -212,7 +210,7 @@ class TestMockAPIServer:
             "POST", url, data=b"DATA!", headers={"Extra": "Thing"}
         )
         assert response.status_code == 201
-        assert response.content == "DATA!".encode("utf-8")
+        assert response.content == b"DATA!"
         assert response.headers["Extra"] == "Thing"
 
         requests = mock_web_server.requests()

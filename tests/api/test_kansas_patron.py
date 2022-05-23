@@ -7,7 +7,7 @@ from core.testing import DatabaseTest
 from . import sample_data
 
 
-class MockResponse(object):
+class MockResponse:
     def __init__(self, content):
         self.status_code = 200
         self.content = content
@@ -15,7 +15,7 @@ class MockResponse(object):
 
 class MockAPI(KansasAuthenticationAPI):
     def __init__(self, library_id, integration, analytics=None, base_url=None):
-        super(MockAPI, self).__init__(library_id, integration, analytics, base_url)
+        super().__init__(library_id, integration, analytics, base_url)
         self.queue = []
 
     def sample_data(self, filename):
@@ -33,7 +33,7 @@ class MockAPI(KansasAuthenticationAPI):
 
 class TestKansasPatronAPI(DatabaseTest):
     def setup_method(self):
-        super(TestKansasPatronAPI, self).setup_method()
+        super().setup_method()
         self.integration = self._external_integration(
             ExternalIntegration.PATRON_AUTH_GOAL
         )

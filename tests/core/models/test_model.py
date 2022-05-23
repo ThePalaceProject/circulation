@@ -1,5 +1,3 @@
-# encoding: utf-8
-
 import pytest
 from psycopg2.extras import NumericRange
 from sqlalchemy import not_
@@ -65,7 +63,7 @@ class TestDatabaseInterface(DatabaseTest):
         assert old_timestamp == timestamp.finish
 
 
-class TestNumericRangeConversion(object):
+class TestNumericRangeConversion:
     """Test the helper functions that convert between tuples and NumericRange
     objects.
     """
