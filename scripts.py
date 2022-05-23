@@ -2007,7 +2007,7 @@ class LocalAnalyticsExportScript(Script):
                     if end >= current_time:
                         end = current_time
 
-        if output_dir:
+        if output_dir != None:
             if not os.path.exists(output_dir):
                 os.makedirs(output_dir)
 
@@ -2023,7 +2023,9 @@ class LocalAnalyticsExportScript(Script):
             exporter = exporter or LocalAnalyticsExporter()
             output.write(exporter.export(self._db, start, end))
         finally:
-            output.close()
+            # only close output if it was created within this method
+            if output_dir != None:
+                output.close()
 
         if keep_track_of_last:
             state = dict(last_completed_date=end)
