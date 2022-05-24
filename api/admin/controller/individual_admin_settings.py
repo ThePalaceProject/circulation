@@ -27,6 +27,7 @@ class IndividualAdminSettingsController(SettingsController):
         for role in logged_in_admin.roles:
             if role.role in (
                 AdminRole.SYSTEM_ADMIN,
+                AdminRole.SITEWIDE_LIBRARY_MANAGER,
                 AdminRole.LIBRARY_MANAGER,
             ):
                 # Admin has the authority to view this API
@@ -34,7 +35,7 @@ class IndividualAdminSettingsController(SettingsController):
 
             if (
                 not highest_role
-                or role.compare_role(highest_role) == AdminRole.LESS_THAN
+                or highest_role.compare_role(role) == AdminRole.LESS_THAN
             ):
                 # What is the highest role this admin possesses (via AdminRole.ROLES)
                 highest_role = role
@@ -48,33 +49,44 @@ class IndividualAdminSettingsController(SettingsController):
             AdminRole.SYSTEM_ADMIN,
         }
 
+        def append_role(roles, role):
+            role_dict = dict(role=role.role)
+            if role.library:
+                role_dict["library"] = role.library.short_name
+            roles.append(role_dict)
+
         admins = []
         for admin in self._db.query(Admin).order_by(Admin.email):
             roles = []
-            show_admin = always_show_admins
+            show_admin = True
             for role in admin.roles:
-                if always_show_admins:
-                    role_dict = dict(role=role.role)
-                    if role.library:
-                        role_dict["library"] = role.library.short_name
-                    roles.append(role_dict)
-                elif role.library:
-                    if not logged_in_admin or not logged_in_admin.is_library_manager(
+
+                # System admin sees all
+                if highest_role.role == AdminRole.SYSTEM_ADMIN:
+                    append_role(roles, role)
+
+                # Sitewide managers see each other and lower
+                elif (
+                    highest_role.role == AdminRole.SITEWIDE_LIBRARY_MANAGER
+                    and highest_role.compare_role(role) is not AdminRole.LESS_THAN
+                ):
+                    append_role(roles, role)
+
+                # Managers
+                elif highest_role.role == AdminRole.LIBRARY_MANAGER:
+                    # See same library admins
+                    if role.library and logged_in_admin.is_library_manager(
                         role.library
                     ):
-                        continue
-                    show_admin = True
-                    roles.append(dict(role=role.role, library=role.library.short_name))
-                elif highest_role.compare_role(role) is not AdminRole.LESS_THAN:
-                    # Any sitewide higher role should be able to view a lower or equal role
-                    show_admin = True
-                    roles.append(dict(role=role.role))
-                elif role.role in AdminRole.SITEWIDE_LIBRARY_MANAGER:
-                    # Sitewide manager should be visible to other managers (even though manager < sitewide manager)
-                    show_admin = True
-                    roles.append(dict(role=role.role))
+                        append_role(roles, role)
+                    # and sitewide managers and librarians
+                    elif role.role in {
+                        AdminRole.SITEWIDE_LIBRARY_MANAGER,
+                        AdminRole.SITEWIDE_LIBRARIAN,
+                    }:
+                        append_role(roles, role)
 
-            if show_admin:
+            if len(roles):
                 admins.append(dict(email=admin.email, roles=roles))
 
         return dict(
