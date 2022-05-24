@@ -86,13 +86,20 @@ class named:
     """A variable-length field in a SIP2 response."""
 
     def __init__(
-        self, internal_name, sip_code, required=False, length=None, allow_multiple=False
+        self,
+        internal_name,
+        sip_code,
+        required=False,
+        length=None,
+        allow_multiple=False,
+        log=None,
     ):
         self.sip_code = sip_code
         self.internal_name = internal_name
         self.req = required
         self.length = length
         self.allow_multiple = allow_multiple
+        self.log = log or logging.getLogger("SIPClient")
 
     @property
     def required(self):
@@ -106,7 +113,12 @@ class named:
         `field.req`.
         """
         return named(
-            self.internal_name, self.sip_code, True, self.length, self.allow_multiple
+            self.internal_name,
+            self.sip_code,
+            True,
+            self.length,
+            self.allow_multiple,
+            log=self.log,
         )
 
     def consume(self, value, in_progress):
@@ -121,7 +133,7 @@ class named:
             dictionary.
         """
         if self.length and len(value) != self.length:
-            self.log.warn(
+            self.log.warning(
                 "Expected string of length %d for field %s, but got %r",
                 self.length,
                 self.sip_code,
@@ -744,7 +756,7 @@ class SIPClient(Constants):
                     # This is an extension field. Do the best we can.
                     # This basically means storing it in the dictionary
                     # under its SIP code.
-                    field = named(sip_code, sip_code, allow_multiple=True)
+                    field = named(sip_code, sip_code, allow_multiple=True, log=self.log)
 
                 if field:
                     field.consume(value, parsed)
