@@ -140,7 +140,10 @@ class CustomListImporter:
         response = self._session.get(server_work_endpoint)
         if response.status_code == 404:
             problem_missing = CustomListProblemBookMissing.create(
-                id=book.id(), title=book.title()
+                id=book.id(),
+                id_type=book.id_type(),
+                author=book.author(),
+                title=book.title(),
             )
             report.add_problem(problem_missing)
             self._logger.error(problem_missing.message())
@@ -150,6 +153,8 @@ class CustomListImporter:
         if response.status_code >= 400:
             problem_request = CustomListProblemBookRequestFailed.create(
                 id=book.id(),
+                id_type=book.id_type(),
+                author=book.author(),
                 title=book.title(),
                 error=self._error_response("Book request failed", response),
             )
@@ -163,9 +168,11 @@ class CustomListImporter:
             if entry.id != book.id() or entry.title != book.title():
                 problem = CustomListProblemBookMismatch.create(
                     expected_id=book.id(),
+                    expected_id_type=book.id_type(),
                     expected_title=book.title(),
                     received_id=entry.id,
                     received_title=entry.title,
+                    author=book.author(),
                 )
                 self._logger.error(problem.message())
                 report.add_problem(problem)
@@ -179,6 +186,8 @@ class CustomListImporter:
         """Add all of the known problematic books to the output report."""
         problem = CustomListProblemBookBrokenOnSourceCM(
             id=book.id(),
+            author=book.author(),
+            id_type="?",
             title=book.title(),
             message=f"Book '{book.title()}' ({book.id()}) was excluded from list updates due to a problem on the source CM: {book.message()}",
         )

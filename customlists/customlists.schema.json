@@ -51,6 +51,10 @@
         "title": {
           "$comment": "The book title",
           "type": "string"
+        },
+        "author": {
+          "$comment": "The book (primary) author",
+          "type": "string"
         }
       },
       "additionalProperties": false,
@@ -58,7 +62,8 @@
         "%type",
         "id",
         "id-type",
-        "title"
+        "title",
+        "author"
       ]
     },
 
@@ -104,6 +109,10 @@
           "$comment": "The primary identifier used for the book (typically an ISBN or similar)",
           "type": "string"
         },
+        "id-type": {
+          "$comment": "The type of the primary identifier",
+          "type": "string"
+        },
         "title": {
           "$comment": "The book title",
           "type": "string"
@@ -111,14 +120,20 @@
         "message": {
           "$comment": "The error message",
           "type": "string"
+        },
+        "author": {
+          "$comment": "The book (primary) author",
+          "type": "string"
         }
       },
       "additionalProperties": false,
       "required": [
         "%type",
+        "author",
         "id",
-        "title",
-        "message"
+        "id-type",
+        "message",
+        "title"
       ]
     },
 
