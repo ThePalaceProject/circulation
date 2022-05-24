@@ -138,12 +138,11 @@ class TestIndividualAdmins(SettingsControllerTest):
             ) == sorted(admins, key=lambda x: x["email"])
 
         with self.request_context_with_admin("/", admin=admin3):
-            # A librarian or library manager of a specific library can see all admins, but only
-            # roles that affect their libraries.
-            response = (
-                self.manager.admin_individual_admin_settings_controller.process_get()
+            # A librarian cannot view this API anymore
+            pytest.raises(
+                AdminNotAuthorized,
+                self.manager.admin_individual_admin_settings_controller.process_get,
             )
-            assert response is FORBIDDEN_BY_POLICY
 
         with self.request_context_with_admin("/", admin=admin4):
             response = (
@@ -187,10 +186,10 @@ class TestIndividualAdmins(SettingsControllerTest):
             ) == sorted(admins, key=lambda x: x["email"])
 
         with self.request_context_with_admin("/", admin=admin5):
-            response = (
-                self.manager.admin_individual_admin_settings_controller.process_get()
+            pytest.raises(
+                AdminNotAuthorized,
+                self.manager.admin_individual_admin_settings_controller.process_get,
             )
-            assert response is FORBIDDEN_BY_POLICY
 
         with self.request_context_with_admin("/", admin=admin6):
             response = (

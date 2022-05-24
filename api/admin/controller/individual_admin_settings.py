@@ -1,4 +1,5 @@
 import json
+from typing import Optional
 
 import flask
 from flask import Response
@@ -19,12 +20,16 @@ class IndividualAdminSettingsController(SettingsController):
         else:
             return self.process_post()
 
-    def process_get(self):
-        logged_in_admin: Admin = flask.request.admin
+    def _highest_authorized_role(self) -> Optional[AdminRole]:
+        highest_role = None
         has_auth = False
-        highest_role: AdminRole = None
 
-        for role in logged_in_admin.roles:
+        admin = getattr(flask.request, "admin", None)
+
+        if not admin:
+            return False
+
+        for role in admin.roles:
             if role.role in (
                 AdminRole.SYSTEM_ADMIN,
                 AdminRole.SITEWIDE_LIBRARY_MANAGER,
@@ -39,15 +44,14 @@ class IndividualAdminSettingsController(SettingsController):
             ):
                 # What is the highest role this admin possesses (via AdminRole.ROLES)
                 highest_role = role
+        return highest_role if has_auth else None
 
-        if not has_auth:
-            return FORBIDDEN_BY_POLICY
+    def process_get(self):
+        logged_in_admin: Admin = flask.request.admin
+        highest_role: AdminRole = self._highest_authorized_role()
 
-        # In case the admin has sitewide authority, we always show the admins
-        always_show_admins = highest_role.role in {
-            AdminRole.SITEWIDE_LIBRARY_MANAGER,
-            AdminRole.SYSTEM_ADMIN,
-        }
+        if not highest_role:
+            raise AdminNotAuthorized()
 
         def append_role(roles, role):
             role_dict = dict(role=role.role)
@@ -96,6 +100,7 @@ class IndividualAdminSettingsController(SettingsController):
     def process_post(self):
 
         email = flask.request.form.get("email")
+
         error = self.validate_form_fields(email)
         if error:
             return error
@@ -106,6 +111,10 @@ class IndividualAdminSettingsController(SettingsController):
             return INCOMPLETE_CONFIGURATION.detailed(
                 _("The password field cannot be blank.")
             )
+
+        highest_role = self._highest_authorized_role()
+        if not settingUp and not highest_role:
+            raise AdminNotAuthorized()
 
         admin, is_new = get_one_or_create(self._db, Admin, email=email)
 
