@@ -34,6 +34,9 @@ class TestIndividualAdmins(SettingsControllerTest):
         admin5, ignore = create(self._db, Admin, email="admin5@l2.org")
         admin5.add_role(AdminRole.LIBRARIAN, library2)
 
+        admin6, ignore = create(self._db, Admin, email="admin6@l2.org")
+        admin6.add_role(AdminRole.SITEWIDE_LIBRARY_MANAGER)
+
         with self.request_context_with_admin("/", admin=admin1):
             # A system admin can see all other admins' roles.
             response = (
@@ -83,6 +86,14 @@ class TestIndividualAdmins(SettingsControllerTest):
                             }
                         ],
                     },
+                    {
+                        "email": "admin6@l2.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.SITEWIDE_LIBRARY_MANAGER,
+                            }
+                        ],
+                    },
                 ],
                 key=lambda x: x["email"],
             ) == sorted(admins, key=lambda x: x["email"])
@@ -95,10 +106,6 @@ class TestIndividualAdmins(SettingsControllerTest):
             admins = response.get("individualAdmins")
             assert sorted(
                 [
-                    {
-                        "email": "admin1@nypl.org",
-                        "roles": [{"role": AdminRole.SYSTEM_ADMIN}],
-                    },
                     {
                         "email": "admin2@nypl.org",
                         "roles": [
@@ -119,20 +126,10 @@ class TestIndividualAdmins(SettingsControllerTest):
                         ],
                     },
                     {
-                        "email": "admin4@l2.org",
+                        "email": "admin6@l2.org",
                         "roles": [
                             {
-                                "role": AdminRole.LIBRARY_MANAGER,
-                                "library": library2.short_name,
-                            }
-                        ],
-                    },
-                    {
-                        "email": "admin5@l2.org",
-                        "roles": [
-                            {
-                                "role": AdminRole.LIBRARIAN,
-                                "library": library2.short_name,
+                                "role": AdminRole.SITEWIDE_LIBRARY_MANAGER,
                             }
                         ],
                     },
@@ -156,14 +153,9 @@ class TestIndividualAdmins(SettingsControllerTest):
             assert sorted(
                 [
                     {
-                        "email": "admin1@nypl.org",
-                        "roles": [{"role": AdminRole.SYSTEM_ADMIN}],
-                    },
-                    {
                         "email": "admin2@nypl.org",
                         "roles": [{"role": AdminRole.SITEWIDE_LIBRARIAN}],
                     },
-                    {"email": "admin3@nypl.org", "roles": []},
                     {
                         "email": "admin4@l2.org",
                         "roles": [
@@ -179,6 +171,14 @@ class TestIndividualAdmins(SettingsControllerTest):
                             {
                                 "role": AdminRole.LIBRARIAN,
                                 "library": library2.short_name,
+                            }
+                        ],
+                    },
+                    {
+                        "email": "admin6@l2.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.SITEWIDE_LIBRARY_MANAGER,
                             }
                         ],
                     },

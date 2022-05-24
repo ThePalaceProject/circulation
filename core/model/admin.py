@@ -247,6 +247,9 @@ class AdminRole(Base, HasSessionCache):
         SITEWIDE_LIBRARIAN,
         LIBRARIAN,
     ]
+    LESS_THAN = -1
+    EQUAL = 0
+    GREATER_THAN = 1
 
     def cache_key(self):
         return (self.admin_id, self.library_id, self.role)
@@ -262,6 +265,17 @@ class AdminRole(Base, HasSessionCache):
             (self.library and self.library.short_name),
             self.admin.email,
         )
+
+    def compare_role(self, other: AdminRole) -> int:
+        """Compare one role to the other for heirarchy"""
+        self_ix = self.ROLES.index(self.role)
+        other_ix = self.ROLES.index(other.role)
+        if self_ix == other_ix:
+            return self.EQUAL
+        elif self_ix > other_ix:  # Lower priority role is later in the array
+            return self.LESS_THAN
+        else:
+            return self.GREATER_THAN
 
 
 Index(
