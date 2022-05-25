@@ -40,6 +40,9 @@ from core.util.datetime_helpers import utc_now
 # fields in a way that makes it easy to reliably parse response
 # documents.
 
+# Client-level logger.
+client_logger = logging.getLogger("SIPClient")
+
 
 class fixed:
     """A fixed-width field in a SIP2 response."""
@@ -87,19 +90,19 @@ class named:
 
     def __init__(
         self,
-        internal_name,
-        sip_code,
+        internal_name: str,
+        sip_code: str,
         required=False,
-        length=None,
+        length: int = None,
         allow_multiple=False,
-        log=None,
+        log: logging.Logger = None,
     ):
         self.sip_code = sip_code
         self.internal_name = internal_name
         self.req = required
         self.length = length
         self.allow_multiple = allow_multiple
-        self.log = log or logging.getLogger("SIPClient")
+        self.log = log or client_logger
 
     @property
     def required(self):
@@ -212,7 +215,7 @@ class Constants:
 
 class SIPClient(Constants):
 
-    log = logging.getLogger("SIPClient")
+    log = client_logger
 
     # Maximum retries of a SIP message before failing.
     MAXIMUM_RETRIES = 5
