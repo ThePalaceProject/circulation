@@ -46,8 +46,8 @@ class TestExplains:
             ]
         ).execute()
 
-        text_expected: List[str] = open(output_path, "r").readlines()
-        text_received: List[str] = open(tmpdir.join("output.csv"), "r").readlines()
+        text_expected: List[str] = open(output_path).readlines()
+        text_received: List[str] = open(tmpdir.join("output.csv")).readlines()
         assert len(text_expected) == len(text_received)
         for i in range(0, len(text_expected)):
             assert text_expected[i] == text_received[i]
