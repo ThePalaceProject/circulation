@@ -409,6 +409,7 @@ class Hyperlink(Base, LinkRelations):
     resource_id = Column(
         Integer, ForeignKey("resources.id"), index=True, nullable=False
     )
+    resource: Resource
 
     @classmethod
     def unmirrored(cls, collection):
