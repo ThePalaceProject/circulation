@@ -76,8 +76,7 @@ class CustomListImportExplainer:
                         "on the target CM.".replace("\n", ""),
                     ]
                 )
-                continue
-            if isinstance(problem, CustomListProblemBookMismatch):
+            elif isinstance(problem, CustomListProblemBookMismatch):
                 csv_writer.writerow(
                     [
                         list_report.name(),
@@ -92,8 +91,7 @@ class CustomListImportExplainer:
                         ),
                     ]
                 )
-                continue
-            if isinstance(problem, CustomListProblemBookMissing):
+            elif isinstance(problem, CustomListProblemBookMissing):
                 csv_writer.writerow(
                     [
                         list_report.name(),
@@ -105,8 +103,7 @@ class CustomListImportExplainer:
                         "Try a search for the book on the target CM and add it to the list manually if it exists.",
                     ]
                 )
-                continue
-            if isinstance(problem, CustomListProblemBookRequestFailed):
+            elif isinstance(problem, CustomListProblemBookRequestFailed):
                 csv_writer.writerow(
                     [
                         list_report.name(),
@@ -118,8 +115,7 @@ class CustomListImportExplainer:
                         "Try a search for the book on the target CM and add it to the list manually if it exists.",
                     ]
                 )
-                continue
-            if isinstance(problem, CustomListProblemCollectionMissing):
+            elif isinstance(problem, CustomListProblemCollectionMissing):
                 csv_writer.writerow(
                     [
                         list_report.name(),
@@ -132,8 +128,7 @@ class CustomListImportExplainer:
                         f"collection to the custom list manually.".replace("\n", ""),
                     ]
                 )
-                continue
-            if isinstance(problem, CustomListProblemCollectionRequestFailed):
+            elif isinstance(problem, CustomListProblemCollectionRequestFailed):
                 csv_writer.writerow(
                     [
                         list_report.name(),
@@ -146,8 +141,7 @@ class CustomListImportExplainer:
                         f"collection to the custom list manually.".replace("\n", ""),
                     ]
                 )
-                continue
-            if isinstance(problem, CustomListProblemListAlreadyExists):
+            elif isinstance(problem, CustomListProblemListAlreadyExists):
                 csv_writer.writerow(
                     [
                         list_report.name(),
@@ -159,8 +153,7 @@ class CustomListImportExplainer:
                         "Please either choose a different name for the custom list, or delete the existing one.",
                     ]
                 )
-                continue
-            if isinstance(problem, CustomListProblemListUpdateFailed):
+            elif isinstance(problem, CustomListProblemListUpdateFailed):
                 csv_writer.writerow(
                     [
                         list_report.name(),
@@ -172,8 +165,7 @@ class CustomListImportExplainer:
                         "Please try running the import again. This might be a temporary failure.",
                     ]
                 )
-                continue
-            if isinstance(problem, CustomListProblemListBroken):
+            elif isinstance(problem, CustomListProblemListBroken):
                 csv_writer.writerow(
                     [
                         list_report.name(),
@@ -185,8 +177,8 @@ class CustomListImportExplainer:
                         "Please let someone on the backend team know; this list seems to be broken!",
                     ]
                 )
-                continue
-            raise ValueError(f"Unrecognized problem type {problem}")
+            else:
+                raise ValueError(f"Unrecognized problem type {problem}")
         return wrote_rows
 
     def _generate_csv(self, report: CustomListsReport) -> None:
