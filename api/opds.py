@@ -212,7 +212,7 @@ class CirculationManagerAnnotator(Annotator):
         return prioritized_drm_schemes, prioritized_content_types
 
     @staticmethod
-    def _deprioritized_lcp_audiobooks(
+    def _deprioritized_lcp_content(
         licensepool: LicensePool,
     ) -> bool:
         collection: Collection = licensepool.collection
@@ -221,7 +221,7 @@ class CirculationManagerAnnotator(Annotator):
         # Consult the configuration information for the external integration
         # that underlies the license pool's collection. The configuration
         # information _might_ contain a flag that indicates whether to deprioritize
-        # LCP audiobooks.
+        # LCP content.
 
         drm_setting: ConfigurationSetting = (
             ConfigurationSetting.for_externalintegration(
@@ -249,7 +249,7 @@ class CirculationManagerAnnotator(Annotator):
             prioritized_drm_schemes=prioritized_drm_schemes,
             prioritized_content_types=prioritized_content_types,
             hidden_content_types=self.hidden_content_types,
-            deprioritize_lcp_non_epubs=CirculationManagerAnnotator._deprioritized_lcp_audiobooks(
+            deprioritize_lcp_non_epubs=CirculationManagerAnnotator._deprioritized_lcp_content(
                 licensepool
             ),
         ).prioritize_for_pool(licensepool)

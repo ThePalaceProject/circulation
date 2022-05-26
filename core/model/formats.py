@@ -105,7 +105,7 @@ class FormatPriorities:
 
         if self._deprioritize_lcp_non_epubs:
             mechanisms_filtered.sort(
-                key=lambda mechanism: FormatPriorities._artificial_lcp_audiobook_priority(
+                key=lambda mechanism: FormatPriorities._artificial_lcp_content_priority(
                     drm_scheme=mechanism.delivery_mechanism.drm_scheme,
                     content_type=mechanism.delivery_mechanism.content_type,
                 ),
@@ -115,10 +115,10 @@ class FormatPriorities:
         return mechanisms_filtered
 
     @staticmethod
-    def _artificial_lcp_audiobook_priority(
+    def _artificial_lcp_content_priority(
         drm_scheme: Optional[str], content_type: Optional[str]
     ) -> int:
-        """A comparison function that arbitrarily deflates the priority of LCP audiobooks. The comparison function
+        """A comparison function that arbitrarily deflates the priority of LCP content. The comparison function
         treats all other DRM mechanisms and content types as equal."""
         if (
             drm_scheme == DeliveryMechanism.LCP_DRM
