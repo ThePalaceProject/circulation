@@ -1751,9 +1751,6 @@ class TestFormatPriorities:
                 "application/vnd.readium.lcp.license.v1.0+json", "application/epub+zip"
             ),
             mock_mechanism(
-                "application/vnd.readium.lcp.license.v1.0+json", "application/pdf"
-            ),
-            mock_mechanism(
                 "application/vnd.librarysimplified.bearer-token+json",
                 "application/epub+zip",
             ),
@@ -1776,6 +1773,9 @@ class TestFormatPriorities:
             ),
             mock_mechanism(
                 "application/vnd.librarysimplified.findaway.license+json", None
+            ),
+            mock_mechanism(
+                "application/vnd.readium.lcp.license.v1.0+json", "application/pdf"
             ),
             mock_mechanism(
                 "application/vnd.readium.lcp.license.v1.0+json",

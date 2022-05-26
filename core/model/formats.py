@@ -122,7 +122,7 @@ class FormatPriorities:
         treats all other DRM mechanisms and content types as equal."""
         if (
             drm_scheme == DeliveryMechanism.LCP_DRM
-            and content_type == MediaTypes.AUDIOBOOK_PACKAGE_LCP_MEDIA_TYPE
+            and content_type != MediaTypes.EPUB_MEDIA_TYPE
         ):
             return -1
         else:
