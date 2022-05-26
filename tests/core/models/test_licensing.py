@@ -1546,6 +1546,10 @@ class TestFormatPriorities:
             mock_mechanism(
                 "application/vnd.readium.lcp.license.v1.0+json", "application/epub+zip"
             ),
+            mock_mechanism(
+                "application/vnd.readium.lcp.license.v1.0+json",
+                "application/pdf",
+            ),
         ]
 
     def test_identity_empty(self):
@@ -1553,6 +1557,7 @@ class TestFormatPriorities:
             prioritized_drm_schemes=[],
             prioritized_content_types=[],
             hidden_content_types=[],
+            deprioritize_lcp_non_epubs=False,
         )
         assert [] == priorities.prioritize_mechanisms([])
 
@@ -1561,6 +1566,7 @@ class TestFormatPriorities:
             prioritized_drm_schemes=[],
             prioritized_content_types=[],
             hidden_content_types=[],
+            deprioritize_lcp_non_epubs=False,
         )
         mechanism_0 = mock_mechanism()
         assert [mechanism_0] == priorities.prioritize_mechanisms([mechanism_0])
@@ -1570,6 +1576,7 @@ class TestFormatPriorities:
             prioritized_drm_schemes=[],
             prioritized_content_types=[],
             hidden_content_types=["application/epub+zip"],
+            deprioritize_lcp_non_epubs=False,
         )
         mechanism_0 = mock_mechanism()
         assert [] == priorities.prioritize_mechanisms([mechanism_0])
@@ -1579,6 +1586,7 @@ class TestFormatPriorities:
             prioritized_drm_schemes=[],
             prioritized_content_types=[],
             hidden_content_types=[],
+            deprioritize_lcp_non_epubs=False,
         )
         expected = sample_data_0.copy()
         assert expected == priorities.prioritize_mechanisms(sample_data_0)
@@ -1589,6 +1597,7 @@ class TestFormatPriorities:
             prioritized_drm_schemes=[],
             prioritized_content_types=["application/x-mobi8-ebook"],
             hidden_content_types=[],
+            deprioritize_lcp_non_epubs=False,
         )
 
         # We expect the mobi8-ebook format to be pushed to the front of the list.
@@ -1633,6 +1642,9 @@ class TestFormatPriorities:
             mock_mechanism(
                 "application/vnd.readium.lcp.license.v1.0+json", "application/epub+zip"
             ),
+            mock_mechanism(
+                "application/vnd.readium.lcp.license.v1.0+json", "application/pdf"
+            ),
         ]
 
         received = priorities.prioritize_mechanisms(sample_data_0)
@@ -1651,7 +1663,8 @@ class TestFormatPriorities:
             prioritized_content_types=[
                 "application/epub+zip",
                 "application/audiobook+json",
-                "application/audiobook+lcp" "application/pdf",
+                "application/audiobook+lcp",
+                "application/pdf",
             ],
             hidden_content_types=[
                 "application/x-mobipocket-ebook",
@@ -1661,6 +1674,7 @@ class TestFormatPriorities:
                 "application/octet-stream",
                 "text/html; charset=utf-8",
             ],
+            deprioritize_lcp_non_epubs=False,
         )
         expected = [
             mock_mechanism(None, "application/epub+zip"),
@@ -1672,6 +1686,10 @@ class TestFormatPriorities:
             mock_mechanism(
                 "application/vnd.readium.lcp.license.v1.0+json",
                 "application/audiobook+lcp",
+            ),
+            mock_mechanism(
+                "application/vnd.readium.lcp.license.v1.0+json",
+                "application/pdf",
             ),
             mock_mechanism(
                 "application/vnd.librarysimplified.bearer-token+json",
@@ -1695,6 +1713,73 @@ class TestFormatPriorities:
             ),
             mock_mechanism(
                 "application/vnd.librarysimplified.findaway.license+json", None
+            ),
+        ]
+        received = priorities.prioritize_mechanisms(sample_data_0)
+        assert expected == received
+
+    def test_prioritized_content_lcp_audiobooks(self, mock_mechanism, sample_data_0):
+        """A test of configuration where LCP audiobooks are artificially deprioritized, whilst
+        keeping the priorities of everything else the same."""
+        priorities = FormatPriorities(
+            prioritized_drm_schemes=[
+                "application/vnd.readium.lcp.license.v1.0+json",
+                "application/vnd.librarysimplified.bearer-token+json",
+                "application/vnd.adobe.adept+xml",
+            ],
+            prioritized_content_types=[
+                "application/epub+zip",
+                "application/audiobook+json",
+                "application/pdf",
+                "application/audiobook+lcp",
+            ],
+            hidden_content_types=[
+                "application/x-mobipocket-ebook",
+                "application/x-mobi8-ebook",
+                "application/kepub+zip",
+                "text/plain; charset=utf-8",
+                "application/octet-stream",
+                "text/html; charset=utf-8",
+            ],
+            deprioritize_lcp_non_epubs=True,
+        )
+        expected = [
+            mock_mechanism(None, "application/epub+zip"),
+            mock_mechanism(None, "application/audiobook+json"),
+            mock_mechanism(None, "application/pdf"),
+            mock_mechanism(
+                "application/vnd.readium.lcp.license.v1.0+json", "application/epub+zip"
+            ),
+            mock_mechanism(
+                "application/vnd.readium.lcp.license.v1.0+json", "application/pdf"
+            ),
+            mock_mechanism(
+                "application/vnd.librarysimplified.bearer-token+json",
+                "application/epub+zip",
+            ),
+            mock_mechanism(
+                "application/vnd.librarysimplified.bearer-token+json",
+                "application/audiobook+json",
+            ),
+            mock_mechanism(
+                "application/vnd.librarysimplified.bearer-token+json",
+                "application/pdf",
+            ),
+            mock_mechanism("application/vnd.adobe.adept+xml", "application/epub+zip"),
+            mock_mechanism(
+                "http://www.feedbooks.com/audiobooks/access-restriction",
+                "application/audiobook+json",
+            ),
+            mock_mechanism(
+                "Libby DRM",
+                "application/vnd.overdrive.circulation.api+json;profile=audiobook",
+            ),
+            mock_mechanism(
+                "application/vnd.librarysimplified.findaway.license+json", None
+            ),
+            mock_mechanism(
+                "application/vnd.readium.lcp.license.v1.0+json",
+                "application/audiobook+lcp",
             ),
         ]
         received = priorities.prioritize_mechanisms(sample_data_0)

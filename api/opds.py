@@ -32,7 +32,7 @@ from core.model import (
     Patron,
     Session,
 )
-from core.model.formats import FormatPriorities
+from core.model.formats import DePrioritizeLCPNonEPUBs, FormatPriorities
 from core.opds import AcquisitionFeed, Annotator, UnfulfillableWork
 from core.util.datetime_helpers import from_timestamp
 from core.util.opds_writer import OPDSFeed
@@ -211,6 +211,29 @@ class CirculationManagerAnnotator(Annotator):
 
         return prioritized_drm_schemes, prioritized_content_types
 
+    @staticmethod
+    def _deprioritized_lcp_audiobooks(
+        licensepool: LicensePool,
+    ) -> bool:
+        collection: Collection = licensepool.collection
+        external: ExternalIntegration = collection.external_integration
+
+        # Consult the configuration information for the external integration
+        # that underlies the license pool's collection. The configuration
+        # information _might_ contain a flag that indicates whether to deprioritize
+        # LCP audiobooks.
+
+        drm_setting: ConfigurationSetting = (
+            ConfigurationSetting.for_externalintegration(
+                FormatPriorities.DEPRIORITIZE_LCP_NON_EPUBS_KEY, external
+            )
+        )
+        _prioritize = (
+            drm_setting.json_value
+            or DePrioritizeLCPNonEPUBs.DO_NOT_DEPRIORITIZE_LCP_NON_EPUBS
+        )
+        return _prioritize == DePrioritizeLCPNonEPUBs.DEPRIORITIZE_LCP_NON_EPUBS
+
     def visible_delivery_mechanisms(
         self, licensepool: Optional[LicensePool]
     ) -> List[LicensePoolDeliveryMechanism]:
@@ -226,6 +249,9 @@ class CirculationManagerAnnotator(Annotator):
             prioritized_drm_schemes=prioritized_drm_schemes,
             prioritized_content_types=prioritized_content_types,
             hidden_content_types=self.hidden_content_types,
+            deprioritize_lcp_non_epubs=CirculationManagerAnnotator._deprioritized_lcp_audiobooks(
+                licensepool
+            ),
         ).prioritize_for_pool(licensepool)
 
     def annotate_work_entry(

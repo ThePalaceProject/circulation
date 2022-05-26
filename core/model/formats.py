@@ -1,4 +1,5 @@
 import sys
+from enum import Enum
 from typing import List, Mapping, Optional
 
 from flask_babel import lazy_gettext as _
@@ -10,7 +11,11 @@ from core.model import (
     LicensePoolDeliveryMechanism,
     MediaTypes,
 )
-from core.model.configuration import ConfigurationAttributeType, ConfigurationMetadata
+from core.model.configuration import (
+    ConfigurationAttributeType,
+    ConfigurationMetadata,
+    ConfigurationOption,
+)
 
 
 class FormatPriorities:
@@ -18,21 +23,25 @@ class FormatPriorities:
 
     PRIORITIZED_DRM_SCHEMES_KEY: str = "prioritized_drm_schemes"
     PRIORITIZED_CONTENT_TYPES_KEY: str = "prioritized_content_types"
+    DEPRIORITIZE_LCP_NON_EPUBS_KEY: str = "deprioritize_lcp_non_epubs"
 
     _prioritized_drm_schemes: Mapping[str, int]
     _prioritized_content_types: Mapping[str, int]
     _hidden_content_types: List[str]
+    _deprioritize_lcp_non_epubs: bool
 
     def __init__(
         self,
         prioritized_drm_schemes: List[str],
         prioritized_content_types: List[str],
         hidden_content_types: List[str],
+        deprioritize_lcp_non_epubs: bool,
     ):
         """
         :param prioritized_drm_schemes: The set of DRM schemes to prioritize; items earlier in the list are higher priority.
         :param prioritized_content_types: The set of content types to prioritize; items earlier in the list are higher priority.
         :param hidden_content_types: The set of content types to remove entirely
+        :param deprioritize_lcp_non_epubs: Should LCP audiobooks/PDFs be deprioritized in an ad-hoc manner?
         """
 
         # Assign priorities to each content type and DRM scheme based on their position
@@ -46,6 +55,7 @@ class FormatPriorities:
             self._prioritized_drm_schemes[drm_scheme] = index + 1
 
         self._hidden_content_types = hidden_content_types
+        self._deprioritize_lcp_non_epubs = deprioritize_lcp_non_epubs
 
     def prioritize_for_pool(
         self, pool: LicensePool
@@ -93,7 +103,30 @@ class FormatPriorities:
                 reverse=True,
             )
 
+        if self._deprioritize_lcp_non_epubs:
+            mechanisms_filtered.sort(
+                key=lambda mechanism: FormatPriorities._artificial_lcp_audiobook_priority(
+                    drm_scheme=mechanism.delivery_mechanism.drm_scheme,
+                    content_type=mechanism.delivery_mechanism.content_type,
+                ),
+                reverse=True,
+            )
+
         return mechanisms_filtered
+
+    @staticmethod
+    def _artificial_lcp_audiobook_priority(
+        drm_scheme: Optional[str], content_type: Optional[str]
+    ) -> int:
+        """A comparison function that arbitrarily deflates the priority of LCP audiobooks. The comparison function
+        treats all other DRM mechanisms and content types as equal."""
+        if (
+            drm_scheme == DeliveryMechanism.LCP_DRM
+            and content_type == MediaTypes.AUDIOBOOK_PACKAGE_LCP_MEDIA_TYPE
+        ):
+            return -1
+        else:
+            return 0
 
     def _drm_scheme_priority(self, drm_scheme: Optional[str]) -> int:
         """Determine the priority of a DRM scheme. A lack of DRM is always
@@ -108,6 +141,11 @@ class FormatPriorities:
         """Determine the priority of a content type. Prioritized content
         types are always of a higher priority than non-prioritized types."""
         return self._prioritized_content_types.get(content_type, 0)
+
+
+class DePrioritizeLCPNonEPUBs(Enum):
+    DEPRIORITIZE_LCP_NON_EPUBS = "De-prioritize"
+    DO_NOT_DEPRIORITIZE_LCP_NON_EPUBS = "Do not de-prioritize"
 
 
 class FormatPrioritiesConfigurationTrait(ConfigurationTrait):
@@ -153,4 +191,21 @@ class FormatPrioritiesConfigurationTrait(ConfigurationTrait):
         type=ConfigurationAttributeType.LIST,
         required=False,
         default=[],
+    )
+
+    deprioritize_lcp_non_epubs = ConfigurationMetadata(
+        key=FormatPriorities.DEPRIORITIZE_LCP_NON_EPUBS_KEY,
+        label=_("De-prioritize LCP non-EPUBs"),
+        description=_(
+            "De-prioritize all LCP content except for EPUBs. Setting this configuration option to "
+            "<tt>DEPRIORITIZE_LCP_NON_EPUBS</tt> will preserve any priorities specified above, but will artificially "
+            "push (for example) LCP audiobooks and PDFs to the lowest priority."
+            "<br/>"
+            "<br/>"
+            "<b>Note:</b> This option is a temporary solution and will be removed in future releases!"
+        ),
+        type=ConfigurationAttributeType.SELECT,
+        required=False,
+        default=DePrioritizeLCPNonEPUBs.DO_NOT_DEPRIORITIZE_LCP_NON_EPUBS.value,
+        options=ConfigurationOption.from_enum(DePrioritizeLCPNonEPUBs),
     )
