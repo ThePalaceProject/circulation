@@ -1649,7 +1649,7 @@ python-versions = "*"
 
 [[package]]
 name = "types-requests"
-version = "2.27.25"
+version = "2.27.29"
 description = "Typing stubs for requests"
 category = "dev"
 optional = false
@@ -1828,7 +1828,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.7,<4"
-content-hash = "aa1bb1b6d517332f81bc9d06b7bf6c585c720dd48c4603043b17dcefc66b475a"
+content-hash = "873f6a08631f7145d9c7061f108634c414313b094f9f5793b6aca4fb1a39a4db"
 
 [metadata.files]
 atomicwrites = [
@@ -2856,8 +2856,8 @@ types-pytz = [
     {file = "types_pytz-2021.3.8-py3-none-any.whl", hash = "sha256:aef4a917ab28c585d3f474bfce4f4b44b91e95d9d47d4de29dd845e0db8e3910"},
 ]
 types-requests = [
-    {file = "types-requests-2.27.25.tar.gz", hash = "sha256:805ae7e38fd9d157153066dc4381cf585fd34dfa212f2fc1fece248c05aac571"},
-    {file = "types_requests-2.27.25-py3-none-any.whl", hash = "sha256:2444905c89731dbcb6bbcd6d873a04252445df7623917c640e463b2b28d2a708"},
+    {file = "types-requests-2.27.29.tar.gz", hash = "sha256:fb453b3a76a48eca66381cea8004feaaea12835e838196f5c7ac87c75c5c19ef"},
+    {file = "types_requests-2.27.29-py3-none-any.whl", hash = "sha256:014f4f82db7b96c41feea9adaea30e68cd64c230eeab34b70c29bebb26ec74ac"},
 ]
 types-urllib3 = [
     {file = "types-urllib3-1.26.10.tar.gz", hash = "sha256:a26898f530e6c3f43f25b907f2b884486868ffd56a9faa94cbf9b3eb6e165d6a"},
