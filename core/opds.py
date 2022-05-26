@@ -1,9 +1,11 @@
 import datetime
 import logging
 from collections import defaultdict
+from typing import List
 from urllib.parse import quote
 
 from lxml import etree
+from sqlalchemy.orm import joinedload
 from sqlalchemy.orm.session import Session
 
 from .cdn import cdnify
@@ -183,6 +185,22 @@ class Annotator:
             type_key = AtomFeed.schema_("additionalType")
             rating_tag.set(type_key, type_uri)
         return rating_tag
+
+    @classmethod
+    def samples(cls, edition: Edition) -> List[Hyperlink]:
+        if not edition:
+            return []
+        _db = Session.object_session(edition)
+        links = (
+            _db.query(Hyperlink)
+            .filter(
+                Hyperlink.rel == Hyperlink.SAMPLE,
+                Hyperlink.identifier_id == edition.primary_identifier_id,
+            )
+            .options(joinedload(Hyperlink.resource))
+            .all()
+        )
+        return links
 
     @classmethod
     def cover_links(cls, work):
@@ -1404,6 +1422,10 @@ class AcquisitionFeed(OPDSFeed):
                 elif url.endswith(".gif"):
                     image_type = "image/gif"
                 links.append(AtomFeed.link(rel=rel, href=url, type=image_type))
+
+        sample_links = self.annotator.samples(edition)
+        for link in sample_links:
+            links.append(AtomFeed.link(rel=link.rel, href=link.resource.url))
 
         content = self.annotator.content(work)
         if isinstance(content, bytes):
