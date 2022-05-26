@@ -112,7 +112,7 @@ psycopg2-binary = { version = "~2.9.3", optional = true }
 py-bcrypt = "0.4"
 pycryptodome = "3.14.1"
 pyinstrument = "< 4.2"
-PyJWT = "2.3.0"
+PyJWT = "2.4.0"
 PyLD = "2.0.3"
 pymarc = "4.2.0"
 pyOpenSSL = "22.0.0"
