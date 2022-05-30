@@ -44,7 +44,7 @@
         "problems": {
           "type": "array",
           "items": {
-            "oneOf": [
+            "anyOf": [
               { "$ref": "#/$defs/problem-book-broken-on-source" },
               { "$ref": "#/$defs/problem-book-mismatch" },
               { "$ref": "#/$defs/problem-book-missing" },
@@ -78,6 +78,10 @@
           "$comment": "The expected book identifier",
           "type": "string"
         },
+        "expected-id-type": {
+          "$comment": "The expected book identifier type",
+          "type": "string"
+        },
         "expected-title": {
           "$comment": "The expected book title",
           "type": "string"
@@ -93,16 +97,22 @@
         "message": {
           "$comment": "The error message",
           "type": "string"
+        },
+        "author": {
+          "$comment": "The book (primary) author",
+          "type": "string"
         }
       },
       "additionalProperties": false,
       "required": [
         "%type",
         "expected-id",
+        "expected-id-type",
         "expected-title",
         "received-id",
         "received-title",
-        "message"
+        "message",
+        "author"
       ]
     },
 
@@ -118,6 +128,10 @@
           "$comment": "The primary identifier used for the book (typically an ISBN or similar)",
           "type": "string"
         },
+        "id-type": {
+          "$comment": "The primary identifier type",
+          "type": "string"
+        },
         "title": {
           "$comment": "The book title",
           "type": "string"
@@ -125,14 +139,20 @@
         "message": {
           "$comment": "The error message",
           "type": "string"
+        },
+        "author": {
+          "$comment": "The book (primary) author",
+          "type": "string"
         }
       },
       "additionalProperties": false,
       "required": [
         "%type",
         "id",
+        "id-type",
         "title",
-        "message"
+        "message",
+        "author"
       ]
     },
 
@@ -148,6 +168,10 @@
           "$comment": "The primary identifier used for the book (typically an ISBN or similar)",
           "type": "string"
         },
+        "id-type": {
+          "$comment": "The primary identifier type",
+          "type": "string"
+        },
         "title": {
           "$comment": "The book title",
           "type": "string"
@@ -155,14 +179,20 @@
         "message": {
           "$comment": "The error message",
           "type": "string"
+        },
+        "author": {
+          "$comment": "The book (primary) author",
+          "type": "string"
         }
       },
       "additionalProperties": false,
       "required": [
         "%type",
         "id",
+        "id-type",
         "title",
-        "message"
+        "message",
+        "author"
       ]
     },
 
@@ -178,6 +208,10 @@
           "$comment": "The primary identifier used for the book (typically an ISBN or similar)",
           "type": "string"
         },
+        "id-type": {
+          "$comment": "The primary identifier type",
+          "type": "string"
+        },
         "title": {
           "$comment": "The book title",
           "type": "string"
@@ -185,14 +219,20 @@
         "message": {
           "$comment": "The error message",
           "type": "string"
+        },
+        "author": {
+          "$comment": "The book (primary) author",
+          "type": "string"
         }
       },
       "additionalProperties": false,
       "required": [
         "%type",
         "id",
+        "id-type",
         "title",
-        "message"
+        "message",
+        "author"
       ]
     },
 

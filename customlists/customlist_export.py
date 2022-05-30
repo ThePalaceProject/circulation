@@ -52,11 +52,17 @@ class Book:
     _id: str
     _id_type: str
     _title: str
+    _author: str
 
-    def __init__(self, id: str, id_type: str, title: str):
+    def __init__(self, id: str, id_type: str, title: str, author: str):
         self._id = id
         self._id_type = id_type
         self._title = title
+        self._author = author
+        assert id
+        assert id_type
+        assert title
+        assert author
 
     def id(self) -> str:
         return self._id
@@ -67,12 +73,16 @@ class Book:
     def title(self) -> str:
         return self._title
 
+    def author(self) -> str:
+        return self._author
+
     def to_dict(self) -> dict:
         return {
             "%type": "book",
             "id": self._id,
             "id-type": self._id_type,
             "title": self._title,
+            "author": self._author,
         }
 
 
@@ -81,10 +91,15 @@ class ProblematicBook:
     _title: str
     _message: str
 
-    def __init__(self, id: str, title: str, message: str):
+    def __init__(self, id: str, title: str, message: str, author: str):
         self._id = id
         self._message = message
         self._title = title
+        self._author = author
+        assert id
+        assert message
+        assert title
+        assert author
 
     def id(self) -> str:
         return self._id
@@ -95,12 +110,16 @@ class ProblematicBook:
     def title(self) -> str:
         return self._title
 
+    def author(self) -> str:
+        return self._author
+
     def to_dict(self) -> dict:
         return {
             "%type": "problematic-book",
             "id": self._id,
             "message": self._message,
             "title": self._title,
+            "author": self._author,
         }
 
 
@@ -245,6 +264,7 @@ class CustomListExports:
                     id=raw_book["id"],
                     id_type=raw_book["id-type"],
                     title=raw_book["title"],
+                    author=raw_book["author"],
                 )
                 custom_list.add_book(book)
             for raw_book in raw_list["problematic-books"]:
@@ -252,6 +272,7 @@ class CustomListExports:
                     id=raw_book["id"],
                     message=raw_book["message"],
                     title=raw_book["title"],
+                    author=raw_book["author"],
                 )
                 custom_list.add_problematic_book(problem_book)
             for raw_collection in raw_list["collections"]:
@@ -379,7 +400,12 @@ class CustomListExporter:
                     match = re.search("^(.*)/works/([^/]+)/(.*)$", link.href)
                     if match is not None:
                         custom_list.add_book(
-                            Book(id=entry.id, id_type=match.group(2), title=entry.title)
+                            Book(
+                                id=entry.id,
+                                id_type=match.group(2),
+                                title=entry.title,
+                                author=entry.author,
+                            )
                         )
                         added = True
                         break
@@ -389,6 +415,7 @@ class CustomListExporter:
                         id=entry.id,
                         title=entry.title,
                         message=f"Could not determine the identifier type for book {entry.id}, {entry.title}",
+                        author=entry.author,
                     )
                 )
 
