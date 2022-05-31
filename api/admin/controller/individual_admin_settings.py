@@ -27,7 +27,7 @@ class IndividualAdminSettingsController(SettingsController):
         admin = getattr(flask.request, "admin", None)
 
         if not admin:
-            return False
+            return None
 
         for role in admin.roles:
             if role.role in (
