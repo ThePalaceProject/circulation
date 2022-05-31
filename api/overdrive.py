@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 import dateutil
 import flask
 from flask_babel import lazy_gettext as _
+from sqlalchemy.orm.exc import StaleDataError
 
 from core.analytics import Analytics
 from core.metadata_layer import ReplacementPolicy
@@ -1328,11 +1329,16 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
                 self.log.info("%s books processed", total_books)
             if not book:
                 continue
-            _, _, is_changed = self.api.update_licensepool(book)
 
-            self._db.commit()
-            if self.should_stop(start, book, is_changed):
-                break
+            try:
+                _, _, is_changed = self.api.update_licensepool(book)
+                self._db.commit()
+
+                if self.should_stop(start, book, is_changed):
+                    break
+            except StaleDataError as e:
+                self.log.exception("encountered stale data exception: ", exc_info=e)
+                self._db.rollback()
 
         progress.achievements = "Books processed: %d." % total_books
 
