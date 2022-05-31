@@ -104,7 +104,7 @@ class SAMLMetadataParser:
         )
 
         try:
-            metadata_dom = fromstring(xml_metadata.encode("utf-8"), forbid_dtd=True)
+            metadata_dom = fromstring(xml_metadata, forbid_dtd=True)
         except (
             ValueError,
             XMLSyntaxError,

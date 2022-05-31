@@ -108,7 +108,7 @@ class SAMLFederatedMetadataExpirationValidator(SAMLFederatedMetadataValidator):
         )
 
         try:
-            root = fromstring(metadata.encode("utf-8"))
+            root = fromstring(metadata)
         except Exception as exception:
             raise SAMLFederatedMetadataValidationError(
                 "Metadata's XML is not valid", str(exception)
