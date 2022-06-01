@@ -1011,7 +1011,7 @@ class Work(Base):
             or classification_changed
             or summary != self.summary
             or summary_text != new_summary_text
-            or float(quality) != float(self.quality)
+            or float(quality or 0) != float(self.quality or 0)
         )
 
         if changed:

@@ -10,11 +10,14 @@ import unicodedata
 import uuid
 from collections import defaultdict
 from enum import Enum
+from typing import Generator
 
-from sqlalchemy import and_, exists, text
+from sqlalchemy import and_, exists, text, tuple_
 from sqlalchemy.exc import ProgrammingError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Query, Session, defer
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
+
+from core.model.classification import Classification
 
 from .config import CannotLoadConfiguration, Configuration
 from .coverage import CollectionCoverageProviderJob, CoverageProviderProgress
@@ -1528,6 +1531,9 @@ class WorkProcessingScript(IdentifierInputScript):
         )
         self.force = force
 
+    def paginate_query(self, query):
+        raise NotImplementedError()
+
     @classmethod
     def make_query(cls, _db, identifier_type, identifiers, data_source, log=None):
         query = _db.query(Work)
@@ -1558,8 +1564,20 @@ class WorkProcessingScript(IdentifierInputScript):
     def do_run(self):
         works = True
         offset = 0
+
+        # Does this script class allow uniquely pageed queries
+        # If not we will default to OFFSET paging
+        try:
+            paged_query = self.paginate_query(self.query)
+        except NotImplementedError:
+            paged_query = None
+
         while works:
-            works = self.query.offset(offset).limit(self.batch_size).all()
+            if not paged_query:
+                works = self.query.offset(offset).limit(self.batch_size).all()
+            else:
+                works = next(paged_query, [])
+
             for work in works:
                 self.process_work(work)
             offset += self.batch_size
@@ -1657,9 +1675,83 @@ class ReclassifyWorksForUncheckedSubjectsScript(WorkClassificationScript):
     batch_size = 100
 
     def __init__(self, _db=None):
+        super().__init__(_db=_db)
         if _db:
             self._session = _db
-        self.query = Work.for_unchecked_subjects(self._db)
+        self.query = self._optimized_query()
+
+    def _optimized_query(self):
+        """Optimizations include
+        - Correct order by, so that paging is consistent
+        - Deferred loading of large text columns"""
+        query = Work.for_unchecked_subjects(self._db)
+
+        # Must order by all joined attributes
+        query = (
+            query.order_by(None)
+            .order_by(
+                Subject.id, Work.id, LicensePool.id, Identifier.id, Classification.id
+            )
+            .options(
+                defer(Work.summary_text),
+                defer(Work.simple_opds_entry),
+                defer(Work.verbose_opds_entry),
+            )
+        )
+
+        return query
+
+    def paginate_query(self, query) -> Generator:
+        """Page this query using the row-wise comparison
+        technique unique to this job. We have already ensured
+        the ordering of the rows follws all the joined tables"""
+        should_countinue = True
+        last_work: Work = None  # Last work object of the previous page
+        # IDs of the last work, for paging
+        work_id, subject_id, license_id, iden_id, classn_id = (
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+
+        while should_countinue:
+            qu: Query = query
+            # Add the columns we need to page with explicitly in the query
+            qu = qu.add_columns(
+                Subject.id, LicensePool.id, Identifier.id, Classification.id
+            )
+            # We're not on the first page, add the row-wise comparison
+            if last_work is not None:
+                qu = qu.filter(
+                    tuple_(
+                        Subject.id,
+                        Work.id,
+                        LicensePool.id,
+                        Identifier.id,
+                        Classification.id,
+                    )
+                    > (subject_id, work_id, license_id, iden_id, classn_id)
+                )
+
+            qu = qu.limit(self.batch_size)
+            works = qu.all()
+            if not len(works):
+                return
+
+            last_work = works[-1]
+            only_works = [w[0] for w in works]
+
+            yield only_works
+
+            work_id, subject_id, license_id, iden_id, classn_id = (
+                last_work[0].id,
+                last_work[1],
+                last_work[2],
+                last_work[3],
+                last_work[4],
+            )
 
 
 class WorkOPDSScript(WorkPresentationScript):

@@ -6,6 +6,7 @@ import stat
 import tempfile
 from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from parameterized import parameterized
@@ -32,9 +33,9 @@ from core.model import (
     Work,
     WorkCoverageRecord,
     create,
-    dump_query,
     get_one,
 )
+from core.model.classification import Subject
 from core.model.configuration import ExternalIntegrationLink
 from core.monitor import CollectionMonitor, Monitor, ReaperMonitor
 from core.opds_import import OPDSImportMonitor
@@ -2552,9 +2553,58 @@ class TestReclassifyWorksForUncheckedSubjectsScript(DatabaseTest):
             == ReclassifyWorksForUncheckedSubjectsScript.policy
         )
         assert 100 == script.batch_size
-        assert dump_query(Work.for_unchecked_subjects(self._db)) == dump_query(
-            script.query
+
+        # Assert all joins have been included in the Order By
+        ordered_by = script.query._order_by
+        for join in script.query._join_entities:
+            assert join.columns.id in ordered_by
+        assert Work.id in ordered_by
+
+    def test_paginate(self):
+        """Pagination is changed to be row-wise comparison
+        Ensure we are paginating correctly within the same Subject page"""
+        subject = self._subject(Subject.AXIS_360_AUDIENCE, "Any")
+        works = []
+        for i in range(20):
+            work: Work = self._work(with_license_pool=True)
+            self._classification(
+                work.presentation_edition.primary_identifier,
+                subject,
+                work.license_pools[0].data_source,
+            )
+            works.append(work)
+
+        script = ReclassifyWorksForUncheckedSubjectsScript(self._db)
+        script.batch_size = 1
+        for ix, [work] in enumerate(script.paginate_query(script.query)):
+            # We are coming in via "id" order
+            assert work == works[ix]
+
+    @patch("core.scripts.ReclassifyWorksForUncheckedSubjectsScript.parse_command_line")
+    def test_subject_checked(self, mock_parse):
+        subject = self._subject(Subject.AXIS_360_AUDIENCE, "Any")
+        assert subject.checked == False
+
+        works = []
+        for i in range(10):
+            work: Work = self._work(with_license_pool=True)
+            self._classification(
+                work.presentation_edition.primary_identifier,
+                subject,
+                work.license_pools[0].data_source,
+            )
+            works.append(work)
+
+        mock_parse.return_value.identifier_type = (
+            work.presentation_edition.primary_identifier.type
         )
+        mock_parse.return_value.identifier_data_source = work.license_pools[
+            0
+        ].data_source
+        script = ReclassifyWorksForUncheckedSubjectsScript(self._db)
+        script.run()
+        self._db.refresh(subject)
+        assert subject.checked == True
 
 
 class TestListCollectionMetadataIdentifiersScript(DatabaseTest):
