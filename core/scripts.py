@@ -1675,7 +1675,7 @@ class ReclassifyWorksForUncheckedSubjectsScript(WorkClassificationScript):
     batch_size = 100
 
     def __init__(self, _db=None):
-        super().__init__(_db=_db)
+        self.timestamp_collection = None
         if _db:
             self._session = _db
         self.query = self._optimized_query()
@@ -1741,7 +1741,14 @@ class ReclassifyWorksForUncheckedSubjectsScript(WorkClassificationScript):
                 return
 
             last_work = works[-1]
-            only_works = [w[0] for w in works]
+            # set comprehension ensures we get unique works per loop
+            # Works will get duplicated in the query because of the addition
+            # of the ID columns in the select, it is possible and expected
+            # that works will get duplicated across loops. It is not a desired
+            # outcome to duplicate works across loops, but the alternative is to maintain
+            # the IDs in memory and add a NOT IN operator in the query
+            # which would grow quite large, quite fast
+            only_works = list({w[0] for w in works})
 
             yield only_works
 

@@ -6,7 +6,6 @@ import stat
 import tempfile
 from io import StringIO
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 from parameterized import parameterized
@@ -2579,9 +2578,35 @@ class TestReclassifyWorksForUncheckedSubjectsScript(DatabaseTest):
         for ix, [work] in enumerate(script.paginate_query(script.query)):
             # We are coming in via "id" order
             assert work == works[ix]
+        assert ix == 19
 
-    @patch("core.scripts.ReclassifyWorksForUncheckedSubjectsScript.parse_command_line")
-    def test_subject_checked(self, mock_parse):
+        other_subject = self._subject(Subject.BISAC, "Any")
+        last_work = works[-1]
+        self._classification(
+            last_work.presentation_edition.primary_identifier,
+            other_subject,
+            last_work.license_pools[0].data_source,
+        )
+        script.batch_size = 100
+        next_works = next(script.paginate_query(script.query))
+        # Works are only iterated over ONCE per loop
+        assert len(next_works) == 20
+
+        # A checked subjects work is not included
+        not_work = self._work(with_license_pool=True)
+        another_subject = self._subject(Subject.DDC, "Any")
+        self._classification(
+            not_work.presentation_edition.primary_identifier,
+            another_subject,
+            not_work.license_pools[0].data_source,
+        )
+        another_subject.checked = True
+        self._db.commit()
+        next_works = next(script.paginate_query(script.query))
+        assert len(next_works) == 20
+        assert not_work not in next_works
+
+    def test_subject_checked(self):
         subject = self._subject(Subject.AXIS_360_AUDIENCE, "Any")
         assert subject.checked == False
 
@@ -2595,12 +2620,6 @@ class TestReclassifyWorksForUncheckedSubjectsScript(DatabaseTest):
             )
             works.append(work)
 
-        mock_parse.return_value.identifier_type = (
-            work.presentation_edition.primary_identifier.type
-        )
-        mock_parse.return_value.identifier_data_source = work.license_pools[
-            0
-        ].data_source
         script = ReclassifyWorksForUncheckedSubjectsScript(self._db)
         script.run()
         self._db.refresh(subject)
