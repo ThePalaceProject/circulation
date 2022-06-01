@@ -1684,7 +1684,16 @@ class ReclassifyWorksForUncheckedSubjectsScript(WorkClassificationScript):
         """Optimizations include
         - Correct order by, so that paging is consistent
         - Deferred loading of large text columns"""
-        query = Work.for_unchecked_subjects(self._db)
+
+        # No filter clause yet, we will filter this PER SUBJECT ID
+        # in the paginate query
+        query = (
+            self._db.query(Work)
+            .join(Work.license_pools)
+            .join(LicensePool.identifier)
+            .join(Identifier.classifications)
+            .join(Classification.subject)
+        )
 
         # Must order by all joined attributes
         query = (
@@ -1701,64 +1710,82 @@ class ReclassifyWorksForUncheckedSubjectsScript(WorkClassificationScript):
 
         return query
 
+    def _unchecked_subjects(self):
+        """Yield one unchecked subject at a time"""
+        query = (
+            self._db.query(Subject)
+            .filter(Subject.checked == False)
+            .order_by(Subject.id)
+        )
+        last_id = None
+        while True:
+            qu = query
+            if last_id:
+                qu = qu.filter(Subject.id > last_id)
+            subject = qu.first()
+
+            if not subject:
+                return
+
+            last_id = subject.id
+            yield subject
+
     def paginate_query(self, query) -> Generator:
         """Page this query using the row-wise comparison
         technique unique to this job. We have already ensured
         the ordering of the rows follws all the joined tables"""
-        should_countinue = True
-        last_work: Work = None  # Last work object of the previous page
-        # IDs of the last work, for paging
-        work_id, subject_id, license_id, iden_id, classn_id = (
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
 
-        while should_countinue:
-            qu: Query = query
-            # Add the columns we need to page with explicitly in the query
-            qu = qu.add_columns(
-                Subject.id, LicensePool.id, Identifier.id, Classification.id
+        for subject in self._unchecked_subjects():
+
+            last_work: Work = None  # Last work object of the previous page
+            # IDs of the last work, for paging
+            work_id, license_id, iden_id, classn_id = (
+                None,
+                None,
+                None,
+                None,
             )
-            # We're not on the first page, add the row-wise comparison
-            if last_work is not None:
-                qu = qu.filter(
-                    tuple_(
-                        Subject.id,
-                        Work.id,
-                        LicensePool.id,
-                        Identifier.id,
-                        Classification.id,
+
+            while True:
+                # We are a "per subject" filter, this is the MOST efficient method
+                qu: Query = query.filter(Subject.id == subject.id)
+                # Add the columns we need to page with explicitly in the query
+                qu = qu.add_columns(LicensePool.id, Identifier.id, Classification.id)
+                # We're not on the first page, add the row-wise comparison
+                if last_work is not None:
+                    qu = qu.filter(
+                        tuple_(
+                            Work.id,
+                            LicensePool.id,
+                            Identifier.id,
+                            Classification.id,
+                        )
+                        > (work_id, license_id, iden_id, classn_id)
                     )
-                    > (subject_id, work_id, license_id, iden_id, classn_id)
+
+                qu = qu.limit(self.batch_size)
+                works = qu.all()
+                if not len(works):
+                    break
+
+                last_work = works[-1]
+                # set comprehension ensures we get unique works per loop
+                # Works will get duplicated in the query because of the addition
+                # of the ID columns in the select, it is possible and expected
+                # that works will get duplicated across loops. It is not a desired
+                # outcome to duplicate works across loops, but the alternative is to maintain
+                # the IDs in memory and add a NOT IN operator in the query
+                # which would grow quite large, quite fast
+                only_works = list({w[0] for w in works})
+
+                yield only_works
+
+                work_id, license_id, iden_id, classn_id = (
+                    last_work[0].id,
+                    last_work[1],
+                    last_work[2],
+                    last_work[3],
                 )
-
-            qu = qu.limit(self.batch_size)
-            works = qu.all()
-            if not len(works):
-                return
-
-            last_work = works[-1]
-            # set comprehension ensures we get unique works per loop
-            # Works will get duplicated in the query because of the addition
-            # of the ID columns in the select, it is possible and expected
-            # that works will get duplicated across loops. It is not a desired
-            # outcome to duplicate works across loops, but the alternative is to maintain
-            # the IDs in memory and add a NOT IN operator in the query
-            # which would grow quite large, quite fast
-            only_works = list({w[0] for w in works})
-
-            yield only_works
-
-            work_id, subject_id, license_id, iden_id, classn_id = (
-                last_work[0].id,
-                last_work[1],
-                last_work[2],
-                last_work[3],
-                last_work[4],
-            )
 
 
 class WorkOPDSScript(WorkPresentationScript):
