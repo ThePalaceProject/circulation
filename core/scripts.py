@@ -10,7 +10,7 @@ import unicodedata
 import uuid
 from collections import defaultdict
 from enum import Enum
-from typing import Generator
+from typing import Generator, Optional
 
 from sqlalchemy import and_, exists, text, tuple_
 from sqlalchemy.exc import ProgrammingError
@@ -1737,7 +1737,7 @@ class ReclassifyWorksForUncheckedSubjectsScript(WorkClassificationScript):
 
         for subject in self._unchecked_subjects():
 
-            last_work: Work = None  # Last work object of the previous page
+            last_work: Optional[Work] = None  # Last work object of the previous page
             # IDs of the last work, for paging
             work_id, license_id, iden_id, classn_id = (
                 None,
@@ -1768,7 +1768,8 @@ class ReclassifyWorksForUncheckedSubjectsScript(WorkClassificationScript):
                 if not len(works):
                     break
 
-                last_work = works[-1]
+                last_work_row = works[-1]
+                last_work = last_work_row[0]
                 # set comprehension ensures we get unique works per loop
                 # Works will get duplicated in the query because of the addition
                 # of the ID columns in the select, it is possible and expected
@@ -1781,10 +1782,10 @@ class ReclassifyWorksForUncheckedSubjectsScript(WorkClassificationScript):
                 yield only_works
 
                 work_id, license_id, iden_id, classn_id = (
-                    last_work[0].id,
-                    last_work[1],
-                    last_work[2],
-                    last_work[3],
+                    last_work_row[0].id,
+                    last_work_row[1],
+                    last_work_row[2],
+                    last_work_row[3],
                 )
 
 
