@@ -97,7 +97,7 @@ class SAMLFederatedMetadataExpirationValidator(SAMLFederatedMetadataValidator):
         :type federation: api.saml.metadata.federations.model.SAMLFederation
 
         :param metadata: SAML federation's aggregated metadata
-        :type metadata: str
+        :type metadata: Union[str, bytes]
 
         :raises SAMLFederatedMetadataValidationError: in the case of validation errors
         """
@@ -106,6 +106,9 @@ class SAMLFederatedMetadataExpirationValidator(SAMLFederatedMetadataValidator):
                 federation
             )
         )
+
+        if isinstance(metadata, str):
+            metadata = metadata.encode()
 
         try:
             root = fromstring(metadata)

@@ -92,7 +92,7 @@ class SAMLMetadataParser:
         """Converts an XML string containing SAML metadata into XML DOM
 
         :param xml_metadata: XML string containing SAML metadata
-        :type xml_metadata: string
+        :type xml_metadata: Union[str, bytes]
 
         :return: XML DOM tree containing SAML metadata
         :rtype: onelogin.saml2.xmlparser.RestrictedElement
@@ -102,6 +102,9 @@ class SAMLMetadataParser:
         self._logger.debug(
             "Started converting XML string containing SAML metadata into XML DOM"
         )
+
+        if isinstance(xml_metadata, str):
+            xml_metadata = xml_metadata.encode()
 
         try:
             metadata_dom = fromstring(xml_metadata, forbid_dtd=True)
