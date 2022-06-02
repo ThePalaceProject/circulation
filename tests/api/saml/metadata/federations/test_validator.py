@@ -1,5 +1,6 @@
 import datetime
 import os
+from typing import Optional, Union
 
 import pytest
 from freezegun import freeze_time
@@ -20,19 +21,31 @@ class TestSAMLFederatedMetadataExpirationValidator:
     @parameterized.expand(
         [
             (
-                "incorrect_xml",
+                "incorrect_xml_str_type",
                 utc_now(),
                 fixtures.INCORRECT_XML,
                 SAMLFederatedMetadataValidationError,
             ),
             (
-                "without_valid_until_attribute",
+                "incorrect_xml_bytes_type",
+                utc_now(),
+                fixtures.INCORRECT_XML.encode(),
+                SAMLFederatedMetadataValidationError,
+            ),
+            (
+                "without_valid_until_attribute_metadata_str_type",
                 utc_now(),
                 fixtures.FEDERATED_METADATA_WITHOUT_VALID_UNTIL_ATTRIBUTE,
                 SAMLFederatedMetadataValidationError,
             ),
             (
-                "with_expired_valid_until_attribute",
+                "without_valid_until_attribute_metadata_bytes_type",
+                utc_now(),
+                fixtures.FEDERATED_METADATA_WITHOUT_VALID_UNTIL_ATTRIBUTE.encode(),
+                SAMLFederatedMetadataValidationError,
+            ),
+            (
+                "with_expired_valid_until_attribute_metadata_str_type",
                 fixtures.FEDERATED_METADATA_VALID_UNTIL
                 + SAMLFederatedMetadataExpirationValidator.MAX_CLOCK_SKEW
                 + datetime.timedelta(minutes=1),
@@ -40,7 +53,15 @@ class TestSAMLFederatedMetadataExpirationValidator:
                 SAMLFederatedMetadataValidationError,
             ),
             (
-                "with_valid_until_attribute_too_far_in_the_future",
+                "with_expired_valid_until_attribute_metadata_bytes_type",
+                fixtures.FEDERATED_METADATA_VALID_UNTIL
+                + SAMLFederatedMetadataExpirationValidator.MAX_CLOCK_SKEW
+                + datetime.timedelta(minutes=1),
+                fixtures.FEDERATED_METADATA_WITH_VALID_UNTIL_ATTRIBUTE.encode(),
+                SAMLFederatedMetadataValidationError,
+            ),
+            (
+                "with_valid_until_attribute_too_far_in_the_future_metadata_str_type",
                 fixtures.FEDERATED_METADATA_VALID_UNTIL
                 - SAMLFederatedMetadataExpirationValidator.MAX_VALID_TIME
                 - datetime.timedelta(minutes=1),
@@ -48,14 +69,29 @@ class TestSAMLFederatedMetadataExpirationValidator:
                 SAMLFederatedMetadataValidationError,
             ),
             (
-                "with_valid_until_attribute_less_than_current_time_and_less_than_max_clock_skew",
+                "with_valid_until_attribute_too_far_in_the_future_metadata_bytes_type",
+                fixtures.FEDERATED_METADATA_VALID_UNTIL
+                - SAMLFederatedMetadataExpirationValidator.MAX_VALID_TIME
+                - datetime.timedelta(minutes=1),
+                fixtures.FEDERATED_METADATA_WITH_VALID_UNTIL_ATTRIBUTE.encode(),
+                SAMLFederatedMetadataValidationError,
+            ),
+            (
+                "with_valid_until_attribute_less_than_current_time_and_less_than_max_clock_skew_metadata_str_type",
                 fixtures.FEDERATED_METADATA_VALID_UNTIL
                 + SAMLFederatedMetadataExpirationValidator.MAX_CLOCK_SKEW,
                 fixtures.FEDERATED_METADATA_WITH_VALID_UNTIL_ATTRIBUTE,
                 None,
             ),
             (
-                "with_valid_until_attribute_greater_than_current_time_and_less_than_max_valid_time",
+                "with_valid_until_attribute_less_than_current_time_and_less_than_max_clock_skew_metadata_bytes_type",
+                fixtures.FEDERATED_METADATA_VALID_UNTIL
+                + SAMLFederatedMetadataExpirationValidator.MAX_CLOCK_SKEW,
+                fixtures.FEDERATED_METADATA_WITH_VALID_UNTIL_ATTRIBUTE.encode(),
+                None,
+            ),
+            (
+                "with_valid_until_attribute_greater_than_current_time_and_less_than_max_valid_time_metadata_str_type",
                 fixtures.FEDERATED_METADATA_VALID_UNTIL
                 - SAMLFederatedMetadataExpirationValidator.MAX_VALID_TIME
                 + datetime.timedelta(minutes=1),
@@ -63,7 +99,15 @@ class TestSAMLFederatedMetadataExpirationValidator:
                 None,
             ),
             (
-                "with_real_incommon_metadata",
+                "with_valid_until_attribute_greater_than_current_time_and_less_than_max_valid_time_metadata_bytes_type",
+                fixtures.FEDERATED_METADATA_VALID_UNTIL
+                - SAMLFederatedMetadataExpirationValidator.MAX_VALID_TIME
+                + datetime.timedelta(minutes=1),
+                fixtures.FEDERATED_METADATA_WITH_VALID_UNTIL_ATTRIBUTE.encode(),
+                None,
+            ),
+            (
+                "with_real_incommon_metadata_str_type",
                 datetime_utc(2020, 11, 26, 14, 32, 42),
                 open(
                     os.path.join(
@@ -73,9 +117,28 @@ class TestSAMLFederatedMetadataExpirationValidator:
                 ).read(),
                 None,
             ),
+            (
+                "with_real_incommon_metadata_bytes_type",
+                datetime_utc(2020, 11, 26, 14, 32, 42),
+                open(
+                    os.path.join(
+                        os.path.dirname(os.path.abspath(__file__)),
+                        "../../../files/saml/incommon-metadata-idp-only.xml",
+                    )
+                )
+                .read()
+                .encode(),
+                None,
+            ),
         ]
     )
-    def test_validate(self, _, current_time, metadata, expected_exception):
+    def test_validate(
+        self,
+        _,
+        current_time: datetime.datetime,
+        metadata: Union[str, bytes],
+        expected_exception: Optional[Exception],
+    ):
         # Arrange
         validator = SAMLFederatedMetadataExpirationValidator()
         federation = SAMLFederation(

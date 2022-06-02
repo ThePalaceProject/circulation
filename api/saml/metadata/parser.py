@@ -1,11 +1,12 @@
 import logging
+from typing import Union
 
 from flask_babel import lazy_gettext as _
 from lxml.etree import XMLSyntaxError
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
 from onelogin.saml2.constants import OneLogin_Saml2_Constants
 from onelogin.saml2.utils import OneLogin_Saml2_XML
-from onelogin.saml2.xmlparser import fromstring
+from onelogin.saml2.xmlparser import RestrictedElement, fromstring
 
 from api.saml.metadata.model import (
     SAMLAttribute,
@@ -88,14 +89,14 @@ class SAMLMetadataParser:
             OneLogin_Saml2_Constants.NS_PREFIX_ALG
         ] = OneLogin_Saml2_Constants.NS_ALG
 
-    def _convert_xml_string_to_dom(self, xml_metadata):
+    def _convert_xml_string_to_dom(
+        self, xml_metadata: Union[str, bytes]
+    ) -> RestrictedElement:
         """Converts an XML string containing SAML metadata into XML DOM
 
         :param xml_metadata: XML string containing SAML metadata
-        :type xml_metadata: string
 
         :return: XML DOM tree containing SAML metadata
-        :rtype: onelogin.saml2.xmlparser.RestrictedElement
 
         :raise: MetadataParsingError
         """
@@ -103,8 +104,11 @@ class SAMLMetadataParser:
             "Started converting XML string containing SAML metadata into XML DOM"
         )
 
+        if isinstance(xml_metadata, str):
+            xml_metadata = xml_metadata.encode()
+
         try:
-            metadata_dom = fromstring(xml_metadata.encode("utf-8"), forbid_dtd=True)
+            metadata_dom = fromstring(xml_metadata, forbid_dtd=True)
         except (
             ValueError,
             XMLSyntaxError,
