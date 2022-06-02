@@ -1565,7 +1565,7 @@ class WorkProcessingScript(IdentifierInputScript):
         works = True
         offset = 0
 
-        # Does this script class allow uniquely pageed queries
+        # Does this script class allow uniquely paged queries
         # If not we will default to OFFSET paging
         try:
             paged_query = self.paginate_query(self.query)
@@ -1682,7 +1682,7 @@ class ReclassifyWorksForUncheckedSubjectsScript(WorkClassificationScript):
 
     def _optimized_query(self):
         """Optimizations include
-        - Correct order by, so that paging is consistent
+        - Order by each joined table's PK, so that paging is consistent
         - Deferred loading of large text columns"""
 
         # No filter clause yet, we will filter this PER SUBJECT ID
@@ -1733,7 +1733,7 @@ class ReclassifyWorksForUncheckedSubjectsScript(WorkClassificationScript):
     def paginate_query(self, query) -> Generator:
         """Page this query using the row-wise comparison
         technique unique to this job. We have already ensured
-        the ordering of the rows follws all the joined tables"""
+        the ordering of the rows follows all the joined tables"""
 
         for subject in self._unchecked_subjects():
 
