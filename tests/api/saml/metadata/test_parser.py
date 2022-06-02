@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Union
 from unittest.mock import MagicMock, create_autospec
 
 import onelogin
@@ -31,16 +31,38 @@ from tests.api.saml import fixtures
 
 
 class TestSAMLMetadataParser:
-    def test_parse_raises_exception_when_xml_metadata_has_incorrect_format(self):
+    @parameterized.expand(
+        [
+            ("incorrect_xml_str_type", fixtures.INCORRECT_XML),
+            ("incorrect_xml_bytes_type", fixtures.INCORRECT_XML.encode()),
+        ]
+    )
+    def test_parse_raises_exception_when_xml_metadata_has_incorrect_format(
+        self, _, incorrect_xml: Union[str, bytes]
+    ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
 
         # Act
         with pytest.raises(SAMLMetadataParsingError):
-            metadata_parser.parse(fixtures.INCORRECT_XML)
+            metadata_parser.parse(incorrect_xml)
 
+    @parameterized.expand(
+        [
+            (
+                "incorrect_xml_with_one_idp_metadata_without_sso_service_str_type",
+                fixtures.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_SSO_SERVICE,
+            ),
+            (
+                "incorrect_xml_with_one_idp_metadata_without_sso_service_bytes_type",
+                fixtures.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_SSO_SERVICE.encode(),
+            ),
+        ]
+    )
     def test_parse_raises_exception_when_idp_metadata_does_not_contain_sso_service(
         self,
+        _,
+        incorrect_xml_with_one_idp_metadata_without_sso_service: Union[str, bytes],
     ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
@@ -48,11 +70,27 @@ class TestSAMLMetadataParser:
         # Act
         with pytest.raises(SAMLMetadataParsingError):
             metadata_parser.parse(
-                fixtures.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_SSO_SERVICE
+                incorrect_xml_with_one_idp_metadata_without_sso_service
             )
 
+    @parameterized.expand(
+        [
+            (
+                "incorrect_xml_with_one_idp_metadata_with_sso_service_with_wrong_binding_str_type",
+                fixtures.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITH_SSO_SERVICE_WITH_WRONG_BINDING,
+            ),
+            (
+                "incorrect_xml_with_one_idp_metadata_with_sso_service_with_wrong_binding_bytes_type",
+                fixtures.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITH_SSO_SERVICE_WITH_WRONG_BINDING.encode(),
+            ),
+        ]
+    )
     def test_parse_raises_exception_when_idp_metadata_contains_sso_service_with_wrong_binding(
         self,
+        _,
+        incorrect_xml_with_one_idp_metadata_with_sso_service_with_wrong_binding: Union[
+            str, bytes
+        ],
     ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
@@ -60,18 +98,32 @@ class TestSAMLMetadataParser:
         # Act
         with pytest.raises(SAMLMetadataParsingError):
             metadata_parser.parse(
-                fixtures.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITH_SSO_SERVICE_WITH_WRONG_BINDING
+                incorrect_xml_with_one_idp_metadata_with_sso_service_with_wrong_binding
             )
 
+    @parameterized.expand(
+        [
+            (
+                "correct_xml_with_one_idp_metadata_without_display_names_str_type",
+                fixtures.CORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_DISPLAY_NAMES,
+            ),
+            (
+                "correct_xml_with_one_idp_metadata_without_display_names_bytes_type",
+                fixtures.CORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_DISPLAY_NAMES.encode(),
+            ),
+        ]
+    )
     def test_parse_does_not_raise_exception_when_xml_metadata_does_not_have_display_names(
         self,
+        _,
+        correct_xml_with_one_idp_metadata_without_display_names: Union[str, bytes],
     ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
 
         # Act
         parsing_results = metadata_parser.parse(
-            fixtures.CORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_DISPLAY_NAMES
+            correct_xml_with_one_idp_metadata_without_display_names
         )
 
         # Assert
@@ -103,12 +155,23 @@ class TestSAMLMetadataParser:
             == parsing_result.provider
         )
 
-    def test_parse_correctly_parses_one_idp_metadata(self):
+    @parameterized.expand(
+        [
+            ("correct_xml_with_idp_1_str_type", fixtures.CORRECT_XML_WITH_IDP_1),
+            (
+                "correct_xml_with_idp_1_bytes_type",
+                fixtures.CORRECT_XML_WITH_IDP_1.encode(),
+            ),
+        ]
+    )
+    def test_parse_correctly_parses_one_idp_metadata(
+        self, _, correct_xml_with_idp_1: Union[str, bytes]
+    ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
 
         # Act
-        parsing_results = metadata_parser.parse(fixtures.CORRECT_XML_WITH_IDP_1)
+        parsing_results = metadata_parser.parse(correct_xml_with_idp_1)
 
         # Assert
         assert 1 == len(parsing_results)
@@ -191,12 +254,23 @@ class TestSAMLMetadataParser:
             == parsing_result.provider
         )
 
-    def test_parse_correctly_parses_idp_metadata_without_name_id_format(self):
+    @parameterized.expand(
+        [
+            ("correct_xml_with_idp_1_str_type", fixtures.CORRECT_XML_WITH_IDP_1),
+            (
+                "correct_xml_with_idp_1_bytes_type",
+                fixtures.CORRECT_XML_WITH_IDP_1.encode(),
+            ),
+        ]
+    )
+    def test_parse_correctly_parses_idp_metadata_without_name_id_format(
+        self, _, correct_xml_with_idp_1: Union[str, bytes]
+    ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
 
         # Act
-        parsing_results = metadata_parser.parse(fixtures.CORRECT_XML_WITH_IDP_1)
+        parsing_results = metadata_parser.parse(correct_xml_with_idp_1)
 
         # Assert
         assert 1 == len(parsing_results)
@@ -279,13 +353,29 @@ class TestSAMLMetadataParser:
             == parsing_result.provider
         )
 
-    def test_parse_correctly_parses_idp_metadata_with_one_certificate(self):
+    @parameterized.expand(
+        [
+            (
+                "correct_xml_with_one_idp_metadata_with_one_certificate_str_type",
+                fixtures.CORRECT_XML_WITH_ONE_IDP_METADATA_WITH_ONE_CERTIFICATE,
+            ),
+            (
+                "correct_xml_with_one_idp_metadata_with_one_certificate_bytes_type",
+                fixtures.CORRECT_XML_WITH_ONE_IDP_METADATA_WITH_ONE_CERTIFICATE.encode(),
+            ),
+        ]
+    )
+    def test_parse_correctly_parses_idp_metadata_with_one_certificate(
+        self,
+        _,
+        correct_xml_with_one_idp_metadata_with_one_certificate: Union[str, bytes],
+    ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
 
         # Act
         parsing_results = metadata_parser.parse(
-            fixtures.CORRECT_XML_WITH_ONE_IDP_METADATA_WITH_ONE_CERTIFICATE
+            correct_xml_with_one_idp_metadata_with_one_certificate
         )
 
         # Assert
@@ -369,12 +459,26 @@ class TestSAMLMetadataParser:
             == parsing_result.provider
         )
 
-    def test_parse_correctly_parses_metadata_with_multiple_descriptors(self):
+    @parameterized.expand(
+        [
+            (
+                "correct_xml_with_multiple_idps_str_type",
+                fixtures.CORRECT_XML_WITH_MULTIPLE_IDPS,
+            ),
+            (
+                "correct_xml_with_multiple_idps_bytes_type",
+                fixtures.CORRECT_XML_WITH_MULTIPLE_IDPS.encode(),
+            ),
+        ]
+    )
+    def test_parse_correctly_parses_metadata_with_multiple_descriptors(
+        self, _, correct_xml_with_multiple_idps: Union[str, bytes]
+    ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
 
         # Act
-        parsing_results = metadata_parser.parse(fixtures.CORRECT_XML_WITH_MULTIPLE_IDPS)
+        parsing_results = metadata_parser.parse(correct_xml_with_multiple_idps)
 
         # Assert
         assert 2 == len(parsing_results)
@@ -504,22 +608,49 @@ class TestSAMLMetadataParser:
             == parsing_results[1].provider
         )
 
-    def test_parse_raises_exception_when_sp_metadata_does_not_contain_acs_service(self):
+    @parameterized.expand(
+        [
+            (
+                "incorrect_xml_with_one_sp_metadata_without_acs_service_str_type",
+                fixtures.INCORRECT_XML_WITH_ONE_SP_METADATA_WITHOUT_ACS_SERVICE,
+            ),
+            (
+                "incorrect_xml_with_one_sp_metadata_without_acs_service_bytes_type",
+                fixtures.INCORRECT_XML_WITH_ONE_SP_METADATA_WITHOUT_ACS_SERVICE.encode(),
+            ),
+        ]
+    )
+    def test_parse_raises_exception_when_sp_metadata_does_not_contain_acs_service(
+        self,
+        _,
+        incorrect_xml_with_one_sp_metadata_without_acs_service: Union[str, bytes],
+    ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
 
         # Act
         with pytest.raises(SAMLMetadataParsingError):
             metadata_parser.parse(
-                fixtures.INCORRECT_XML_WITH_ONE_SP_METADATA_WITHOUT_ACS_SERVICE
+                incorrect_xml_with_one_sp_metadata_without_acs_service
             )
 
-    def test_parse_correctly_parses_one_sp_metadata(self):
+    @parameterized.expand(
+        [
+            ("correct_xml_with_one_sp_str_type", fixtures.CORRECT_XML_WITH_ONE_SP),
+            (
+                "correct_xml_with_one_sp_bytes_type",
+                fixtures.CORRECT_XML_WITH_ONE_SP.encode(),
+            ),
+        ]
+    )
+    def test_parse_correctly_parses_one_sp_metadata(
+        self, _, correct_xml_with_one_sp: Union[str, bytes]
+    ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
 
         # Act
-        parsing_results = metadata_parser.parse(fixtures.CORRECT_XML_WITH_ONE_SP)
+        parsing_results = metadata_parser.parse(correct_xml_with_one_sp)
 
         # Assert
         assert 1 == len(parsing_results)
