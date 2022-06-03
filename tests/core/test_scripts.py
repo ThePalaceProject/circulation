@@ -32,9 +32,9 @@ from core.model import (
     Work,
     WorkCoverageRecord,
     create,
-    dump_query,
     get_one,
 )
+from core.model.classification import Subject
 from core.model.configuration import ExternalIntegrationLink
 from core.monitor import CollectionMonitor, Monitor, ReaperMonitor
 from core.opds_import import OPDSImportMonitor
@@ -2552,9 +2552,78 @@ class TestReclassifyWorksForUncheckedSubjectsScript(DatabaseTest):
             == ReclassifyWorksForUncheckedSubjectsScript.policy
         )
         assert 100 == script.batch_size
-        assert dump_query(Work.for_unchecked_subjects(self._db)) == dump_query(
-            script.query
+
+        # Assert all joins have been included in the Order By
+        ordered_by = script.query._order_by
+        for join in script.query._join_entities:
+            assert join.columns.id in ordered_by
+        assert Work.id in ordered_by
+
+    def test_paginate(self):
+        """Pagination is changed to be row-wise comparison
+        Ensure we are paginating correctly within the same Subject page"""
+        subject = self._subject(Subject.AXIS_360_AUDIENCE, "Any")
+        works = []
+        for i in range(20):
+            work: Work = self._work(with_license_pool=True)
+            self._classification(
+                work.presentation_edition.primary_identifier,
+                subject,
+                work.license_pools[0].data_source,
+            )
+            works.append(work)
+
+        script = ReclassifyWorksForUncheckedSubjectsScript(self._db)
+        script.batch_size = 1
+        for ix, [work] in enumerate(script.paginate_query(script.query)):
+            # We are coming in via "id" order
+            assert work == works[ix]
+        assert ix == 19
+
+        other_subject = self._subject(Subject.BISAC, "Any")
+        last_work = works[-1]
+        self._classification(
+            last_work.presentation_edition.primary_identifier,
+            other_subject,
+            last_work.license_pools[0].data_source,
         )
+        script.batch_size = 100
+        next_works = next(script.paginate_query(script.query))
+        # Works are only iterated over ONCE per loop
+        assert len(next_works) == 20
+
+        # A checked subjects work is not included
+        not_work = self._work(with_license_pool=True)
+        another_subject = self._subject(Subject.DDC, "Any")
+        self._classification(
+            not_work.presentation_edition.primary_identifier,
+            another_subject,
+            not_work.license_pools[0].data_source,
+        )
+        another_subject.checked = True
+        self._db.commit()
+        next_works = next(script.paginate_query(script.query))
+        assert len(next_works) == 20
+        assert not_work not in next_works
+
+    def test_subject_checked(self):
+        subject = self._subject(Subject.AXIS_360_AUDIENCE, "Any")
+        assert subject.checked == False
+
+        works = []
+        for i in range(10):
+            work: Work = self._work(with_license_pool=True)
+            self._classification(
+                work.presentation_edition.primary_identifier,
+                subject,
+                work.license_pools[0].data_source,
+            )
+            works.append(work)
+
+        script = ReclassifyWorksForUncheckedSubjectsScript(self._db)
+        script.run()
+        self._db.refresh(subject)
+        assert subject.checked == True
 
 
 class TestListCollectionMetadataIdentifiersScript(DatabaseTest):

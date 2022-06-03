@@ -1011,7 +1011,11 @@ class Work(Base):
             or classification_changed
             or summary != self.summary
             or summary_text != new_summary_text
-            or float(quality) != float(self.quality)
+            or (
+                policy.calculate_quality
+                and float(quality or default_quality)
+                != float(self.quality or default_quality)
+            )
         )
 
         if changed:
