@@ -1619,7 +1619,7 @@ python-versions = "*"
 
 [[package]]
 name = "types-pillow"
-version = "9.0.16"
+version = "9.0.19"
 description = "Typing stubs for Pillow"
 category = "dev"
 optional = false
@@ -1830,7 +1830,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.7,<4"
-content-hash = "ff5db9c17ec6acef88580cf176859d628bc8f124f4ea07896782d82e89227e9c"
+content-hash = "8cbfc512f015f1c96881f8e4019eab21df51f15f813bc2b3e0e95a356684b5fa"
 
 [metadata.files]
 atomicwrites = [
@@ -2844,8 +2844,8 @@ types-markupsafe = [
     {file = "types_MarkupSafe-1.1.10-py3-none-any.whl", hash = "sha256:ca2bee0f4faafc45250602567ef38d533e877d2ddca13003b319c551ff5b3cc5"},
 ]
 types-pillow = [
-    {file = "types-Pillow-9.0.16.tar.gz", hash = "sha256:83385b550ed003016bd685cf47201595dce2a90cec0c430d4bf742da9ca52c91"},
-    {file = "types_Pillow-9.0.16-py3-none-any.whl", hash = "sha256:792227090a49e17e360c32a5b9f732c996b7b60dbcd2d4ee60381b8ab1650d3f"},
+    {file = "types-Pillow-9.0.19.tar.gz", hash = "sha256:bad0de01fd2b6cfdcfcab580fc4025db2b5068e6237707d8f2f4493cd4c4fe16"},
+    {file = "types_Pillow-9.0.19-py3-none-any.whl", hash = "sha256:34f8380d9e5367baa075e3ef2961c65908f6b69b9161c2b08feb8937200aa25c"},
 ]
 types-psycopg2 = [
     {file = "types-psycopg2-2.9.16.tar.gz", hash = "sha256:b350d7cf7aaa24c42854f6656fb70547799271eccb738fc5e244840b798bb373"},
