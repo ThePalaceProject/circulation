@@ -221,7 +221,8 @@ class CirculationManagerAnnotator(Annotator):
         # Consult the configuration information for the external integration
         # that underlies the license pool's collection. The configuration
         # information _might_ contain a flag that indicates whether to deprioritize
-        # LCP content.
+        # LCP content. By default, if no configuration value is specified, then
+        # the priority of LCP content will be left completely unchanged.
 
         drm_setting: ConfigurationSetting = (
             ConfigurationSetting.for_externalintegration(
