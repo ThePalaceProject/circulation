@@ -184,12 +184,20 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
         self.ssl_key = integration.setting(self.SSL_KEY).value
         self.dialect = Sip2Dialect.load_dialect(integration.setting(self.ILS).value)
         self.client = client
-        patron_status_block = integration.setting(self.PATRON_STATUS_BLOCK).json_value
-        if patron_status_block is None or patron_status_block:
+
+        # Check if patrons should be blocked based on SIP status
+        # If nothing is specified, the default is True (block patrons!)
+        _block = integration.setting(self.PATRON_STATUS_BLOCK).json_value
+        if _block is None:
+            _block = True
+
+        if _block:
+            self.patron_status_should_block = True
             self.fields_that_deny_borrowing = (
                 SIPClient.PATRON_STATUS_FIELDS_THAT_DENY_BORROWING_PRIVILEGES
             )
         else:
+            self.patron_status_should_block = False
             self.fields_that_deny_borrowing = []
 
     @property
