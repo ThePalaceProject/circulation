@@ -78,7 +78,7 @@ def mock_search_index(mock=None):
 
 class ExternalSearchIndex(HasSelfTests):
 
-    NAME = ExternalIntegration.ELASTICSEARCH
+    NAME = ExternalIntegration.OPENSEARCH
 
     # A test may temporarily set this to a mock of this class.
     # While that's true, load() will return the mock instead of
@@ -91,7 +91,6 @@ class ExternalSearchIndex(HasSelfTests):
     TEST_SEARCH_TERM_KEY = "test_search_term"
     DEFAULT_TEST_SEARCH_TERM = "test"
 
-    work_document_type = "work-type"
     __client = None
 
     CURRENT_ALIAS_SUFFIX = "current"
@@ -110,7 +109,7 @@ class ExternalSearchIndex(HasSelfTests):
             "default": DEFAULT_WORKS_INDEX_PREFIX,
             "required": True,
             "description": _(
-                "Any Elasticsearch indexes needed for this application will be created with this unique prefix. In most cases, the default will work fine. You may need to change this if you have multiple application servers using a single Elasticsearch server."
+                "Any Opensearch indexes needed for this application will be created with this unique prefix. In most cases, the default will work fine. You may need to change this if you have multiple application servers using a single Opensearch server."
             ),
         },
         {
@@ -136,7 +135,7 @@ class ExternalSearchIndex(HasSelfTests):
     def search_integration(cls, _db):
         """Look up the ExternalIntegration for ElasticSearch."""
         return ExternalIntegration.lookup(
-            _db, ExternalIntegration.ELASTICSEARCH, goal=ExternalIntegration.SEARCH_GOAL
+            _db, ExternalIntegration.OPENSEARCH, goal=ExternalIntegration.SEARCH_GOAL
         )
 
     @classmethod
@@ -210,7 +209,7 @@ class ExternalSearchIndex(HasSelfTests):
 
         if not _db:
             raise CannotLoadConfiguration(
-                "Cannot load Elasticsearch configuration without a database.",
+                "Cannot load Opensearch configuration without a database.",
             )
 
         # initialize the cached data if not already done so
@@ -219,21 +218,19 @@ class ExternalSearchIndex(HasSelfTests):
         if not url or not works_index:
             integration = self.search_integration(_db)
             if not integration:
-                raise CannotLoadConfiguration(
-                    "No Elasticsearch integration configured."
-                )
+                raise CannotLoadConfiguration("No Opensearch integration configured.")
             url = url or integration.url
             if not works_index:
                 works_index = self.works_index_name(_db)
             test_search_term = integration.setting(self.TEST_SEARCH_TERM_KEY).value
         if not url:
-            raise CannotLoadConfiguration("No URL configured to Elasticsearch server.")
+            raise CannotLoadConfiguration("No URL configured to Opensearch server.")
         self.test_search_term = test_search_term or self.DEFAULT_TEST_SEARCH_TERM
         if not in_testing:
             if not ExternalSearchIndex.__client:
                 use_ssl = url.startswith("https://")
                 self.log.info(
-                    "Connecting to index %s in Elasticsearch cluster at %s",
+                    "Connecting to index %s in Opensearch cluster at %s",
                     works_index,
                     url,
                 )
@@ -259,7 +256,7 @@ class ExternalSearchIndex(HasSelfTests):
                 raise
             except ElasticsearchException as e:
                 raise CannotLoadConfiguration(
-                    "Exception communicating with Elasticsearch server: %s" % repr(e)
+                    "Exception communicating with Opensearch server: %s" % repr(e)
                 )
 
         self.search = Search(using=self.__client, index=self.works_alias)
@@ -556,7 +553,7 @@ class ExternalSearchIndex(HasSelfTests):
         if debug:
             b = time.time()
             self.log.debug(
-                "Elasticsearch query %r completed in %.3fsec", query_string, b - a
+                "Opensearch query %r completed in %.3fsec", query_string, b - a
             )
             for results in resultset:
                 for i, result in enumerate(results):

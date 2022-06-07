@@ -15,9 +15,7 @@ class TestSearchServices(SettingsControllerTest):
             response = self.manager.admin_search_services_controller.process_services()
             assert response.get("search_services") == []
             protocols = response.get("protocols")
-            assert ExternalIntegration.ELASTICSEARCH in [
-                p.get("name") for p in protocols
-            ]
+            assert ExternalIntegration.OPENSEARCH in [p.get("name") for p in protocols]
             assert "settings" in protocols[0]
 
             self.admin.remove_role(AdminRole.SYSTEM_ADMIN)
@@ -31,7 +29,7 @@ class TestSearchServices(SettingsControllerTest):
         search_service, ignore = create(
             self._db,
             ExternalIntegration,
-            protocol=ExternalIntegration.ELASTICSEARCH,
+            protocol=ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
         )
         search_service.url = "search url"
@@ -87,7 +85,7 @@ class TestSearchServices(SettingsControllerTest):
         service, ignore = create(
             self._db,
             ExternalIntegration,
-            protocol=ExternalIntegration.ELASTICSEARCH,
+            protocol=ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
         )
 
@@ -95,7 +93,7 @@ class TestSearchServices(SettingsControllerTest):
             flask.request.form = MultiDict(
                 [
                     ("name", "Name"),
-                    ("protocol", ExternalIntegration.ELASTICSEARCH),
+                    ("protocol", ExternalIntegration.OPENSEARCH),
                 ]
             )
             response = controller.process_services()
@@ -114,7 +112,7 @@ class TestSearchServices(SettingsControllerTest):
             flask.request.form = MultiDict(
                 [
                     ("name", service.name),
-                    ("protocol", ExternalIntegration.ELASTICSEARCH),
+                    ("protocol", ExternalIntegration.OPENSEARCH),
                 ]
             )
             response = controller.process_services()
@@ -123,7 +121,7 @@ class TestSearchServices(SettingsControllerTest):
         service, ignore = create(
             self._db,
             ExternalIntegration,
-            protocol=ExternalIntegration.ELASTICSEARCH,
+            protocol=ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
         )
 
@@ -132,7 +130,7 @@ class TestSearchServices(SettingsControllerTest):
                 [
                     ("name", "Name"),
                     ("id", service.id),
-                    ("protocol", ExternalIntegration.ELASTICSEARCH),
+                    ("protocol", ExternalIntegration.OPENSEARCH),
                 ]
             )
             response = controller.process_services()
@@ -142,7 +140,7 @@ class TestSearchServices(SettingsControllerTest):
         with self.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
-                    ("protocol", ExternalIntegration.ELASTICSEARCH),
+                    ("protocol", ExternalIntegration.OPENSEARCH),
                     (ExternalIntegration.URL, "search url"),
                     (ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY, "works-index-prefix"),
                 ]
@@ -154,7 +152,7 @@ class TestSearchServices(SettingsControllerTest):
             flask.request.form = MultiDict(
                 [
                     ("name", "Name"),
-                    ("protocol", ExternalIntegration.ELASTICSEARCH),
+                    ("protocol", ExternalIntegration.OPENSEARCH),
                     (ExternalIntegration.URL, "http://search_url"),
                     (ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY, "works-index-prefix"),
                     (ExternalSearchIndex.TEST_SEARCH_TERM_KEY, "sample-search-term"),
@@ -167,7 +165,7 @@ class TestSearchServices(SettingsControllerTest):
             self._db, ExternalIntegration, goal=ExternalIntegration.SEARCH_GOAL
         )
         assert service.id == int(response.response[0])
-        assert ExternalIntegration.ELASTICSEARCH == service.protocol
+        assert ExternalIntegration.OPENSEARCH == service.protocol
         assert "http://search_url" == service.url
         assert (
             "works-index-prefix"
@@ -182,7 +180,7 @@ class TestSearchServices(SettingsControllerTest):
         search_service, ignore = create(
             self._db,
             ExternalIntegration,
-            protocol=ExternalIntegration.ELASTICSEARCH,
+            protocol=ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
         )
         search_service.url = "search url"
@@ -198,7 +196,7 @@ class TestSearchServices(SettingsControllerTest):
                 [
                     ("name", "Name"),
                     ("id", search_service.id),
-                    ("protocol", ExternalIntegration.ELASTICSEARCH),
+                    ("protocol", ExternalIntegration.OPENSEARCH),
                     (ExternalIntegration.URL, "http://new_search_url"),
                     (
                         ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY,
@@ -214,7 +212,7 @@ class TestSearchServices(SettingsControllerTest):
             assert response.status_code == 200
 
         assert search_service.id == int(response.response[0])
-        assert ExternalIntegration.ELASTICSEARCH == search_service.protocol
+        assert ExternalIntegration.OPENSEARCH == search_service.protocol
         assert "http://new_search_url" == search_service.url
         assert (
             "new-works-index-prefix"
@@ -229,7 +227,7 @@ class TestSearchServices(SettingsControllerTest):
         search_service, ignore = create(
             self._db,
             ExternalIntegration,
-            protocol=ExternalIntegration.ELASTICSEARCH,
+            protocol=ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
         )
         search_service.url = "search url"
