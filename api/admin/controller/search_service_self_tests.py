@@ -24,6 +24,6 @@ class SearchServiceSelfTestsController(SelfTestsController, ExternalSearchTest):
     def look_up_by_id(self, identifier):
         return self.look_up_service_by_id(
             identifier,
-            ExternalIntegration.ELASTICSEARCH,
+            ExternalIntegration.OPENSEARCH,
             ExternalIntegration.SEARCH_GOAL,
         )

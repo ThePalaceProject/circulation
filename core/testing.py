@@ -1172,7 +1172,7 @@ class ExternalSearchTest(DatabaseTest):
         self.indexes = []
 
         self.integration = self._external_integration(
-            ExternalIntegration.ELASTICSEARCH,
+            ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
             url=self.SIMPLIFIED_TEST_ELASTICSEARCH,
             settings={

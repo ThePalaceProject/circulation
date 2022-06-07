@@ -29,7 +29,7 @@ class TestSearchServiceSelfTests(SettingsControllerTest):
         search_service, ignore = create(
             self._db,
             ExternalIntegration,
-            protocol=ExternalIntegration.ELASTICSEARCH,
+            protocol=ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
         )
         # Make sure that HasSelfTest.prior_test_results() was called and that
@@ -61,7 +61,7 @@ class TestSearchServiceSelfTests(SettingsControllerTest):
         search_service, ignore = create(
             self._db,
             ExternalIntegration,
-            protocol=ExternalIntegration.ELASTICSEARCH,
+            protocol=ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
         )
         m = (
