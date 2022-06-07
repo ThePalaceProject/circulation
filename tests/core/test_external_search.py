@@ -317,7 +317,7 @@ class TestExternalSearch(ExternalSearchTest):
         collection = self._collection()
 
         search_result = MockSearchResult("Sample Book Title", "author", {}, "id")
-        index.index("index", "doc type", "id", search_result)
+        index.index("index", "id", search_result)
         test_results = [x for x in index._run_self_tests(self._db, in_testing=True)]
 
         assert "Search results for 'a search term':" == test_results[0].name

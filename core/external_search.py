@@ -609,7 +609,6 @@ class ExternalSearchIndex(HasSelfTests):
 
         for doc in docs:
             doc["_index"] = self.works_index
-            doc["_type"] = self.work_document_type
         time2 = time.time()
 
         success_count, errors = self.bulk(
@@ -686,9 +685,7 @@ class ExternalSearchIndex(HasSelfTests):
 
     def remove_work(self, work):
         """Remove the search document for `work` from the search index."""
-        args = dict(
-            index=self.works_index, doc_type=self.work_document_type, id=work.id
-        )
+        args = dict(index=self.works_index, id=work.id)
         if self.exists(**args):
             self.delete(**args)
 
@@ -937,7 +934,7 @@ class Mapping(MappingDocument):
         for name, subdocument in list(self.subdocuments.items()):
             properties[name] = dict(type="nested", properties=subdocument.properties)
 
-        mappings = {ExternalSearchIndex.work_document_type: dict(properties=properties)}
+        mappings = dict(properties=properties)
         return dict(settings=settings, mappings=mappings)
 
 
@@ -3401,20 +3398,20 @@ class MockExternalSearchIndex(ExternalSearchIndex):
         self.search = list(self.docs.keys())
         self.test_search_term = "a search term"
 
-    def _key(self, index, doc_type, id):
-        return (index, doc_type, id)
+    def _key(self, index, id):
+        return (index, id)
 
-    def index(self, index, doc_type, id, body):
-        self.docs[self._key(index, doc_type, id)] = body
+    def index(self, index, id, body):
+        self.docs[self._key(index, id)] = body
         self.search = list(self.docs.keys())
 
-    def delete(self, index, doc_type, id):
-        key = self._key(index, doc_type, id)
+    def delete(self, index, id):
+        key = self._key(index, id)
         if key in self.docs:
             del self.docs[key]
 
-    def exists(self, index, doc_type, id):
-        return self._key(index, doc_type, id) in self.docs
+    def exists(self, index, id):
+        return self._key(index, id) in self.docs
 
     def create_search_doc(
         self, query_string, filter=None, pagination=None, debug=False
@@ -3475,7 +3472,7 @@ class MockExternalSearchIndex(ExternalSearchIndex):
 
     def bulk(self, docs, **kwargs):
         for doc in docs:
-            self.index(doc["_index"], doc["_type"], doc["_id"], doc)
+            self.index(doc["_index"], doc["_id"], doc)
         return len(docs), []
 
 
