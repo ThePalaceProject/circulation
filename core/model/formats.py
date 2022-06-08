@@ -1,5 +1,4 @@
 import sys
-from enum import Enum
 from typing import List, Mapping, Optional
 
 from flask_babel import lazy_gettext as _
@@ -143,11 +142,6 @@ class FormatPriorities:
         return self._prioritized_content_types.get(content_type, 0)
 
 
-class DePrioritizeLCPNonEPUBs(Enum):
-    DEPRIORITIZE_LCP_NON_EPUBS = "De-prioritize"
-    DO_NOT_DEPRIORITIZE_LCP_NON_EPUBS = "Do not de-prioritize"
-
-
 class FormatPrioritiesConfigurationTrait(ConfigurationTrait):
     """A configuration trait that can be used to enable format/DRM prioritization."""
 
@@ -198,7 +192,7 @@ class FormatPrioritiesConfigurationTrait(ConfigurationTrait):
         label=_("De-prioritize LCP non-EPUBs"),
         description=_(
             "De-prioritize all LCP content except for EPUBs. Setting this configuration option to "
-            "<tt>DEPRIORITIZE_LCP_NON_EPUBS</tt> will preserve any priorities specified above, but will artificially "
+            "<i>De-prioritize</i> will preserve any priorities specified above, but will artificially "
             "push (for example) LCP audiobooks and PDFs to the lowest priority."
             "<br/>"
             "<br/>"
@@ -206,6 +200,9 @@ class FormatPrioritiesConfigurationTrait(ConfigurationTrait):
         ),
         type=ConfigurationAttributeType.SELECT,
         required=False,
-        default=DePrioritizeLCPNonEPUBs.DO_NOT_DEPRIORITIZE_LCP_NON_EPUBS.value,
-        options=ConfigurationOption.from_enum(DePrioritizeLCPNonEPUBs),
+        default="false",
+        options=[
+            ConfigurationOption(label=_("De-prioritize"), key="true"),
+            ConfigurationOption(label=_("Do not de-prioritize"), key="false"),
+        ],
     )
