@@ -30,6 +30,7 @@ from core.model import (
     Session,
     Subject,
 )
+from core.model.configuration import ConfigurationAttributeValue
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import from_timestamp, strptime_utc, utc_now
@@ -56,8 +57,21 @@ class EnkiAPI(BaseCirculationAPI, HasSelfTests):
         },
     ] + BaseCirculationAPI.SETTINGS
 
-    LIBRARY_SETTINGS = [
+    LIBRARY_SETTINGS = BaseCirculationAPI.LIBRARY_SETTINGS + [
         {"key": ENKI_LIBRARY_ID_KEY, "label": _("Library ID"), "required": True},
+        {
+            "key": ExternalIntegration.DISPLAY_RESERVES,
+            "label": _("Show/Hide Titles with No Available Loans"),
+            "required": False,
+            "description": _(
+                "Titles with no available loans will not be displayed in the Catalog view."
+            ),
+            "type": "select",
+            "options": [
+                {"key": ConfigurationAttributeValue.YESVALUE.value, "label": "Show"},
+                {"key": ConfigurationAttributeValue.NOVALUE.value, "label": "Hide"},
+            ],
+        },
     ]
 
     list_endpoint = "ListAPI"
