@@ -192,10 +192,9 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
             _block = True
 
         if _block:
+            _deny_fields = SIPClient.PATRON_STATUS_FIELDS_THAT_DENY_BORROWING_PRIVILEGES
             self.patron_status_should_block = True
-            self.fields_that_deny_borrowing = (
-                SIPClient.PATRON_STATUS_FIELDS_THAT_DENY_BORROWING_PRIVILEGES
-            )
+            self.fields_that_deny_borrowing = _deny_fields
         else:
             self.patron_status_should_block = False
             self.fields_that_deny_borrowing = []
@@ -353,7 +352,13 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
                     patrondata.authorization_expires = value
                     break
 
-        patrondata.block_reason = self.info_to_patrondata_block_reason(info, patrondata)
+        if self.patron_status_should_block:
+            patrondata.block_reason = self.info_to_patrondata_block_reason(
+                info, patrondata
+            )
+        else:
+            patrondata.block_reason = PatronData.NO_VALUE
+
         return patrondata
 
     def info_to_patrondata_block_reason(
