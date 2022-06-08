@@ -32,7 +32,7 @@ from core.model import (
     Patron,
     Session,
 )
-from core.model.formats import DePrioritizeLCPNonEPUBs, FormatPriorities
+from core.model.formats import FormatPriorities
 from core.opds import AcquisitionFeed, Annotator, UnfulfillableWork
 from core.util.datetime_helpers import from_timestamp
 from core.util.opds_writer import OPDSFeed
@@ -229,11 +229,8 @@ class CirculationManagerAnnotator(Annotator):
                 FormatPriorities.DEPRIORITIZE_LCP_NON_EPUBS_KEY, external
             )
         )
-        _prioritize = (
-            drm_setting.json_value
-            or DePrioritizeLCPNonEPUBs.DO_NOT_DEPRIORITIZE_LCP_NON_EPUBS
-        )
-        return _prioritize == DePrioritizeLCPNonEPUBs.DEPRIORITIZE_LCP_NON_EPUBS
+        _prioritize: bool = drm_setting.bool_value or False
+        return _prioritize
 
     def visible_delivery_mechanisms(
         self, licensepool: Optional[LicensePool]
