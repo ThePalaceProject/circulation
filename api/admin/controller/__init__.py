@@ -1551,7 +1551,6 @@ class DashboardController(AdminCirculationManagerController):
         )
 
 
-
 class SettingsController(AdminCirculationManagerController):
 
     METADATA_SERVICE_URI_TYPE = "application/opds+json;profile=https://librarysimplified.org/rel/profile/metadata-service"
@@ -1592,7 +1591,7 @@ class SettingsController(AdminCirculationManagerController):
         :return: ProblemDetail object if the operation failed
         :rtype: Optional[ProblemDetail]
         """
-        mirror_integration_id = flask.request.form.get('mirror_integration_id')
+        mirror_integration_id = flask.request.form.get("mirror_integration_id")
 
         if not mirror_integration_id:
             return
@@ -1600,10 +1599,11 @@ class SettingsController(AdminCirculationManagerController):
         # If no storage integration was selected, then delete the existing
         # external integration link.
         current_integration_link, ignore = get_one_or_create(
-            self._db, ExternalIntegrationLink,
+            self._db,
+            ExternalIntegrationLink,
             library_id=None,
             external_integration_id=service.id,
-            purpose=purpose
+            purpose=purpose,
         )
 
         if mirror_integration_id == self.NO_MIRROR_INTEGRATION:
@@ -1616,8 +1616,10 @@ class SettingsController(AdminCirculationManagerController):
 
             # Only get storage integrations that have a specific configuration setting set.
             # For example: a specific bucket.
-            if not storage_integration or \
-                    not storage_integration.setting(setting_key).value:
+            if (
+                not storage_integration
+                or not storage_integration.setting(setting_key).value
+            ):
                 return MISSING_INTEGRATION
             current_integration_link.other_integration_id = storage_integration.id
 
@@ -2020,6 +2022,10 @@ class SettingsController(AdminCirculationManagerController):
                 S3UploaderConfiguration.PROTECTED_CONTENT_BUCKET_KEY
             ).value
 
+            analytics_bucket = integration.setting(
+                S3UploaderConfiguration.ANALYTICS_BUCKET_KEY
+            ).value
+
             for setting in mirror_integration_settings:
                 if (
                     setting["key"] == ExternalIntegrationLink.COVERS_KEY
@@ -2036,6 +2042,11 @@ class SettingsController(AdminCirculationManagerController):
                 elif (
                     setting["key"] == ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS_KEY
                 ):
+                    if protected_access_bucket:
+                        setting["options"].append(
+                            {"key": str(integration.id), "label": integration.name}
+                        )
+                elif setting["key"] == ExternalIntegrationLink.ANALYTICS_KEY:
                     if protected_access_bucket:
                         setting["options"].append(
                             {"key": str(integration.id), "label": integration.name}

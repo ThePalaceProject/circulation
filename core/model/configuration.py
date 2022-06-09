@@ -48,6 +48,9 @@ class ExternalIntegrationLink(Base, HasSessionCache):
     PROTECTED_ACCESS_BOOKS = "protected_access_books_mirror"
     PROTECTED_ACCESS_BOOKS_KEY = f"{PROTECTED_ACCESS_BOOKS}_integration_id"
 
+    ANALYTICS = "analytics_mirror"
+    ANALYTICS_KEY = f"{ANALYTICS}_integration_id"
+
     MARC = "MARC_mirror"
 
     id = Column(Integer, primary_key=True)
@@ -78,6 +81,12 @@ class ExternalIntegrationLink(Base, HasSessionCache):
             "type": PROTECTED_ACCESS_BOOKS,
             "description_type": "self-hosted, commercially licensed books",
             "label": "Protected Access Books Mirror",
+        },
+        {
+            "key": ANALYTICS_KEY,
+            "type": ANALYTICS,
+            "description_type": "Analytics",
+            "label": "Analytics Mirror",
         },
     ]
     settings = []

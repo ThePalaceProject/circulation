@@ -2,27 +2,26 @@ import datetime
 import json
 
 from flask_babel import lazy_gettext as _
+from sqlalchemy.orm import Session
 
 from core.config import CannotLoadConfiguration
-from core.local_analytics_provider import (
-    LocalAnalyticsProvider,
-    LocalAnalyticsProviderConfiguration,
-)
+from core.local_analytics_provider import LocalAnalyticsProvider
 from core.mirror import MirrorUploader
 from core.model import ExternalIntegration, MediaTypes, Representation, get_one
 from core.model.configuration import (
     ConfigurationAttributeType,
+    ConfigurationGrouping,
     ConfigurationMetadata,
     ConfigurationOption,
     ExternalIntegrationLink,
 )
-from core.s3 import S3UploaderConfiguration
+from core.s3 import S3Uploader, S3UploaderConfiguration
 
 
-class S3AnalyticsProviderConfiguration(LocalAnalyticsProviderConfiguration):
+class S3AnalyticsProviderConfiguration(ConfigurationGrouping):
     """Contains configuration settings of the S3 Analytics provider."""
 
-    NO_MIRROR_INTEGRATION = u"NO_MIRROR"
+    NO_MIRROR_INTEGRATION = "NO_MIRROR"
 
     DEFAULT_MIRROR_OPTION = ConfigurationOption(NO_MIRROR_INTEGRATION, "None")
 
@@ -46,7 +45,9 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
     NAME = _("S3 Analytics")
     DESCRIPTION = _("Store analytics events in a S3 bucket.")
 
-    SETTINGS = S3AnalyticsProviderConfiguration.to_settings()
+    SETTINGS = (
+        LocalAnalyticsProvider.SETTINGS + S3AnalyticsProviderConfiguration.to_settings()
+    )
 
     @staticmethod
     def _create_event_object(
@@ -156,16 +157,15 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
 
         return event
 
-    def _collect_event(
+    def collect_event(
         self,
-        db,
         library,
         license_pool,
         event_type,
         time,
-        neighborhood,
         old_value=None,
         new_value=None,
+        **kwargs
     ):
         """Log the event using the appropriate for the specific provider's mechanism.
 
@@ -193,11 +193,29 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         :param new_value: New value of the metric changed by the event
         :type new_value: Any
         """
+
+        if not library and not license_pool:
+            raise ValueError("Either library or license_pool must be provided.")
+        if library:
+            _db = Session.object_session(library)
+        else:
+            _db = Session.object_session(license_pool)
+        if library and self.library_id and library.id != self.library_id:
+            return
+
+        neighborhood = None
+        if self.location_source == self.LOCATION_SOURCE_NEIGHBORHOOD:
+            neighborhood = kwargs.pop("neighborhood", None)
+
         event = self._create_event_object(
             library, license_pool, event_type, time, old_value, new_value, neighborhood
         )
-        content = json.dumps(event, default=str, ensure_ascii=True, encoding="utf-8")
-        s3_uploader = self._get_s3_uploader(db)
+        content = json.dumps(
+            event,
+            default=str,
+            ensure_ascii=True,
+        )
+        s3_uploader: S3Uploader = self._get_s3_uploader(_db)
         analytics_file_url = s3_uploader.analytics_file_url(
             library, license_pool, event_type, time
         )
@@ -205,7 +223,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         # Create a temporary Representation object because S3Uploader can work only with Representation objects.
         # NOTE: It won't be stored in the database.
         representation = Representation(
-            media_type=MediaTypes.JSON_MEDIA_TYPE, content=content
+            media_type=MediaTypes.APPLICATION_JSON_MEDIA_TYPE, content=content
         )
         s3_uploader.mirror_one(representation, analytics_file_url)
 
@@ -249,7 +267,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
 
         if not analytics_bucket:
             raise CannotLoadConfiguration(
-                "The associated storage service does not have {0} bucket".format(
+                "The associated storage service does not have {} bucket".format(
                     S3UploaderConfiguration.ANALYTICS_BUCKET_KEY
                 )
             )
