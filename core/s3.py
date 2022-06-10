@@ -1,5 +1,7 @@
 import functools
 import logging
+import random
+import string
 from contextlib import contextmanager
 from datetime import datetime
 from enum import Enum
@@ -548,15 +550,18 @@ class S3Uploader(MirrorUploader):
         end_time: datetime,
         start_time: datetime = None,
     ):
-        """The path to the analytics data file for the given library, lane,
-        and date range."""
+        """The path to the analytics data file for the given library, license
+        pool and date range."""
         bucket = self.get_bucket(S3UploaderConfiguration.ANALYTICS_BUCKET_KEY)
         root = self._analytics_file_root(bucket, library)
         if start_time:
             time_part = str(start_time) + "-" + str(end_time)
         else:
             time_part = str(end_time)
-        parts = [time_part, license_pool.collection_id]
+
+        # ensure the uniqueness of file name (in case of overlapping events)
+        random_string = random.choices(string.ascii_lowercase, k=10)
+        parts = [time_part, license_pool.collection_id, random_string]
         return root + self.key_join(parts) + ".json"
 
     def split_url(self, url: str, unquote: bool = True) -> Tuple[str, str]:

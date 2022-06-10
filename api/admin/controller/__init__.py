@@ -1574,7 +1574,9 @@ class SettingsController(AdminCirculationManagerController):
         LCPAPI,
     ]
 
-    def _set_storage_external_integration_link(self, service, purpose, setting_key):
+    def _set_storage_external_integration_link(
+        self, service: ExternalIntegration, purpose: str, setting_key: str
+    ):
         """Either set or delete the external integration link between the
         service and the storage integration.
 
@@ -1598,15 +1600,16 @@ class SettingsController(AdminCirculationManagerController):
 
         # If no storage integration was selected, then delete the existing
         # external integration link.
-        current_integration_link, ignore = get_one_or_create(
-            self._db,
-            ExternalIntegrationLink,
-            library_id=None,
-            external_integration_id=service.id,
-            purpose=purpose,
-        )
-
         if mirror_integration_id == self.NO_MIRROR_INTEGRATION:
+
+            current_integration_link = get_one(
+                self._db,
+                ExternalIntegrationLink,
+                library_id=None,
+                external_integration_id=service.id,
+                purpose=purpose,
+            )
+
             if current_integration_link:
                 self._db.delete(current_integration_link)
         else:
@@ -1621,6 +1624,15 @@ class SettingsController(AdminCirculationManagerController):
                 or not storage_integration.setting(setting_key).value
             ):
                 return MISSING_INTEGRATION
+
+            current_integration_link, ignore = get_one_or_create(
+                self._db,
+                ExternalIntegrationLink,
+                library_id=None,
+                external_integration_id=service.id,
+                purpose=purpose,
+            )
+
             current_integration_link.other_integration_id = storage_integration.id
 
     @classmethod

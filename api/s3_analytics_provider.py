@@ -290,14 +290,6 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
             db, ExternalIntegration.STORAGE_GOAL
         )
 
-        # Remove all the existing options.
-        del S3AnalyticsProviderConfiguration.analytics_mirror.options[:]
-
-        # Add the default option.
-        S3AnalyticsProviderConfiguration.analytics_mirror.options.append(
-            S3AnalyticsProviderConfiguration.DEFAULT_MIRROR_OPTION
-        )
-
         for storage_integration in storage_integrations:
             configuration_settings = [
                 setting

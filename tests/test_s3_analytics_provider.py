@@ -1,10 +1,11 @@
 import datetime
 import json
+from unittest.mock import patch
 
 import pytest
-from api.s3_analytics_provider import S3AnalyticsProvider
 from mock import MagicMock, create_autospec
 
+from api.s3_analytics_provider import S3AnalyticsProvider
 from core.classifier import Classifier
 from core.config import CannotLoadConfiguration
 from core.mirror import MirrorUploader
@@ -34,7 +35,7 @@ class TestS3AnalyticsProvider(DatabaseTest):
         return timestamp.strftime("%Y-%m-%d %H:%M:%S.%f")
 
     def setup_method(self):
-        super(TestS3AnalyticsProvider, self).setup_method()
+        super().setup_method()
 
         self._analytics_integration, _ = create(
             self._db,
@@ -140,32 +141,33 @@ class TestS3AnalyticsProvider(DatabaseTest):
 
         # Set up a mock instead of real S3Uploader class acting as the S3 storage service
         s3_uploader = create_autospec(spec=S3Uploader)
-        MirrorUploader.implementation = MagicMock(return_value=s3_uploader)
 
-        # Set up event's metadata
-        event_time = datetime.datetime.utcnow()
-        event_time_formatted = self.timestamp_to_string(event_time)
-        event_type = CirculationEvent.NEW_PATRON
+        with patch("MirrorUploader.implementation") as mock_implementation:
+            mock_implementation.return_value = s3_uploader
+            # Set up event's metadata
+            event_time = datetime.datetime.utcnow()
+            event_time_formatted = self.timestamp_to_string(event_time)
+            event_type = CirculationEvent.NEW_PATRON
 
-        # Act
-        provider.collect_event(self._default_library, None, event_type, event_time)
+            # Act
+            provider.collect_event(self._default_library, None, event_type, event_time)
 
-        # Assert
-        s3_uploader.analytics_file_url.assert_called_once_with(
-            self._default_library, None, event_type, event_time
-        )
-        s3_uploader.mirror_one.assert_called_once()
-        representation, _ = s3_uploader.mirror_one.call_args[0]
+            # Assert
+            s3_uploader.analytics_file_url.assert_called_once_with(
+                self._default_library, None, event_type, event_time
+            )
+            s3_uploader.mirror_one.assert_called_once()
+            representation, _ = s3_uploader.mirror_one.call_args[0]
 
-        assert MediaTypes.JSON_MEDIA_TYPE == representation.media_type
+            assert MediaTypes.JSON_MEDIA_TYPE == representation.media_type
 
-        content = representation.content
-        event = json.loads(content)
+            content = representation.content
+            event = json.loads(content)
 
-        assert event_type == event["type"]
-        assert event_time_formatted == event["start"]
-        assert event_time_formatted == event["end"]
-        assert self._default_library.id == event["library_id"]
+            assert event_type == event["type"]
+            assert event_time_formatted == event["start"]
+            assert event_time_formatted == event["end"]
+            assert self._default_library.id == event["library_id"]
 
     def test_analytics_data_with_associated_license_pool_is_correctly_stored_in_s3(
         self,
