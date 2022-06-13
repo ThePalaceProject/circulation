@@ -2,6 +2,8 @@ import datetime
 import logging
 
 from api.saml.metadata.federations.model import SAMLFederation
+from api.saml.provider import SAMLWebSSOAuthenticationProvider
+from core.model import ExternalIntegration
 from core.monitor import Monitor
 from core.util.datetime_helpers import utc_now
 
@@ -42,8 +44,31 @@ class SAMLMetadataMonitor(Monitor):
 
         self._logger.info(f"Finished processing {saml_federation}")
 
+    def _check_if_saml_protocol_is_used(self):
+        saml_integrations = (
+            self._db.query(ExternalIntegration)
+            .filter(
+                ExternalIntegration.protocol
+                == SAMLWebSSOAuthenticationProvider.__module__
+            )
+            .all()
+        )
+
+        if saml_integrations:
+            return True
+
+        return False
+
     def run_once(self, progress):
         self._logger.info("Started running the SAML metadata monitor")
+
+        is_saml_used = self._check_if_saml_protocol_is_used()
+
+        if not is_saml_used:
+            self._logger.info(
+                "Finished running the SAML metadata monitor - SAML protocol not used"
+            )
+            return
 
         with self._db.begin(subtransactions=True):
             saml_federations = self._db.query(SAMLFederation).all()
