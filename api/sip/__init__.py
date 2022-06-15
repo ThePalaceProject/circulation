@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from typing import Union
 
 from flask_babel import lazy_gettext as _
 
@@ -183,12 +184,19 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
         self.ssl_key = integration.setting(self.SSL_KEY).value
         self.dialect = Sip2Dialect.load_dialect(integration.setting(self.ILS).value)
         self.client = client
-        patron_status_block = integration.setting(self.PATRON_STATUS_BLOCK).json_value
-        if patron_status_block is None or patron_status_block:
-            self.fields_that_deny_borrowing = (
-                SIPClient.PATRON_STATUS_FIELDS_THAT_DENY_BORROWING_PRIVILEGES
-            )
+
+        # Check if patrons should be blocked based on SIP status
+        # If nothing is specified, the default is True (block patrons!)
+        _block = integration.setting(self.PATRON_STATUS_BLOCK).json_value
+        if _block is None:
+            _block = True
+
+        if _block:
+            _deny_fields = SIPClient.PATRON_STATUS_FIELDS_THAT_DENY_BORROWING_PRIVILEGES
+            self.patron_status_should_block = True
+            self.fields_that_deny_borrowing = _deny_fields
         else:
+            self.patron_status_should_block = False
             self.fields_that_deny_borrowing = []
 
     @property
@@ -313,10 +321,10 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
             # return any data.
             return None
 
-            # TODO: I'm not 100% convinced that a missing CQ field
-            # always means "we don't have passwords so you're
-            # authenticated," rather than "you didn't provide a
-            # password so we didn't check."
+        # TODO: I'm not 100% convinced that a missing CQ field
+        # always means "we don't have passwords so you're
+        # authenticated," rather than "you didn't provide a
+        # password so we didn't check."
         patrondata = PatronData()
         if "sipserver_internal_id" in info:
             patrondata.permanent_id = info["sipserver_internal_id"]
@@ -344,6 +352,18 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
                     patrondata.authorization_expires = value
                     break
 
+        if self.patron_status_should_block:
+            patrondata.block_reason = self.info_to_patrondata_block_reason(
+                info, patrondata
+            )
+        else:
+            patrondata.block_reason = PatronData.NO_VALUE
+
+        return patrondata
+
+    def info_to_patrondata_block_reason(
+        self, info, patrondata: PatronData
+    ) -> Union[PatronData.NoValue, str]:
         # A True value in most (but not all) subfields of the
         # patron_status field will prohibit the patron from borrowing
         # books.
@@ -360,7 +380,6 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
                     # error message. There's no need to look through
                     # more fields.
                     break
-        patrondata.block_reason = block_reason
 
         # If we can tell by looking at the SIP2 message that the
         # patron has excessive fines, we can use that as the reason
@@ -368,9 +387,9 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
         if "fee_limit" in info:
             fee_limit = MoneyUtility.parse(info["fee_limit"]).amount
             if fee_limit and patrondata.fines > fee_limit:
-                patrondata.block_reason = PatronData.EXCESSIVE_FINES
+                block_reason = PatronData.EXCESSIVE_FINES
 
-        return patrondata
+        return block_reason
 
     @classmethod
     def parse_date(cls, value):

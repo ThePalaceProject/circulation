@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from decimal import Decimal
 
 import pytest
 
@@ -439,6 +440,50 @@ class TestSIP2AuthenticationProvider(DatabaseTest):
         assert "Booth Expired Test" == patron.personal_name
         assert 0 == patron.fines
         assert datetime(2008, 9, 7) == patron.authorization_expires
+        assert PatronData.NO_VALUE == patron.block_reason
+
+    def test_patron_block_setting_with_fines(self):
+        integration_block = self._external_integration(
+            self._str, settings={SIP2AuthenticationProvider.PATRON_STATUS_BLOCK: "true"}
+        )
+        integration_noblock = self._external_integration(
+            self._str,
+            settings={SIP2AuthenticationProvider.PATRON_STATUS_BLOCK: "false"},
+        )
+
+        # Test with blocked patron, block should be set
+        p = SIP2AuthenticationProvider(
+            self._default_library, integration_block, client=MockSIPClientFactory()
+        )
+        client = p._client
+        info = client.patron_information_parser(
+            TestSIP2AuthenticationProvider.evergreen_excessive_fines
+        )
+        info["fee_limit"] = "10.0"
+        patron = p.info_to_patrondata(info)
+        assert patron.__class__ == PatronData
+        assert "12345" == patron.authorization_identifier
+        assert "863718" == patron.permanent_id
+        assert "Booth Excessive Fines Test" == patron.personal_name
+        assert Decimal("100.0") == patron.fines
+        assert datetime(2019, 10, 4) == patron.authorization_expires
+        assert PatronData.EXCESSIVE_FINES == patron.block_reason
+
+        # Test with a patron that has fines. No block should be set.
+        p = SIP2AuthenticationProvider(
+            self._default_library, integration_noblock, client=MockSIPClientFactory()
+        )
+        client = p._client
+        info = client.patron_information_parser(
+            TestSIP2AuthenticationProvider.evergreen_excessive_fines
+        )
+        patron = p.info_to_patrondata(info)
+        assert patron.__class__ == PatronData
+        assert "12345" == patron.authorization_identifier
+        assert "863718" == patron.permanent_id
+        assert "Booth Excessive Fines Test" == patron.personal_name
+        assert Decimal("100.0") == patron.fines
+        assert datetime(2019, 10, 4) == patron.authorization_expires
         assert PatronData.NO_VALUE == patron.block_reason
 
     def test_run_self_tests(self):
