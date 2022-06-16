@@ -1351,7 +1351,9 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
                         progress.exception = e
                     else:
                         time.sleep(1)
-                        self.log.warning(f"retrying book {book}")
+                        self.log.warning(
+                            f"retrying book {book} (attempt {attempt} of {OverdriveCirculationMonitor.MAXIMUM_BOOK_RETRIES})"
+                        )
 
             if self.should_stop(start, book, book_changed):
                 break
