@@ -1,7 +1,7 @@
 # Library
 import logging
 from collections import Counter
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 from expiringdict import ExpiringDict
 from sqlalchemy import (
@@ -34,6 +34,7 @@ if TYPE_CHECKING:
         CachedFeed,
         CachedMARCFile,
         CirculationEvent,
+        Collection,
         ConfigurationSetting,
         CustomList,
         ExternalIntegration,
@@ -136,6 +137,9 @@ class Library(Base, HasSessionCache):
     # used for Library.has_root_lane.  This is invalidated whenever
     # Lane configuration changes, and it will also expire on its own.
     _has_root_lane_cache = ExpiringDict(max_len=1000, max_age_seconds=3600)
+
+    # Typing specific
+    collections: List["Collection"]
 
     def __repr__(self):
         return (

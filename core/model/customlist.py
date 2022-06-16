@@ -2,6 +2,7 @@
 
 import logging
 from functools import total_ordering
+from typing import TYPE_CHECKING, List
 
 from sqlalchemy import (
     Boolean,
@@ -24,6 +25,9 @@ from .datasource import DataSource
 from .identifier import Identifier
 from .licensing import LicensePool
 from .work import Work
+
+if TYPE_CHECKING:
+    from . import Collection
 
 
 @total_ordering
@@ -48,14 +52,18 @@ class CustomList(Base):
     # cached when the list contents change.
     size = Column(Integer, nullable=False, default=0)
 
-    entries = relationship("CustomListEntry", backref="customlist")
+    entries = relationship("CustomListEntry", backref="customlist", uselist=True)
 
     # List sharing mechanisms
     shared_locally_with_libraries = relationship(
         "Library",
-        secondary=lambda: customlist_sharedlibrary,
+        secondary=lambda: customlist_sharedlibrary,  # type: ignore
         backref="shared_custom_lists",
+        uselist=True,
     )
+
+    # Typing specific
+    collections: List["Collection"]
 
     __table_args__ = (
         UniqueConstraint("data_source_id", "foreign_identifier"),
