@@ -108,6 +108,8 @@ class Library(Base, HasSessionCache):
         backref="library",
         lazy="joined",
     )
+    # Lists shared with this library
+    shared_custom_lists: "CustomList"
 
     # A Library may have many ExternalIntegrations.
     integrations = relationship(

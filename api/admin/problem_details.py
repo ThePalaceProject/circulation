@@ -503,3 +503,19 @@ MISSING_IDENTIFIER = pd(
     title=_("Missing identifier"),
     detail=_("No identifier was used."),
 )
+
+CUSTOMLIST_SOURCE_COLLECTION_MISSING = pd(
+    "http://librarysimplified.org/terms/problem/customlist-source-collection-missing",
+    status_code=400,
+    title=_("Source collection missing"),
+    detail=_("A source collection is not present in the library."),
+)
+
+CUSTOMLIST_ENTRY_NOT_VALID_FOR_LIBRARY = pd(
+    "http://librarysimplified.org/terms/problem/customlist-entry-not-valid-for-library",
+    status_code=400,
+    title=_("Entry not valid for library"),
+    detail=_(
+        "An entry in the customlist was not valid for the library being shared with."
+    ),
+)

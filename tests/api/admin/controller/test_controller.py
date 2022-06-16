@@ -9,6 +9,7 @@ from io import StringIO
 import feedparser
 import flask
 import pytest
+from attrs import define
 from werkzeug.datastructures import MultiDict
 from werkzeug.http import dump_cookie
 
@@ -52,6 +53,7 @@ from core.model import (
     get_one,
     get_one_or_create,
 )
+from core.model.collection import Collection
 from core.opds_import import OPDSImporter, OPDSImportMonitor
 from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
@@ -1493,6 +1495,90 @@ class TestCustomListsController(AdminControllerTest):
         with self.request_context_with_library_and_admin("/", method="DELETE"):
             response = self.manager.admin_custom_lists_controller.custom_list(123)
             assert MISSING_CUSTOM_LIST == response
+
+    @define
+    class ShareLocallySetup:
+        shared_with: Library = None
+        primary_library: Library = None
+        collection1: Collection = None
+        list: CustomList = None
+
+    def _setup_share_locally(self):
+        shared_with = self._library("shared_with")
+        primary_library = self._library("primary")
+        collection1 = self._collection("c1")
+        primary_library.collections.append(collection1)
+
+        data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
+        list, ignore = create(
+            self._db,
+            CustomList,
+            name=self._str,
+            data_source=data_source,
+            library=primary_library,
+            collections=[collection1],
+        )
+
+        return self.ShareLocallySetup(
+            shared_with=shared_with,
+            primary_library=primary_library,
+            collection1=collection1,
+            list=list,
+        )
+
+    def _share_locally(self, customlist, share_with_library):
+        with self.request_context_with_library_and_admin("/", method="POST") as c:
+            flask.request.form = MultiDict(
+                [
+                    ("library", share_with_library.id),
+                    ("customlist", customlist.id),
+                ]
+            )
+            response = self.manager.admin_custom_lists_controller.share_locally()
+        return response
+
+    def test_share_locally_missing_collection(self):
+        s = self._setup_share_locally()
+        response = self._share_locally(s.list, s.shared_with)
+        assert response == CUSTOMLIST_SOURCE_COLLECTION_MISSING
+
+    def test_share_locally_success(self):
+        s = self._setup_share_locally()
+        s.shared_with.collections.append(s.collection1)
+        response = self._share_locally(s.list, s.shared_with)
+        assert response.status_code == 200
+
+        self._db.refresh(s.list)
+        assert len(s.list.shared_locally_with_libraries) == 1
+
+    def test_share_locally_with_invalid_entries(self):
+        s = self._setup_share_locally()
+        s.shared_with.collections.append(s.collection1)
+
+        # Second collection with work in list
+        collection2 = self._collection()
+        s.primary_library.collections.append(collection2)
+        w = self._work(collection=collection2)
+        s.list.add_entry(w)
+
+        response = self._share_locally(s.list, s.shared_with)
+        assert response == CUSTOMLIST_ENTRY_NOT_VALID_FOR_LIBRARY
+
+    def test_share_locally_get(self):
+        """Does the GET method fetch shared lists"""
+        s = self._setup_share_locally()
+        s.shared_with.collections.append(s.collection1)
+
+        resp = self._share_locally(s.list, s.shared_with)
+        assert resp.status_code == 200
+
+        self.admin.add_role(AdminRole.LIBRARIAN, s.shared_with)
+        with self.request_context_with_library_and_admin(
+            "/", method="GET", library=s.shared_with
+        ):
+            response = self.manager.admin_custom_lists_controller.custom_lists()
+            assert len(response["custom_lists"]) == 1
+            assert response["custom_lists"][0]["id"] == s.list.id
 
 
 class TestLanesController(AdminControllerTest):

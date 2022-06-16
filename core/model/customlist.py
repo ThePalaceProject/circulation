@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Table,
     Unicode,
     UniqueConstraint,
 )
@@ -48,6 +49,13 @@ class CustomList(Base):
     size = Column(Integer, nullable=False, default=0)
 
     entries = relationship("CustomListEntry", backref="customlist")
+
+    # List sharing mechanisms
+    shared_locally_with_libraries = relationship(
+        "Library",
+        secondary=lambda: customlist_sharedlibrary,
+        backref="shared_custom_lists",
+    )
 
     __table_args__ = (
         UniqueConstraint("data_source_id", "foreign_identifier"),
@@ -290,6 +298,23 @@ class CustomList(Base):
 
     def update_size(self):
         self.size = len(self.entries)
+
+
+customlist_sharedlibrary = Table(
+    "customlist_sharedlibraries",
+    Base.metadata,
+    Column(
+        "customlist_id",
+        Integer,
+        ForeignKey("customlists.id"),
+        index=True,
+        nullable=False,
+    ),
+    Column(
+        "library_id", Integer, ForeignKey("libraries.id"), index=True, nullable=False
+    ),
+    UniqueConstraint("customlist_id", "library_id"),
+)
 
 
 class CustomListEntry(Base):
