@@ -1020,10 +1020,9 @@ class CustomListsController(AdminCirculationManagerController):
                 lane.update_size(self._db, self.search_engine)
             return Response(str(_("Deleted")), 200)
 
-    def share_locally(self) -> Union[ProblemDetail, Response]:
+    def share_locally(self, customlist_id) -> Union[ProblemDetail, Response]:
         """Share this customlist with a library on this local CM"""
         library_id = flask.request.form.get("library")
-        customlist_id = flask.request.form.get("customlist")
         if not library_id or not customlist_id:
             return INVALID_INPUT
 
@@ -1039,6 +1038,31 @@ class CustomListsController(AdminCirculationManagerController):
         else:
             self._db.rollback()
             return response
+
+    def share_locally_with_library_collection(self, customlist_id):
+        """Share with all libraries having a collection"""
+        collection_id = flask.request.form.get("collection")
+        if not collection_id or not customlist_id:
+            return INVALID_INPUT
+
+        collection: Collection = get_one(self._db, Collection, id=collection_id)
+        customlist: CustomList = get_one(self._db, CustomList, id=customlist_id)
+
+        for library in collection.libraries:
+            if (
+                customlist.library == library
+                or library in customlist.shared_locally_with_libraries
+            ):
+                continue
+            response = CustomListQueries.share_locally_with_library(
+                self._db, customlist, library
+            )
+            if response is not True:
+                self._db.rollback()
+                return response
+
+        self._db.commit()
+        return Response(200)
 
 
 class LanesController(AdminCirculationManagerController):

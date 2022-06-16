@@ -1527,14 +1527,27 @@ class TestCustomListsController(AdminControllerTest):
         )
 
     def _share_locally(self, customlist, share_with_library):
-        with self.request_context_with_library_and_admin("/", method="POST") as c:
+        with self.request_context_with_library_and_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("library", share_with_library.id),
-                    ("customlist", customlist.id),
                 ]
             )
-            response = self.manager.admin_custom_lists_controller.share_locally()
+            response = self.manager.admin_custom_lists_controller.share_locally(
+                customlist.id
+            )
+        return response
+
+    def _share_locally_with_collection(self, customlist, collection):
+        with self.request_context_with_library_and_admin("/", method="POST") as c:
+            flask.request.form = MultiDict(
+                [
+                    ("collection", collection.id),
+                ]
+            )
+            response = self.manager.admin_custom_lists_controller.share_locally_with_library_collection(
+                customlist.id
+            )
         return response
 
     def test_share_locally_missing_collection(self):
@@ -1579,6 +1592,23 @@ class TestCustomListsController(AdminControllerTest):
             response = self.manager.admin_custom_lists_controller.custom_lists()
             assert len(response["custom_lists"]) == 1
             assert response["custom_lists"][0]["id"] == s.list.id
+
+    def test_share_locally_with_collection(self):
+        s = self._setup_share_locally()
+        s.shared_with.collections.append(s.collection1)
+
+        response = self._share_locally_with_collection(s.list, s.collection1)
+        assert response.status_code == 200
+
+        assert len(s.list.shared_locally_with_libraries) == 1
+        assert s.list.shared_locally_with_libraries[0].id == s.shared_with.id
+
+    def test_share_locally_with_collection_not_accessible(self):
+        s = self._setup_share_locally()
+
+        response = self._share_locally_with_collection(s.list, s.collection1)
+        assert response.status_code == 200
+        assert len(s.list.shared_locally_with_libraries) == 0
 
 
 class TestLanesController(AdminControllerTest):
