@@ -314,12 +314,16 @@ customlist_sharedlibrary = Table(
     Column(
         "customlist_id",
         Integer,
-        ForeignKey("customlists.id"),
+        ForeignKey("customlists.id", ondelete="CASCADE"),
         index=True,
         nullable=False,
     ),
     Column(
-        "library_id", Integer, ForeignKey("libraries.id"), index=True, nullable=False
+        "library_id",
+        Integer,
+        ForeignKey("libraries.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
     ),
     UniqueConstraint("customlist_id", "library_id"),
 )
