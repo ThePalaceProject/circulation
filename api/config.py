@@ -266,16 +266,19 @@ class Configuration(CoreConfiguration):
             "description": _(
                 "An email address a patron can use if they need help, e.g. 'simplyehelp@yourlibrary.org'."
             ),
-            "required": True,
+            # "required": True,
+            "category": "Basic Information",
             "format": "email",
             "level": CoreConfiguration.SYS_ADMIN_ONLY,
         },
         {
             "key": HELP_WEB,
             "label": _("Patron support web site"),
-            "description": _("A URL for patrons to get help."),
+            "description": _(
+                "A URL for patrons to get help. Either this field or patron support email address must be provided."
+            ),
             "format": "url",
-            "category": "Patron Support",
+            "category": "Basic Information",
             "level": CoreConfiguration.ALL_ACCESS,
         },
         {
