@@ -1553,7 +1553,12 @@ class Work(Base):
             item.classifications = list(  # type: ignore
                 filter(lambda idx: idx[0] == item.id, all_subjects)
             )
-            search_doc = cls.search_doc_as_dict(cast(WorkTypevar, item))
+
+            try:
+                search_doc = cls.search_doc_as_dict(cast(WorkTypevar, item))
+            except:
+                logging.exception(f"Could not create search document for {item}")
+
             results.append(search_doc)
 
         return results
