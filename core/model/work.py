@@ -1556,10 +1556,9 @@ class Work(Base):
 
             try:
                 search_doc = cls.search_doc_as_dict(cast(WorkTypevar, item))
+                results.append(search_doc)
             except:
                 logging.exception(f"Could not create search document for {item}")
-
-            results.append(search_doc)
 
         return results
 
