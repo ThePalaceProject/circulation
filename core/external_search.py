@@ -7,6 +7,7 @@ import time
 from collections import defaultdict
 from typing import Dict, Optional, Union
 
+from attr import define
 from elasticsearch import Elasticsearch
 from elasticsearch.exceptions import ElasticsearchException, RequestError
 from elasticsearch.helpers import bulk as elasticsearch_bulk
@@ -27,6 +28,8 @@ from elasticsearch_dsl.query import Query as BaseQuery
 from elasticsearch_dsl.query import Range, Term, Terms
 from flask_babel import lazy_gettext as _
 from spellchecker import SpellChecker
+
+from core.util import Values
 
 from .classifier import (
     AgeClassifier,
@@ -1917,16 +1920,21 @@ class Query(SearchBase):
 
 
 class JSONQuery(Query):
-    class Conjunctives:
+    """An ES query created out of a JSON based query language
+    Eg. { "query": { "and": [{"key": "title", "value": "book" }, {"key": "author", "value": "robert" }] } }
+    Simply means "title=book and author=robert". The language is extensible, and easy to understand for clients to implement
+    """
+
+    class Conjunctives(Values):
         AND = "and"
         OR = "or"
 
-    class QueryLeaf:
+    class QueryLeaf(Values):
         KEY = "key"
         VALUE = "value"
         OP = "op"
 
-    class Operators:
+    class Operators(Values):
         EQ = "eq"
         NEQ = "neq"
         GTE = "gte"
@@ -1935,6 +1943,8 @@ class JSONQuery(Query):
         GT = "gt"
 
     _KEYWORD_ONLY = {"keyword": True}
+
+    # The fields mappings in the search DB
     FIELD_MAPPING: Dict[str, Dict] = {
         "audience": _KEYWORD_ONLY,
         "author": _KEYWORD_ONLY,
@@ -1975,13 +1985,31 @@ class JSONQuery(Query):
         "title": _KEYWORD_ONLY,
     }
 
+    # From the client, some field names may be abstracted
+    FIELD_TRANSFORMS = {
+        "genre": "genres.name",
+        "open_access": "licensepools.open_access",
+        "available": "licensepools.available",
+        "classification": "classifications.term",
+    }
+
     def __init__(self, query: Dict, filter=None):
+        if type(query) is str:
+            try:
+                query = json.loads(query)
+            except Exception as e:
+                raise QueryParseException(
+                    detail=f"'{query}' is not a valid json"
+                ) from None
+
         self.query = query
         self.filter = filter
 
     @property
     def elasticsearch_query(self):
         query = None
+        if "query" not in self.query:
+            raise QueryParseException("'query' key must be present as the root")
         query = self._parse_json_query(self.query["query"])
         return query
 
@@ -1995,18 +2023,41 @@ class JSONQuery(Query):
         """Eventually recursive json query parser"""
         es_query = None
 
+        # Empty query remains empty
+        if not query:
+            return {}
+
+        # This is minimal set of leaf keys, op is optional
         leaves = {self.QueryLeaf.KEY, self.QueryLeaf.VALUE}
+
+        # Are we a {key, value, [op]} query
         if set(query.keys()).intersection(leaves) == leaves:
             es_query = self._parse_json_leaf(query)
+        # Are we an {and, or} query
         elif {self.Conjunctives.AND, self.Conjunctives.OR}.issuperset(query.keys()):
             es_query = self._parse_json_join(query)
+        else:
+            raise QueryParseException(
+                detail=f"Could not make sense of the query: {query}"
+            )
 
         return es_query
 
-    def _parse_json_leaf(self, query):
+    def _parse_json_leaf(self, query: Dict) -> Dict:
+        """We have a leaf query, which means this becomes a keyword.term query"""
         op = query.get(self.QueryLeaf.OP, self.Operators.EQ)
 
-        key = query[self.QueryLeaf.KEY]
+        if op not in self.Operators:
+            raise QueryParseException(detail=f"Unrecognized operator: {op}")
+
+        old_key = query[self.QueryLeaf.KEY]
+        key = self.FIELD_TRANSFORMS.get(
+            old_key, old_key
+        )  # Transform field name, if applicable
+
+        if key not in self.FIELD_MAPPING.keys():
+            raise QueryParseException(f"Unrecognized key: {old_key}")
+
         nested_path = self._nested_path(key)
         if self._is_keyword(key):
             key = query[self.QueryLeaf.KEY] + ".keyword"
@@ -2033,7 +2084,12 @@ class JSONQuery(Query):
 
         return es_query
 
-    def _parse_json_join(self, query):
+    def _parse_json_join(self, query: Dict) -> Dict:
+        if len(query.keys()) != 1:
+            raise QueryParseException(
+                detail="A conjuction cannot have multiple parts in the same sub-query"
+            )
+
         join = list(query.keys())[0]
         to_join = []
         for query_part in query[join]:
@@ -2046,6 +2102,11 @@ class JSONQuery(Query):
             joined_query = Bool(should=to_join)
 
         return joined_query
+
+
+@define
+class QueryParseException(Exception):
+    detail: str = None
 
 
 class QueryParser:

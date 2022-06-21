@@ -4452,6 +4452,10 @@ class TestOPDSFeedController(CirculationControllerTest):
             response = self.manager.opds_feeds.search(None, feed_class=Mock)
             assert AudiobooksEntryPoint == self.called_with["facets"].entrypoint
 
+        with self.request_context_with_library("/?q=t&search_type=json"):
+            response = self.manager.opds_feeds.search(None, feed_class=Mock)
+            assert self.called_with["facets"].search_type == "json"
+
     def test_misconfigured_search(self):
         class BadSearch(CirculationManager):
             @property

@@ -32,6 +32,7 @@ from core.external_search import (
     MockExternalSearchIndex,
     MockSearchResult,
     Query,
+    QueryParseException,
     QueryParser,
     SearchBase,
     SearchIndexCoverageProvider,
@@ -4682,6 +4683,23 @@ class TestJSONQuery(ExternalSearchTest):
             "nested": {"path": root, "query": {"term": {term: value}}}
         }
 
+    @parameterized.expand(
+        [
+            (dict(key="author", op="eg", value="name"), "Unrecognized operator: eg"),
+            (dict(key="arthur", op="eq", value="name"), "Unrecognized key: arthur"),
+            (
+                dict(kew="author", op="eq", value="name"),
+                "Could not make sense of the query",
+            ),
+            ({"and": [], "or": []}, "A conjuction cannot have multiple parts"),
+        ]
+    )
+    def test_errors(self, query, error_match):
+        q = self._jq(query)
+
+        with pytest.raises(QueryParseException, match=error_match):
+            q.elasticsearch_query  # fetch the property
+
 
 class TestExternalSearchJSONQuery(EndToEndSearchTest):
     def _leaf(self, key, value, op="eq"):
@@ -4698,12 +4716,20 @@ class TestExternalSearchJSONQuery(EndToEndSearchTest):
         self.audio_work.presentation_edition.medium = "Audio"
 
         self.random_works = []
+        specifics = [
+            dict(language="Spanish"),
+            dict(language="Spanish"),
+            dict(language="German"),
+            dict(with_open_access_download=False, with_license_pool=True),
+        ]
         for i in range(4):
-            w = self._work(
+            data = dict(
                 title=uuid.uuid4(),
                 authors=[uuid.uuid4()],
                 with_open_access_download=True,
             )
+            data.update(**specifics[i])
+            w = self._work(**data)
             self.random_works.append(w)
 
         self._db.commit()
@@ -4723,9 +4749,6 @@ class TestExternalSearchJSONQuery(EndToEndSearchTest):
         assert respids == expectedids
 
     def test_search_basic(self):
-        facets = SearchFacets(search_type="json")
-        filter = Filter(facets=facets)
-
         self.expect(self._leaf("medium", "Audio"), [self.audio_work])
 
         w1: Work = self.random_works[0]
@@ -4747,3 +4770,12 @@ class TestExternalSearchJSONQuery(EndToEndSearchTest):
             {"and": [self._leaf("title", w1.title), self._leaf("title", w2.title)]},
             [],
         )
+
+        self.expect(
+            {"and": [self._leaf("language", "German")]},
+            [self.random_works[2]],
+        )
+
+    def test_field_transform(self):
+        """Fields transforms should apply and criterias should match"""
+        self.expect(self._leaf("open_access", False), [self.random_works[3]])
