@@ -239,6 +239,23 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
             response = self.manager.admin_library_settings_controller.process_post()
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
+        # Either patron support email or website MUST be present
+        with self.request_context_with_admin("/", method="POST"):
+            flask.request.form = MultiDict(
+                [
+                    ("name", "Email or Website Library"),
+                    ("short_name", "Email or Website"),
+                    ("website", "http://example.org"),
+                    ("default_notification_email_address", "email@example.org"),
+                ]
+            )
+            response = self.manager.admin_library_settings_controller.process_post()
+            assert response.uri == INCOMPLETE_CONFIGURATION.uri
+            assert (
+                "Patron support email address or Patron support web site"
+                in response.detail
+            )
+
         # Test a web primary and secondary color that doesn't contrast
         # well on white. Here primary will, secondary should not.
         with self.request_context_with_admin("/", method="POST"):
