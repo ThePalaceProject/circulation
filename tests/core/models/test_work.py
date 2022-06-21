@@ -1306,6 +1306,19 @@ class TestWork(DatabaseTest):
             x["collection_id"] for x in search_doc["licensepools"]
         }
 
+    def test_to_search_doc_no_edition(self):
+        """There was a bug where to_search_documents would crash if
+        a presentation_edition was missing"""
+        work = self._work(with_license_pool=True)
+        work.presentation_edition = None
+        search_doc = work.to_search_document()
+
+        assert "edition" not in search_doc
+        assert len(search_doc["licensepools"]) == 1
+        assert (
+            "medium" not in search_doc["licensepools"][0]
+        )  # No presentation edition means no medium
+
     def test_age_appropriate_for_patron(self):
         work = self._work()
         work.audience = Classifier.AUDIENCE_YOUNG_ADULT

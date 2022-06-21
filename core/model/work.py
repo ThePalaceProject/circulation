@@ -1553,8 +1553,12 @@ class Work(Base):
             item.classifications = list(  # type: ignore
                 filter(lambda idx: idx[0] == item.id, all_subjects)
             )
-            search_doc = cls.search_doc_as_dict(cast(WorkTypevar, item))
-            results.append(search_doc)
+
+            try:
+                search_doc = cls.search_doc_as_dict(cast(WorkTypevar, item))
+                results.append(search_doc)
+            except:
+                logging.exception(f"Could not create search document for {item}")
 
         return results
 
@@ -1667,7 +1671,8 @@ class Work(Base):
                 lc["licensed"] = (
                     item.unlimited_access or item.self_hosted or item.licenses_owned > 0
                 )
-                lc["medium"] = doc.presentation_edition.medium
+                if doc.presentation_edition:
+                    lc["medium"] = doc.presentation_edition.medium
                 lc["licensepool_id"] = item.id
                 lc["quality"] = doc.quality
                 result["licensepools"].append(lc)
