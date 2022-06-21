@@ -25,7 +25,7 @@ from elasticsearch_dsl.query import (
     Nested,
 )
 from elasticsearch_dsl.query import Query as BaseQuery
-from elasticsearch_dsl.query import Range, Term, Terms
+from elasticsearch_dsl.query import Range, Regexp, Term, Terms
 from flask_babel import lazy_gettext as _
 from spellchecker import SpellChecker
 
@@ -1941,6 +1941,8 @@ class JSONQuery(Query):
         LTE = "lte"
         LT = "lt"
         GT = "gt"
+        REGEX = "regex"
+        CONTAINS = "contains"
 
     _KEYWORD_ONLY = {"keyword": True}
 
@@ -1993,7 +1995,7 @@ class JSONQuery(Query):
         "classification": "classifications.term",
     }
 
-    def __init__(self, query: Dict, filter=None):
+    def __init__(self, query: Union[str, Dict], filter=None):
         if type(query) is str:
             try:
                 query = json.loads(query)
@@ -2066,9 +2068,9 @@ class JSONQuery(Query):
 
         es_query = None
 
-        if op is self.Operators.EQ:
+        if op == self.Operators.EQ:
             es_query = Term(**{key: value})
-        elif op is self.Operators.NEQ:
+        elif op == self.Operators.NEQ:
             es_query = Bool(must_not=[Term(**{key: value})])
         elif op in {
             self.Operators.GT,
@@ -2077,10 +2079,19 @@ class JSONQuery(Query):
             self.Operators.LTE,
         }:
             es_query = Range(**{key: {op: value}})
+        elif op == self.Operators.REGEX:
+            regex_query = dict(value=value, flags="ALL")
+            es_query = Regexp(**{key: regex_query})
+        elif op == self.Operators.CONTAINS:
+            regex_query = dict(value=f".*{value}.*", flags="ALL")
+            es_query = Regexp(**{key: regex_query})
 
         # For nested paths
         if nested_path:
             es_query = Nested(path=nested_path, query=es_query)
+
+        if es_query is None:
+            raise QueryParseException(detail=f"Could not parse query: {query}")
 
         return es_query
 
@@ -2106,7 +2117,7 @@ class JSONQuery(Query):
 
 @define
 class QueryParseException(Exception):
-    detail: str = None
+    detail: str = ""
 
 
 class QueryParser:

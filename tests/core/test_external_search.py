@@ -4700,6 +4700,17 @@ class TestJSONQuery(ExternalSearchTest):
         with pytest.raises(QueryParseException, match=error_match):
             q.elasticsearch_query  # fetch the property
 
+    def test_regex_query(self):
+        q = self._jq(self._leaf("title", "book", op="regex"))
+        assert q.elasticsearch_query.to_dict() == {
+            "regexp": {
+                "title.keyword": {
+                    "flags": "ALL",
+                    "value": "book",
+                }
+            }
+        }
+
 
 class TestExternalSearchJSONQuery(EndToEndSearchTest):
     def _leaf(self, key, value, op="eq"):
