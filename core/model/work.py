@@ -1667,7 +1667,8 @@ class Work(Base):
                 lc["licensed"] = (
                     item.unlimited_access or item.self_hosted or item.licenses_owned > 0
                 )
-                lc["medium"] = doc.presentation_edition.medium
+                if doc.presentation_edition:
+                    lc["medium"] = doc.presentation_edition.medium
                 lc["licensepool_id"] = item.id
                 lc["quality"] = doc.quality
                 result["licensepools"].append(lc)
