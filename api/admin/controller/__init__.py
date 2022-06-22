@@ -6,6 +6,7 @@ import os
 import sys
 import urllib.parse
 from datetime import date, datetime, timedelta
+from typing import Union
 
 import flask
 import jwt
@@ -74,6 +75,7 @@ from core.model.configuration import ExternalIntegrationLink
 from core.opds import AcquisitionFeed
 from core.opds2_import import OPDS2Importer
 from core.opds_import import OPDSImporter, OPDSImportMonitor
+from core.query.customlist import CustomListQueries
 from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
 from core.util.datetime_helpers import utc_now
@@ -794,6 +796,26 @@ class CustomListsController(AdminCirculationManagerController):
                         entry_count=list.size,
                     )
                 )
+
+            for list in library.shared_custom_lists:
+                collections = []
+                for collection in list.collections:
+                    collections.append(
+                        dict(
+                            id=collection.id,
+                            name=collection.name,
+                            protocol=collection.protocol,
+                        )
+                    )
+                custom_lists.append(
+                    dict(
+                        id=list.id,
+                        name=list.name,
+                        collections=collections,
+                        entry_count=list.size,
+                    )
+                )
+
             return dict(custom_lists=custom_lists)
 
         if flask.request.method == "POST":
@@ -997,6 +1019,50 @@ class CustomListsController(AdminCirculationManagerController):
             for lane in surviving_lanes:
                 lane.update_size(self._db, self.search_engine)
             return Response(str(_("Deleted")), 200)
+
+    def share_locally(self, customlist_id) -> Union[ProblemDetail, Response]:
+        """Share this customlist with a library on this local CM"""
+        library_id = flask.request.form.get("library")
+        if not library_id or not customlist_id:
+            return INVALID_INPUT
+
+        library: Library = get_one(self._db, Library, id=library_id)
+        customlist: CustomList = get_one(self._db, CustomList, id=customlist_id)
+        response = CustomListQueries.share_locally_with_library(
+            self._db, customlist, library
+        )
+
+        if response is True:
+            self._db.commit()
+            return Response(200)
+        else:
+            self._db.rollback()
+            return response
+
+    def share_locally_with_library_collection(self, customlist_id):
+        """Share with all libraries having a collection"""
+        collection_id = flask.request.form.get("collection")
+        if not collection_id or not customlist_id:
+            return INVALID_INPUT
+
+        collection: Collection = get_one(self._db, Collection, id=collection_id)
+        customlist: CustomList = get_one(self._db, CustomList, id=customlist_id)
+
+        for library in collection.libraries:
+            if (
+                customlist.library == library
+                or library in customlist.shared_locally_with_libraries
+            ):
+                continue
+            response = CustomListQueries.share_locally_with_library(
+                self._db, customlist, library
+            )
+            if response is not True:
+                self._db.rollback()
+                return response
+
+        self._db.commit()
+        return Response(200)
 
 
 class LanesController(AdminCirculationManagerController):
