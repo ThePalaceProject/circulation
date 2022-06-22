@@ -1298,7 +1298,7 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
     basic Editions for any new LicensePools that show up.
     """
 
-    MAXIMUM_BOOK_RETRIES = 10
+    MAXIMUM_BOOK_RETRIES = 3
     SERVICE_NAME = "Overdrive Circulation Monitor"
     PROTOCOL = ExternalIntegration.OVERDRIVE
     OVERLAP = datetime.timedelta(minutes=1)
