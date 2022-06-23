@@ -37,9 +37,9 @@ optional arguments:
 
 ```bash
 $ ./bin/customlist_import --help
-usage: customlist_import [-h] --server SERVER --username USERNAME
---password PASSWORD [--schema-file SCHEMA_FILE] [--schema-report-file SCHEMA_REPORT_FILE]
---file FILE --output OUTPUT [--dry-run] [--verbose]
+usage: customlist_import [-h] --server SERVER --username USERNAME --password PASSWORD
+[--schema-file SCHEMA_FILE] [--schema-report-file SCHEMA_REPORT_FILE]
+--library-name LIBRARY_NAME --file FILE --output OUTPUT [--dry-run] [--verbose]
 
 Import custom lists.
 
@@ -52,10 +52,13 @@ optional arguments:
                         The schema file for custom lists
   --schema-report-file SCHEMA_REPORT_FILE
                         The schema file for custom list reports
+  --library-name LIBRARY_NAME
+                        The destination library short name
   --file FILE           The customlists file
   --output OUTPUT       The output report
   --dry-run             Show what would be done, but don't do it.
   --verbose, -v         Increase verbosity (can be specified multiple times)
+
 
 ```
 
@@ -81,8 +84,8 @@ optional arguments:
 ## Example
 
 The following copies all lists that belong to the library with the short name `HAZELNUT` from `source.example.com`
-to `target.example.com`, producing an `output.csv` file that  contains any manual steps that might need to be performed
-afterwards:
+to the library `WALNUT` on `target.example.com`, producing an `output.csv` file that  contains any manual steps that
+might need to be performed afterwards:
 
 ```bash
 $ ./bin/customlist_export \
@@ -96,6 +99,7 @@ $ ./bin/customlist_import \
   --server http://target.example.com \
   --username admin-example \
   --password 12345678 \
+  --library-name WALNUT \
   --file export.json \
   --output report.json
 
