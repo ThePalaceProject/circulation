@@ -41,6 +41,7 @@ class CustomListImporter:
     _output_file: str
     _schema_file: str
     _schema_report_file: str
+    _library_name: str
 
     @staticmethod
     def _fatal(message: str):
@@ -77,6 +78,9 @@ class CustomListImporter:
             help="The schema file for custom list reports",
             required=False,
             default="customlists/customlists-report.schema.json",
+        )
+        parser.add_argument(
+            "--library-name", help="The destination library short name", required=True
         )
         parser.add_argument("--file", help="The customlists file", required=True)
         parser.add_argument("--output", help="The output report", required=True)
@@ -256,7 +260,9 @@ class CustomListImporter:
             f"Checking that list '{customlist.name()}' ({customlist.id()}) does not exist on the target CM"
         )
 
-        server_list_endpoint: str = f"{self._server_base}/admin/custom_lists"
+        server_list_endpoint: str = (
+            f"{self._server_base}/{self._library_name}/admin/custom_lists"
+        )
         response = self._session.get(server_list_endpoint)
         if response.status_code >= 400:
             self._fatal_response("Failed to retrieve custom lists", response)
@@ -305,7 +311,7 @@ class CustomListImporter:
 
             # Send the new list to the server.
             server_list_endpoint: str = (
-                f"{self._server_base}/{customlist.library_id()}/admin/custom_lists"
+                f"{self._server_base}/{self._library_name}/admin/custom_lists"
             )
 
             response = self._session.post(
@@ -405,6 +411,7 @@ class CustomListImporter:
         self._dry_run = args.dry_run
         self._schema_file = args.schema_file
         self._schema_report_file = args.schema_report_file
+        self._library_name = args.library_name
         verbose: int = args.verbose or 0
         if verbose > 0:
             self._logger.setLevel(logging.INFO)

@@ -74,6 +74,8 @@ class TestImports:
                     "someone@example.com",
                     "--password",
                     "12345678",
+                    "--library-name",
+                    "WALNUT",
                     "--schema-file",
                     str(schema_path),
                     "--schema-report-file",
@@ -87,6 +89,89 @@ class TestImports:
             ).execute()
 
         assert 1 == len(mock_web_server.requests())
+
+    def test_import_library_nonexistent(self, mock_web_server: MockAPIServer, tmpdir):
+        """If the target library does not exist, importing fails."""
+        sign_response = MockAPIServerResponse()
+        sign_response.status_code = 200
+        sign_response.headers[
+            "Set-Cookie"
+        ] = "csrf_token=DUZ8inJjpISkyCYjHx7PONZM8354pCu4; HttpOnly; Path=/"
+        mock_web_server.enqueue_response(
+            "POST", "/admin/sign_in_with_password", sign_response
+        )
+
+        collection_response_0 = MockAPIServerResponse()
+        collection_response_0.status_code = 200
+        collection_response_0.content = self.normalCollections()
+        mock_web_server.enqueue_response(
+            "GET",
+            "/admin/collections",
+            collection_response_0,
+        )
+
+        work_response_0 = MockAPIServerResponse()
+        work_response_0.status_code = 200
+        mock_web_server.enqueue_response(
+            "GET",
+            "/admin/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6",
+            work_response_0,
+        )
+
+        work_response_1 = MockAPIServerResponse()
+        work_response_1.status_code = 200
+        mock_web_server.enqueue_response(
+            "GET",
+            "/admin/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
+            work_response_1,
+        )
+
+        lists_response_0 = MockAPIServerResponse()
+        lists_response_0.status_code = 404
+        lists_response_0.content = b"No!"
+        mock_web_server.enqueue_response(
+            "GET", "/WALNUT/admin/custom_lists", lists_response_0
+        )
+
+        update_response_0 = MockAPIServerResponse()
+        update_response_0.status_code = 200
+        mock_web_server.enqueue_response(
+            "POST", "/WALNUT/admin/custom_lists", update_response_0
+        )
+
+        schema_path = TestImports._customlists_resource_path("customlists.schema.json")
+        schema_report_path = TestImports._customlists_resource_path(
+            "customlists-report.schema.json"
+        )
+        input_file = TestImports._test_customlists_resource_path(
+            "example-customlists.json"
+        )
+        output_file = tmpdir.join("output.json")
+
+        with pytest.raises(CustomListImportFailed) as e:
+            CustomListImporter.create(
+                [
+                    "--server",
+                    mock_web_server.url("/"),
+                    "--username",
+                    "someone@example.com",
+                    "--password",
+                    "12345678",
+                    "--library-name",
+                    "WALNUT",
+                    "--schema-file",
+                    str(schema_path),
+                    "--schema-report-file",
+                    str(schema_report_path),
+                    "--file",
+                    str(input_file),
+                    "--output",
+                    str(output_file),
+                    "-v",
+                ]
+            ).execute()
+
+            assert e.value.args[0] == "Failed to retrieve custom lists: 404 Not Found"
 
     def test_import_cannot_retrieve_custom_lists(
         self, mock_web_server: MockAPIServer, tmpdir
@@ -125,7 +210,9 @@ class TestImports:
 
         lists_response_0 = MockAPIServerResponse()
         lists_response_0.status_code = 404
-        mock_web_server.enqueue_response("GET", "/admin/custom_lists", lists_response_0)
+        mock_web_server.enqueue_response(
+            "GET", "/WALNUT/admin/custom_lists", lists_response_0
+        )
 
         schema_path = TestImports._customlists_resource_path("customlists.schema.json")
         schema_report_path = TestImports._customlists_resource_path(
@@ -147,6 +234,8 @@ class TestImports:
                     "someone@example.com",
                     "--password",
                     "12345678",
+                    "--library-name",
+                    "WALNUT",
                     "--schema-file",
                     str(schema_path),
                     "--schema-report-file",
@@ -199,12 +288,14 @@ class TestImports:
         lists_response_0 = MockAPIServerResponse()
         lists_response_0.status_code = 200
         lists_response_0.content = self.emptyCustomlists()
-        mock_web_server.enqueue_response("GET", "/admin/custom_lists", lists_response_0)
+        mock_web_server.enqueue_response(
+            "GET", "/WALNUT/admin/custom_lists", lists_response_0
+        )
 
         update_response_0 = MockAPIServerResponse()
         update_response_0.status_code = 500
         mock_web_server.enqueue_response(
-            "POST", "/HAZELNUT/admin/custom_lists", update_response_0
+            "POST", "/WALNUT/admin/custom_lists", update_response_0
         )
 
         schema_path = TestImports._customlists_resource_path("customlists.schema.json")
@@ -223,6 +314,8 @@ class TestImports:
                 "someone@example.com",
                 "--password",
                 "12345678",
+                "--library-name",
+                "WALNUT",
                 "--schema-file",
                 str(schema_path),
                 "--schema-report-file",
@@ -305,12 +398,14 @@ class TestImports:
         lists_response_0.content = TestImports._test_customlists_resource_bytes(
             "id90-customlists-response.json"
         )
-        mock_web_server.enqueue_response("GET", "/admin/custom_lists", lists_response_0)
+        mock_web_server.enqueue_response(
+            "GET", "/WALNUT/admin/custom_lists", lists_response_0
+        )
 
         update_response_0 = MockAPIServerResponse()
         update_response_0.status_code = 500
         mock_web_server.enqueue_response(
-            "POST", "/HAZELNUT/admin/custom_lists", update_response_0
+            "POST", "/WALNUT/admin/custom_lists", update_response_0
         )
 
         schema_path = TestImports._customlists_resource_path("customlists.schema.json")
@@ -329,6 +424,8 @@ class TestImports:
                 "someone@example.com",
                 "--password",
                 "12345678",
+                "--library-name",
+                "WALNUT",
                 "--schema-file",
                 str(schema_path),
                 "--schema-report-file",
@@ -402,7 +499,9 @@ class TestImports:
         lists_response_0 = MockAPIServerResponse()
         lists_response_0.status_code = 200
         lists_response_0.content = self.emptyCustomlists()
-        mock_web_server.enqueue_response("GET", "/admin/custom_lists", lists_response_0)
+        mock_web_server.enqueue_response(
+            "GET", "/WALNUT/admin/custom_lists", lists_response_0
+        )
 
         schema_path = TestImports._customlists_resource_path("customlists.schema.json")
         schema_report_path = TestImports._customlists_resource_path(
@@ -420,6 +519,8 @@ class TestImports:
                 "someone@example.com",
                 "--password",
                 "12345678",
+                "--library-name",
+                "WALNUT",
                 "--schema-file",
                 str(schema_path),
                 "--schema-report-file",
@@ -497,7 +598,9 @@ class TestImports:
         lists_response_0 = MockAPIServerResponse()
         lists_response_0.status_code = 200
         lists_response_0.content = self.emptyCustomlists()
-        mock_web_server.enqueue_response("GET", "/admin/custom_lists", lists_response_0)
+        mock_web_server.enqueue_response(
+            "GET", "/WALNUT/admin/custom_lists", lists_response_0
+        )
 
         schema_path = TestImports._customlists_resource_path("customlists.schema.json")
         schema_report_path = TestImports._customlists_resource_path(
@@ -515,6 +618,8 @@ class TestImports:
                 "someone@example.com",
                 "--password",
                 "12345678",
+                "--library-name",
+                "WALNUT",
                 "--schema-file",
                 str(schema_path),
                 "--schema-report-file",
@@ -593,12 +698,14 @@ class TestImports:
         lists_response_0 = MockAPIServerResponse()
         lists_response_0.status_code = 200
         lists_response_0.content = self.emptyCustomlists()
-        mock_web_server.enqueue_response("GET", "/admin/custom_lists", lists_response_0)
+        mock_web_server.enqueue_response(
+            "GET", "/WALNUT/admin/custom_lists", lists_response_0
+        )
 
         update_response_0 = MockAPIServerResponse()
         update_response_0.status_code = 200
         mock_web_server.enqueue_response(
-            "POST", "/HAZELNUT/admin/custom_lists", update_response_0
+            "POST", "/WALNUT/admin/custom_lists", update_response_0
         )
 
         schema_path = TestImports._customlists_resource_path("customlists.schema.json")
@@ -617,6 +724,8 @@ class TestImports:
                 "someone@example.com",
                 "--password",
                 "12345678",
+                "--library-name",
+                "WALNUT",
                 "--schema-file",
                 str(schema_path),
                 "--schema-report-file",
@@ -650,7 +759,7 @@ class TestImports:
 
         assert 6 == len(mock_web_server.requests())
         req = mock_web_server.requests()[5]
-        assert "/HAZELNUT/admin/custom_lists" == req.path
+        assert "/WALNUT/admin/custom_lists" == req.path
         assert "POST" == req.method
         assert "DUZ8inJjpISkyCYjHx7PONZM8354pCu4" == req.headers["X-CSRF-Token"]
 
@@ -692,12 +801,14 @@ class TestImports:
         lists_response_0 = MockAPIServerResponse()
         lists_response_0.status_code = 200
         lists_response_0.content = self.emptyCustomlists()
-        mock_web_server.enqueue_response("GET", "/admin/custom_lists", lists_response_0)
+        mock_web_server.enqueue_response(
+            "GET", "/WALNUT/admin/custom_lists", lists_response_0
+        )
 
         update_response_0 = MockAPIServerResponse()
         update_response_0.status_code = 200
         mock_web_server.enqueue_response(
-            "POST", "/HAZELNUT/admin/custom_lists", update_response_0
+            "POST", "/WALNUT/admin/custom_lists", update_response_0
         )
 
         schema_path = TestImports._customlists_resource_path("customlists.schema.json")
@@ -716,6 +827,8 @@ class TestImports:
                 "someone@example.com",
                 "--password",
                 "12345678",
+                "--library-name",
+                "WALNUT",
                 "--schema-file",
                 str(schema_path),
                 "--schema-report-file",
@@ -753,7 +866,7 @@ class TestImports:
 
         assert 6 == len(mock_web_server.requests())
         req = mock_web_server.requests()[5]
-        assert "/HAZELNUT/admin/custom_lists" == req.path
+        assert "/WALNUT/admin/custom_lists" == req.path
 
     def emptyCollections(self):
         return TestImports._test_customlists_resource_bytes(
@@ -797,12 +910,14 @@ class TestImports:
         lists_response_0 = MockAPIServerResponse()
         lists_response_0.status_code = 200
         lists_response_0.content = self.emptyCustomlists()
-        mock_web_server.enqueue_response("GET", "/admin/custom_lists", lists_response_0)
+        mock_web_server.enqueue_response(
+            "GET", "/WALNUT/admin/custom_lists", lists_response_0
+        )
 
         update_response_0 = MockAPIServerResponse()
         update_response_0.status_code = 200
         mock_web_server.enqueue_response(
-            "POST", "/HAZELNUT/admin/custom_lists", update_response_0
+            "POST", "/WALNUT/admin/custom_lists", update_response_0
         )
 
         schema_path = TestImports._customlists_resource_path("customlists.schema.json")
@@ -826,6 +941,8 @@ class TestImports:
                     "someone@example.com",
                     "--password",
                     "12345678",
+                    "--library-name",
+                    "WALNUT",
                     "--schema-file",
                     str(schema_path),
                     "--schema-report-file",
