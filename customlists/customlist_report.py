@@ -137,7 +137,7 @@ class CustomListProblemBookMissing(CustomListBookProblem):
         cls, id: str, id_type: str, title: str, author: str
     ) -> "CustomListProblemBookMissing":
         return CustomListProblemBookMissing(
-            f"The book '{title}' (id {id}) appears to be missing on the importing CM",
+            f"The book '{title}' (id {id}) does not appear to be present in the target library on the importing CM",
             id=id,
             id_type=id_type,
             title=title,

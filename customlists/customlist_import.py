@@ -138,9 +138,7 @@ class CustomListImporter:
         )
 
         """Check that the book on the target CM has a matching ID and title."""
-        server_work_endpoint: str = (
-            f"{self._server_base}/admin/works/{book.id_type()}/{book.id()}"
-        )
+        server_work_endpoint: str = f"{self._server_base}/{self._library_name}/admin/works/{book.id_type()}/{book.id()}"
         response = self._session.get(server_work_endpoint)
         if response.status_code == 404:
             problem_missing = CustomListProblemBookMissing.create(

@@ -114,7 +114,7 @@ class TestImports:
         work_response_0.status_code = 200
         mock_web_server.enqueue_response(
             "GET",
-            "/admin/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6",
+            "/WALNUT/admin/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6",
             work_response_0,
         )
 
@@ -122,7 +122,7 @@ class TestImports:
         work_response_1.status_code = 200
         mock_web_server.enqueue_response(
             "GET",
-            "/admin/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
+            "/WALNUT/admin/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
             work_response_1,
         )
 
@@ -196,7 +196,7 @@ class TestImports:
         work_response_0.status_code = 200
         mock_web_server.enqueue_response(
             "GET",
-            "/admin/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6",
+            "/WALNUT/admin/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6",
             work_response_0,
         )
 
@@ -204,7 +204,7 @@ class TestImports:
         work_response_1.status_code = 200
         mock_web_server.enqueue_response(
             "GET",
-            "/admin/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
+            "/WALNUT/admin/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
             work_response_1,
         )
 
@@ -273,7 +273,7 @@ class TestImports:
         work_response_0.status_code = 200
         mock_web_server.enqueue_response(
             "GET",
-            "/admin/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6",
+            "/WALNUT/admin/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6",
             work_response_0,
         )
 
@@ -281,7 +281,7 @@ class TestImports:
         work_response_1.status_code = 200
         mock_web_server.enqueue_response(
             "GET",
-            "/admin/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
+            "/WALNUT/admin/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
             work_response_1,
         )
 
@@ -381,7 +381,7 @@ class TestImports:
         work_response_0.status_code = 200
         mock_web_server.enqueue_response(
             "GET",
-            "/admin/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6",
+            "/WALNUT/admin/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6",
             work_response_0,
         )
 
@@ -389,7 +389,7 @@ class TestImports:
         work_response_1.status_code = 200
         mock_web_server.enqueue_response(
             "GET",
-            "/admin/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
+            "/WALNUT/admin/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
             work_response_1,
         )
 
@@ -484,7 +484,7 @@ class TestImports:
         work_response_0.status_code = 200
         mock_web_server.enqueue_response(
             "GET",
-            "/admin/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6",
+            "/WALNUT/admin/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6",
             work_response_0,
         )
 
@@ -492,7 +492,7 @@ class TestImports:
         work_response_1.status_code = 200
         mock_web_server.enqueue_response(
             "GET",
-            "/admin/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
+            "/WALNUT/admin/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
             work_response_1,
         )
 
@@ -583,7 +583,7 @@ class TestImports:
         work_response_0.status_code = 200
         mock_web_server.enqueue_response(
             "GET",
-            "/admin/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6",
+            "/WALNUT/admin/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6",
             work_response_0,
         )
 
@@ -591,7 +591,7 @@ class TestImports:
         work_response_1.status_code = 200
         mock_web_server.enqueue_response(
             "GET",
-            "/admin/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
+            "/WALNUT/admin/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
             work_response_1,
         )
 
@@ -683,7 +683,7 @@ class TestImports:
         work_response_0.status_code = 200
         mock_web_server.enqueue_response(
             "GET",
-            "/admin/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6",
+            "/WALNUT/admin/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6",
             work_response_0,
         )
 
@@ -691,7 +691,7 @@ class TestImports:
         work_response_1.status_code = 200
         mock_web_server.enqueue_response(
             "GET",
-            "/admin/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
+            "/WALNUT/admin/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
             work_response_1,
         )
 
@@ -786,7 +786,7 @@ class TestImports:
         work_response_0.status_code = 200
         mock_web_server.enqueue_response(
             "GET",
-            "/admin/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6",
+            "/WALNUT/admin/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6",
             work_response_0,
         )
 
@@ -794,7 +794,7 @@ class TestImports:
         work_response_1.status_code = 200
         mock_web_server.enqueue_response(
             "GET",
-            "/admin/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
+            "/WALNUT/admin/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
             work_response_1,
         )
 
