@@ -13,9 +13,9 @@ In order to copy _customlists_ between CM instances, a suite of three command-li
 
 ```bash
 $ ./bin/customlist_export --help
-usage: customlist_export [-h] [--schema-file SCHEMA_FILE] --server SERVER
---username USERNAME --password PASSWORD --output OUTPUT [--list LIST [LIST ...]]
-[--verbose]
+usage: customlist_export [-h] [--schema-file SCHEMA_FILE]
+--server SERVER --username USERNAME --password PASSWORD --output OUTPUT
+ --library-name LIBRARY_NAME [--list LIST [LIST ...]] [--verbose]
 
 Fetch one or more custom lists.
 
@@ -27,6 +27,8 @@ optional arguments:
   --username USERNAME   The CM admin username
   --password PASSWORD   The CM admin password
   --output OUTPUT       The output file
+  --library-name LIBRARY_NAME
+                        The short name of the library that owns the lists.
   --list LIST [LIST ...]
                         Only export the named list (may be repeated)
   --verbose, -v         Increase verbosity (can be specified multiple times to export multiple lists)
@@ -78,14 +80,16 @@ optional arguments:
 
 ## Example
 
-The following copies all lists from `source.example.com` to `target.example.com`, producing an `output.csv` file that
-contains any manual steps that might need to be performed afterwards:
+The following copies all lists that belong to the library with the short name `HAZELNUT` from `source.example.com`
+to `target.example.com`, producing an `output.csv` file that  contains any manual steps that might need to be performed
+afterwards:
 
 ```bash
 $ ./bin/customlist_export \
   --server http://source.example.com \
   --username admin-example \
   --password 12345678 \
+  --library-name HAZELNUT \
   --output export.json
 
 $ ./bin/customlist_import \

@@ -65,6 +65,8 @@ class TestExports:
                     "someone@example.com",
                     "--password",
                     "12345678",
+                    "--library-name",
+                    "ANYTHING",
                     "--output",
                     str(output_file),
                     "-v",
@@ -82,7 +84,9 @@ class TestExports:
         list_response = MockAPIServerResponse()
         list_response.status_code = 200
         list_response.set_content(b'{"custom_lists":[]}')
-        mock_web_server.enqueue_response("GET", "/admin/custom_lists", list_response)
+        mock_web_server.enqueue_response(
+            "GET", "/HAZELNUT/admin/custom_lists", list_response
+        )
 
         schema_path = TestExports._customlists_resource_path("customlists.schema.json")
         output_file = tmpdir.join("output.json")
@@ -94,6 +98,8 @@ class TestExports:
                 "someone@example.com",
                 "--password",
                 "12345678",
+                "--library-name",
+                "HAZELNUT",
                 "--output",
                 str(output_file),
                 "--schema-file",
@@ -109,6 +115,47 @@ class TestExports:
 
         assert 0 == exports.size()
 
+    def test_export_nonexistent_library(self, mock_web_server: MockAPIServer, tmpdir):
+        """If the library is nonexistent, the export fails."""
+        sign_response = MockAPIServerResponse()
+        sign_response.status_code = 200
+        mock_web_server.enqueue_response(
+            "POST", "/admin/sign_in_with_password", sign_response
+        )
+
+        list_response = MockAPIServerResponse()
+        list_response.status_code = 404
+        list_response.set_content(
+            b'{"type": "http://librarysimplified.org/terms/problem/library-not-found", "title": "Library not found.", "status": 404, "detail": "No library with the requested name on this server."}'
+        )
+        mock_web_server.enqueue_response(
+            "GET", "/NONEXISTENT/admin/custom_lists", list_response
+        )
+
+        schema_path = TestExports._customlists_resource_path("customlists.schema.json")
+        output_file = tmpdir.join("output.json")
+
+        with pytest.raises(CustomListExportFailed) as e:
+            CustomListExporter.create(
+                [
+                    "--server",
+                    mock_web_server.url("/"),
+                    "--username",
+                    "someone@example.com",
+                    "--password",
+                    "12345678",
+                    "--library-name",
+                    "NONEXISTENT",
+                    "--output",
+                    str(output_file),
+                    "--schema-file",
+                    schema_path,
+                    "-v",
+                ]
+            ).execute()
+
+        assert e.value.args[0] == "Failed to retrieve custom lists: 404 Not Found"
+
     def test_export_list_retrieval_fails(self, mock_web_server: MockAPIServer, tmpdir):
         """If fetching the OPDS feed for a list fails, the list is marked as broken."""
         sign_response = MockAPIServerResponse()
@@ -122,11 +169,15 @@ class TestExports:
         lists_response.content = TestExports._test_customlists_resource_bytes(
             "id90-customlists-response.json"
         )
-        mock_web_server.enqueue_response("GET", "/admin/custom_lists", lists_response)
+        mock_web_server.enqueue_response(
+            "GET", "/HAZELNUT/admin/custom_lists", lists_response
+        )
 
         list_response = MockAPIServerResponse()
         list_response.status_code = 404
-        mock_web_server.enqueue_response("GET", "/admin/custom_list/90", list_response)
+        mock_web_server.enqueue_response(
+            "GET", "/HAZELNUT/admin/custom_list/90", list_response
+        )
 
         schema_path = TestExports._customlists_resource_path("customlists.schema.json")
         output_file = tmpdir.join("output.json")
@@ -138,6 +189,8 @@ class TestExports:
                 "someone@example.com",
                 "--password",
                 "12345678",
+                "--library-name",
+                "HAZELNUT",
                 "--output",
                 str(output_file),
                 "--schema-file",
@@ -170,14 +223,16 @@ class TestExports:
         lists_response.content = TestExports._test_customlists_resource_bytes(
             "multiple-customlists-response.json"
         )
-        mock_web_server.enqueue_response("GET", "/admin/custom_lists", lists_response)
+        mock_web_server.enqueue_response(
+            "GET", "/HAZELNUT/admin/custom_lists", lists_response
+        )
 
         list_response_0 = MockAPIServerResponse()
         list_response_0.status_code = 200
         with open(TestExports._test_customlists_resource_path("feed90.xml")) as file:
             list_response_0.set_content(file.read().encode("utf-8"))
         mock_web_server.enqueue_response(
-            "GET", "/admin/custom_list/90", list_response_0
+            "GET", "/HAZELNUT/admin/custom_list/90", list_response_0
         )
 
         list_response_1 = MockAPIServerResponse()
@@ -185,7 +240,7 @@ class TestExports:
         with open(TestExports._test_customlists_resource_path("feed91.xml")) as file:
             list_response_1.set_content(file.read().encode("utf-8"))
         mock_web_server.enqueue_response(
-            "GET", "/admin/custom_list/91", list_response_1
+            "GET", "/HAZELNUT/admin/custom_list/91", list_response_1
         )
 
         schema_path = TestExports._customlists_resource_path("customlists.schema.json")
@@ -198,6 +253,8 @@ class TestExports:
                 "someone@example.com",
                 "--password",
                 "12345678",
+                "--library-name",
+                "HAZELNUT",
                 "--output",
                 str(output_file),
                 "--schema-file",
@@ -242,14 +299,16 @@ class TestExports:
         lists_response.content = TestExports._test_customlists_resource_bytes(
             "multiple-customlists-response.json"
         )
-        mock_web_server.enqueue_response("GET", "/admin/custom_lists", lists_response)
+        mock_web_server.enqueue_response(
+            "GET", "/HAZELNUT/admin/custom_lists", lists_response
+        )
 
         list_response_0 = MockAPIServerResponse()
         list_response_0.status_code = 200
         with open(TestExports._test_customlists_resource_path("feed90.xml")) as file:
             list_response_0.set_content(file.read().encode("utf-8"))
         mock_web_server.enqueue_response(
-            "GET", "/admin/custom_list/90", list_response_0
+            "GET", "/HAZELNUT/admin/custom_list/90", list_response_0
         )
 
         schema_path = TestExports._customlists_resource_path("customlists.schema.json")
@@ -262,6 +321,8 @@ class TestExports:
                 "someone@example.com",
                 "--password",
                 "12345678",
+                "--library-name",
+                "HAZELNUT",
                 "--output",
                 str(output_file),
                 "--schema-file",
@@ -302,7 +363,9 @@ class TestExports:
         lists_response.content = TestExports._test_customlists_resource_bytes(
             "multiple-customlists-response.json"
         )
-        mock_web_server.enqueue_response("GET", "/admin/custom_lists", lists_response)
+        mock_web_server.enqueue_response(
+            "GET", "/HAZELNUT/admin/custom_lists", lists_response
+        )
 
         list_response_0 = MockAPIServerResponse()
         list_response_0.status_code = 200
@@ -311,7 +374,7 @@ class TestExports:
         ) as file:
             list_response_0.set_content(file.read().encode("utf-8"))
         mock_web_server.enqueue_response(
-            "GET", "/admin/custom_list/90", list_response_0
+            "GET", "/HAZELNUT/admin/custom_list/90", list_response_0
         )
 
         schema_path = TestExports._customlists_resource_path("customlists.schema.json")
@@ -324,6 +387,8 @@ class TestExports:
                 "someone@example.com",
                 "--password",
                 "12345678",
+                "--library-name",
+                "HAZELNUT",
                 "--output",
                 str(output_file),
                 "--schema-file",
