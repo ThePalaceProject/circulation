@@ -4,6 +4,7 @@ import logging
 import os
 import re
 from typing import IO, Iterable, List, Union
+from urllib.parse import unquote
 
 import feedparser
 import jsonschema
@@ -391,10 +392,15 @@ class CustomListExporter:
                 if link.rel == "alternate":
                     match = re.search("^(.*)/works/([^/]+)/(.*)$", link.href)
                     if match is not None:
+                        id_quoted: str = match.group(3)
+                        id_type_quoted: str = match.group(2)
+                        id: str = unquote(id_quoted)
+                        id_type: str = unquote(id_type_quoted)
+
                         custom_list.add_book(
                             Book(
-                                id=entry.id,
-                                id_type=match.group(2),
+                                id=id,
+                                id_type=id_type,
                                 title=entry.title,
                                 author=entry.author,
                             )
@@ -406,7 +412,7 @@ class CustomListExporter:
                     ProblematicBook(
                         id=entry.id,
                         title=entry.title,
-                        message=f"Could not determine the identifier type for book {entry.id}, {entry.title}",
+                        message=f"Could not determine the identifier type for book {entry.title} (OPDS entry ID: {entry.id})",
                         author=entry.author,
                     )
                 )
