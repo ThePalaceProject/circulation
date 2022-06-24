@@ -6,6 +6,7 @@ import os
 import sys
 import urllib.parse
 from datetime import date, datetime, timedelta
+from enum import auto
 from typing import Union
 
 import flask
@@ -794,6 +795,8 @@ class CustomListsController(AdminCirculationManagerController):
                         name=list.name,
                         collections=collections,
                         entry_count=list.size,
+                        auto_update=list.auto_update_enabled,
+                        auto_update_query=list.auto_update_query,
                     )
                 )
 
@@ -813,6 +816,8 @@ class CustomListsController(AdminCirculationManagerController):
                         name=list.name,
                         collections=collections,
                         entry_count=list.size,
+                        auto_update=list.auto_update_enabled,
+                        auto_update_query=list.auto_update_query,
                     )
                 )
 
@@ -850,7 +855,15 @@ class CustomListsController(AdminCirculationManagerController):
         return work
 
     def _create_or_update_list(
-        self, library, name, entries, collections, deletedEntries=None, id=None
+        self,
+        library,
+        name,
+        entries,
+        collections,
+        deletedEntries=None,
+        id=None,
+        auto_update=None,
+        auto_update_query=None,
     ):
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
 
@@ -876,6 +889,14 @@ class CustomListsController(AdminCirculationManagerController):
 
         list.updated = datetime.now()
         list.name = name
+        # Record the time the auto_update was toggled "on"
+        if auto_update is True and list.auto_update_enabled is False:
+            list.auto_update_last_update = datetime.now()
+        if auto_update is not None:
+            list.auto_update_enabled = auto_update
+        if auto_update_query is not None:
+            list.auto_update_query = auto_update_query
+
         membership_change = False
 
         works_to_update_in_search = set()
@@ -985,6 +1006,11 @@ class CustomListsController(AdminCirculationManagerController):
             deletedEntries = self._getJSONFromRequest(
                 flask.request.form.get("deletedEntries")
             )
+
+            # For auto updating lists
+            auto_update = flask.request.form.get("auto_update", False)
+            auto_update_query = flask.request.form.get("auto_update_query")
+
             return self._create_or_update_list(
                 library,
                 name,
@@ -992,6 +1018,8 @@ class CustomListsController(AdminCirculationManagerController):
                 collections,
                 deletedEntries=deletedEntries,
                 id=list_id,
+                auto_update=auto_update,
+                auto_update_query=auto_update_query,
             )
 
         elif flask.request.method == "DELETE":

@@ -1968,6 +1968,7 @@ class JSONQuery(Query):
         "imprint": _KEYWORD_ONLY,
         "language": _KEYWORD_ONLY,
         "licensepools.available": dict(path="licensepools"),
+        "licensepools.availability_time": dict(path="licensepools"),
         "licensepools.collection_id": dict(path="licensepools"),
         "licensepools.data_source_id": dict(path="licensepools"),
         "licensepools.licensed": dict(path="licensepools"),

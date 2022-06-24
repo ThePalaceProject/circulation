@@ -1,4 +1,6 @@
 import argparse
+import datetime
+import json
 import logging
 import os
 import random
@@ -22,7 +24,7 @@ from core.model.classification import Classification
 from .config import CannotLoadConfiguration, Configuration
 from .coverage import CollectionCoverageProviderJob, CoverageProviderProgress
 from .external_search import ExternalSearchIndex, Filter, SearchIndexCoverageProvider
-from .lane import Lane
+from .lane import Lane, Pagination, SearchFacets, WorkList
 from .metadata_layer import (
     LinkData,
     MetaToModelUtility,
@@ -3492,6 +3494,82 @@ class SearchIndexCoverageRemover(TimestampScript, RemovesSearchCoverage):
         return TimestampData(
             achievements="Coverage records deleted: %(deleted)d" % dict(deleted=count)
         )
+
+
+class CustomListUpdateEntriesScript(CustomListSweeperScript):
+    """Traverse all entries and update lists if they have auto_update_enabled"""
+
+    def process_custom_list(self, custom_list: CustomList):
+        if not custom_list.auto_update_enabled:
+            return
+        try:
+            self.log.info(f"Auto updating list entries for: {custom_list.name}")
+            self._update_list_with_new_entries(custom_list)
+        except Exception:
+            self.log.exception(f"Could not auto update {custom_list.name}")
+
+    def _update_list_with_new_entries(self, custom_list: CustomList):
+        """Run a search on a custom list, assuming we have auto_update_enabled with a valid query
+        Only json type queries are supported right now, without any support for additional facets"""
+        try:
+            json_query = json.loads(custom_list.auto_update_query)
+        except json.JSONDecodeError as e:
+            self.log.error(
+                f"Could not decode custom list({custom_list.id}) saved query: {e}"
+            )
+            return
+
+        # Update availability time as a query part that allows us to filter for new licenses
+        # Although the last_update should never be null, we're failsafing
+        availability_time = (
+            custom_list.auto_update_last_update or datetime.datetime.now()
+        )
+        query_part = json_query["query"]
+        query_part = {
+            "and": [
+                {
+                    "key": "licensepools.availability_time",
+                    "op": "gte",
+                    "value": availability_time.timestamp(),
+                },
+                query_part,
+            ]
+        }
+        # Update the query as such
+        json_query["query"] = query_part
+
+        search = ExternalSearchIndex(self._db)
+        facets = SearchFacets(search_type="json")
+        page_size = 100
+        total_works_updated = 0
+        for page in range(10000):  # failsafe max loops
+            ## Query for the works with the search query
+            pagination = Pagination(offset=page_size * page, size=page_size)
+            wl = WorkList()
+            wl.initialize(custom_list.library)
+            works = wl.search(
+                self._db, json_query, search, pagination=pagination, facets=facets
+            )
+
+            ## No more works
+            if not len(works):
+                self.log.info(
+                    f"Completed customlist auto update {custom_list.name} with {total_works_updated} works"
+                )
+                break
+
+            total_works_updated += len(works)
+
+            ## Now update works into the list
+            for work in works:
+                custom_list.add_entry(work, update_external_index=True)
+
+            self.log.info(
+                f"Updated customlist {custom_list.name} with {total_works_updated} works"
+            )
+
+        # update this lists last updated time
+        custom_list.auto_update_last_update = datetime.datetime.now()
 
 
 class MockStdin:
