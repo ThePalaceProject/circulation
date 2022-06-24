@@ -392,15 +392,15 @@ class CustomListExporter:
                 if link.rel == "alternate":
                     match = re.search("^(.*)/works/([^/]+)/(.*)$", link.href)
                     if match is not None:
-                        id_quoted: str = match.group(3)
-                        id_type_quoted: str = match.group(2)
-                        id: str = unquote(id_quoted)
-                        id_type: str = unquote(id_type_quoted)
+                        link_id_quoted: str = match.group(3)
+                        link_id_type_quoted: str = match.group(2)
+                        link_id: str = unquote(link_id_quoted)
+                        link_id_type: str = unquote(link_id_type_quoted)
 
                         custom_list.add_book(
                             Book(
-                                id=id,
-                                id_type=id_type,
+                                id=link_id,
+                                id_type=link_id_type,
                                 title=entry.title,
                                 author=entry.author,
                             )
