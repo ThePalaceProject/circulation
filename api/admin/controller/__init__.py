@@ -6,7 +6,6 @@ import os
 import sys
 import urllib.parse
 from datetime import date, datetime, timedelta
-from enum import auto
 from typing import Union
 
 import flask
