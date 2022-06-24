@@ -27,7 +27,7 @@ from .licensing import LicensePool
 from .work import Work
 
 if TYPE_CHECKING:
-    from . import Collection
+    from . import Collection, Library
 
 
 @total_ordering
@@ -62,12 +62,13 @@ class CustomList(Base):
         uselist=True,
     )
 
-    auto_update_enabled = Column(Boolean, default=False, index=True)
+    auto_update_enabled = Column(Boolean, default=False)
     auto_update_query = Column(Unicode, nullable=True)
     auto_update_last_update = Column(DateTime, nullable=True)
 
     # Typing specific
     collections: List["Collection"]
+    library: "Library"
 
     __table_args__ = (
         UniqueConstraint("data_source_id", "foreign_identifier"),

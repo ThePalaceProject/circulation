@@ -3512,7 +3512,10 @@ class CustomListUpdateEntriesScript(CustomListSweeperScript):
         """Run a search on a custom list, assuming we have auto_update_enabled with a valid query
         Only json type queries are supported right now, without any support for additional facets"""
         try:
-            json_query = json.loads(custom_list.auto_update_query)
+            if custom_list.auto_update_query:
+                json_query = json.loads(custom_list.auto_update_query)
+            else:
+                return
         except json.JSONDecodeError as e:
             self.log.error(
                 f"Could not decode custom list({custom_list.id}) saved query: {e}"
