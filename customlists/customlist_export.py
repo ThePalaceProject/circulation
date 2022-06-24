@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import re
-from typing import IO, Iterable, List, Optional, Union
+from typing import IO, Iterable, List, Union
 
 import feedparser
 import jsonschema
@@ -323,6 +323,7 @@ class CustomListExporter:
     _email: str
     _password: str
     _output_file: str
+    _library_name: str
     _schema_file: str
     _lists: List[str]
 
@@ -346,6 +347,11 @@ class CustomListExporter:
         parser.add_argument("--password", help="The CM admin password", required=True)
         parser.add_argument("--output", help="The output file", required=True)
         parser.add_argument(
+            "--library-name",
+            help="The short name of the library that owns the lists.",
+            required=True,
+        )
+        parser.add_argument(
             "--list", help="Only export the named list (may be repeated)", nargs="+"
         )
         parser.add_argument(
@@ -364,7 +370,9 @@ class CustomListExporter:
         name: str = raw_list["name"]
 
         # The /admin/custom_list/ URL will yield an OPDS feed of the list contents.
-        server_list_endpoint: str = f"{self._server_base}/admin/custom_list/{id}"
+        server_list_endpoint: str = (
+            f"{self._server_base}/{self._library_name}/admin/custom_list/{id}"
+        )
         response = self._session.get(server_list_endpoint)
         if response.status_code >= 400:
             return ProblematicCustomList(
@@ -374,23 +382,7 @@ class CustomListExporter:
             )
 
         feed = feedparser.parse(url_file_stream_or_string=response.content)
-
-        # Extract the "self" link in order to determine the library identifier.
-        library_short_id: Optional[str] = None
-        for link in feed.feed.links:
-            if link.rel == "self":
-                match = re.search(f"^(.*)/(.*)/admin/custom_list/{id}(.*)", link.href)
-                if match is not None:
-                    library_short_id = match.group(2)
-                    break
-
-        # If we couldn't find a self link, then we don't know which library has this list.
-        if not library_short_id:
-            return ProblematicCustomList(
-                id, name, "Unable to locate a 'self' link in the custom list feed"
-            )
-
-        custom_list = CustomList(id=id, name=name, library_id=library_short_id)
+        custom_list = CustomList(id=id, name=name, library_id=self._library_name)
 
         # Now, for each book, extract the book identifier and identifier type.
         for entry in feed.entries:
@@ -434,7 +426,9 @@ class CustomListExporter:
 
     def _make_custom_lists_document(self) -> CustomListExports:
         self._logger.info("Fetching lists...")
-        server_lists_endpoint: str = f"{self._server_base}/admin/custom_lists"
+        server_lists_endpoint: str = (
+            f"{self._server_base}/{self._library_name}/admin/custom_lists"
+        )
         response = self._session.get(server_lists_endpoint)
         if response.status_code >= 400:
             CustomListExporter._fatal(
@@ -500,6 +494,7 @@ class CustomListExporter:
         self._password = args.password
         self._output_file = args.output
         self._schema_file = args.schema_file
+        self._library_name = args.library_name
         self._lists = args.list
         verbose: int = args.verbose or 0
         if verbose > 0:
