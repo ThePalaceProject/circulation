@@ -4654,6 +4654,22 @@ class TestJSONQuery(ExternalSearchTest):
             }
         }
 
+        q = {
+            "and": [
+                self._leaf("title", "Title"),
+                {"not": [self._leaf("author", "Geoffrey")]},
+            ]
+        }
+        q = self._jq(q)
+        assert q.elasticsearch_query.to_dict() == {
+            "bool": {
+                "must": [
+                    {"term": {"title.keyword": "Title"}},
+                    {"bool": {"must_not": [{"term": {"author.keyword": "Geoffrey"}}]}},
+                ]
+            }
+        }
+
     @parameterized.expand(
         [
             ("target_age", 18, "lte"),
@@ -4790,3 +4806,14 @@ class TestExternalSearchJSONQuery(EndToEndSearchTest):
     def test_field_transform(self):
         """Fields transforms should apply and criterias should match"""
         self.expect(self._leaf("open_access", False), [self.random_works[3]])
+
+    def test_search_not(self):
+        self.expect(
+            {
+                "and": [
+                    self._leaf("medium", "Book"),
+                    {"not": [self._leaf("language", "Spanish")]},
+                ]
+            },
+            [self.book_work, self.random_works[2], self.random_works[3]],
+        )
