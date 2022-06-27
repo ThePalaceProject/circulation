@@ -126,6 +126,22 @@ class TestImports:
             work_response_1,
         )
 
+        work_response_2 = MockAPIServerResponse()
+        work_response_2.status_code = 200
+        mock_web_server.enqueue_response(
+            "GET",
+            "/WALNUT/admin/works/Overdrive%20ID/614ed125-d7e5-4cff-b3de-6b6c90ff853c",
+            work_response_2,
+        )
+
+        work_response_3 = MockAPIServerResponse()
+        work_response_3.status_code = 200
+        mock_web_server.enqueue_response(
+            "GET",
+            "/WALNUT/admin/works/URI/http://www.feedbooks.com/book/859",
+            work_response_3,
+        )
+
         lists_response_0 = MockAPIServerResponse()
         lists_response_0.status_code = 404
         lists_response_0.content = b"No!"
@@ -208,6 +224,22 @@ class TestImports:
             work_response_1,
         )
 
+        work_response_2 = MockAPIServerResponse()
+        work_response_2.status_code = 200
+        mock_web_server.enqueue_response(
+            "GET",
+            "/WALNUT/admin/works/Overdrive%20ID/614ed125-d7e5-4cff-b3de-6b6c90ff853c",
+            work_response_2,
+        )
+
+        work_response_3 = MockAPIServerResponse()
+        work_response_3.status_code = 200
+        mock_web_server.enqueue_response(
+            "GET",
+            "/WALNUT/admin/works/URI/http://www.feedbooks.com/book/859",
+            work_response_3,
+        )
+
         lists_response_0 = MockAPIServerResponse()
         lists_response_0.status_code = 404
         mock_web_server.enqueue_response(
@@ -248,7 +280,7 @@ class TestImports:
                 ]
             ).execute()
 
-        assert 5 == len(mock_web_server.requests())
+        assert 7 == len(mock_web_server.requests())
 
     def test_import_cannot_update_custom_list(
         self, mock_web_server: MockAPIServer, tmpdir
@@ -283,6 +315,22 @@ class TestImports:
             "GET",
             "/WALNUT/admin/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
             work_response_1,
+        )
+
+        work_response_2 = MockAPIServerResponse()
+        work_response_2.status_code = 200
+        mock_web_server.enqueue_response(
+            "GET",
+            "/WALNUT/admin/works/Overdrive%20ID/614ed125-d7e5-4cff-b3de-6b6c90ff853c",
+            work_response_2,
+        )
+
+        work_response_3 = MockAPIServerResponse()
+        work_response_3.status_code = 200
+        mock_web_server.enqueue_response(
+            "GET",
+            "/WALNUT/admin/works/URI/http://www.feedbooks.com/book/859",
+            work_response_3,
         )
 
         lists_response_0 = MockAPIServerResponse()
@@ -351,7 +399,7 @@ class TestImports:
             == problems[1].message()
         )
 
-        assert 6 == len(mock_web_server.requests())
+        assert 8 == len(mock_web_server.requests())
 
     def emptyCustomlists(self):
         return TestImports._test_customlists_resource_bytes(
@@ -391,6 +439,22 @@ class TestImports:
             "GET",
             "/WALNUT/admin/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
             work_response_1,
+        )
+
+        work_response_2 = MockAPIServerResponse()
+        work_response_2.status_code = 200
+        mock_web_server.enqueue_response(
+            "GET",
+            "/WALNUT/admin/works/Overdrive%20ID/614ed125-d7e5-4cff-b3de-6b6c90ff853c",
+            work_response_2,
+        )
+
+        work_response_3 = MockAPIServerResponse()
+        work_response_3.status_code = 200
+        mock_web_server.enqueue_response(
+            "GET",
+            "/WALNUT/admin/works/URI/http://www.feedbooks.com/book/859",
+            work_response_3,
         )
 
         lists_response_0 = MockAPIServerResponse()
@@ -461,7 +525,7 @@ class TestImports:
             == problems[1].message()
         )
 
-        assert 5 == len(mock_web_server.requests())
+        assert 7 == len(mock_web_server.requests())
 
     def test_import_dry_run(self, mock_web_server: MockAPIServer, tmpdir):
         """If --dry-run is specified, the lists aren't actually updated."""
@@ -494,6 +558,22 @@ class TestImports:
             "GET",
             "/WALNUT/admin/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
             work_response_1,
+        )
+
+        work_response_2 = MockAPIServerResponse()
+        work_response_2.status_code = 200
+        mock_web_server.enqueue_response(
+            "GET",
+            "/WALNUT/admin/works/Overdrive%20ID/614ed125-d7e5-4cff-b3de-6b6c90ff853c",
+            work_response_2,
+        )
+
+        work_response_3 = MockAPIServerResponse()
+        work_response_3.status_code = 200
+        mock_web_server.enqueue_response(
+            "GET",
+            "/WALNUT/admin/works/URI/http://www.feedbooks.com/book/859",
+            work_response_3,
         )
 
         lists_response_0 = MockAPIServerResponse()
@@ -553,7 +633,7 @@ class TestImports:
             == problems[0].message()
         )
 
-        assert 5 == len(mock_web_server.requests())
+        assert 7 == len(mock_web_server.requests())
 
     def normalCollections(self):
         return TestImports._test_customlists_resource_bytes(
@@ -595,6 +675,22 @@ class TestImports:
             work_response_1,
         )
 
+        work_response_2 = MockAPIServerResponse()
+        work_response_2.status_code = 200
+        mock_web_server.enqueue_response(
+            "GET",
+            "/WALNUT/admin/works/Overdrive%20ID/614ed125-d7e5-4cff-b3de-6b6c90ff853c",
+            work_response_2,
+        )
+
+        work_response_3 = MockAPIServerResponse()
+        work_response_3.status_code = 200
+        mock_web_server.enqueue_response(
+            "GET",
+            "/WALNUT/admin/works/URI/http://www.feedbooks.com/book/859",
+            work_response_3,
+        )
+
         lists_response_0 = MockAPIServerResponse()
         lists_response_0.status_code = 200
         lists_response_0.content = self.emptyCustomlists()
@@ -655,7 +751,7 @@ class TestImports:
             "Book 'Bad Book' (urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f7) was excluded from list updates due to a problem on the source CM: Something went wrong on the source CM"
             == problems[1].message()
         )
-        assert 5 == len(mock_web_server.requests())
+        assert 7 == len(mock_web_server.requests())
 
     def test_import_updates_and_includes_csrf(
         self, mock_web_server: MockAPIServer, tmpdir
@@ -693,6 +789,22 @@ class TestImports:
             "GET",
             "/WALNUT/admin/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
             work_response_1,
+        )
+
+        work_response_2 = MockAPIServerResponse()
+        work_response_2.status_code = 200
+        mock_web_server.enqueue_response(
+            "GET",
+            "/WALNUT/admin/works/Overdrive%20ID/614ed125-d7e5-4cff-b3de-6b6c90ff853c",
+            work_response_2,
+        )
+
+        work_response_3 = MockAPIServerResponse()
+        work_response_3.status_code = 200
+        mock_web_server.enqueue_response(
+            "GET",
+            "/WALNUT/admin/works/URI/http://www.feedbooks.com/book/859",
+            work_response_3,
         )
 
         lists_response_0 = MockAPIServerResponse()
@@ -757,8 +869,8 @@ class TestImports:
             == problems[0].message()
         )
 
-        assert 6 == len(mock_web_server.requests())
-        req = mock_web_server.requests()[5]
+        assert 8 == len(mock_web_server.requests())
+        req = mock_web_server.requests()[7]
         assert "/WALNUT/admin/custom_lists" == req.path
         assert "POST" == req.method
         assert "DUZ8inJjpISkyCYjHx7PONZM8354pCu4" == req.headers["X-CSRF-Token"]
@@ -796,6 +908,22 @@ class TestImports:
             "GET",
             "/WALNUT/admin/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
             work_response_1,
+        )
+
+        work_response_2 = MockAPIServerResponse()
+        work_response_2.status_code = 200
+        mock_web_server.enqueue_response(
+            "GET",
+            "/WALNUT/admin/works/Overdrive%20ID/614ed125-d7e5-4cff-b3de-6b6c90ff853c",
+            work_response_2,
+        )
+
+        work_response_3 = MockAPIServerResponse()
+        work_response_3.status_code = 200
+        mock_web_server.enqueue_response(
+            "GET",
+            "/WALNUT/admin/works/URI/http://www.feedbooks.com/book/859",
+            work_response_3,
         )
 
         lists_response_0 = MockAPIServerResponse()
@@ -864,8 +992,8 @@ class TestImports:
             == problems[1].message()
         )
 
-        assert 6 == len(mock_web_server.requests())
-        req = mock_web_server.requests()[5]
+        assert 8 == len(mock_web_server.requests())
+        req = mock_web_server.requests()[7]
         assert "/WALNUT/admin/custom_lists" == req.path
 
     def emptyCollections(self):
@@ -992,6 +1120,22 @@ class TestImports:
             work_response_1,
         )
 
+        work_response_2 = MockAPIServerResponse()
+        work_response_2.status_code = 200
+        mock_web_server.enqueue_response(
+            "GET",
+            "/WALNUT/admin/works/Overdrive%20ID/614ed125-d7e5-4cff-b3de-6b6c90ff853c",
+            work_response_2,
+        )
+
+        work_response_3 = MockAPIServerResponse()
+        work_response_3.status_code = 200
+        mock_web_server.enqueue_response(
+            "GET",
+            "/WALNUT/admin/works/URI/http://www.feedbooks.com/book/859",
+            work_response_3,
+        )
+
         lists_response_0 = MockAPIServerResponse()
         lists_response_0.status_code = 200
         lists_response_0.content = self.emptyCustomlists()
@@ -1062,6 +1206,6 @@ class TestImports:
             == problems[2].message()
         )
 
-        assert 6 == len(mock_web_server.requests())
-        req = mock_web_server.requests()[5]
+        assert 8 == len(mock_web_server.requests())
+        req = mock_web_server.requests()[7]
         assert "/WALNUT/admin/custom_lists" == req.path
