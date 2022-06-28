@@ -92,7 +92,7 @@ class CustomListProblemBookMismatch(CustomListBookProblem):
         author: str,
     ) -> "CustomListProblemBookMismatch":
         return CustomListProblemBookMismatch(
-            f"The book '{expected_title}' (id {expected_id}) appears to have title '{received_title}' (id {received_id}) on the importing CM",
+            f"Book is mismatched on the importing CM. Expected title is '{expected_title}', received title is '{received_title}'. Expected ID is '{expected_id}', received ID is '{received_id}'.",
             expected_id=expected_id,
             expected_id_type=expected_id_type,
             expected_title=expected_title,

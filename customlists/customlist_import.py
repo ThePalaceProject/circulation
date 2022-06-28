@@ -2,7 +2,9 @@ import argparse
 import json
 import logging
 import os
+import re
 from typing import Dict, List, Set
+from urllib.parse import unquote
 
 import feedparser
 import requests
@@ -138,7 +140,7 @@ class CustomListImporter:
         )
 
         """Check that the book on the target CM has a matching ID and title."""
-        server_work_endpoint: str = f"{self._server_base}/{self._library_name}/admin/works/{book.id_type()}/{book.id()}"
+        server_work_endpoint: str = f"{self._server_base}/{self._library_name}/admin/works/{book.id_type()}/{book.id_value()}"
         response = self._session.get(server_work_endpoint)
         if response.status_code == 404:
             problem_missing = CustomListProblemBookMissing.create(
@@ -167,18 +169,25 @@ class CustomListImporter:
 
         feed = feedparser.parse(response.content)
         for entry in feed.entries:
-            if entry.id != book.id() or entry.title != book.title():
-                problem = CustomListProblemBookMismatch.create(
-                    expected_id=book.id(),
-                    expected_id_type=book.id_type(),
-                    expected_title=book.title(),
-                    received_id=entry.id,
-                    received_title=entry.title,
-                    author=book.author(),
-                )
-                self._logger.error(problem.message())
-                report.add_problem(problem)
-                rejected_books.add(book.id())
+            for link in entry.links:
+                if link.rel == "alternate":
+                    match = re.search("^(.*)/works/([^/]+)/(.*)$", link.href)
+                    if match is not None:
+                        link_id_quoted: str = match.group(3)
+                        link_id: str = unquote(link_id_quoted)
+                        if link_id != book.id() or entry.title != book.title():
+                            problem = CustomListProblemBookMismatch.create(
+                                expected_id=book.id(),
+                                expected_id_type=book.id_type(),
+                                expected_title=book.title(),
+                                received_id=entry.id,
+                                received_title=entry.title,
+                                author=book.author(),
+                            )
+                            self._logger.error(problem.message())
+                            report.add_problem(problem)
+                            rejected_books.add(book.id())
+                            break
 
     def _process_check_problematic_book(
         self,

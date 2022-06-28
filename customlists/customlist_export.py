@@ -4,6 +4,7 @@ import logging
 import os
 import re
 from typing import IO, Iterable, List, Union
+from urllib.parse import unquote
 
 import feedparser
 import jsonschema
@@ -49,26 +50,34 @@ class CollectionReference:
 
 
 class Book:
-    _id: str
+    _id_value: str
     _id_type: str
+    _id_full: str
     _title: str
     _author: str
 
-    def __init__(self, id: str, id_type: str, title: str, author: str):
-        self._id = id
+    def __init__(
+        self, id_value: str, id_type: str, id_full: str, title: str, author: str
+    ):
+        self._id_value = id_value
         self._id_type = id_type
+        self._id_full = id_full
         self._title = title
         self._author = author
-        assert id
+        assert id_value
         assert id_type
+        assert id_full
         assert title
         assert author
 
     def id(self) -> str:
-        return self._id
+        return self._id_full
 
     def id_type(self) -> str:
         return self._id_type
+
+    def id_value(self) -> str:
+        return self._id_value
 
     def title(self) -> str:
         return self._title
@@ -79,8 +88,9 @@ class Book:
     def to_dict(self) -> dict:
         return {
             "%type": "book",
-            "id": self._id,
+            "id-value": self._id_value,
             "id-type": self._id_type,
+            "id-full": self._id_full,
             "title": self._title,
             "author": self._author,
         }
@@ -261,15 +271,16 @@ class CustomListExports:
             )
             for raw_book in raw_list["books"]:
                 book = Book(
-                    id=raw_book["id"],
+                    id_value=raw_book["id-value"],
                     id_type=raw_book["id-type"],
+                    id_full=raw_book["id-full"],
                     title=raw_book["title"],
                     author=raw_book["author"],
                 )
                 custom_list.add_book(book)
             for raw_book in raw_list["problematic-books"]:
                 problem_book = ProblematicBook(
-                    id=raw_book["id"],
+                    id=raw_book["id-full"],
                     message=raw_book["message"],
                     title=raw_book["title"],
                     author=raw_book["author"],
@@ -386,15 +397,22 @@ class CustomListExporter:
 
         # Now, for each book, extract the book identifier and identifier type.
         for entry in feed.entries:
+            entry_id: str = unquote(entry.id)
             added = False
             for link in entry.links:
                 if link.rel == "alternate":
                     match = re.search("^(.*)/works/([^/]+)/(.*)$", link.href)
                     if match is not None:
+                        link_id_quoted: str = match.group(3)
+                        link_id_type_quoted: str = match.group(2)
+                        link_id: str = unquote(link_id_quoted)
+                        link_id_type: str = unquote(link_id_type_quoted)
+
                         custom_list.add_book(
                             Book(
-                                id=entry.id,
-                                id_type=match.group(2),
+                                id_value=link_id,
+                                id_type=link_id_type,
+                                id_full=entry_id,
                                 title=entry.title,
                                 author=entry.author,
                             )
@@ -404,9 +422,9 @@ class CustomListExporter:
             if not added:
                 custom_list.add_problematic_book(
                     ProblematicBook(
-                        id=entry.id,
+                        id=entry_id,
                         title=entry.title,
-                        message=f"Could not determine the identifier type for book {entry.id}, {entry.title}",
+                        message=f"Could not determine the identifier type for book {entry.title} (OPDS entry ID: {entry_id})",
                         author=entry.author,
                     )
                 )

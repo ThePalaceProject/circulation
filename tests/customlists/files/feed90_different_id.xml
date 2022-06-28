@@ -10,7 +10,6 @@
     <title>Something Else</title>
     <updated>2022-04-25T19:31:37+00:00</updated>
     <link href="http://localhost:6500/HAZELNUT/admin/custom_list/90?list_name=Something+Else" rel="self"/>
-
     <entry schema:additionalType="http://schema.org/EBook">
         <title>Chameleon</title>
         <author>
@@ -51,7 +50,7 @@
               href="http://localhost:6500/HAZELNUT/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6/report"/>
         <id>urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6</id>
         <link rel="alternate"
-              href="http://localhost:6500/HAZELNUT/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6"
+              href="http://localhost:6500/HAZELNUT/works/URI/urn:xyz"
               type="application/atom+xml;type=entry;profile=opds-catalog"/>
         <bibframe:distribution bibframe:ProviderName="BiblioBoard"/>
         <published>2022-04-14T00:00:00Z</published>
