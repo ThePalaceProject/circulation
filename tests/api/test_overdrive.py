@@ -2289,7 +2289,7 @@ class TestOverdriveCirculationMonitor(OverdriveAPITest):
                 current_count = current_count + 1
                 self.tries[str(book_id)] = current_count
 
-                if current_count < 9:
+                if current_count < 2:
                     raise StaleDataError("Ouch!")
 
                 pool, is_new, is_changed = self.licensepools.pop(0)
@@ -2327,9 +2327,9 @@ class TestOverdriveCirculationMonitor(OverdriveAPITest):
         cutoff = object()
         monitor.catch_up_from(start, cutoff, progress)
 
-        assert api.tries["1"] == 9
-        assert api.tries["2"] == 9
-        assert api.tries["3"] == 9
+        assert api.tries["1"] == 2
+        assert api.tries["2"] == 2
+        assert api.tries["3"] == 2
         assert not progress.is_failure
 
     def test_catch_up_from_with_failures_all(self):
@@ -2382,9 +2382,9 @@ class TestOverdriveCirculationMonitor(OverdriveAPITest):
         cutoff = object()
         monitor.catch_up_from(start, cutoff, progress)
 
-        assert api.tries["1"] == 10
-        assert api.tries["2"] == 10
-        assert api.tries["3"] == 10
+        assert api.tries["1"] == 3
+        assert api.tries["2"] == 3
+        assert api.tries["3"] == 3
         assert progress.is_failure
 
 
