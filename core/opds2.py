@@ -5,6 +5,7 @@ from core.lane import SearchFacets, WorkList
 from core.model.collection import Collection
 from core.model.contributor import Contribution, Contributor
 from core.model.edition import Edition
+from core.model.resource import Hyperlink
 from core.model.work import Work
 
 
@@ -12,63 +13,15 @@ class OPDS2Feed:
     pass
 
 
-class FeedTypes:
-    PUBLICATIONS = "publications"
+class OPDS2Annotator:
+    """Annotate a feed following the OPDS2 spec"""
 
-
-class AcquisitonFeedOPDS2(OPDS2Feed):
-    @classmethod
-    def publications(
-        cls,
-        _db,
-        worklist: WorkList,
-        facets: SearchFacets,
-        search_engine: ExternalSearchIndex,
-    ):
-        # do some caching magic
-        # then do the publication
-
-        return cls._generate_publications(_db, worklist, facets, search_engine)
-
-    @classmethod
-    def _generate_publications(
-        cls,
-        _db,
-        worklist: WorkList,
-        facets: SearchFacets,
-        search_engine: ExternalSearchIndex,
-    ):
-        publications = []
-
-        for work in worklist.works(_db, facets=facets, search_engine=search_engine):
-            publications.append(work)
-
-        return cls(_db, "publications", publications, worklist.get_library(_db))
-
-    def __init__(
-        self, _db, title, works: List[Work], library, feed_type=FeedTypes.PUBLICATIONS
-    ):
-        self._db = _db
-        self.works = works
+    def __init__(self, facets, library) -> None:
+        self.facets = facets
         self.library = library
-        self.feed_type = feed_type
-
-    def json(self):
-        if self.feed_type == FeedTypes.PUBLICATIONS:
-            return self.publications_json()
-
-    def publications_json(self):
-        result = {}
-
-        entries = []
-        for work in self.works:
-            entries.append(self._metadata_for_work(work))
-
-        result["publications"] = entries
-        return result
 
     # Should this be in an annotator??
-    def _metadata_for_work(self, work: Work):
+    def metadata_for_work(self, work: Work) -> Dict:
         """Create the metadata json for a work item
         using the schema https://readium.org/webpub-manifest/context.jsonld"""
         # TODO: What happens when there is not presentation edition?
@@ -93,6 +46,7 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
             result["imprint"] = {"name": edition.imprint}
         result["modified"] = work.last_update_time
         result["description"] = work.summary_text
+
         # TODO: belongsTo. Palace marketplace has series and collection within this,
         # which shouldn't be the case because it is a https://schema.org/CreativeWork
         # Even the OPDS example uses it in this way https://drafts.opds.io/opds-2.0.html#42-metadata
@@ -104,12 +58,54 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
             result["position"] = (
                 work.series_position if work.series_position is not None else 1
             )
-        collection = self._collection(edition)
-        if collection:
-            result["collection"] = collection
-        # TODO: add acquisition links
+
+        # TODO: Collection, what does this stand for?
+        # collection = self._collection(edition)
+        # if collection:
+        #     result["collection"] = collection
+
+        links = self._work_metadata_links(edition)
+        if links:
+            result["links"] = links
 
         return dict(metadata=result)
+
+    def _work_metadata_links(self, edition: Edition):
+        """Create links for works in the publication"""
+        samples = self.resource_links(edition, Hyperlink.SAMPLE)
+        open_access = self.resource_links(edition, Hyperlink.OPEN_ACCESS_DOWNLOAD)
+        loan_link = self.loan_link(edition)
+        self_link = self.self_link(edition)
+        links = []
+        if open_access:
+            links.extend(open_access)
+        if samples:
+            links.extend(samples)
+        if loan_link:
+            links.append(loan_link)
+        if self_link:
+            links.append(self_link)
+        return links
+
+    def resource_links(self, edition: Edition, rel) -> List[Dict]:
+        link: Hyperlink
+        samples = []
+        for link in edition.primary_identifier.links:
+            if link.rel == rel:
+                samples.append(
+                    {
+                        "href": link.resource.url,
+                        "rel": link.rel,
+                        "type": link.resource.representation.media_type,
+                    }
+                )
+        return samples
+
+    def loan_link(self, edition: Edition) -> Dict:
+        return None
+
+    def self_link(self, edition: Edition) -> Dict:
+        return None
 
     def _collection(self, edition: Edition) -> Dict:
         """The first collection of this edition that is part of the library of this feed"""
@@ -128,7 +124,7 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
         authors = {}
         contribution: Contribution
         key_mapping = {
-            Contributor.AUTHOR_ROLE: "author",
+            Contributor.PRIMARY_AUTHOR_ROLE: "author",
             Contributor.TRANSLATOR_ROLE: "translator",
             Contributor.EDITOR_ROLE: "editor",
             Contributor.ILLUSTRATOR_ROLE: "illustrator",
@@ -149,9 +145,80 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
 
                 # TODO: Marketplace adds links for the author based search
                 # should we do the same?
-
                 authors[key_mapping[contribution.role]] = meta
         return authors
+
+
+class FeedTypes:
+    PUBLICATIONS = "publications"
+
+
+class AcquisitonFeedOPDS2(OPDS2Feed):
+    @classmethod
+    def publications(
+        cls,
+        _db,
+        url: str,
+        worklist: WorkList,
+        facets: SearchFacets,
+        search_engine: ExternalSearchIndex,
+        annotator: OPDS2Annotator,
+    ):
+        # do some caching magic
+        # then do the publication
+
+        return cls._generate_publications(
+            _db, url, worklist, facets, search_engine, annotator
+        )
+
+    @classmethod
+    def _generate_publications(
+        cls,
+        _db,
+        url: str,
+        worklist: WorkList,
+        facets: SearchFacets,
+        search_engine: ExternalSearchIndex,
+        annotator: OPDS2Annotator,
+    ):
+        publications = []
+
+        for work in worklist.works(_db, facets=facets, search_engine=search_engine):
+            publications.append(work)
+
+        return cls(
+            _db,
+            "publications",
+            publications,
+            annotator,
+        )
+
+    def __init__(
+        self,
+        _db,
+        title,
+        works: List[Work],
+        annotator: OPDS2Annotator,
+        feed_type=FeedTypes.PUBLICATIONS,
+    ):
+        self._db = _db
+        self.works = works
+        self.annotator = annotator
+        self.feed_type = feed_type
+
+    def json(self):
+        if self.feed_type == FeedTypes.PUBLICATIONS:
+            return self.publications_json()
+
+    def publications_json(self):
+        result = {}
+
+        entries = []
+        for work in self.works:
+            entries.append(self.annotator.metadata_for_work(work))
+
+        result["publications"] = entries
+        return result
 
     def __str__(self):
         """Make the serialized OPDS2 feed"""
