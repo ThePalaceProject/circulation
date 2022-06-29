@@ -24,7 +24,12 @@ class TestOPDS2Feed(DatabaseTest):
         )
         self.search_engine.bulk_update([work])
         result = AcquisitonFeedOPDS2.publications(
-            self._db, "/", self.fiction, SearchFacets(), self.search_engine
+            self._db,
+            "/",
+            self.fiction,
+            SearchFacets(),
+            self.search_engine,
+            OPDS2Annotator("/", SearchFacets(), self._default_library),
         )
 
         assert type(result) == AcquisitonFeedOPDS2
@@ -69,7 +74,7 @@ class TestOPDS2Feed(DatabaseTest):
         )
 
         self.search_engine.bulk_update(works)
-        annotator = OPDS2Annotator(self.fiction, self._default_library)
+        annotator = OPDS2Annotator("/", self.fiction, self._default_library)
         result = AcquisitonFeedOPDS2.publications(
             self._db, "/", self.fiction, SearchFacets(), self.search_engine, annotator
         )
@@ -88,10 +93,35 @@ class TestOPDS2Feed(DatabaseTest):
 
             links = sorted(metadata["links"], key=lambda x: x["rel"])
             if ix == last_ix:
-                assert metadata["series"] == {"name": "A series"}
-                assert metadata["position"] == 1
+                assert metadata["belongsTo"]["series"] == {
+                    "name": "A series",
+                    "position": 1,
+                }
                 assert metadata["modified"] == modified
                 assert len(links) == 2
                 assert links[1]["href"] == "https://example.org/sample"
                 assert links[1]["rel"] == Hyperlink.SAMPLE
                 assert links[0]["rel"] == Hyperlink.OPEN_ACCESS_DOWNLOAD
+
+
+class TestOPDS2Annotator(DatabaseTest):
+    def setup_method(self):
+        super().setup_method()
+
+        self.search_engine = MockExternalSearchIndex()
+
+        self.fiction = self._lane("Fiction")
+        self.fiction.fiction = True
+        self.fiction.audiences = [Classifier.AUDIENCE_ADULT]
+
+    def test_feed_links(self):
+        annotator = OPDS2Annotator(
+            "http://example.org/feed?page=2", self.fiction, self._default_library
+        )
+        links = annotator.feed_links()
+        assert len(links) == 1
+        assert links[0] == {
+            "rel": "self",
+            "href": "http://example.org/feed?page=2",
+            "type": "application/opds+json",
+        }

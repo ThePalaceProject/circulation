@@ -2,6 +2,7 @@ from typing import Dict, List
 
 from core.external_search import ExternalSearchIndex
 from core.lane import SearchFacets, WorkList
+from core.model.classification import Genre, Subject
 from core.model.collection import Collection
 from core.model.contributor import Contribution, Contributor
 from core.model.edition import Edition
@@ -16,27 +17,38 @@ class OPDS2Feed:
 class OPDS2Annotator:
     """Annotate a feed following the OPDS2 spec"""
 
-    def __init__(self, facets, library) -> None:
+    def __init__(self, url, facets, library) -> None:
+        self.url = url
         self.facets = facets
         self.library = library
 
     # Should this be in an annotator??
     def metadata_for_work(self, work: Work) -> Dict:
         """Create the metadata json for a work item
-        using the schema https://readium.org/webpub-manifest/context.jsonld"""
+        using the schema https://readium.org/webpub-manifest/schema/metadata.schema.json"""
         # TODO: What happens when there is not presentation edition?
         edition: Edition = work.presentation_edition
         result = {}
         # Palace marketplace has this as '@type'
-        result["type"] = Edition.medium_to_additional_type.get(edition.medium)
+        result["@type"] = Edition.medium_to_additional_type.get(edition.medium)
         result["title"] = edition.title
         result["subtitle"] = edition.subtitle
         result["identifier"] = edition.primary_identifier.identifier
         result["sortAs"] = edition.sort_title
         result.update(self._contributors(edition))
         result["language"] = edition.language
-        # TODO: subject is meant to be http://schema.org/about,
-        # however Palace marketplace uses this to provide genre subjects
+
+        subjects = []
+        genre: Genre
+        for genre in work.genres:
+            subjects.append(
+                {
+                    "scheme": Subject.SIMPLIFIED_GENRE,
+                    "name": genre.name,
+                    "sortAs": genre.name,
+                }
+            )
+
         # TODO: numberOfPages. we don't store this
         # TODO: duration. we don't store this
         # TODO: abridged. we don't store this
@@ -47,17 +59,17 @@ class OPDS2Annotator:
         result["modified"] = work.last_update_time
         result["description"] = work.summary_text
 
-        # TODO: belongsTo. Palace marketplace has series and collection within this,
-        # which shouldn't be the case because it is a https://schema.org/CreativeWork
-        # Even the OPDS example uses it in this way https://drafts.opds.io/opds-2.0.html#42-metadata
+        belongs_to = {}
         if work.series:
-            result["series"] = {
+            belongs_to["series"] = {
                 "name": work.series,
+                "position": work.series_position
+                if work.series_position is not None
+                else 1,
             }
-            # Palace marketplace has this within the "series" object
-            result["position"] = (
-                work.series_position if work.series_position is not None else 1
-            )
+
+        if belongs_to:
+            result["belongsTo"] = belongs_to
 
         # TODO: Collection, what does this stand for?
         # collection = self._collection(edition)
@@ -148,6 +160,16 @@ class OPDS2Annotator:
                 authors[key_mapping[contribution.role]] = meta
         return authors
 
+    def feed_links(self):
+        # TODO: Next page, previous page, last page
+        # Need to get entire sample size from the search db
+        # in order to achieve this
+        links = [
+            {"href": self.url, "rel": "self", "type": "application/opds+json"},
+        ]
+
+        return links
+
 
 class FeedTypes:
     PUBLICATIONS = "publications"
@@ -188,6 +210,7 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
 
         return cls(
             _db,
+            url,
             "publications",
             publications,
             annotator,
@@ -196,12 +219,14 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
     def __init__(
         self,
         _db,
+        url,
         title,
         works: List[Work],
         annotator: OPDS2Annotator,
         feed_type=FeedTypes.PUBLICATIONS,
     ):
         self._db = _db
+        self.url = url
         self.works = works
         self.annotator = annotator
         self.feed_type = feed_type
@@ -218,6 +243,8 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
             entries.append(self.annotator.metadata_for_work(work))
 
         result["publications"] = entries
+        feed_links = self.annotator.feed_links()
+        result["links"] = feed_links
         return result
 
     def __str__(self):
