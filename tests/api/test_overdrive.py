@@ -3,9 +3,11 @@ import json
 import os
 import random
 from datetime import timedelta
+from typing import Dict
 from unittest.mock import MagicMock
 
 import pytest
+from sqlalchemy.orm.exc import StaleDataError
 
 from api.authenticator import BasicAuthenticationProvider
 from api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
@@ -2268,6 +2270,122 @@ class TestOverdriveCirculationMonitor(OverdriveAPITest):
         # We processed four books: 1, 2, None (which was ignored)
         # and 3.
         assert "Books processed: 4." == progress.achievements
+
+    def test_catch_up_from_with_failures_retried(self):
+        """Check that book failures are retried."""
+
+        class MockAPI:
+            tries: Dict[str, int] = {}
+
+            def __init__(self, *ignore, **kwignore):
+                self.licensepools = []
+                self.update_licensepool_calls = []
+
+            def recently_changed_ids(self, start, cutoff):
+                return [1, 2, 3]
+
+            def update_licensepool(self, book_id):
+                current_count = self.tries.get(str(book_id)) or 0
+                current_count = current_count + 1
+                self.tries[str(book_id)] = current_count
+
+                if current_count < 2:
+                    raise StaleDataError("Ouch!")
+
+                pool, is_new, is_changed = self.licensepools.pop(0)
+                self.update_licensepool_calls.append((book_id, pool))
+                return pool, is_new, is_changed
+
+        class MockAnalytics:
+            def __init__(self, _db):
+                self._db = _db
+                self.events = []
+
+            def collect_event(self, *args):
+                self.events.append(args)
+
+        monitor = OverdriveCirculationMonitor(
+            self._db, self.collection, api_class=MockAPI, analytics_class=MockAnalytics
+        )
+        api = monitor.api
+
+        # A MockAnalytics object was created and is ready to receive analytics
+        # events.
+        assert isinstance(monitor.analytics, MockAnalytics)
+        assert self._db == monitor.analytics._db
+
+        lp1 = self._licensepool(None)
+        lp1.last_checked = utc_now()
+        lp2 = self._licensepool(None)
+        lp3 = self._licensepool(None)
+        api.licensepools.append((lp1, True, True))
+        api.licensepools.append((lp2, False, False))
+        api.licensepools.append((lp3, False, True))
+
+        progress = TimestampData()
+        start = object()
+        cutoff = object()
+        monitor.catch_up_from(start, cutoff, progress)
+
+        assert api.tries["1"] == 2
+        assert api.tries["2"] == 2
+        assert api.tries["3"] == 2
+        assert not progress.is_failure
+
+    def test_catch_up_from_with_failures_all(self):
+        """If an individual book fails, the import continues, but ends in failure after handling all the books."""
+
+        class MockAPI:
+            tries: Dict[str, int] = {}
+
+            def __init__(self, *ignore, **kwignore):
+                self.licensepools = []
+                self.update_licensepool_calls = []
+
+            def recently_changed_ids(self, start, cutoff):
+                return [1, 2, 3]
+
+            def update_licensepool(self, book_id):
+                current_count = self.tries.get(str(book_id)) or 0
+                current_count = current_count + 1
+                self.tries[str(book_id)] = current_count
+                raise StaleDataError("Ouch!")
+
+        class MockAnalytics:
+            def __init__(self, _db):
+                self._db = _db
+                self.events = []
+
+            def collect_event(self, *args):
+                self.events.append(args)
+
+        monitor = OverdriveCirculationMonitor(
+            self._db, self.collection, api_class=MockAPI, analytics_class=MockAnalytics
+        )
+        api = monitor.api
+
+        # A MockAnalytics object was created and is ready to receive analytics
+        # events.
+        assert isinstance(monitor.analytics, MockAnalytics)
+        assert self._db == monitor.analytics._db
+
+        lp1 = self._licensepool(None)
+        lp1.last_checked = utc_now()
+        lp2 = self._licensepool(None)
+        lp3 = self._licensepool(None)
+        api.licensepools.append((lp1, True, True))
+        api.licensepools.append((lp2, False, False))
+        api.licensepools.append((lp3, False, True))
+
+        progress = TimestampData()
+        start = object()
+        cutoff = object()
+        monitor.catch_up_from(start, cutoff, progress)
+
+        assert api.tries["1"] == 3
+        assert api.tries["2"] == 3
+        assert api.tries["3"] == 3
+        assert progress.is_failure
 
 
 class TestNewTitlesOverdriveCollectionMonitor(OverdriveAPITest):
