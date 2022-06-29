@@ -108,6 +108,8 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
             "start": start,
             "end": end,
             "library_id": library.id,
+            "library_name": library.name,
+            "library_short_name": library.short_name,
             "old_value": old_value,
             "new_value": new_value,
             "delta": delta,
@@ -126,6 +128,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
             "identifier_type": identifier.type if identifier else None,
             "identifier": identifier.identifier if identifier else None,
             "data_source": data_source.name if data_source else None,
+            "distributor": data_source.name if data_source else None,
             "audience": work.audience if work else None,
             "fiction": work.fiction if work else None,
             "summary_text": work.summary_text if work else None,
@@ -150,9 +153,11 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
             else None,
             "self_hosted": license_pool.self_hosted if license_pool else None,
             "title": work.title if work else None,
+            "author": work.author if work else None,
             "series": work.series if work else None,
             "series_position": work.series_position if work else None,
             "language": work.language if work else None,
+            "open_access": license_pool.open_access,
         }
 
         return event
