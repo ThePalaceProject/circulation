@@ -560,7 +560,7 @@ class S3Uploader(MirrorUploader):
             time_part = str(end_time)
 
         # ensure the uniqueness of file name (in case of overlapping events)
-        random_string = random.choices(string.ascii_lowercase, k=10)
+        random_string = "".join(random.choices(string.ascii_lowercase, k=10))
         parts = [time_part, license_pool.collection_id, random_string]
         return root + self.key_join(parts) + ".json"
 
