@@ -3,6 +3,9 @@ from datetime import datetime
 from core.classifier import Classifier
 from core.external_search import MockExternalSearchIndex
 from core.lane import SearchFacets
+from core.model.classification import Subject
+from core.model.edition import Edition
+from core.model.identifier import Identifier
 from core.model.resource import Hyperlink
 from core.opds2 import AcquisitonFeedOPDS2, OPDS2Annotator
 from core.testing import DatabaseTest
@@ -62,17 +65,6 @@ class TestOPDS2Feed(DatabaseTest):
                 fiction=True,
             ),
         ]
-        last_ix = len(works) - 1
-        modified = datetime.now()
-        works[-1].last_update_time = modified
-        works[-1].presentation_edition.series = "A series"
-        works[-1].presentation_edition.primary_identifier.add_link(
-            Hyperlink.SAMPLE,
-            "https://example.org/sample",
-            works[-1].presentation_edition.data_source,
-            media_type="application/zip+epub",
-        )
-
         self.search_engine.bulk_update(works)
         annotator = OPDS2Annotator("/", self.fiction, self._default_library)
         result = AcquisitonFeedOPDS2.publications(
@@ -81,27 +73,6 @@ class TestOPDS2Feed(DatabaseTest):
         result = result.json()
 
         assert len(result["publications"]) == len(works)
-        for ix, pub in enumerate(result["publications"]):
-            work = works[ix]
-            metadata = pub["metadata"]
-            assert (
-                metadata["identifier"]
-                == work.presentation_edition.primary_identifier.identifier
-            )
-            assert metadata["title"] == work.presentation_edition.title
-            assert metadata["author"] == {"name": work.presentation_edition.author}
-
-            links = sorted(metadata["links"], key=lambda x: x["rel"])
-            if ix == last_ix:
-                assert metadata["belongsTo"]["series"] == {
-                    "name": "A series",
-                    "position": 1,
-                }
-                assert metadata["modified"] == modified
-                assert len(links) == 2
-                assert links[1]["href"] == "https://example.org/sample"
-                assert links[1]["rel"] == Hyperlink.SAMPLE
-                assert links[0]["rel"] == Hyperlink.OPEN_ACCESS_DOWNLOAD
 
 
 class TestOPDS2Annotator(DatabaseTest):
@@ -113,15 +84,79 @@ class TestOPDS2Annotator(DatabaseTest):
         self.fiction = self._lane("Fiction")
         self.fiction.fiction = True
         self.fiction.audiences = [Classifier.AUDIENCE_ADULT]
-
-    def test_feed_links(self):
-        annotator = OPDS2Annotator(
+        self.annotator = OPDS2Annotator(
             "http://example.org/feed?page=2", self.fiction, self._default_library
         )
-        links = annotator.feed_links()
+
+    def test_feed_links(self):
+        links = self.annotator.feed_links()
         assert len(links) == 1
         assert links[0] == {
             "rel": "self",
             "href": "http://example.org/feed?page=2",
             "type": "application/opds+json",
         }
+
+    def test_image_links(self):
+        work = self._work()
+        edition = work.presentation_edition
+        idn: Identifier = edition.primary_identifier
+        idn.add_link(
+            Hyperlink.IMAGE,
+            "https://example.org/image",
+            edition.data_source,
+            media_type="image/png",
+        )
+        idn.add_link(
+            Hyperlink.THUMBNAIL_IMAGE,
+            "https://example.org/thumb",
+            edition.data_source,
+            media_type="image/png",
+        )
+        self.search_engine.bulk_update([work])
+
+        result = self.annotator.metadata_for_work(work)
+
+        assert "images" in result
+        assert len(result["images"]) == 2
+        assert result["images"] == [
+            dict(
+                rel=Hyperlink.IMAGE, href="https://example.org/image", type="image/png"
+            ),
+            dict(
+                rel=Hyperlink.THUMBNAIL_IMAGE,
+                href="https://example.org/thumb",
+                type="image/png",
+            ),
+        ]
+
+    def test_work_metadata(self):
+        work = self._work(
+            authors="Author Person", genre="Science", with_license_pool=True
+        )
+        edition: Edition = work.presentation_edition
+        idn: Identifier = edition.primary_identifier
+
+        modified = datetime.now()
+        work.last_update_time = modified
+        edition.license_pools[0].availability_time = modified
+        edition.series = "A series"
+        edition.series_position = 4
+
+        self.search_engine.bulk_update([work])
+        result = self.annotator.metadata_for_work(work)
+
+        meta = result["metadata"]
+        assert meta["@type"] == "http://schema.org/EBook"
+        assert meta["title"] == work.title
+        assert meta["subtitle"] == work.subtitle
+        assert meta["identifier"] == idn.identifier
+        assert meta["modified"] == modified
+        assert meta["published"] == modified
+        assert meta["language"] == "en"
+        assert meta["sortAs"] == work.sort_title
+        assert meta["author"] == {"name": "Author Person"}
+        assert meta["subject"] == [
+            {"name": "Science", "sortAs": "Science", "scheme": Subject.SIMPLIFIED_GENRE}
+        ]
+        assert meta["belongsTo"] == {"series": {"name": "A series", "position": 4}}

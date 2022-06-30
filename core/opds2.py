@@ -3,9 +3,9 @@ from typing import Dict, List
 from core.external_search import ExternalSearchIndex
 from core.lane import SearchFacets, WorkList
 from core.model.classification import Genre, Subject
-from core.model.collection import Collection
 from core.model.contributor import Contribution, Contributor
 from core.model.edition import Edition
+from core.model.licensing import LicensePool
 from core.model.resource import Hyperlink
 from core.model.work import Work
 
@@ -28,6 +28,7 @@ class OPDS2Annotator:
         using the schema https://readium.org/webpub-manifest/schema/metadata.schema.json"""
         # TODO: What happens when there is not presentation edition?
         edition: Edition = work.presentation_edition
+        pool = self._pool_for_library(edition)
         result = {}
         # Palace marketplace has this as '@type'
         result["@type"] = Edition.medium_to_additional_type.get(edition.medium)
@@ -36,7 +37,7 @@ class OPDS2Annotator:
         result["identifier"] = edition.primary_identifier.identifier
         result["sortAs"] = edition.sort_title
         result.update(self._contributors(edition))
-        result["language"] = edition.language
+        result["language"] = edition.language_code
 
         subjects = []
         genre: Genre
@@ -48,6 +49,8 @@ class OPDS2Annotator:
                     "sortAs": genre.name,
                 }
             )
+        if subjects:
+            result["subject"] = subjects
 
         # TODO: numberOfPages. we don't store this
         # TODO: duration. we don't store this
@@ -57,6 +60,8 @@ class OPDS2Annotator:
         if edition.imprint:
             result["imprint"] = {"name": edition.imprint}
         result["modified"] = work.last_update_time
+        if pool:
+            result["published"] = pool.availability_time
         result["description"] = work.summary_text
 
         belongs_to = {}
@@ -72,15 +77,13 @@ class OPDS2Annotator:
             result["belongsTo"] = belongs_to
 
         # TODO: Collection, what does this stand for?
-        # collection = self._collection(edition)
-        # if collection:
-        #     result["collection"] = collection
 
         links = self._work_metadata_links(edition)
-        if links:
-            result["links"] = links
+        image_links = self.resource_links(
+            edition, Hyperlink.IMAGE, Hyperlink.THUMBNAIL_IMAGE, Hyperlink.ILLUSTRATION
+        )
 
-        return dict(metadata=result)
+        return dict(metadata=result, links=links, images=image_links)
 
     def _work_metadata_links(self, edition: Edition):
         """Create links for works in the publication"""
@@ -99,11 +102,11 @@ class OPDS2Annotator:
             links.append(self_link)
         return links
 
-    def resource_links(self, edition: Edition, rel) -> List[Dict]:
+    def resource_links(self, edition: Edition, *rels) -> List[Dict]:
         link: Hyperlink
         samples = []
         for link in edition.primary_identifier.links:
-            if link.rel == rel:
+            if link.rel in rels:
                 samples.append(
                     {
                         "href": link.resource.url,
@@ -119,18 +122,11 @@ class OPDS2Annotator:
     def self_link(self, edition: Edition) -> Dict:
         return None
 
-    def _collection(self, edition: Edition) -> Dict:
-        """The first collection of this edition that is part of the library of this feed"""
-        collection = None
+    def _pool_for_library(self, edition: Edition) -> LicensePool:
         collection_ids = [c.id for c in self.library.all_collections]
-        this_collection: Collection = None
         for pool in edition.license_pools:
             if pool.collection_id in collection_ids:
-                this_collection = pool.collection
-                break
-        if this_collection:
-            collection = {"name": this_collection.name}
-        return collection
+                return pool
 
     def _contributors(self, edition: Edition) -> Dict:
         authors = {}
