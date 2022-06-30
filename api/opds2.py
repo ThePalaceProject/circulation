@@ -16,6 +16,7 @@ class OPDS2PublicationsAnnotator(OPDS2Annotator):
                 "borrow",
                 identifier_type=identifier.type,
                 identifier=identifier.identifier,
+                library_short_name=self.library.short_name,
             ),
             "rel": Hyperlink.BORROW,
         }
@@ -27,6 +28,28 @@ class OPDS2PublicationsAnnotator(OPDS2Annotator):
                 "permalink",
                 identifier_type=identifier.type,
                 identifier=identifier.identifier,
+                library_short_name=self.library.short_name,
             ),
             "rel": "self",
         }
+
+
+class OPDS2NavigationsAnnotator(OPDS2Annotator):
+    def navigation_collection(self) -> Dict:
+        return [
+            {
+                "href": url_for(
+                    "opds2_publications", library_short_name=self.library.short_name
+                ),
+                "title": "OPDS2 Publications Feed",
+                "type": self.OPDS2_TYPE,
+            }
+        ]
+
+    def feed_metadata(self):
+        return {"title": self.title}
+
+    def feed_links(self):
+        return [
+            {"href": self.url, "rel": "self", "type": self.OPDS2_TYPE},
+        ]

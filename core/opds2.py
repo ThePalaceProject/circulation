@@ -19,6 +19,8 @@ class OPDS2Feed:
 class OPDS2Annotator:
     """Annotate a feed following the OPDS2 spec"""
 
+    OPDS2_TYPE = "application/opds+json"
+
     def __init__(self, url, facets, pagination, library, title="OPDS2 Feed") -> None:
         self.url = url
         self.facets: Facets = facets
@@ -162,11 +164,13 @@ class OPDS2Annotator:
         return authors
 
     def feed_links(self):
-        # TODO: Next page, previous page, last page
-        # Need to get entire sample size from the search db
-        # in order to achieve this
+        next_query_string = (
+            f"{self.pagination.next_page.query_string}&{self.facets.query_string}"
+        )
+        next_url = self.url.split("?", 1)[0] + "?" + next_query_string
         links = [
-            {"href": self.url, "rel": "self", "type": "application/opds+json"},
+            {"href": self.url, "rel": "self", "type": self.OPDS2_TYPE},
+            {"href": next_url, "rel": "next", "type": self.OPDS2_TYPE},
         ]
 
         return links
@@ -182,6 +186,7 @@ class OPDS2Annotator:
 
 class FeedTypes:
     PUBLICATIONS = "publications"
+    NAVIGATION = "navigation"
 
 
 class AcquisitonFeedOPDS2(OPDS2Feed):
@@ -199,7 +204,7 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
         # then do the publication
 
         return cls._generate_publications(
-            _db, worklist, facets, search_engine, annotator
+            _db, worklist, facets, pagination, search_engine, annotator
         )
 
     @classmethod
@@ -208,12 +213,15 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
         _db,
         worklist: WorkList,
         facets: SearchFacets,
+        pagination: Pagination,
         search_engine: ExternalSearchIndex,
         annotator: OPDS2Annotator,
     ):
         publications = []
 
-        for work in worklist.works(_db, facets=facets, search_engine=search_engine):
+        for work in worklist.works(
+            _db, facets=facets, search_engine=search_engine, pagination=pagination
+        ):
             publications.append(work)
 
         return cls(
@@ -221,6 +229,10 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
             publications,
             annotator,
         )
+
+    @classmethod
+    def navigation(cls, _db, annotator: OPDS2Annotator):
+        return cls(_db, [], annotator, feed_type=FeedTypes.NAVIGATION)
 
     def __init__(
         self,
@@ -237,6 +249,15 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
     def json(self):
         if self.feed_type == FeedTypes.PUBLICATIONS:
             return self.publications_json()
+        elif self.feed_type == FeedTypes.NAVIGATION:
+            return self.navigation_json()
+
+    def navigation_json(self):
+        return {
+            "metadata": self.annotator.feed_metadata(),
+            "links": self.annotator.feed_links(),
+            "navigation": self.annotator.navigation_collection(),
+        }
 
     def publications_json(self):
         result = {}

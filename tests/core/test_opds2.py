@@ -97,7 +97,7 @@ class TestOPDS2Annotator(DatabaseTest):
         self.fiction.fiction = True
         self.fiction.audiences = [Classifier.AUDIENCE_ADULT]
         self.annotator = OPDS2Annotator(
-            "http://example.org/feed?page=2",
+            "http://example.org/feed",
             Facets.default(self._default_library),
             Pagination(),
             self._default_library,
@@ -105,12 +105,13 @@ class TestOPDS2Annotator(DatabaseTest):
 
     def test_feed_links(self):
         links = self.annotator.feed_links()
-        assert len(links) == 1
+        assert len(links) == 2
         assert links[0] == {
             "rel": "self",
-            "href": "http://example.org/feed?page=2",
+            "href": "http://example.org/feed",
             "type": "application/opds+json",
         }
+        assert "after=50" in links[1]["href"]
 
     def test_image_links(self):
         work = self._work()

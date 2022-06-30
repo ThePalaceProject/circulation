@@ -17,7 +17,7 @@ from flask_babel import lazy_gettext as _
 from lxml import etree
 from sqlalchemy.orm import eagerload
 
-from api.opds2 import OPDS2PublicationsAnnotator
+from api.opds2 import OPDS2NavigationsAnnotator, OPDS2PublicationsAnnotator
 from api.saml.controller import SAMLController
 from core.analytics import Analytics
 from core.app_server import HeartbeatController
@@ -1383,7 +1383,11 @@ class OPDS2FeedController(CirculationManagerController):
     def publications(self):
         library = flask.request.library
         pagination = load_pagination_from_request()
+        if isinstance(pagination, ProblemDetail):
+            return pagination
         facets = load_facets_from_request()
+        if isinstance(facets, ProblemDetail):
+            return facets
         annotator = OPDS2PublicationsAnnotator(
             flask.request.url, facets, pagination, library
         )
@@ -1391,9 +1395,27 @@ class OPDS2FeedController(CirculationManagerController):
         feed = AcquisitonFeedOPDS2.publications(
             self._db, lane, facets, pagination, self.search_engine, annotator
         )
-        print("Feed", feed)
 
-        return Response(str(feed), status=200)
+        return Response(
+            str(feed), status=200, headers={"Content-Type": annotator.OPDS2_TYPE}
+        )
+
+    def navigation(self):
+        library = flask.request.library
+        pagination = load_pagination_from_request()
+        if isinstance(pagination, ProblemDetail):
+            return pagination
+        facets = load_facets_from_request()
+        if isinstance(facets, ProblemDetail):
+            return facets
+        annotator = OPDS2NavigationsAnnotator(
+            flask.request.url, facets, pagination, library, title="OPDS2 Navigation"
+        )
+        feed = AcquisitonFeedOPDS2.navigation(self._db, annotator)
+
+        return Response(
+            str(feed), status=200, headers={"Content-Type": annotator.OPDS2_TYPE}
+        )
 
 
 class MARCRecordController(CirculationManagerController):
