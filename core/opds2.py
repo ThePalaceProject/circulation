@@ -1,7 +1,8 @@
+import math
 from typing import Dict, List
 
 from core.external_search import ExternalSearchIndex
-from core.lane import SearchFacets, WorkList
+from core.lane import Facets, Pagination, SearchFacets, WorkList
 from core.model.classification import Genre, Subject
 from core.model.contributor import Contribution, Contributor
 from core.model.edition import Edition
@@ -17,10 +18,12 @@ class OPDS2Feed:
 class OPDS2Annotator:
     """Annotate a feed following the OPDS2 spec"""
 
-    def __init__(self, url, facets, library) -> None:
+    def __init__(self, url, facets, pagination, library, title="OPDS2 Feed") -> None:
         self.url = url
-        self.facets = facets
+        self.facets: Facets = facets
         self.library = library
+        self.title = title
+        self.pagination = pagination or Pagination()
 
     # Should this be in an annotator??
     def metadata_for_work(self, work: Work) -> Dict:
@@ -166,6 +169,14 @@ class OPDS2Annotator:
 
         return links
 
+    def feed_metadata(self):
+        return {
+            "title": self.title,
+            "itemsPerPage": self.pagination.size,
+            "currentPage": math.ceil(self.pagination.offset / self.pagination.size)
+            + 1,  # start from 1
+        }
+
 
 class FeedTypes:
     PUBLICATIONS = "publications"
@@ -179,6 +190,7 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
         url: str,
         worklist: WorkList,
         facets: SearchFacets,
+        pagination: Pagination,
         search_engine: ExternalSearchIndex,
         annotator: OPDS2Annotator,
     ):
@@ -186,7 +198,7 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
         # then do the publication
 
         return cls._generate_publications(
-            _db, url, worklist, facets, search_engine, annotator
+            _db, url, worklist, facets, pagination, search_engine, annotator
         )
 
     @classmethod
@@ -196,6 +208,7 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
         url: str,
         worklist: WorkList,
         facets: SearchFacets,
+        pagination: Pagination,
         search_engine: ExternalSearchIndex,
         annotator: OPDS2Annotator,
     ):

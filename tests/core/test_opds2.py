@@ -2,7 +2,7 @@ from datetime import datetime
 
 from core.classifier import Classifier
 from core.external_search import MockExternalSearchIndex
-from core.lane import SearchFacets
+from core.lane import Facets, Pagination, SearchFacets
 from core.model.classification import Subject
 from core.model.edition import Edition
 from core.model.identifier import Identifier
@@ -31,8 +31,11 @@ class TestOPDS2Feed(DatabaseTest):
             "/",
             self.fiction,
             SearchFacets(),
+            Pagination.default(),
             self.search_engine,
-            OPDS2Annotator("/", SearchFacets(), self._default_library),
+            OPDS2Annotator(
+                "/", SearchFacets(), Pagination.default(), self._default_library
+            ),
         )
 
         assert type(result) == AcquisitonFeedOPDS2
@@ -66,9 +69,20 @@ class TestOPDS2Feed(DatabaseTest):
             ),
         ]
         self.search_engine.bulk_update(works)
-        annotator = OPDS2Annotator("/", self.fiction, self._default_library)
+        annotator = OPDS2Annotator(
+            "/",
+            Facets.default(self._default_library),
+            Pagination.default(),
+            self._default_library,
+        )
         result = AcquisitonFeedOPDS2.publications(
-            self._db, "/", self.fiction, SearchFacets(), self.search_engine, annotator
+            self._db,
+            "/",
+            self.fiction,
+            SearchFacets(),
+            Pagination.default(),
+            self.search_engine,
+            annotator,
         )
         result = result.json()
 
@@ -85,7 +99,10 @@ class TestOPDS2Annotator(DatabaseTest):
         self.fiction.fiction = True
         self.fiction.audiences = [Classifier.AUDIENCE_ADULT]
         self.annotator = OPDS2Annotator(
-            "http://example.org/feed?page=2", self.fiction, self._default_library
+            "http://example.org/feed?page=2",
+            Facets.default(self._default_library),
+            Pagination(),
+            self._default_library,
         )
 
     def test_feed_links(self):
@@ -160,3 +177,11 @@ class TestOPDS2Annotator(DatabaseTest):
             {"name": "Science", "sortAs": "Science", "scheme": Subject.SIMPLIFIED_GENRE}
         ]
         assert meta["belongsTo"] == {"series": {"name": "A series", "position": 4}}
+
+    def test_feed_metadata(self):
+        meta = self.annotator.feed_metadata()
+        assert meta == {
+            "title": "OPDS2 Feed",
+            "itemsPerPage": Pagination.DEFAULT_SIZE,
+            "currentPage": 1,
+        }
