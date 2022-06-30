@@ -28,7 +28,6 @@ class TestOPDS2Feed(DatabaseTest):
         self.search_engine.bulk_update([work])
         result = AcquisitonFeedOPDS2.publications(
             self._db,
-            "/",
             self.fiction,
             SearchFacets(),
             Pagination.default(),
@@ -77,7 +76,6 @@ class TestOPDS2Feed(DatabaseTest):
         )
         result = AcquisitonFeedOPDS2.publications(
             self._db,
-            "/",
             self.fiction,
             SearchFacets(),
             Pagination.default(),
@@ -168,8 +166,8 @@ class TestOPDS2Annotator(DatabaseTest):
         assert meta["title"] == work.title
         assert meta["subtitle"] == work.subtitle
         assert meta["identifier"] == idn.identifier
-        assert meta["modified"] == modified
-        assert meta["published"] == modified
+        assert meta["modified"] == modified.isoformat()
+        assert meta["published"] == modified.isoformat()
         assert meta["language"] == "en"
         assert meta["sortAs"] == work.sort_title
         assert meta["author"] == {"name": "Author Person"}

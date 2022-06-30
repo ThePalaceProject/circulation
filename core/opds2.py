@@ -1,3 +1,4 @@
+import json
 import math
 from typing import Dict, List
 
@@ -62,9 +63,10 @@ class OPDS2Annotator:
             result["publisher"] = {"name": edition.publisher}
         if edition.imprint:
             result["imprint"] = {"name": edition.imprint}
-        result["modified"] = work.last_update_time
-        if pool:
-            result["published"] = pool.availability_time
+        if work.last_update_time:
+            result["modified"] = work.last_update_time.isoformat()
+        if pool and pool.availability_time:
+            result["published"] = pool.availability_time.isoformat()
         result["description"] = work.summary_text
 
         belongs_to = {}
@@ -187,9 +189,8 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
     def publications(
         cls,
         _db,
-        url: str,
         worklist: WorkList,
-        facets: SearchFacets,
+        facets: Facets,
         pagination: Pagination,
         search_engine: ExternalSearchIndex,
         annotator: OPDS2Annotator,
@@ -198,17 +199,15 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
         # then do the publication
 
         return cls._generate_publications(
-            _db, url, worklist, facets, pagination, search_engine, annotator
+            _db, worklist, facets, search_engine, annotator
         )
 
     @classmethod
     def _generate_publications(
         cls,
         _db,
-        url: str,
         worklist: WorkList,
         facets: SearchFacets,
-        pagination: Pagination,
         search_engine: ExternalSearchIndex,
         annotator: OPDS2Annotator,
     ):
@@ -219,8 +218,6 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
 
         return cls(
             _db,
-            url,
-            "publications",
             publications,
             annotator,
         )
@@ -228,14 +225,11 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
     def __init__(
         self,
         _db,
-        url,
-        title,
         works: List[Work],
         annotator: OPDS2Annotator,
         feed_type=FeedTypes.PUBLICATIONS,
     ):
         self._db = _db
-        self.url = url
         self.works = works
         self.annotator = annotator
         self.feed_type = feed_type
@@ -252,9 +246,10 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
             entries.append(self.annotator.metadata_for_work(work))
 
         result["publications"] = entries
-        feed_links = self.annotator.feed_links()
-        result["links"] = feed_links
+        result["links"] = self.annotator.feed_links()
+        result["metadata"] = self.annotator.feed_metadata()
         return result
 
     def __str__(self):
         """Make the serialized OPDS2 feed"""
+        return json.dumps(self.json())

@@ -17,6 +17,7 @@ from flask_babel import lazy_gettext as _
 from lxml import etree
 from sqlalchemy.orm import eagerload
 
+from api.opds2 import OPDS2PublicationsAnnotator
 from api.saml.controller import SAMLController
 from core.analytics import Analytics
 from core.app_server import HeartbeatController
@@ -73,6 +74,7 @@ from core.model.devicetokens import (
     InvalidTokenTypeError,
 )
 from core.opds import AcquisitionFeed, NavigationFacets, NavigationFeed
+from core.opds2 import AcquisitonFeedOPDS2
 from core.opensearch import OpenSearchDocument
 from core.user_profile import ProfileController as CoreProfileController
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
@@ -435,6 +437,7 @@ class CirculationManager:
         """
         self.index_controller = IndexController(self)
         self.opds_feeds = OPDSFeedController(self)
+        self.opds2_feeds = OPDS2FeedController(self)
         self.marc_records = MARCRecordController(self)
         self.loans = LoanController(self)
         self.annotations = AnnotationController(self)
@@ -1374,6 +1377,23 @@ class OPDSFeedController(CirculationManagerController):
             facet_class=HasSeriesFacets,
             worklist_factory=factory,
         )
+
+
+class OPDS2FeedController(CirculationManagerController):
+    def publications(self):
+        library = flask.request.library
+        pagination = load_pagination_from_request()
+        facets = load_facets_from_request()
+        annotator = OPDS2PublicationsAnnotator(
+            flask.request.url, facets, pagination, library
+        )
+        lane = self.load_lane(None)
+        feed = AcquisitonFeedOPDS2.publications(
+            self._db, lane, facets, pagination, self.search_engine, annotator
+        )
+        print("Feed", feed)
+
+        return Response(str(feed), status=200)
 
 
 class MARCRecordController(CirculationManagerController):
