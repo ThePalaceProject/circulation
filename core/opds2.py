@@ -1,9 +1,9 @@
 import json
 import math
-from typing import Dict, List
+from typing import Any, Dict, List, Optional
 
 from core.external_search import ExternalSearchIndex
-from core.lane import Facets, Pagination, SearchFacets, WorkList
+from core.lane import Facets, Pagination, WorkList
 from core.model.classification import Genre, Subject
 from core.model.contributor import Contribution, Contributor
 from core.model.edition import Edition
@@ -29,15 +29,17 @@ class OPDS2Annotator:
         self.pagination = pagination or Pagination()
 
     # Should this be in an annotator??
-    def metadata_for_work(self, work: Work) -> Dict:
+    def metadata_for_work(self, work: Work) -> Optional[Dict[str, Any]]:
         """Create the metadata json for a work item
         using the schema https://readium.org/webpub-manifest/schema/metadata.schema.json"""
         # TODO: What happens when there is not presentation edition?
         edition: Edition = work.presentation_edition
+        if not edition:
+            return None
+
         pool = self._pool_for_library(edition)
-        result = {}
-        # Palace marketplace has this as '@type'
-        result["@type"] = Edition.medium_to_additional_type.get(edition.medium)
+        result: Dict[str, Any] = {}
+        result["@type"] = Edition.medium_to_additional_type.get(str(edition.medium))
         result["title"] = edition.title
         result["subtitle"] = edition.subtitle
         result["identifier"] = edition.primary_identifier.identifier
@@ -123,17 +125,18 @@ class OPDS2Annotator:
                 )
         return samples
 
-    def loan_link(self, edition: Edition) -> Dict:
+    def loan_link(self, edition: Edition) -> Optional[Dict]:
         return None
 
-    def self_link(self, edition: Edition) -> Dict:
+    def self_link(self, edition: Edition) -> Optional[Dict]:
         return None
 
-    def _pool_for_library(self, edition: Edition) -> LicensePool:
+    def _pool_for_library(self, edition: Edition) -> Optional[LicensePool]:
         collection_ids = [c.id for c in self.library.all_collections]
         for pool in edition.license_pools:
             if pool.collection_id in collection_ids:
                 return pool
+        return None
 
     def _contributors(self, edition: Edition) -> Dict:
         authors = {}
@@ -212,7 +215,7 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
         cls,
         _db,
         worklist: WorkList,
-        facets: SearchFacets,
+        facets: Facets,
         pagination: Pagination,
         search_engine: ExternalSearchIndex,
         annotator: OPDS2Annotator,
@@ -264,7 +267,9 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
 
         entries = []
         for work in self.works:
-            entries.append(self.annotator.metadata_for_work(work))
+            entry = self.annotator.metadata_for_work(work)
+            if entry:
+                entries.append(entry)
 
         result["publications"] = entries
         result["links"] = self.annotator.feed_links()

@@ -51,6 +51,7 @@ class Edition(Base, EditionConstants):
     # it. Through the Equivalency class, it is associated with a
     # (probably huge) number of other identifiers.
     primary_identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
+    primary_identifier: Identifier  # for typing
 
     # An Edition may be the presentation edition for a single Work. If it's not
     # a presentation edition for a work, work will be None.
@@ -77,7 +78,7 @@ class Edition(Base, EditionConstants):
     author = Column(Unicode, index=True)
     sort_author = Column(Unicode, index=True)
 
-    contributions = relationship("Contribution", backref="edition")
+    contributions = relationship("Contribution", backref="edition", uselist=True)
 
     language = Column(Unicode, index=True)
     publisher = Column(Unicode, index=True)
