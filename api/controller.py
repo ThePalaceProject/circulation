@@ -11,6 +11,7 @@ from wsgiref.handlers import format_date_time
 
 import flask
 import pytz
+from attr import define
 from expiringdict import ExpiringDict
 from flask import Response, make_response, redirect
 from flask_babel import lazy_gettext as _
@@ -36,6 +37,7 @@ from core.external_search import (
 )
 from core.lane import (
     BaseFacets,
+    Facets,
     FeaturedFacets,
     Lane,
     Pagination,
@@ -1379,21 +1381,48 @@ class OPDSFeedController(CirculationManagerController):
         )
 
 
+@define
+class FeedRequestParameters:
+    library: Optional[Library] = None
+    pagination: Optional[Pagination] = None
+    facets: Optional[Facets] = None
+    problem: Optional[ProblemDetail] = None
+
+
 class OPDS2FeedController(CirculationManagerController):
-    def publications(self):
-        library = flask.request.library
+    def _parse_feed_request(self):
+        library = getattr(flask.request, "library", None)
         pagination = load_pagination_from_request()
         if isinstance(pagination, ProblemDetail):
-            return pagination
-        facets = load_facets_from_request()
-        if isinstance(facets, ProblemDetail):
-            return facets
+            return FeedRequestParameters(problem=pagination)
+
+        try:
+            facets = load_facets_from_request()
+            if isinstance(facets, ProblemDetail):
+                return FeedRequestParameters(problem=facets)
+        except AttributeError:
+            # No facets/library present, so NoneType
+            facets = None
+
+        return FeedRequestParameters(
+            library=library, facets=facets, pagination=pagination
+        )
+
+    def publications(self):
+        params: FeedRequestParameters = self._parse_feed_request()
+        if params.problem:
+            return params.problem
         annotator = OPDS2PublicationsAnnotator(
-            flask.request.url, facets, pagination, library
+            flask.request.url, params.facets, params.pagination, params.library
         )
         lane = self.load_lane(None)
         feed = AcquisitonFeedOPDS2.publications(
-            self._db, lane, facets, pagination, self.search_engine, annotator
+            self._db,
+            lane,
+            params.facets,
+            params.pagination,
+            self.search_engine,
+            annotator,
         )
 
         return Response(
@@ -1401,15 +1430,13 @@ class OPDS2FeedController(CirculationManagerController):
         )
 
     def navigation(self):
-        library = flask.request.library
-        pagination = load_pagination_from_request()
-        if isinstance(pagination, ProblemDetail):
-            return pagination
-        facets = load_facets_from_request()
-        if isinstance(facets, ProblemDetail):
-            return facets
+        params: FeedRequestParameters = self._parse_feed_request()
         annotator = OPDS2NavigationsAnnotator(
-            flask.request.url, facets, pagination, library, title="OPDS2 Navigation"
+            flask.request.url,
+            params.facets,
+            params.pagination,
+            params.library,
+            title="OPDS2 Navigation",
         )
         feed = AcquisitonFeedOPDS2.navigation(self._db, annotator)
 

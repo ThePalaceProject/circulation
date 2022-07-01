@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from core.external_search import ExternalSearchIndex
 from core.lane import Facets, Pagination, WorkList
+from core.model.cachedfeed import CachedFeed
 from core.model.classification import Genre, Subject
 from core.model.contributor import Contribution, Contributor
 from core.model.edition import Edition
@@ -202,12 +203,22 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
         pagination: Pagination,
         search_engine: ExternalSearchIndex,
         annotator: OPDS2Annotator,
+        max_age: int = None,
     ):
         # do some caching magic
         # then do the publication
+        def refresh():
+            return cls._generate_publications(
+                _db, worklist, facets, pagination, search_engine, annotator
+            )
 
-        return cls._generate_publications(
-            _db, worklist, facets, pagination, search_engine, annotator
+        return CachedFeed.fetch(
+            _db,
+            worklist=worklist,
+            facets=facets,
+            pagination=pagination,
+            refresher_method=refresh,
+            max_age=max_age,
         )
 
     @classmethod
