@@ -23,6 +23,9 @@ class LanguageCodes:
 
     The data file comes from
     http://www.loc.gov/standards/iso639-2/ISO-639-2_utf-8.txt
+    According to LOC (https://www.loc.gov/standards/iso639-2/ascii_8bits.html), the format is
+    An alpha-3 (bibliographic) code, an alpha-3 (terminologic) code (when given), an alpha-2 code (when given),
+    an English name, and a French name of a language are all separated by pipe (|) characters.
     """
 
     two_to_three = LookupTable()
@@ -588,8 +591,8 @@ zza|||Zaza; Dimili; Dimli; Kirdki; Kirmanjki; Zazaki|zaza; dimili; dimli; kirdki
         if "-" in s:
             s = s.split("-")[0]
 
-        if s in cls.three_to_two:
-            # It's already an alpha-3.
+        if s in cls.english_names and len(s) == 3:
+            # All LOC language code have an English name; it's already an alpha-3.
             return s
         elif s in cls.two_to_three:
             # It's an alpha-2.

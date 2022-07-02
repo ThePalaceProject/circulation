@@ -18,6 +18,7 @@ class TestLanguageCodes:
     def test_lookups(self):
         c = LanguageCodes
 
+        # test a simple case with all expected data
         assert "eng" == c.two_to_three["en"]
         assert "en" == c.three_to_two["eng"]
         assert ["English"] == c.english_names["en"]
@@ -25,6 +26,7 @@ class TestLanguageCodes:
         assert ["English"] == c.native_names["en"]
         assert ["English"] == c.native_names["eng"]
 
+        # test a case with multiple English and native names
         assert "spa" == c.two_to_three["es"]
         assert "es" == c.three_to_two["spa"]
         assert ["Spanish", "Castilian"] == c.english_names["es"]
@@ -32,6 +34,7 @@ class TestLanguageCodes:
         assert ["español", "castellano"] == c.native_names["es"]
         assert ["español", "castellano"] == c.native_names["spa"]
 
+        # test a case with no native names
         assert "chi" == c.two_to_three["zh"]
         assert "zh" == c.three_to_two["chi"]
         assert ["Chinese"] == c.english_names["zh"]
@@ -40,6 +43,11 @@ class TestLanguageCodes:
         assert [] == c.native_names["zh"]
         assert [] == c.native_names["chi"]
 
+        # test a case with no alpha-2 code
+        assert None == c.three_to_two["ssa"]
+        assert ["Nilo-Saharan languages"] == c.english_names["ssa"]
+
+        # test that no lookup value returned for nonexistent values
         assert None == c.two_to_three["nosuchlanguage"]
         assert None == c.three_to_two["nosuchlanguage"]
         assert [] == c.english_names["nosuchlanguage"]
@@ -60,6 +68,7 @@ class TestLanguageCodes:
         assert "eng" == m("English")
         assert "eng" == m("ENGLISH")
         assert "ssa" == m("Nilo-Saharan languages")
+        assert "ssa" == m("ssa")
         assert None == m("NO SUCH LANGUAGE")
         assert None == None
 
