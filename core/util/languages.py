@@ -30,6 +30,7 @@ class LanguageCodes:
 
     two_to_three = LookupTable()
     three_to_two = LookupTable()
+    terminologic_to_three = LookupTable()
     english_names: Dict[str, List[str]] = defaultdict(list)
     english_names_to_three = LookupTable()
     native_names: Dict[str, List[str]] = defaultdict(list)
@@ -540,6 +541,9 @@ zza|||Zaza; Dimili; Dimli; Kirdki; Kirmanjki; Zazaki|zaza; dimili; dimli; kirdki
         {"code": "sv", "name": "Swedish", "nativeName": "svenska"},
     ]
 
+    RESERVED_CODES = re.compile("^q[a-t][a-z]$")
+    RESERVED_CODE_LABEL = "Reserved for local use"
+
     for raw_name_data in RAW_DATA.split("\n"):
         (
             alpha_3,
@@ -553,6 +557,8 @@ zza|||Zaza; Dimili; Dimli; Kirdki; Kirmanjki; Zazaki|zaza; dimili; dimli; kirdki
             three_to_two[alpha_3] = alpha_2
             english_names[alpha_2] = names
             two_to_three[alpha_2] = alpha_3
+        if terminologic_code:
+            terminologic_to_three[terminologic_code] = alpha_3
         for name in names:
             english_names_to_three[name.lower()] = alpha_3
         english_names[alpha_3] = names
@@ -591,10 +597,16 @@ zza|||Zaza; Dimili; Dimli; Kirdki; Kirmanjki; Zazaki|zaza; dimili; dimli; kirdki
         if "-" in s:
             s = s.split("-")[0]
 
-        if s in cls.english_names and len(s) == 3:
-            # All LOC language code have an English name; it's already an alpha-3.
-            return s
-        elif s in cls.two_to_three:
+        if len(s) == 3:
+            if s in cls.english_names:
+                # All LOC language code have an English name; it's already an alpha-3.
+                return s
+            elif s in cls.terminologic_to_three:
+                return cls.terminologic_to_three[s]
+            elif LanguageCodes.RESERVED_CODES.match(s):
+                # the reserved range qaa-qtz is represented by one row in the LOC data
+                return s
+        if s in cls.two_to_three:
             # It's an alpha-2.
             return cls.two_to_three[s]
 
@@ -615,7 +627,10 @@ zza|||Zaza; Dimili; Dimli; Kirdki; Kirmanjki; Zazaki|zaza; dimili; dimli; kirdki
             else:
                 names = cls.english_names.get(normalized, [])
                 if not names:
-                    raise ValueError("No native or English name for %s" % l)
+                    if normalized and LanguageCodes.RESERVED_CODES.match(normalized):
+                        names.append(LanguageCodes.RESERVED_CODE_LABEL)
+                    else:
+                        raise ValueError("No native or English name for %s" % l)
                 all_names.append(names[0])
         if len(all_names) == 1:
             return all_names[0]

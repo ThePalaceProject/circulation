@@ -67,8 +67,14 @@ class TestLanguageCodes:
         assert "eng" == m("en-GB")
         assert "eng" == m("English")
         assert "eng" == m("ENGLISH")
+        # test sparse code data where there is no alpha-2
         assert "ssa" == m("Nilo-Saharan languages")
         assert "ssa" == m("ssa")
+        # test terminologic codes
+        assert "tib" == m("bod")
+        # test reserved codes
+        assert "qab" == m("qab")
+        # test bad data
         assert None == m("NO SUCH LANGUAGE")
         assert None == None
 
@@ -79,9 +85,17 @@ class TestLanguageCodes:
         assert "English" == m(["en"])
         assert "English" == m(["eng"])
         assert "español" == m(["es"])
+        # test mixed languages
         assert "English/español" == m(["eng", "spa"])
         assert "español/English" == m("spa,eng")
         assert "español/English/Chinese" == m(["spa", "eng", "chi"])
+        # test sparse code data where there is no alpha-2
+        assert "Nilo-Saharan languages" == m("ssa")
+        # test terminologic codes
+        assert "Tibetan" == m("bod")
+        # test reserved codes
+        assert LanguageCodes.RESERVED_CODE_LABEL == m("qab")
+        # test ValueError for bad data
         pytest.raises(ValueError, m, ["eng, nxx"])
 
 
