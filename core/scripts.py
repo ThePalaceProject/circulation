@@ -3557,7 +3557,7 @@ class CustomListUpdateEntriesScript(CustomListSweeperScript):
             ## No more works
             if not len(works):
                 self.log.info(
-                    f"Completed customlist auto update {custom_list.name} with {total_works_updated} works"
+                    f"{custom_list.name} customlist updated with {total_works_updated} works, moving on..."
                 )
                 break
 
