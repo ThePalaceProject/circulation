@@ -9,6 +9,8 @@ from core.opds2 import OPDS2Annotator
 
 
 class OPDS2PublicationsAnnotator(OPDS2Annotator):
+    """API level implementation for the publications feed OPDS2 annotator"""
+
     def loan_link(self, edition: Edition) -> Dict:
         identifier: Identifier = edition.primary_identifier
         return {
@@ -35,7 +37,10 @@ class OPDS2PublicationsAnnotator(OPDS2Annotator):
 
 
 class OPDS2NavigationsAnnotator(OPDS2Annotator):
+    """API level implementation for the navigation feed OPDS2 annotator"""
+
     def navigation_collection(self) -> Dict:
+        """The OPDS2 navigation collection, currently only serves the publications link"""
         return [
             {
                 "href": url_for(

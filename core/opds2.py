@@ -29,11 +29,11 @@ class OPDS2Annotator:
         self.title = title
         self.pagination = pagination or Pagination()
 
-    # Should this be in an annotator??
     def metadata_for_work(self, work: Work) -> Optional[Dict[str, Any]]:
         """Create the metadata json for a work item
-        using the schema https://readium.org/webpub-manifest/schema/metadata.schema.json"""
-        # TODO: What happens when there is not presentation edition?
+        using the schema https://drafts.opds.io/schema/publication.schema.json"""
+
+        # TODO: What happens when there is no presentation edition?
         edition: Edition = work.presentation_edition
         if not edition:
             return None
@@ -113,6 +113,7 @@ class OPDS2Annotator:
         return links
 
     def resource_links(self, edition: Edition, *rels) -> List[Dict]:
+        """Create a link entry based on a stored Resource"""
         link: Hyperlink
         samples = []
         for link in edition.primary_identifier.links:
@@ -127,12 +128,17 @@ class OPDS2Annotator:
         return samples
 
     def loan_link(self, edition: Edition) -> Optional[Dict]:
+        """Create a Loan link for an edition, needs access to the API layer
+        Must be implemented in the API layer"""
         return None
 
     def self_link(self, edition: Edition) -> Optional[Dict]:
+        """Create a Self link for an edition, needs access to the API layer
+        Must be implemented in the API layer"""
         return None
 
     def _pool_for_library(self, edition: Edition) -> Optional[LicensePool]:
+        """Fetch the licensepool of an edition that is part of the library we're annotating with"""
         collection_ids = [c.id for c in self.library.all_collections]
         for pool in edition.license_pools:
             if pool.collection_id in collection_ids:
@@ -140,6 +146,7 @@ class OPDS2Annotator:
         return None
 
     def _contributors(self, edition: Edition) -> Dict:
+        """Create the contributor type entries"""
         authors = {}
         contribution: Contribution
         key_mapping = {
@@ -168,6 +175,7 @@ class OPDS2Annotator:
         return authors
 
     def feed_links(self):
+        """Create links for a publication feed"""
         next_query_string = (
             f"{self.pagination.next_page.query_string}&{self.facets.query_string}"
         )
@@ -180,6 +188,7 @@ class OPDS2Annotator:
         return links
 
     def feed_metadata(self):
+        """Create the metadata for a publication feed"""
         return {
             "title": self.title,
             "itemsPerPage": self.pagination.size,
@@ -189,11 +198,16 @@ class OPDS2Annotator:
 
 
 class FeedTypes:
+    """The types of feeds supported for OPDS2"""
+
     PUBLICATIONS = "publications"
     NAVIGATION = "navigation"
 
 
 class AcquisitonFeedOPDS2(OPDS2Feed):
+    """Creates different kinds of OPDS2 feeds
+    Currently supports publications and navigation"""
+
     @classmethod
     def publications(
         cls,
@@ -205,6 +219,7 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
         annotator: OPDS2Annotator,
         max_age: int = None,
     ):
+        """The publication feed, cached"""
         # do some caching magic
         # then do the publication
         def refresh():
@@ -246,6 +261,7 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
 
     @classmethod
     def navigation(cls, _db, annotator: OPDS2Annotator):
+        """The navigation feed"""
         return cls(_db, [], annotator, feed_type=FeedTypes.NAVIGATION)
 
     def __init__(
@@ -261,6 +277,7 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
         self.feed_type = feed_type
 
     def json(self):
+        """The a json feed based on the FeedType"""
         if self.feed_type == FeedTypes.PUBLICATIONS:
             return self.publications_json()
         elif self.feed_type == FeedTypes.NAVIGATION:

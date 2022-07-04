@@ -1383,6 +1383,8 @@ class OPDSFeedController(CirculationManagerController):
 
 @define
 class FeedRequestParameters:
+    """Frequently used request parameters for feed requests"""
+
     library: Optional[Library] = None
     pagination: Optional[Pagination] = None
     facets: Optional[Facets] = None
@@ -1390,7 +1392,10 @@ class FeedRequestParameters:
 
 
 class OPDS2FeedController(CirculationManagerController):
+    """All OPDS2 type feeds are served through this controller"""
+
     def _parse_feed_request(self):
+        """Parse the request to get frequently used request parameters for the feeds"""
         library = getattr(flask.request, "library", None)
         pagination = load_pagination_from_request()
         if isinstance(pagination, ProblemDetail):
@@ -1409,6 +1414,7 @@ class OPDS2FeedController(CirculationManagerController):
         )
 
     def publications(self):
+        """OPDS2 publications feed"""
         params: FeedRequestParameters = self._parse_feed_request()
         if params.problem:
             return params.problem
@@ -1430,6 +1436,7 @@ class OPDS2FeedController(CirculationManagerController):
         )
 
     def navigation(self):
+        """OPDS2 navigation links"""
         params: FeedRequestParameters = self._parse_feed_request()
         annotator = OPDS2NavigationsAnnotator(
             flask.request.url,
