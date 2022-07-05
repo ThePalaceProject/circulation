@@ -355,6 +355,13 @@ class TestExternalSearch(ExternalSearchTest):
         result = json.loads(test_results[5].result)
         assert {collection.name: 1} == result
 
+    def test_update_mapping(self):
+        self.search.mapping.add_properties({"long": ["new_long_property"]})
+        put_mapping = self.search._update_index_mapping(dry_run=False)
+        assert "new_long_property" in put_mapping
+        put_mapping = self.search._update_index_mapping(dry_run=True)
+        assert "new_long_property" not in put_mapping
+
 
 class TestCurrentMapping:
     def test_character_filters(self):
