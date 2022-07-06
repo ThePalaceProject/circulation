@@ -1198,7 +1198,7 @@ class TestImports:
             == problems[0].message()
         )
         assert (
-            "Book is mismatched on the importing CM. Expected title is 'Chameleon', received title is 'Chameleon'. Expected ID is 'urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6', received ID is 'urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6'."
+            "Book is mismatched on the importing CM. Expected title is 'Chameleon', received title is 'Chameleon'. Expected ID is 'urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6', received ID is 'urn:uuid:eff86500-009d-4e64-b675-0c0b1b6f243d'."
             == problems[1].message()
         )
         assert (
