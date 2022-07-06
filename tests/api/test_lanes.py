@@ -45,6 +45,8 @@ from core.testing import DatabaseTest
 
 
 class TestLaneCreation(DatabaseTest):
+    NONEXISTENT_ALPHA3 = "nqq"
+
     def test_create_lanes_for_large_collection(self):
         languages = ["eng", "spa"]
         create_lanes_for_large_collection(self._db, self._default_library, languages)
@@ -222,8 +224,8 @@ class TestLaneCreation(DatabaseTest):
         ] == [set(x.audiences) for x in sublanes]
         assert [True, False, None] == [x.fiction for x in sublanes]
 
-        # If a language name is not found, don't create any lanes.
-        languages = ["eng", "mul", "chi"]
+        # If any language codes do not map to a name, don't create any lanes.
+        languages = ["eng", self.NONEXISTENT_ALPHA3, "chi"]
         parent = self._lane()
         priority = create_lane_for_small_collection(
             self._db, self._default_library, parent, languages, priority=2
@@ -251,7 +253,7 @@ class TestLaneCreation(DatabaseTest):
             self._db,
             self._default_library,
             new_parent,
-            ["spa", "gaa", "eng"],
+            ["spa", self.NONEXISTENT_ALPHA3, "eng"],
             priority=3,
         )
         assert 0 == new_priority
