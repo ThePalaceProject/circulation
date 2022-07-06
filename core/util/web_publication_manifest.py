@@ -6,8 +6,6 @@
 
 import json
 
-from . import LanguageCodes
-
 
 class JSONable:
     """An object whose Unicode representation is a JSON dump
@@ -93,9 +91,8 @@ class Manifest(JSONable):
             return
         self.metadata["title"] = edition.title
 
-        self.metadata["language"] = LanguageCodes.three_to_two.get(
-            edition.language, edition.language
-        )
+        self.metadata["language"] = edition.language_code
+
         authors = [
             author.display_name or author.sort_name
             for author in edition.author_contributors

@@ -571,18 +571,32 @@ zza|||Zaza; Dimili; Dimli; Kirdki; Kirmanjki; Zazaki|zaza; dimili; dimli; kirdki
         native_names[alpha_3] = names
 
     @classmethod
-    def iso_639_2_for_locale(cls, locale):
+    def iso_639_2_for_locale(cls, locale, default=None):
         """Turn a locale code into an ISO-639-2 alpha-3 language code."""
         if "-" in locale:
             language, place = locale.lower().split("-", 1)
         else:
             language = locale
-        if cls.two_to_three[language]:
+        if len(language) == 3:
+            if language in cls.english_names:
+                # All LOC language code have an English name; it's already an alpha-3.
+                return language
+            elif language in cls.terminologic_to_three:
+                return cls.terminologic_to_three[language]
+            elif LanguageCodes.RESERVED_CODES.match(language):
+                # the reserved range qaa-qtz is represented by one row in the LOC data
+                return language
+        if language in cls.two_to_three:
+            # It's an alpha-2.
             return cls.two_to_three[language]
-        elif cls.three_to_two[language]:
-            # It's already ISO-639-2.
-            return language
-        return None
+
+        return default
+
+    @classmethod
+    def bcp47_for_locale(cls, locale, default=None):
+        """Turn a locale code into an ISO-639-2 code preferring alpha-2 if available, then alpha-3"""
+        alpha3 = cls.iso_639_2_for_locale(locale, default=default)
+        return cls.three_to_two.get(alpha3, alpha3)
 
     @classmethod
     def string_to_alpha_3(cls, s):
@@ -594,23 +608,7 @@ zza|||Zaza; Dimili; Dimli; Kirdki; Kirmanjki; Zazaki|zaza; dimili; dimli; kirdki
             # It's the English name of a language.
             return cls.english_names_to_three[s]
 
-        if "-" in s:
-            s = s.split("-")[0]
-
-        if len(s) == 3:
-            if s in cls.english_names:
-                # All LOC language code have an English name; it's already an alpha-3.
-                return s
-            elif s in cls.terminologic_to_three:
-                return cls.terminologic_to_three[s]
-            elif LanguageCodes.RESERVED_CODES.match(s):
-                # the reserved range qaa-qtz is represented by one row in the LOC data
-                return s
-        if s in cls.two_to_three:
-            # It's an alpha-2.
-            return cls.two_to_three[s]
-
-        return None
+        return cls.iso_639_2_for_locale(s)
 
     @classmethod
     def name_for_languageset(cls, languages):

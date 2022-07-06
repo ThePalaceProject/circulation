@@ -15,6 +15,11 @@ class TestLookupTable:
 
 
 class TestLanguageCodes:
+    NONEXISTENT_ALPHA2 = "nq"
+    NONEXISTENT_ALPHA3 = "nqq"
+    NONEXISTENT_LABEL = "NO SUCH LANGUAGE"
+    NONEXISTENT_LOCALE = NONEXISTENT_ALPHA2 + "-none"
+
     def test_lookups(self):
         c = LanguageCodes
 
@@ -47,18 +52,44 @@ class TestLanguageCodes:
         assert None == c.three_to_two["ssa"]
         assert ["Nilo-Saharan languages"] == c.english_names["ssa"]
 
-        # test that no lookup value returned for nonexistent values
-        assert None == c.two_to_three["nosuchlanguage"]
-        assert None == c.three_to_two["nosuchlanguage"]
-        assert [] == c.english_names["nosuchlanguage"]
-        assert [] == c.native_names["nosuchlanguage"]
+        assert None == c.two_to_three[self.NONEXISTENT_ALPHA2]
+        assert None == c.three_to_two[self.NONEXISTENT_ALPHA3]
+        assert [] == c.english_names[self.NONEXISTENT_ALPHA3]
+        assert [] == c.native_names[self.NONEXISTENT_ALPHA3]
 
     def test_locale(self):
         m = LanguageCodes.iso_639_2_for_locale
         assert "eng" == m("en-US")
         assert "eng" == m("en")
         assert "eng" == m("en-GB")
-        assert None == m("nq-none")
+        # test sparse code data where there is no alpha-2
+        assert "ssa" == m("ssa")
+        # test terminologic codes
+        assert "tib" == m("bod")
+        # test reserved codes
+        assert "qab" == m("qab")
+
+        assert None == m(self.NONEXISTENT_LOCALE)
+        assert "optional default" == m(
+            self.NONEXISTENT_LOCALE, default="optional default"
+        )
+
+    def test_bcp47(self):
+        m = LanguageCodes.bcp47_for_locale
+        assert "en" == m("en-US")
+        assert "en" == m("en")
+        assert "en" == m("eng")
+        # test sparse code data where there is no alpha-2
+        assert "ssa" == m("ssa")
+        # test terminologic codes
+        assert "bo" == m("bod")
+        # test reserved codes
+        assert "qab" == m("qab")
+
+        assert None == m(self.NONEXISTENT_LOCALE)
+        assert "optional default" == m(
+            self.NONEXISTENT_LOCALE, default="optional default"
+        )
 
     def test_string_to_alpha_3(self):
         m = LanguageCodes.string_to_alpha_3
@@ -75,8 +106,7 @@ class TestLanguageCodes:
         # test reserved codes
         assert "qab" == m("qab")
         # test bad data
-        assert None == m("NO SUCH LANGUAGE")
-        assert None == None
+        assert None == m(self.NONEXISTENT_LABEL)
 
     def test_name_for_languageset(self):
         m = LanguageCodes.name_for_languageset
@@ -96,7 +126,7 @@ class TestLanguageCodes:
         # test reserved codes
         assert LanguageCodes.RESERVED_CODE_LABEL == m("qab")
         # test ValueError for bad data
-        pytest.raises(ValueError, m, ["eng, nxx"])
+        pytest.raises(ValueError, m, ["eng, " + self.NONEXISTENT_ALPHA3])
 
 
 class TestLanguageNames:
