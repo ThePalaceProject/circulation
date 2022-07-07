@@ -48,7 +48,7 @@
         <dcterms:issued>2006-01-01</dcterms:issued>
         <link rel="issues"
               href="http://localhost:6500/HAZELNUT/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6/report"/>
-        <id>urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6</id>
+        <id>urn:uuid:eff86500-009d-4e64-b675-0c0b1b6f243d</id>
         <link rel="alternate"
               href="http://localhost:6500/HAZELNUT/works/URI/urn:xyz"
               type="application/atom+xml;type=entry;profile=opds-catalog"/>

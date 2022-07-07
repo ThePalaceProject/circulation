@@ -173,14 +173,22 @@ class CustomListImporter:
                 if link.rel == "alternate":
                     match = re.search("^(.*)/works/([^/]+)/(.*)$", link.href)
                     if match is not None:
-                        link_id_quoted: str = match.group(3)
-                        link_id: str = unquote(link_id_quoted)
-                        if link_id != book.id() or entry.title != book.title():
+                        entry_id_unquoted = unquote(entry.id)
+                        matches_id = entry_id_unquoted == book.id()
+                        matches_title = entry.title == book.title()
+                        self._logger.debug(
+                            f"comparing id '{entry_id_unquoted}' with '{book.id()}' -> {matches_id}"
+                        )
+                        self._logger.debug(
+                            f"comparing title '{entry.title}' with '{book.title()}' -> {matches_title}"
+                        )
+
+                        if not (matches_id and matches_title):
                             problem = CustomListProblemBookMismatch.create(
                                 expected_id=book.id(),
                                 expected_id_type=book.id_type(),
                                 expected_title=book.title(),
-                                received_id=entry.id,
+                                received_id=entry_id_unquoted,
                                 received_title=entry.title,
                                 author=book.author(),
                             )

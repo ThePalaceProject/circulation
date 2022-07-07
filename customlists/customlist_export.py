@@ -408,6 +408,14 @@ class CustomListExporter:
                         link_id: str = unquote(link_id_quoted)
                         link_id_type: str = unquote(link_id_type_quoted)
 
+                        self._logger.debug(f"storing link id (id_value) {link_id}")
+                        self._logger.debug(
+                            f"storing link id type (id_type) {link_id_type}"
+                        )
+                        self._logger.debug(f"storing entry id (id_full) {entry_id}")
+                        self._logger.debug(f"storing entry title {entry.title}")
+                        self._logger.debug(f"storing entry author {entry.author}")
+
                         custom_list.add_book(
                             Book(
                                 id_value=link_id,
