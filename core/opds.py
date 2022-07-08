@@ -8,6 +8,9 @@ from lxml import etree
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm.session import Session
 
+from core.external_search import QueryParseException
+from core.problem_details import INVALID_INPUT
+
 from .cdn import cdnify
 from .classifier import Classifier
 from .entrypoint import EntryPoint
@@ -1060,9 +1063,13 @@ class AcquisitionFeed(OPDSFeed):
         """
         facets = facets or SearchFacets()
         pagination = pagination or Pagination.default()
-        results = lane.search(
-            _db, query, search_engine, pagination=pagination, facets=facets
-        )
+        try:
+            results = lane.search(
+                _db, query, search_engine, pagination=pagination, facets=facets
+            )
+        except QueryParseException as e:
+            return INVALID_INPUT.detailed(e.detail)
+
         opds_feed = AcquisitionFeed(_db, title, url, results, annotator=annotator)
         AcquisitionFeed.add_link_to_feed(
             feed=opds_feed.feed,

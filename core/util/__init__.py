@@ -570,3 +570,26 @@ def chunks(lst, chunk_size, start_index=0):
 
     for i in range(start_index, length, chunk_size):
         yield lst[i : i + chunk_size]
+
+
+class ValuesMeta(type):
+    """Metaclass to allow operators on simple constants defining classes"""
+
+    def __contains__(cls, value):
+        """Does the values exist in the constants of this class"""
+        return value in cls.values()
+
+    def values(cls):
+        """Fetch the values of constants defined in the class"""
+        values = set()
+        for key in dir(cls):
+            val = getattr(cls, key)
+            if not key.startswith("_") and not callable(val):
+                values.add(val)
+        return values
+
+
+class Values(metaclass=ValuesMeta):
+    """Like an enum class but a little more nuanced
+    Use this to define classes that define only constants
+    Operators can be defined in the metaclass"""

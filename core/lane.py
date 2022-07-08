@@ -952,6 +952,10 @@ class SearchFacets(Facets):
             default_min_score = self.DEFAULT_MIN_SCORE
         self.min_score = kwargs.pop("min_score", default_min_score)
 
+        self.search_type = kwargs.pop("search_type", "default")
+        if self.search_type not in ["default", "json"]:
+            raise ValueError(f"Invalid search type: {self.search_type}")
+
         super().__init__(**kwargs)
         if media == Edition.ALL_MEDIUM:
             self.media = media
@@ -1040,6 +1044,10 @@ class SearchFacets(Facets):
         # in the search request.
         if languageQuery != "all":
             extra["languages"] = languages
+
+        search_type = get_argument("search_type")
+        if search_type:
+            extra["search_type"] = search_type
 
         return cls._from_request(
             config, get_argument, get_header, worklist, default_entrypoint, **extra
