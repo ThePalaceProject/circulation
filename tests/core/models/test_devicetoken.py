@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy.exc import InvalidRequestError
 
 from core.model.devicetokens import (
     DeviceToken,
@@ -37,3 +38,16 @@ class TestDeviceToken(DatabaseTest):
         patron = self._patron()
         with pytest.raises(InvalidTokenTypeError):
             DeviceToken.create(self._db, "invalidtype", "xxxx", patron)
+
+    def test_cascade(self):
+        """Ensure the devicetoken is deleted after a patron is deleted
+        Else need to run 20220701-add-devicetoken-cascade.sql"""
+        patron = self._patron()
+        device = DeviceToken.create(
+            self._db, DeviceTokenTypes.FCM_ANDROID, "xxxx", patron
+        )
+
+        self._db.delete(patron)
+        self._db.commit()
+        with pytest.raises(InvalidRequestError):
+            self._db.refresh(device)
