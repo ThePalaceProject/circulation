@@ -1445,7 +1445,7 @@ class Work(Base):
         qu = qu.options(
             joinedload(Work.presentation_edition)
             .joinedload(Edition.contributions)
-            .joinedload(Contribution.contributor),  # type: ignore
+            .joinedload(Contribution.contributor),
             joinedload(Work.work_genres).joinedload(WorkGenre.genre),  # type: ignore
             joinedload(Work.custom_list_entries),
         )

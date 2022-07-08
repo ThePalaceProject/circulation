@@ -385,6 +385,24 @@ def crawlable_collection_feed(collection_name):
     return app.manager.opds_feeds.crawlable_collection_feed(collection_name)
 
 
+@library_route("/opds2/publications")
+@has_library
+@allows_patron_web
+@returns_problem_detail
+@compressible
+def opds2_publications():
+    return app.manager.opds2_feeds.publications()
+
+
+@library_route("/opds2/navigation")
+@has_library
+@allows_patron_web
+@returns_problem_detail
+@compressible
+def opds2_navigation():
+    return app.manager.opds2_feeds.navigation()
+
+
 @app.route("/collections/<collection_name>")
 @returns_problem_detail
 def shared_collection_info(collection_name):

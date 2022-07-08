@@ -107,7 +107,7 @@ class Identifier(Base, IdentifierConstants):
     )
 
     # One Identifier may have many Links.
-    links = relationship("Hyperlink", backref="identifier")
+    links = relationship("Hyperlink", backref="identifier", uselist=True)
 
     # One Identifier may be the subject of many Measurements.
     measurements = relationship("Measurement", backref="identifier")

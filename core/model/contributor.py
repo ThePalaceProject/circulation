@@ -474,5 +474,6 @@ class Contribution(Base):
     contributor_id = Column(
         Integer, ForeignKey("contributors.id"), index=True, nullable=False
     )
+    contributor: Contributor  # for typing
     role = Column(Unicode, index=True, nullable=False)
     __table_args__ = (UniqueConstraint("edition_id", "contributor_id", "role"),)
