@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import datetime
+import json
 import os
 import random
 import stat
 import tempfile
 from io import StringIO
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
+from freezegun import freeze_time
 from parameterized import parameterized
 
 from core.classifier import Classifier
@@ -50,6 +54,7 @@ from core.scripts import (
     ConfigureLaneScript,
     ConfigureLibraryScript,
     ConfigureSiteScript,
+    CustomListUpdateEntriesScript,
     DatabaseMigrationInitializationScript,
     DatabaseMigrationScript,
     Explain,
@@ -87,6 +92,7 @@ from core.testing import (
     AlwaysSuccessfulCollectionCoverageProvider,
     AlwaysSuccessfulWorkCoverageProvider,
     DatabaseTest,
+    EndToEndSearchTest,
 )
 from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
 from core.util.worker_pools import DatabasePool
@@ -3090,6 +3096,68 @@ class TestUpdateCustomListSizeScript(DatabaseTest):
         customlist.size = 100
         UpdateCustomListSizeScript(self._db).do_run(cmd_args=[])
         assert 1 == customlist.size
+
+
+class TestCustomListUpdateEntriesScript(EndToEndSearchTest):
+    def populate_works(self):
+        self.populated_books: list[Work] = [
+            self._work(with_license_pool=True, title="Populated Book") for _ in range(5)
+        ]
+        self.unpopular_books: list[Work] = [
+            self._work(with_license_pool=True, title="Unpopular Book") for _ in range(3)
+        ]
+
+    def test_process_custom_list(self):
+        last_updated = datetime.datetime.now() - datetime.timedelta(hours=1)
+        custom_list, _ = self._customlist()
+        custom_list.library = self._default_library
+        custom_list.auto_update_enabled = True
+        custom_list.auto_update_query = json.dumps(
+            dict(query=dict(key="title", value="Populated Book"))
+        )
+        custom_list.auto_update_last_update = last_updated
+
+        custom_list1, _ = self._customlist()
+        custom_list1.library = self._default_library
+        custom_list1.auto_update_enabled = True
+        custom_list1.auto_update_query = json.dumps(
+            dict(query=dict(key="title", value="Unpopular Book"))
+        )
+        custom_list1.auto_update_last_update = last_updated
+
+        # Do the process
+        script = CustomListUpdateEntriesScript(self._db)
+        mock_parse = MagicMock()
+        mock_parse.return_value.libraries = [self._default_library]
+        script.parse_command_line = mock_parse
+
+        with freeze_time("2022-01-01") as frozen_time:
+            script.run()
+
+        self._db.refresh(custom_list)
+        self._db.refresh(custom_list1)
+        assert len(custom_list.entries) == 1 + len(
+            self.populated_books
+        )  # default + new
+        assert len(custom_list1.entries) == 1 + len(
+            self.unpopular_books
+        )  # default + new
+        # last updated time has updated correctly
+        assert custom_list.auto_update_last_update == frozen_time.time_to_freeze
+        assert custom_list1.auto_update_last_update == frozen_time.time_to_freeze
+
+    @freeze_time("2022-01-01", as_kwarg="frozen_time")
+    def test_no_last_update(self, frozen_time=None):
+        # No previous timestamp
+        custom_list, _ = self._customlist()
+        custom_list.library = self._default_library
+        custom_list.auto_update_enabled = True
+        custom_list.auto_update_query = json.dumps(
+            dict(query=dict(key="title", value="Populated Book"))
+        )
+        script = CustomListUpdateEntriesScript(self._db)
+        script.process_custom_list(custom_list)
+        assert custom_list.auto_update_last_update == frozen_time.time_to_freeze
 
 
 class TestWorkConsolidationScript:

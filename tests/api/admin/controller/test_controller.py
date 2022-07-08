@@ -1049,8 +1049,14 @@ class TestCustomListsController(AdminControllerTest):
         # This list has no associated Library and should not be included.
         no_library, ignore = create(self._db, CustomList, name=self._str)
 
+        auto_update_query = json.dumps(dict(query=dict(key="key", value="value")))
         one_entry, ignore = create(
-            self._db, CustomList, name=self._str, library=self._default_library
+            self._db,
+            CustomList,
+            name=self._str,
+            library=self._default_library,
+            auto_update_enabled=True,
+            auto_update_query=auto_update_query,
         )
         edition = self._edition()
         one_entry.add_entry(edition)
@@ -1058,7 +1064,11 @@ class TestCustomListsController(AdminControllerTest):
         collection.customlists = [one_entry]
 
         no_entries, ignore = create(
-            self._db, CustomList, name=self._str, library=self._default_library
+            self._db,
+            CustomList,
+            name=self._str,
+            library=self._default_library,
+            auto_update_enabled=False,
         )
 
         with self.request_context_with_library_and_admin("/"):
@@ -1075,11 +1085,15 @@ class TestCustomListsController(AdminControllerTest):
             assert collection.name == c.get("name")
             assert collection.id == c.get("id")
             assert collection.protocol == c.get("protocol")
+            assert True == l1.get("auto_update")
+            assert auto_update_query == l1.get("auto_update_query")
 
             assert no_entries.id == l2.get("id")
             assert no_entries.name == l2.get("name")
             assert 0 == l2.get("entry_count")
             assert 0 == len(l2.get("collections"))
+            assert False == l2.get("auto_update")
+            assert None == l2.get("auto_update_query")
 
         self.admin.remove_role(AdminRole.LIBRARIAN, self._default_library)
         with self.request_context_with_library_and_admin("/"):

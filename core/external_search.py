@@ -1928,6 +1928,7 @@ class JSONQuery(Query):
     class Conjunctives(Values):
         AND = "and"
         OR = "or"
+        NOT = "not"
 
     class QueryLeaf(Values):
         KEY = "key"
@@ -1968,6 +1969,7 @@ class JSONQuery(Query):
         "imprint": _KEYWORD_ONLY,
         "language": _KEYWORD_ONLY,
         "licensepools.available": dict(path="licensepools"),
+        "licensepools.availability_time": dict(path="licensepools"),
         "licensepools.collection_id": dict(path="licensepools"),
         "licensepools.data_source_id": dict(path="licensepools"),
         "licensepools.licensed": dict(path="licensepools"),
@@ -2036,7 +2038,7 @@ class JSONQuery(Query):
         if set(query.keys()).intersection(leaves) == leaves:
             es_query = self._parse_json_leaf(query)
         # Are we an {and, or} query
-        elif {self.Conjunctives.AND, self.Conjunctives.OR}.issuperset(query.keys()):
+        elif set(self.Conjunctives.values()).issuperset(query.keys()):
             es_query = self._parse_json_join(query)
         else:
             raise QueryParseException(
@@ -2111,6 +2113,8 @@ class JSONQuery(Query):
             joined_query = Bool(must=to_join)
         elif join == self.Conjunctives.OR:
             joined_query = Bool(should=to_join)
+        elif join == self.Conjunctives.NOT:
+            joined_query = Bool(must_not=to_join)
 
         return joined_query
 
