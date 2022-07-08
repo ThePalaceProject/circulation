@@ -4503,9 +4503,6 @@ class TestSearchIndexCoverageProvider(DatabaseTest):
         # Top level keys should be the same
         assert len(result) == len(inapp)
 
-        # This test is no longer valid with new mapping properties
-        # assert result[0].keys() == inapp[0].keys()
-
         inapp_work1 = list(filter(lambda x: x["work_id"] == work1.id, inapp))[0]
         inapp_work2 = list(filter(lambda x: x["work_id"] == work2.id, inapp))[0]
 
