@@ -124,7 +124,10 @@ class Edition(Base, EditionConstants):
 
     @property
     def language_code(self):
-        return LanguageCodes.three_to_two.get(self.language, self.language)
+        """A single BCP47 language code for display purposes."""
+        if not self.language:
+            return None
+        return LanguageCodes.bcp47_for_locale(self.language, default=self.language)
 
     @property
     def contributors(self):

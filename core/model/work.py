@@ -782,13 +782,10 @@ class Work(Base):
 
     @property
     def language_code(self):
-        """A single 2-letter language code for display purposes."""
+        """A single BCP47 language code for display purposes."""
         if not self.language:
             return None
-        language = self.language
-        if language in LanguageCodes.three_to_two:
-            language = LanguageCodes.three_to_two[language]
-        return language
+        return LanguageCodes.bcp47_for_locale(self.language, default=self.language)
 
     def age_appropriate_for_patron(self, patron):
         """Is this Work age-appropriate for the given Patron?
