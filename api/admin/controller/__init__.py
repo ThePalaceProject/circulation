@@ -6,7 +6,7 @@ import os
 import sys
 import urllib.parse
 from datetime import date, datetime, timedelta
-from typing import Union
+from typing import Optional, Union
 
 import flask
 import jwt
@@ -1576,22 +1576,18 @@ class SettingsController(AdminCirculationManagerController):
 
     def _set_storage_external_integration_link(
         self, service: ExternalIntegration, purpose: str, setting_key: str
-    ):
+    ) -> Optional[ProblemDetail]:
         """Either set or delete the external integration link between the
         service and the storage integration.
 
         :param service: Service's ExternalIntegration object
-        :type service: core.model.configuration.ExternalIntegration
 
         :param purpose: Service's purpose
-        :type purpose: str
 
         :param setting_key: Key of the configuration setting that must be set in the storage integration.
             For example, a specific bucket (MARC, Analytics, etc.).
-        :type setting_key: str
 
         :return: ProblemDetail object if the operation failed
-        :rtype: Optional[ProblemDetail]
         """
         mirror_integration_id = flask.request.form.get("mirror_integration_id")
 

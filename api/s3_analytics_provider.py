@@ -1,5 +1,6 @@
 import datetime
 import json
+from typing import Dict
 
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
@@ -7,7 +8,14 @@ from sqlalchemy.orm import Session
 from core.config import CannotLoadConfiguration
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.mirror import MirrorUploader
-from core.model import ExternalIntegration, MediaTypes, Representation, get_one
+from core.model import (
+    ExternalIntegration,
+    Library,
+    LicensePool,
+    MediaTypes,
+    Representation,
+    get_one,
+)
 from core.model.configuration import (
     ConfigurationAttributeType,
     ConfigurationGrouping,
@@ -51,39 +59,31 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
 
     @staticmethod
     def _create_event_object(
-        library,
-        license_pool,
-        event_type,
-        time,
+        library: Library,
+        license_pool: LicensePool,
+        event_type: str,
+        time: datetime.datetime,
         old_value,
         new_value,
-        neighborhood,
-    ):
+        neighborhood: str,
+    ) -> Dict:
         """Create a Python dict containing required information about the event.
 
         :param library: Library associated with the event
-        :type library: core.model.library.Library
 
         :param license_pool: License pool associated with the event
-        :type license_pool: core.model.licensing.LicensePool
 
         :param event_type: Type of the event
-        :type event_type: str
 
         :param time: Event's timestamp
-        :type time: datetime.datetime
 
         :param old_value: Old value of the metric changed by the event
-        :type old_value: Any
 
         :param new_value: New value of the metric changed by the event
-        :type new_value: Any
 
         :param neighborhood: Geographic location of the event
-        :type neighborhood: str
 
         :return: Python dict containing required information about the event
-        :rtype: dict
         """
         start = time
         if not start:
@@ -232,14 +232,12 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         )
         s3_uploader.mirror_one(representation, analytics_file_url)
 
-    def _get_s3_uploader(self, db):
+    def _get_s3_uploader(self, db: Session) -> S3Uploader:
         """Get an S3Uploader object associated with the provider's selected storage service.
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
 
         :return: S3Uploader object associated with the provider's selected storage service
-        :rtype: core.s3.S3Uploader
         """
         # To find the storage integration for the exporter, first find the
         # external integration link associated with the provider's external
@@ -282,14 +280,12 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         return s3_uploader
 
     @classmethod
-    def get_storage_settings(cls, db):
+    def get_storage_settings(cls, db: Session) -> Dict:
         """Return the provider's configuration settings including available storage options.
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
 
         :return: Dictionary containing the provider's configuration settings
-        :rtype: dict
         """
         storage_integrations = ExternalIntegration.for_goal(
             db, ExternalIntegration.STORAGE_GOAL
