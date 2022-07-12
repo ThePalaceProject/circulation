@@ -1637,6 +1637,9 @@ def session_fixture():
     # Drop any existing schema. It will be recreated when
     # SessionManager.initialize() runs.
     engine = SessionManager.engine()
+    Base.metadata.reflect(
+        engine
+    )  # Required to drop table with CASCADE constriants in the right order
     Base.metadata.drop_all(engine)
 
     yield
