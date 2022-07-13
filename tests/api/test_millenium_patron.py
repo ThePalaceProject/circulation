@@ -125,6 +125,23 @@ class TestMilleniumPatronAPI(DatabaseTest):
         assert "alice@sheldon.com" == patrondata.email_address
         assert PatronData.NO_VALUE == patrondata.block_reason
 
+    def test__remote_patron_lookup_success_nonsensical_labels(self):
+        self.api.enqueue("dump.success_nonsensical_labels.html")
+        patrondata = PatronData(authorization_identifier="good barcode")
+        patrondata = self.api._remote_patron_lookup(patrondata)
+
+        # The barcode is correctly captured from the "NONSENSE[pb]" element.
+        # This checks that we care about the 'pb' code and don't care about
+        # what comes before it.
+        assert "6666666" == patrondata.permanent_id
+        assert "44444444444447" == patrondata.authorization_identifier
+        assert "alice" == patrondata.username
+        assert Decimal(0) == patrondata.fines
+        assert date(2059, 4, 1) == patrondata.authorization_expires
+        assert "SHELDON, ALICE" == patrondata.personal_name
+        assert "alice@sheldon.com" == patrondata.email_address
+        assert PatronData.NO_VALUE == patrondata.block_reason
+
     def test__remote_patron_lookup_barcode_spaces(self):
         self.api.enqueue("dump.success_barcode_spaces.html")
         patrondata = PatronData(authorization_identifier="44444444444447")

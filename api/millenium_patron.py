@@ -1,5 +1,6 @@
 import datetime
 import re
+from typing import Optional
 from urllib import parse
 
 import dateutil
@@ -21,21 +22,26 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
 
     NAME = "Millenium"
 
-    RECORD_NUMBER_FIELD = "RECORD #[p81]"
-    PATRON_TYPE_FIELD = "P TYPE[p47]"
-    EXPIRATION_FIELD = "EXP DATE[p43]"
-    HOME_BRANCH_FIELD = "HOME LIBR[p53]"
-    ADDRESS_FIELD = "ADDRESS[pa]"
-    BARCODE_FIELD = "P BARCODE[pb]"
-    USERNAME_FIELD = "ALT ID[pu]"
-    FINES_FIELD = "MONEY OWED[p96]"
-    BLOCK_FIELD = "MBLOCK[p56]"
     ERROR_MESSAGE_FIELD = "ERRMSG"
-    PERSONAL_NAME_FIELD = "PATRN NAME[pn]"
-    EMAIL_ADDRESS_FIELD = "EMAIL ADDR[pz]"
+    RECORD_NUMBER_FIELD = "p81"  # e.g., "RECORD #[p81]"
+    PATRON_TYPE_FIELD = "p47"  # e.g., "P TYPE[p47]"
+    EXPIRATION_FIELD = "p43"  # e.g., "EXP DATE[p43]"
+    HOME_BRANCH_FIELD = "p53"  # e.g., "HOME LIBR[p53]"
+    ADDRESS_FIELD = "pa"  # e.g., "ADDRESS[pa]"
+    BARCODE_FIELD = "pb"  # e.g., "P BARCODE[pb]"
+    USERNAME_FIELD = "pu"  # e.g., "UNIV ID[pu]"
+    FINES_FIELD = "p96"  # e.g., "MONEY OWED[p96]"
+    BLOCK_FIELD = "p56"  # e.g., "MBLOCK[p56]"
+    PERSONAL_NAME_FIELD = "pn"  # e.g., "PATRN NAME[pn]"
+    EMAIL_ADDRESS_FIELD = "pz"  # e.g., "EMAIL ADDR[pz]"
+    NOTE_FIELD = "px"  # e.g., "NOTE[px]"
     EXPIRATION_DATE_FORMAT = "%m-%d-%y"
 
-    MULTIVALUE_FIELDS = {"NOTE[px]", BARCODE_FIELD}
+    MULTIVALUE_FIELDS = {NOTE_FIELD, BARCODE_FIELD}
+
+    # The following regex will match a field name of the form `<label>[<code>]`
+    # with a group for the code. E.g., "P TYPE[p47]" -> "p47".
+    FIELD_CODE_REGEX = re.compile(r".*\[(.*)\]")
 
     DEFAULT_CURRENCY = "USD"
 
@@ -334,6 +340,27 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
         # The patron does not have one of those types, so is not blocked.
         return PatronData.NO_VALUE
 
+    @classmethod
+    def _code_from_field(cls, field_name: Optional[str]) -> Optional[str]:
+        """Convert a Millenium property key to its code.
+
+        A field name may comprise a label and a code or just a code.
+
+        If the field name is of the form "<label>[<code>]" (e.g., "P TYPE[p47]"),
+        return "<code>" (e.g., "p47"). Otherwise, return the original field name.
+        """
+        if field_name is None:
+            return None
+
+        match = cls.FIELD_CODE_REGEX.match(field_name)
+        return match.groups()[0] if match is not None else field_name
+
+    def _is_blacklisted(self, identifier: str) -> bool:
+        # This identifier contains a blacklisted
+        # string. Ignore it, even if this means the patron
+        # ends up with no identifier whatsoever.
+        return any(x.search(identifier) for x in self.blacklist)
+
     def patron_dump_to_patrondata(self, current_identifier, content):
         """Convert an HTML patron dump to a PatronData object.
 
@@ -356,12 +383,10 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
         neighborhood = PatronData.NO_VALUE
 
         potential_identifiers = []
-        for k, v in self._extract_text_nodes(content):
+        for f, v in self._extract_text_nodes(content):
+            k = self._code_from_field(f)
             if k == self.BARCODE_FIELD:
-                if any(x.search(v) for x in self.blacklist):
-                    # This barcode contains a blacklisted
-                    # string. Ignore it, even if this means the patron
-                    # ends up with no barcode whatsoever.
+                if self._is_blacklisted(v):
                     continue
                 # We'll figure out which barcode is the 'right' one
                 # later.
@@ -371,10 +396,12 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
                 # list as well.
                 if " " in v:
                     potential_identifiers.append(v.replace(" ", ""))
+            elif k == self.USERNAME_FIELD:
+                if self._is_blacklisted(v):
+                    continue
+                username = v
             elif k == self.RECORD_NUMBER_FIELD:
                 permanent_id = v
-            elif k == self.USERNAME_FIELD:
-                username = v
             elif k == self.PERSONAL_NAME_FIELD:
                 personal_name = v
             elif k == self.EMAIL_ADDRESS_FIELD:
@@ -416,15 +443,21 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
             ):
                 neighborhood = self.extract_postal_code(v)
             elif k == self.ERROR_MESSAGE_FIELD:
-                # An error has occured. Most likely the patron lookup
+                # An error has occurred. Most likely the patron lookup
                 # failed.
                 return None
 
         # Set the library identifier field
-        library_identifier = None
+        library_identifier_field_code = self._code_from_field(
+            self.library_identifier_field
+        )
         for k, v in self._extract_text_nodes(content):
-            if k == self.library_identifier_field:
+            code = self._code_from_field(k)
+            if code == library_identifier_field_code:
                 library_identifier = v.strip()
+                break
+        else:
+            library_identifier = None
 
         # We may now have multiple authorization
         # identifiers. PatronData expects the best authorization
