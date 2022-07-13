@@ -125,8 +125,8 @@ class TestMilleniumPatronAPI(DatabaseTest):
         assert "alice@sheldon.com" == patrondata.email_address
         assert PatronData.NO_VALUE == patrondata.block_reason
 
-    def test__remote_patron_lookup_success_by_identifier(self):
-        self.api.enqueue("dump.success_identifier.html")
+    def test__remote_patron_lookup_success_nonsensical_labels(self):
+        self.api.enqueue("dump.success_nonsensical_labels.html")
         patrondata = PatronData(authorization_identifier="good barcode")
         patrondata = self.api._remote_patron_lookup(patrondata)
 
