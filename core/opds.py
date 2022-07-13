@@ -1432,7 +1432,13 @@ class AcquisitionFeed(OPDSFeed):
 
         sample_links = self.annotator.samples(edition)
         for link in sample_links:
-            links.append(AtomFeed.link(rel=link.rel, href=link.resource.url))
+            links.append(
+                AtomFeed.link(
+                    rel=link.rel,
+                    href=link.resource.url,
+                    type=link.resource.representation.media_type,
+                )
+            )
 
         content = self.annotator.content(work)
         if isinstance(content, bytes):

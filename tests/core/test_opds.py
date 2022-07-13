@@ -699,7 +699,10 @@ class TestOPDS(DatabaseTest):
         work = self._work(with_open_access_download=True)
         edition = work.presentation_edition
 
-        resource = Resource(url="sampleurl")
+        representation, _ = self._representation(
+            "sampleurl", media_type="application/epub+zip"
+        )
+        resource = Resource(url="sampleurl", representation_id=representation.id)
         link = Hyperlink(
             rel=Hyperlink.SAMPLE,
             identifier_id=edition.primary_identifier_id,
@@ -715,7 +718,7 @@ class TestOPDS(DatabaseTest):
             identifier_id=edition1.primary_identifier_id,
             data_source_id=2,
         )
-        resource1 = Resource(url="sampleurl1")
+        resource1 = Resource(url="sampleurl1", representation_id=representation.id)
         link1.resource = resource1
 
         # unrelated work/link should not show up
@@ -727,7 +730,9 @@ class TestOPDS(DatabaseTest):
             identifier_id=edition2.primary_identifier_id,
             data_source_id=2,
         )
-        link2.resource = Resource(url="notsampleurl")
+        link2.resource = Resource(
+            url="notsampleurl", representation_id=representation.id
+        )
 
         self._db.add_all([resource, link, link1, link2])
 
