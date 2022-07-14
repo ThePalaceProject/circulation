@@ -3,6 +3,7 @@ from typing import List
 import firebase_admin
 from firebase_admin import credentials, messaging
 
+from core.config import Configuration
 from core.model.devicetokens import DeviceToken
 from core.model.edition import Edition
 from core.model.identifier import Identifier
@@ -19,9 +20,7 @@ class PushNotifications:
     def fcm_app(cls):
         if not cls._fcm_app:
             cls._fcm_app = firebase_admin.initialize_app(
-                credentials.Certificate(
-                    "/home/rishi/Downloads/test-notifications-88814-32474665d578.json"
-                )
+                credentials.Certificate(Configuration.fcm_credentials_file())
             )
         return cls._fcm_app
 

@@ -154,6 +154,7 @@ grant all privileges on database circ to palace;
 #### Environment variables
 
 To let the application know which database to use set the `SIMPLIFIED_PRODUCTION_DATABASE` env variable.
+The `SIMPLIFIED_FCM_CREDENTIALS_FILE` env variable should hold the path to the JSON format GCP service account key
 
 ```sh
 export SIMPLIFIED_PRODUCTION_DATABASE="postgresql://palace:test@localhost:5432/circ"

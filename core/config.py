@@ -51,6 +51,9 @@ class Configuration(ConfigurationConstants):
     DATABASE_TEST_ENVIRONMENT_VARIABLE = "SIMPLIFIED_TEST_DATABASE"
     DATABASE_PRODUCTION_ENVIRONMENT_VARIABLE = "SIMPLIFIED_PRODUCTION_DATABASE"
 
+    # Environment variable for FCM service account key
+    FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE = "SIMPLIFIED_FCM_CREDENTIALS_FILE"
+
     # Environment variable for Overdrive fulfillment keys
     OD_PREFIX_PRODUCTION_PREFIX = "SIMPLIFIED"
     OD_PREFIX_TESTING_PREFIX = "SIMPLIFIED_TESTING"
@@ -335,6 +338,17 @@ class Configuration(ConfigurationConstants):
         # Calling __to_string__ will hide the password.
         logging.info("Connecting to database: %s" % url_obj.__to_string__())
         return url
+
+    @classmethod
+    def fcm_credentials_file(cls):
+        fcm_file = os.environ.get(cls.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE)
+        if not fcm_file:
+            raise CannotLoadConfiguration(
+                f"FCM Credentials File not defined in environment variable {cls.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE}"
+            )
+        if not os.path.exists(fcm_file):
+            raise FileNotFoundError(f"The file at {fcm_file} does not exist")
+        return fcm_file
 
     @classmethod
     def overdrive_fulfillment_keys(cls, testing=False) -> Dict[str, str]:

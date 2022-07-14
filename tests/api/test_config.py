@@ -1,10 +1,13 @@
 import json
+import os
 from collections import Counter
 
+import pytest
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.PublicKey import RSA
 
 from api.config import Configuration
+from core.config import CannotLoadConfiguration
 from core.config import Configuration as CoreConfiguration
 from core.model import ConfigurationSetting
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -195,3 +198,25 @@ class TestConfiguration:
         assert (
             Configuration.DEFAULT_OPDS_FORMAT == CoreConfiguration.DEFAULT_OPDS_FORMAT
         )
+
+    def test_fcm_credentials_file(self):
+        env_var = os.environ.pop(
+            Configuration.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE, None
+        )
+
+        with pytest.raises(CannotLoadConfiguration):
+            Configuration.fcm_credentials_file()
+
+        os.environ[
+            Configuration.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE
+        ] = "filedoesnotexist.deleteifitdoes"
+        with pytest.raises(FileNotFoundError):
+            Configuration.fcm_credentials_file()
+
+        os.environ[
+            Configuration.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE
+        ] = os.path.abspath(__file__)
+        assert os.path.abspath(__file__) == Configuration.fcm_credentials_file()
+
+        # Reset env var
+        os.environ[Configuration.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE] = env_var
