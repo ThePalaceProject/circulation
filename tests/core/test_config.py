@@ -1,7 +1,9 @@
 import os
 
+import pytest
 from sqlalchemy.orm.session import Session
 
+from core.config import CannotLoadConfiguration
 from core.config import Configuration as BaseConfiguration
 from core.model import ExternalIntegration
 from core.testing import DatabaseTest
@@ -98,3 +100,27 @@ class TestConfiguration(DatabaseTest):
         assert new_db != self._db
         assert isinstance(new_db, Session)
         assert None == none
+
+    def test_fcm_credentials_file(self):
+        env_var = os.environ.pop(
+            BaseConfiguration.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE, None
+        )
+
+        with pytest.raises(CannotLoadConfiguration):
+            BaseConfiguration.fcm_credentials_file()
+
+        os.environ[
+            BaseConfiguration.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE
+        ] = "filedoesnotexist.deleteifitdoes"
+        with pytest.raises(FileNotFoundError):
+            BaseConfiguration.fcm_credentials_file()
+
+        os.environ[
+            BaseConfiguration.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE
+        ] = os.path.abspath(__file__)
+        assert os.path.abspath(__file__) == BaseConfiguration.fcm_credentials_file()
+
+        # Reset env var
+        os.environ[
+            BaseConfiguration.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE
+        ] = env_var
