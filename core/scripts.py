@@ -3578,15 +3578,40 @@ class CustomListUpdateEntriesScript(CustomListSweeperScript):
         custom_list.auto_update_last_update = datetime.datetime.now()
 
 
-class LoanNotificationsScript(PatronInputScript):
+class LoanNotificationsScript(Script):
     """Notifications must be sent to Patrons based on when their current loans
     are expiring"""
 
     # Days before on which to send out a notification
     LOAN_EXPIRATION_DAYS = [5, 1]
+    BATCH_SIZE = 100
 
-    def process_patron(self, patron: Patron):
+    def do_run(self):
+        self.log.info("Loan Notifications Job started")
+        _query = self._db.query(Loan).order_by(Loan.id)
+        last_loan_id = None
+        processed_loans = 0
+        for _ in range(100000):
+            query = _query.limit(self.BATCH_SIZE)
+            if last_loan_id:
+                query = _query.filter(Loan.id > last_loan_id)
+
+            loans = query.all()
+            if len(loans) == 0:
+                break
+
+            for loan in loans:
+                processed_loans += 1
+                self.process_loan(loan)
+            last_loan_id = loan.id
+
+        self.log.info(
+            f"Loan Notifications Job ended: {processed_loans} loans processed"
+        )
+
+    def process_loan(self, loan: Loan):
         tokens = []
+        patron: Patron = loan.patron
         t: DeviceToken
         for t in patron.device_tokens:
             if t.token_type in [DeviceTokenTypes.FCM_ANDROID, DeviceTokenTypes.FCM_IOS]:
@@ -3597,17 +3622,15 @@ class LoanNotificationsScript(PatronInputScript):
             return
 
         now = utc_now()
-        loan: Loan
-        for loan in patron.loans:
-            delta: datetime.timedelta = loan.end - now
-            # We assume this script runs ONCE A DAY
-            # else this will send notifications multiple times for
-            # the same day
-            if delta.days in self.LOAN_EXPIRATION_DAYS:
-                self.log.info(
-                    f"Patron {patron.external_identifier} has an expiring loan on ({loan.license_pool.identifier.urn})"
-                )
-                PushNotifications.send_loan_expiry_message(loan, delta.days, tokens)
+        delta: datetime.timedelta = loan.end - now
+        # We assume this script runs ONCE A DAY
+        # else this will send notifications multiple times for
+        # the same day
+        if delta.days in self.LOAN_EXPIRATION_DAYS:
+            self.log.info(
+                f"Patron {patron.external_identifier} has an expiring loan on ({loan.license_pool.identifier.urn})"
+            )
+            PushNotifications.send_loan_expiry_message(loan, delta.days, tokens)
 
 
 class MockStdin:

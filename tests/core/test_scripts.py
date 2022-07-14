@@ -8,8 +8,7 @@ import stat
 import tempfile
 from io import StringIO
 from pathlib import Path
-from unittest import mock
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from freezegun import freeze_time
@@ -3181,20 +3180,58 @@ class TestLoanNotificationsScript(DatabaseTest):
         )
         PushNotifications.TESTING_MODE = True
 
-    @mock.patch("core.scripts.PushNotifications")
+    @patch("core.scripts.PushNotifications")
     def test_loan_notification(self, mock_notf: PushNotifications):
         loan, _ = self.work.active_license_pool().loan_to(
             self.patron,
             utc_now(),
             utc_now() + datetime.timedelta(days=1, hours=1),
         )
-        self.script.process_patron(self.patron)
+
+        work2 = self._work(with_license_pool=True)
+        loan2, _ = work2.active_license_pool().loan_to(
+            self.patron,
+            utc_now(),
+            utc_now() + datetime.timedelta(days=2, hours=1),
+        )  # Should not get notified
+
+        self.script.process_loan(loan)
+        self.script.process_loan(loan2)
+
         assert mock_notf.send_loan_expiry_message.call_count == 1
         assert mock_notf.send_loan_expiry_message.call_args[0] == (
             loan,
             1,
             [self.device_token],
         )
+
+    def test_do_run(self):
+        loan, _ = self.work.active_license_pool().loan_to(
+            self.patron,
+            utc_now(),
+            utc_now() + datetime.timedelta(days=1, hours=1),
+        )
+
+        work2 = self._work(with_license_pool=True)
+        loan2, _ = work2.active_license_pool().loan_to(
+            self.patron,
+            utc_now(),
+            utc_now() + datetime.timedelta(days=2, hours=1),
+        )
+
+        self.script.process_loan = MagicMock()
+        self.script.BATCH_SIZE = 1
+        self.script.do_run()
+
+        assert self.script.process_loan.call_count == 2
+        assert self.script.process_loan.call_args_list == [
+            call(
+                loan,
+            ),
+            call(
+                loan2,
+            ),
+        ]
 
 
 class TestWorkConsolidationScript:
