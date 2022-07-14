@@ -3181,7 +3181,7 @@ class TestLoanNotificationsScript(DatabaseTest):
         PushNotifications.TESTING_MODE = True
 
     @patch("core.scripts.PushNotifications")
-    def test_loan_notification(self, mock_notf: PushNotifications):
+    def test_loan_notification(self, mock_notf: MagicMock):
         loan, _ = self.work.active_license_pool().loan_to(
             self.patron,
             utc_now(),
