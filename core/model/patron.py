@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from core.model import IntegrationClient  # noqa: autoflake
     from core.model.library import Library  # noqa: autoflake
     from core.model.licensing import LicensePool  # noqa: autoflake
+    from .devicetokens import DeviceToken
 
 
 class LoanAndHoldMixin:
@@ -176,6 +177,8 @@ class Patron(Base):
     credentials: Mapped[List[Credential]] = relationship(
         "Credential", backref="patron", cascade="delete"
     )
+
+    device_tokens: List["DeviceToken"]
 
     __table_args__ = (
         UniqueConstraint("library_id", "username"),
@@ -529,7 +532,10 @@ Index("ix_patron_library_id_username", Patron.library_id, Patron.username)
 class Loan(Base, LoanAndHoldMixin):
     __tablename__ = "loans"
     id = Column(Integer, primary_key=True)
+
     patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
+    patron: Patron  # typing
+
     integration_client_id = Column(
         Integer, ForeignKey("integrationclients.id"), index=True
     )
