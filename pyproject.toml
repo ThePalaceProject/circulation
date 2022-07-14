@@ -53,6 +53,7 @@ module = [
     "textblob.*",
     "watchtower",
     "webpub_manifest_parser.*",
+    "firebase_admin",
 ]
 
 [[tool.mypy.overrides]]

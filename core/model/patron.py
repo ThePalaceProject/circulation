@@ -3,6 +3,7 @@
 import datetime
 import logging
 import uuid
+from typing import TYPE_CHECKING, List
 
 from psycopg2.extras import NumericRange
 from sqlalchemy import (
@@ -27,6 +28,10 @@ from ..user_profile import ProfileStorage
 from ..util.datetime_helpers import utc_now
 from . import Base, get_one_or_create, numericrange_to_tuple
 from .credential import Credential
+
+if TYPE_CHECKING:
+    from . import LicensePool
+    from .devicetokens import DeviceToken
 
 
 class LoanAndHoldMixin:
@@ -158,6 +163,8 @@ class Patron(Base):
 
     # One Patron can have many associated Credentials.
     credentials = relationship("Credential", backref="patron", cascade="delete")
+
+    device_tokens: List["DeviceToken"]
 
     __table_args__ = (
         UniqueConstraint("library_id", "username"),
@@ -507,13 +514,17 @@ Index("ix_patron_library_id_username", Patron.library_id, Patron.username)
 class Loan(Base, LoanAndHoldMixin):
     __tablename__ = "loans"
     id = Column(Integer, primary_key=True)
+
     patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
+    patron: Patron  # typing
+
     integration_client_id = Column(
         Integer, ForeignKey("integrationclients.id"), index=True
     )
 
     # A Loan is always associated with a LicensePool.
     license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
+    license_pool: "LicensePool"  # typing
 
     # It may also be associated with an individual License if the source
     # provides information about individual licenses.
