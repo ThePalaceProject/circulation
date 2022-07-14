@@ -237,8 +237,9 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
             )
         self.neighborhood_mode = neighborhood_mode
 
-        self.field_used_as_patron_identifier = integration.setting(
-            self.FIELD_USED_AS_PATRON_IDENTIFIER
+        self.field_used_as_patron_identifier: str = (
+            integration.setting(self.FIELD_USED_AS_PATRON_IDENTIFIER).value
+            or MilleniumPatronAPI.BARCODE_FIELD
         )
 
     # Begin implementation of BasicAuthenticationProvider abstract
@@ -381,9 +382,7 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
         return any(x.search(identifier) for x in self.blacklist)
 
     def _is_patron_identifier_field(self, k: str) -> bool:
-        return (
-            k == self.field_used_as_patron_identifier.value or k == self.BARCODE_FIELD
-        )
+        return k == self.field_used_as_patron_identifier
 
     def patron_dump_to_patrondata(self, current_identifier, content):
         """Convert an HTML patron dump to a PatronData object.
