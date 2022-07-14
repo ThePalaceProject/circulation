@@ -20,6 +20,9 @@ from sqlalchemy.orm import Query, Session, defer
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 
 from core.model.classification import Classification
+from core.model.devicetokens import DeviceToken, DeviceTokenTypes
+from core.model.patron import Loan
+from core.util.notifications import PushNotifications
 
 from .config import CannotLoadConfiguration, Configuration
 from .coverage import CollectionCoverageProviderJob, CoverageProviderProgress
@@ -3573,6 +3576,38 @@ class CustomListUpdateEntriesScript(CustomListSweeperScript):
 
         # update this lists last updated time
         custom_list.auto_update_last_update = datetime.datetime.now()
+
+
+class LoanNotificationsScript(PatronInputScript):
+    """Notifications must be sent to Patrons based on when their current loans
+    are expiring"""
+
+    # Days before on which to send out a notification
+    LOAN_EXPIRATION_DAYS = [5, 1]
+
+    def process_patron(self, patron: Patron):
+        tokens = []
+        t: DeviceToken
+        for t in patron.device_tokens:
+            if t.token_type in [DeviceTokenTypes.FCM_ANDROID, DeviceTokenTypes.FCM_IOS]:
+                tokens.append(t)
+
+        # No tokens means no notifications
+        if not tokens:
+            return
+
+        now = utc_now()
+        loan: Loan
+        for loan in patron.loans:
+            delta: datetime.timedelta = loan.end - now
+            # We assume this script runs ONCE A DAY
+            # else this will send notifications multiple times for
+            # the same day
+            if delta.days in self.LOAN_EXPIRATION_DAYS:
+                self.log.info(
+                    f"Patron {patron.external_identifier} has an expiring loan on ({loan.license_pool.identifier.urn})"
+                )
+                PushNotifications.send_loan_expiry_message(loan, delta.days, tokens)
 
 
 class MockStdin:
