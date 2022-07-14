@@ -39,10 +39,13 @@ from core.model import (
     WorkCoverageRecord,
     create,
     get_one,
+    get_one_or_create,
 )
 from core.model.classification import Classification, Subject
 from core.model.configuration import ExternalIntegrationLink
 from core.model.customlist import CustomList
+from core.model.devicetokens import DeviceToken, DeviceTokenTypes
+from core.model.patron import Patron
 from core.monitor import CollectionMonitor, Monitor, ReaperMonitor
 from core.opds_import import OPDSImportMonitor
 from core.overdrive import OverdriveAdvantageAccount
@@ -67,6 +70,7 @@ from core.scripts import (
     LaneSweeperScript,
     LibraryInputScript,
     ListCollectionMetadataIdentifiersScript,
+    LoanNotificationsScript,
     MirrorResourcesScript,
     MockStdin,
     OPDSImportScript,
@@ -99,6 +103,7 @@ from tests.core.mock import (
     AlwaysSuccessfulCollectionCoverageProvider,
     AlwaysSuccessfulWorkCoverageProvider,
 )
+from core.util.notifications import PushNotifications
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchPatchFixture
 
@@ -2809,6 +2814,37 @@ class TestAlembicMigrateVersionScript:
                 AlembicMigrateVersion().do_run(args)
                 downgrade.assert_called_once()
                 upgrade.assert_not_called()
+class TestLoanNotificationsScript():
+    def _setup_method(self, db: DatabaseTransactionFixture):
+        self.script = LoanNotificationsScript(_db=db.session)
+        self.patron: Patron = db.patron()
+        self.work: Work = db.work(with_license_pool=True)
+        self.device_token, _ = get_one_or_create(
+            db.session,
+            DeviceToken,
+            patron=self.patron,
+            token_type=DeviceTokenTypes.FCM_ANDROID,
+            device_token="atesttoken",
+        )
+        PushNotifications.TESTING_MODE = True
+
+    
+    def test_loan_notification(self, db: DatabaseTransactionFixture):
+        self._setup_method(db)
+        loan, _ = self.work.active_license_pool().loan_to(
+            self.patron,
+            utc_now(),
+            utc_now() + datetime.timedelta(days=1, hours=1),
+        )
+
+        with patch("core.scripts.PushNotifications") as mock_notf:
+            self.script.process_patron(self.patron)
+        assert mock_notf.send_loan_expiry_message.call_count == 1
+        assert mock_notf.send_loan_expiry_message.call_args[0] == (
+            loan,
+            1,
+            [self.device_token],
+        )
 
 
 class TestGenerateOverdriveAdvantageAccountList:
