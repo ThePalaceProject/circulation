@@ -48,4 +48,3 @@ class TestPushNotifications(DatabaseTest):
             (messaging.Message(),),
             {"dry_run": True, "app": mock_fcm},
         ]
-        assert PushNotifications._fcm_app == mock_fcm
