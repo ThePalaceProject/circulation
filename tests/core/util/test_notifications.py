@@ -12,8 +12,9 @@ class TestPushNotifications(DatabaseTest):
         PushNotifications.TESTING_MODE = True
         return super().setup_method()
 
+    @mock.patch("core.util.notifications.PushNotifications.fcm_app")
     @mock.patch("core.util.notifications.messaging")
-    def test_send_loan_notification(self, messaging):
+    def test_send_loan_notification(self, messaging, mock_fcm):
         patron = self._patron()
         device_token, _ = get_one_or_create(
             self._db,
@@ -45,5 +46,6 @@ class TestPushNotifications(DatabaseTest):
         assert messaging.send.call_count == 1
         assert messaging.send.call_args_list[0] == [
             (messaging.Message(),),
-            {"dry_run": True, "app": PushNotifications._fcm_app},
+            {"dry_run": True, "app": mock_fcm},
         ]
+        assert PushNotifications._fcm_app == mock_fcm
