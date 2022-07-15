@@ -201,7 +201,7 @@ class TestConfiguration:
 
     def test_fcm_credentials_file(self):
         env_var = os.environ.pop(
-            Configuration.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE, None
+            Configuration.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE, "Empty"
         )
 
         with pytest.raises(CannotLoadConfiguration):
