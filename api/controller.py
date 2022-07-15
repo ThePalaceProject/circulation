@@ -17,6 +17,7 @@ from flask import Response, make_response, redirect
 from flask_babel import lazy_gettext as _
 from lxml import etree
 from sqlalchemy.orm import eagerload
+from sqlalchemy.orm.exc import NoResultFound
 
 from api.opds2 import OPDS2NavigationsAnnotator, OPDS2PublicationsAnnotator
 from api.saml.controller import SAMLController
@@ -2440,6 +2441,27 @@ class DeviceTokensController(CirculationManagerController):
             return DEVICE_TOKEN_ALREADY_EXISTS
 
         return "", 201
+
+    def delete_patron_device(self):
+        patron = flask.request.patron
+        device_token = flask.request.json["device_token"]
+        token_type = flask.request.json["token_type"]
+
+        try:
+            device: DeviceToken = (
+                self._db.query(DeviceToken)
+                .filter(
+                    DeviceToken.patron == patron,
+                    DeviceToken.device_token == device_token,
+                    DeviceToken.token_type == token_type,
+                )
+                .one()
+            )
+            self._db.delete(device)
+        except NoResultFound:
+            return DEVICE_TOKEN_NOT_FOUND
+
+        return Response("", 204)
 
 
 class URNLookupController(CoreURNLookupController):
