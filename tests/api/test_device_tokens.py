@@ -103,3 +103,36 @@ class TestDeviceTokens(ControllerTest):
         response = self.app.manager.patron_devices.create_patron_device()
 
         assert response == DEVICE_TOKEN_ALREADY_EXISTS
+
+    def test_delete_token(self, flask):
+        patron = self._patron()
+        device = DeviceToken.create(self._db, DeviceTokenTypes.FCM_IOS, "xxx", patron)
+
+        request = MagicMock()
+        request.patron = patron
+        request.json = {
+            "device_token": "xxx",
+            "token_type": DeviceTokenTypes.FCM_IOS,
+        }
+        flask.request = request
+
+        response = self.app.manager.patron_devices.delete_patron_device()
+        self._db.commit()
+
+        assert response.status_code == 204
+        assert self._db.query(DeviceToken).get(device.id) == None
+
+    def test_delete_no_token(self, flask):
+        patron = self._patron()
+        device = DeviceToken.create(self._db, DeviceTokenTypes.FCM_IOS, "xxx", patron)
+
+        request = MagicMock()
+        request.patron = patron
+        request.json = {
+            "device_token": "xxxy",
+            "token_type": DeviceTokenTypes.FCM_IOS,
+        }
+        flask.request = request
+
+        response = self.app.manager.patron_devices.delete_patron_device()
+        assert response == DEVICE_TOKEN_NOT_FOUND
