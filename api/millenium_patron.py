@@ -413,7 +413,7 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
             # This is dependent on a configuration setting. The key will also have a
             # chance to be treated as a different kind of field below (for example, if
             # the configuration says that the username field 'pu' should be treated as
-            # a patron identifier, we _also_ want to treat is as a username below; both
+            # a patron identifier, we _also_ want to treat it as a username below; both
             # classifications should apply!
             if self._is_patron_identifier_field(k):
                 if self._is_blacklisted(v):
