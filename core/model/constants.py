@@ -235,6 +235,11 @@ class LinkRelations:
     AUTHOR = "http://schema.org/author"
     ALTERNATE = "alternate"
 
+    # A uri rel type for authentication documents with a vendor specific "link"
+    PATRON_PASSWORD_RESET = (
+        "http://librarysimplified.org/terms/rel/patron-password-reset"
+    )
+
     # TODO: Is this the appropriate relation?
     DRM_ENCRYPTED_DOWNLOAD = "http://opds-spec.org/acquisition/"
     BORROW = "http://opds-spec.org/acquisition/borrow"

@@ -49,6 +49,7 @@ from core.model import (
     Session,
     create,
 )
+from core.model.constants import LinkRelations
 from core.opds import OPDSFeed
 from core.testing import DatabaseTest
 from core.user_profile import ProfileController
@@ -1203,6 +1204,7 @@ class TestLibraryAuthenticator(AuthenticatorTest):
             LibraryAnnotator.ABOUT: "http://about",
             LibraryAnnotator.LICENSE: "http://license/",
             LibraryAnnotator.REGISTER: "custom-registration-hook://library/",
+            LinkRelations.PATRON_PASSWORD_RESET: "https://example.org/reset",
             Configuration.LOGO: "image data",
             Configuration.WEB_CSS_FILE: "http://style.css",
         }
@@ -1322,6 +1324,7 @@ class TestLibraryAuthenticator(AuthenticatorTest):
                 help_web,
                 help_email,
                 copyright_agent,
+                reset_link,
                 profile,
                 loans,
                 license,
@@ -1365,6 +1368,8 @@ class TestLibraryAuthenticator(AuthenticatorTest):
             # uses a non-HTTP URI scheme.
             assert "type" not in register
             assert "custom-registration-hook://library/" == register["href"]
+
+            assert "https://example.org/reset" == reset_link["href"]
 
             # The logo link has type "image/png".
             assert "image/png" == logo["type"]
