@@ -11,6 +11,7 @@ from core.config import Configuration as CoreConfiguration
 from core.config import empty_config as core_empty_config
 from core.config import temp_config as core_temp_config
 from core.model import ConfigurationSetting
+from core.model.constants import LinkRelations
 from core.util import MoneyUtility
 
 from .announcements import Announcements
@@ -163,7 +164,7 @@ class Configuration(CoreConfiguration):
 
     # These are link relations that are valid in Authentication for
     # OPDS documents but are not registered with IANA.
-    AUTHENTICATION_FOR_OPDS_LINKS = ["register"]
+    AUTHENTICATION_FOR_OPDS_LINKS = ["register", LinkRelations.PATRON_PASSWORD_RESET]
 
     # We support three different ways of integrating help processes.
     # All three of these will be sent out as links with rel='help'
@@ -526,6 +527,16 @@ class Configuration(CoreConfiguration):
             "category": "Patron Support",
             "allowed": ["nypl.card-creator:https://patrons.librarysimplified.org/"],
             "level": CoreConfiguration.ALL_ACCESS,
+        },
+        {
+            "key": LinkRelations.PATRON_PASSWORD_RESET,
+            "label": _("Password Reset Link"),
+            "description": _(
+                "A link to a web page where a user can reset their virtual library card password"
+            ),
+            "format": "url",
+            "category": "Patron Support",
+            "level": CoreConfiguration.SYS_ADMIN_ONLY,
         },
         {
             "key": LARGE_COLLECTION_LANGUAGES,
