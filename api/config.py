@@ -151,6 +151,7 @@ class Configuration(CoreConfiguration):
     ABOUT = "about"
     LICENSE = "license"
     REGISTER = "register"
+    PATRON_PWD_RESET_LINK = "patron-password-reset-link"
 
     # A library with this many titles in a given language will be given
     # a large, detailed lane configuration for that language.
@@ -526,6 +527,16 @@ class Configuration(CoreConfiguration):
             "category": "Patron Support",
             "allowed": ["nypl.card-creator:https://patrons.librarysimplified.org/"],
             "level": CoreConfiguration.ALL_ACCESS,
+        },
+        {
+            "key": PATRON_PWD_RESET_LINK,
+            "label": _("Password Reset Link"),
+            "description": _(
+                "A link to a web page where a user can reset their virtual library card password"
+            ),
+            "format": "url",
+            "category": "Patron Support",
+            "level": CoreConfiguration.SYS_ADMIN_ONLY,
         },
         {
             "key": LARGE_COLLECTION_LANGUAGES,
