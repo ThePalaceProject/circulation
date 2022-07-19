@@ -6,7 +6,7 @@ import os
 import sys
 import urllib.parse
 from datetime import date, datetime, timedelta
-from typing import Union
+from typing import Optional, Union
 
 import flask
 import jwt
@@ -1601,6 +1601,63 @@ class SettingsController(AdminCirculationManagerController):
         LCPAPI,
     ]
 
+    def _set_storage_external_integration_link(
+        self, service: ExternalIntegration, purpose: str, setting_key: str
+    ) -> Optional[ProblemDetail]:
+        """Either set or delete the external integration link between the
+        service and the storage integration.
+
+        :param service: Service's ExternalIntegration object
+
+        :param purpose: Service's purpose
+
+        :param setting_key: Key of the configuration setting that must be set in the storage integration.
+            For example, a specific bucket (MARC, Analytics, etc.).
+
+        :return: ProblemDetail object if the operation failed
+        """
+        mirror_integration_id = flask.request.form.get("mirror_integration_id")
+
+        if not mirror_integration_id:
+            return
+
+        # If no storage integration was selected, then delete the existing
+        # external integration link.
+        if mirror_integration_id == self.NO_MIRROR_INTEGRATION:
+
+            current_integration_link = get_one(
+                self._db,
+                ExternalIntegrationLink,
+                library_id=None,
+                external_integration_id=service.id,
+                purpose=purpose,
+            )
+
+            if current_integration_link:
+                self._db.delete(current_integration_link)
+        else:
+            storage_integration = get_one(
+                self._db, ExternalIntegration, id=mirror_integration_id
+            )
+
+            # Only get storage integrations that have a specific configuration setting set.
+            # For example: a specific bucket.
+            if (
+                not storage_integration
+                or not storage_integration.setting(setting_key).value
+            ):
+                return MISSING_INTEGRATION
+
+            current_integration_link, ignore = get_one_or_create(
+                self._db,
+                ExternalIntegrationLink,
+                library_id=None,
+                external_integration_id=service.id,
+                purpose=purpose,
+            )
+
+            current_integration_link.other_integration_id = storage_integration.id
+
     @classmethod
     def _get_integration_protocols(cls, provider_apis, protocol_name_attr="__module__"):
         protocols = []
@@ -2000,6 +2057,10 @@ class SettingsController(AdminCirculationManagerController):
                 S3UploaderConfiguration.PROTECTED_CONTENT_BUCKET_KEY
             ).value
 
+            analytics_bucket = integration.setting(
+                S3UploaderConfiguration.ANALYTICS_BUCKET_KEY
+            ).value
+
             for setting in mirror_integration_settings:
                 if (
                     setting["key"] == ExternalIntegrationLink.COVERS_KEY
@@ -2016,6 +2077,11 @@ class SettingsController(AdminCirculationManagerController):
                 elif (
                     setting["key"] == ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS_KEY
                 ):
+                    if protected_access_bucket:
+                        setting["options"].append(
+                            {"key": str(integration.id), "label": integration.name}
+                        )
+                elif setting["key"] == ExternalIntegrationLink.ANALYTICS_KEY:
                     if protected_access_bucket:
                         setting["options"].append(
                             {"key": str(integration.id), "label": integration.name}

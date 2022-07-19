@@ -274,6 +274,7 @@ class MediaTypes:
     TEXT_XML_MEDIA_TYPE = "text/xml"
     TEXT_HTML_MEDIA_TYPE = "text/html"
     APPLICATION_XML_MEDIA_TYPE = "application/xml"
+    APPLICATION_JSON_MEDIA_TYPE = "application/json"
     JPEG_MEDIA_TYPE = "image/jpeg"
     PNG_MEDIA_TYPE = "image/png"
     GIF_MEDIA_TYPE = "image/gif"
