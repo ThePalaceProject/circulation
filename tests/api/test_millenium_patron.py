@@ -154,7 +154,7 @@ class TestMilleniumPatronAPI(DatabaseTest):
         patrondata = PatronData(authorization_identifier="good barcode")
         patrondata = self.api._remote_patron_lookup(patrondata)
 
-        # The barcode is correctly captured from the "MENINX[pu]" element.
+        # The identifier is correctly captured from the "MENINX[pu]" element.
         assert "6666666" == patrondata.permanent_id
         assert "alice" == patrondata.authorization_identifier
         assert "alice" == patrondata.username
