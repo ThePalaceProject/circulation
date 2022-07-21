@@ -37,6 +37,10 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
     NOTE_FIELD = "px"  # e.g., "NOTE[px]"
     EXPIRATION_DATE_FORMAT = "%m-%d-%y"
 
+    # The option that defines which field will be used for the patron identifier.
+    # Defaults to the barcode field ("pb").
+    FIELD_USED_AS_PATRON_IDENTIFIER = "field_used_as_patron_identifier"
+
     MULTIVALUE_FIELDS = {NOTE_FIELD, BARCODE_FIELD}
 
     # The following regex will match a field name of the form `<label>[<code>]`
@@ -149,6 +153,17 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
             ],
             "default": NO_NEIGHBORHOOD_MODE,
         },
+        {
+            "key": FIELD_USED_AS_PATRON_IDENTIFIER,
+            "label": _("Field for patron identifier"),
+            "description": _(
+                "The name of the field used as a patron identifier. Typically, this will be the <i>barcode</i> field "
+                " which has code <tt>pb</tt>. Some systems, however, are configured to use a different field (such "
+                " as the <i>username</i> field, which has code <tt>pu</tt>)."
+            ),
+            "required": True,
+            "default": BARCODE_FIELD,
+        },
     ] + BasicAuthenticationProvider.SETTINGS
 
     # Replace library settings to allow text in identifier field.
@@ -221,6 +236,11 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
                 % neighborhood_mode
             )
         self.neighborhood_mode = neighborhood_mode
+
+        self.field_used_as_patron_identifier: str = (
+            integration.setting(self.FIELD_USED_AS_PATRON_IDENTIFIER).value
+            or MilleniumPatronAPI.BARCODE_FIELD
+        )
 
     # Begin implementation of BasicAuthenticationProvider abstract
     # methods.
@@ -361,6 +381,9 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
         # ends up with no identifier whatsoever.
         return any(x.search(identifier) for x in self.blacklist)
 
+    def _is_patron_identifier_field(self, k: str) -> bool:
+        return k == self.field_used_as_patron_identifier
+
     def patron_dump_to_patrondata(self, current_identifier, content):
         """Convert an HTML patron dump to a PatronData object.
 
@@ -385,18 +408,27 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
         potential_identifiers = []
         for f, v in self._extract_text_nodes(content):
             k = self._code_from_field(f)
-            if k == self.BARCODE_FIELD:
+
+            # Check to see if the key should be treated as if it is a patron identifier.
+            # This is dependent on a configuration setting. The key will also have a
+            # chance to be treated as a different kind of field below (for example, if
+            # the configuration says that the username field 'pu' should be treated as
+            # a patron identifier, we _also_ want to treat it as a username below; both
+            # classifications should apply!
+            if self._is_patron_identifier_field(k):
                 if self._is_blacklisted(v):
                     continue
                 # We'll figure out which barcode is the 'right' one
                 # later.
                 potential_identifiers.append(v)
                 # The millenium API doesn't care about spaces, so we add
-                # a version of the barcode without spaces to our identifers
+                # a version of the barcode without spaces to our identifiers
                 # list as well.
                 if " " in v:
                     potential_identifiers.append(v.replace(" ", ""))
-            elif k == self.USERNAME_FIELD:
+
+            # Handle all the other interpretations for fields.
+            if k == self.USERNAME_FIELD:
                 if self._is_blacklisted(v):
                     continue
                 username = v
