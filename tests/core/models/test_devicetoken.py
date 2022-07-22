@@ -34,6 +34,17 @@ class TestDeviceToken(DatabaseTest):
         with pytest.raises(DuplicateDeviceTokenError):
             DeviceToken.create(self._db, DeviceTokenTypes.FCM_IOS, "xxxx", patron)
 
+    def test_duplicate_different_patron(self):
+        patron = self._patron()
+        device = DeviceToken.create(
+            self._db, DeviceTokenTypes.FCM_ANDROID, "xxxx", patron
+        )
+        patron1 = self._patron()
+        device = DeviceToken.create(
+            self._db, DeviceTokenTypes.FCM_ANDROID, "xxxx", patron1
+        )
+        assert device.id is not None
+
     def test_invalid_type(self):
         patron = self._patron()
         with pytest.raises(InvalidTokenTypeError):

@@ -88,6 +88,19 @@ class TestDeviceTokens(ControllerTest):
         patron = self._patron()
         device = DeviceToken.create(self._db, DeviceTokenTypes.FCM_IOS, "xxx", patron)
 
+        # Same patron same token
+        request = MagicMock()
+        request.patron = patron
+        request.json = {
+            "device_token": "xxx",
+            "token_type": DeviceTokenTypes.FCM_ANDROID,
+        }
+        flask.request = request
+        nested = self._db.begin_nested()  # rollback only affects device create
+        response = self.app.manager.patron_devices.create_patron_device()
+        assert response == (dict(exists=True), 200)
+
+        # different patron same token
         patron1 = self._patron()
         request = MagicMock()
         request.patron = patron1
@@ -98,7 +111,7 @@ class TestDeviceTokens(ControllerTest):
         flask.request = request
         response = self.app.manager.patron_devices.create_patron_device()
 
-        assert response == (dict(exists=True), 200)
+        assert response[1] == 201
 
     def test_delete_token(self, flask):
         patron = self._patron()
