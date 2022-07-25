@@ -1,8 +1,9 @@
 import time
 from functools import wraps
+from typing import Any, Callable, Dict
 
 
-def _signature(func, *args, **kwargs):
+def _signature(func: Callable, *args, **kwargs) -> str:
     """Create a hashable function signature
     by stringifying and joining all arguments"""
     strargs = ";".join([str(a) for a in args])
@@ -22,7 +23,7 @@ def memoize(ttls: int = 3600):
     because the first argument will always be the instance itself
     Hence the signatures will be different for each object
     """
-    cache = {}
+    cache: Dict[str, Any] = {}
 
     def outer(func):
         @wraps(func)
