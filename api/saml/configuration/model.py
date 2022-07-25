@@ -1,5 +1,6 @@
 import cgi
 import html
+from datetime import datetime
 from threading import Lock
 
 from contextlib2 import contextmanager
@@ -362,6 +363,7 @@ class SAMLSettings(dict):
     """
 
     _mutex = Lock()
+    _last_updated_at = datetime.now()
 
     def __get__(self, instance, owner):
         """Return a SETTINGS-compatible dictionary.
@@ -370,7 +372,28 @@ class SAMLSettings(dict):
         :rtype: Dict
         """
         with self._mutex:
+            fetch = False
             if not SAMLConfiguration.federated_identity_provider_entity_ids.options:
+                fetch = True
+            else:
+                from api.app import app
+
+                incommon_fed: SAMLFederation = (
+                    app._db.query(SAMLFederation)
+                    .filter(SAMLFederation.type == incommon.FEDERATION_TYPE)
+                    .first()
+                )
+                # Has the last updated time changed since this object was created?
+                # Then refresh
+                if (
+                    incommon_fed
+                    and incommon_fed.last_updated_at
+                    and incommon_fed.last_updated_at > self.__class__._last_updated_at
+                ):
+                    self.__class__._last_updated_at = incommon_fed.last_updated_at
+                    fetch = True
+
+            if fetch is True:
                 try:
                     from api.app import app
 
