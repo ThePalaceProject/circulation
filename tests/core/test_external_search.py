@@ -107,9 +107,7 @@ class TestExternalSearch(ExternalSearchTest):
 
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             Mock(self._db)
-        assert "Exception communicating with Elasticsearch server: " in str(
-            excinfo.value
-        )
+        assert "Exception communicating with Opensearch server: " in str(excinfo.value)
         assert "very bad" in str(excinfo.value)
 
     def test_works_index_name(self):
@@ -316,7 +314,7 @@ class TestExternalSearch(ExternalSearchTest):
         collection = self._collection()
 
         search_result = MockSearchResult("Sample Book Title", "author", {}, "id")
-        index.index("index", "doc type", "id", search_result)
+        index.index("index", "id", search_result)
         test_results = [x for x in index._run_self_tests(self._db, in_testing=True)]
 
         assert "Search results for 'a search term':" == test_results[0].name
