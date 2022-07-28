@@ -579,6 +579,11 @@ class OverdriveAPI(
 
             raise e
 
+        fulfillment_force_redirect = internal_format in [
+            "ebook-epub-open",
+            "ebook-pdf-open",
+        ]
+
         return FulfillmentInfo(
             licensepool.collection,
             licensepool.data_source.name,
@@ -588,6 +593,7 @@ class OverdriveAPI(
             content_type=media_type,
             content=None,
             content_expires=None,
+            content_link_redirect=fulfillment_force_redirect,
         )
 
     def get_fulfillment_link(

@@ -192,6 +192,7 @@ class FulfillmentInfo(CirculationInfo):
         content_type,
         content,
         content_expires,
+        content_link_redirect=False,
     ):
         """Constructor.
 
@@ -224,6 +225,7 @@ class FulfillmentInfo(CirculationInfo):
         self.content_type = content_type
         self.content = content
         self.content_expires = content_expires
+        self.content_link_redirect = content_link_redirect
 
     def __repr__(self):
         if self.content:
@@ -231,12 +233,13 @@ class FulfillmentInfo(CirculationInfo):
         else:
             blength = 0
         return (
-            "<FulfillmentInfo: content_link: %r, content_type: %r, content: %d bytes, expires: %r>"
+            "<FulfillmentInfo: content_link: %r, content_type: %r, content: %d bytes, expires: %r, content_link_redirect: %s>"
             % (
                 self.content_link,
                 self.content_type,
                 blength,
                 self.fd(self.content_expires),
+                self.content_link_redirect,
             )
         )
 

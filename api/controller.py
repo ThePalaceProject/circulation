@@ -1915,6 +1915,10 @@ class LoanController(CirculationManagerController):
                 content = etree.tostring(feed)
             status_code = 200
             headers["Content-Type"] = OPDSFeed.ACQUISITION_FEED_TYPE
+        elif fulfillment.content_link_redirect is True:
+            # Overdrive specific flow, the content link has no-drm linked to it
+            # So we should not be a proxy and instead redirect the client directly
+            return redirect(fulfillment.content_link)
         else:
             content = fulfillment.content
             if fulfillment.content_link:

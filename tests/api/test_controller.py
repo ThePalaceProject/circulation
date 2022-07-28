@@ -27,7 +27,7 @@ from api.authenticator import (
     LibraryAuthenticator,
     OAuthController,
 )
-from api.circulation import FulfillmentInfo, HoldInfo, LoanInfo
+from api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
 from api.circulation_exceptions import *
 from api.circulation_exceptions import RemoteInitiatedServerError
 from api.config import Configuration, temp_config
@@ -120,6 +120,8 @@ from core.model import (
     get_one_or_create,
     tuple_to_numericrange,
 )
+from core.model.licensing import LicensePool
+from core.model.work import Work
 from core.opds import AcquisitionFeed, NavigationFacets, NavigationFeed
 from core.problem_details import *
 from core.testing import DummyHTTPClient, MockRequestsResponse
@@ -2400,6 +2402,59 @@ class TestLoanController(CirculationControllerTest):
 
             assert "here's your book" == response.get_data(as_text=True)
             assert [] == self._db.query(Loan).all()
+
+    def test_no_drm_overdrive_fulfill(self):
+        """A very specific flow, wherein an overdrive work does not have DRM
+        for it's fulfillment. In which case we must simply redirect the client
+        to the non-DRM'd location instead doing a proxy download"""
+        # setup the patron, work and loan
+        patron = self._patron()
+        work: Work = self._work(
+            with_license_pool=True, data_source_name=DataSource.OVERDRIVE
+        )
+        pool: LicensePool = work.active_license_pool()
+        pool.loan_to(patron)
+        controller = self.manager.loans
+
+        # This work has a no-DRM fulfillment criteria
+        lpdm = pool.set_delivery_mechanism(
+            MediaTypes.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.NO_DRM,
+            RightsStatus.IN_COPYRIGHT,
+        )
+        lpdm.delivery_mechanism.default_client_can_fulfill = True
+
+        # Mock out the flow
+        overdrive_api = MagicMock()
+        overdrive_api.fulfill.return_value = FulfillmentInfo(
+            self._default_collection,
+            DataSource.OVERDRIVE,
+            "overdrive",
+            pool.identifier.identifier,
+            "https://example.org/redirect_to_epub",
+            MediaTypes.EPUB_MEDIA_TYPE,
+            "",
+            None,
+            content_link_redirect=True,
+        )
+        controller.can_fulfill_without_loan = MagicMock(return_value=False)
+        controller.authenticated_patron_from_request = MagicMock(return_value=patron)
+
+        with self.request_context_with_library(
+            "/",
+            library=self._default_library,
+            headers=dict(Authorization=self.valid_auth),
+        ):
+            self.manager.circulation_apis[self._default_library.id] = CirculationAPI(
+                self._db, self._default_library
+            )
+            controller.circulation.api_for_collection[
+                self._default_collection.id
+            ] = overdrive_api
+            response = controller.fulfill(pool.id, lpdm.delivery_mechanism.id)
+
+        assert response.status_code == 302
+        assert response.location == "https://example.org/redirect_to_epub"
 
     def test_revoke_loan(self):
         with self.request_context_with_library(
