@@ -4,9 +4,10 @@ import os
 import random
 from datetime import timedelta
 from typing import Dict
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
+from requests import Response
 from sqlalchemy.orm.exc import StaleDataError
 
 from api.authenticator import BasicAuthenticationProvider
@@ -1565,6 +1566,51 @@ class TestOverdriveAPI(OverdriveAPITest):
         )
         with pytest.raises(CannotFulfill):
             od_api.fulfillment_authorization_header
+
+    def test_no_drm_fulfillment(self):
+        patron = self._patron()
+        work = self._work(with_license_pool=True)
+        patron.authorization_identifier = "barcode"
+        self._default_collection.external_integration.protocol = "Overdrive"
+        self._default_collection.external_account_id = 1
+        self._default_collection.external_integration.setting(
+            OverdriveConfiguration.OVERDRIVE_CLIENT_KEY
+        ).value = "user"
+        self._default_collection.external_integration.setting(
+            OverdriveConfiguration.OVERDRIVE_CLIENT_SECRET
+        ).value = "password"
+        self._default_collection.external_integration.setting(
+            OverdriveConfiguration.OVERDRIVE_WEBSITE_ID
+        ).value = "100"
+
+        od_api = OverdriveAPI(self._db, self._default_collection)
+        od_api._server_nickname = OverdriveConfiguration.TESTING_SERVERS
+
+        # Load the mock API data
+        with open("tests/api/files/overdrive/no_drm_fulfill.json") as fp:
+            api_data = json.load(fp)
+
+        # Mock out the flow
+        od_api.get_loan = MagicMock(return_value=api_data["loan"])
+
+        mock_lock_in_response = create_autospec(Response)
+        mock_lock_in_response.status_code = 200
+        mock_lock_in_response.json.return_value = api_data["lock_in"]
+        od_api.lock_in_format = MagicMock(return_value=mock_lock_in_response)
+
+        od_api.get_fulfillment_link_from_download_link = MagicMock(
+            return_value=(
+                "https://example.org/epub-redirect",
+                "application/epub+zip",
+            )
+        )
+
+        fulfill = od_api.fulfill(
+            patron, "pin", work.active_license_pool(), "ebook-epub-open"
+        )
+
+        assert fulfill.content_link_redirect == True
+        assert fulfill.content_link == "https://example.org/epub-redirect"
 
 
 class TestOverdriveAPICredentials(OverdriveAPITest):

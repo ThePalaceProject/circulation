@@ -1915,6 +1915,9 @@ class LoanController(CirculationManagerController):
                 content = etree.tostring(feed)
             status_code = 200
             headers["Content-Type"] = OPDSFeed.ACQUISITION_FEED_TYPE
+        elif fulfillment.content_link_redirect is True:
+            # The fulfillment API has asked us to not be a proxy and instead redirect the client directly
+            return redirect(fulfillment.content_link)
         else:
             content = fulfillment.content
             if fulfillment.content_link:
