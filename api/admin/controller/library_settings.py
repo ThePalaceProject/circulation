@@ -356,7 +356,9 @@ class LibrarySettingsController(SettingsController):
             if type == "image":
                 value = self.image_setting(setting) or default_value
             else:
-                value = self.scalar_setting(setting) or default_value
+                value = self.scalar_setting(setting)
+                # An empty "" value or 0 value is valid, hence check for None
+                value = default_value if value is None else value
         return value
 
     def scalar_setting(self, setting):
