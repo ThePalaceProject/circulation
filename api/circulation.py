@@ -219,6 +219,8 @@ class FulfillmentInfo(CirculationInfo):
             `content_type`).
         :param content_expires: A time after which the "next step"
             link or content will no longer be usable.
+        :param content_link_redirect: Force the API layer to redirect the client to
+            the content_link
         """
         super().__init__(collection, data_source_name, identifier_type, identifier)
         self.content_link = content_link

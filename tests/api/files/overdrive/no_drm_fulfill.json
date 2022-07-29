@@ -1,0 +1,46 @@
+{
+    "loan": {
+        "reserveId": "A4466636-34F5-495A-92EE-3A9C701F46CF",
+        "crossRefId": 432890,
+        "expires": "2022-07-27T10:38:06Z",
+        "isFormatLockedIn": false,
+        "formats": [
+            {
+                "reserveId": "A4466636-34F5-495A-92EE-3A9C701F46CF",
+                "formatType": "ebook-overdrive",
+                "links": {
+                    "self": {
+                        "href": "https://example.org/v1/patrons/me/checkouts/A4466636-34F5-495A-92EE-3A9C701F46CF/formats/ebook-overdrive",
+                        "type": "application/vnd.overdrive.circulation.api+json"
+                    }
+                },
+                "linkTemplates": {
+                    "downloadLink": {
+                        "href": "https://example.org/v1/patrons/me/checkouts/A4466636-34F5-495A-92EE-3A9C701F46CF/formats/ebook-overdrive/downloadlink?errorpageurl={errorpageurl}&odreadauthurl={odreadauthurl}",
+                        "type": "application/vnd.overdrive.circulation.api+json"
+                    },
+                    "downloadLinkV2": {
+                        "href": "https://example.org/v1/patrons/me/checkouts/A4466636-34F5-495A-92EE-3A9C701F46CF/formats/ebook-overdrive/downloadlink?errorurl={errorurl}&successurl={successurl}",
+                        "type": "application/vnd.overdrive.circulation.api+json"
+                    }
+                }
+            }
+        ],
+        "checkoutDate": "2022-07-26T10:38:06Z"
+    },
+    "lock_in": {
+        "formatType": "ebook-epub-open",
+        "reserveId": "a4466636-34f5-495a-92ee-3a9c701f46cf",
+        "crossRefId": 432890,
+        "linkTemplates": {
+            "downloadLink": {
+                "href": "https://example.org/v1/patrons/me/checkouts/a4466636-34f5-495a-92ee-3a9c701f46cf/formats/ebook-epub-open/downloadlink?errorpageurl={errorpageurl}",
+                "type": "application/vnd.overdrive.circulation.api+json"
+            },
+            "downloadLinkV2": {
+                "href": "https://example.org/v1/patrons/me/checkouts/a4466636-34f5-495a-92ee-3a9c701f46cf/formats/ebook-epub-open/downloadlink?errorurl={errorurl}&successurl={successurl}",
+                "type": "application/vnd.overdrive.circulation.api+json"
+            }
+        }
+    }
+}

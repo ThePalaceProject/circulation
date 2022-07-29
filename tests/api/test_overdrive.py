@@ -1586,56 +1586,16 @@ class TestOverdriveAPI(OverdriveAPITest):
         od_api = OverdriveAPI(self._db, self._default_collection)
         od_api._server_nickname = OverdriveConfiguration.TESTING_SERVERS
 
+        # Load the mock API data
+        with open("tests/api/files/overdrive/no_drm_fulfill.json") as fp:
+            api_data = json.load(fp)
+
         # Mock out the flow
-        od_api.get_loan = MagicMock(
-            return_value={
-                "reserveId": "A4466636-34F5-495A-92EE-3A9C701F46CF",
-                "crossRefId": 432890,
-                "expires": "2022-07-27T10:38:06Z",
-                "isFormatLockedIn": False,
-                "formats": [
-                    {
-                        "reserveId": "A4466636-34F5-495A-92EE-3A9C701F46CF",
-                        "formatType": "ebook-overdrive",
-                        "links": {
-                            "self": {
-                                "href": "https://example.org/v1/patrons/me/checkouts/A4466636-34F5-495A-92EE-3A9C701F46CF/formats/ebook-overdrive",
-                                "type": "application/vnd.overdrive.circulation.api+json",
-                            }
-                        },
-                        "linkTemplates": {
-                            "downloadLink": {
-                                "href": "https://example.org/v1/patrons/me/checkouts/A4466636-34F5-495A-92EE-3A9C701F46CF/formats/ebook-overdrive/downloadlink?errorpageurl={errorpageurl}&odreadauthurl={odreadauthurl}",
-                                "type": "application/vnd.overdrive.circulation.api+json",
-                            },
-                            "downloadLinkV2": {
-                                "href": "https://example.org/v1/patrons/me/checkouts/A4466636-34F5-495A-92EE-3A9C701F46CF/formats/ebook-overdrive/downloadlink?errorurl={errorurl}&successurl={successurl}",
-                                "type": "application/vnd.overdrive.circulation.api+json",
-                            },
-                        },
-                    }
-                ],
-                "checkoutDate": "2022-07-26T10:38:06Z",
-            }
-        )
+        od_api.get_loan = MagicMock(return_value=api_data["loan"])
 
         mock_lock_in_response = create_autospec(Response)
         mock_lock_in_response.status_code = 200
-        mock_lock_in_response.json.return_value = {
-            "formatType": "ebook-epub-open",
-            "reserveId": "a4466636-34f5-495a-92ee-3a9c701f46cf",
-            "crossRefId": 432890,
-            "linkTemplates": {
-                "downloadLink": {
-                    "href": "https://example.org/v1/patrons/me/checkouts/a4466636-34f5-495a-92ee-3a9c701f46cf/formats/ebook-epub-open/downloadlink?errorpageurl={errorpageurl}",
-                    "type": "application/vnd.overdrive.circulation.api+json",
-                },
-                "downloadLinkV2": {
-                    "href": "https://example.org/v1/patrons/me/checkouts/a4466636-34f5-495a-92ee-3a9c701f46cf/formats/ebook-epub-open/downloadlink?errorurl={errorurl}&successurl={successurl}",
-                    "type": "application/vnd.overdrive.circulation.api+json",
-                },
-            },
-        }
+        mock_lock_in_response.json.return_value = api_data["lock_in"]
         od_api.lock_in_format = MagicMock(return_value=mock_lock_in_response)
 
         od_api.get_fulfillment_link_from_download_link = MagicMock(

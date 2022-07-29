@@ -579,6 +579,7 @@ class OverdriveAPI(
 
             raise e
 
+        # In case we are a non-drm asset, we should just redirect the client to the asset directly
         fulfillment_force_redirect = internal_format in [
             "ebook-epub-open",
             "ebook-pdf-open",

@@ -2403,10 +2403,10 @@ class TestLoanController(CirculationControllerTest):
             assert "here's your book" == response.get_data(as_text=True)
             assert [] == self._db.query(Loan).all()
 
-    def test_no_drm_overdrive_fulfill(self):
-        """A very specific flow, wherein an overdrive work does not have DRM
-        for it's fulfillment. In which case we must simply redirect the client
-        to the non-DRM'd location instead doing a proxy download"""
+    def test_no_drm_fulfill(self):
+        """In case a work does not have DRM for it's fulfillment.
+        We must simply redirect the client to the non-DRM'd location
+        instead doing a proxy download"""
         # setup the patron, work and loan
         patron = self._patron()
         work: Work = self._work(
@@ -2425,8 +2425,8 @@ class TestLoanController(CirculationControllerTest):
         lpdm.delivery_mechanism.default_client_can_fulfill = True
 
         # Mock out the flow
-        overdrive_api = MagicMock()
-        overdrive_api.fulfill.return_value = FulfillmentInfo(
+        api = MagicMock()
+        api.fulfill.return_value = FulfillmentInfo(
             self._default_collection,
             DataSource.OVERDRIVE,
             "overdrive",
@@ -2448,9 +2448,7 @@ class TestLoanController(CirculationControllerTest):
             self.manager.circulation_apis[self._default_library.id] = CirculationAPI(
                 self._db, self._default_library
             )
-            controller.circulation.api_for_collection[
-                self._default_collection.id
-            ] = overdrive_api
+            controller.circulation.api_for_collection[self._default_collection.id] = api
             response = controller.fulfill(pool.id, lpdm.delivery_mechanism.id)
 
         assert response.status_code == 302
