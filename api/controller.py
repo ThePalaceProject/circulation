@@ -2441,7 +2441,7 @@ class DeviceTokensController(CirculationManagerController):
         except InvalidTokenTypeError:
             return DEVICE_TOKEN_TYPE_INVALID
         except DuplicateDeviceTokenError:
-            return DEVICE_TOKEN_ALREADY_EXISTS
+            return dict(exists=True), 200
 
         return "", 201
 

@@ -1,10 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from api.problem_details import (
-    DEVICE_TOKEN_ALREADY_EXISTS,
-    DEVICE_TOKEN_NOT_FOUND,
-    DEVICE_TOKEN_TYPE_INVALID,
-)
+from api.problem_details import DEVICE_TOKEN_NOT_FOUND, DEVICE_TOKEN_TYPE_INVALID
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from tests.api.test_controller import ControllerTest
 
@@ -102,7 +98,7 @@ class TestDeviceTokens(ControllerTest):
         flask.request = request
         response = self.app.manager.patron_devices.create_patron_device()
 
-        assert response == DEVICE_TOKEN_ALREADY_EXISTS
+        assert response == (dict(exists=True), 200)
 
     def test_delete_token(self, flask):
         patron = self._patron()
