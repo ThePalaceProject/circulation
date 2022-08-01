@@ -8,7 +8,7 @@ import stat
 import tempfile
 from io import StringIO
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from freezegun import freeze_time
@@ -37,9 +37,12 @@ from core.model import (
     WorkCoverageRecord,
     create,
     get_one,
+    get_one_or_create,
 )
 from core.model.classification import Subject
 from core.model.configuration import ExternalIntegrationLink
+from core.model.devicetokens import DeviceToken, DeviceTokenTypes
+from core.model.patron import Patron
 from core.monitor import CollectionMonitor, Monitor, ReaperMonitor
 from core.opds_import import OPDSImportMonitor
 from core.s3 import MinIOUploader, MinIOUploaderConfiguration, S3Uploader
@@ -62,6 +65,7 @@ from core.scripts import (
     LaneSweeperScript,
     LibraryInputScript,
     ListCollectionMetadataIdentifiersScript,
+    LoanNotificationsScript,
     MirrorResourcesScript,
     MockStdin,
     OPDSImportScript,
@@ -95,6 +99,7 @@ from core.testing import (
     EndToEndSearchTest,
 )
 from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
+from core.util.notifications import PushNotifications
 from core.util.worker_pools import DatabasePool
 
 
@@ -3158,6 +3163,75 @@ class TestCustomListUpdateEntriesScript(EndToEndSearchTest):
         script = CustomListUpdateEntriesScript(self._db)
         script.process_custom_list(custom_list)
         assert custom_list.auto_update_last_update == frozen_time.time_to_freeze
+
+
+class TestLoanNotificationsScript(DatabaseTest):
+    def setup_method(self):
+        super().setup_method()
+        self.script = LoanNotificationsScript(_db=self._db)
+        self.patron: Patron = self._patron()
+        self.work: Work = self._work(with_license_pool=True)
+        self.device_token, _ = get_one_or_create(
+            self._db,
+            DeviceToken,
+            patron=self.patron,
+            token_type=DeviceTokenTypes.FCM_ANDROID,
+            device_token="atesttoken",
+        )
+        PushNotifications.TESTING_MODE = True
+
+    @patch("core.scripts.PushNotifications")
+    def test_loan_notification(self, mock_notf: MagicMock):
+        loan, _ = self.work.active_license_pool().loan_to(
+            self.patron,
+            utc_now(),
+            utc_now() + datetime.timedelta(days=1, hours=1),
+        )
+
+        work2 = self._work(with_license_pool=True)
+        loan2, _ = work2.active_license_pool().loan_to(
+            self.patron,
+            utc_now(),
+            utc_now() + datetime.timedelta(days=2, hours=1),
+        )  # Should not get notified
+
+        self.script.process_loan(loan)
+        self.script.process_loan(loan2)
+
+        assert mock_notf.send_loan_expiry_message.call_count == 1
+        assert mock_notf.send_loan_expiry_message.call_args[0] == (
+            loan,
+            1,
+            [self.device_token],
+        )
+
+    def test_do_run(self):
+        loan, _ = self.work.active_license_pool().loan_to(
+            self.patron,
+            utc_now(),
+            utc_now() + datetime.timedelta(days=1, hours=1),
+        )
+
+        work2 = self._work(with_license_pool=True)
+        loan2, _ = work2.active_license_pool().loan_to(
+            self.patron,
+            utc_now(),
+            utc_now() + datetime.timedelta(days=2, hours=1),
+        )
+
+        self.script.process_loan = MagicMock()
+        self.script.BATCH_SIZE = 1
+        self.script.do_run()
+
+        assert self.script.process_loan.call_count == 2
+        assert self.script.process_loan.call_args_list == [
+            call(
+                loan,
+            ),
+            call(
+                loan2,
+            ),
+        ]
 
 
 class TestWorkConsolidationScript:

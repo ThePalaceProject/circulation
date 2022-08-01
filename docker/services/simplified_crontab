@@ -125,3 +125,7 @@ HOME=/var/www/circulation
 # SAML
 #
 0 5 * * * root core/bin/run saml_monitor >> /var/log/cron.log 2>&1
+
+# Notifications
+#
+10 12 * * * root core/bin/run loan_notifications >> /var/log/cron.log 2>&1

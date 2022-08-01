@@ -23,7 +23,7 @@ from .patron import Hold, Loan, Patron
 
 if TYPE_CHECKING:
     # Only import for type checking, since it creates an import cycle
-    from core.model import Collection, Resource  # noqa: autoflake
+    from core.model import Collection, Identifier, Resource  # noqa: autoflake
 
     from ..analytics import Analytics
 
@@ -178,6 +178,7 @@ class LicensePool(Base):
     # Identifier.
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
+    identifier: "Identifier"
 
     # Each LicensePool belongs to one Collection.
     collection_id = Column(
