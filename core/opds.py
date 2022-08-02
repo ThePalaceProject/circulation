@@ -191,6 +191,8 @@ class Annotator:
 
     @classmethod
     def samples(cls, edition: Edition) -> List[Hyperlink]:
+        # TODO: Remove this short-circuit once client apps properly handle preview links.
+        return []
         if not edition:
             return []
         _db = Session.object_session(edition)
