@@ -43,6 +43,8 @@ class TestPushNotifications(DatabaseTest):
                     body=f"Your loan on {work.presentation_edition.title} is expiring soon",
                     event_type=NotificationConstants.LOAN_EXPIRY_TYPE,
                     loans_endpoint="http://localhost/default/loans",
+                    external_identifier=patron.external_identifier,
+                    authorization_identifier=patron.authorization_identifier,
                     identifier=work.presentation_edition.primary_identifier.identifier,
                     type=work.presentation_edition.primary_identifier.type,
                     library=loan.library.short_name,
