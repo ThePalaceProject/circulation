@@ -5,7 +5,9 @@ from typing import List
 from urllib.parse import quote
 
 from lxml import etree
-from sqlalchemy.orm import joinedload
+
+# TODO: Uncomment this import when we re-activate sample links.
+# from sqlalchemy.orm import joinedload
 from sqlalchemy.orm.session import Session
 
 from core.external_search import QueryParseException
@@ -193,19 +195,19 @@ class Annotator:
     def samples(cls, edition: Edition) -> List[Hyperlink]:
         # TODO: Remove this short-circuit once client apps properly handle preview links.
         return []
-        if not edition:
-            return []
-        _db = Session.object_session(edition)
-        links = (
-            _db.query(Hyperlink)
-            .filter(
-                Hyperlink.rel == Hyperlink.SAMPLE,
-                Hyperlink.identifier_id == edition.primary_identifier_id,
-            )
-            .options(joinedload(Hyperlink.resource))
-            .all()
-        )
-        return links
+        # if not edition:
+        #     return []
+        # _db = Session.object_session(edition)
+        # links = (
+        #     _db.query(Hyperlink)
+        #     .filter(
+        #         Hyperlink.rel == Hyperlink.SAMPLE,
+        #         Hyperlink.identifier_id == edition.primary_identifier_id,
+        #     )
+        #     .options(joinedload(Hyperlink.resource))
+        #     .all()
+        # )
+        # return links
 
     @classmethod
     def cover_links(cls, work):
