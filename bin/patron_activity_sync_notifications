@@ -1,0 +1,12 @@
+#!/usr/bin/env python
+"""Send out notifications to Patrons that need their loan/hold activity synced"""
+import os
+import sys
+
+bin_dir = os.path.split(__file__)[0]
+package_dir = os.path.join(bin_dir, "..")
+sys.path.append(os.path.abspath(package_dir))
+from core.jobs.patron_activity_sync import PatronActivitySyncNotificationScript
+from core.model import production_session
+
+PatronActivitySyncNotificationScript(production_session()).run()
