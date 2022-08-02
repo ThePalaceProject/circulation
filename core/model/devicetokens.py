@@ -1,6 +1,6 @@
 from typing import Type, TypeVar, Union
 
-from sqlalchemy import Column, Enum, ForeignKey, Integer, Unicode
+from sqlalchemy import Column, Enum, ForeignKey, Index, Integer, Unicode
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import backref, relationship
 
@@ -39,7 +39,13 @@ class DeviceToken(Base):
     )
     token_type = Column(token_type_enum, nullable=False)
 
-    device_token = Column(Unicode, nullable=False, unique=True, index=True)
+    device_token = Column(Unicode, nullable=False, index=True)
+
+    __table_args__ = (
+        Index(
+            "ix_devicetokens_device_token_patron", device_token, patron_id, unique=True
+        ),
+    )
 
     @classmethod
     def create(
