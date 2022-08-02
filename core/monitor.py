@@ -664,6 +664,16 @@ class NotPresentationReadyWorkSweepMonitor(WorkSweepMonitor):
         return super().item_query().filter(not_presentation_ready)
 
 
+class PatronSweepMonitor(SweepMonitor):
+    """Sweep through all Patrons"""
+
+    MODEL_CLASS: Optional[Type[Base]] = Patron
+
+    def scope_to_collection(self, qu, collection):
+        """Patrons aren't scoped to a collection"""
+        return qu
+
+
 # SweepMonitors that do something specific.
 
 
