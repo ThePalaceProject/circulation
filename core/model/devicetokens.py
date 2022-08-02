@@ -66,6 +66,7 @@ class DeviceToken(Base):
             db.add(device)
             db.commit()
         except IntegrityError as e:
+            db.rollback()
             if "device_token" in e.args[0]:
                 raise DuplicateDeviceTokenError() from e
             else:
