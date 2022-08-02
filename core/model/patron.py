@@ -22,7 +22,6 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 
 from core.model.hybrid import hybrid_property
-from core.model.library import Library
 
 from ..classifier import Classifier
 from ..user_profile import ProfileStorage
@@ -33,6 +32,7 @@ from .credential import Credential
 if TYPE_CHECKING:
     from . import LicensePool
     from .devicetokens import DeviceToken
+    from .library import Library
 
 
 class LoanAndHoldMixin:
@@ -66,7 +66,7 @@ class Patron(Base):
     # individual human being may patronize multiple libraries, but
     # they will have a different patron account at each one.
     library_id = Column(Integer, ForeignKey("libraries.id"), index=True, nullable=False)
-    library: Library
+    library: "Library"
 
     # The patron's permanent unique identifier in an external library
     # system, probably never seen by the patron.
