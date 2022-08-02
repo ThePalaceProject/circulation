@@ -2,7 +2,7 @@
 
 import logging
 from collections import Counter
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type, TypeVar, cast
 
@@ -1584,6 +1584,7 @@ class Work(Base):
                 "publisher",
                 "imprint",
                 "permanent_work_id",
+                "published",
             ],
             "contribution": ["role"],
             "contributor": ["display_name", "sort_name", "family_name", "lc", "viaf"],
@@ -1606,6 +1607,8 @@ class Work(Base):
                 return float(value)
             elif isinstance(value, datetime):
                 return value.timestamp()
+            elif isinstance(value, date):
+                return datetime(value.year, value.month, value.day).timestamp()
             return value
 
         def _set_value(parent, key, target):

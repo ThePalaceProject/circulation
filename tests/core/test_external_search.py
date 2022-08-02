@@ -355,6 +355,25 @@ class TestExternalSearch(ExternalSearchTest):
         result = json.loads(test_results[5].result)
         assert {collection.name: 1} == result
 
+    def test_update_mapping(self):
+        self.search.mapping.add_properties({"long": ["new_long_property"]})
+        put_mapping = self.search._update_index_mapping(dry_run=True)
+        assert "new_long_property" in put_mapping
+        put_mapping = self.search._update_index_mapping(dry_run=False)
+        assert "new_long_property" in put_mapping
+        put_mapping = self.search._update_index_mapping(dry_run=True)
+        assert "new_long_property" not in put_mapping
+
+        new_mapping = self.search.indices.get_mapping(
+            self.search.works_index, self.search.work_document_type
+        )
+        assert (
+            "new_long_property"
+            in new_mapping[self.search.works_index]["mappings"][
+                self.search.work_document_type
+            ]["properties"]
+        )
+
 
 class TestCurrentMapping:
     def test_character_filters(self):
@@ -4483,7 +4502,6 @@ class TestSearchIndexCoverageProvider(DatabaseTest):
 
         # Top level keys should be the same
         assert len(result) == len(inapp)
-        assert result[0].keys() == inapp[0].keys()
 
         inapp_work1 = list(filter(lambda x: x["work_id"] == work1.id, inapp))[0]
         inapp_work2 = list(filter(lambda x: x["work_id"] == work2.id, inapp))[0]

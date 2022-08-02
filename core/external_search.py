@@ -274,12 +274,37 @@ class ExternalSearchIndex(HasSelfTests):
         if not self.indices.exists(self.works_index):
             # That index doesn't actually exist. Set it up.
             self.setup_index()
+        else:
+            # Update the mapping incase there are any new properties
+            self._update_index_mapping()
 
         # Make sure the alias points to the most recent index.
         self.setup_current_alias(_db)
 
         # Make sure the stored scripts for the latest mapping exist.
         self.set_stored_scripts()
+
+    def _update_index_mapping(self, dry_run=False) -> Dict:
+        """Updates the index mapping with any NEW properties added"""
+
+        current_mapping: Dict = self.indices.get_mapping(self.works_index)[
+            self.works_index
+        ]["mappings"][self.work_document_type]["properties"]
+        new_mapping = self.mapping.body()["mappings"][self.work_document_type][
+            "properties"
+        ]
+        puts = {}
+        for name, v in new_mapping.items():
+            split_name = name.split(".")[0]  # dot based names become dicts
+            if split_name not in current_mapping:
+                puts[name] = v
+
+        if not dry_run and puts:
+            self.indices.put_mapping(
+                dict(properties=puts), self.work_document_type, self.works_index
+            )
+            self.log.info(f"Updated {self.works_index} mapping with {puts}")
+        return puts
 
     def setup_current_alias(self, _db):
         """Finds or creates the works_alias as named by the current site
@@ -1101,7 +1126,7 @@ class CurrentMapping(Mapping):
             "icu_collation_keyword": ["sort_title"],
             "sort_author_keyword": ["sort_author"],
             "integer": ["series_position", "work_id"],
-            "long": ["last_update_time"],
+            "long": ["last_update_time", "published"],
         }
         self.add_properties(fields_by_type)
 
