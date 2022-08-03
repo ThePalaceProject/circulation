@@ -4745,6 +4745,19 @@ class TestJSONQuery(ExternalSearchTest):
             }
         }
 
+    def test_field_transforms(self):
+        q = self._jq(self._leaf("classification", "cls"))
+        assert q.elasticsearch_query.to_dict() == {
+            "term": {"classifications.term.keyword": "cls"}
+        }
+        q = self._jq(self._leaf("open_access", True))
+        assert q.elasticsearch_query.to_dict() == {
+            "nested": {
+                "path": "licensepools",
+                "query": {"term": {"licensepools.open_access": True}},
+            }
+        }
+
 
 class TestExternalSearchJSONQuery(EndToEndSearchTest):
     def _leaf(self, key, value, op="eq"):

@@ -2089,7 +2089,7 @@ class JSONQuery(Query):
 
         nested_path = self._nested_path(key)
         if self._is_keyword(key):
-            key = query[self.QueryLeaf.KEY] + ".keyword"
+            key = key + ".keyword"
 
         value = query[self.QueryLeaf.VALUE]
 
