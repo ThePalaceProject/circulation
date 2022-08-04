@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from core.model.library import Library  # noqa: autoflake
     from core.model.licensing import LicensePool  # noqa: autoflake
     from .devicetokens import DeviceToken
+    from .library import Library
 
 
 class LoanAndHoldMixin:
