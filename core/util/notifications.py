@@ -113,6 +113,7 @@ class PushNotifications:
 
     @classmethod
     def send_holds_notifications(cls, holds: List[Hold]) -> List[str]:
+        """Send out notifcations to all patron devices that their hold is ready for checkout"""
         if not holds:
             return []
 

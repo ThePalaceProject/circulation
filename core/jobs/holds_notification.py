@@ -7,7 +7,7 @@ from core.util.notifications import PushNotifications
 
 
 class HoldsNotificationMonitor(SweepMonitor):
-    """Sweep across all holds that are ready to be checked out by the user"""
+    """Sweep across all holds that are ready to be checked out by the user (position=0)"""
 
     MODEL_CLASS: Optional[Type[Base]] = Hold
     SERVICE_NAME: Optional[str] = "Holds Notification"
