@@ -561,10 +561,12 @@ class Hold(Base, LoanAndHoldMixin):
     __tablename__ = "holds"
     id = Column(Integer, primary_key=True)
     patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
+    patron: Patron
     integration_client_id = Column(
         Integer, ForeignKey("integrationclients.id"), index=True
     )
     license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
+    license_pool: "LicensePool"
     start = Column(DateTime(timezone=True), index=True)
     end = Column(DateTime(timezone=True), index=True)
     position = Column(Integer, index=True)
