@@ -173,3 +173,9 @@ class OPDSEntryResponse(Response):
     def __init__(self, response=None, **kwargs):
         kwargs.setdefault("mimetype", OPDSFeed.ENTRY_TYPE)
         super().__init__(response, **kwargs)
+
+
+def boolean_value(value):
+    """Convert a string request value into a boolean, used for form encoded requests
+    JSON encoded requests will get automatically converted"""
+    return True if value in ["true", "True", True] else False

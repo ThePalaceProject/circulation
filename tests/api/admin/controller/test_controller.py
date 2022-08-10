@@ -1365,6 +1365,7 @@ class TestCustomListsController(AdminControllerTest):
         # Test fails without expiring the ORM cache
         self._db.expire_all()
 
+        update_query = {"query": {"key": "title", "value": "title"}}
         with self.request_context_with_library_and_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
@@ -1373,6 +1374,8 @@ class TestCustomListsController(AdminControllerTest):
                     ("entries", json.dumps(new_entries)),
                     ("deletedEntries", json.dumps(deletedEntries)),
                     ("collections", json.dumps([c.id for c in new_collections])),
+                    ("auto_update", "true"),
+                    ("auto_update_query", json.dumps(update_query)),
                 ]
             )
 
@@ -1394,6 +1397,8 @@ class TestCustomListsController(AdminControllerTest):
         assert "new name" == list.name
         assert {w2, w3} == {entry.work for entry in list.entries}
         assert new_collections == list.collections
+        assert True == list.auto_update_enabled
+        assert json.dumps(update_query) == list.auto_update_query
 
         # If we were using a real search engine instance, the lane's size would be set
         # to 2, since that's the number of works that would be associated with the
