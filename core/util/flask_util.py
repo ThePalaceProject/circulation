@@ -175,7 +175,7 @@ class OPDSEntryResponse(Response):
         super().__init__(response, **kwargs)
 
 
-def boolean_value(value):
+def boolean_value(value: str) -> bool:
     """Convert a string request value into a boolean, used for form encoded requests
     JSON encoded requests will get automatically converted"""
-    return True if value in ["true", "True", True] else False
+    return True if value in ["true", "True", True, "1"] else False

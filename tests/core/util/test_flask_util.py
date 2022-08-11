@@ -5,9 +5,15 @@ import time
 from wsgiref.handlers import format_date_time
 
 from flask import Response as FlaskResponse
+from parameterized import parameterized
 
 from core.util.datetime_helpers import utc_now
-from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse, Response
+from core.util.flask_util import (
+    OPDSEntryResponse,
+    OPDSFeedResponse,
+    Response,
+    boolean_value,
+)
 from core.util.opds_writer import OPDSFeed
 
 
@@ -147,3 +153,21 @@ class TestOPDSEntryResponse:
         override_defaults = c("an entry", content_type="content/type")
         assert "content/type" == override_defaults.content_type
         assert "content/type" == override_defaults.mimetype
+
+
+class TestMethods:
+    @parameterized.expand(
+        [
+            ("true", True),
+            ("True", True),
+            (True, True),
+            ("1", True),
+            ("false", False),
+            ("False", False),
+            ("0", False),
+            ("t", False),
+            (None, False),
+        ]
+    )
+    def test_boolean_value(self, value, result):
+        assert boolean_value(value) == result
