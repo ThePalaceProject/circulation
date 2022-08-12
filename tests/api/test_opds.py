@@ -842,7 +842,9 @@ class TestLibraryAnnotator(VendorIDTest):
         annotator.annotate_work_entry(work, None, edition, identifier, feed, entry)
         parsed = feedparser.parse(etree.tostring(entry))
         [entry_parsed] = parsed["entries"]
-        [feed_link] = [l for l in entry_parsed["links"] if l.rel == Hyperlink.SAMPLE]
+        [feed_link] = [
+            l for l in entry_parsed["links"] if l.rel == Hyperlink.CLIENT_SAMPLE
+        ]
         assert feed_link["href"] == link.resource.url
         assert feed_link["type"] == link.resource.representation.media_type
 
