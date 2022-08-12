@@ -550,11 +550,11 @@ class TestPatron:
         assert recently == patron.last_loan_activity_sync
 
         # If it's _not_ relatively recent, attempting to access it
-        # clears it out.
+        # doesn't clear it out, but accessor returns None
         patron.last_loan_activity_sync = long_ago
         assert long_ago == patron._last_loan_activity_sync
         assert None == patron.last_loan_activity_sync
-        assert None == patron._last_loan_activity_sync
+        assert long_ago == patron._last_loan_activity_sync
 
     def test_root_lane(self, db: DatabaseTransactionFixture):
         root_1 = db.lane()
