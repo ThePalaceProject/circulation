@@ -3164,7 +3164,7 @@ class TestCustomListUpdateEntriesScript(EndToEndSearchTest):
         script.process_custom_list(custom_list)
 
         assert mock_index().query_works.call_count == 1
-        filter: Filter = mock_index().query_works.call_args_list[0].args[1]
+        filter: Filter = mock_index().query_works.call_args_list[0][0][1]
         assert filter.sort_order[0] == {
             "sort_title": "asc"
         }  # since we asked for title ordering this should come up first
