@@ -79,7 +79,7 @@ from core.query.customlist import CustomListQueries
 from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
 from core.util.datetime_helpers import utc_now
-from core.util.flask_util import OPDSFeedResponse
+from core.util.flask_util import OPDSFeedResponse, boolean_value
 from core.util.http import HTTP
 from core.util.problem_detail import ProblemDetail
 
@@ -1007,7 +1007,9 @@ class CustomListsController(AdminCirculationManagerController):
             )
 
             # For auto updating lists
-            auto_update = flask.request.form.get("auto_update", False)
+            auto_update = flask.request.form.get(
+                "auto_update", False, type=boolean_value
+            )
             auto_update_query = flask.request.form.get("auto_update_query")
 
             return self._create_or_update_list(
