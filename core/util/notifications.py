@@ -23,7 +23,7 @@ class PushNotifications:
     VALID_TOKEN_TYPES = [DeviceTokenTypes.FCM_ANDROID, DeviceTokenTypes.FCM_IOS]
 
     @classmethod
-    def notifiable_tokens(cls, patron: Patron):
+    def notifiable_tokens(cls, patron: Patron) -> List[DeviceToken]:
         return [
             token
             for token in patron.device_tokens
