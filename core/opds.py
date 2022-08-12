@@ -1434,7 +1434,7 @@ class AcquisitionFeed(OPDSFeed):
         for link in sample_links:
             links.append(
                 AtomFeed.link(
-                    rel=link.rel,
+                    rel=Hyperlink.CLIENT_SAMPLE,
                     href=link.resource.url,
                     type=link.resource.representation.media_type,
                 )

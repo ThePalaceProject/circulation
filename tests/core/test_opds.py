@@ -747,7 +747,7 @@ class TestOPDS(DatabaseTest):
 
         atom_links = OPDSXMLParser._xpath(
             etree.parse(StringIO(str(feed))),
-            f"atom:entry/atom:link[@rel='{Hyperlink.SAMPLE}']",
+            f"atom:entry/atom:link[@rel='{Hyperlink.CLIENT_SAMPLE}']",
         )
 
         assert len(atom_links) == 2

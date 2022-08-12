@@ -235,6 +235,9 @@ class LinkRelations:
     AUTHOR = "http://schema.org/author"
     ALTERNATE = "alternate"
 
+    # The rel for a link we feed to clients for samples/previews.
+    CLIENT_SAMPLE = "preview"
+
     # A uri rel type for authentication documents with a vendor specific "link"
     PATRON_PASSWORD_RESET = (
         "http://librarysimplified.org/terms/rel/patron-password-reset"
