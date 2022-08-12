@@ -8,7 +8,7 @@ import stat
 import tempfile
 from io import StringIO
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from freezegun import freeze_time
@@ -16,7 +16,7 @@ from parameterized import parameterized
 
 from core.classifier import Classifier
 from core.config import CannotLoadConfiguration
-from core.external_search import MockExternalSearchIndex
+from core.external_search import Filter, MockExternalSearchIndex
 from core.lane import Lane, WorkList
 from core.metadata_layer import LinkData, TimestampData
 from core.mirror import MirrorUploader
@@ -3145,6 +3145,31 @@ class TestCustomListUpdateEntriesScript(EndToEndSearchTest):
         # last updated time has updated correctly
         assert custom_list.auto_update_last_update == frozen_time.time_to_freeze
         assert custom_list1.auto_update_last_update == frozen_time.time_to_freeze
+
+    @patch("core.scripts.ExternalSearchIndex")
+    def test_search_facets(self, mock_index):
+        last_updated = datetime.datetime.now() - datetime.timedelta(hours=1)
+        custom_list, _ = self._customlist()
+        custom_list.library = self._default_library
+        custom_list.auto_update_enabled = True
+        custom_list.auto_update_query = json.dumps(
+            dict(query=dict(key="title", value="Populated Book"))
+        )
+        custom_list.auto_update_facets = json.dumps(
+            dict(order="title", languages="fr", media=["book", "audio"])
+        )
+        custom_list.auto_update_last_update = last_updated
+
+        script = CustomListUpdateEntriesScript(self._db)
+        script.process_custom_list(custom_list)
+
+        assert mock_index().query_works.call_count == 1
+        filter: Filter = mock_index().query_works.call_args_list[0].args[1]
+        assert filter.sort_order[0] == {
+            "sort_title": "asc"
+        }  # since we asked for title ordering this should come up first
+        assert filter.languages == ["fr"]
+        assert filter.media == ["book", "audio"]
 
     @freeze_time("2022-01-01", as_kwarg="frozen_time")
     def test_no_last_update(self, frozen_time=None):

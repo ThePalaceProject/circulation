@@ -59,6 +59,7 @@ from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
 from core.util.datetime_helpers import utc_now
 from core.util.http import HTTP
+from core.util.problem_detail import ProblemDetail
 from tests.api.test_controller import CirculationControllerTest
 
 
@@ -1366,6 +1367,7 @@ class TestCustomListsController(AdminControllerTest):
         self._db.expire_all()
 
         update_query = {"query": {"key": "title", "value": "title"}}
+        update_facets = {"order": "title"}
         with self.request_context_with_library_and_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
@@ -1376,6 +1378,7 @@ class TestCustomListsController(AdminControllerTest):
                     ("collections", json.dumps([c.id for c in new_collections])),
                     ("auto_update", "true"),
                     ("auto_update_query", json.dumps(update_query)),
+                    ("auto_update_facets", json.dumps(update_facets)),
                 ]
             )
 
@@ -1399,6 +1402,7 @@ class TestCustomListsController(AdminControllerTest):
         assert new_collections == list.collections
         assert True == list.auto_update_enabled
         assert json.dumps(update_query) == list.auto_update_query
+        assert json.dumps(update_facets) == list.auto_update_facets
 
         # If we were using a real search engine instance, the lane's size would be set
         # to 2, since that's the number of works that would be associated with the
@@ -1422,6 +1426,72 @@ class TestCustomListsController(AdminControllerTest):
                 AdminNotAuthorized,
                 self.manager.admin_custom_lists_controller.custom_list,
                 list.id,
+            )
+
+    def test_custom_list_auto_update_cases(self):
+        list, _ = self._customlist(
+            data_source_name=DataSource.LIBRARY_STAFF,
+        )
+        list.library = self._default_library
+
+        update_query = {"query": {"key": "title", "value": "title"}}
+        update_facets = {"order": "title"}
+        with self.request_context_with_library_and_admin("/", method="POST"):
+            flask.request.form = MultiDict(
+                [
+                    ("id", str(list.id)),
+                    ("name", "new name"),
+                    ("entries", "[]"),
+                    ("deletedEntries", "[]"),
+                    ("collections", "[]"),
+                    ("auto_update", "true"),
+                    ("auto_update_query", json.dumps(update_query)),
+                    ("auto_update_facets", "Bad facets"),
+                ]
+            )
+
+            response = self.manager.admin_custom_lists_controller.custom_list(list.id)
+            assert type(response) == ProblemDetail
+            assert response.status_code == 400
+            assert response.detail == "auto_update_facets is not JSON serializable"
+
+        with self.request_context_with_library_and_admin("/", method="POST"):
+            flask.request.form = MultiDict(
+                [
+                    ("id", str(list.id)),
+                    ("name", "new name"),
+                    ("entries", "[]"),
+                    ("deletedEntries", "[]"),
+                    ("collections", "[]"),
+                    ("auto_update", "true"),
+                    ("auto_update_query", "Bad query"),
+                ]
+            )
+
+            response = self.manager.admin_custom_lists_controller.custom_list(list.id)
+            assert type(response) == ProblemDetail
+            assert response.status_code == 400
+            assert response.detail == "auto_update_query is not JSON serializable"
+
+        with self.request_context_with_library_and_admin("/", method="POST"):
+            flask.request.form = MultiDict(
+                [
+                    ("id", str(list.id)),
+                    ("name", "new name"),
+                    ("entries", "[]"),
+                    ("deletedEntries", "[]"),
+                    ("collections", "[]"),
+                    ("auto_update", "true"),
+                    ("auto_update_query", None),
+                ]
+            )
+
+            response = self.manager.admin_custom_lists_controller.custom_list(list.id)
+            assert type(response) == ProblemDetail
+            assert response.status_code == 400
+            assert (
+                response.detail
+                == "auto_update_query must be present when auto_update is enabled"
             )
 
     def test_custom_list_delete_success(self):
