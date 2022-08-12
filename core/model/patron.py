@@ -249,7 +249,8 @@ class Patron(Base):
         """
         return 15 * 60
 
-    def has_last_loan_activity_expired(self):
+    def is_last_loan_activity_stale(self) -> bool:
+        """Has the last_loan_activity_sync timestamp outlived the loan_activity_max_age seconds"""
         if not self._last_loan_activity_sync:
             return True
 
@@ -265,7 +266,7 @@ class Patron(Base):
         :return: A datetime, or None if we know our loan data is
             stale.
         """
-        if self.has_last_loan_activity_expired():
+        if self.is_last_loan_activity_stale():
             return None
         return self._last_loan_activity_sync
 
