@@ -773,6 +773,27 @@ class FeedController(AdminCirculationManagerController):
 
 
 class CustomListsController(AdminCirculationManagerController):
+    def _list_as_json(self, list: CustomList):
+        """Transform a CustomList object into a response ready dict"""
+        collections = []
+        for collection in list.collections:
+            collections.append(
+                dict(
+                    id=collection.id,
+                    name=collection.name,
+                    protocol=collection.protocol,
+                )
+            )
+        return dict(
+            id=list.id,
+            name=list.name,
+            collections=collections,
+            entry_count=list.size,
+            auto_update=list.auto_update_enabled,
+            auto_update_query=list.auto_update_query,
+            auto_update_facets=list.auto_update_facets,
+        )
+
     def custom_lists(self):
         library = flask.request.library
         self.require_librarian(library)
@@ -780,48 +801,10 @@ class CustomListsController(AdminCirculationManagerController):
         if flask.request.method == "GET":
             custom_lists = []
             for list in library.custom_lists:
-                collections = []
-                for collection in list.collections:
-                    collections.append(
-                        dict(
-                            id=collection.id,
-                            name=collection.name,
-                            protocol=collection.protocol,
-                        )
-                    )
-                custom_lists.append(
-                    dict(
-                        id=list.id,
-                        name=list.name,
-                        collections=collections,
-                        entry_count=list.size,
-                        auto_update=list.auto_update_enabled,
-                        auto_update_query=list.auto_update_query,
-                        auto_update_facets=list.auto_update_facets,
-                    )
-                )
+                custom_lists.append(self._list_as_json(list))
 
             for list in library.shared_custom_lists:
-                collections = []
-                for collection in list.collections:
-                    collections.append(
-                        dict(
-                            id=collection.id,
-                            name=collection.name,
-                            protocol=collection.protocol,
-                        )
-                    )
-                custom_lists.append(
-                    dict(
-                        id=list.id,
-                        name=list.name,
-                        collections=collections,
-                        entry_count=list.size,
-                        auto_update=list.auto_update_enabled,
-                        auto_update_query=list.auto_update_query,
-                        auto_update_facets=list.auto_update_facets,
-                    )
-                )
+                custom_lists.append(self._list_as_json(list))
 
             return dict(custom_lists=custom_lists)
 
