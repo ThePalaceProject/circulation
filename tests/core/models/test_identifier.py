@@ -9,7 +9,12 @@ from parameterized import parameterized
 from core.model import PresentationCalculationPolicy
 from core.model.datasource import DataSource
 from core.model.edition import Edition
-from core.model.identifier import Equivalency, Identifier, RecursiveEquivalencyCache
+from core.model.identifier import (
+    Equivalency,
+    Identifier,
+    ProQuestIdentifierParser,
+    RecursiveEquivalencyCache,
+)
 from core.model.resource import Hyperlink, Representation
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
@@ -215,6 +220,18 @@ class TestIdentifier(DatabaseTest):
         https_identifier, ignore = Identifier.parse_urn(self._db, "https://example.com")
         assert Identifier.URI == https_identifier.type
         assert "https://example.com" == https_identifier.identifier
+
+        # we can parse Gutenberg identifiers
+        gut_identifier = "http://www.gutenberg.org/ebooks/9781449358068"
+        gut_identifier2, ignore = Identifier.parse_urn(self._db, gut_identifier)
+        assert gut_identifier2.type == Identifier.GUTENBERG_ID
+        assert gut_identifier2.identifier == "9781449358068"
+
+        # we can parse ProQuest identifiers
+        pq_identifier = "urn:proquest.com/document-id/1543720"
+        pq_identifier2, ignore = Identifier.parse_urn(self._db, pq_identifier)
+        assert pq_identifier2.type == Identifier.PROQUEST_ID
+        assert pq_identifier2.identifier == "1543720"
 
         # We can parse UUIDs.
         uuid_identifier, ignore = Identifier.parse_urn(
@@ -764,3 +781,26 @@ class TestRecursiveEquivalencyCache(DatabaseTest):
         # RecursiveEquivalencyCache was deleted by cascade
         all_recursives = self._db.query(RecursiveEquivalencyCache).all()
         assert len(all_recursives) == 3
+
+
+class TestProQuestIdentifierParser:
+    @parameterized.expand(
+        [
+            (
+                "incorrect_identifier",
+                "urn:librarysimplified.org/terms/id/Overdrive%20ID/adfcc11a-cc5b-4c82-8048-e005e4a90222",
+                None,
+            ),
+            (
+                "correct_identifier",
+                "urn:proquest.com/document-id/12345",
+                (Identifier.PROQUEST_ID, "12345"),
+            ),
+        ]
+    )
+    def test_parse(self, _, identifier_string, expected_result):
+        parser = ProQuestIdentifierParser()
+
+        result = parser.parse(identifier_string)
+
+        assert expected_result == result
