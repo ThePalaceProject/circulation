@@ -574,6 +574,19 @@ class Configuration(CoreConfiguration):
         },
     ]
 
+    ANNOUNCEMENT_SETTINGS = [
+        {
+            "key": Announcements.GLOBAL_SETTING_NAME,
+            "label": _("Scheduled announcements"),
+            "description": _(
+                "Announcements will be displayed to authenticated patrons."
+            ),
+            "category": "Announcements",
+            "type": "announcements",
+            "level": CoreConfiguration.ALL_ACCESS,
+        },
+    ]
+
     @classmethod
     def lending_policy(cls):
         return cls.policy(cls.LENDING_POLICY)

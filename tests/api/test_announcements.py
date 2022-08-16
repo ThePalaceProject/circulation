@@ -3,6 +3,7 @@ import json
 from api.admin.announcement_list_validator import AnnouncementListValidator
 from api.announcements import Announcement, Announcements
 from api.testing import AnnouncementTest
+from core.model.configuration import ConfigurationSetting
 from core.testing import DatabaseTest
 
 
@@ -37,6 +38,23 @@ class TestAnnouncements(AnnouncementTest, DatabaseTest):
         invalid["finish"] = "Not a date"
         setting.value = json.dumps([self.active, invalid, self.expired])
         assert [] == Announcements.for_library(l).announcements
+
+    def test_for_all(self):
+        assert [] == Announcements.for_all(self._db).announcements
+
+        # This should not show up
+        library_based = self._default_library.setting(Announcements.GLOBAL_SETTING_NAME)
+        library_based.value = json.dumps([self.active])
+
+        # Only there should show up
+        conf = ConfigurationSetting.sitewide(
+            self._db, Announcements.GLOBAL_SETTING_NAME
+        )
+        conf.value = json.dumps([self.active, self.expired])
+
+        announcements = Announcements.for_all(self._db)
+        assert len(announcements.announcements) == 2
+        assert len(list(announcements.active)) == 1
 
     def test_active(self):
         # The Announcements object keeps track of all announcements, but

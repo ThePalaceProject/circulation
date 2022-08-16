@@ -1179,7 +1179,12 @@ class LibraryAuthenticator:
             x.for_authentication_document
             for x in Announcements.for_library(library).active
         ]
-        doc["announcements"] = announcements
+        # Add any global announcements
+        announcements_for_all = [
+            x.for_authentication_document
+            for x in Announcements.for_all(self._db).active
+        ]
+        doc["announcements"] = announcements_for_all + announcements
 
         # Finally, give the active annotator a chance to modify the document.
 
