@@ -1,6 +1,9 @@
 import time
 from functools import wraps
-from typing import Any, Callable, Dict
+from threading import Lock
+from typing import Any, Callable, Dict, List
+
+from ..model.datasource import DataSource
 
 
 def _signature(func: Callable, *args, **kwargs) -> str:
@@ -45,3 +48,42 @@ def memoize(ttls: int = 3600):
         return inner
 
     return outer
+
+
+class CachedData:
+    """Threadsafe in-memory data caching using the memoize method
+    Cache data using the CachedData.cache instance
+    This must be initialized somewhere in the vicinity of its usage with CacheData.initialize(_db)
+    While writing methods to cache, always lock the body to the _db is used and updated in a threadsafe manner
+    Always expunge objects before returning the data, to avoid stale/cross-thread session usage"""
+
+    # Instance of itself
+    cache = None
+
+    @classmethod
+    def initialize(cls, _db):
+        """Initialize the cache data instance or update the _db instance for the global cache instance
+        Use this method liberally in the vicinity of the usage of the cache functions so the _db instance
+        is constantly being updated
+        """
+        if not cls.cache:
+            cls.cache = cls(_db)
+        else:
+            # Simply update the DB session
+            with cls.cache.lock:
+                cls.cache._db = _db
+
+        return cls.cache
+
+    def __init__(self, _db) -> None:
+        self._db = _db
+        self.lock = Lock()
+
+    @memoize(ttls=3600)
+    def data_sources(self) -> List[DataSource]:
+        """List of all datasources within the system"""
+        with self.lock:
+            sources = self._db.query(DataSource).all()
+            for s in sources:
+                self._db.expunge(s)
+        return sources

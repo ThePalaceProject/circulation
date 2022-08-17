@@ -57,6 +57,7 @@ from .model import (
 )
 from .problem_details import INVALID_INPUT
 from .selftest import HasSelfTests
+from .util.cache import CachedData
 from .util.datetime_helpers import from_timestamp
 from .util.personal_names import display_name_to_sort_name
 from .util.problem_detail import ProblemDetail
@@ -211,6 +212,10 @@ class ExternalSearchIndex(HasSelfTests):
             raise CannotLoadConfiguration(
                 "Cannot load Elasticsearch configuration without a database.",
             )
+
+        # initialize the cached data if not already done so
+        CachedData.initialize(_db)
+
         if not url or not works_index:
             integration = self.search_integration(_db)
             if not integration:
@@ -263,6 +268,9 @@ class ExternalSearchIndex(HasSelfTests):
             return elasticsearch_bulk(self.__client, docs, **kwargs)
 
         self.bulk = bulk
+
+    def prime_query_values(self, _db):
+        JSONQuery.data_sources = _db.query(DataSource).all()
 
     def set_works_index_and_alias(self, _db):
         """Finds or creates the works_index and works_alias based on
@@ -1996,7 +2004,7 @@ class JSONQuery(Query):
         "licensepools.available": dict(path="licensepools"),
         "licensepools.availability_time": dict(path="licensepools"),
         "licensepools.collection_id": dict(path="licensepools"),
-        "licensepools.data_source_id": dict(path="licensepools"),
+        "licensepools.data_source_id": dict(path="licensepools", ops=[Operators.EQ]),
         "licensepools.licensed": dict(path="licensepools"),
         "licensepools.medium": dict(path="licensepools"),
         "licensepools.open_access": dict(path="licensepools"),
@@ -2012,6 +2020,7 @@ class JSONQuery(Query):
         "subtitle": _KEYWORD_ONLY,
         "target_age": dict(),
         "title": _KEYWORD_ONLY,
+        "published": dict(),
     }
 
     # From the client, some field names may be abstracted
@@ -2020,6 +2029,36 @@ class JSONQuery(Query):
         "open_access": "licensepools.open_access",
         "available": "licensepools.available",
         "classification": "classifications.term",
+        "data_source": "licensepools.data_source_id",
+    }
+
+    class ValueTransforms:
+        @staticmethod
+        def data_source(value):
+            sources = CachedData.cache.data_sources()
+            for source in sources:
+                if source.name == value:
+                    return source.id
+
+            # No such value was found, so return a non-id
+            return 0
+
+        @staticmethod
+        def published(value):
+            """Expects a YYYY-MM-DD format string"""
+            try:
+                values = value.split("-")
+                return datetime.datetime(
+                    int(values[0]), int(values[1]), int(values[2])
+                ).timestamp()
+            except Exception as e:
+                raise QueryParseException(
+                    detail=f"Could not parse 'published' value '{value}'. Only use 'YYYY-MM-DD'"
+                )
+
+    VALUE_TRANSORMS = {
+        "data_source": ValueTransforms.data_source,
+        "published": ValueTransforms.published,
     }
 
     def __init__(self, query: Union[str, Dict], filter=None):
@@ -2080,18 +2119,30 @@ class JSONQuery(Query):
             raise QueryParseException(detail=f"Unrecognized operator: {op}")
 
         old_key = query[self.QueryLeaf.KEY]
+        value = query[self.QueryLeaf.VALUE]
+
+        # In case values need to be transformed
+        if old_key in self.VALUE_TRANSORMS:
+            value = self.VALUE_TRANSORMS[old_key](value)
+
         key = self.FIELD_TRANSFORMS.get(
             old_key, old_key
         )  # Transform field name, if applicable
 
         if key not in self.FIELD_MAPPING.keys():
             raise QueryParseException(f"Unrecognized key: {old_key}")
+        mapping = self.FIELD_MAPPING[key]
 
         nested_path = self._nested_path(key)
         if self._is_keyword(key):
             key = key + ".keyword"
 
-        value = query[self.QueryLeaf.VALUE]
+        # Validate operator restrictions
+        allowed_ops = mapping.get("ops")
+        if allowed_ops is not None and op not in allowed_ops:
+            raise QueryParseException(
+                detail=f"Operator '{op}' is not allowed for '{old_key}'. Only use {allowed_ops}"
+            )
 
         es_query = None
 

@@ -1,6 +1,9 @@
 import time
+from unittest.mock import MagicMock
 
-from core.util.cache import _signature, memoize
+from core.model.datasource import DataSource
+from core.testing import DatabaseTest
+from core.util.cache import CachedData, _signature, memoize
 
 
 class TestMemoize:
@@ -29,3 +32,18 @@ class TestMemoize:
             _signature(_func, 1, "x", o, one="one", obj=o)
             == f"{str(_func)}::1;x;{o}::one=one;obj={str(o)}"
         )
+
+
+class TestCacheData(DatabaseTest):
+    def test_data_sources(self):
+        CachedData.initialize(self._db)
+        all_sources = self._db.query(DataSource).all()
+        assert CachedData.cache.data_sources() == all_sources
+
+        # Mock the db object
+        CachedData.initialize(MagicMock())
+        # No changes to output
+        assert CachedData.cache.data_sources() == all_sources
+        assert CachedData.cache.data_sources() == all_sources
+        # mock object was never called due to memoize
+        assert CachedData.cache._db.query.call_count == 0
