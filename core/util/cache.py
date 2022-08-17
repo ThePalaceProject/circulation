@@ -83,7 +83,7 @@ class CachedData:
     def data_sources(self) -> List[DataSource]:
         """List of all datasources within the system"""
         with self.lock:
-            sources = self._db.query(DataSource).all()
+            sources = self._db.query(DataSource).order_by(DataSource.id).all()
             for s in sources:
                 self._db.expunge(s)
         return sources

@@ -36,14 +36,17 @@ class TestMemoize:
 
 class TestCacheData(DatabaseTest):
     def test_data_sources(self):
+        def to_ids(objects):
+            return [o.id for o in objects]
+
         CachedData.initialize(self._db)
-        all_sources = self._db.query(DataSource).all()
-        assert CachedData.cache.data_sources() == all_sources
+        all_sources = to_ids(self._db.query(DataSource).order_by(DataSource.id))
+        assert to_ids(CachedData.cache.data_sources()) == all_sources
 
         # Mock the db object
         CachedData.initialize(MagicMock())
         # No changes to output
-        assert CachedData.cache.data_sources() == all_sources
-        assert CachedData.cache.data_sources() == all_sources
+        assert to_ids(CachedData.cache.data_sources()) == all_sources
+        assert to_ids(CachedData.cache.data_sources()) == all_sources
         # mock object was never called due to memoize
         assert CachedData.cache._db.query.call_count == 0
