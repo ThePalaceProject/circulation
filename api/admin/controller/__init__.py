@@ -773,7 +773,7 @@ class FeedController(AdminCirculationManagerController):
 
 
 class CustomListsController(AdminCirculationManagerController):
-    def _list_as_json(self, list: CustomList):
+    def _list_as_json(self, list: CustomList, is_owner=True):
         """Transform a CustomList object into a response ready dict"""
         collections = []
         for collection in list.collections:
@@ -792,6 +792,7 @@ class CustomListsController(AdminCirculationManagerController):
             auto_update=list.auto_update_enabled,
             auto_update_query=list.auto_update_query,
             auto_update_facets=list.auto_update_facets,
+            is_owner=is_owner,
         )
 
     def custom_lists(self):
@@ -804,7 +805,7 @@ class CustomListsController(AdminCirculationManagerController):
                 custom_lists.append(self._list_as_json(list))
 
             for list in library.shared_custom_lists:
-                custom_lists.append(self._list_as_json(list))
+                custom_lists.append(self._list_as_json(list, is_owner=False))
 
             return dict(custom_lists=custom_lists)
 
@@ -1082,48 +1083,35 @@ class CustomListsController(AdminCirculationManagerController):
             return Response(str(_("Deleted")), 200)
 
     def share_locally(self, customlist_id) -> Union[ProblemDetail, Response]:
-        """Share this customlist with a library on this local CM"""
-        library_id = flask.request.form.get("library")
-        if not library_id or not customlist_id:
+        """Share this customlist with all libraries on this local CM"""
+        if not customlist_id:
             return INVALID_INPUT
 
-        library: Library = get_one(self._db, Library, id=library_id)
         customlist: CustomList = get_one(self._db, CustomList, id=customlist_id)
-        response = CustomListQueries.share_locally_with_library(
-            self._db, customlist, library
-        )
-
-        if response is True:
-            self._db.commit()
-            return Response(200)
-        else:
-            self._db.rollback()
-            return response
-
-    def share_locally_with_library_collection(self, customlist_id):
-        """Share with all libraries having a collection"""
-        collection_id = flask.request.form.get("collection")
-        if not collection_id or not customlist_id:
-            return INVALID_INPUT
-
-        collection: Collection = get_one(self._db, Collection, id=collection_id)
-        customlist: CustomList = get_one(self._db, CustomList, id=customlist_id)
-
-        for library in collection.libraries:
-            if (
-                customlist.library == library
-                or library in customlist.shared_locally_with_libraries
-            ):
+        library: Library = None
+        successes = []
+        failures = []
+        for library in self._db.query(Library).all():
+            # Do not share with self
+            if library == customlist.library:
                 continue
+
+            # Do not attempt to re-share
+            if library in customlist.shared_locally_with_libraries:
+                continue
+
+            # Attempt to share the list
             response = CustomListQueries.share_locally_with_library(
                 self._db, customlist, library
             )
+
             if response is not True:
-                self._db.rollback()
-                return response
+                failures.append(library)
+            else:
+                successes.append(library)
 
         self._db.commit()
-        return Response(200)
+        return dict(successes=len(successes), failures=len(failures))
 
 
 class LanesController(AdminCirculationManagerController):
