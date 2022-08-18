@@ -2045,7 +2045,7 @@ class JSONQuery(Query):
             return 0
 
         @staticmethod
-        def published(value: str) -> int:
+        def published(value: str) -> float:
             """Expects a YYYY-MM-DD format string and returns a timestamp from epoch"""
             try:
                 values = value.split("-")

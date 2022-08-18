@@ -58,7 +58,7 @@ class CachedData:
     Always expunge objects before returning the data, to avoid stale/cross-thread session usage"""
 
     # Instance of itself
-    cache = None
+    cache: Any = None
 
     @classmethod
     def initialize(cls, _db) -> "CachedData":
