@@ -2034,7 +2034,8 @@ class JSONQuery(Query):
 
     class ValueTransforms:
         @staticmethod
-        def data_source(value):
+        def data_source(value: str) -> int:
+            """Transform a datasource name into a datasource id"""
             sources = CachedData.cache.data_sources()
             for source in sources:
                 if source.name == value:
@@ -2044,8 +2045,8 @@ class JSONQuery(Query):
             return 0
 
         @staticmethod
-        def published(value):
-            """Expects a YYYY-MM-DD format string"""
+        def published(value: str) -> int:
+            """Expects a YYYY-MM-DD format string and returns a timestamp from epoch"""
             try:
                 values = value.split("-")
                 return datetime.datetime(

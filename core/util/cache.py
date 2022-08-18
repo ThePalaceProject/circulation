@@ -61,7 +61,7 @@ class CachedData:
     cache = None
 
     @classmethod
-    def initialize(cls, _db):
+    def initialize(cls, _db) -> "CachedData":
         """Initialize the cache data instance or update the _db instance for the global cache instance
         Use this method liberally in the vicinity of the usage of the cache functions so the _db instance
         is constantly being updated
