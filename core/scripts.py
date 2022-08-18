@@ -3542,7 +3542,13 @@ class CustomListUpdateEntriesScript(CustomListSweeperScript):
         json_query["query"] = query_part
 
         search = ExternalSearchIndex(self._db)
-        facets = SearchFacets(search_type="json")
+        if custom_list.auto_update_facets:
+            facets = SearchFacets(
+                search_type="json", **json.loads(custom_list.auto_update_facets)
+            )
+        else:
+            facets = SearchFacets(search_type="json")
+
         page_size = 100
         total_works_updated = 0
         for page in range(10000):  # failsafe max loops

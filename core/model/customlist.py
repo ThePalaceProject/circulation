@@ -63,7 +63,8 @@ class CustomList(Base):
     )
 
     auto_update_enabled = Column(Boolean, default=False)
-    auto_update_query = Column(Unicode, nullable=True)
+    auto_update_query = Column(Unicode, nullable=True)  # holds json data
+    auto_update_facets = Column(Unicode, nullable=True)  # holds json data
     auto_update_last_update = Column(DateTime, nullable=True)
 
     # Typing specific

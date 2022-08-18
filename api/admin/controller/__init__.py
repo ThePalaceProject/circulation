@@ -6,6 +6,7 @@ import os
 import sys
 import urllib.parse
 from datetime import date, datetime, timedelta
+from http.client import BAD_REQUEST
 from typing import Optional, Union
 
 import flask
@@ -772,6 +773,27 @@ class FeedController(AdminCirculationManagerController):
 
 
 class CustomListsController(AdminCirculationManagerController):
+    def _list_as_json(self, list: CustomList):
+        """Transform a CustomList object into a response ready dict"""
+        collections = []
+        for collection in list.collections:
+            collections.append(
+                dict(
+                    id=collection.id,
+                    name=collection.name,
+                    protocol=collection.protocol,
+                )
+            )
+        return dict(
+            id=list.id,
+            name=list.name,
+            collections=collections,
+            entry_count=list.size,
+            auto_update=list.auto_update_enabled,
+            auto_update_query=list.auto_update_query,
+            auto_update_facets=list.auto_update_facets,
+        )
+
     def custom_lists(self):
         library = flask.request.library
         self.require_librarian(library)
@@ -779,46 +801,10 @@ class CustomListsController(AdminCirculationManagerController):
         if flask.request.method == "GET":
             custom_lists = []
             for list in library.custom_lists:
-                collections = []
-                for collection in list.collections:
-                    collections.append(
-                        dict(
-                            id=collection.id,
-                            name=collection.name,
-                            protocol=collection.protocol,
-                        )
-                    )
-                custom_lists.append(
-                    dict(
-                        id=list.id,
-                        name=list.name,
-                        collections=collections,
-                        entry_count=list.size,
-                        auto_update=list.auto_update_enabled,
-                        auto_update_query=list.auto_update_query,
-                    )
-                )
+                custom_lists.append(self._list_as_json(list))
 
             for list in library.shared_custom_lists:
-                collections = []
-                for collection in list.collections:
-                    collections.append(
-                        dict(
-                            id=collection.id,
-                            name=collection.name,
-                            protocol=collection.protocol,
-                        )
-                    )
-                custom_lists.append(
-                    dict(
-                        id=list.id,
-                        name=list.name,
-                        collections=collections,
-                        entry_count=list.size,
-                        auto_update=list.auto_update_enabled,
-                        auto_update_query=list.auto_update_query,
-                    )
-                )
+                custom_lists.append(self._list_as_json(list))
 
             return dict(custom_lists=custom_lists)
 
@@ -863,6 +849,7 @@ class CustomListsController(AdminCirculationManagerController):
         id=None,
         auto_update=None,
         auto_update_query=None,
+        auto_update_facets=None,
     ):
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
 
@@ -886,6 +873,26 @@ class CustomListsController(AdminCirculationManagerController):
             list.created = datetime.now()
             list.library = library
 
+        # Test JSON viability of auto update data
+        if auto_update_query:
+            try:
+                json.loads(auto_update_query)
+            except json.JSONDecodeError:
+                return INVALID_INPUT.detailed(
+                    "auto_update_query is not JSON serializable"
+                )
+        if auto_update_facets:
+            try:
+                json.loads(auto_update_facets)
+            except json.JSONDecodeError:
+                return INVALID_INPUT.detailed(
+                    "auto_update_facets is not JSON serializable"
+                )
+        if auto_update is True and auto_update_query is None:
+            return INVALID_INPUT.detailed(
+                "auto_update_query must be present when auto_update is enabled"
+            )
+
         list.updated = datetime.now()
         list.name = name
         # Record the time the auto_update was toggled "on"
@@ -895,6 +902,8 @@ class CustomListsController(AdminCirculationManagerController):
             list.auto_update_enabled = auto_update
         if auto_update_query is not None:
             list.auto_update_query = auto_update_query
+        if auto_update_facets is not None:
+            list.auto_update_facets = auto_update_facets
 
         membership_change = False
 
@@ -1011,6 +1020,7 @@ class CustomListsController(AdminCirculationManagerController):
                 "auto_update", False, type=boolean_value
             )
             auto_update_query = flask.request.form.get("auto_update_query")
+            auto_update_facets = flask.request.form.get("auto_update_facets")
 
             return self._create_or_update_list(
                 library,
@@ -1021,6 +1031,7 @@ class CustomListsController(AdminCirculationManagerController):
                 id=list_id,
                 auto_update=auto_update,
                 auto_update_query=auto_update_query,
+                auto_update_facets=auto_update_facets,
             )
 
         elif flask.request.method == "DELETE":

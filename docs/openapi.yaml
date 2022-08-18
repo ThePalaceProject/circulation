@@ -1,0 +1,59 @@
+openapi: "3.0.0"
+info:
+  version: "0.1"
+  title: Circulation API
+paths:
+  /{library}/admin/custom_list/{list_id}:
+    summary: Edit/Delete a custom list as required
+    post:
+      summary: Edit a custom list
+      requestBody:
+        $ref: "#/components/requestBodies/custom_list"
+      responses:
+        '200':
+          description: Custom list was edited successfully
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: 5
+        '400':
+          description: Bad input was provided
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        example: auto_update_query is required when auto_update is enabled
+      tags:
+        - admin
+
+components:
+  requestBodies:
+    custom_list:
+      content:
+        multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                entries:
+                  type: object
+                collections:
+                  type: array
+                  items:
+                    type: number
+                deletedEntries:
+                  type: array
+                  items:
+                    type: number
+                auto_update:
+                  type: boolean
+                auto_update_query:
+                  type: object
+                auto_update_facets:
+                  type: object
