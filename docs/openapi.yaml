@@ -31,6 +31,61 @@ paths:
       tags:
         - admin
 
+  /admin/announcements:
+    summary: >
+      Create/Edit/Read global announcements meant for every library. \
+      The announcements will show up in the authentication documents.
+    get:
+      summary: Fetch all global announcements
+      tags:
+        - admin
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  settings:
+                    type: object
+                  announcements:
+                    type: object
+    post:
+      summary: Edit the list of global announcements in its entirety.
+      tags:
+        - admin
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                announcements:
+                  type: string
+                  description: JSON stringified list of announcements
+                  example: [{"id": "xxxx-xxx-xxxxx", "message": "An announcement for all to see", start: "1990-01-01"}, {"message": "This is a new announcement without an id yet"}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '400':
+          description: Bad Input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/invalid_input"
+
+
+
+
 components:
   requestBodies:
     custom_list:
@@ -57,3 +112,16 @@ components:
                   type: object
                 auto_update_facets:
                   type: object
+  schemas:
+    invalid_input:
+      type: object
+      properties:
+        message:
+          type: string
+          example: You provided invalid or unrecognized input
+        type:
+          type: string
+          example: http://librarysimplified.org/terms/problem/invalid-input
+        title:
+          type: string
+          example: Invalid input.
