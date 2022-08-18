@@ -10,7 +10,8 @@ from core.model.constants import NotificationConstants
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from core.model.edition import Edition
 from core.model.identifier import Identifier
-from core.model.patron import Loan, Patron
+from core.model.patron import Hold, Loan, Patron
+from core.model.work import Work
 
 
 class PushNotifications:
@@ -20,6 +21,14 @@ class PushNotifications:
     _base_url = None
 
     VALID_TOKEN_TYPES = [DeviceTokenTypes.FCM_ANDROID, DeviceTokenTypes.FCM_IOS]
+
+    @classmethod
+    def notifiable_tokens(cls, patron: Patron) -> List[DeviceToken]:
+        return [
+            token
+            for token in patron.device_tokens
+            if token.token_type in cls.VALID_TOKEN_TYPES
+        ]
 
     @classmethod
     @property
@@ -73,7 +82,7 @@ class PushNotifications:
         return responses
 
     @classmethod
-    def send_activity_sync_message(cls, patrons: List[Patron]):
+    def send_activity_sync_message(cls, patrons: List[Patron]) -> List[str]:
         """Send notifications to the given patrons to sync their bookshelves
         Enough information needs to be sent to identify a patron on the mobile Apps
         and make the loans api request with the right authentication"""
@@ -84,11 +93,7 @@ class PushNotifications:
         _db = Session.object_session(patrons[0])
         url = cls.base_url(_db)
         for patron in patrons:
-            tokens = [
-                token
-                for token in patron.device_tokens
-                if token.token_type in cls.VALID_TOKEN_TYPES
-            ]
+            tokens = cls.notifiable_tokens(patron)
             loans_api = f"{url}/{patron.library.short_name}/loans"
             for token in tokens:
                 msg = messaging.Message(
@@ -98,6 +103,40 @@ class PushNotifications:
                         loans_endpoint=loans_api,
                         external_identifier=patron.external_identifier,
                         authorization_identifier=patron.authorization_identifier,
+                    ),
+                )
+                msgs.append(msg)
+        batch: messaging.BatchResponse = messaging.send_all(
+            msgs, dry_run=cls.TESTING_MODE, app=cls.fcm_app
+        )
+        return [resp.message_id for resp in batch.responses]
+
+    @classmethod
+    def send_holds_notifications(cls, holds: List[Hold]) -> List[str]:
+        """Send out notifcations to all patron devices that their hold is ready for checkout"""
+        if not holds:
+            return []
+
+        msgs = []
+        _db = Session.object_session(holds[0])
+        url = cls.base_url(_db)
+        for hold in holds:
+            tokens = cls.notifiable_tokens(hold.patron)
+            loans_api = f"{url}/{hold.patron.library.short_name}/loans"
+            work: Work = hold.work
+            identifier: Identifier = hold.license_pool.identifier
+            for token in tokens:
+                msg = messaging.Message(
+                    token=token.device_token,
+                    data=dict(
+                        title=f'Your hold on "{work.title}" is available!',
+                        event_type=NotificationConstants.HOLD_AVAILABLE_TYPE,
+                        loans_endpoint=loans_api,
+                        external_identifier=hold.patron.external_identifier,
+                        authorization_identifier=hold.patron.authorization_identifier,
+                        identifier=identifier.identifier,
+                        type=identifier.type,
+                        library=hold.patron.library.short_name,
                     ),
                 )
                 msgs.append(msg)

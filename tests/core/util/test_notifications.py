@@ -129,3 +129,69 @@ class TestPushNotifications(DatabaseTest):
         ]
 
         assert messaging.send_all.call_count == 1
+
+    @mock.patch("core.util.notifications.PushNotifications.fcm_app")
+    @mock.patch("core.util.notifications.messaging")
+    def test_holds_notification(
+        self, messaging: mock.MagicMock, fcm_app: mock.MagicMock
+    ):
+        patron1 = self._patron()
+        patron2 = self._patron()
+        DeviceToken.create(
+            self._db, DeviceTokenTypes.FCM_ANDROID, "test-token-1", patron1
+        )
+        DeviceToken.create(
+            self._db, DeviceTokenTypes.FCM_ANDROID, "test-token-2", patron1
+        )
+        DeviceToken.create(self._db, DeviceTokenTypes.FCM_IOS, "test-token-3", patron2)
+
+        work1: Work = self._work(with_license_pool=True)
+        work2: Work = self._work(with_license_pool=True)
+        hold1, _ = work1.active_license_pool().on_hold_to(patron1, position=0)
+        hold2, _ = work2.active_license_pool().on_hold_to(patron2, position=0)
+
+        PushNotifications.send_holds_notifications([hold1, hold2])
+
+        loans_api = "http://localhost/default/loans"
+        assert messaging.Message.call_count == 3
+        assert messaging.Message.call_args_list == [
+            mock.call(
+                token="test-token-1",
+                data=dict(
+                    title=f'Your hold on "{work1.title}" is available!',
+                    event_type=NotificationConstants.HOLD_AVAILABLE_TYPE,
+                    loans_endpoint=loans_api,
+                    external_identifier=hold1.patron.external_identifier,
+                    authorization_identifier=hold1.patron.authorization_identifier,
+                    identifier=hold1.license_pool.identifier.identifier,
+                    type=hold1.license_pool.identifier.type,
+                    library=hold1.patron.library.short_name,
+                ),
+            ),
+            mock.call(
+                token="test-token-2",
+                data=dict(
+                    title=f'Your hold on "{work1.title}" is available!',
+                    event_type=NotificationConstants.HOLD_AVAILABLE_TYPE,
+                    loans_endpoint=loans_api,
+                    external_identifier=hold1.patron.external_identifier,
+                    authorization_identifier=hold1.patron.authorization_identifier,
+                    identifier=hold1.license_pool.identifier.identifier,
+                    type=hold1.license_pool.identifier.type,
+                    library=hold1.patron.library.short_name,
+                ),
+            ),
+            mock.call(
+                token="test-token-3",
+                data=dict(
+                    title=f'Your hold on "{work2.title}" is available!',
+                    event_type=NotificationConstants.HOLD_AVAILABLE_TYPE,
+                    loans_endpoint=loans_api,
+                    external_identifier=hold2.patron.external_identifier,
+                    authorization_identifier=hold2.patron.authorization_identifier,
+                    identifier=hold2.license_pool.identifier.identifier,
+                    type=hold2.license_pool.identifier.type,
+                    library=hold2.patron.library.short_name,
+                ),
+            ),
+        ]
