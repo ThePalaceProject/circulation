@@ -2,6 +2,7 @@ import json
 import re
 import time
 import uuid
+from datetime import datetime
 
 import pytest
 from elasticsearch.exceptions import ElasticsearchException
@@ -4757,6 +4758,41 @@ class TestJSONQuery(ExternalSearchTest):
                 "query": {"term": {"licensepools.open_access": True}},
             }
         }
+
+    def test_value_transforms(self):
+        gutenberg = (
+            self._db.query(DataSource)
+            .filter(DataSource.name == DataSource.GUTENBERG)
+            .first()
+        )
+        q = self._jq(self._leaf("data_source", DataSource.GUTENBERG))
+        assert q.elasticsearch_query.to_dict() == {
+            "nested": {
+                "path": "licensepools",
+                "query": {"term": {"licensepools.data_source_id": gutenberg.id}},
+            }
+        }
+
+        dt = datetime(1990, 1, 1)
+        q = self._jq(self._leaf("published", "1990-01-01"))
+        assert q.elasticsearch_query.to_dict() == {
+            "term": {"published": dt.timestamp()}
+        }
+
+        with pytest.raises(QueryParseException) as exc:
+            q = self._jq(self._leaf("published", "1990-01-x1"))
+            q.elasticsearch_query
+            assert (
+                "Could not parse 'published' value '1990-01-x1'. Only use 'YYYY-MM-DD'"
+            )
+
+    def test_operator_restrictions(self):
+        q = self._jq(self._leaf("data_source", DataSource.GUTENBERG, "gt"))
+        with pytest.raises(QueryParseException) as exc:
+            q.elasticsearch_query
+        assert "Operator 'gt' is not allowed for 'data_source'. Only use ['eq']" == str(
+            exc.value
+        )
 
 
 class TestExternalSearchJSONQuery(EndToEndSearchTest):
