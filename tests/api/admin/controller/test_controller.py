@@ -55,6 +55,7 @@ from core.model import (
 )
 from core.model.collection import Collection
 from core.opds_import import OPDSImporter, OPDSImportMonitor
+from core.query.customlist import CustomListQueries
 from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
 from core.util.datetime_helpers import utc_now
@@ -1584,6 +1585,13 @@ class TestCustomListsController(AdminControllerTest):
         with self.request_context_with_library_and_admin("/", method="DELETE"):
             response = self.manager.admin_custom_lists_controller.custom_list(123)
             assert MISSING_CUSTOM_LIST == response
+
+        library = self._library()
+        self.admin.add_role(AdminRole.LIBRARY_MANAGER, library)
+        CustomListQueries.share_locally_with_library(self._db, list, library)
+        with self.request_context_with_library_and_admin("/", method="DELETE"):
+            response = self.manager.admin_custom_lists_controller.custom_list(list.id)
+            assert response == CANNOT_DELETE_SHARED_LIST
 
     @define
     class ShareLocallySetup:
