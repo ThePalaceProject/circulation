@@ -1725,8 +1725,6 @@ class Axis360FulfillmentInfo(APIAwareFulfillmentInfo):
         self._content = str(manifest)
         self._content_type = manifest.MEDIA_TYPE
         self._content_expires = expires
-        # Never used in this object, required for consistency
-        self.content_link_redirect = False
 
 
 class Axis360AcsFulfillmentInfo(FulfillmentInfo):

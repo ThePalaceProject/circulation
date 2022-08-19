@@ -288,6 +288,8 @@ class APIAwareFulfillmentInfo(FulfillmentInfo):
         self._content_type = None
         self._content = None
         self._content_expires = None
+        # Never used in this object, required for consistency
+        self.content_link_redirect = False
 
     def fetch(self):
         """It's time to tell the API that we want to fulfill this book."""
