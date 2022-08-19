@@ -16,6 +16,29 @@ This is a [The Palace Project](https://thepalaceproject.org) maintained fork of 
 * Elasticsearch
 * Postgres
 
+### Python
+
+[pyenv](https://github.com/pyenv/pyenv) pyenv lets you easily switch between multiple versions of Python. It can be
+[installed](https://github.com/pyenv/pyenv-installer) using the command `curl https://pyenv.run | bash`. You can then
+install the version of Python you want to work with.
+
+It is recommended that [pyenv-virtualenv](https://github.com/pyenv/pyenv-virtualenv) be used to allow `pyenv`
+to manage _virtual environments_ in a manner that can be used by the [poetry](#poetry) tool. The `pyenv-virtualenv`
+plugin can be installed by cloning the relevant repository into the `plugins` subdirectory of your `$PYENV_ROOT`:
+
+```sh
+mkdir -p $PYENV_ROOT/plugins
+cd $PYENV_ROOT/plugins
+git clone https://github.com/pyenv/pyenv-virtualenv
+```
+
+After cloning the repository, `pyenv` now has a new `virtualenv` command:
+
+```sh
+$ pyenv virtualenv
+pyenv-virtualenv: no virtualenv name given.
+```
+
 ### Poetry
 
 You will need to set up a local virtual environment to install packages and run the project. This project uses
@@ -26,7 +49,7 @@ Poetry can be installed using the command `curl -sSL https://install.python-poet
 More information about installation options can be found in the
 [poetry documentation](https://python-poetry.org/docs/master/#installation).
 
-As mentioned in the [pyenv](#pyenv) section, the `poetry` tool should be executed under a virtual environment
+As mentioned in the [Pythob](#Python) section, the `poetry` tool should be executed under a virtual environment
 in order to guarantee that it will use the Python version you expect. To use a particular Python version,
 you should create a local virtual environment in the cloned `circulation` repository directory. Assuming that
 you want to use, for example, Python 3.9.9:
