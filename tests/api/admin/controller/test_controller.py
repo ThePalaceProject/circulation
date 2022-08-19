@@ -1968,6 +1968,48 @@ class TestLanesController(AdminControllerTest):
             # The sibling's priority has been shifted down to put the new lane at the top.
             assert 1 == sibling.priority
 
+    def test_lanes_create_shared_list(self):
+        list, ignore = self._customlist(
+            data_source_name=DataSource.LIBRARY_STAFF, num_entries=0
+        )
+        list.library = self._default_library
+        library = self._library()
+        self.admin.add_role(AdminRole.LIBRARY_MANAGER, library=library)
+
+        with self.request_context_with_library_and_admin(
+            "/", method="POST", library=library
+        ):
+            flask.request.form = MultiDict(
+                [
+                    ("display_name", "lane"),
+                    ("custom_list_ids", json.dumps([list.id])),
+                    ("inherit_parent_restrictions", "false"),
+                ]
+            )
+            response = self.manager.admin_lanes_controller.lanes()
+            assert 404 == response.status_code
+
+        success = CustomListQueries.share_locally_with_library(self._db, list, library)
+        assert success == True
+
+        with self.request_context_with_library_and_admin(
+            "/", method="POST", library=library
+        ):
+            flask.request.form = MultiDict(
+                [
+                    ("display_name", "lane"),
+                    ("custom_list_ids", json.dumps([list.id])),
+                    ("inherit_parent_restrictions", "false"),
+                ]
+            )
+            response = self.manager.admin_lanes_controller.lanes()
+            assert 201 == response.status_code
+            lane_id = int(response.data)
+
+        lane: Lane = get_one(self._db, Lane, id=lane_id)
+        assert lane.customlists == [list]
+        assert lane.library == library
+
     def test_lanes_edit(self):
 
         work = self._work(with_license_pool=True)
