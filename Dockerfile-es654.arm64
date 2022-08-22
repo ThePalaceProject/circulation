@@ -1,3 +1,10 @@
+###############################################################################
+## This is necessary for Elasticsearch 6.x images on Apple Silicon
+## Can be removed when app is upgraded to Elasticsearch 7.x
+## See https://github.com/ThePalaceProject/circulation/pull/482
+###############################################################################
+
+
 FROM arm64v8/centos:7 AS es_arm_64
 
 ENV ELASTIC_CONTAINER=true

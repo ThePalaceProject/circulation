@@ -101,6 +101,9 @@ docker run -d --name es -e discovery.type=single-node -p 9200:9200 cm_local_es_a
 
 ```
 
+There are no Elasticsearch 6.x images for Apple silicon, but there are starting with Elasticsearch 7.x. This step can
+be removed when Elasticsearch is updated to 7.x.
+
 ### 2. Start up Postgres database
 
 ```sh
