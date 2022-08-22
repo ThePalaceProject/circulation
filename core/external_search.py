@@ -295,9 +295,9 @@ class ExternalSearchIndex(HasSelfTests):
     def _update_index_mapping(self, dry_run=False) -> Dict:
         """Updates the index mapping with any NEW properties added"""
 
-        current_mapping: Dict = self.indices.get_mapping(self.works_index)[
-            self.works_index
-        ]["mappings"][self.work_document_type]["properties"]
+        current_mapping: Dict = self.indices.get_mapping(
+            self.works_index, include_type_name=True
+        )[self.works_index]["mappings"][self.work_document_type]["properties"]
         new_mapping = self.mapping.body()["mappings"][self.work_document_type][
             "properties"
         ]
@@ -372,7 +372,7 @@ class ExternalSearchIndex(HasSelfTests):
         self.log.info("Creating index %s", index_name)
         body = self.mapping.body()
         body.setdefault("settings", {}).update(index_settings)
-        index = self.indices.create(index=index_name, body=body)
+        index = self.indices.create(index=index_name, body=body, include_type_name=True)
 
     def set_stored_scripts(self):
         for name, definition in self.mapping.stored_scripts():
