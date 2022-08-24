@@ -170,7 +170,7 @@ class CirculationManagerAnnotator(Annotator):
             _external=True,
         )
 
-    def active_licensepool_for(self, work):
+    def active_licensepool_for(self, work, library=None):
         loan = self.active_loans_by_work.get(work) or self.active_holds_by_work.get(
             work
         )
@@ -181,7 +181,7 @@ class CirculationManagerAnnotator(Annotator):
         else:
             # There is no active loan. Use the default logic for
             # determining the active license pool.
-            return super().active_licensepool_for(work)
+            return super().active_licensepool_for(work, library=library)
 
     @staticmethod
     def _prioritized_formats_for_pool(
@@ -1441,6 +1441,10 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                 _external=True,
             ),
         )
+
+    def active_licensepool_for(self, work):
+        """Get an active licensepool, always within the scope of the library"""
+        return super().active_licensepool_for(work, library=self.library)
 
 
 class SharedCollectionAnnotator(CirculationManagerAnnotator):

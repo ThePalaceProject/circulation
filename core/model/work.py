@@ -1178,12 +1178,15 @@ class Work(Base):
             self, operation=WorkCoverageRecord.GENERATE_MARC_OPERATION
         )
 
-    def active_license_pool(self):
+    def active_license_pool(self, library=None):
         # The active license pool is the one that *would* be
         # associated with a loan, were a loan to be issued right
         # now.
         active_license_pool = None
+        collections = [] if not library else [c for c in library.collections]
         for p in self.license_pools:
+            if collections and p.collection not in collections:
+                continue
             if p.superceded:
                 continue
             edition = p.presentation_edition

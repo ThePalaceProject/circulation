@@ -452,14 +452,14 @@ class Annotator:
         raise NotImplementedError()
 
     @classmethod
-    def active_licensepool_for(cls, work):
+    def active_licensepool_for(cls, work, library=None):
         """Which license pool would be/has been used to issue a license for
         this work?
         """
         if not work:
             return None
 
-        return work.active_license_pool()
+        return work.active_license_pool(library=library)
 
     def sort_works_for_groups_feed(self, works, **kwargs):
         return works
