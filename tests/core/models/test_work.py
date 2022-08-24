@@ -1723,7 +1723,6 @@ class TestWork(DatabaseTest):
             work.presentation_edition,
             collection=c1,
             unlimited_access=True,
-            open_access=True,
         )
         lp2 = self._licensepool(
             work.presentation_edition,
@@ -1735,6 +1734,8 @@ class TestWork(DatabaseTest):
             "http://example.org/"  # Unscoped calls will ALWAYS pick this pool now
         )
         lp1.calculate_work()
+        lp2.calculate_work()
+        lp1.open_access = True  # force open access
         self._db.commit()
 
         assert work.active_license_pool() == lp1
