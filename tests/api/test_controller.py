@@ -27,6 +27,7 @@ from api.authenticator import (
     LibraryAuthenticator,
     OAuthController,
 )
+from api.axis import Axis360FulfillmentInfo
 from api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
 from api.circulation_exceptions import *
 from api.circulation_exceptions import RemoteInitiatedServerError
@@ -2453,6 +2454,31 @@ class TestLoanController(CirculationControllerTest):
 
         assert response.status_code == 302
         assert response.location == "https://example.org/redirect_to_epub"
+
+        # Axis360 variant
+        api.collection = self._default_collection
+        api._db = self._db
+        axis360_ff = Axis360FulfillmentInfo(
+            api, DataSource.AXIS_360, "Axis 360 ID", "xxxxxx", "xxxxxx"
+        )
+        api.get_fulfillment_info.return_value = MagicMock(
+            content={
+                "ExpirationDate": "2020-01-01 00:00:00",
+                "Status": dict(Code=1, Message="Worked."),
+                "ISBN": "ISBN ID",
+                "BookVaultUUID": "Vault ID",
+            }
+        )
+        api.fulfill.return_value = axis360_ff
+        with self.request_context_with_library(
+            "/",
+            library=self._default_library,
+            headers=dict(Authorization=self.valid_auth),
+        ):
+            response = controller.fulfill(pool.id, lpdm.delivery_mechanism.id)
+
+        assert response.status_code == 200
+        assert response.json == {"book_vault_uuid": "Vault ID", "isbn": "ISBN ID"}
 
     def test_revoke_loan(self):
         with self.request_context_with_library(
