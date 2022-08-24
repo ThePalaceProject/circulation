@@ -1224,6 +1224,12 @@ class TestCustomListsController(AdminControllerTest):
                         ),
                     ),
                     ("collections", json.dumps([collection.id])),
+                    ("auto_update", True),
+                    (
+                        "auto_update_query",
+                        json.dumps({"query": {"key": "title", "value": "A Title"}}),
+                    ),
+                    ("auto_update_facets", json.dumps({})),
                 ]
             )
 
@@ -1239,6 +1245,12 @@ class TestCustomListsController(AdminControllerTest):
             assert work.presentation_edition == list.entries[0].edition
             assert True == list.entries[0].featured
             assert [collection] == list.collections
+            assert True == list.auto_update_enabled
+            assert (
+                json.dumps({"query": {"key": "title", "value": "A Title"}})
+                == list.auto_update_query
+            )
+            assert json.dumps({}) == list.auto_update_facets
 
     def test_custom_list_get(self):
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)

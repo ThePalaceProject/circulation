@@ -7,7 +7,7 @@ import sys
 import urllib.parse
 from datetime import date, datetime, timedelta
 from http.client import BAD_REQUEST
-from typing import Optional, Union
+from typing import Dict, List, Optional, Union
 
 import flask
 import jwt
@@ -815,8 +815,21 @@ class CustomListsController(AdminCirculationManagerController):
             collections = self._getJSONFromRequest(
                 flask.request.form.get("collections")
             )
+            # For auto updating lists
+            auto_update = flask.request.form.get(
+                "auto_update", False, type=boolean_value
+            )
+            auto_update_query = flask.request.form.get("auto_update_query")
+            auto_update_facets = flask.request.form.get("auto_update_facets")
             return self._create_or_update_list(
-                library, name, entries, collections, id=id
+                library,
+                name,
+                entries,
+                collections,
+                id=id,
+                auto_update=auto_update,
+                auto_update_facets=auto_update_facets,
+                auto_update_query=auto_update_query,
             )
 
     def _getJSONFromRequest(self, values):
@@ -841,15 +854,15 @@ class CustomListsController(AdminCirculationManagerController):
 
     def _create_or_update_list(
         self,
-        library,
-        name,
-        entries,
-        collections,
-        deletedEntries=None,
-        id=None,
-        auto_update=None,
-        auto_update_query=None,
-        auto_update_facets=None,
+        library: Library,
+        name: str,
+        entries: List[Dict],
+        collections: List[int],
+        deletedEntries: List[Dict] = None,
+        id: int = None,
+        auto_update: Optional[bool] = None,
+        auto_update_query: Optional[str] = None,
+        auto_update_facets: Optional[str] = None,
     ):
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
 
