@@ -50,7 +50,12 @@ from .measurement import Measurement
 
 # Import related models when doing type checking
 if TYPE_CHECKING:
-    from core.model import CachedFeed, CustomListEntry, LicensePool  # noqa: autoflake
+    from core.model import (  # noqa: autoflake
+        CachedFeed,
+        CustomListEntry,
+        Library,
+        LicensePool,
+    )
 
 
 class WorkGenre(Base):
@@ -1178,7 +1183,7 @@ class Work(Base):
             self, operation=WorkCoverageRecord.GENERATE_MARC_OPERATION
         )
 
-    def active_license_pool(self, library=None):
+    def active_license_pool(self, library: "Library" = None) -> Optional["LicensePool"]:
         # The active license pool is the one that *would* be
         # associated with a loan, were a loan to be issued right
         # now.

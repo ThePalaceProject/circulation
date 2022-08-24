@@ -1,7 +1,7 @@
 import datetime
 import logging
 from collections import defaultdict
-from typing import List
+from typing import List, Optional
 from urllib.parse import quote
 
 from lxml import etree
@@ -9,6 +9,8 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.orm.session import Session
 
 from core.external_search import QueryParseException
+from core.model.library import Library
+from core.model.licensing import LicensePool
 from core.problem_details import INVALID_INPUT
 
 from .cdn import cdnify
@@ -452,7 +454,9 @@ class Annotator:
         raise NotImplementedError()
 
     @classmethod
-    def active_licensepool_for(cls, work, library=None):
+    def active_licensepool_for(
+        cls, work: Work, library: Library = None
+    ) -> Optional[LicensePool]:
         """Which license pool would be/has been used to issue a license for
         this work?
         """
@@ -1263,8 +1267,12 @@ class AcquisitionFeed(OPDSFeed):
         return entry
 
     def create_entry(
-        self, work, even_if_no_license_pool=False, force_create=False, use_cache=True
-    ):
+        self,
+        work: Optional[Work | Edition],
+        even_if_no_license_pool=False,
+        force_create=False,
+        use_cache=True,
+    ) -> etree.Element | OPDSMessage:
         """Turn a work into an entry for an acquisition feed."""
         identifier = None
         if isinstance(work, Edition):
