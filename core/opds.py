@@ -1,7 +1,7 @@
 import datetime
 import logging
 from collections import defaultdict
-from typing import List, Optional
+from typing import List, Optional, Union
 from urllib.parse import quote
 
 from lxml import etree
@@ -1268,11 +1268,11 @@ class AcquisitionFeed(OPDSFeed):
 
     def create_entry(
         self,
-        work: Optional[Work | Edition],
+        work: Optional[Union[Work, Edition]],
         even_if_no_license_pool=False,
         force_create=False,
         use_cache=True,
-    ) -> etree.Element | OPDSMessage:
+    ) -> Union[etree.Element, OPDSMessage]:
         """Turn a work into an entry for an acquisition feed."""
         identifier = None
         if isinstance(work, Edition):
