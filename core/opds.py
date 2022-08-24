@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 import logging
 from collections import defaultdict
-from typing import TYPE_CHECKING, List, Optional, Union
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 from lxml import etree
@@ -196,7 +196,7 @@ class Annotator:
         return rating_tag
 
     @classmethod
-    def samples(cls, edition: Edition) -> List[Hyperlink]:
+    def samples(cls, edition: Edition) -> list[Hyperlink]:
         if not edition:
             return []
         _db = Session.object_session(edition)
@@ -460,7 +460,7 @@ class Annotator:
     @classmethod
     def active_licensepool_for(
         cls, work: Work, library: Library = None
-    ) -> Optional[LicensePool]:
+    ) -> LicensePool | None:
         """Which license pool would be/has been used to issue a license for
         this work?
         """
@@ -1272,11 +1272,11 @@ class AcquisitionFeed(OPDSFeed):
 
     def create_entry(
         self,
-        work: Optional[Union[Work, Edition]],
+        work: Work | Edition | None,
         even_if_no_license_pool=False,
         force_create=False,
         use_cache=True,
-    ) -> Union[etree.Element, OPDSMessage]:
+    ) -> etree.Element | OPDSMessage:
         """Turn a work into an entry for an acquisition feed."""
         identifier = None
         if isinstance(work, Edition):

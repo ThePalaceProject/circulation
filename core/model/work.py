@@ -6,7 +6,7 @@ import logging
 from collections import Counter
 from datetime import date, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type, TypeVar, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from sqlalchemy import (
     Boolean,
@@ -890,7 +890,7 @@ class Work(Base):
         )
         return changed
 
-    def _get_default_audience(self) -> Optional[str]:
+    def _get_default_audience(self) -> str | None:
         """Return the default audience.
 
         :return: Default audience
@@ -1185,7 +1185,7 @@ class Work(Base):
             self, operation=WorkCoverageRecord.GENERATE_MARC_OPERATION
         )
 
-    def active_license_pool(self, library: Library = None) -> Optional[LicensePool]:
+    def active_license_pool(self, library: Library = None) -> LicensePool | None:
         # The active license pool is the one that *would* be
         # associated with a loan, were a loan to be issued right
         # now.
@@ -1439,8 +1439,8 @@ class Work(Base):
 
     @classmethod
     def to_search_documents(
-        cls: Type[WorkTypevar], works: List[WorkTypevar]
-    ) -> List[Dict]:
+        cls: type[WorkTypevar], works: list[WorkTypevar]
+    ) -> list[dict]:
         """In app to search documents needed to ease off the burden
         of complex queries from the DB cluster
         No recursive identifier policy is taken here as using the
@@ -1457,7 +1457,7 @@ class Work(Base):
             joinedload(Work.custom_list_entries),
         )
 
-        rows: List[Work] = qu.all()
+        rows: list[Work] = qu.all()
 
         ## IDENTIFIERS START
         ## Identifiers is a house of cards, it comes crashing down if anything is changed here
@@ -1570,7 +1570,7 @@ class Work(Base):
         return results
 
     @classmethod
-    def search_doc_as_dict(cls: Type[WorkTypevar], doc: WorkTypevar):
+    def search_doc_as_dict(cls: type[WorkTypevar], doc: WorkTypevar):
         columns = {
             "work": [
                 "fiction",
@@ -1610,7 +1610,7 @@ class Work(Base):
             "custom_list_entries": ["list_id", "featured", "first_appearance"],
         }
 
-        result: Dict = {}
+        result: dict = {}
 
         def _convert(value):
             if isinstance(value, Decimal):
@@ -1654,7 +1654,7 @@ class Work(Base):
         result["contributors"] = []
         if doc.presentation_edition and doc.presentation_edition.contributions:
             for item in doc.presentation_edition.contributions:
-                contributor: Dict = {}
+                contributor: dict = {}
                 _set_value(item.contributor, "contributor", contributor)
                 _set_value(item, "contribution", contributor)
                 result["contributors"].append(contributor)
@@ -1670,7 +1670,7 @@ class Work(Base):
                 ):
                     continue
 
-                lc: Dict = {}
+                lc: dict = {}
                 _set_value(item, "licensepools", lc)
                 # lc["availability_time"] = getattr(item, "availability_time").timestamp()
                 lc["available"] = (
@@ -1702,21 +1702,21 @@ class Work(Base):
         result["identifiers"] = []
         if doc.identifiers:  # type: ignore
             for item in doc.identifiers:  # type: ignore
-                identifier: Dict = {}
+                identifier: dict = {}
                 _set_value(item, "identifiers", identifier)
                 result["identifiers"].append(identifier)
 
         result["classifications"] = []
         if doc.classifications:  # type: ignore
             for item in doc.classifications:  # type: ignore
-                classification: Dict = {}
+                classification: dict = {}
                 _set_value(item, "classifications", classification)
                 result["classifications"].append(classification)
 
         result["customlists"] = []
         if doc.custom_list_entries:
             for item in doc.custom_list_entries:  # type: ignore
-                customlist: Dict = {}
+                customlist: dict = {}
                 _set_value(item, "custom_list_entries", customlist)
                 result["customlists"].append(customlist)
 
