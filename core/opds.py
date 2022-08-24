@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import datetime
 import logging
 from collections import defaultdict
-from typing import List, Optional, Union
+from typing import TYPE_CHECKING, List, Optional, Union
 from urllib.parse import quote
 
 from lxml import etree
@@ -9,8 +11,6 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.orm.session import Session
 
 from core.external_search import QueryParseException
-from core.model.library import Library
-from core.model.licensing import LicensePool
 from core.problem_details import INVALID_INPUT
 
 from .cdn import cdnify
@@ -40,6 +40,10 @@ from .model import (
 from .util.datetime_helpers import utc_now
 from .util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from .util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
+
+# Import related models when doing type checking
+if TYPE_CHECKING:
+    from core.model import Library, LicensePool  # noqa: autoflake
 
 
 class UnfulfillableWork(Exception):

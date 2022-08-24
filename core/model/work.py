@@ -1,5 +1,7 @@
 # WorkGenre, Work
 
+from __future__ import annotations
+
 import logging
 from collections import Counter
 from datetime import date, datetime
@@ -1183,7 +1185,7 @@ class Work(Base):
             self, operation=WorkCoverageRecord.GENERATE_MARC_OPERATION
         )
 
-    def active_license_pool(self, library: "Library" = None) -> Optional["LicensePool"]:
+    def active_license_pool(self, library: Library = None) -> Optional[LicensePool]:
         # The active license pool is the one that *would* be
         # associated with a loan, were a loan to be issued right
         # now.
