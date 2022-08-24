@@ -891,6 +891,7 @@ class CustomListsController(AdminCirculationManagerController):
             try:
                 json.loads(auto_update_query)
             except json.JSONDecodeError:
+                self._db.rollback()
                 return INVALID_INPUT.detailed(
                     "auto_update_query is not JSON serializable"
                 )
@@ -898,10 +899,12 @@ class CustomListsController(AdminCirculationManagerController):
             try:
                 json.loads(auto_update_facets)
             except json.JSONDecodeError:
+                self._db.rollback()
                 return INVALID_INPUT.detailed(
                     "auto_update_facets is not JSON serializable"
                 )
         if auto_update is True and auto_update_query is None:
+            self._db.rollback()
             return INVALID_INPUT.detailed(
                 "auto_update_query must be present when auto_update is enabled"
             )

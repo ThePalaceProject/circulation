@@ -1252,6 +1252,24 @@ class TestCustomListsController(AdminControllerTest):
             )
             assert json.dumps({}) == list.auto_update_facets
 
+        # On an error of auto_update, rollbacks should occur
+        with self.request_context_with_library_and_admin("/", method="POST"):
+            flask.request.form = MultiDict(
+                [
+                    ("name", "400List"),
+                    (
+                        "entries",
+                        "[]",
+                    ),
+                    ("collections", "[]"),
+                    ("auto_update", True),
+                ]
+            )
+            response = self.manager.admin_custom_lists_controller.custom_lists()
+            assert 400 == response.status_code
+            # List was not created
+            assert None == get_one(self._db, CustomList, name="400List")
+
     def test_custom_list_get(self):
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
         list, ignore = create(
