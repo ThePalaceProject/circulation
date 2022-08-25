@@ -570,7 +570,7 @@ develop = ["coverage (<5.0.0)", "mock", "pytest (>=3.0.0)", "pytest-cov", "pytz"
 
 [[package]]
 name = "expiringdict"
-version = "1.2.1"
+version = "1.2.2"
 description = "Dictionary with auto-expiring values for caching purposes"
 category = "main"
 optional = false
@@ -1834,7 +1834,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.7,<4"
-content-hash = "feb46e8893878ab3349a64bbe50ff82adf33257d79278a4bd064ca1696368a6f"
+content-hash = "85ca419eaec776b41ab84a10a0c1c75d9e496337ae1b550cb7cc15d22bb040f6"
 
 [metadata.files]
 atomicwrites = [
@@ -1994,7 +1994,8 @@ elasticsearch-dsl = [
     {file = "elasticsearch_dsl-6.4.0-py2.py3-none-any.whl", hash = "sha256:f60aea7fd756ac1fbe7ce114bbf4949aefbf495dfe8896640e787c67344f12f6"},
 ]
 expiringdict = [
-    {file = "expiringdict-1.2.1.tar.gz", hash = "sha256:fe2ba427220425c3c8a3d29f6d2e2985bcee323f8bcd4021e68ebefbd90d8250"},
+    {file = "expiringdict-1.2.2-py3-none-any.whl", hash = "sha256:09a5d20bc361163e6432a874edd3179676e935eb81b925eccef48d409a8a45e8"},
+    {file = "expiringdict-1.2.2.tar.gz", hash = "sha256:300fb92a7e98f15b05cf9a856c1415b3bc4f2e132be07daa326da6414c23ee09"},
 ]
 feedparser = [
     {file = "feedparser-6.0.10-py3-none-any.whl", hash = "sha256:79c257d526d13b944e965f6095700587f27388e50ea16fd245babe4dfae7024f"},
