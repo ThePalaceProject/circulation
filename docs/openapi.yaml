@@ -64,7 +64,7 @@ paths:
                 announcements:
                   type: string
                   description: JSON stringified list of announcements
-                  example: [{"id": "xxxx-xxx-xxxxx", "message": "An announcement for all to see", start: "1990-01-01"}, {"message": "This is a new announcement without an id yet"}]
+                  example: [{"id": "xxxx-xxx-xxxxx", "content": "An announcement for all to see", start: "1990-01-01"}, {"content": "This is a new announcement without an id yet"}]
       responses:
         '200':
           description: OK
