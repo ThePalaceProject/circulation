@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import datetime
 import logging
 from collections import defaultdict
-from typing import List
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 from lxml import etree
@@ -38,6 +40,10 @@ from .model import (
 from .util.datetime_helpers import utc_now
 from .util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from .util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
+
+# Import related models when doing type checking
+if TYPE_CHECKING:
+    from core.model import Library, LicensePool  # noqa: autoflake
 
 
 class UnfulfillableWork(Exception):
@@ -190,7 +196,7 @@ class Annotator:
         return rating_tag
 
     @classmethod
-    def samples(cls, edition: Edition) -> List[Hyperlink]:
+    def samples(cls, edition: Edition) -> list[Hyperlink]:
         if not edition:
             return []
         _db = Session.object_session(edition)
@@ -452,14 +458,16 @@ class Annotator:
         raise NotImplementedError()
 
     @classmethod
-    def active_licensepool_for(cls, work):
+    def active_licensepool_for(
+        cls, work: Work, library: Library = None
+    ) -> LicensePool | None:
         """Which license pool would be/has been used to issue a license for
         this work?
         """
         if not work:
             return None
 
-        return work.active_license_pool()
+        return work.active_license_pool(library=library)
 
     def sort_works_for_groups_feed(self, works, **kwargs):
         return works
@@ -1263,8 +1271,12 @@ class AcquisitionFeed(OPDSFeed):
         return entry
 
     def create_entry(
-        self, work, even_if_no_license_pool=False, force_create=False, use_cache=True
-    ):
+        self,
+        work: Work | Edition | None,
+        even_if_no_license_pool=False,
+        force_create=False,
+        use_cache=True,
+    ) -> etree.Element | OPDSMessage:
         """Turn a work into an entry for an acquisition feed."""
         identifier = None
         if isinstance(work, Edition):

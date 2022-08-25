@@ -1710,6 +1710,37 @@ class TestWork(DatabaseTest):
         pool2.presentation_edition.title = None
         assert pool1 == work.active_license_pool()
 
+    def test_active_license_pool_accounts_for_library(self):
+        """2 libraries, 2 collections, and 2 pools, always select the right pool in a scoped request"""
+        l1 = self._library()
+        l2 = self._library()
+        c1 = self._collection()
+        c2 = self._collection()
+        l1.collections = [c1]
+        l2.collections = [c2]
+        work: Work = self._work(presentation_edition=self._edition())
+        lp1: LicensePool = self._licensepool(
+            work.presentation_edition,
+            collection=c1,
+            unlimited_access=True,
+        )
+        lp2 = self._licensepool(
+            work.presentation_edition,
+            collection=c2,
+            unlimited_access=True,
+            open_access=False,
+        )
+        lp1._open_access_download_url = (
+            "http://example.org/"  # Unscoped calls will ALWAYS pick this pool now
+        )
+        lp1.calculate_work()
+        lp2.calculate_work()
+        lp1.open_access = True  # force open access
+        self._db.commit()
+
+        assert work.active_license_pool() == lp1
+        assert work.active_license_pool(library=l2) == lp2
+
     def test_delete_work(self):
         # Search mock
         class MockSearchIndex:
