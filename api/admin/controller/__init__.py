@@ -987,7 +987,9 @@ class CustomListsController(AdminCirculationManagerController):
         self.require_librarian(library)
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
 
-        list = get_one(self._db, CustomList, id=list_id, data_source=data_source)
+        list: CustomList = get_one(
+            self._db, CustomList, id=list_id, data_source=data_source
+        )
         if not list:
             return MISSING_CUSTOM_LIST
 
@@ -1053,6 +1055,9 @@ class CustomListsController(AdminCirculationManagerController):
         elif flask.request.method == "DELETE":
             # Deleting requires a library manager.
             self.require_library_manager(flask.request.library)
+
+            if len(list.shared_locally_with_libraries) > 0:
+                return CANNOT_DELETE_SHARED_LIST
 
             # Build the list of affected lanes before modifying the
             # CustomList.

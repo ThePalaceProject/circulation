@@ -189,6 +189,13 @@ NO_SUCH_LIST = pd(
     _("You asked for a nonexistent list."),
 )
 
+CANNOT_DELETE_SHARED_LIST = pd(
+    "http://librarysimplified.org/terms/problem/cannot-delete-shared-list",
+    409,
+    _("Cannot delete list."),
+    _("It is not possible to delete a shared list."),
+)
+
 NO_SUCH_COLLECTION = pd(
     "http://librarysimplified.org/terms/problem/unknown-collection",
     404,
