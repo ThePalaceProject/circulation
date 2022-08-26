@@ -1465,6 +1465,11 @@ class DashboardController(AdminCirculationManagerController):
 
             library_collection_counts = dict()
             for collection in library.all_collections:
+                # sometimes a parent collection may be dissociated from a library
+                # in this case we may not have access to the collection as a library staff member
+                if collection.name not in collection_counts:
+                    continue
+
                 counts = collection_counts[collection.name]
                 library_collection_counts[collection.name] = counts
                 title_count += counts.get("licensed_titles", 0) + counts.get(

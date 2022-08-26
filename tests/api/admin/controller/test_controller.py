@@ -2602,6 +2602,23 @@ class TestDashboardController(AdminControllerTest):
                 assert 0 == c3_data.get("licenses")
                 assert 0 == c3_data.get("available_licenses")
 
+    def test_stats_parent_collection_permissions(self):
+        """A parent collection may be dissociated from a library"""
+        parent: Collection = self._collection()
+        child: Collection = self._collection()
+        child.parent = parent
+        library = self._library()
+        child.libraries.append(library)
+        self.admin.add_role(AdminRole.LIBRARIAN, library)
+
+        with self.request_context_with_library_and_admin("/", library=library):
+            response = self.manager.admin_dashboard_controller.stats()
+            stats = response["total"]["collections"]
+        # Child is in stats, but parent is not
+        # No exceptions were thrown
+        assert child.name in stats
+        assert parent.name not in stats
+
 
 class SettingsControllerTest(AdminControllerTest):
     """Test some part of the settings controller."""
