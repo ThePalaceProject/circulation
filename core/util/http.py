@@ -252,16 +252,19 @@ class HTTP:
         if "data" in kwargs and isinstance(kwargs["data"], str):
             kwdata: str = kwargs["data"]
             kwargs["data"] = kwdata.encode("utf8")
-        if "headers" in kwargs:
-            headers = kwargs["headers"]
-            new_headers = {}
-            for k, v in list(headers.items()):
-                if isinstance(k, str):
-                    k = k.encode("utf8")
-                if isinstance(v, str):
-                    v = v.encode("utf8")
-                new_headers[k] = v
-            kwargs["headers"] = new_headers
+
+        headers = kwargs.get("headers", {})
+        # Set a user-agent if not already present
+        if "User-Agent" not in headers:
+            headers["User-Agent"] = "Palace Manager/1.x.x"
+        new_headers = {}
+        for k, v in list(headers.items()):
+            if isinstance(k, str):
+                k = k.encode("utf8")
+            if isinstance(v, str):
+                v = v.encode("utf8")
+            new_headers[k] = v
+        kwargs["headers"] = new_headers
 
         try:
             if verbose:

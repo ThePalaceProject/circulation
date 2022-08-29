@@ -38,6 +38,9 @@ class TestHTTP:
 
             # A default timeout is added.
             assert 20 == kwargs["timeout"]
+
+            # Default header should be set
+            assert b"Palace Manager/1.x.x" == kwargs["headers"][b"User-Agent"]
             return MockRequestsResponse(200, content="Success!")
 
         response = HTTP._request_with_timeout(
@@ -45,6 +48,22 @@ class TestHTTP:
         )
         assert 200 == response.status_code
         assert b"Success!" == response.content
+
+    def test_request_with_timeout_with_ua(self):
+        def fake_request_method(*args, **kwargs):
+            # Non-default user agent
+            assert b"Fake Agent" == kwargs["headers"][b"User-Agent"]
+            return MockRequestsResponse(201)
+
+        assert (
+            HTTP._request_with_timeout(
+                "http://url",
+                fake_request_method,
+                "GET",
+                headers={"User-Agent": "Fake Agent"},
+            ).status_code
+            == 201
+        )
 
     def test_request_with_timeout_failure(self):
         def immediately_timeout(*args, **kwargs):
