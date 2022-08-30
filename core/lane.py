@@ -1892,6 +1892,10 @@ class WorkList:
         # performance isn't a big concern -- it's just ugly.
         wl = SpecificWorkList(work_ids)
         wl.initialize(self.get_library(_db))
+        # If we are specifically targeting a collection and not a library
+        # ensure the worklist is aware of this
+        if not self.library_id and self.collection_ids:
+            wl.collection_ids = self.collection_ids
         qu = wl.works_from_database(_db, facets=facets)
         a = time.time()
         all_works = qu.all()
