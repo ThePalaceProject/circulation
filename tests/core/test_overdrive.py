@@ -501,7 +501,7 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         # patrons_in_hold_queue to both be nonzero; this is just to
         # verify that the test picks up whatever data is in the
         # document.
-        assert 3 == circulationdata.licenses_owned
+        assert 4 == circulationdata.licenses_owned
         assert 1 == circulationdata.licenses_available
         assert 10 == circulationdata.patrons_in_hold_queue
 
@@ -518,9 +518,11 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         raw, info = self.sample_json("overdrive_availability_advantage.json")
 
         extractor = OverdriveRepresentationExtractor(self.api)
+        # consortial data means data that is available to a consortial account
+        # in other words, the consortial account itself + any shared accounts
         consortial_data = extractor.book_info_to_circulation(info)
-        assert 2 == consortial_data.licenses_owned
-        assert 2 == consortial_data.licenses_available
+        assert 4 == consortial_data.licenses_owned
+        assert 4 == consortial_data.licenses_available
 
         class MockAPI:
             # Pretend to be an API for an Overdrive Advantage collection with
@@ -552,8 +554,8 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
 
         extractor = OverdriveRepresentationExtractor(MockAPI())
         advantage_data = extractor.book_info_to_circulation(info)
-        assert None == advantage_data.licenses_owned
-        assert None == advantage_data.licenses_available
+        assert 0 == advantage_data.licenses_owned
+        assert 0 == advantage_data.licenses_available
         assert 0 == consortial_data.patrons_in_hold_queue
 
     def test_not_found_error_to_circulationdata(self):

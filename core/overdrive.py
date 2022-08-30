@@ -1024,24 +1024,47 @@ class OverdriveRepresentationExtractor:
             patrons_in_hold_queue = 0
         elif book.get("isOwnedByCollections") is not False:
             # We own this book.
-            for account in book.get("accounts", []):
-                # Only keep track of copies owned by the collection
-                # we're tracking.
-                if account.get("id") != self.library_id:
-                    continue
+            accounts = book.get("accounts", [])
+            # consortial accounts will always contain an account with id == -1
+            # This section of code is convoluted in part because I don't fully
+            # understand the relationship between overdrive, overdrive
+            # advantage, and overdrive consortial accounts and how related
+            # information is returned by the API or not depending on the
+            # the API token used.
+            # The problem as I see it is that the response is overloaded:
+            # you need to know something about the nature of the API token
+            # in order to properly interpret the results...maybe.  I'm not sure
+            # talking to OD about it has not left me with clarity on the issue.
+            is_consortium = len([a for a in accounts if a["id"] == -1]) == 1
+            licenses_owned = 0
+            licenses_available = 0
+            if self.library_id != -1:
+                # this is an overdrive advantage account
+                for account in accounts:
+                    if account["id"] == self.library_id:
+                        if "copiesOwned" in account:
+                            licenses_owned += int(account["copiesOwned"])
+                        if "copiesAvailable" in account:
+                            licenses_available += int(account["copiesAvailable"])
+            elif not is_consortium:
+                # this is a non-consortial overdrive account
+                # just get the values from the book object
+                licenses_owned = book.get("copiesOwned", 0)
+                licenses_available = book.get("copiesAvailable", 0)
+            else:
+                for account in accounts:
+                    shared = "shared" in account and account["shared"]
+                    if shared or account["id"] == -1:
+                        if "copiesOwned" in account:
+                            licenses_owned += int(account["copiesOwned"])
+                        if "copiesAvailable" in account:
+                            licenses_available += int(account["copiesAvailable"])
 
-                if "copiesOwned" in account:
-                    if licenses_owned is None:
-                        licenses_owned = 0
-                    licenses_owned += int(account["copiesOwned"])
-                if "copiesAvailable" in account:
-                    if licenses_available is None:
-                        licenses_available = 0
-                    licenses_available += int(account["copiesAvailable"])
             if "numberOfHolds" in book:
                 if patrons_in_hold_queue is None:
                     patrons_in_hold_queue = 0
                 patrons_in_hold_queue += book["numberOfHolds"]
+
         return CirculationData(
             data_source=DataSource.OVERDRIVE,
             primary_identifier=primary_identifier,
