@@ -1,4 +1,5 @@
 import datetime
+from typing import Generator
 
 from core.model.configuration import ConfigurationSetting
 from core.util.problem_detail import ProblemDetail
@@ -19,7 +20,7 @@ class Announcements:
     GLOBAL_SETTING_NAME = "global_announcements"
 
     @classmethod
-    def for_all(cls, _db):
+    def for_all(cls, _db) -> "Announcements":
         """Load announcements that are not bound to any library"""
         announcement = (
             ConfigurationSetting.sitewide(_db, cls.GLOBAL_SETTING_NAME).json_value or []
@@ -27,7 +28,7 @@ class Announcements:
         return cls(announcement)
 
     @classmethod
-    def for_library(cls, library):
+    def for_library(cls, library) -> "Announcements":
         """Load an Announcements object for the given Library.
 
         :param library: A Library
@@ -56,7 +57,7 @@ class Announcements:
         self.announcements = [Announcement(**data) for data in validated]
 
     @property
-    def active(self):
+    def active(self) -> Generator["Announcement", None, None]:
         """Yield only the active announcements."""
         for a in self.announcements:
             if a.is_active:
