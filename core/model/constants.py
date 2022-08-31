@@ -99,9 +99,6 @@ class EditionConstants:
     IMAGE_MEDIUM = "Image"
     COURSEWARE_MEDIUM = "Courseware"
 
-    ELECTRONIC_FORMAT = "Electronic"
-    CODEX_FORMAT = "Codex"
-
     # These are all media known to the system.
     KNOWN_MEDIA = (
         BOOK_MEDIUM,
