@@ -4892,6 +4892,8 @@ class TestExternalSearchJSONQuery(EndToEndSearchTest):
     def test_search_with_facets_ordering(self):
         self.facets = SearchFacets(order="author", search_type="json")
         self.filter = Filter(facets=self.facets)
+        assert self.filter.min_score == None
+
         w = self.random_works
         expected = [w[1], w[2], w[0]]
         response = self.expect(
