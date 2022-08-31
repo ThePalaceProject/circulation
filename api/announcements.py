@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import datetime
-from typing import Generator
+from typing import TYPE_CHECKING, Generator
 
 from core.model.configuration import ConfigurationSetting
 from core.util.problem_detail import ProblemDetail
 
 from .admin.announcement_list_validator import AnnouncementListValidator
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
+    from core.model import Library
 
 
 class Announcements:
@@ -22,7 +27,7 @@ class Announcements:
     GLOBAL_SETTING_NAME = "global_announcements"
 
     @classmethod
-    def for_all(cls, _db) -> Announcements:
+    def for_all(cls, _db: Session) -> Announcements:
         """Load announcements that are not bound to any library"""
         announcement = (
             ConfigurationSetting.sitewide(_db, cls.GLOBAL_SETTING_NAME).json_value or []
@@ -30,7 +35,7 @@ class Announcements:
         return cls(announcement)
 
     @classmethod
-    def for_library(cls, library) -> Announcements:
+    def for_library(cls, library: Library) -> Announcements:
         """Load an Announcements object for the given Library.
 
         :param library: A Library
