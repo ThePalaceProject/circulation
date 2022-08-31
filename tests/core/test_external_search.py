@@ -4811,15 +4811,18 @@ class TestExternalSearchJSONQuery(EndToEndSearchTest):
 
         self.random_works = []
         specifics = [
-            dict(language="Spanish"),
-            dict(language="Spanish"),
-            dict(language="German"),
-            dict(with_open_access_download=False, with_license_pool=True),
+            dict(language="Spanish", authors=["charlie"]),
+            dict(language="Spanish", authors=["alpha"]),
+            dict(language="German", authors=["beta"]),
+            dict(
+                with_open_access_download=False,
+                with_license_pool=True,
+                authors=["delta"],
+            ),
         ]
         for i in range(4):
             data = dict(
                 title=uuid.uuid4(),
-                authors=[uuid.uuid4()],
                 with_open_access_download=True,
             )
             data.update(**specifics[i])
@@ -4841,6 +4844,7 @@ class TestExternalSearchJSONQuery(EndToEndSearchTest):
         respids = {h.work_id for h in resp.hits}
         expectedids = {w.id for w in works}
         assert respids == expectedids
+        return resp
 
     def test_search_basic(self):
         self.expect(self._leaf("medium", "Audio"), [self.audio_work])
@@ -4884,3 +4888,20 @@ class TestExternalSearchJSONQuery(EndToEndSearchTest):
             },
             [self.book_work, self.random_works[2], self.random_works[3]],
         )
+
+    def test_search_with_facets_ordering(self):
+        self.facets = SearchFacets(order="author", search_type="json")
+        self.filter = Filter(facets=self.facets)
+        w = self.random_works
+        expected = [w[1], w[2], w[0]]
+        response = self.expect(
+            {
+                "or": [
+                    self._leaf("language", "Spanish"),
+                    self._leaf("language", "German"),
+                ]
+            },
+            expected,
+        )
+        # assert the ordering is as expected
+        assert [h.work_id for h in response.hits] == [e.id for e in expected]

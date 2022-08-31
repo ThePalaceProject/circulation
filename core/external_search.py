@@ -2619,6 +2619,10 @@ class Filter(SearchBase):
             self.scoring_functions = []
             self.search_type = "default"
 
+        # JSON type searches are exact matches and do not have scoring
+        if self.search_type == "json":
+            self.min_score = None
+
     @property
     def audiences(self):
         """Return the appropriate audiences for this query.
