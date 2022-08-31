@@ -1,4 +1,5 @@
 import json
+from unittest import mock
 
 import pytest
 import requests
@@ -23,8 +24,9 @@ class TestHTTP:
         assert "3xx" == m(399)
         assert "5xx" == m(500)
 
-    def test_request_with_timeout_success(self):
-
+    @mock.patch("core.util.http.Configuration")
+    def test_request_with_timeout_success(self, mock_conf):
+        mock_conf.app_version.return_value = "<VERSION>"
         called_with = None
 
         def fake_200_response(*args, **kwargs):
@@ -40,7 +42,7 @@ class TestHTTP:
             assert 20 == kwargs["timeout"]
 
             # Default header should be set
-            assert b"Palace Manager/1.x.x" == kwargs["headers"][b"User-Agent"]
+            assert b"Palace Manager/<VERSION>" == kwargs["headers"][b"User-Agent"]
             return MockRequestsResponse(200, content="Success!")
 
         response = HTTP._request_with_timeout(

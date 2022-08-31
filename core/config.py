@@ -9,14 +9,14 @@ from flask_babel import lazy_gettext as _
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import ArgumentError
 
+# It's convenient for other modules import IntegrationException
+# from this module, alongside CannotLoadConfiguration.
+from core.exceptions import IntegrationException
+
 from .entrypoint import EntryPoint
 from .facets import FacetConstants
 from .util import LanguageCodes
 from .util.datetime_helpers import to_utc, utc_now
-
-# It's convenient for other modules import IntegrationException
-# from this module, alongside CannotLoadConfiguration.
-from .util.http import IntegrationException
 
 
 class CannotLoadConfiguration(IntegrationException):
