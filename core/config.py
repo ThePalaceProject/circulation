@@ -185,6 +185,8 @@ class Configuration(ConfigurationConstants):
 
     EXCLUDED_AUDIO_DATA_SOURCES = "excluded_audio_data_sources"
 
+    DEFAULT_USER_AGENT_VERSION = "1.x.x"
+
     SITEWIDE_SETTINGS = [
         {
             "key": BASE_URL_KEY,

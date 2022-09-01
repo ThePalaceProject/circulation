@@ -228,7 +228,7 @@ class HTTP:
             version = (
                 version
                 if version and version != Configuration.NO_APP_VERSION_FOUND
-                else "1.x.x"
+                else Configuration.DEFAULT_USER_AGENT_VERSION
             )
             headers["User-Agent"] = f"Palace Manager/{version}"
         new_headers = {}

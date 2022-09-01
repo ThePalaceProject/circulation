@@ -4,6 +4,7 @@ from unittest import mock
 import pytest
 import requests
 
+from core.config import Configuration
 from core.problem_details import INVALID_INPUT
 from core.testing import MockRequestsResponse
 from core.util.http import (
@@ -66,6 +67,19 @@ class TestHTTP:
             ).status_code
             == 201
         )
+
+    @mock.patch("core.util.http.Configuration", spec=Configuration)
+    def test_default_user_agent(self, mock_conf):
+        mock_conf.app_version.return_value = Configuration.NO_APP_VERSION_FOUND
+        # Mocked information should match real information
+        mock_conf.NO_APP_VERSION_FOUND = Configuration.NO_APP_VERSION_FOUND
+        mock_conf.DEFAULT_USER_AGENT_VERSION = Configuration.DEFAULT_USER_AGENT_VERSION
+
+        def fake_request(*args, **kwargs):
+            assert b"Palace Manager/1.x.x" == kwargs["headers"][b"User-Agent"]
+            return MockRequestsResponse(201)
+
+        assert HTTP._request_with_timeout("/", fake_request).status_code == 201
 
     def test_request_with_timeout_failure(self):
         def immediately_timeout(*args, **kwargs):
