@@ -1,8 +1,17 @@
-import datetime
+from __future__ import annotations
 
+import datetime
+from typing import TYPE_CHECKING, Generator
+
+from core.model.configuration import ConfigurationSetting
 from core.util.problem_detail import ProblemDetail
 
 from .admin.announcement_list_validator import AnnouncementListValidator
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
+    from core.model import Library
 
 
 class Announcements:
@@ -13,9 +22,20 @@ class Announcements:
     """
 
     SETTING_NAME = "announcements"
+    # Must keep the global and library local settings names different
+    # to avoid configuration inheritance
+    GLOBAL_SETTING_NAME = "global_announcements"
 
     @classmethod
-    def for_library(cls, library):
+    def for_all(cls, _db: Session) -> Announcements:
+        """Load announcements that are not bound to any library"""
+        announcement = (
+            ConfigurationSetting.sitewide(_db, cls.GLOBAL_SETTING_NAME).json_value or []
+        )
+        return cls(announcement)
+
+    @classmethod
+    def for_library(cls, library: Library) -> Announcements:
         """Load an Announcements object for the given Library.
 
         :param library: A Library
@@ -32,17 +52,19 @@ class Announcements:
         :return: A list of Announcement objects. The list will be empty if
             there are validation errors in `announcements`.
         """
+        self.problem = None
         validator = AnnouncementListValidator()
         validated = validator.validate_announcements(announcements)
         if isinstance(validated, ProblemDetail):
             # There's a problem with the way the announcements were
             # serialized to the database. Treat this as an empty list.
+            self.problem = validated
             validated = []
 
         self.announcements = [Announcement(**data) for data in validated]
 
     @property
-    def active(self):
+    def active(self) -> Generator[Announcement, None, None]:
         """Yield only the active announcements."""
         for a in self.announcements:
             if a.is_active:

@@ -204,6 +204,10 @@ def setup_admin_controllers(manager):
 
     manager.admin_catalog_services_controller = CatalogServicesController(manager)
 
+    from api.admin.controller.announcement_service import AnnouncementSettings
+
+    manager.admin_announcement_service = AnnouncementSettings(manager)
+
 
 class AdminController:
     def __init__(self, manager):
