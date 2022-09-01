@@ -36,7 +36,7 @@ class AnnouncementSettings(SettingsController):
         settings = Configuration.ANNOUNCEMENT_SETTINGS
         return dict(
             settings=settings,
-            announcements=[ann.json_ready for ann in announcements.active],
+            announcements=[ann.json_ready for ann in announcements.announcements],
         )
 
     def post(self) -> dict | ProblemDetail:
