@@ -35,7 +35,7 @@ class TestAnnouncementService(AnnouncementTest, AdminControllerTest):
             response = AnnouncementSettings(self.manager).process_many()
 
         announcements = Announcements.for_all(self._db)
-        assert len(announcements.announcements) == 2
+        assert len(announcements.announcements) == 1
         assert announcements.announcements[0].id == "active"
 
     def test_post_errors(self):
