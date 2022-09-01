@@ -147,8 +147,11 @@ class TestPushNotifications(DatabaseTest):
 
         work1: Work = self._work(with_license_pool=True)
         work2: Work = self._work(with_license_pool=True)
-        hold1, _ = work1.active_license_pool().on_hold_to(patron1, position=0)
-        hold2, _ = work2.active_license_pool().on_hold_to(patron2, position=0)
+        p1 = work1.active_license_pool()
+        p2 = work2.active_license_pool()
+        if p1 and p2:  # mypy complains if we don't do this
+            hold1, _ = p1.on_hold_to(patron1, position=0)
+            hold2, _ = p2.on_hold_to(patron2, position=0)
 
         PushNotifications.send_holds_notifications([hold1, hold2])
 

@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import datetime
 import logging
 import traceback
-from typing import List, Optional, Type, Union
+from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import defer
 from sqlalchemy.sql.expression import and_, or_
@@ -32,6 +34,9 @@ from .model import (
 )
 from .model.configuration import ConfigurationSetting
 from .util.datetime_helpers import utc_now
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Query
 
 
 class CollectionMonitorLogger(logging.LoggerAdapter):
@@ -74,7 +79,7 @@ class Monitor:
     # e.g. "Overdrive Circulation Monitor". All instances of your
     # subclass will give this as their service name and track their
     # Timestamps under this name.
-    SERVICE_NAME: Optional[str] = None
+    SERVICE_NAME: str | None = None
 
     # Some useful relative constants for DEFAULT_START_TIME (below).
     ONE_MINUTE_AGO = datetime.timedelta(seconds=60)
@@ -83,13 +88,13 @@ class Monitor:
 
     # If there is no Timestamp for this Monitor, this time will be
     # passed into `run_once()` as the `start_time` parameter.
-    DEFAULT_START_TIME: Union[object, datetime.timedelta] = ONE_MINUTE_AGO
+    DEFAULT_START_TIME: object | datetime.timedelta = ONE_MINUTE_AGO
 
     # When the Timestamp for this Monitor is created, this value will
     # be set for `Timestamp.counter`.
     #
     # This is only used by the SweepMonitor subclass.
-    DEFAULT_COUNTER: Optional[int] = None
+    DEFAULT_COUNTER: int | None = None
 
     def __init__(self, _db, collection=None):
         self._db = _db
@@ -338,7 +343,7 @@ class CollectionMonitor(Monitor):
     # instantiated with Collections that get their licenses from this
     # provider. If this is unset, the CollectionMonitor can be
     # instantiated with any Collection, or with no Collection at all.
-    PROTOCOL: Optional[str] = None
+    PROTOCOL: str | None = None
 
     def __init__(self, _db, collection):
         cls = self.__class__
@@ -434,7 +439,7 @@ class SweepMonitor(CollectionMonitor):
     # The model class corresponding to the database table that this
     # Monitor sweeps over. This class must keep its primary key in the
     # `id` field.
-    MODEL_CLASS: Optional[Type[Base]] = None
+    MODEL_CLASS: type[Base] | None = None
 
     def __init__(self, _db, collection=None, batch_size=None):
         cls = self.__class__
@@ -667,9 +672,9 @@ class NotPresentationReadyWorkSweepMonitor(WorkSweepMonitor):
 class PatronSweepMonitor(SweepMonitor):
     """Sweep through all Patrons"""
 
-    MODEL_CLASS: Optional[Type[Base]] = Patron
+    MODEL_CLASS: type[Base] | None = Patron
 
-    def scope_to_collection(self, qu, collection):
+    def scope_to_collection(self, qu: Query, collection: Collection) -> Query:
         """Patrons aren't scoped to a collection"""
         return qu
 
@@ -822,12 +827,12 @@ class ReaperMonitor(Monitor):
     that information, improving performance.
     """
 
-    MODEL_CLASS: Type[Base]
-    TIMESTAMP_FIELD: Optional[str] = None
-    MAX_AGE: Union[datetime.timedelta, int]
+    MODEL_CLASS: type[Base]
+    TIMESTAMP_FIELD: str | None = None
+    MAX_AGE: datetime.timedelta | int
     BATCH_SIZE: int = 1000
 
-    REGISTRY: List[Type["ReaperMonitor"]] = []
+    REGISTRY: list[type[ReaperMonitor]] = []
 
     def __init__(self, *args, **kwargs):
         self.SERVICE_NAME = "Reaper for %s" % self.MODEL_CLASS.__name__

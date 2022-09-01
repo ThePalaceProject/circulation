@@ -2832,11 +2832,13 @@ class TestLoanNotificationsScript:
 
     def test_loan_notification(self, db: DatabaseTransactionFixture):
         self._setup_method(db)
-        loan, _ = self.work.active_license_pool().loan_to(
-            self.patron,
-            utc_now(),
-            utc_now() + datetime.timedelta(days=1, hours=1),
-        )
+        p = self.work.active_license_pool()
+        if p:  # mypy complains if we don't do this
+            loan, _ = p.loan_to(
+                self.patron,
+                utc_now(),
+                utc_now() + datetime.timedelta(days=1, hours=1),
+            )
 
         work2 = db.work(with_license_pool=True)
         loan2, _ = work2.active_license_pool().loan_to(

@@ -198,6 +198,7 @@ module = [
     "wcag_contrast_ratio",
     "webpub_manifest_parser.*",
     "firebase_admin",
+    "firebase_admin.messaging",
 ]
 
 [tool.poetry]

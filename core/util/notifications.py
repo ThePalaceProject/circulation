@@ -1,4 +1,6 @@
-from typing import List
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import firebase_admin
 from firebase_admin import credentials, messaging
@@ -13,6 +15,9 @@ from core.model.identifier import Identifier
 from core.model.patron import Hold, Loan, Patron
 from core.model.work import Work
 
+if TYPE_CHECKING:
+    from firebase_admin.messaging import SendResponse
+
 
 class PushNotifications:
     # Should be set to true while unit testing
@@ -23,7 +28,7 @@ class PushNotifications:
     VALID_TOKEN_TYPES = [DeviceTokenTypes.FCM_ANDROID, DeviceTokenTypes.FCM_IOS]
 
     @classmethod
-    def notifiable_tokens(cls, patron: Patron) -> List[DeviceToken]:
+    def notifiable_tokens(cls, patron: Patron) -> list[DeviceToken]:
         return [
             token
             for token in patron.device_tokens
@@ -40,7 +45,7 @@ class PushNotifications:
         return cls._fcm_app
 
     @classmethod
-    def base_url(cls, _db):
+    def base_url(cls, _db: Session) -> str:
         if not cls._base_url:
             cls._base_url = ConfigurationSetting.sitewide(
                 _db, Configuration.BASE_URL_KEY
@@ -49,8 +54,8 @@ class PushNotifications:
 
     @classmethod
     def send_loan_expiry_message(
-        cls, loan: Loan, days_to_expiry, tokens: List[DeviceToken]
-    ):
+        cls, loan: Loan, days_to_expiry, tokens: list[DeviceToken]
+    ) -> list[SendResponse]:
         """Send a loan expiry reminder to the mobile Apps, with enough information
         to identify two things
         - Which loan is being mentioned, in order to correctly deep link
@@ -82,9 +87,9 @@ class PushNotifications:
         return responses
 
     @classmethod
-    def send_activity_sync_message(cls, patrons: List[Patron]) -> List[str]:
-        """Send notifications to the given patrons to sync their bookshelves
-        Enough information needs to be sent to identify a patron on the mobile Apps
+    def send_activity_sync_message(cls, patrons: list[Patron]) -> list[str]:
+        """Send notifications to the given patrons to sync their bookshelves.
+        Enough information needs to be sent to identify a patron on the mobile Apps,
         and make the loans api request with the right authentication"""
         if not patrons:
             return []
@@ -112,7 +117,7 @@ class PushNotifications:
         return [resp.message_id for resp in batch.responses]
 
     @classmethod
-    def send_holds_notifications(cls, holds: List[Hold]) -> List[str]:
+    def send_holds_notifications(cls, holds: list[Hold]) -> list[str]:
         """Send out notifcations to all patron devices that their hold is ready for checkout"""
         if not holds:
             return []

@@ -18,7 +18,7 @@ class PatronActivitySyncNotificationScript(PatronSweepMonitor):
     STALE_ACTIVITY_SYNC_DAYS = 2
     SERVICE_NAME: Optional[str] = "Patron Activity Sync Notification"
 
-    def item_query(self):
+    def item_query(self) -> Query:
         expired_sync = utc_now() - timedelta(days=self.STALE_ACTIVITY_SYNC_DAYS)
         query: Query = super().item_query()
         query = (
@@ -36,5 +36,5 @@ class PatronActivitySyncNotificationScript(PatronSweepMonitor):
         )
         return query
 
-    def process_items(self, items: List[Patron]):
+    def process_items(self, items: List[Patron]) -> None:
         PushNotifications.send_activity_sync_message(items)
