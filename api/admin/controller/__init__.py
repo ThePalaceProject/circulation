@@ -7,7 +7,7 @@ import sys
 import urllib.parse
 from datetime import date, datetime, timedelta
 from http.client import BAD_REQUEST
-from typing import Dict, List, Optional, Union
+from typing import Callable, Dict, List, Optional, Union
 
 import flask
 import jwt
@@ -773,7 +773,7 @@ class FeedController(AdminCirculationManagerController):
 
 
 class CustomListsController(AdminCirculationManagerController):
-    def _list_as_json(self, list: CustomList, is_owner=True):
+    def _list_as_json(self, list: CustomList, is_owner=True) -> Dict:
         """Transform a CustomList object into a response ready dict"""
         collections = []
         for collection in list.collections:
@@ -795,7 +795,7 @@ class CustomListsController(AdminCirculationManagerController):
             is_owner=is_owner,
         )
 
-    def custom_lists(self):
+    def custom_lists(self) -> Dict:
         library = flask.request.library
         self.require_librarian(library)
 
@@ -833,7 +833,7 @@ class CustomListsController(AdminCirculationManagerController):
                 auto_update_query=auto_update_query,
             )
 
-    def _getJSONFromRequest(self, values):
+    def _getJSONFromRequest(self, values: Optional[str]) -> Union[Dict, List]:
         if values:
             values = json.loads(values)
         else:
@@ -841,7 +841,7 @@ class CustomListsController(AdminCirculationManagerController):
 
         return values
 
-    def _get_work_from_urn(self, library, urn):
+    def _get_work_from_urn(self, library: Library, urn: str) -> Work:
         identifier, ignore = Identifier.parse_urn(self._db, urn)
         query = (
             self._db.query(Work)
@@ -864,7 +864,7 @@ class CustomListsController(AdminCirculationManagerController):
         auto_update: Optional[bool] = None,
         auto_update_query: Optional[str] = None,
         auto_update_facets: Optional[str] = None,
-    ):
+    ) -> Union[ProblemDetail, Response]:
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
 
         old_list_with_name = CustomList.find(self._db, name, library=library)
@@ -972,7 +972,9 @@ class CustomListsController(AdminCirculationManagerController):
         else:
             return Response(str(list.id), 200)
 
-    def url_for_custom_list(self, library, list):
+    def url_for_custom_list(
+        self, library: Library, list: CustomList
+    ) -> Callable[[int], str]:
         def url_fn(after):
             return self.url_for(
                 "custom_list",
@@ -983,7 +985,7 @@ class CustomListsController(AdminCirculationManagerController):
 
         return url_fn
 
-    def custom_list(self, list_id):
+    def custom_list(self, list_id: int) -> Union[Response, Dict, ProblemDetail]:
         library = flask.request.library
         self.require_librarian(library)
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
@@ -1082,7 +1084,7 @@ class CustomListsController(AdminCirculationManagerController):
                 lane.update_size(self._db, self.search_engine)
             return Response(str(_("Deleted")), 200)
 
-    def share_locally(self, customlist_id) -> Union[ProblemDetail, Response]:
+    def share_locally(self, customlist_id: int) -> Union[ProblemDetail, Response]:
         """Share this customlist with all libraries on this local CM"""
         if not customlist_id:
             return INVALID_INPUT
