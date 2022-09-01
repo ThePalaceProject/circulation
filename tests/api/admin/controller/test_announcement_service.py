@@ -15,14 +15,19 @@ class TestAnnouncementService(AnnouncementTest, AdminControllerTest):
         setting = ConfigurationSetting.sitewide(
             self._db, Announcements.GLOBAL_SETTING_NAME
         )
-        setting.value = json.dumps([self.expired, self.active])
+        setting.value = json.dumps([self.expired, self.active, self.forthcoming])
+        global_announcements = Announcements.for_all(self._db)
 
         with self.request_context_with_admin("/", method="GET") as ctx:
             response = AnnouncementSettings(self.manager).process_many()
 
         assert set(response.keys()) == {"settings", "announcements"}
-        assert len(response["announcements"]) == 1
-        assert response["announcements"][0]["id"] == "active"
+        announcements_in_response = response["announcements"]
+        # Only one of the announcements should be active.
+        assert 1 == len(list(global_announcements.active))
+        # All announcements should be available for management.
+        assert 3 == len(global_announcements.announcements)
+        assert len(global_announcements.announcements) == len(announcements_in_response)
 
     def test_post(self):
         with self.request_context_with_admin("/", method="POST") as ctx:
@@ -30,7 +35,7 @@ class TestAnnouncementService(AnnouncementTest, AdminControllerTest):
             response = AnnouncementSettings(self.manager).process_many()
 
         announcements = Announcements.for_all(self._db)
-        assert len(announcements.announcements) == 1
+        assert len(announcements.announcements) == 2
         assert announcements.announcements[0].id == "active"
 
     def test_post_errors(self):
