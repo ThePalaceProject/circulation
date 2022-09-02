@@ -125,6 +125,7 @@ class LocalAnalyticsExporter:
                 .join(Identifier, LicensePool.identifier_id == Identifier.id)
                 .join(Work, Work.id == LicensePool.work_id)
                 .join(Edition, Work.presentation_edition_id == Edition.id)
+                .join(Collection, LicensePool.collection_id == Collection.id)
                 .outerjoin(Library, CirculationEvent.library_id == Library.id)
             )
             .where(and_(*clauses))
