@@ -11,11 +11,14 @@ class TestLocalAnalyticsExporter(DatabaseTest):
 
     def test_export(self):
         exporter = LocalAnalyticsExporter()
-
+        c1 = self._collection(name="c1")
+        c2 = self._collection(name="c2")
         w1 = self._work(with_open_access_download=True)
         w2 = self._work(with_open_access_download=True)
         [lp1] = w1.license_pools
         [lp2] = w2.license_pools
+        lp1.collection = c1
+        lp2.collection = c2
         edition1 = w1.presentation_edition
         edition1.publisher = "A publisher"
         edition1.imprint = "An imprint"
@@ -43,7 +46,6 @@ class TestLocalAnalyticsExporter(DatabaseTest):
         num = len(types)
         time = datetime.now() - timedelta(minutes=len(types))
         location = "11377"
-        collection_name = "Default Collection"
         # Create a bunch of circulation events of different types,
         # all with the same .location.
         for type in types:
@@ -98,7 +100,7 @@ class TestLocalAnalyticsExporter(DatabaseTest):
             w1.target_age_string or "",
             ordered_genre_string,
             location,
-            collection_name,
+            c1.name,
             "",
             "",
             edition1.medium,
@@ -142,7 +144,7 @@ class TestLocalAnalyticsExporter(DatabaseTest):
             w2.target_age_string or "",
             genres[1].name,
             no_location,
-            collection_name,
+            c2.name,
             "",
             "",
             edition1.medium,
