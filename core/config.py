@@ -186,7 +186,7 @@ class Configuration(ConfigurationConstants):
     EXCLUDED_AUDIO_DATA_SOURCES = "excluded_audio_data_sources"
 
     # In case an app version is not present, we can use this version as a fallback
-    # for all outgoing http requests with a custom user-agent
+    # for all outgoing http requests without a custom user-agent
     DEFAULT_USER_AGENT_VERSION = "1.x.x"
 
     SITEWIDE_SETTINGS = [
