@@ -1,8 +1,10 @@
 import json
+from unittest import mock
 
 import pytest
 import requests
 
+from core.config import Configuration
 from core.problem_details import INVALID_INPUT
 from core.testing import MockRequestsResponse
 from core.util.http import (
@@ -23,8 +25,9 @@ class TestHTTP:
         assert "3xx" == m(399)
         assert "5xx" == m(500)
 
-    def test_request_with_timeout_success(self):
-
+    @mock.patch("core.util.http.Configuration")
+    def test_request_with_timeout_success(self, mock_conf):
+        mock_conf.app_version.return_value = "<VERSION>"
         called_with = None
 
         def fake_200_response(*args, **kwargs):
@@ -38,6 +41,9 @@ class TestHTTP:
 
             # A default timeout is added.
             assert 20 == kwargs["timeout"]
+
+            # Default header should be set
+            assert b"Palace Manager/<VERSION>" == kwargs["headers"][b"User-Agent"]
             return MockRequestsResponse(200, content="Success!")
 
         response = HTTP._request_with_timeout(
@@ -45,6 +51,35 @@ class TestHTTP:
         )
         assert 200 == response.status_code
         assert b"Success!" == response.content
+
+    def test_request_with_timeout_with_ua(self):
+        def fake_request_method(*args, **kwargs):
+            # Non-default user agent
+            assert b"Fake Agent" == kwargs["headers"][b"User-Agent"]
+            return MockRequestsResponse(201)
+
+        assert (
+            HTTP._request_with_timeout(
+                "http://url",
+                fake_request_method,
+                "GET",
+                headers={"User-Agent": "Fake Agent"},
+            ).status_code
+            == 201
+        )
+
+    @mock.patch("core.util.http.Configuration", spec=Configuration)
+    def test_default_user_agent(self, mock_conf):
+        mock_conf.app_version.return_value = Configuration.NO_APP_VERSION_FOUND
+        # Mocked information should match real information
+        mock_conf.NO_APP_VERSION_FOUND = Configuration.NO_APP_VERSION_FOUND
+        mock_conf.DEFAULT_USER_AGENT_VERSION = Configuration.DEFAULT_USER_AGENT_VERSION
+
+        def fake_request(*args, **kwargs):
+            assert b"Palace Manager/1.x.x" == kwargs["headers"][b"User-Agent"]
+            return MockRequestsResponse(201)
+
+        assert HTTP._request_with_timeout("/", fake_request).status_code == 201
 
     def test_request_with_timeout_failure(self):
         def immediately_timeout(*args, **kwargs):
