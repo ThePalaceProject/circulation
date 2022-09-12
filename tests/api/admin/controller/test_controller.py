@@ -1875,18 +1875,6 @@ class TestLanesController(AdminControllerTest):
 
         lane1 = self._lane("lane1")
         lane2 = self._lane("lane2")
-
-        with self.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = MultiDict(
-                [
-                    ("id", lane1.id),
-                    ("display_name", "lane1"),
-                    ("custom_list_ids", json.dumps([list.id])),
-                ]
-            )
-            response = self.manager.admin_lanes_controller.lanes()
-            assert CANNOT_EDIT_DEFAULT_LANE == response
-
         lane1.customlists += [list]
 
         with self.request_context_with_library_and_admin("/", method="POST"):
@@ -2052,6 +2040,31 @@ class TestLanesController(AdminControllerTest):
             assert True == lane.inherit_parent_restrictions
             assert None == lane.media
             assert 2 == lane.size
+
+    def test_default_lane_edit(self):
+        """Default lanes only allow the display_name to be edited"""
+        lane: Lane = self._lane("default")
+        customlist, _ = self._customlist()
+        with self.request_context_with_library_and_admin("/", method="POST"):
+            flask.request.form = MultiDict(
+                [
+                    ("id", str(lane.id)),
+                    ("parent_id", "12345"),
+                    ("display_name", "new name"),
+                    ("custom_list_ids", json.dumps([customlist.id])),
+                    ("inherit_parent_restrictions", "false"),
+                ]
+            )
+            response = self.manager.admin_lanes_controller.lanes()
+
+        assert 200 == response.status_code
+        assert lane.id == int(response.get_data(as_text=True))
+
+        assert "new name" == lane.display_name
+        # Nothing else changes
+        assert [] == lane.customlists
+        assert True == lane.inherit_parent_restrictions
+        assert None == lane.parent_id
 
     def test_lane_delete_success(self):
         library = self._library()

@@ -1169,16 +1169,21 @@ class LanesController(AdminCirculationManagerController):
             if not display_name:
                 return NO_DISPLAY_NAME_FOR_LANE
 
-            if not custom_list_ids or len(custom_list_ids) == 0:
-                return NO_CUSTOM_LISTS_FOR_LANE
-
             if id:
                 is_new = False
                 lane = get_one(self._db, Lane, id=id, library=library)
                 if not lane:
                     return MISSING_LANE
+
                 if not lane.customlists:
-                    return CANNOT_EDIT_DEFAULT_LANE
+                    # just update what is allowed for default lane, and exit out
+                    lane.display_name = display_name
+                    return Response(str(lane.id), 200)
+                else:
+                    # In case we are not a default lane, the lane MUST have custom lists
+                    if not custom_list_ids or len(custom_list_ids) == 0:
+                        return NO_CUSTOM_LISTS_FOR_LANE
+
                 if display_name != lane.display_name:
                     old_lane = get_one(
                         self._db, Lane, display_name=display_name, parent=lane.parent
@@ -1187,6 +1192,9 @@ class LanesController(AdminCirculationManagerController):
                         return LANE_WITH_PARENT_AND_DISPLAY_NAME_ALREADY_EXISTS
                 lane.display_name = display_name
             else:
+                if not custom_list_ids or len(custom_list_ids) == 0:
+                    return NO_CUSTOM_LISTS_FOR_LANE
+
                 parent = None
                 if parent_id:
                     parent = get_one(self._db, Lane, id=parent_id, library=library)
