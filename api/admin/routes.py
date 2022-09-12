@@ -684,19 +684,6 @@ def custom_list_share(list_id):
     return app.manager.admin_custom_lists_controller.share_locally(list_id)
 
 
-@library_route("/admin/custom_list/<list_id>/collection/share", methods=["POST"])
-@has_library
-@returns_json_or_response_or_problem_detail
-@requires_admin
-@requires_csrf_token
-def custom_list_share_library_collection(list_id):
-    return (
-        app.manager.admin_custom_lists_controller.share_locally_with_library_collection(
-            list_id
-        )
-    )
-
-
 @library_route("/admin/lanes", methods=["GET", "POST"])
 @has_library
 @returns_json_or_response_or_problem_detail

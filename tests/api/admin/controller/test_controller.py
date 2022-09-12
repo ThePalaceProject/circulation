@@ -1653,13 +1653,8 @@ class TestCustomListsController(AdminControllerTest):
             list=list,
         )
 
-    def _share_locally(self, customlist, share_with_library):
+    def _share_locally(self, customlist):
         with self.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = MultiDict(
-                [
-                    ("library", share_with_library.id),
-                ]
-            )
             response = self.manager.admin_custom_lists_controller.share_locally(
                 customlist.id
             )
@@ -1679,17 +1674,24 @@ class TestCustomListsController(AdminControllerTest):
 
     def test_share_locally_missing_collection(self):
         s = self._setup_share_locally()
-        response = self._share_locally(s.list, s.shared_with)
-        assert response == CUSTOMLIST_SOURCE_COLLECTION_MISSING
+        response = self._share_locally(s.list)
+        assert response["failures"] == 2
+        assert response["successes"] == 0
 
     def test_share_locally_success(self):
         s = self._setup_share_locally()
         s.shared_with.collections.append(s.collection1)
-        response = self._share_locally(s.list, s.shared_with)
-        assert response.status_code == 200
+        response = self._share_locally(s.list)
+        assert response["successes"] == 1
+        assert response["failures"] == 1  # The default library
 
         self._db.refresh(s.list)
         assert len(s.list.shared_locally_with_libraries) == 1
+
+        # Try again should have 0 more libraries as successes
+        response = self._share_locally(s.list)
+        assert response["successes"] == 0
+        assert response["failures"] == 1  # The default library
 
     def test_share_locally_with_invalid_entries(self):
         s = self._setup_share_locally()
@@ -1701,16 +1703,17 @@ class TestCustomListsController(AdminControllerTest):
         w = self._work(collection=collection2)
         s.list.add_entry(w)
 
-        response = self._share_locally(s.list, s.shared_with)
-        assert response == CUSTOMLIST_ENTRY_NOT_VALID_FOR_LIBRARY
+        response = self._share_locally(s.list)
+        assert response["failures"] == 2
+        assert response["successes"] == 0
 
     def test_share_locally_get(self):
         """Does the GET method fetch shared lists"""
         s = self._setup_share_locally()
         s.shared_with.collections.append(s.collection1)
 
-        resp = self._share_locally(s.list, s.shared_with)
-        assert resp.status_code == 200
+        resp = self._share_locally(s.list)
+        assert resp["successes"] == 1
 
         self.admin.add_role(AdminRole.LIBRARIAN, s.shared_with)
         with self.request_context_with_library_and_admin(
@@ -1718,24 +1721,20 @@ class TestCustomListsController(AdminControllerTest):
         ):
             response = self.manager.admin_custom_lists_controller.custom_lists()
             assert len(response["custom_lists"]) == 1
-            assert response["custom_lists"][0]["id"] == s.list.id
-
-    def test_share_locally_with_collection(self):
-        s = self._setup_share_locally()
-        s.shared_with.collections.append(s.collection1)
-
-        response = self._share_locally_with_collection(s.list, s.collection1)
-        assert response.status_code == 200
-
-        assert len(s.list.shared_locally_with_libraries) == 1
-        assert s.list.shared_locally_with_libraries[0].id == s.shared_with.id
-
-    def test_share_locally_with_collection_not_accessible(self):
-        s = self._setup_share_locally()
-
-        response = self._share_locally_with_collection(s.list, s.collection1)
-        assert response.status_code == 200
-        assert len(s.list.shared_locally_with_libraries) == 0
+            collections = [
+                dict(id=c.id, name=c.name, protocol=c.protocol)
+                for c in s.list.collections
+            ]
+            assert response["custom_lists"][0] == dict(
+                id=s.list.id,
+                name=s.list.name,
+                collections=collections,
+                entry_count=s.list.size,
+                auto_update=False,
+                auto_update_query=None,
+                auto_update_facets=None,
+                is_owner=False,
+            )
 
 
 class TestLanesController(AdminControllerTest):
@@ -1968,6 +1967,48 @@ class TestLanesController(AdminControllerTest):
 
             # The sibling's priority has been shifted down to put the new lane at the top.
             assert 1 == sibling.priority
+
+    def test_lanes_create_shared_list(self):
+        list, ignore = self._customlist(
+            data_source_name=DataSource.LIBRARY_STAFF, num_entries=0
+        )
+        list.library = self._default_library
+        library = self._library()
+        self.admin.add_role(AdminRole.LIBRARY_MANAGER, library=library)
+
+        with self.request_context_with_library_and_admin(
+            "/", method="POST", library=library
+        ):
+            flask.request.form = MultiDict(
+                [
+                    ("display_name", "lane"),
+                    ("custom_list_ids", json.dumps([list.id])),
+                    ("inherit_parent_restrictions", "false"),
+                ]
+            )
+            response = self.manager.admin_lanes_controller.lanes()
+            assert 404 == response.status_code
+
+        success = CustomListQueries.share_locally_with_library(self._db, list, library)
+        assert success == True
+
+        with self.request_context_with_library_and_admin(
+            "/", method="POST", library=library
+        ):
+            flask.request.form = MultiDict(
+                [
+                    ("display_name", "lane"),
+                    ("custom_list_ids", json.dumps([list.id])),
+                    ("inherit_parent_restrictions", "false"),
+                ]
+            )
+            response = self.manager.admin_lanes_controller.lanes()
+            assert 201 == response.status_code
+            lane_id = int(response.data)
+
+        lane: Lane = get_one(self._db, Lane, id=lane_id)
+        assert lane.customlists == [list]
+        assert lane.library == library
 
     def test_lanes_edit(self):
 
