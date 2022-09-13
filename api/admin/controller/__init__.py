@@ -797,6 +797,7 @@ class CustomListsController(AdminCirculationManagerController):
             auto_update_query=list.auto_update_query,
             auto_update_facets=list.auto_update_facets,
             is_owner=is_owner,
+            is_shared=len(list.shared_locally_with_libraries) > 0,
         )
 
     def custom_lists(self) -> Dict:

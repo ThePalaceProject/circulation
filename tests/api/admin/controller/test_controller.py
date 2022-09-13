@@ -1073,6 +1073,15 @@ class TestCustomListsController(AdminControllerTest):
             auto_update_enabled=False,
         )
 
+        # This will set the is_shared attribute
+        shared_library = self._library()
+        assert (
+            CustomListQueries.share_locally_with_library(
+                self._db, no_entries, shared_library
+            )
+            == True
+        )
+
         with self.request_context_with_library_and_admin("/"):
             response = self.manager.admin_custom_lists_controller.custom_lists()
             assert 2 == len(response.get("custom_lists"))
@@ -1089,6 +1098,7 @@ class TestCustomListsController(AdminControllerTest):
             assert collection.protocol == c.get("protocol")
             assert True == l1.get("auto_update")
             assert auto_update_query == l1.get("auto_update_query")
+            assert False == l1.get("is_shared")
 
             assert no_entries.id == l2.get("id")
             assert no_entries.name == l2.get("name")
@@ -1096,6 +1106,7 @@ class TestCustomListsController(AdminControllerTest):
             assert 0 == len(l2.get("collections"))
             assert False == l2.get("auto_update")
             assert None == l2.get("auto_update_query")
+            assert True == l2.get("is_shared")
 
         self.admin.remove_role(AdminRole.LIBRARIAN, self._default_library)
         with self.request_context_with_library_and_admin("/"):
@@ -1734,6 +1745,7 @@ class TestCustomListsController(AdminControllerTest):
                 auto_update_query=None,
                 auto_update_facets=None,
                 is_owner=False,
+                is_shared=True,
             )
 
 
