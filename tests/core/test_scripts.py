@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from freezegun import freeze_time
 from parameterized import parameterized
+from sqlalchemy.exc import InvalidRequestError
 
 from core.classifier import Classifier
 from core.config import CannotLoadConfiguration
@@ -3147,9 +3148,11 @@ class TestCustomListUpdateEntriesScript(EndToEndSearchTest):
         assert (
             len(custom_list.entries) == 1 + len(self.populated_books) - 1
         )  # default + new - one past availability time
+        assert custom_list.size == 1 + len(self.populated_books) - 1
         assert len(custom_list1.entries) == 1 + len(
             self.unpopular_books
         )  # default + new
+        assert custom_list1.size == 1 + len(self.unpopular_books)
         # last updated time has updated correctly
         assert custom_list.auto_update_last_update == frozen_time.time_to_freeze
         assert custom_list1.auto_update_last_update == frozen_time.time_to_freeze
@@ -3207,6 +3210,37 @@ class TestCustomListUpdateEntriesScript(EndToEndSearchTest):
         assert args[1]["json_query"] == None
         assert args[1]["start_page"] == 2
         assert custom_list.auto_update_status == CustomList.UPDATED
+
+    def test_repopulate_state(self):
+        """The repopulate deletes all entries and runs the query again"""
+        custom_list, _ = self._customlist()
+        custom_list.library = self._default_library
+        custom_list.auto_update_enabled = True
+        custom_list.auto_update_query = json.dumps(
+            dict(query=dict(key="title", value="Populated Book"))
+        )
+        custom_list.auto_update_status = CustomList.REPOPULATE
+
+        # Previously the list would have had Unpopular books
+        for w in self.unpopular_books:
+            custom_list.add_entry(w)
+        prev_entry = custom_list.entries[0]
+
+        script = CustomListUpdateEntriesScript(self._db)
+        script.process_custom_list(custom_list)
+        # Commit the process changes and refresh the list
+        self._db.commit()
+        self._db.refresh(custom_list)
+
+        # Now the entries are only the Popular books
+        assert {e.work_id for e in custom_list.entries} == {
+            w.id for w in self.populated_books
+        }
+        # The previous entries should have been deleted, not just un-related
+        with pytest.raises(InvalidRequestError):
+            self._db.refresh(prev_entry)
+        assert custom_list.auto_update_status == CustomList.UPDATED
+        assert custom_list.size == len(self.populated_books)
 
 
 class TestWorkConsolidationScript:

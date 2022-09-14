@@ -3519,7 +3519,15 @@ class CustomListUpdateEntriesScript(CustomListSweeperScript):
             # We're in the init phase, we need to back-populate all titles
             # starting from page 2, since page 1 should be already populated
             start_page = 2
+        elif custom_list.auto_update_status == CustomList.REPOPULATE:
+            # During a repopulate phase we must empty the list
+            # and start population from page 1
+            for entry in custom_list.entries:
+                self._db.delete(entry)
+            custom_list.entries = []
         else:
+            # Otherwise we are a update type process, which means we only search for
+            # "newer" books from the last time we updated the list
             try:
                 if custom_list.auto_update_query:
                     json_query = json.loads(custom_list.auto_update_query)
