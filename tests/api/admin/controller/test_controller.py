@@ -1099,7 +1099,9 @@ class TestCustomListsController(AdminControllerTest):
             assert collection.protocol == c.get("protocol")
             assert True == l1.get("auto_update")
             assert auto_update_query == l1.get("auto_update_query")
+            assert CustomList.INIT == l1.get("auto_update_status")
             assert False == l1.get("is_shared")
+            assert True == l1.get("is_owner")
 
             assert no_entries.id == l2.get("id")
             assert no_entries.name == l2.get("name")
@@ -1107,7 +1109,9 @@ class TestCustomListsController(AdminControllerTest):
             assert 0 == len(l2.get("collections"))
             assert False == l2.get("auto_update")
             assert None == l2.get("auto_update_query")
+            assert CustomList.INIT == l2.get("auto_update_status")
             assert True == l2.get("is_shared")
+            assert True == l2.get("is_owner")
 
         self.admin.remove_role(AdminRole.LIBRARIAN, self._default_library)
         with self.request_context_with_library_and_admin("/"):
@@ -1801,6 +1805,7 @@ class TestCustomListsController(AdminControllerTest):
                 auto_update=False,
                 auto_update_query=None,
                 auto_update_facets=None,
+                auto_update_status=CustomList.INIT,
                 is_owner=False,
                 is_shared=True,
             )
