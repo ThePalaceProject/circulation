@@ -67,6 +67,12 @@ class CustomListQueries:
         log = logging.getLogger("Auto Update Custom List")
         search = ExternalSearchIndex(_db)
 
+        if not custom_list.auto_update_query:
+            log.info(
+                f"Cannot populate entries: Custom list {custom_list.name} is missing an auto update query"
+            )
+            return 0
+
         if not json_query:
             json_query = json.loads(custom_list.auto_update_query)
 
