@@ -1822,8 +1822,6 @@ class TestCustomListsController(AdminControllerTest):
         custom_list.auto_update_status = CustomList.UPDATED
         self._db.commit()
 
-        print(custom_list.library, self._default_library)
-
         response = self.manager.admin_custom_lists_controller._create_or_update_list(
             custom_list.library,
             custom_list.name,
