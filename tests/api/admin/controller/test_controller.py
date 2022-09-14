@@ -5,6 +5,7 @@ import re
 from contextlib import contextmanager
 from datetime import timedelta
 from io import StringIO
+from unittest import mock
 
 import feedparser
 import flask
@@ -1236,12 +1237,6 @@ class TestCustomListsController(AdminControllerTest):
                         ),
                     ),
                     ("collections", json.dumps([collection.id])),
-                    ("auto_update", True),
-                    (
-                        "auto_update_query",
-                        json.dumps({"query": {"key": "title", "value": "A Title"}}),
-                    ),
-                    ("auto_update_facets", json.dumps({})),
                 ]
             )
 
@@ -1257,12 +1252,7 @@ class TestCustomListsController(AdminControllerTest):
             assert work.presentation_edition == list.entries[0].edition
             assert True == list.entries[0].featured
             assert [collection] == list.collections
-            assert True == list.auto_update_enabled
-            assert (
-                json.dumps({"query": {"key": "title", "value": "A Title"}})
-                == list.auto_update_query
-            )
-            assert json.dumps({}) == list.auto_update_facets
+            assert False == list.auto_update_enabled
 
         # On an error of auto_update, rollbacks should occur
         with self.request_context_with_library_and_admin("/", method="POST"):
@@ -1281,6 +1271,60 @@ class TestCustomListsController(AdminControllerTest):
             assert 400 == response.status_code
             # List was not created
             assert None == get_one(self._db, CustomList, name="400List")
+
+        with self.request_context_with_library_and_admin("/", method="POST"):
+            flask.request.form = MultiDict(
+                [
+                    ("name", "400List"),
+                    (
+                        "entries",
+                        json.dumps(
+                            [dict(id=work.presentation_edition.primary_identifier.urn)]
+                        ),
+                    ),
+                    ("collections", json.dumps([collection.id])),
+                    ("auto_update", True),
+                    (
+                        "auto_update_query",
+                        json.dumps({"query": {"key": "title", "value": "A Title"}}),
+                    ),
+                    ("auto_update_facets", json.dumps({})),
+                ]
+            )
+
+            response = self.manager.admin_custom_lists_controller.custom_lists()
+            assert response == AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES
+            assert 400 == response.status_code
+
+        # Valid auto update query request
+        with self.request_context_with_library_and_admin(
+            "/", method="POST"
+        ), mock.patch("api.admin.controller.CustomListQueries") as mock_query:
+            flask.request.form = MultiDict(
+                [
+                    ("name", "200List"),
+                    ("collections", json.dumps([collection.id])),
+                    ("auto_update", True),
+                    (
+                        "auto_update_query",
+                        json.dumps({"query": {"key": "title", "value": "A Title"}}),
+                    ),
+                    ("auto_update_facets", json.dumps({})),
+                ]
+            )
+
+            response = self.manager.admin_custom_lists_controller.custom_lists()
+            assert 201 == response.status_code
+            [list] = (
+                self._db.query(CustomList).filter(CustomList.name == "200List").all()
+            )
+            assert True == list.auto_update_enabled
+            assert (
+                json.dumps({"query": {"key": "title", "value": "A Title"}})
+                == list.auto_update_query
+            )
+            assert json.dumps({}) == list.auto_update_facets
+            assert mock_query.populate_query_pages.call_count == 1
 
     def test_custom_list_get(self):
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
@@ -1408,8 +1452,6 @@ class TestCustomListsController(AdminControllerTest):
         # Test fails without expiring the ORM cache
         self._db.expire_all()
 
-        update_query = {"query": {"key": "title", "value": "title"}}
-        update_facets = {"order": "title"}
         with self.request_context_with_library_and_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
@@ -1418,9 +1460,6 @@ class TestCustomListsController(AdminControllerTest):
                     ("entries", json.dumps(new_entries)),
                     ("deletedEntries", json.dumps(deletedEntries)),
                     ("collections", json.dumps([c.id for c in new_collections])),
-                    ("auto_update", "true"),
-                    ("auto_update_query", json.dumps(update_query)),
-                    ("auto_update_facets", json.dumps(update_facets)),
                 ]
             )
 
@@ -1442,9 +1481,6 @@ class TestCustomListsController(AdminControllerTest):
         assert "new name" == list.name
         assert {w2, w3} == {entry.work for entry in list.entries}
         assert new_collections == list.collections
-        assert True == list.auto_update_enabled
-        assert json.dumps(update_query) == list.auto_update_query
-        assert json.dumps(update_facets) == list.auto_update_facets
 
         # If we were using a real search engine instance, the lane's size would be set
         # to 2, since that's the number of works that would be associated with the
@@ -1453,6 +1489,27 @@ class TestCustomListsController(AdminControllerTest):
         # returns the number of items in search_engine.docs. Testing that lane.size is now
         # set to 3 shows that .update_size() was called during the call to custom_list().
         assert lane.size == 3
+
+        # Edit for auto update values
+        update_query = {"query": {"key": "title", "value": "title"}}
+        update_facets = {"order": "title"}
+        with self.request_context_with_library_and_admin("/", method="POST"):
+            flask.request.form = MultiDict(
+                [
+                    ("id", str(list.id)),
+                    ("name", "new name"),
+                    ("collections", json.dumps([c.id for c in new_collections])),
+                    ("auto_update", "true"),
+                    ("auto_update_query", json.dumps(update_query)),
+                    ("auto_update_facets", json.dumps(update_facets)),
+                ]
+            )
+
+            response = self.manager.admin_custom_lists_controller.custom_list(list.id)
+
+        assert True == list.auto_update_enabled
+        assert json.dumps(update_query) == list.auto_update_query
+        assert json.dumps(update_facets) == list.auto_update_facets
 
         self.admin.remove_role(AdminRole.LIBRARIAN, self._default_library)
         with self.request_context_with_library_and_admin("/", method="POST"):

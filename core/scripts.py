@@ -20,11 +20,12 @@ from sqlalchemy.orm import Query, Session, defer
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 
 from core.model.classification import Classification
+from core.query.customlist import CustomListQueries
 
 from .config import CannotLoadConfiguration, Configuration
 from .coverage import CollectionCoverageProviderJob, CoverageProviderProgress
 from .external_search import ExternalSearchIndex, Filter, SearchIndexCoverageProvider
-from .lane import Lane, Pagination, SearchFacets, WorkList
+from .lane import Lane
 from .metadata_layer import (
     LinkData,
     MetaToModelUtility,
@@ -3511,74 +3512,47 @@ class CustomListUpdateEntriesScript(CustomListSweeperScript):
     def _update_list_with_new_entries(self, custom_list: CustomList):
         """Run a search on a custom list, assuming we have auto_update_enabled with a valid query
         Only json type queries are supported right now, without any support for additional facets"""
-        try:
-            if custom_list.auto_update_query:
-                json_query = json.loads(custom_list.auto_update_query)
-            else:
-                return
-        except json.JSONDecodeError as e:
-            self.log.error(
-                f"Could not decode custom list({custom_list.id}) saved query: {e}"
-            )
-            return
 
-        # Update availability time as a query part that allows us to filter for new licenses
-        # Although the last_update should never be null, we're failsafing
-        availability_time = (
-            custom_list.auto_update_last_update or datetime.datetime.now()
-        )
-        query_part = json_query["query"]
-        query_part = {
-            "and": [
-                {
-                    "key": "licensepools.availability_time",
-                    "op": "gte",
-                    "value": availability_time.timestamp(),
-                },
-                query_part,
-            ]
-        }
-        # Update the query as such
-        json_query["query"] = query_part
-
-        search = ExternalSearchIndex(self._db)
-        if custom_list.auto_update_facets:
-            facets = SearchFacets(
-                search_type="json", **json.loads(custom_list.auto_update_facets)
-            )
+        start_page = 1
+        json_query = None
+        if custom_list.auto_update_status == CustomList.INIT:
+            # We're in the init phase, we need to back-populate all titles
+            # starting from page 2, since page 1 should be already populated
+            start_page = 2
         else:
-            facets = SearchFacets(search_type="json")
-
-        page_size = 100
-        total_works_updated = 0
-        for page in range(10000):  # failsafe max loops
-            ## Query for the works with the search query
-            pagination = Pagination(offset=page_size * page, size=page_size)
-            wl = WorkList()
-            wl.initialize(custom_list.library)
-            works = wl.search(
-                self._db, json_query, search, pagination=pagination, facets=facets
-            )
-
-            ## No more works
-            if not len(works):
-                self.log.info(
-                    f"{custom_list.name} customlist updated with {total_works_updated} works, moving on..."
+            try:
+                if custom_list.auto_update_query:
+                    json_query = json.loads(custom_list.auto_update_query)
+                else:
+                    return
+            except json.JSONDecodeError as e:
+                self.log.error(
+                    f"Could not decode custom list({custom_list.id}) saved query: {e}"
                 )
-                break
-
-            total_works_updated += len(works)
-
-            ## Now update works into the list
-            for work in works:
-                custom_list.add_entry(work, update_external_index=True)
-
-            self.log.info(
-                f"Updated customlist {custom_list.name} with {total_works_updated} works"
+                return
+            # Update availability time as a query part that allows us to filter for new licenses
+            # Although the last_update should never be null, we're failsafing
+            availability_time = (
+                custom_list.auto_update_last_update or datetime.datetime.now()
             )
+            query_part = json_query["query"]
+            query_part = {
+                "and": [
+                    {
+                        "key": "licensepools.availability_time",
+                        "op": "gte",
+                        "value": availability_time.timestamp(),
+                    },
+                    query_part,
+                ]
+            }
+            # Update the query as such
+            json_query["query"] = query_part
 
-        # update this lists last updated time
-        custom_list.auto_update_last_update = datetime.datetime.now()
+        CustomListQueries.populate_query_pages(
+            self._db, custom_list, json_query=json_query, start_page=start_page
+        )
+        custom_list.auto_update_status = CustomList.UPDATED
 
 
 class MockStdin:

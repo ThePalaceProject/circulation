@@ -40,6 +40,7 @@ from core.model import (
 )
 from core.model.classification import Subject
 from core.model.configuration import ExternalIntegrationLink
+from core.model.customlist import CustomList
 from core.monitor import CollectionMonitor, Monitor, ReaperMonitor
 from core.opds_import import OPDSImportMonitor
 from core.s3 import MinIOUploader, MinIOUploaderConfiguration, S3Uploader
@@ -3106,6 +3107,11 @@ class TestCustomListUpdateEntriesScript(EndToEndSearchTest):
         self.unpopular_books: list[Work] = [
             self._work(with_license_pool=True, title="Unpopular Book") for _ in range(3)
         ]
+        # This is for back population only
+        self.populated_books[0].license_pools[0].availability_time = datetime.datetime(
+            1900, 1, 1
+        )
+        self._db.commit()
 
     def test_process_custom_list(self):
         last_updated = datetime.datetime.now() - datetime.timedelta(hours=1)
@@ -3116,6 +3122,7 @@ class TestCustomListUpdateEntriesScript(EndToEndSearchTest):
             dict(query=dict(key="title", value="Populated Book"))
         )
         custom_list.auto_update_last_update = last_updated
+        custom_list.auto_update_status = CustomList.UPDATED
 
         custom_list1, _ = self._customlist()
         custom_list1.library = self._default_library
@@ -3124,6 +3131,7 @@ class TestCustomListUpdateEntriesScript(EndToEndSearchTest):
             dict(query=dict(key="title", value="Unpopular Book"))
         )
         custom_list1.auto_update_last_update = last_updated
+        custom_list1.auto_update_status = CustomList.UPDATED
 
         # Do the process
         script = CustomListUpdateEntriesScript(self._db)
@@ -3136,9 +3144,9 @@ class TestCustomListUpdateEntriesScript(EndToEndSearchTest):
 
         self._db.refresh(custom_list)
         self._db.refresh(custom_list1)
-        assert len(custom_list.entries) == 1 + len(
-            self.populated_books
-        )  # default + new
+        assert (
+            len(custom_list.entries) == 1 + len(self.populated_books) - 1
+        )  # default + new - one past availability time
         assert len(custom_list1.entries) == 1 + len(
             self.unpopular_books
         )  # default + new
@@ -3146,7 +3154,7 @@ class TestCustomListUpdateEntriesScript(EndToEndSearchTest):
         assert custom_list.auto_update_last_update == frozen_time.time_to_freeze
         assert custom_list1.auto_update_last_update == frozen_time.time_to_freeze
 
-    @patch("core.scripts.ExternalSearchIndex")
+    @patch("core.query.customlist.ExternalSearchIndex")
     def test_search_facets(self, mock_index):
         last_updated = datetime.datetime.now() - datetime.timedelta(hours=1)
         custom_list, _ = self._customlist()
@@ -3183,6 +3191,22 @@ class TestCustomListUpdateEntriesScript(EndToEndSearchTest):
         script = CustomListUpdateEntriesScript(self._db)
         script.process_custom_list(custom_list)
         assert custom_list.auto_update_last_update == frozen_time.time_to_freeze
+
+    @patch("core.scripts.CustomListQueries")
+    def test_init_backpopulates(self, mock_queries):
+        custom_list, _ = self._customlist()
+        custom_list.library = self._default_library
+        custom_list.auto_update_enabled = True
+        custom_list.auto_update_query = json.dumps(
+            dict(query=dict(key="title", value="Populated Book"))
+        )
+        script = CustomListUpdateEntriesScript(self._db)
+        script.process_custom_list(custom_list)
+
+        args = mock_queries.populate_query_pages.call_args_list[0]
+        assert args[1]["json_query"] == None
+        assert args[1]["start_page"] == 2
+        assert custom_list.auto_update_status == CustomList.UPDATED
 
 
 class TestWorkConsolidationScript:
