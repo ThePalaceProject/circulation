@@ -1810,6 +1810,36 @@ class TestCustomListsController(AdminControllerTest):
                 is_shared=True,
             )
 
+    def test_auto_update_edit(self):
+        w1 = self._work()
+        custom_list: CustomList
+        custom_list, _ = self._customlist(
+            data_source_name=DataSource.LIBRARY_STAFF, num_entries=0
+        )
+        custom_list.add_entry(w1)
+        custom_list.auto_update_enabled = True
+        custom_list.auto_update_query = '{"query":"...."}'
+        custom_list.auto_update_status = CustomList.UPDATED
+        self._db.commit()
+
+        print(custom_list.library, self._default_library)
+
+        response = self.manager.admin_custom_lists_controller._create_or_update_list(
+            custom_list.library,
+            custom_list.name,
+            [],
+            [],
+            [],
+            id=custom_list.id,
+            auto_update=True,
+            auto_update_query='{"query": "...changed"}',
+        )
+
+        assert response.status_code == 200
+        assert custom_list.auto_update_query == '{"query": "...changed"}'
+        assert custom_list.auto_update_status == CustomList.REPOPULATE
+        assert [e.work_id for e in custom_list.entries] == [w1.id]
+
 
 class TestLanesController(AdminControllerTest):
     def setup_method(self):

@@ -896,9 +896,10 @@ class CustomListsController(AdminCirculationManagerController):
 
         # Test JSON viability of auto update data
         try:
+            auto_update_query_dict = None
             if auto_update_query:
                 try:
-                    json.loads(auto_update_query)
+                    auto_update_query_dict = json.loads(auto_update_query)
                 except json.JSONDecodeError:
                     raise Exception(
                         INVALID_INPUT.detailed(
@@ -938,6 +939,7 @@ class CustomListsController(AdminCirculationManagerController):
 
         list.updated = datetime.now()
         list.name = name
+        previous_auto_update_query = list.auto_update_query
         # Record the time the auto_update was toggled "on"
         if auto_update is True and list.auto_update_enabled is False:
             list.auto_update_last_update = datetime.now()
@@ -950,11 +952,27 @@ class CustomListsController(AdminCirculationManagerController):
 
         # In case this is a new list with no entries, populate the first page
         if (
-            list.entries == []
+            is_new
             and list.auto_update_enabled
             and list.auto_update_status == CustomList.INIT
         ):
             CustomListQueries.populate_query_pages(self._db, list, max_pages=1)
+        elif (
+            not is_new
+            and list.auto_update_enabled
+            and auto_update_query_dict
+            and previous_auto_update_query
+        ):
+            # In case this is a previous auto update list, we must check if the
+            # query has been updated
+            # JSON maps are unordered by definition, so we must deserialize and compare dicts
+            try:
+                prev_query_dict = json.loads(previous_auto_update_query)
+                if prev_query_dict != auto_update_query_dict:
+                    list.auto_update_status = CustomList.REPOPULATE
+            except json.JSONDecodeError:
+                # Do nothing if the previous query was not valid
+                pass
 
         membership_change = False
 
