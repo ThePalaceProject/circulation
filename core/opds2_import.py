@@ -488,43 +488,41 @@ class OPDS2Importer(
 
         media_types_and_drm_scheme = []
 
-        if link.properties:
-            if (
-                link.properties.availability
-                and link.properties.availability.state
-                != opds2_ast.OPDS2AvailabilityType.AVAILABLE.value
-            ):
-                self._logger.info(f"Link unavailable. Skipping link. {encode(link)}")
+        if (
+            link.properties
+            and link.properties.availability
+            and link.properties.availability.state
+            != opds2_ast.OPDS2AvailabilityType.AVAILABLE.value
+        ):
+            self._logger.info(f"Link unavailable. Skipping. {encode(link)}")
+            return []
 
-            elif link.properties.indirect_acquisition:
-                if link.type not in DeliveryMechanism.KNOWN_DRM_TYPES:
-                    self._logger.info(
-                        f"Unknown DRM Mechanism. Skipping link. {encode(link)}: {link.type}"
-                    )
-                else:
-                    for acquisition_object in link.properties.indirect_acquisition:
-                        if acquisition_object.child:
-                            # We don't currently support nested indirect acquisition, so we skip this case
-                            self._logger.info(
-                                f"Nested indirect acquisition objects. Skipping link. {encode(link)}"
-                            )
-                            continue
+        # We need to take into account indirect acquisition links
+        if link.properties and link.properties.indirect_acquisition:
+            # We make the assumption that when we have nested indirect acquisition links
+            # that the most deeply nested link is the content type, and the link at the nesting
+            # level above that is the DRM.
+            #
+            # This may not be a safe assumption, but it lets us deal with CM style acquisition links
+            # where the top level link is a OPDS feed.
+            for acquisition_object in link.properties.indirect_acquisition:
+                nested_acquisition = acquisition_object
+                nested_types = [link.type]
+                while nested_acquisition:
+                    nested_types.append(nested_acquisition.type)
+                    nested_acquisition = first_or_default(nested_acquisition.child)
+                drm_type = nested_types.pop()
+                media_type = nested_types.pop()
 
-                        if (
-                            acquisition_object.type not in MediaTypes.BOOK_MEDIA_TYPES
-                            and acquisition_object.type
-                            not in MediaTypes.AUDIOBOOK_MEDIA_TYPES
-                        ):
-                            self._logger.info(
-                                f"Media type not known. Skipping link. {encode(link)}: {acquisition_object.type}"
-                            )
-                            continue
-
-                        media_types_and_drm_scheme.append(
-                            (acquisition_object.type, link.type)
-                        )
+                if (
+                    media_type in MediaTypes.BOOK_MEDIA_TYPES
+                    or media_type in MediaTypes.AUDIOBOOK_MEDIA_TYPES
+                ) and drm_type in DeliveryMechanism.KNOWN_DRM_TYPES:
+                    media_types_and_drm_scheme.append((media_type, drm_type))
 
         else:
+            # If there are no indirect links, then the link type points to the media, and
+            # there is no DRM on the item
             if (
                 link.type in MediaTypes.BOOK_MEDIA_TYPES
                 or link.type in MediaTypes.AUDIOBOOK_MEDIA_TYPES
