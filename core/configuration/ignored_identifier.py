@@ -66,7 +66,7 @@ class IgnoredIdentifierConfiguration(ConfigurationTrait):
             if isinstance(item, str):
                 ignored_identifier_types.append(item)
             elif isinstance(item, IdentifierType):
-                ignored_identifier_types.append(item.name)
+                ignored_identifier_types.append(item.value)
             else:
                 raise ValueError(
                     "Argument 'value' must contain string or IdentifierType enumeration's items only"

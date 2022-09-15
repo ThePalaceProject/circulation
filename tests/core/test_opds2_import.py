@@ -1,5 +1,6 @@
 import datetime
 import os
+from typing import List
 
 from parameterized import parameterized
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
@@ -80,6 +81,9 @@ class OPDS2Test(OPDSTest):
 class TestOPDS2Importer(OPDS2Test):
     MOBY_DICK_IDENTIFIER = "urn:isbn:978-3-16-148410-0"
     HUCKLEBERRY_FINN_IDENTIFIER = "http://example.org/huckleberry-finn"
+    PROQUEST_IDENTIFIER = (
+        "urn:librarysimplified.org/terms/id/ProQuest%20Doc%20ID/181639"
+    )
 
     def sample_opds(self, filename, file_type="r"):
         base_path = os.path.split(__file__)[0]
@@ -131,7 +135,7 @@ class TestOPDS2Importer(OPDS2Test):
 
         # 1. Make sure that editions contain all required metadata
         assert isinstance(imported_editions, list)
-        assert 2 == len(imported_editions)
+        assert 3 == len(imported_editions)
 
         # 1.1. Edition with open-access links (Moby-Dick)
         moby_dick_edition = self._get_edition_by_identifier(
@@ -310,14 +314,27 @@ class TestOPDS2Importer(OPDS2Test):
 
     @parameterized.expand(
         [
-            ("ISBN", IdentifierType.URI, MOBY_DICK_IDENTIFIER),
-            ("URI", IdentifierType.ISBN, HUCKLEBERRY_FINN_IDENTIFIER),
+            (
+                "ISBN",
+                [IdentifierType.URI, IdentifierType.PROQUEST_ID],
+                MOBY_DICK_IDENTIFIER,
+            ),
+            (
+                "URI",
+                [IdentifierType.ISBN, IdentifierType.PROQUEST_ID],
+                HUCKLEBERRY_FINN_IDENTIFIER,
+            ),
+            (
+                "ProQuest Doc ID",
+                [IdentifierType.ISBN, IdentifierType.URI],
+                PROQUEST_IDENTIFIER,
+            ),
         ]
     )
     def test_opds2_importer_skips_publications_with_unsupported_identifier_types(
         self,
         this_identifier_type,
-        ignore_identifier_type: IdentifierType,
+        ignore_identifier_type: List[IdentifierType],
         identifier: str,
     ) -> None:
         """Ensure that OPDS2Importer imports only publications having supported identifier types.
@@ -332,7 +349,7 @@ class TestOPDS2Importer(OPDS2Test):
         with self._configuration_factory.create(
             self._configuration_storage, self._db, OPDS2ImporterConfiguration
         ) as configuration:
-            configuration.set_ignored_identifier_types([ignore_identifier_type])
+            configuration.set_ignored_identifier_types(ignore_identifier_type)
 
         content_server_feed = self.sample_opds("feed.json")
 
