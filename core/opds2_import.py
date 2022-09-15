@@ -6,12 +6,17 @@ from typing import Callable, Dict, Iterable, Iterator, List, Optional, Tuple, Un
 from urllib.parse import urljoin, urlparse
 
 import sqlalchemy
-import webpub_manifest_parser
 import webpub_manifest_parser.opds2.ast as opds2_ast
 from flask_babel import lazy_gettext as _
 from webpub_manifest_parser.core import ManifestParserFactory, ManifestParserResult
 from webpub_manifest_parser.core.analyzer import NodeFinder
-from webpub_manifest_parser.core.ast import Manifestlike
+from webpub_manifest_parser.core.ast import (
+    Contributor,
+    Link,
+    LinkList,
+    Manifestlike,
+    Subject,
+)
 from webpub_manifest_parser.errors import BaseError
 from webpub_manifest_parser.opds2.registry import (
     OPDS2LinkRelationsRegistry,
@@ -217,9 +222,7 @@ class OPDS2Importer(
 
         return identifier.type not in ignored_identifier_types
 
-    def _extract_subjects(
-        self, subjects: List[webpub_manifest_parser.core.ast.Subject]
-    ) -> List[SubjectData]:
+    def _extract_subjects(self, subjects: List[Subject]) -> List[SubjectData]:
         """Extract a list of SubjectData objects from the webpub-manifest-parser's subject.
 
         :param subjects: Parsed subject object
@@ -264,7 +267,7 @@ class OPDS2Importer(
 
     def _extract_contributors(
         self,
-        contributors: List[webpub_manifest_parser.core.ast.Contributor],
+        contributors: List[Contributor],
         default_role: Optional[str] = Contributor.AUTHOR_ROLE,
     ) -> List[ContributorData]:
         """Extract a list of ContributorData objects from the webpub-manifest-parser's contributor.
@@ -384,7 +387,7 @@ class OPDS2Importer(
 
     def _extract_image_links(
         self,
-        publication: webpub_manifest_parser.core.ast.Publication,
+        publication: opds2_ast.OPDS2Publication,
         feed_self_url: str,
     ) -> List[LinkData]:
         """Extracts a list of LinkData objects containing information about artwork.
@@ -446,7 +449,7 @@ class OPDS2Importer(
 
     def _extract_links(
         self,
-        publication: webpub_manifest_parser.core.ast.Publication,
+        publication: opds2_ast.OPDS2Publication,
         feed_self_url: str,
     ) -> List[LinkData]:
         """Extract a list of LinkData objects from a list of webpub-manifest-parser links.
@@ -480,7 +483,7 @@ class OPDS2Importer(
         return links
 
     def _extract_media_types_and_drm_scheme_from_link(
-        self, link: webpub_manifest_parser.core.ast.Link
+        self, link: Link
     ) -> List[Tuple[str, str]]:
         """Extract information about content's media type and used DRM schema from the link.
 
@@ -533,9 +536,7 @@ class OPDS2Importer(
 
         return media_types_and_drm_scheme
 
-    def _extract_medium_from_links(
-        self, links: webpub_manifest_parser.core.ast.LinkList
-    ) -> Optional[str]:
+    def _extract_medium_from_links(self, links: LinkList) -> Optional[str]:
         """Extract the publication's medium from its links.
 
         :param links: List of links
@@ -732,7 +733,7 @@ class OPDS2Importer(
 
     def _find_formats_in_non_open_access_acquisition_links(
         self,
-        ast_link_list: List[webpub_manifest_parser.core.ast.Link],
+        ast_link_list: List[Link],
         link_data_list: List[LinkData],
         rights_uri: str,
         circulation_data: CirculationData,
@@ -807,7 +808,7 @@ class OPDS2Importer(
                     yield from group.publications
 
     @staticmethod
-    def _is_acquisition_link(link: webpub_manifest_parser.core.ast.Link) -> bool:
+    def _is_acquisition_link(link: Link) -> bool:
         """Return a boolean value indicating whether a link can be considered an acquisition link.
 
         :param link: Link object
