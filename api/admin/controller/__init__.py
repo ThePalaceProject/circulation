@@ -865,7 +865,7 @@ class CustomListsController(AdminCirculationManagerController):
         name: str,
         entries: List[Dict],
         collections: List[int],
-        deletedEntries: List[Dict] = None,
+        deleted_entries: List[Dict] = None,
         id: int = None,
         auto_update: Optional[bool] = None,
         auto_update_query: Optional[str] = None,
@@ -909,7 +909,7 @@ class CustomListsController(AdminCirculationManagerController):
 
                 if entries and len(entries) > 0:
                     raise Exception(AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES)
-                if deletedEntries and len(deletedEntries) > 0:
+                if deleted_entries and len(deleted_entries) > 0:
                     raise Exception(AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES)
 
             if auto_update_facets:
@@ -988,8 +988,8 @@ class CustomListsController(AdminCirculationManagerController):
                     works_to_update_in_search.add(work)
                     membership_change = True
 
-        if deletedEntries:
-            for entry in deletedEntries:
+        if deleted_entries:
+            for entry in deleted_entries:
                 urn = entry.get("id")
                 work = self._get_work_from_urn(library, urn)
 
@@ -1084,7 +1084,7 @@ class CustomListsController(AdminCirculationManagerController):
             collections = self._getJSONFromRequest(
                 flask.request.form.get("collections")
             )
-            deletedEntries = self._getJSONFromRequest(
+            deleted_entries = self._getJSONFromRequest(
                 flask.request.form.get("deletedEntries")
             )
 
@@ -1100,7 +1100,7 @@ class CustomListsController(AdminCirculationManagerController):
                 name,
                 entries,
                 collections,
-                deletedEntries=deletedEntries,
+                deleted_entries=deleted_entries,
                 id=list_id,
                 auto_update=auto_update,
                 auto_update_query=auto_update_query,

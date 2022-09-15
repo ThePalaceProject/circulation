@@ -3526,7 +3526,7 @@ class CustomListUpdateEntriesScript(CustomListSweeperScript):
                 self._db.delete(entry)
             custom_list.entries = []
         else:
-            # Otherwise we are a update type process, which means we only search for
+            # Otherwise we are in an update type process, which means we only search for
             # "newer" books from the last time we updated the list
             try:
                 if custom_list.auto_update_query:

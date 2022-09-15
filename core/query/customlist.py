@@ -59,9 +59,11 @@ class CustomListQueries:
         json_query: dict = None,
     ) -> int:
         """Populate the custom list while paging through the search query results
+        :param _db: The database conenction
+        :param custom_list: The list to be populated
         :param start_page: Offset of the search will be used from here (based on page_size)
-        :param page_size: Page size to use for the search iteration
         :param max_pages: Maximum number of pages to search through
+        :param page_size: Page size to use for the search iteration
         :param json_query: If provided, use this json query rather than that of the custom list"""
 
         log = logging.getLogger("Auto Update Custom List")
