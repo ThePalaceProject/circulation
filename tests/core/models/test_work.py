@@ -3,6 +3,7 @@ import os
 from unittest.mock import MagicMock
 
 import pytest
+import pytz
 from psycopg2.extras import NumericRange
 
 from core.classifier import Classifier, Fantasy, Romance, Science_Fiction
@@ -1321,6 +1322,23 @@ class TestWork(DatabaseTest):
         assert (
             "medium" not in search_doc["licensepools"][0]
         )  # No presentation edition means no medium
+
+    def test_to_search_doc_datetime_cases(self):
+        # datetime.dates are tz unaware and converting to timestamps may cause errors
+        # if the local timezone pushes it out of a valid date range (eg. year 0)
+        work = self._work(with_license_pool=True)
+        work.presentation_edition.published = datetime.date(1, 1, 1)
+        # naive datetimes would also cause the same issue
+        work.license_pools[0].availability_time = datetime.datetime(1, 1, 1)
+        doc = work.to_search_document()
+        # This should no longer error out
+        assert (
+            doc["published"] == datetime.datetime(1, 1, 1, tzinfo=pytz.UTC).timestamp()
+        )
+        assert (
+            doc["licensepools"][0]["availability_time"]
+            == datetime.datetime(1, 1, 1, tzinfo=pytz.UTC).timestamp()
+        )
 
     def test_age_appropriate_for_patron(self):
         work = self._work()
