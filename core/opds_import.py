@@ -3,7 +3,7 @@ import logging
 import traceback
 from contextlib import contextmanager
 from io import BytesIO
-from typing import Iterator, Optional
+from typing import Iterator, List, Optional
 from urllib.parse import quote, urljoin, urlparse
 
 import dateutil
@@ -947,8 +947,7 @@ class OPDSImporter:
         # background, and that's good enough.
         return pool, work
 
-    @classmethod
-    def extract_next_links(self, feed):
+    def extract_next_links(self, feed) -> List[str]:
         if isinstance(feed, (bytes, str)):
             parsed = feedparser.parse(feed)
         else:

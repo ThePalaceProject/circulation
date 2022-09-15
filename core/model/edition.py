@@ -3,7 +3,7 @@
 
 import logging
 from collections import defaultdict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List
 
 from sqlalchemy import Column, Date, Enum, ForeignKey, Index, Integer, String, Unicode
 from sqlalchemy.dialects.postgresql import JSON
@@ -37,6 +37,7 @@ class Edition(Base, EditionConstants):
     __tablename__ = "editions"
     id = Column(Integer, primary_key=True)
 
+    data_source = relationship("DataSource", back_populates="editions")
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
 
     MAX_THUMBNAIL_HEIGHT = 300
@@ -78,7 +79,7 @@ class Edition(Base, EditionConstants):
     author = Column(Unicode, index=True)
     sort_author = Column(Unicode, index=True)
 
-    contributions = relationship("Contribution", backref="edition", uselist=True)
+    contributions = relationship("Contribution", back_populates="edition", uselist=True)
 
     language = Column(Unicode, index=True)
     publisher = Column(Unicode, index=True)
@@ -134,7 +135,7 @@ class Edition(Base, EditionConstants):
         return {x.contributor for x in self.contributions}
 
     @property
-    def author_contributors(self):
+    def author_contributors(self) -> List[Contributor]:
         """All distinct 'author'-type contributors, with the primary author
         first, other authors sorted by sort name.
         Basically, we're trying to figure out what would go on the
@@ -149,10 +150,9 @@ class Edition(Base, EditionConstants):
         etc. However it happens, your name only shows up once on the
         front of the book.
         """
-        seen_authors = set()
         primary_author = None
         other_authors = []
-        acceptable_substitutes = defaultdict(list)
+        acceptable_substitutes: Dict[str, List[Contributor]] = defaultdict(list)
         if not self.contributions:
             return []
 

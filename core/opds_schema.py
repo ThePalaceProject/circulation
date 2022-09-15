@@ -1,5 +1,6 @@
 import json
 import os
+from abc import ABC, abstractmethod
 
 import requests
 from jsonschema import Draft7Validator, RefResolver
@@ -9,7 +10,12 @@ from api.odl2 import ODL2ImportMonitor
 from core.opds2_import import OPDS2ImportMonitor
 
 
-class OPDS2SchemaValidationMixin:
+class OPDS2SchemaValidationMixin(ABC):
+    @property
+    @abstractmethod
+    def log(self):
+        ...
+
     def get_ref_resolver(self, json_schema):
         dir_ = os.path.dirname(os.path.realpath(__file__))
         handlers = {

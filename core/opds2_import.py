@@ -2,10 +2,11 @@ import logging
 from contextlib import contextmanager
 from datetime import datetime
 from io import BytesIO, StringIO
-from typing import Callable, Collection, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Callable, Dict, Iterable, Iterator, List, Optional, Tuple, Union
 from urllib.parse import urljoin, urlparse
 
 import sqlalchemy
+import webpub_manifest_parser
 import webpub_manifest_parser.opds2.ast as opds2_ast
 from flask_babel import lazy_gettext as _
 from webpub_manifest_parser.core import ManifestParserFactory, ManifestParserResult
@@ -41,6 +42,7 @@ from .metadata_layer import (
     SubjectData,
 )
 from .model import (
+    Collection,
     Contributor,
     DeliveryMechanism,
     Edition,
@@ -49,6 +51,7 @@ from .model import (
     Identifier,
     LicensePool,
     LinkRelations,
+    Measurement,
     MediaTypes,
     Representation,
     RightsStatus,
@@ -76,7 +79,7 @@ class RWPMManifestParser:
         self._manifest_parser_factory = manifest_parser_factory
 
     def parse_manifest(
-        self, manifest: Union[str, Dict, Manifestlike]
+        self, manifest: Union[str, bytes, Dict, Manifestlike]
     ) -> ManifestParserResult:
         """Parse the feed into an RPWM-like AST object.
 
@@ -87,13 +90,13 @@ class RWPMManifestParser:
 
         try:
             if isinstance(manifest, bytes):
-                input_stream = BytesIO(manifest)
+                input_stream_bytes = BytesIO(manifest)
                 parser = self._manifest_parser_factory.create()
-                result = parser.parse_stream(input_stream)
+                result = parser.parse_stream(input_stream_bytes)
             elif isinstance(manifest, str):
-                input_stream = StringIO(manifest)
+                input_stream_str = StringIO(manifest)
                 parser = self._manifest_parser_factory.create()
-                result = parser.parse_stream(input_stream)
+                result = parser.parse_stream(input_stream_str)
             elif isinstance(manifest, dict):
                 parser = self._manifest_parser_factory.create()
                 result = parser.parse_json(manifest)
@@ -215,8 +218,8 @@ class OPDS2Importer(
         return identifier.type not in ignored_identifier_types
 
     def _extract_subjects(
-        self, subjects: List["core_ast.Subject"]
-    ) -> List["SubjectMetadata"]:
+        self, subjects: List[webpub_manifest_parser.core.ast.Subject]
+    ) -> List[SubjectData]:
         """Extract a list of SubjectData objects from the webpub-manifest-parser's subject.
 
         :param subjects: Parsed subject object
@@ -261,7 +264,7 @@ class OPDS2Importer(
 
     def _extract_contributors(
         self,
-        contributors: List["core_ast.Contributor"],
+        contributors: List[webpub_manifest_parser.core.ast.Contributor],
         default_role: Optional[str] = Contributor.AUTHOR_ROLE,
     ) -> List[ContributorData]:
         """Extract a list of ContributorData objects from the webpub-manifest-parser's contributor.
@@ -350,7 +353,7 @@ class OPDS2Importer(
 
     def _extract_description_link(
         self, publication: opds2_ast.OPDS2Publication
-    ) -> LinkData:
+    ) -> Optional[LinkData]:
         """Extract description from the publication object and create a Hyperlink.DESCRIPTION link containing it.
 
         :param publication: Publication object
@@ -380,7 +383,9 @@ class OPDS2Importer(
         return description_link
 
     def _extract_image_links(
-        self, publication: "ast_core.Publication", feed_self_url: str
+        self,
+        publication: webpub_manifest_parser.core.ast.Publication,
+        feed_self_url: str,
     ) -> List[LinkData]:
         """Extracts a list of LinkData objects containing information about artwork.
 
@@ -440,7 +445,9 @@ class OPDS2Importer(
         return image_links
 
     def _extract_links(
-        self, publication: "ast_core.Publication", feed_self_url: str
+        self,
+        publication: webpub_manifest_parser.core.ast.Publication,
+        feed_self_url: str,
     ) -> List[LinkData]:
         """Extract a list of LinkData objects from a list of webpub-manifest-parser links.
 
@@ -473,7 +480,7 @@ class OPDS2Importer(
         return links
 
     def _extract_media_types_and_drm_scheme_from_link(
-        self, link: "ast_core.Link"
+        self, link: webpub_manifest_parser.core.ast.Link
     ) -> List[Tuple[str, str]]:
         """Extract information about content's media type and used DRM schema from the link.
 
@@ -526,7 +533,9 @@ class OPDS2Importer(
 
         return media_types_and_drm_scheme
 
-    def _extract_medium_from_links(self, links: "ast_core.LinkList") -> Optional[str]:
+    def _extract_medium_from_links(
+        self, links: webpub_manifest_parser.core.ast.LinkList
+    ) -> Optional[str]:
         """Extract the publication's medium from its links.
 
         :param links: List of links
@@ -552,8 +561,8 @@ class OPDS2Importer(
     @staticmethod
     def _extract_medium(
         publication: opds2_ast.OPDS2Publication,
-        default_medium: str = Edition.BOOK_MEDIUM,
-    ) -> str:
+        default_medium: Optional[str] = Edition.BOOK_MEDIUM,
+    ) -> Optional[str]:
         """Extract the publication's medium from its metadata.
 
         :param publication: Publication object
@@ -667,7 +676,7 @@ class OPDS2Importer(
         )
 
         # FIXME: There are no measurements in OPDS 2.0
-        measurements = []
+        measurements: Optional[List[Measurement]] = []
 
         # FIXME: There is no series information in OPDS 2.0
         series = None
@@ -723,7 +732,7 @@ class OPDS2Importer(
 
     def _find_formats_in_non_open_access_acquisition_links(
         self,
-        ast_link_list: List["ast_core.Link"],
+        ast_link_list: List[webpub_manifest_parser.core.ast.Link],
         link_data_list: List[LinkData],
         rights_uri: str,
         circulation_data: CirculationData,
@@ -762,7 +771,7 @@ class OPDS2Importer(
     @contextmanager
     def _get_configuration(
         self, db: sqlalchemy.orm.session.Session
-    ) -> OPDS2ImporterConfiguration:
+    ) -> Iterator[OPDS2ImporterConfiguration]:
         """Return the configuration object.
         :param db: Database session
         :return: Configuration object
@@ -798,7 +807,7 @@ class OPDS2Importer(
                     yield from group.publications
 
     @staticmethod
-    def _is_acquisition_link(link: "ast_core.Link") -> bool:
+    def _is_acquisition_link(link: webpub_manifest_parser.core.ast.Link) -> bool:
         """Return a boolean value indicating whether a link can be considered an acquisition link.
 
         :param link: Link object
@@ -883,7 +892,7 @@ class OPDS2Importer(
                 f"Publication # {original_identifier} ('{title}') has an unrecognizable identifier."
             )
 
-    def extract_next_links(self, feed: Union[str, opds2_ast.OPDS2Feed]) -> List[str]:
+    def extract_next_links(self, feed) -> List[str]:
         """Extracts "next" links from the feed.
 
         :param feed: OPDS 2.0 feed
@@ -932,7 +941,7 @@ class OPDS2Importer(
         parser_result = self._parser.parse_manifest(feed)
         feed = parser_result.root
         publication_metadata_dictionary = {}
-        failures = {}
+        failures: Dict[str, List[CoverageFailure]] = {}
 
         for publication in self._get_publications(feed):
             recognized_identifier = self._extract_identifier(publication)
