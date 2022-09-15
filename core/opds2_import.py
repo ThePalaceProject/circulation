@@ -490,27 +490,40 @@ class OPDS2Importer(
 
         if link.properties:
             if (
-                not link.properties.availability
-                or link.properties.availability.state
-                == opds2_ast.OPDS2AvailabilityType.AVAILABLE.value
+                link.properties.availability
+                and link.properties.availability.state
+                != opds2_ast.OPDS2AvailabilityType.AVAILABLE.value
             ):
-                for acquisition_object in link.properties.indirect_acquisition:
-                    nested_acquisition_object = acquisition_object
+                self._logger.info(f"Link unavailable. Skipping link. {encode(link)}")
 
-                    while nested_acquisition_object.child:
-                        nested_acquisition_object = first_or_default(
-                            acquisition_object.child
+            elif link.properties.indirect_acquisition:
+                if link.type not in DeliveryMechanism.KNOWN_DRM_TYPES:
+                    self._logger.info(
+                        f"Unknown DRM Mechanism. Skipping link. {encode(link)}: {link.type}"
+                    )
+                else:
+                    for acquisition_object in link.properties.indirect_acquisition:
+                        if acquisition_object.child:
+                            # We don't currently support nested indirect acquisition, so we skip this case
+                            self._logger.info(
+                                f"Nested indirect acquisition objects. Skipping link. {encode(link)}"
+                            )
+                            continue
+
+                        if (
+                            acquisition_object.type not in MediaTypes.BOOK_MEDIA_TYPES
+                            and acquisition_object.type
+                            not in MediaTypes.AUDIOBOOK_MEDIA_TYPES
+                        ):
+                            self._logger.info(
+                                f"Media type not known. Skipping link. {encode(link)}: {acquisition_object.type}"
+                            )
+                            continue
+
+                        media_types_and_drm_scheme.append(
+                            (acquisition_object.type, link.type)
                         )
 
-                    drm_scheme = (
-                        acquisition_object.type
-                        if acquisition_object.type in DeliveryMechanism.KNOWN_DRM_TYPES
-                        else DeliveryMechanism.NO_DRM
-                    )
-
-                    media_types_and_drm_scheme.append(
-                        (nested_acquisition_object.type, drm_scheme)
-                    )
         else:
             if (
                 link.type in MediaTypes.BOOK_MEDIA_TYPES
