@@ -79,9 +79,9 @@ class OPDS2Test(OPDSTest):
 
 
 class TestOPDS2Importer(OPDS2Test):
-    MOBY_DICK_IDENTIFIER = "urn:isbn:978-3-16-148410-0"
-    HUCKLEBERRY_FINN_IDENTIFIER = "http://example.org/huckleberry-finn"
-    PROQUEST_IDENTIFIER = (
+    MOBY_DICK_ISBN_IDENTIFIER = "urn:isbn:978-3-16-148410-0"
+    HUCKLEBERRY_FINN_URI_IDENTIFIER = "http://example.org/huckleberry-finn"
+    POSTMODERNISM_PROQUEST_IDENTIFIER = (
         "urn:librarysimplified.org/terms/id/ProQuest%20Doc%20ID/181639"
     )
 
@@ -139,7 +139,7 @@ class TestOPDS2Importer(OPDS2Test):
 
         # 1.1. Edition with open-access links (Moby-Dick)
         moby_dick_edition = self._get_edition_by_identifier(
-            imported_editions, self.MOBY_DICK_IDENTIFIER
+            imported_editions, self.MOBY_DICK_ISBN_IDENTIFIER
         )
         assert isinstance(moby_dick_edition, Edition)
 
@@ -175,7 +175,7 @@ class TestOPDS2Importer(OPDS2Test):
 
         # 1.2. Edition with non open-access acquisition links (Adventures of Huckleberry Finn)
         huckleberry_finn_edition = self._get_edition_by_identifier(
-            imported_editions, self.HUCKLEBERRY_FINN_IDENTIFIER
+            imported_editions, self.HUCKLEBERRY_FINN_URI_IDENTIFIER
         )
         assert isinstance(huckleberry_finn_edition, Edition)
 
@@ -232,7 +232,7 @@ class TestOPDS2Importer(OPDS2Test):
 
         # 2.1. Edition with open-access links (Moby-Dick)
         moby_dick_license_pool = self._get_license_pool_by_identifier(
-            pools, self.MOBY_DICK_IDENTIFIER
+            pools, self.MOBY_DICK_ISBN_IDENTIFIER
         )
         assert isinstance(moby_dick_license_pool, LicensePool)
         assert moby_dick_license_pool.open_access
@@ -252,7 +252,7 @@ class TestOPDS2Importer(OPDS2Test):
 
         # 2.2. Edition with non open-access acquisition links (Adventures of Huckleberry Finn)
         huckleberry_finn_license_pool = self._get_license_pool_by_identifier(
-            pools, self.HUCKLEBERRY_FINN_IDENTIFIER
+            pools, self.HUCKLEBERRY_FINN_URI_IDENTIFIER
         )
         assert True == isinstance(huckleberry_finn_license_pool, LicensePool)
         assert False == huckleberry_finn_license_pool.open_access
@@ -289,10 +289,10 @@ class TestOPDS2Importer(OPDS2Test):
 
         # 2.3 Edition with non open-access acquisition links (The Politics of Postmodernism)
         postmodernism_license_pool = self._get_license_pool_by_identifier(
-            pools, self.PROQUEST_IDENTIFIER
+            pools, self.POSTMODERNISM_PROQUEST_IDENTIFIER
         )
         assert True == isinstance(postmodernism_license_pool, LicensePool)
-        assert False == huckleberry_finn_license_pool.open_access
+        assert False == postmodernism_license_pool.open_access
         assert LicensePool.UNLIMITED_ACCESS == postmodernism_license_pool.licenses_owned
         assert (
             LicensePool.UNLIMITED_ACCESS
@@ -327,7 +327,9 @@ class TestOPDS2Importer(OPDS2Test):
         assert 3 == len(works)
 
         # 3.1. Work (Moby-Dick)
-        moby_dick_work = self._get_work_by_identifier(works, self.MOBY_DICK_IDENTIFIER)
+        moby_dick_work = self._get_work_by_identifier(
+            works, self.MOBY_DICK_ISBN_IDENTIFIER
+        )
         assert isinstance(moby_dick_work, Work)
         assert moby_dick_edition == moby_dick_work.presentation_edition
         assert 1 == len(moby_dick_work.license_pools)
@@ -335,7 +337,7 @@ class TestOPDS2Importer(OPDS2Test):
 
         # 3.2. Work (Adventures of Huckleberry Finn)
         huckleberry_finn_work = self._get_work_by_identifier(
-            works, self.HUCKLEBERRY_FINN_IDENTIFIER
+            works, self.HUCKLEBERRY_FINN_URI_IDENTIFIER
         )
         assert isinstance(huckleberry_finn_work, Work)
         assert huckleberry_finn_edition == huckleberry_finn_work.presentation_edition
@@ -350,19 +352,19 @@ class TestOPDS2Importer(OPDS2Test):
     @parameterized.expand(
         [
             (
-                "ISBN",
+                IdentifierType.ISBN,
                 [IdentifierType.URI, IdentifierType.PROQUEST_ID],
-                MOBY_DICK_IDENTIFIER,
+                MOBY_DICK_ISBN_IDENTIFIER,
             ),
             (
-                "URI",
+                IdentifierType.URI,
                 [IdentifierType.ISBN, IdentifierType.PROQUEST_ID],
-                HUCKLEBERRY_FINN_IDENTIFIER,
+                HUCKLEBERRY_FINN_URI_IDENTIFIER,
             ),
             (
-                "ProQuest Doc ID",
+                IdentifierType.PROQUEST_ID,
                 [IdentifierType.ISBN, IdentifierType.URI],
-                PROQUEST_IDENTIFIER,
+                POSTMODERNISM_PROQUEST_IDENTIFIER,
             ),
         ]
     )
@@ -398,7 +400,9 @@ class TestOPDS2Importer(OPDS2Test):
         # Ensure that that CM imported only the edition having the selected identifier type.
         assert isinstance(imported_editions, list)
         assert 1 == len(imported_editions)
-        assert imported_editions[0].primary_identifier.type == this_identifier_type
+        assert (
+            imported_editions[0].primary_identifier.type == this_identifier_type.value
+        )
 
         # Ensure that it was parsed correctly and available by its identifier.
         edition = self._get_edition_by_identifier(imported_editions, identifier)
