@@ -8,6 +8,7 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
+    Enum,
     ForeignKey,
     Index,
     Integer,
@@ -35,6 +36,11 @@ class CustomList(Base):
     """A custom grouping of Editions."""
 
     STAFF_PICKS_NAME = "Staff Picks"
+
+    INIT = "init"
+    UPDATED = "updated"
+    REPOPULATE = "repopulate"
+    auto_update_status_enum = Enum(INIT, UPDATED, REPOPULATE, name="auto_update_status")
 
     __tablename__ = "customlists"
     id = Column(Integer, primary_key=True)
@@ -66,6 +72,7 @@ class CustomList(Base):
     auto_update_query = Column(Unicode, nullable=True)  # holds json data
     auto_update_facets = Column(Unicode, nullable=True)  # holds json data
     auto_update_last_update = Column(DateTime, nullable=True)
+    auto_update_status = Column(auto_update_status_enum, default=INIT)
 
     # Typing specific
     collections: List["Collection"]

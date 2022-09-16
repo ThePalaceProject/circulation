@@ -428,6 +428,13 @@ CUSTOM_LIST_NAME_ALREADY_IN_USE = pd(
     detail=_("The library already has a custom list with that name."),
 )
 
+AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES = pd(
+    "http://librarysimplified.org/terms/problem/auto-update-custom-list-cannot-have-entries",
+    status_code=400,
+    title=_("An auto update custom list cannot have entries"),
+    detail=_("Entries are automatically managed for auto update custom lists"),
+)
+
 COLLECTION_NOT_ASSOCIATED_WITH_LIBRARY = pd(
     "http://librarysimplified.org/terms/problem/collection-not-associated-with-library",
     status_code=400,
