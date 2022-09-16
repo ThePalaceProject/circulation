@@ -228,7 +228,7 @@ class TestOPDS2Importer(OPDS2Test):
 
         # 2. Make sure that license pools have correct configuration
         assert isinstance(pools, list)
-        assert 2 == len(pools)
+        assert 3 == len(pools)
 
         # 2.1. Edition with open-access links (Moby-Dick)
         moby_dick_license_pool = self._get_license_pool_by_identifier(
@@ -287,18 +287,53 @@ class TestOPDS2Importer(OPDS2Test):
             == huckleberry_finn_delivery_mechanisms[1].delivery_mechanism.content_type
         )
 
+        # 2.3 Edition with non open-access acquisition links (The Politics of Postmodernism)
+        postmodernism_license_pool = self._get_license_pool_by_identifier(
+            pools, self.PROQUEST_IDENTIFIER
+        )
+        assert True == isinstance(postmodernism_license_pool, LicensePool)
+        assert False == huckleberry_finn_license_pool.open_access
+        assert LicensePool.UNLIMITED_ACCESS == postmodernism_license_pool.licenses_owned
+        assert (
+            LicensePool.UNLIMITED_ACCESS
+            == postmodernism_license_pool.licenses_available
+        )
+
+        assert 2 == len(postmodernism_license_pool.delivery_mechanisms)
+        postmodernism_delivery_mechanisms = (
+            postmodernism_license_pool.delivery_mechanisms
+        )
+
+        assert (
+            DeliveryMechanism.ADOBE_DRM
+            == postmodernism_delivery_mechanisms[0].delivery_mechanism.drm_scheme
+        )
+        assert (
+            MediaTypes.EPUB_MEDIA_TYPE
+            == postmodernism_delivery_mechanisms[0].delivery_mechanism.content_type
+        )
+
+        assert (
+            DeliveryMechanism.ADOBE_DRM
+            == postmodernism_delivery_mechanisms[1].delivery_mechanism.drm_scheme
+        )
+        assert (
+            MediaTypes.PDF_MEDIA_TYPE
+            == postmodernism_delivery_mechanisms[1].delivery_mechanism.content_type
+        )
+
         # 3. Make sure that work objects contain all the required metadata
         assert isinstance(works, list)
-        assert 2 == len(works)
+        assert 3 == len(works)
 
-        # 3.1. Edition with open-access links (Moby-Dick)
+        # 3.1. Work (Moby-Dick)
         moby_dick_work = self._get_work_by_identifier(works, self.MOBY_DICK_IDENTIFIER)
         assert isinstance(moby_dick_work, Work)
         assert moby_dick_edition == moby_dick_work.presentation_edition
         assert 1 == len(moby_dick_work.license_pools)
         assert moby_dick_license_pool == moby_dick_work.license_pools[0]
 
-        # 3.2. Edition with open-access links (Adventures of Huckleberry Finn)
+        # 3.2. Work (Adventures of Huckleberry Finn)
         huckleberry_finn_work = self._get_work_by_identifier(
             works, self.HUCKLEBERRY_FINN_IDENTIFIER
         )

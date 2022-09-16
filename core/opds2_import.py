@@ -501,7 +501,8 @@ class OPDS2Importer(
         if link.properties and link.properties.indirect_acquisition:
             # We make the assumption that when we have nested indirect acquisition links
             # that the most deeply nested link is the content type, and the link at the nesting
-            # level above that is the DRM.
+            # level above that is the DRM. We discard all other levels of indirection, assuming
+            # that they don't matter for us.
             #
             # This may not be a safe assumption, but it lets us deal with CM style acquisition links
             # where the top level link is a OPDS feed.
@@ -511,8 +512,7 @@ class OPDS2Importer(
                 while nested_acquisition:
                     nested_types.append(nested_acquisition.type)
                     nested_acquisition = first_or_default(nested_acquisition.child)
-                drm_type = nested_types.pop()
-                media_type = nested_types.pop()
+                [drm_type, media_type] = nested_types[-2:]
 
                 if (
                     media_type in MediaTypes.BOOK_MEDIA_TYPES
@@ -520,9 +520,9 @@ class OPDS2Importer(
                 ) and drm_type in DeliveryMechanism.KNOWN_DRM_TYPES:
                     media_types_and_drm_scheme.append((media_type, drm_type))
 
+        # There are no indirect links, then the link type points to the media, and
+        # there is no DRM on the item
         else:
-            # If there are no indirect links, then the link type points to the media, and
-            # there is no DRM on the item
             if (
                 link.type in MediaTypes.BOOK_MEDIA_TYPES
                 or link.type in MediaTypes.AUDIOBOOK_MEDIA_TYPES
