@@ -152,7 +152,7 @@
         {
           "type": "application/vnd.adobe.adept+xml",
           "rel": "http://opds-spec.org/acquisition",
-          "href": "https://ebookcentral.proquest.com/lib/nyulibrary-ebooks/getAcsmFile.action?documentId=181639&mediaType=epub{&authentication_token}",
+          "href": "https://example.com/getAcsmFile.action?documentId=181639&mediaType=epub{&authentication_token}",
           "templated": true,
           "properties": {
             "indirectAcquisition": [
@@ -165,7 +165,7 @@
         {
           "type": "application/vnd.adobe.adept+xml",
           "rel": "http://opds-spec.org/acquisition",
-          "href": "https://ebookcentral.proquest.com/lib/nyulibrary-ebooks/getAcsmFile.action?documentId=181639&mediaType=pdf{&authentication_token}",
+          "href": "https://example.com/getAcsmFile.action?documentId=181639&mediaType=pdf{&authentication_token}",
           "templated": true,
           "properties": {
             "indirectAcquisition": [
@@ -178,25 +178,25 @@
       ],
       "images": [
         {
-          "href": "https://ebookcentral.proquest.com/covers/181639-s.jpg",
+          "href": "https://example.com/covers/181639-s.jpg",
           "type": "image/jpeg",
           "height": 140,
           "width": 100
         },
         {
-          "href": "https://ebookcentral.proquest.com/covers/181639-m.jpg",
+          "href": "https://example.com/covers/181639-m.jpg",
           "type": "image/jpeg",
           "height": 238,
           "width": 170
         },
         {
-          "href": "https://ebookcentral.proquest.com/covers/181639-l.jpg",
+          "href": "https://example.com/covers/181639-l.jpg",
           "type": "image/jpeg",
           "height": 277,
           "width": 198
         },
         {
-          "href": "https://ebookcentral.proquest.com/covers/181639-x.jpg",
+          "href": "https://example.com/covers/181639-x.jpg",
           "type": "image/jpeg",
           "height": 350,
           "width": 250
