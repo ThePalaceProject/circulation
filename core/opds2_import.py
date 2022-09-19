@@ -517,7 +517,7 @@ class OPDS2Importer(
 
                 # We then check this returned pair of content types to make sure they match known
                 # book or audiobook and DRM types. If they do not match known types, then we skip
-                # the item.
+                # this link.
                 if (
                     media_type in MediaTypes.BOOK_MEDIA_TYPES
                     or media_type in MediaTypes.AUDIOBOOK_MEDIA_TYPES
@@ -525,7 +525,7 @@ class OPDS2Importer(
                     media_types_and_drm_scheme.append((media_type, drm_type))
 
         # There are no indirect links, then the link type points to the media, and
-        # there is no DRM on the item.
+        # there is no DRM for this link.
         else:
             if (
                 link.type in MediaTypes.BOOK_MEDIA_TYPES
