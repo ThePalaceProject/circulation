@@ -501,7 +501,7 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         # patrons_in_hold_queue to both be nonzero; this is just to
         # verify that the test picks up whatever data is in the
         # document.
-        assert 4 == circulationdata.licenses_owned
+        assert 3 == circulationdata.licenses_owned
         assert 1 == circulationdata.licenses_available
         assert 10 == circulationdata.patrons_in_hold_queue
 
