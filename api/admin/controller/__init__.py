@@ -796,6 +796,7 @@ class CustomListsController(AdminCirculationManagerController):
             auto_update=list.auto_update_enabled,
             auto_update_query=list.auto_update_query,
             auto_update_facets=list.auto_update_facets,
+            auto_update_status=list.auto_update_status,
             is_owner=is_owner,
             is_shared=len(list.shared_locally_with_libraries) > 0,
         )
@@ -864,7 +865,7 @@ class CustomListsController(AdminCirculationManagerController):
         name: str,
         entries: List[Dict],
         collections: List[int],
-        deletedEntries: List[Dict] = None,
+        deleted_entries: List[Dict] = None,
         id: int = None,
         auto_update: Optional[bool] = None,
         auto_update_query: Optional[str] = None,
@@ -874,6 +875,7 @@ class CustomListsController(AdminCirculationManagerController):
 
         old_list_with_name = CustomList.find(self._db, name, library=library)
 
+        list: CustomList
         if id:
             is_new = False
             list = get_one(self._db, CustomList, id=int(id), data_source=data_source)
@@ -893,30 +895,51 @@ class CustomListsController(AdminCirculationManagerController):
             list.library = library
 
         # Test JSON viability of auto update data
-        if auto_update_query:
-            try:
-                json.loads(auto_update_query)
-            except json.JSONDecodeError:
-                self._db.rollback()
-                return INVALID_INPUT.detailed(
-                    "auto_update_query is not JSON serializable"
+        try:
+            auto_update_query_dict = None
+            if auto_update_query:
+                try:
+                    auto_update_query_dict = json.loads(auto_update_query)
+                except json.JSONDecodeError:
+                    raise Exception(
+                        INVALID_INPUT.detailed(
+                            "auto_update_query is not JSON serializable"
+                        )
+                    )
+
+                if entries and len(entries) > 0:
+                    raise Exception(AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES)
+                if deleted_entries and len(deleted_entries) > 0:
+                    raise Exception(AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES)
+
+            if auto_update_facets:
+                try:
+                    json.loads(auto_update_facets)
+                except json.JSONDecodeError:
+                    raise Exception(
+                        INVALID_INPUT.detailed(
+                            "auto_update_facets is not JSON serializable"
+                        )
+                    )
+            if auto_update is True and auto_update_query is None:
+                raise Exception(
+                    INVALID_INPUT.detailed(
+                        "auto_update_query must be present when auto_update is enabled"
+                    )
                 )
-        if auto_update_facets:
-            try:
-                json.loads(auto_update_facets)
-            except json.JSONDecodeError:
-                self._db.rollback()
-                return INVALID_INPUT.detailed(
-                    "auto_update_facets is not JSON serializable"
-                )
-        if auto_update is True and auto_update_query is None:
+        except Exception as e:
+            auto_update_error = e.args[0] if len(e.args) else None
+
+            if not auto_update_error or type(auto_update_error) != ProblemDetail:
+                raise
+
+            # Rollback if this was a deliberate error
             self._db.rollback()
-            return INVALID_INPUT.detailed(
-                "auto_update_query must be present when auto_update is enabled"
-            )
+            return auto_update_error
 
         list.updated = datetime.now()
         list.name = name
+        previous_auto_update_query = list.auto_update_query
         # Record the time the auto_update was toggled "on"
         if auto_update is True and list.auto_update_enabled is False:
             list.auto_update_last_update = datetime.now()
@@ -926,6 +949,30 @@ class CustomListsController(AdminCirculationManagerController):
             list.auto_update_query = auto_update_query
         if auto_update_facets is not None:
             list.auto_update_facets = auto_update_facets
+
+        # In case this is a new list with no entries, populate the first page
+        if (
+            is_new
+            and list.auto_update_enabled
+            and list.auto_update_status == CustomList.INIT
+        ):
+            CustomListQueries.populate_query_pages(self._db, list, max_pages=1)
+        elif (
+            not is_new
+            and list.auto_update_enabled
+            and auto_update_query_dict
+            and previous_auto_update_query
+        ):
+            # In case this is a previous auto update list, we must check if the
+            # query has been updated
+            # JSON maps are unordered by definition, so we must deserialize and compare dicts
+            try:
+                prev_query_dict = json.loads(previous_auto_update_query)
+                if prev_query_dict != auto_update_query_dict:
+                    list.auto_update_status = CustomList.REPOPULATE
+            except json.JSONDecodeError:
+                # Do nothing if the previous query was not valid
+                pass
 
         membership_change = False
 
@@ -941,8 +988,8 @@ class CustomListsController(AdminCirculationManagerController):
                     works_to_update_in_search.add(work)
                     membership_change = True
 
-        if deletedEntries:
-            for entry in deletedEntries:
+        if deleted_entries:
+            for entry in deleted_entries:
                 urn = entry.get("id")
                 work = self._get_work_from_urn(library, urn)
 
@@ -1037,7 +1084,7 @@ class CustomListsController(AdminCirculationManagerController):
             collections = self._getJSONFromRequest(
                 flask.request.form.get("collections")
             )
-            deletedEntries = self._getJSONFromRequest(
+            deleted_entries = self._getJSONFromRequest(
                 flask.request.form.get("deletedEntries")
             )
 
@@ -1053,7 +1100,7 @@ class CustomListsController(AdminCirculationManagerController):
                 name,
                 entries,
                 collections,
-                deletedEntries=deletedEntries,
+                deleted_entries=deleted_entries,
                 id=list_id,
                 auto_update=auto_update,
                 auto_update_query=auto_update_query,

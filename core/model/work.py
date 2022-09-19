@@ -8,6 +8,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
+import pytz
 from sqlalchemy import (
     Boolean,
     Column,
@@ -1616,9 +1617,26 @@ class Work(Base):
             if isinstance(value, Decimal):
                 return float(value)
             elif isinstance(value, datetime):
-                return value.timestamp()
+                try:
+                    # If we do not have a timezone, force UTC
+                    if value.tzinfo is None:
+                        value = value.replace(tzinfo=pytz.UTC)
+                    return value.timestamp()
+                except (ValueError, OverflowError) as e:
+                    logging.error(
+                        f"Could not convert date value {value} for document {doc.id}: {e}"
+                    )
+                    return 0
             elif isinstance(value, date):
-                return datetime(value.year, value.month, value.day).timestamp()
+                try:
+                    return datetime(
+                        value.year, value.month, value.day, tzinfo=pytz.UTC
+                    ).timestamp()
+                except (ValueError, OverflowError) as e:
+                    logging.error(
+                        f"Could not convert date value {value} for document {doc.id}: {e}"
+                    )
+                    return 0
             return value
 
         def _set_value(parent, key, target):
