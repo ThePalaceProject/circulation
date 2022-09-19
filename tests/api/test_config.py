@@ -1,6 +1,7 @@
 import json
 import os
 from collections import Counter
+from unittest.mock import patch
 
 import pytest
 from Crypto.Cipher import PKCS1_OAEP
@@ -199,11 +200,8 @@ class TestConfiguration:
             Configuration.DEFAULT_OPDS_FORMAT == CoreConfiguration.DEFAULT_OPDS_FORMAT
         )
 
+    @patch.object(os, "environ", new=dict())
     def test_fcm_credentials_file(self):
-        env_var = os.environ.pop(
-            Configuration.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE, "Empty"
-        )
-
         with pytest.raises(CannotLoadConfiguration):
             Configuration.fcm_credentials_file()
 
@@ -217,6 +215,3 @@ class TestConfiguration:
             Configuration.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE
         ] = os.path.abspath(__file__)
         assert os.path.abspath(__file__) == Configuration.fcm_credentials_file()
-
-        # Reset env var
-        os.environ[Configuration.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE] = env_var

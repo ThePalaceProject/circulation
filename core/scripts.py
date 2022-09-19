@@ -3092,7 +3092,7 @@ class LoanNotificationsScript(Script):
         _query = self._db.query(Loan).order_by(Loan.id)
         last_loan_id = None
         processed_loans = 0
-        for _ in range(100000):
+        for _ in range(100000):  # failsafe max 100000 loops
             query = _query.limit(self.BATCH_SIZE)
             if last_loan_id:
                 query = _query.filter(Loan.id > last_loan_id)

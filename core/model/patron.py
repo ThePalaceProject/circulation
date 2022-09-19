@@ -4,7 +4,7 @@ from __future__ import annotations
 import datetime
 import logging
 import uuid
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 from psycopg2.extras import NumericRange
 from sqlalchemy import (
@@ -179,7 +179,7 @@ class Patron(Base):
         "Credential", backref="patron", cascade="delete"
     )
 
-    device_tokens: List["DeviceToken"]
+    device_tokens: list[DeviceToken]
 
     __table_args__ = (
         UniqueConstraint("library_id", "username"),

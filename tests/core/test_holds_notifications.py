@@ -20,7 +20,7 @@ class TestHoldsNotifications(DatabaseTest):
         hold3, _ = work3.active_license_pool().on_hold_to(patron1, position=0)
         hold4, _ = work4.active_license_pool().on_hold_to(patron1, position=None)
 
-        # Only position 0 holds should be pushed queried for
+        # Only position 0 holds should be queried for
         assert self.monitor.item_query().all() == [hold2, hold3]
 
     @patch("core.jobs.holds_notification.PushNotifications")

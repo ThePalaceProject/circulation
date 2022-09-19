@@ -2,6 +2,8 @@ from __future__ import annotations
 
 # PolicyException LicensePool, LicensePoolDeliveryMechanism, DeliveryMechanism,
 # RightsStatus
+from __future__ import annotations
+
 import datetime
 import logging
 from enum import Enum as PythonEnum
