@@ -428,6 +428,13 @@ CUSTOM_LIST_NAME_ALREADY_IN_USE = pd(
     detail=_("The library already has a custom list with that name."),
 )
 
+AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES = pd(
+    "http://librarysimplified.org/terms/problem/auto-update-custom-list-cannot-have-entries",
+    status_code=400,
+    title=_("An auto update custom list cannot have entries"),
+    detail=_("Entries are automatically managed for auto update custom lists"),
+)
+
 COLLECTION_NOT_ASSOCIATED_WITH_LIBRARY = pd(
     "http://librarysimplified.org/terms/problem/collection-not-associated-with-library",
     status_code=400,
@@ -502,4 +509,20 @@ MISSING_IDENTIFIER = pd(
     status_code=400,
     title=_("Missing identifier"),
     detail=_("No identifier was used."),
+)
+
+CUSTOMLIST_SOURCE_COLLECTION_MISSING = pd(
+    "http://librarysimplified.org/terms/problem/customlist-source-collection-missing",
+    status_code=400,
+    title=_("Source collection missing"),
+    detail=_("A source collection is not present in the library."),
+)
+
+CUSTOMLIST_ENTRY_NOT_VALID_FOR_LIBRARY = pd(
+    "http://librarysimplified.org/terms/problem/customlist-entry-not-valid-for-library",
+    status_code=400,
+    title=_("Entry not valid for library"),
+    detail=_(
+        "An entry in the customlist was not valid for the library being shared with."
+    ),
 )

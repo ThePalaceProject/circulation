@@ -52,6 +52,7 @@ class TestMilleniumPatronAPI(DatabaseTest):
         password_keyboard=None,
         library_identifier_field=None,
         neighborhood_mode=None,
+        field_used_as_patron_identifier=None,
     ):
         integration = self._external_integration(self._str)
         integration.url = url
@@ -84,6 +85,11 @@ class TestMilleniumPatronAPI(DatabaseTest):
                 self._default_library,
                 integration,
             ).value = library_identifier_field
+
+        if field_used_as_patron_identifier:
+            integration.setting(
+                MilleniumPatronAPI.FIELD_USED_AS_PATRON_IDENTIFIER
+            ).value = field_used_as_patron_identifier
 
         return MockAPI(self._default_library, integration)
 
@@ -118,6 +124,39 @@ class TestMilleniumPatronAPI(DatabaseTest):
         # precedence.
         assert "6666666" == patrondata.permanent_id
         assert "44444444444447" == patrondata.authorization_identifier
+        assert "alice" == patrondata.username
+        assert Decimal(0) == patrondata.fines
+        assert date(2059, 4, 1) == patrondata.authorization_expires
+        assert "SHELDON, ALICE" == patrondata.personal_name
+        assert "alice@sheldon.com" == patrondata.email_address
+        assert PatronData.NO_VALUE == patrondata.block_reason
+
+    def test__remote_patron_lookup_success_nonsensical_labels(self):
+        self.api.enqueue("dump.success_nonsensical_labels.html")
+        patrondata = PatronData(authorization_identifier="good barcode")
+        patrondata = self.api._remote_patron_lookup(patrondata)
+
+        # The barcode is correctly captured from the "NONSENSE[pb]" element.
+        # This checks that we care about the 'pb' code and don't care about
+        # what comes before it.
+        assert "6666666" == patrondata.permanent_id
+        assert "44444444444447" == patrondata.authorization_identifier
+        assert "alice" == patrondata.username
+        assert Decimal(0) == patrondata.fines
+        assert date(2059, 4, 1) == patrondata.authorization_expires
+        assert "SHELDON, ALICE" == patrondata.personal_name
+        assert "alice@sheldon.com" == patrondata.email_address
+        assert PatronData.NO_VALUE == patrondata.block_reason
+
+    def test__remote_patron_lookup_success_alternative_identifier(self):
+        self.api = self.mock_api(field_used_as_patron_identifier="pu")
+        self.api.enqueue("dump.success_alternative_identifier.html")
+        patrondata = PatronData(authorization_identifier="good barcode")
+        patrondata = self.api._remote_patron_lookup(patrondata)
+
+        # The identifier is correctly captured from the "MENINX[pu]" element.
+        assert "6666666" == patrondata.permanent_id
+        assert "alice" == patrondata.authorization_identifier
         assert "alice" == patrondata.username
         assert Decimal(0) == patrondata.fines
         assert date(2059, 4, 1) == patrondata.authorization_expires

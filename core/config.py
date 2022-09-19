@@ -9,14 +9,14 @@ from flask_babel import lazy_gettext as _
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import ArgumentError
 
+# It's convenient for other modules import IntegrationException
+# from this module, alongside CannotLoadConfiguration.
+from core.exceptions import IntegrationException
+
 from .entrypoint import EntryPoint
 from .facets import FacetConstants
 from .util import LanguageCodes
 from .util.datetime_helpers import to_utc, utc_now
-
-# It's convenient for other modules import IntegrationException
-# from this module, alongside CannotLoadConfiguration.
-from .util.http import IntegrationException
 
 
 class CannotLoadConfiguration(IntegrationException):
@@ -184,6 +184,10 @@ class Configuration(ConfigurationConstants):
     ]
 
     EXCLUDED_AUDIO_DATA_SOURCES = "excluded_audio_data_sources"
+
+    # In case an app version is not present, we can use this version as a fallback
+    # for all outgoing http requests without a custom user-agent
+    DEFAULT_USER_AGENT_VERSION = "1.x.x"
 
     SITEWIDE_SETTINGS = [
         {

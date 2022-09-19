@@ -2,7 +2,7 @@ import pytest
 
 from core.model import get_one_or_create
 from core.model.coverage import WorkCoverageRecord
-from core.model.customlist import CustomList, CustomListEntry
+from core.model.customlist import CustomList, CustomListEntry, customlist_sharedlibrary
 from core.model.datasource import DataSource
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
@@ -353,6 +353,34 @@ class TestCustomList(DatabaseTest):
         list.size = 44
         list.update_size()
         assert 4 == list.size
+
+
+class TestCustomListSharedLibrary(DatabaseTest):
+    def test_cascade(self):
+        c1, _ = self._customlist()
+        l1 = self._library()
+
+        c1.shared_locally_with_libraries = [l1]
+        self._db.commit()
+
+        shared = (
+            self._db.query(customlist_sharedlibrary)
+            .filter(customlist_sharedlibrary.c.library_id == l1.id)
+            .all()
+        )
+        assert len(shared) == 1
+        assert shared[0].customlist_id == c1.id
+
+        self._db.delete(c1)
+        self._db.commit()
+
+        # should be deleted on cascade
+        shared = (
+            self._db.query(customlist_sharedlibrary)
+            .filter(customlist_sharedlibrary.c.library_id == l1.id)
+            .all()
+        )
+        assert len(shared) == 0
 
 
 class TestCustomListEntry(DatabaseTest):

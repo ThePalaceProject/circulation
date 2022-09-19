@@ -1,6 +1,9 @@
 import functools
 import logging
+import random
+import string
 from contextlib import contextmanager
+from datetime import datetime
 from enum import Enum
 from typing import Any, List, Optional, Tuple
 from urllib.parse import quote, unquote_plus, urlsplit
@@ -12,7 +15,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from flask_babel import lazy_gettext as _
 
 from .mirror import MirrorUploader
-from .model import Collection, ExternalIntegration, Representation
+from .model import Collection, ExternalIntegration, Library, LicensePool, Representation
 from .model.configuration import (
     ConfigurationAttributeType,
     ConfigurationGrouping,
@@ -114,6 +117,8 @@ class S3UploaderConfiguration(ConfigurationGrouping):
     BOOK_COVERS_BUCKET_KEY = "book_covers_bucket"
     OA_CONTENT_BUCKET_KEY = "open_access_content_bucket"
     PROTECTED_CONTENT_BUCKET_KEY = "protected_content_bucket"
+    ANALYTICS_BUCKET_KEY = "analytics_bucket"
+
     MARC_BUCKET_KEY = "marc_bucket"
 
     URL_TEMPLATE_KEY = "bucket_name_transform"
@@ -178,6 +183,17 @@ class S3UploaderConfiguration(ConfigurationGrouping):
         description=_(
             "Self-hosted books will be uploaded to this S3 bucket. "
             "<p>The bucket must already exist&mdash;it will not be created automatically.</p>"
+        ),
+        type=ConfigurationAttributeType.TEXT,
+        required=False,
+    )
+
+    analytics_bucket = ConfigurationMetadata(
+        key=ANALYTICS_BUCKET_KEY,
+        label=_("Analytics Bucket"),
+        description=_(
+            "Text files containing analytics data will be uploaded to this "
+            "S3 bucket. "
         ),
         type=ConfigurationAttributeType.TEXT,
         required=False,
@@ -444,6 +460,12 @@ class S3Uploader(MirrorUploader):
             url += "/"
         return url
 
+    def _analytics_file_root(self, bucket, library) -> str:
+        url = self.url(bucket, [library.short_name])
+        if not url.endswith("/"):
+            url += "/"
+        return url
+
     @classmethod
     def key_join(self, key, encode=True):
         """Quote the path portions of an S3 key while leaving the path
@@ -520,6 +542,27 @@ class S3Uploader(MirrorUploader):
             time_part = str(end_time)
         parts = [time_part, lane.display_name]
         return root + self.key_join(parts) + ".mrc"
+
+    def analytics_file_url(
+        self,
+        library: Library,
+        license_pool: LicensePool,
+        end_time: datetime,
+        start_time: datetime = None,
+    ):
+        """The path to the analytics data file for the given library, license
+        pool and date range."""
+        bucket = self.get_bucket(S3UploaderConfiguration.ANALYTICS_BUCKET_KEY)
+        root = self._analytics_file_root(bucket, library)
+        if start_time:
+            time_part = str(start_time) + "-" + str(end_time)
+        else:
+            time_part = str(end_time)
+
+        # ensure the uniqueness of file name (in case of overlapping events)
+        random_string = "".join(random.choices(string.ascii_lowercase, k=10))
+        parts = [time_part, license_pool.collection_id, random_string]
+        return root + self.key_join(parts) + ".json"
 
     def split_url(self, url: str, unquote: bool = True) -> Tuple[str, str]:
         """Splits the URL into the components: bucket and file path
@@ -739,6 +782,8 @@ class MockS3Uploader(S3Uploader):
             aws_access_key_id=None,
             aws_secret_access_key=None,
         )
+
+        self.client
 
     def mirror_one(self, representation, **kwargs):
         mirror_to = kwargs["mirror_to"]

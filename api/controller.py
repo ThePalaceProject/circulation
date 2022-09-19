@@ -11,12 +11,15 @@ from wsgiref.handlers import format_date_time
 
 import flask
 import pytz
+from attr import define
 from expiringdict import ExpiringDict
 from flask import Response, make_response, redirect
 from flask_babel import lazy_gettext as _
 from lxml import etree
 from sqlalchemy.orm import eagerload
+from sqlalchemy.orm.exc import NoResultFound
 
+from api.opds2 import OPDS2NavigationsAnnotator, OPDS2PublicationsAnnotator
 from api.saml.controller import SAMLController
 from core.analytics import Analytics
 from core.app_server import HeartbeatController
@@ -35,6 +38,7 @@ from core.external_search import (
 )
 from core.lane import (
     BaseFacets,
+    Facets,
     FeaturedFacets,
     Lane,
     Pagination,
@@ -73,6 +77,7 @@ from core.model.devicetokens import (
     InvalidTokenTypeError,
 )
 from core.opds import AcquisitionFeed, NavigationFacets, NavigationFeed
+from core.opds2 import AcquisitonFeedOPDS2
 from core.opensearch import OpenSearchDocument
 from core.user_profile import ProfileController as CoreProfileController
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
@@ -435,6 +440,7 @@ class CirculationManager:
         """
         self.index_controller = IndexController(self)
         self.opds_feeds = OPDSFeedController(self)
+        self.opds2_feeds = OPDS2FeedController(self)
         self.marc_records = MARCRecordController(self)
         self.loans = LoanController(self)
         self.annotations = AnnotationController(self)
@@ -1376,6 +1382,77 @@ class OPDSFeedController(CirculationManagerController):
         )
 
 
+@define
+class FeedRequestParameters:
+    """Frequently used request parameters for feed requests"""
+
+    library: Optional[Library] = None
+    pagination: Optional[Pagination] = None
+    facets: Optional[Facets] = None
+    problem: Optional[ProblemDetail] = None
+
+
+class OPDS2FeedController(CirculationManagerController):
+    """All OPDS2 type feeds are served through this controller"""
+
+    def _parse_feed_request(self):
+        """Parse the request to get frequently used request parameters for the feeds"""
+        library = getattr(flask.request, "library", None)
+        pagination = load_pagination_from_request()
+        if isinstance(pagination, ProblemDetail):
+            return FeedRequestParameters(problem=pagination)
+
+        try:
+            facets = load_facets_from_request()
+            if isinstance(facets, ProblemDetail):
+                return FeedRequestParameters(problem=facets)
+        except AttributeError:
+            # No facets/library present, so NoneType
+            facets = None
+
+        return FeedRequestParameters(
+            library=library, facets=facets, pagination=pagination
+        )
+
+    def publications(self):
+        """OPDS2 publications feed"""
+        params: FeedRequestParameters = self._parse_feed_request()
+        if params.problem:
+            return params.problem
+        annotator = OPDS2PublicationsAnnotator(
+            flask.request.url, params.facets, params.pagination, params.library
+        )
+        lane = self.load_lane(None)
+        feed = AcquisitonFeedOPDS2.publications(
+            self._db,
+            lane,
+            params.facets,
+            params.pagination,
+            self.search_engine,
+            annotator,
+        )
+
+        return Response(
+            str(feed), status=200, headers={"Content-Type": annotator.OPDS2_TYPE}
+        )
+
+    def navigation(self):
+        """OPDS2 navigation links"""
+        params: FeedRequestParameters = self._parse_feed_request()
+        annotator = OPDS2NavigationsAnnotator(
+            flask.request.url,
+            params.facets,
+            params.pagination,
+            params.library,
+            title="OPDS2 Navigation",
+        )
+        feed = AcquisitonFeedOPDS2.navigation(self._db, annotator)
+
+        return Response(
+            str(feed), status=200, headers={"Content-Type": annotator.OPDS2_TYPE}
+        )
+
+
 class MARCRecordController(CirculationManagerController):
     DOWNLOAD_TEMPLATE = """
 <html lang="en">
@@ -1838,6 +1915,9 @@ class LoanController(CirculationManagerController):
                 content = etree.tostring(feed)
             status_code = 200
             headers["Content-Type"] = OPDSFeed.ACQUISITION_FEED_TYPE
+        elif fulfillment.content_link_redirect is True:
+            # The fulfillment API has asked us to not be a proxy and instead redirect the client directly
+            return redirect(fulfillment.content_link)
         else:
             content = fulfillment.content
             if fulfillment.content_link:
@@ -2361,9 +2441,30 @@ class DeviceTokensController(CirculationManagerController):
         except InvalidTokenTypeError:
             return DEVICE_TOKEN_TYPE_INVALID
         except DuplicateDeviceTokenError:
-            return DEVICE_TOKEN_ALREADY_EXISTS
+            return dict(exists=True), 200
 
         return "", 201
+
+    def delete_patron_device(self):
+        patron = flask.request.patron
+        device_token = flask.request.json["device_token"]
+        token_type = flask.request.json["token_type"]
+
+        try:
+            device: DeviceToken = (
+                self._db.query(DeviceToken)
+                .filter(
+                    DeviceToken.patron == patron,
+                    DeviceToken.device_token == device_token,
+                    DeviceToken.token_type == token_type,
+                )
+                .one()
+            )
+            self._db.delete(device)
+        except NoResultFound:
+            return DEVICE_TOKEN_NOT_FOUND
+
+        return Response("", 204)
 
 
 class URNLookupController(CoreURNLookupController):

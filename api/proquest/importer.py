@@ -17,7 +17,6 @@ from api.circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
 from api.circulation_exceptions import CannotFulfill, CannotLoan
 from api.proquest.client import ProQuestAPIClientConfiguration, ProQuestAPIClientFactory
 from api.proquest.credential import ProQuestCredentialManager
-from api.proquest.identifier import ProQuestIdentifierParser
 from api.saml.metadata.model import SAMLAttributeType
 from core.classifier import Classifier
 from core.exceptions import BaseError
@@ -41,6 +40,7 @@ from core.model.configuration import (
     ExternalIntegration,
     HasExternalIntegration,
 )
+from core.model.identifier import ProQuestIdentifierParser
 from core.opds2_import import (
     OPDS2Importer,
     OPDS2ImporterConfiguration,

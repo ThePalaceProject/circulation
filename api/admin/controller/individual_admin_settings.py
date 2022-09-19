@@ -1,4 +1,5 @@
 import json
+from typing import Optional
 
 import flask
 from flask import Response
@@ -19,20 +20,78 @@ class IndividualAdminSettingsController(SettingsController):
         else:
             return self.process_post()
 
+    def _highest_authorized_role(self) -> Optional[AdminRole]:
+        highest_role = None
+        has_auth = False
+
+        admin = getattr(flask.request, "admin", None)
+
+        if not admin:
+            return None
+
+        for role in admin.roles:
+            if role.role in (
+                AdminRole.SYSTEM_ADMIN,
+                AdminRole.SITEWIDE_LIBRARY_MANAGER,
+                AdminRole.LIBRARY_MANAGER,
+            ):
+                # Admin has the authority to view this API
+                has_auth = True
+
+            if (
+                not highest_role
+                or highest_role.compare_role(role) == AdminRole.LESS_THAN
+            ):
+                # What is the highest role this admin possesses (via AdminRole.ROLES)
+                highest_role = role
+        return highest_role if has_auth else None
+
     def process_get(self):
+        logged_in_admin: Admin = flask.request.admin
+        highest_role: AdminRole = self._highest_authorized_role()
+
+        if not highest_role:
+            raise AdminNotAuthorized()
+
+        def append_role(roles, role):
+            role_dict = dict(role=role.role)
+            if role.library:
+                role_dict["library"] = role.library.short_name
+            roles.append(role_dict)
+
         admins = []
         for admin in self._db.query(Admin).order_by(Admin.email):
             roles = []
+            show_admin = True
             for role in admin.roles:
-                if role.library:
-                    if not flask.request.admin or not flask.request.admin.is_librarian(
+
+                # System admin sees all
+                if highest_role.role == AdminRole.SYSTEM_ADMIN:
+                    append_role(roles, role)
+
+                # Sitewide managers see each other and lower
+                elif (
+                    highest_role.role == AdminRole.SITEWIDE_LIBRARY_MANAGER
+                    and highest_role.compare_role(role) is not AdminRole.LESS_THAN
+                ):
+                    append_role(roles, role)
+
+                # Managers
+                elif highest_role.role == AdminRole.LIBRARY_MANAGER:
+                    # See same library admins
+                    if role.library and logged_in_admin.is_library_manager(
                         role.library
                     ):
-                        continue
-                    roles.append(dict(role=role.role, library=role.library.short_name))
-                else:
-                    roles.append(dict(role=role.role))
-            admins.append(dict(email=admin.email, roles=roles))
+                        append_role(roles, role)
+                    # and sitewide managers and librarians
+                    elif role.role in {
+                        AdminRole.SITEWIDE_LIBRARY_MANAGER,
+                        AdminRole.SITEWIDE_LIBRARIAN,
+                    }:
+                        append_role(roles, role)
+
+            if len(roles):
+                admins.append(dict(email=admin.email, roles=roles))
 
         return dict(
             individualAdmins=admins,
@@ -41,6 +100,7 @@ class IndividualAdminSettingsController(SettingsController):
     def process_post(self):
 
         email = flask.request.form.get("email")
+
         error = self.validate_form_fields(email)
         if error:
             return error
@@ -51,6 +111,10 @@ class IndividualAdminSettingsController(SettingsController):
             return INCOMPLETE_CONFIGURATION.detailed(
                 _("The password field cannot be blank.")
             )
+
+        highest_role = self._highest_authorized_role()
+        if not settingUp and not highest_role:
+            raise AdminNotAuthorized()
 
         admin, is_new = get_one_or_create(self._db, Admin, email=email)
 

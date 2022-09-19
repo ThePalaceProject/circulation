@@ -30,7 +30,7 @@ from api.lanes import (
 from api.novelist import MockNoveListAPI
 from core.classifier import Classifier
 from core.entrypoint import AudiobooksEntryPoint
-from core.external_search import Filter
+from core.external_search import Filter, MockExternalSearchIndex
 from core.lane import DefaultSortOrderFacets, Facets, FeaturedFacets, Lane, WorkList
 from core.metadata_layer import ContributorData, Metadata
 from core.model import (
@@ -45,6 +45,8 @@ from core.testing import DatabaseTest
 
 
 class TestLaneCreation(DatabaseTest):
+    NONEXISTENT_ALPHA3 = "nqq"
+
     def test_create_lanes_for_large_collection(self):
         languages = ["eng", "spa"]
         create_lanes_for_large_collection(self._db, self._default_library, languages)
@@ -222,8 +224,8 @@ class TestLaneCreation(DatabaseTest):
         ] == [set(x.audiences) for x in sublanes]
         assert [True, False, None] == [x.fiction for x in sublanes]
 
-        # If a language name is not found, don't create any lanes.
-        languages = ["eng", "mul", "chi"]
+        # If any language codes do not map to a name, don't create any lanes.
+        languages = ["eng", self.NONEXISTENT_ALPHA3, "chi"]
         parent = self._lane()
         priority = create_lane_for_small_collection(
             self._db, self._default_library, parent, languages, priority=2
@@ -251,7 +253,7 @@ class TestLaneCreation(DatabaseTest):
             self._db,
             self._default_library,
             new_parent,
-            ["spa", "gaa", "eng"],
+            ["spa", self.NONEXISTENT_ALPHA3, "eng"],
             priority=3,
         )
         assert 0 == new_priority
@@ -899,6 +901,23 @@ class TestCrawlableCollectionBasedLane(DatabaseTest):
         route, kwargs = lane.url_arguments
         assert CrawlableCollectionBasedLane.COLLECTION_ROUTE == route
         assert other_collection.name == kwargs.get("collection_name")
+
+    def test_works(self):
+        w1 = self._work(collection=self._default_collection)
+        w2 = self._work(collection=self._default_collection)
+        w3 = self._work(collection=self._collection())
+
+        lane = CrawlableCollectionBasedLane()
+        lane.initialize([self._default_collection])
+        search = MockExternalSearchIndex()
+        lane.works(self._db, facets=CrawlableFacets.default(None), search_engine=search)
+
+        assert len(search.queries) == 1
+        filter = search.queries[0][1]
+        # Only target a single collection
+        assert filter.collection_ids == [self._default_collection.id]
+        # without any search query
+        assert None == search.queries[0][0]
 
 
 class TestCrawlableCustomListBasedLane(DatabaseTest):

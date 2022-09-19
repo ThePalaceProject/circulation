@@ -3,6 +3,7 @@ from __future__ import annotations
 # Identifier, Equivalency
 import logging
 import random
+import re
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from functools import total_ordering
@@ -60,6 +61,172 @@ class IdentifierParser(metaclass=ABCMeta):
         raise NotImplementedError()
 
 
+class ISBNURNIdentifierParser(IdentifierParser):
+    """Parser for ISBN URN IDs."""
+
+    def __init__(self):
+        self._logger = logging.getLogger(__name__)
+
+    def parse(self, identifier_string: str) -> tuple[str, str] | None:
+        self._logger.debug(f'Started parsing identifier string "{identifier_string}"')
+
+        if identifier_string.lower().startswith(Identifier.ISBN_URN_SCHEME_PREFIX):
+            identifier_string = identifier_string[
+                len(Identifier.ISBN_URN_SCHEME_PREFIX) :
+            ]
+            identifier_string = unquote(identifier_string)
+            # Make sure this is a valid ISBN, and convert it to an ISBN-13.
+            if not (
+                isbnlib.is_isbn10(identifier_string)
+                or isbnlib.is_isbn13(identifier_string)
+            ):
+                raise ValueError("%s is not a valid ISBN." % identifier_string)
+            if isbnlib.is_isbn10(identifier_string):
+                identifier_string = isbnlib.to_isbn13(identifier_string)
+
+            return (Identifier.ISBN, identifier_string)
+
+        self._logger.debug(
+            'Finished parsing identifier string "{}". It does not contain a '
+            "ISBN URN ID".format(identifier_string)
+        )
+
+        return None
+
+
+class URNIdentifierParser(IdentifierParser):
+    """Parser for URN IDs."""
+
+    def __init__(self):
+        self._logger = logging.getLogger(__name__)
+
+    def parse(self, identifier_string: str) -> tuple[str, str] | None:
+        self._logger.debug(f'Started parsing identifier string "{identifier_string}"')
+
+        if identifier_string.startswith(Identifier.URN_SCHEME_PREFIX):
+            identifier_string = identifier_string[len(Identifier.URN_SCHEME_PREFIX) :]
+            type, identifier_string = list(
+                map(unquote, identifier_string.split("/", 1))
+            )
+            return (type, identifier_string)
+
+        self._logger.debug(
+            'Finished parsing identifier string "{}". It does not contain a '
+            "URN ID".format(identifier_string)
+        )
+
+        return None
+
+
+class GenericURNIdentifierParser(IdentifierParser):
+    """Parser for Generic URN IDs."""
+
+    def __init__(self):
+        self._logger = logging.getLogger(__name__)
+
+    def parse(self, identifier_string: str) -> tuple[str, str] | None:
+        self._logger.debug(f'Started parsing identifier string "{identifier_string}"')
+
+        if identifier_string.startswith(Identifier.OTHER_URN_SCHEME_PREFIX):
+            return (Identifier.URI, identifier_string)
+
+        self._logger.debug(
+            'Finished parsing identifier string "{}". It does not contain a '
+            "Generic URN ID".format(identifier_string)
+        )
+
+        return None
+
+
+class URIIdentifierParser(IdentifierParser):
+    """Parser for URI IDs."""
+
+    def __init__(self):
+        self._logger = logging.getLogger(__name__)
+
+    def parse(self, identifier_string: str) -> tuple[str, str] | None:
+        self._logger.debug(f'Started parsing identifier string "{identifier_string}"')
+
+        if identifier_string.startswith("http:") or identifier_string.startswith(
+            "https:"
+        ):
+            return (Identifier.URI, identifier_string)
+
+        self._logger.debug(
+            'Finished parsing identifier string "{}". It does not contain a '
+            "URI ID".format(identifier_string)
+        )
+
+        return None
+
+
+class GutenbergIdentifierParser(IdentifierParser):
+    """Parser for Gutenberg Doc IDs."""
+
+    ID_REGEX = IdentifierConstants.GUTENBERG_URN_SCHEME_RE
+
+    def __init__(self):
+        self._logger = logging.getLogger(__name__)
+
+    def parse(self, identifier_string: str) -> tuple[str, str] | None:
+        self._logger.debug(f'Started parsing identifier string "{identifier_string}"')
+
+        match = self.ID_REGEX.match(identifier_string)
+
+        if match:
+            document_id = match.groups()[0]
+            result = (Identifier.GUTENBERG_ID, document_id)
+
+            self._logger.debug(
+                'Finished parsing identifier string "{}". Result: {}'.format(
+                    document_id, result
+                )
+            )
+
+            return result
+
+        self._logger.debug(
+            'Finished parsing identifier string "{}". It does not contain a ProQuest Doc ID'.format(
+                identifier_string
+            )
+        )
+
+        return None
+
+
+class ProQuestIdentifierParser(IdentifierParser):
+    """Parser for ProQuest Doc IDs."""
+
+    ID_REGEX = re.compile(r"urn:proquest.com/document-id/(\d+)")
+
+    def __init__(self):
+        self._logger = logging.getLogger(__name__)
+
+    def parse(self, identifier_string: str) -> tuple[str, str] | None:
+        self._logger.debug(f'Started parsing identifier string "{identifier_string}"')
+
+        match = self.ID_REGEX.match(identifier_string)
+
+        if match:
+            document_id = match.groups()[0]
+            result = (Identifier.PROQUEST_ID, document_id)
+
+            self._logger.debug(
+                'Finished parsing identifier string "{}". Result={}'
+                "".format(identifier_string, result)
+            )
+
+            return result
+
+        self._logger.debug(
+            'Finished parsing identifier string "{}". It does not contain a ProQuest Doc ID'.format(
+                identifier_string
+            )
+        )
+
+        return None
+
+
 @total_ordering
 class Identifier(Base, IdentifierConstants):
     """A way of uniquely referring to a particular edition."""
@@ -107,7 +274,7 @@ class Identifier(Base, IdentifierConstants):
     )
 
     # One Identifier may have many Links.
-    links = relationship("Hyperlink", backref="identifier")
+    links = relationship("Hyperlink", backref="identifier", uselist=True)
 
     # One Identifier may be the subject of many Measurements.
     measurements = relationship("Measurement", backref="identifier")
@@ -238,44 +405,27 @@ class Identifier(Base, IdentifierConstants):
         # is provided in a context that requires a resolvable identifier
         pass
 
+    PARSERS: list[IdentifierParser] = [
+        GutenbergIdentifierParser(),
+        URIIdentifierParser(),
+        ISBNURNIdentifierParser(),
+        URNIdentifierParser(),
+        ProQuestIdentifierParser(),
+        GenericURNIdentifierParser(),
+    ]
+
     @classmethod
-    def type_and_identifier_for_urn(cls, identifier_string):
-        if not identifier_string:
-            return None, None
-        m = cls.GUTENBERG_URN_SCHEME_RE.match(identifier_string)
-        if m:
-            type = Identifier.GUTENBERG_ID
-            identifier_string = m.groups()[0]
-        elif identifier_string.startswith("http:") or identifier_string.startswith(
-            "https:"
-        ):
-            type = Identifier.URI
-        elif identifier_string.startswith(Identifier.URN_SCHEME_PREFIX):
-            identifier_string = identifier_string[len(Identifier.URN_SCHEME_PREFIX) :]
-            type, identifier_string = list(
-                map(unquote, identifier_string.split("/", 1))
-            )
-        elif identifier_string.lower().startswith(Identifier.ISBN_URN_SCHEME_PREFIX):
-            type = Identifier.ISBN
-            identifier_string = identifier_string[
-                len(Identifier.ISBN_URN_SCHEME_PREFIX) :
-            ]
-            identifier_string = unquote(identifier_string)
-            # Make sure this is a valid ISBN, and convert it to an ISBN-13.
-            if not (
-                isbnlib.is_isbn10(identifier_string)
-                or isbnlib.is_isbn13(identifier_string)
-            ):
-                raise ValueError("%s is not a valid ISBN." % identifier_string)
-            if isbnlib.is_isbn10(identifier_string):
-                identifier_string = isbnlib.to_isbn13(identifier_string)
-        elif identifier_string.startswith(Identifier.OTHER_URN_SCHEME_PREFIX):
-            type = Identifier.URI
-        else:
-            raise ValueError(
-                "Could not turn %s into a recognized identifier." % identifier_string
-            )
-        return (type, identifier_string)
+    def type_and_identifier_for_urn(cls, identifier_string: str) -> tuple[str, str]:
+
+        for parser in Identifier.PARSERS:
+            result = parser.parse(identifier_string)
+            if result:
+                identifier_type, identifier = result
+                return identifier_type, identifier
+
+        raise ValueError(
+            "Could not turn %s into a recognized identifier." % identifier_string
+        )
 
     @classmethod
     def parse_urns(cls, _db, identifier_strings, autocreate=True, allowed_types=None):
@@ -402,7 +552,7 @@ class Identifier(Base, IdentifierConstants):
         _db: Session,
         identifier_string: str,
         must_support_license_pools: bool = False,
-    ) -> tuple[Identifier, bool]:
+    ) -> tuple[Identifier, bool] | None:
         """Parse identifier string.
 
         :param _db: Database session
@@ -411,6 +561,14 @@ class Identifier(Base, IdentifierConstants):
             licenses for books identified by the given identifier
         :return: 2-tuple containing Identifier object and a boolean value indicating whether it's new
         """
+        # I added this in here in my refactoring because there is a test
+        # that tests for this case. I'm not sure that it is necessary, but
+        # I've assumed there was a reason that the test_identifier.test_parse_urn
+        # tests for this case and thus ensure that it remains valid here.
+        # test
+        if identifier_string == None:
+            return None
+
         identifier_type, identifier_string = cls.type_and_identifier_for_urn(
             identifier_string
         )

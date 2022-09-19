@@ -11,14 +11,18 @@ class TestLocalAnalyticsExporter(DatabaseTest):
 
     def test_export(self):
         exporter = LocalAnalyticsExporter()
-
+        c1 = self._collection(name="c1")
+        c2 = self._collection(name="c2")
         w1 = self._work(with_open_access_download=True)
         w2 = self._work(with_open_access_download=True)
         [lp1] = w1.license_pools
         [lp2] = w2.license_pools
+        lp1.collection = c1
+        lp2.collection = c2
         edition1 = w1.presentation_edition
         edition1.publisher = "A publisher"
         edition1.imprint = "An imprint"
+        edition1.medium = "Book"
         edition2 = w2.presentation_edition
         identifier1 = w1.presentation_edition.primary_identifier
         identifier2 = w2.presentation_edition.primary_identifier
@@ -42,7 +46,6 @@ class TestLocalAnalyticsExporter(DatabaseTest):
         num = len(types)
         time = datetime.now() - timedelta(minutes=len(types))
         location = "11377"
-
         # Create a bunch of circulation events of different types,
         # all with the same .location.
         for type in types:
@@ -97,9 +100,15 @@ class TestLocalAnalyticsExporter(DatabaseTest):
             w1.target_age_string or "",
             ordered_genre_string,
             location,
+            c1.name,
+            "",
+            "",
+            edition1.medium,
         ]
+
+        expected_row_count = 18
         for row in rows:
-            assert 14 == len(row)
+            assert expected_row_count == len(row)
             assert constant == row[2:]
 
         # Now run a query that includes the last event created.
@@ -115,7 +124,7 @@ class TestLocalAnalyticsExporter(DatabaseTest):
         all_but_last_row = rows[:-1]
         assert types == [row[1] for row in all_but_last_row]
         for row in all_but_last_row:
-            assert 14 == len(row)
+            assert expected_row_count == len(row)
             assert constant == row[2:]
 
         # Now let's look at the last row. It's got metadata from a
@@ -135,6 +144,10 @@ class TestLocalAnalyticsExporter(DatabaseTest):
             w2.target_age_string or "",
             genres[1].name,
             no_location,
+            c2.name,
+            "",
+            "",
+            edition1.medium,
         ] == rows[-1][1:]
 
         output = exporter.export(self._db, today, today)
@@ -146,7 +159,10 @@ class TestLocalAnalyticsExporter(DatabaseTest):
 
         # Gather events by library - these events have an associated library id
         # but it was not passed in the exporter
-        library = self._library()
+        library_name = "Library1"
+        library_short_name = "LIB1"
+
+        library = self._library(name=library_name, short_name=library_short_name)
         library2 = self._library()
         time = datetime.now() - timedelta(minutes=num)
         for type in types:
@@ -182,11 +198,15 @@ class TestLocalAnalyticsExporter(DatabaseTest):
         rows = [row for row in reader][1::]  # skip header row
 
         # There are five events with a library ID.
+        constant_with_library = constant.copy()
+        constant_with_library[13] = library_short_name
+        constant_with_library[14] = library_name
+
         assert num == len(rows)
         assert types == [row[1] for row in rows]
         for row in rows:
-            assert 14 == len(row)
-            assert constant == row[2:]
+            assert expected_row_count == len(row)
+            assert constant_with_library == row[2:]
 
         # We are looking for events from a different library but there
         # should be no events associated with this library.
@@ -291,5 +311,5 @@ class TestLocalAnalyticsExporter(DatabaseTest):
         # After the start time and event type, the rest of the row is
         # the same content we've come to expect.
         for row in rows:
-            assert 14 == len(row)
+            assert expected_row_count == len(row)
             assert constant == row[2:]

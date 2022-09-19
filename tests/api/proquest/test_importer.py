@@ -21,7 +21,6 @@ from api.proquest.client import (
     ProQuestBook,
 )
 from api.proquest.credential import ProQuestCredentialManager
-from api.proquest.identifier import ProQuestIdentifierParser
 from api.proquest.importer import (
     ProQuestOPDS2Importer,
     ProQuestOPDS2ImporterConfiguration,
@@ -50,6 +49,7 @@ from core.model.configuration import (
     ConfigurationStorage,
     HasExternalIntegration,
 )
+from core.model.identifier import ProQuestIdentifierParser
 from core.opds2_import import RWPMManifestParser
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import datetime_utc, utc_now

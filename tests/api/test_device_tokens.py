@@ -1,10 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from api.problem_details import (
-    DEVICE_TOKEN_ALREADY_EXISTS,
-    DEVICE_TOKEN_NOT_FOUND,
-    DEVICE_TOKEN_TYPE_INVALID,
-)
+from api.problem_details import DEVICE_TOKEN_NOT_FOUND, DEVICE_TOKEN_TYPE_INVALID
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from tests.api.test_controller import ControllerTest
 
@@ -92,6 +88,19 @@ class TestDeviceTokens(ControllerTest):
         patron = self._patron()
         device = DeviceToken.create(self._db, DeviceTokenTypes.FCM_IOS, "xxx", patron)
 
+        # Same patron same token
+        request = MagicMock()
+        request.patron = patron
+        request.json = {
+            "device_token": "xxx",
+            "token_type": DeviceTokenTypes.FCM_ANDROID,
+        }
+        flask.request = request
+        nested = self._db.begin_nested()  # rollback only affects device create
+        response = self.app.manager.patron_devices.create_patron_device()
+        assert response == (dict(exists=True), 200)
+
+        # different patron same token
         patron1 = self._patron()
         request = MagicMock()
         request.patron = patron1
@@ -102,4 +111,37 @@ class TestDeviceTokens(ControllerTest):
         flask.request = request
         response = self.app.manager.patron_devices.create_patron_device()
 
-        assert response == DEVICE_TOKEN_ALREADY_EXISTS
+        assert response[1] == 201
+
+    def test_delete_token(self, flask):
+        patron = self._patron()
+        device = DeviceToken.create(self._db, DeviceTokenTypes.FCM_IOS, "xxx", patron)
+
+        request = MagicMock()
+        request.patron = patron
+        request.json = {
+            "device_token": "xxx",
+            "token_type": DeviceTokenTypes.FCM_IOS,
+        }
+        flask.request = request
+
+        response = self.app.manager.patron_devices.delete_patron_device()
+        self._db.commit()
+
+        assert response.status_code == 204
+        assert self._db.query(DeviceToken).get(device.id) == None
+
+    def test_delete_no_token(self, flask):
+        patron = self._patron()
+        device = DeviceToken.create(self._db, DeviceTokenTypes.FCM_IOS, "xxx", patron)
+
+        request = MagicMock()
+        request.patron = patron
+        request.json = {
+            "device_token": "xxxy",
+            "token_type": DeviceTokenTypes.FCM_IOS,
+        }
+        flask.request = request
+
+        response = self.app.manager.patron_devices.delete_patron_device()
+        assert response == DEVICE_TOKEN_NOT_FOUND

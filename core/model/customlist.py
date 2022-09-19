@@ -2,14 +2,17 @@
 
 import logging
 from functools import total_ordering
+from typing import TYPE_CHECKING, List
 
 from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
+    Enum,
     ForeignKey,
     Index,
     Integer,
+    Table,
     Unicode,
     UniqueConstraint,
 )
@@ -24,12 +27,20 @@ from .identifier import Identifier
 from .licensing import LicensePool
 from .work import Work
 
+if TYPE_CHECKING:
+    from . import Collection, Library
+
 
 @total_ordering
 class CustomList(Base):
     """A custom grouping of Editions."""
 
     STAFF_PICKS_NAME = "Staff Picks"
+
+    INIT = "init"
+    UPDATED = "updated"
+    REPOPULATE = "repopulate"
+    auto_update_status_enum = Enum(INIT, UPDATED, REPOPULATE, name="auto_update_status")
 
     __tablename__ = "customlists"
     id = Column(Integer, primary_key=True)
@@ -47,7 +58,25 @@ class CustomList(Base):
     # cached when the list contents change.
     size = Column(Integer, nullable=False, default=0)
 
-    entries = relationship("CustomListEntry", backref="customlist")
+    entries = relationship("CustomListEntry", backref="customlist", uselist=True)
+
+    # List sharing mechanisms
+    shared_locally_with_libraries = relationship(
+        "Library",
+        secondary=lambda: customlist_sharedlibrary,  # type: ignore
+        backref="shared_custom_lists",
+        uselist=True,
+    )
+
+    auto_update_enabled = Column(Boolean, default=False)
+    auto_update_query = Column(Unicode, nullable=True)  # holds json data
+    auto_update_facets = Column(Unicode, nullable=True)  # holds json data
+    auto_update_last_update = Column(DateTime, nullable=True)
+    auto_update_status = Column(auto_update_status_enum, default=INIT)
+
+    # Typing specific
+    collections: List["Collection"]
+    library: "Library"
 
     __table_args__ = (
         UniqueConstraint("data_source_id", "foreign_identifier"),
@@ -290,6 +319,27 @@ class CustomList(Base):
 
     def update_size(self):
         self.size = len(self.entries)
+
+
+customlist_sharedlibrary = Table(
+    "customlist_sharedlibraries",
+    Base.metadata,
+    Column(
+        "customlist_id",
+        Integer,
+        ForeignKey("customlists.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    ),
+    Column(
+        "library_id",
+        Integer,
+        ForeignKey("libraries.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    ),
+    UniqueConstraint("customlist_id", "library_id"),
+)
 
 
 class CustomListEntry(Base):

@@ -27,7 +27,8 @@ from api.authenticator import (
     LibraryAuthenticator,
     OAuthController,
 )
-from api.circulation import FulfillmentInfo, HoldInfo, LoanInfo
+from api.axis import Axis360FulfillmentInfo
+from api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
 from api.circulation_exceptions import *
 from api.circulation_exceptions import RemoteInitiatedServerError
 from api.config import Configuration, temp_config
@@ -120,6 +121,8 @@ from core.model import (
     get_one_or_create,
     tuple_to_numericrange,
 )
+from core.model.licensing import LicensePool
+from core.model.work import Work
 from core.opds import AcquisitionFeed, NavigationFacets, NavigationFeed
 from core.problem_details import *
 from core.testing import DummyHTTPClient, MockRequestsResponse
@@ -2401,6 +2404,82 @@ class TestLoanController(CirculationControllerTest):
             assert "here's your book" == response.get_data(as_text=True)
             assert [] == self._db.query(Loan).all()
 
+    def test_no_drm_fulfill(self):
+        """In case a work does not have DRM for it's fulfillment.
+        We must simply redirect the client to the non-DRM'd location
+        instead doing a proxy download"""
+        # setup the patron, work and loan
+        patron = self._patron()
+        work: Work = self._work(
+            with_license_pool=True, data_source_name=DataSource.OVERDRIVE
+        )
+        pool: LicensePool = work.active_license_pool()
+        pool.loan_to(patron)
+        controller = self.manager.loans
+
+        # This work has a no-DRM fulfillment criteria
+        lpdm = pool.set_delivery_mechanism(
+            MediaTypes.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.NO_DRM,
+            RightsStatus.IN_COPYRIGHT,
+        )
+        lpdm.delivery_mechanism.default_client_can_fulfill = True
+
+        # Mock out the flow
+        api = MagicMock()
+        api.fulfill.return_value = FulfillmentInfo(
+            self._default_collection,
+            DataSource.OVERDRIVE,
+            "overdrive",
+            pool.identifier.identifier,
+            "https://example.org/redirect_to_epub",
+            MediaTypes.EPUB_MEDIA_TYPE,
+            "",
+            None,
+            content_link_redirect=True,
+        )
+        controller.can_fulfill_without_loan = MagicMock(return_value=False)
+        controller.authenticated_patron_from_request = MagicMock(return_value=patron)
+
+        with self.request_context_with_library(
+            "/",
+            library=self._default_library,
+            headers=dict(Authorization=self.valid_auth),
+        ):
+            self.manager.circulation_apis[self._default_library.id] = CirculationAPI(
+                self._db, self._default_library
+            )
+            controller.circulation.api_for_collection[self._default_collection.id] = api
+            response = controller.fulfill(pool.id, lpdm.delivery_mechanism.id)
+
+        assert response.status_code == 302
+        assert response.location == "https://example.org/redirect_to_epub"
+
+        # Axis360 variant
+        api.collection = self._default_collection
+        api._db = self._db
+        axis360_ff = Axis360FulfillmentInfo(
+            api, DataSource.AXIS_360, "Axis 360 ID", "xxxxxx", "xxxxxx"
+        )
+        api.get_fulfillment_info.return_value = MagicMock(
+            content={
+                "ExpirationDate": "2020-01-01 00:00:00",
+                "Status": dict(Code=1, Message="Worked."),
+                "ISBN": "ISBN ID",
+                "BookVaultUUID": "Vault ID",
+            }
+        )
+        api.fulfill.return_value = axis360_ff
+        with self.request_context_with_library(
+            "/",
+            library=self._default_library,
+            headers=dict(Authorization=self.valid_auth),
+        ):
+            response = controller.fulfill(pool.id, lpdm.delivery_mechanism.id)
+
+        assert response.status_code == 200
+        assert response.json == {"book_vault_uuid": "Vault ID", "isbn": "ISBN ID"}
+
     def test_revoke_loan(self):
         with self.request_context_with_library(
             "/", headers=dict(Authorization=self.valid_auth)
@@ -4451,6 +4530,10 @@ class TestOPDSFeedController(CirculationControllerTest):
         with self.request_context_with_library("/?q=t"):
             response = self.manager.opds_feeds.search(None, feed_class=Mock)
             assert AudiobooksEntryPoint == self.called_with["facets"].entrypoint
+
+        with self.request_context_with_library("/?q=t&search_type=json"):
+            response = self.manager.opds_feeds.search(None, feed_class=Mock)
+            assert self.called_with["facets"].search_type == "json"
 
     def test_misconfigured_search(self):
         class BadSearch(CirculationManager):

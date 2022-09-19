@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from unittest.mock import MagicMock, PropertyMock, call, create_autospec
 
 import sqlalchemy
@@ -362,6 +363,34 @@ class TestSAMLSettings(DatabaseTest):
 
         # After getting an active database session options get initialized
         assert 1 == len(federated_identity_provider_entity_ids["options"])
+
+        # A new idp shows up only after the last updated time
+        federated_identity_provider_2 = SAMLFederatedIdentityProvider(
+            federation,
+            fixtures.IDP_2_ENTITY_ID,
+            fixtures.IDP_2_UI_INFO_EN_DISPLAY_NAME,
+            fixtures.CORRECT_XML_WITH_IDP_2,
+        )
+        app._db.add(federated_identity_provider_2)
+
+        [federated_identity_provider_entity_ids] = [
+            setting
+            for setting in BaseSAMLAuthenticationProvider.SETTINGS
+            if setting["key"]
+            == SAMLConfiguration.federated_identity_provider_entity_ids.key
+        ]
+
+        # Only the first shows up yet
+        assert 1 == len(federated_identity_provider_entity_ids["options"])
+
+        federation.last_updated_at = datetime.now()
+        [federated_identity_provider_entity_ids] = [
+            setting
+            for setting in BaseSAMLAuthenticationProvider.SETTINGS
+            if setting["key"]
+            == SAMLConfiguration.federated_identity_provider_entity_ids.key
+        ]
+        assert 2 == len(federated_identity_provider_entity_ids["options"])
 
 
 class TestSAMLOneLoginConfiguration:

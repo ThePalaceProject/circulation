@@ -2,7 +2,9 @@ import argparse
 import json
 import logging
 import os
+import re
 from typing import Dict, List, Set
+from urllib.parse import unquote
 
 import feedparser
 import requests
@@ -41,6 +43,7 @@ class CustomListImporter:
     _output_file: str
     _schema_file: str
     _schema_report_file: str
+    _library_name: str
 
     @staticmethod
     def _fatal(message: str):
@@ -77,6 +80,9 @@ class CustomListImporter:
             help="The schema file for custom list reports",
             required=False,
             default="customlists/customlists-report.schema.json",
+        )
+        parser.add_argument(
+            "--library-name", help="The destination library short name", required=True
         )
         parser.add_argument("--file", help="The customlists file", required=True)
         parser.add_argument("--output", help="The output report", required=True)
@@ -134,13 +140,14 @@ class CustomListImporter:
         )
 
         """Check that the book on the target CM has a matching ID and title."""
-        server_work_endpoint: str = (
-            f"{self._server_base}/admin/works/{book.id_type()}/{book.id()}"
-        )
+        server_work_endpoint: str = f"{self._server_base}/{self._library_name}/admin/works/{book.id_type()}/{book.id_value()}"
         response = self._session.get(server_work_endpoint)
         if response.status_code == 404:
             problem_missing = CustomListProblemBookMissing.create(
-                id=book.id(), title=book.title()
+                id=book.id(),
+                id_type=book.id_type(),
+                author=book.author(),
+                title=book.title(),
             )
             report.add_problem(problem_missing)
             self._logger.error(problem_missing.message())
@@ -150,6 +157,8 @@ class CustomListImporter:
         if response.status_code >= 400:
             problem_request = CustomListProblemBookRequestFailed.create(
                 id=book.id(),
+                id_type=book.id_type(),
+                author=book.author(),
                 title=book.title(),
                 error=self._error_response("Book request failed", response),
             )
@@ -160,16 +169,33 @@ class CustomListImporter:
 
         feed = feedparser.parse(response.content)
         for entry in feed.entries:
-            if entry.id != book.id() or entry.title != book.title():
-                problem = CustomListProblemBookMismatch.create(
-                    expected_id=book.id(),
-                    expected_title=book.title(),
-                    received_id=entry.id,
-                    received_title=entry.title,
-                )
-                self._logger.error(problem.message())
-                report.add_problem(problem)
-                rejected_books.add(book.id())
+            for link in entry.links:
+                if link.rel == "alternate":
+                    match = re.search("^(.*)/works/([^/]+)/(.*)$", link.href)
+                    if match is not None:
+                        entry_id_unquoted = unquote(entry.id)
+                        matches_id = entry_id_unquoted == book.id()
+                        matches_title = entry.title == book.title()
+                        self._logger.debug(
+                            f"comparing id '{entry_id_unquoted}' with '{book.id()}' -> {matches_id}"
+                        )
+                        self._logger.debug(
+                            f"comparing title '{entry.title}' with '{book.title()}' -> {matches_title}"
+                        )
+
+                        if not (matches_id and matches_title):
+                            problem = CustomListProblemBookMismatch.create(
+                                expected_id=book.id(),
+                                expected_id_type=book.id_type(),
+                                expected_title=book.title(),
+                                received_id=entry_id_unquoted,
+                                received_title=entry.title,
+                                author=book.author(),
+                            )
+                            self._logger.error(problem.message())
+                            report.add_problem(problem)
+                            rejected_books.add(book.id())
+                            break
 
     def _process_check_problematic_book(
         self,
@@ -179,6 +205,8 @@ class CustomListImporter:
         """Add all of the known problematic books to the output report."""
         problem = CustomListProblemBookBrokenOnSourceCM(
             id=book.id(),
+            author=book.author(),
+            id_type="?",
             title=book.title(),
             message=f"Book '{book.title()}' ({book.id()}) was excluded from list updates due to a problem on the source CM: {book.message()}",
         )
@@ -247,7 +275,9 @@ class CustomListImporter:
             f"Checking that list '{customlist.name()}' ({customlist.id()}) does not exist on the target CM"
         )
 
-        server_list_endpoint: str = f"{self._server_base}/admin/custom_lists"
+        server_list_endpoint: str = (
+            f"{self._server_base}/{self._library_name}/admin/custom_lists"
+        )
         response = self._session.get(server_list_endpoint)
         if response.status_code >= 400:
             self._fatal_response("Failed to retrieve custom lists", response)
@@ -296,7 +326,7 @@ class CustomListImporter:
 
             # Send the new list to the server.
             server_list_endpoint: str = (
-                f"{self._server_base}/{customlist.library_id()}/admin/custom_lists"
+                f"{self._server_base}/{self._library_name}/admin/custom_lists"
             )
 
             response = self._session.post(
@@ -396,6 +426,7 @@ class CustomListImporter:
         self._dry_run = args.dry_run
         self._schema_file = args.schema_file
         self._schema_report_file = args.schema_report_file
+        self._library_name = args.library_name
         verbose: int = args.verbose or 0
         if verbose > 0:
             self._logger.setLevel(logging.INFO)

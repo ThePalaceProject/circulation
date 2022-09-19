@@ -13,6 +13,8 @@ from unittest import mock
 import pytest
 from sqlalchemy.orm.session import Session
 
+from core.model.devicetokens import DeviceToken
+
 from . import external_search
 from .analytics import Analytics
 from .classifier import Classifier
@@ -1637,6 +1639,12 @@ def session_fixture():
     # Drop any existing schema. It will be recreated when
     # SessionManager.initialize() runs.
     engine = SessionManager.engine()
+    # Trying to drop all tables without reflecting first causes an issue
+    # since SQLAchemy does not know the order of cascades
+    # Adding .reflect is throwing an error locally becuase tables are imported
+    # later and hence being defined twice
+    # Deleting the problematic table first fixes the issue, in this case DeviceToken
+    DeviceToken.__table__.drop(engine, checkfirst=True)
     Base.metadata.drop_all(engine)
 
     yield

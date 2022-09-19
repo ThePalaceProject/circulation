@@ -23,10 +23,14 @@ class LanguageCodes:
 
     The data file comes from
     http://www.loc.gov/standards/iso639-2/ISO-639-2_utf-8.txt
+    According to LOC (https://www.loc.gov/standards/iso639-2/ascii_8bits.html), the format is
+    An alpha-3 (bibliographic) code, an alpha-3 (terminologic) code (when given), an alpha-2 code (when given),
+    an English name, and a French name of a language are all separated by pipe (|) characters.
     """
 
     two_to_three = LookupTable()
     three_to_two = LookupTable()
+    terminologic_to_three = LookupTable()
     english_names: Dict[str, List[str]] = defaultdict(list)
     english_names_to_three = LookupTable()
     native_names: Dict[str, List[str]] = defaultdict(list)
@@ -537,6 +541,9 @@ zza|||Zaza; Dimili; Dimli; Kirdki; Kirmanjki; Zazaki|zaza; dimili; dimli; kirdki
         {"code": "sv", "name": "Swedish", "nativeName": "svenska"},
     ]
 
+    RESERVED_CODES = re.compile("^q[a-t][a-z]$")
+    RESERVED_CODE_LABEL = "Reserved for local use"
+
     for raw_name_data in RAW_DATA.split("\n"):
         (
             alpha_3,
@@ -550,6 +557,8 @@ zza|||Zaza; Dimili; Dimli; Kirdki; Kirmanjki; Zazaki|zaza; dimili; dimli; kirdki
             three_to_two[alpha_3] = alpha_2
             english_names[alpha_2] = names
             two_to_three[alpha_2] = alpha_3
+        if terminologic_code:
+            terminologic_to_three[terminologic_code] = alpha_3
         for name in names:
             english_names_to_three[name.lower()] = alpha_3
         english_names[alpha_3] = names
@@ -562,18 +571,32 @@ zza|||Zaza; Dimili; Dimli; Kirdki; Kirmanjki; Zazaki|zaza; dimili; dimli; kirdki
         native_names[alpha_3] = names
 
     @classmethod
-    def iso_639_2_for_locale(cls, locale):
+    def iso_639_2_for_locale(cls, locale, default=None):
         """Turn a locale code into an ISO-639-2 alpha-3 language code."""
         if "-" in locale:
             language, place = locale.lower().split("-", 1)
         else:
             language = locale
-        if cls.two_to_three[language]:
+        if len(language) == 3:
+            if language in cls.english_names:
+                # All LOC language code have an English name; it's already an alpha-3.
+                return language
+            elif language in cls.terminologic_to_three:
+                return cls.terminologic_to_three[language]
+            elif LanguageCodes.RESERVED_CODES.match(language):
+                # the reserved range qaa-qtz is represented by one row in the LOC data
+                return language
+        if language in cls.two_to_three:
+            # It's an alpha-2.
             return cls.two_to_three[language]
-        elif cls.three_to_two[language]:
-            # It's already ISO-639-2.
-            return language
-        return None
+
+        return default
+
+    @classmethod
+    def bcp47_for_locale(cls, locale, default=None):
+        """Turn a locale code into an ISO-639-2 code preferring alpha-2 if available, then alpha-3"""
+        alpha3 = cls.iso_639_2_for_locale(locale, default=default)
+        return cls.three_to_two.get(alpha3, alpha3)
 
     @classmethod
     def string_to_alpha_3(cls, s):
@@ -585,17 +608,7 @@ zza|||Zaza; Dimili; Dimli; Kirdki; Kirmanjki; Zazaki|zaza; dimili; dimli; kirdki
             # It's the English name of a language.
             return cls.english_names_to_three[s]
 
-        if "-" in s:
-            s = s.split("-")[0]
-
-        if s in cls.three_to_two:
-            # It's already an alpha-3.
-            return s
-        elif s in cls.two_to_three:
-            # It's an alpha-2.
-            return cls.two_to_three[s]
-
-        return None
+        return cls.iso_639_2_for_locale(s)
 
     @classmethod
     def name_for_languageset(cls, languages):
@@ -612,7 +625,10 @@ zza|||Zaza; Dimili; Dimli; Kirdki; Kirmanjki; Zazaki|zaza; dimili; dimli; kirdki
             else:
                 names = cls.english_names.get(normalized, [])
                 if not names:
-                    raise ValueError("No native or English name for %s" % l)
+                    if normalized and LanguageCodes.RESERVED_CODES.match(normalized):
+                        names.append(LanguageCodes.RESERVED_CODE_LABEL)
+                    else:
+                        raise ValueError("No native or English name for %s" % l)
                 all_names.append(names[0])
         if len(all_names) == 1:
             return all_names[0]

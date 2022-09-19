@@ -3,9 +3,12 @@ import json
 import os
 import random
 from datetime import timedelta
-from unittest.mock import MagicMock
+from typing import Dict
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
+from requests import Response
+from sqlalchemy.orm.exc import StaleDataError
 
 from api.authenticator import BasicAuthenticationProvider
 from api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
@@ -1564,6 +1567,51 @@ class TestOverdriveAPI(OverdriveAPITest):
         with pytest.raises(CannotFulfill):
             od_api.fulfillment_authorization_header
 
+    def test_no_drm_fulfillment(self):
+        patron = self._patron()
+        work = self._work(with_license_pool=True)
+        patron.authorization_identifier = "barcode"
+        self._default_collection.external_integration.protocol = "Overdrive"
+        self._default_collection.external_account_id = 1
+        self._default_collection.external_integration.setting(
+            OverdriveConfiguration.OVERDRIVE_CLIENT_KEY
+        ).value = "user"
+        self._default_collection.external_integration.setting(
+            OverdriveConfiguration.OVERDRIVE_CLIENT_SECRET
+        ).value = "password"
+        self._default_collection.external_integration.setting(
+            OverdriveConfiguration.OVERDRIVE_WEBSITE_ID
+        ).value = "100"
+
+        od_api = OverdriveAPI(self._db, self._default_collection)
+        od_api._server_nickname = OverdriveConfiguration.TESTING_SERVERS
+
+        # Load the mock API data
+        with open("tests/api/files/overdrive/no_drm_fulfill.json") as fp:
+            api_data = json.load(fp)
+
+        # Mock out the flow
+        od_api.get_loan = MagicMock(return_value=api_data["loan"])
+
+        mock_lock_in_response = create_autospec(Response)
+        mock_lock_in_response.status_code = 200
+        mock_lock_in_response.json.return_value = api_data["lock_in"]
+        od_api.lock_in_format = MagicMock(return_value=mock_lock_in_response)
+
+        od_api.get_fulfillment_link_from_download_link = MagicMock(
+            return_value=(
+                "https://example.org/epub-redirect",
+                "application/epub+zip",
+            )
+        )
+
+        fulfill = od_api.fulfill(
+            patron, "pin", work.active_license_pool(), "ebook-epub-open"
+        )
+
+        assert fulfill.content_link_redirect == True
+        assert fulfill.content_link == "https://example.org/epub-redirect"
+
 
 class TestOverdriveAPICredentials(OverdriveAPITest):
     def test_patron_correct_credentials_for_multiple_overdrive_collections(self):
@@ -2268,6 +2316,122 @@ class TestOverdriveCirculationMonitor(OverdriveAPITest):
         # We processed four books: 1, 2, None (which was ignored)
         # and 3.
         assert "Books processed: 4." == progress.achievements
+
+    def test_catch_up_from_with_failures_retried(self):
+        """Check that book failures are retried."""
+
+        class MockAPI:
+            tries: Dict[str, int] = {}
+
+            def __init__(self, *ignore, **kwignore):
+                self.licensepools = []
+                self.update_licensepool_calls = []
+
+            def recently_changed_ids(self, start, cutoff):
+                return [1, 2, 3]
+
+            def update_licensepool(self, book_id):
+                current_count = self.tries.get(str(book_id)) or 0
+                current_count = current_count + 1
+                self.tries[str(book_id)] = current_count
+
+                if current_count < 2:
+                    raise StaleDataError("Ouch!")
+
+                pool, is_new, is_changed = self.licensepools.pop(0)
+                self.update_licensepool_calls.append((book_id, pool))
+                return pool, is_new, is_changed
+
+        class MockAnalytics:
+            def __init__(self, _db):
+                self._db = _db
+                self.events = []
+
+            def collect_event(self, *args):
+                self.events.append(args)
+
+        monitor = OverdriveCirculationMonitor(
+            self._db, self.collection, api_class=MockAPI, analytics_class=MockAnalytics
+        )
+        api = monitor.api
+
+        # A MockAnalytics object was created and is ready to receive analytics
+        # events.
+        assert isinstance(monitor.analytics, MockAnalytics)
+        assert self._db == monitor.analytics._db
+
+        lp1 = self._licensepool(None)
+        lp1.last_checked = utc_now()
+        lp2 = self._licensepool(None)
+        lp3 = self._licensepool(None)
+        api.licensepools.append((lp1, True, True))
+        api.licensepools.append((lp2, False, False))
+        api.licensepools.append((lp3, False, True))
+
+        progress = TimestampData()
+        start = object()
+        cutoff = object()
+        monitor.catch_up_from(start, cutoff, progress)
+
+        assert api.tries["1"] == 2
+        assert api.tries["2"] == 2
+        assert api.tries["3"] == 2
+        assert not progress.is_failure
+
+    def test_catch_up_from_with_failures_all(self):
+        """If an individual book fails, the import continues, but ends in failure after handling all the books."""
+
+        class MockAPI:
+            tries: Dict[str, int] = {}
+
+            def __init__(self, *ignore, **kwignore):
+                self.licensepools = []
+                self.update_licensepool_calls = []
+
+            def recently_changed_ids(self, start, cutoff):
+                return [1, 2, 3]
+
+            def update_licensepool(self, book_id):
+                current_count = self.tries.get(str(book_id)) or 0
+                current_count = current_count + 1
+                self.tries[str(book_id)] = current_count
+                raise StaleDataError("Ouch!")
+
+        class MockAnalytics:
+            def __init__(self, _db):
+                self._db = _db
+                self.events = []
+
+            def collect_event(self, *args):
+                self.events.append(args)
+
+        monitor = OverdriveCirculationMonitor(
+            self._db, self.collection, api_class=MockAPI, analytics_class=MockAnalytics
+        )
+        api = monitor.api
+
+        # A MockAnalytics object was created and is ready to receive analytics
+        # events.
+        assert isinstance(monitor.analytics, MockAnalytics)
+        assert self._db == monitor.analytics._db
+
+        lp1 = self._licensepool(None)
+        lp1.last_checked = utc_now()
+        lp2 = self._licensepool(None)
+        lp3 = self._licensepool(None)
+        api.licensepools.append((lp1, True, True))
+        api.licensepools.append((lp2, False, False))
+        api.licensepools.append((lp3, False, True))
+
+        progress = TimestampData()
+        start = object()
+        cutoff = object()
+        monitor.catch_up_from(start, cutoff, progress)
+
+        assert api.tries["1"] == 3
+        assert api.tries["2"] == 3
+        assert api.tries["3"] == 3
+        assert progress.is_failure
 
 
 class TestNewTitlesOverdriveCollectionMonitor(OverdriveAPITest):

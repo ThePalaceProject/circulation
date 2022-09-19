@@ -41,6 +41,7 @@ from core.model import (
     create,
     get_one,
 )
+from core.model.resource import Hyperlink, Resource
 from core.opds import (
     AcquisitionFeed,
     Annotator,
@@ -57,6 +58,7 @@ from core.testing import DatabaseTest
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse, Response
 from core.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
+from tests.core.utils import DBStatementCounter
 
 
 class TestBaseAnnotator(DatabaseTest):
@@ -397,6 +399,33 @@ class TestAnnotators(DatabaseTest):
         [entry] = feedparser.parse(str(raw_feed))["entries"]
         assert "schema_series" not in list(entry.items())
 
+    def test_samples(self):
+        work = self._work(with_license_pool=True)
+        edition = work.presentation_edition
+
+        resource = Resource(url="sampleurl")
+        self._db.add(resource)
+        self._db.commit()
+
+        sample_link = Hyperlink(
+            rel=Hyperlink.SAMPLE,
+            resource_id=resource.id,
+            identifier_id=edition.primary_identifier_id,
+            data_source_id=2,
+        )
+        self._db.add(sample_link)
+        self._db.commit()
+
+        with DBStatementCounter(self.connection) as counter:
+            links = Annotator.samples(edition)
+            count = counter.count
+
+            assert len(links) == 1
+            assert links[0].id == sample_link.id
+            assert links[0].resource.url == "sampleurl"
+            # accessing resource should not be another query
+            assert counter.count == count
+
 
 class TestOPDS(DatabaseTest):
     def links(self, entry, rel=None):
@@ -665,6 +694,65 @@ class TestOPDS(DatabaseTest):
 
         assert None == e4["issued"]
         assert None == e4["published"]
+
+    def test_acquisition_feed_includes_sample_links(self):
+        work = self._work(with_open_access_download=True)
+        edition = work.presentation_edition
+
+        representation, _ = self._representation(
+            "sampleurl", media_type="application/epub+zip"
+        )
+        resource = Resource(url="sampleurl", representation_id=representation.id)
+        link = Hyperlink(
+            rel=Hyperlink.SAMPLE,
+            identifier_id=edition.primary_identifier_id,
+            data_source_id=2,
+        )
+        link.resource = resource
+
+        work1 = self._work(with_open_access_download=True)
+        edition1 = work1.presentation_edition
+
+        link1 = Hyperlink(
+            rel=Hyperlink.SAMPLE,
+            identifier_id=edition1.primary_identifier_id,
+            data_source_id=2,
+        )
+        resource1 = Resource(url="sampleurl1", representation_id=representation.id)
+        link1.resource = resource1
+
+        # unrelated work/link should not show up
+        work2 = self._work(with_open_access_download=True)
+        edition2 = work2.presentation_edition
+
+        link2 = Hyperlink(
+            rel=Hyperlink.SAMPLE,
+            identifier_id=edition2.primary_identifier_id,
+            data_source_id=2,
+        )
+        link2.resource = Resource(
+            url="notsampleurl", representation_id=representation.id
+        )
+
+        self._db.add_all([resource, link, link1, link2])
+
+        # clear cache before links were added
+        work.simple_opds_entry = None
+        work1.simple_opds_entry = None
+        work2.simple_opds_entry = None
+
+        self._db.commit()
+
+        feed = AcquisitionFeed(self._db, "TestFeed", "http://some-url", [work, work1])
+
+        atom_links = OPDSXMLParser._xpath(
+            etree.parse(StringIO(str(feed))),
+            f"atom:entry/atom:link[@rel='{Hyperlink.CLIENT_SAMPLE}']",
+        )
+
+        assert len(atom_links) == 2
+        assert atom_links[0].attrib["href"] == resource.url
+        assert atom_links[1].attrib["href"] == resource1.url
 
     def test_acquisition_feed_includes_publisher_and_imprint_tag(self):
         work = self._work(with_open_access_download=True)

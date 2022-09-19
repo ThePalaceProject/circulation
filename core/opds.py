@@ -1,10 +1,17 @@
+from __future__ import annotations
+
 import datetime
 import logging
 from collections import defaultdict
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 from lxml import etree
+from sqlalchemy.orm import joinedload
 from sqlalchemy.orm.session import Session
+
+from core.external_search import QueryParseException
+from core.problem_details import INVALID_INPUT
 
 from .cdn import cdnify
 from .classifier import Classifier
@@ -33,6 +40,10 @@ from .model import (
 from .util.datetime_helpers import utc_now
 from .util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from .util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
+
+# Import related models when doing type checking
+if TYPE_CHECKING:
+    from core.model import Library, LicensePool  # noqa: autoflake
 
 
 class UnfulfillableWork(Exception):
@@ -183,6 +194,22 @@ class Annotator:
             type_key = AtomFeed.schema_("additionalType")
             rating_tag.set(type_key, type_uri)
         return rating_tag
+
+    @classmethod
+    def samples(cls, edition: Edition) -> list[Hyperlink]:
+        if not edition:
+            return []
+        _db = Session.object_session(edition)
+        links = (
+            _db.query(Hyperlink)
+            .filter(
+                Hyperlink.rel == Hyperlink.SAMPLE,
+                Hyperlink.identifier_id == edition.primary_identifier_id,
+            )
+            .options(joinedload(Hyperlink.resource))
+            .all()
+        )
+        return links
 
     @classmethod
     def cover_links(cls, work):
@@ -431,14 +458,16 @@ class Annotator:
         raise NotImplementedError()
 
     @classmethod
-    def active_licensepool_for(cls, work):
+    def active_licensepool_for(
+        cls, work: Work, library: Library = None
+    ) -> LicensePool | None:
         """Which license pool would be/has been used to issue a license for
         this work?
         """
         if not work:
             return None
 
-        return work.active_license_pool()
+        return work.active_license_pool(library=library)
 
     def sort_works_for_groups_feed(self, works, **kwargs):
         return works
@@ -1042,9 +1071,13 @@ class AcquisitionFeed(OPDSFeed):
         """
         facets = facets or SearchFacets()
         pagination = pagination or Pagination.default()
-        results = lane.search(
-            _db, query, search_engine, pagination=pagination, facets=facets
-        )
+        try:
+            results = lane.search(
+                _db, query, search_engine, pagination=pagination, facets=facets
+            )
+        except QueryParseException as e:
+            return INVALID_INPUT.detailed(e.detail)
+
         opds_feed = AcquisitionFeed(_db, title, url, results, annotator=annotator)
         AcquisitionFeed.add_link_to_feed(
             feed=opds_feed.feed,
@@ -1238,8 +1271,12 @@ class AcquisitionFeed(OPDSFeed):
         return entry
 
     def create_entry(
-        self, work, even_if_no_license_pool=False, force_create=False, use_cache=True
-    ):
+        self,
+        work: Work | Edition | None,
+        even_if_no_license_pool=False,
+        force_create=False,
+        use_cache=True,
+    ) -> etree.Element | OPDSMessage:
         """Turn a work into an entry for an acquisition feed."""
         identifier = None
         if isinstance(work, Edition):
@@ -1404,6 +1441,16 @@ class AcquisitionFeed(OPDSFeed):
                 elif url.endswith(".gif"):
                     image_type = "image/gif"
                 links.append(AtomFeed.link(rel=rel, href=url, type=image_type))
+
+        sample_links = self.annotator.samples(edition)
+        for link in sample_links:
+            links.append(
+                AtomFeed.link(
+                    rel=Hyperlink.CLIENT_SAMPLE,
+                    href=link.resource.url,
+                    type=link.resource.representation.media_type,
+                )
+            )
 
         content = self.annotator.content(work)
         if isinstance(content, bytes):

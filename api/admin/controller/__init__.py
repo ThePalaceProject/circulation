@@ -6,6 +6,8 @@ import os
 import sys
 import urllib.parse
 from datetime import date, datetime, timedelta
+from http.client import BAD_REQUEST
+from typing import Callable, Dict, List, Optional, Union
 
 import flask
 import jwt
@@ -74,10 +76,11 @@ from core.model.configuration import ExternalIntegrationLink
 from core.opds import AcquisitionFeed
 from core.opds2_import import OPDS2Importer
 from core.opds_import import OPDSImporter, OPDSImportMonitor
+from core.query.customlist import CustomListQueries
 from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
 from core.util.datetime_helpers import utc_now
-from core.util.flask_util import OPDSFeedResponse
+from core.util.flask_util import OPDSFeedResponse, boolean_value
 from core.util.http import HTTP
 from core.util.problem_detail import ProblemDetail
 
@@ -200,6 +203,10 @@ def setup_admin_controllers(manager):
     from api.admin.controller.catalog_services import CatalogServicesController
 
     manager.admin_catalog_services_controller = CatalogServicesController(manager)
+
+    from api.admin.controller.announcement_service import AnnouncementSettings
+
+    manager.admin_announcement_service = AnnouncementSettings(manager)
 
 
 class AdminController:
@@ -770,30 +777,42 @@ class FeedController(AdminCirculationManagerController):
 
 
 class CustomListsController(AdminCirculationManagerController):
-    def custom_lists(self):
+    def _list_as_json(self, list: CustomList, is_owner=True) -> Dict:
+        """Transform a CustomList object into a response ready dict"""
+        collections = []
+        for collection in list.collections:
+            collections.append(
+                dict(
+                    id=collection.id,
+                    name=collection.name,
+                    protocol=collection.protocol,
+                )
+            )
+        return dict(
+            id=list.id,
+            name=list.name,
+            collections=collections,
+            entry_count=list.size,
+            auto_update=list.auto_update_enabled,
+            auto_update_query=list.auto_update_query,
+            auto_update_facets=list.auto_update_facets,
+            auto_update_status=list.auto_update_status,
+            is_owner=is_owner,
+            is_shared=len(list.shared_locally_with_libraries) > 0,
+        )
+
+    def custom_lists(self) -> Dict:
         library = flask.request.library
         self.require_librarian(library)
 
         if flask.request.method == "GET":
             custom_lists = []
             for list in library.custom_lists:
-                collections = []
-                for collection in list.collections:
-                    collections.append(
-                        dict(
-                            id=collection.id,
-                            name=collection.name,
-                            protocol=collection.protocol,
-                        )
-                    )
-                custom_lists.append(
-                    dict(
-                        id=list.id,
-                        name=list.name,
-                        collections=collections,
-                        entry_count=list.size,
-                    )
-                )
+                custom_lists.append(self._list_as_json(list))
+
+            for list in library.shared_custom_lists:
+                custom_lists.append(self._list_as_json(list, is_owner=False))
+
             return dict(custom_lists=custom_lists)
 
         if flask.request.method == "POST":
@@ -803,11 +822,24 @@ class CustomListsController(AdminCirculationManagerController):
             collections = self._getJSONFromRequest(
                 flask.request.form.get("collections")
             )
+            # For auto updating lists
+            auto_update = flask.request.form.get(
+                "auto_update", False, type=boolean_value
+            )
+            auto_update_query = flask.request.form.get("auto_update_query")
+            auto_update_facets = flask.request.form.get("auto_update_facets")
             return self._create_or_update_list(
-                library, name, entries, collections, id=id
+                library,
+                name,
+                entries,
+                collections,
+                id=id,
+                auto_update=auto_update,
+                auto_update_facets=auto_update_facets,
+                auto_update_query=auto_update_query,
             )
 
-    def _getJSONFromRequest(self, values):
+    def _getJSONFromRequest(self, values: Optional[str]) -> Union[Dict, List]:
         if values:
             values = json.loads(values)
         else:
@@ -815,7 +847,7 @@ class CustomListsController(AdminCirculationManagerController):
 
         return values
 
-    def _get_work_from_urn(self, library, urn):
+    def _get_work_from_urn(self, library: Library, urn: str) -> Work:
         identifier, ignore = Identifier.parse_urn(self._db, urn)
         query = (
             self._db.query(Work)
@@ -828,12 +860,22 @@ class CustomListsController(AdminCirculationManagerController):
         return work
 
     def _create_or_update_list(
-        self, library, name, entries, collections, deletedEntries=None, id=None
-    ):
+        self,
+        library: Library,
+        name: str,
+        entries: List[Dict],
+        collections: List[int],
+        deleted_entries: List[Dict] = None,
+        id: int = None,
+        auto_update: Optional[bool] = None,
+        auto_update_query: Optional[str] = None,
+        auto_update_facets: Optional[str] = None,
+    ) -> Union[ProblemDetail, Response]:
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
 
         old_list_with_name = CustomList.find(self._db, name, library=library)
 
+        list: CustomList
         if id:
             is_new = False
             list = get_one(self._db, CustomList, id=int(id), data_source=data_source)
@@ -852,8 +894,86 @@ class CustomListsController(AdminCirculationManagerController):
             list.created = datetime.now()
             list.library = library
 
+        # Test JSON viability of auto update data
+        try:
+            auto_update_query_dict = None
+            if auto_update_query:
+                try:
+                    auto_update_query_dict = json.loads(auto_update_query)
+                except json.JSONDecodeError:
+                    raise Exception(
+                        INVALID_INPUT.detailed(
+                            "auto_update_query is not JSON serializable"
+                        )
+                    )
+
+                if entries and len(entries) > 0:
+                    raise Exception(AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES)
+                if deleted_entries and len(deleted_entries) > 0:
+                    raise Exception(AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES)
+
+            if auto_update_facets:
+                try:
+                    json.loads(auto_update_facets)
+                except json.JSONDecodeError:
+                    raise Exception(
+                        INVALID_INPUT.detailed(
+                            "auto_update_facets is not JSON serializable"
+                        )
+                    )
+            if auto_update is True and auto_update_query is None:
+                raise Exception(
+                    INVALID_INPUT.detailed(
+                        "auto_update_query must be present when auto_update is enabled"
+                    )
+                )
+        except Exception as e:
+            auto_update_error = e.args[0] if len(e.args) else None
+
+            if not auto_update_error or type(auto_update_error) != ProblemDetail:
+                raise
+
+            # Rollback if this was a deliberate error
+            self._db.rollback()
+            return auto_update_error
+
         list.updated = datetime.now()
         list.name = name
+        previous_auto_update_query = list.auto_update_query
+        # Record the time the auto_update was toggled "on"
+        if auto_update is True and list.auto_update_enabled is False:
+            list.auto_update_last_update = datetime.now()
+        if auto_update is not None:
+            list.auto_update_enabled = auto_update
+        if auto_update_query is not None:
+            list.auto_update_query = auto_update_query
+        if auto_update_facets is not None:
+            list.auto_update_facets = auto_update_facets
+
+        # In case this is a new list with no entries, populate the first page
+        if (
+            is_new
+            and list.auto_update_enabled
+            and list.auto_update_status == CustomList.INIT
+        ):
+            CustomListQueries.populate_query_pages(self._db, list, max_pages=1)
+        elif (
+            not is_new
+            and list.auto_update_enabled
+            and auto_update_query_dict
+            and previous_auto_update_query
+        ):
+            # In case this is a previous auto update list, we must check if the
+            # query has been updated
+            # JSON maps are unordered by definition, so we must deserialize and compare dicts
+            try:
+                prev_query_dict = json.loads(previous_auto_update_query)
+                if prev_query_dict != auto_update_query_dict:
+                    list.auto_update_status = CustomList.REPOPULATE
+            except json.JSONDecodeError:
+                # Do nothing if the previous query was not valid
+                pass
+
         membership_change = False
 
         works_to_update_in_search = set()
@@ -868,8 +988,8 @@ class CustomListsController(AdminCirculationManagerController):
                     works_to_update_in_search.add(work)
                     membership_change = True
 
-        if deletedEntries:
-            for entry in deletedEntries:
+        if deleted_entries:
+            for entry in deleted_entries:
                 urn = entry.get("id")
                 work = self._get_work_from_urn(library, urn)
 
@@ -904,7 +1024,9 @@ class CustomListsController(AdminCirculationManagerController):
         else:
             return Response(str(list.id), 200)
 
-    def url_for_custom_list(self, library, list):
+    def url_for_custom_list(
+        self, library: Library, list: CustomList
+    ) -> Callable[[int], str]:
         def url_fn(after):
             return self.url_for(
                 "custom_list",
@@ -915,12 +1037,14 @@ class CustomListsController(AdminCirculationManagerController):
 
         return url_fn
 
-    def custom_list(self, list_id):
+    def custom_list(self, list_id: int) -> Union[Response, Dict, ProblemDetail]:
         library = flask.request.library
         self.require_librarian(library)
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
 
-        list = get_one(self._db, CustomList, id=list_id, data_source=data_source)
+        list: CustomList = get_one(
+            self._db, CustomList, id=list_id, data_source=data_source
+        )
         if not list:
             return MISSING_CUSTOM_LIST
 
@@ -960,21 +1084,35 @@ class CustomListsController(AdminCirculationManagerController):
             collections = self._getJSONFromRequest(
                 flask.request.form.get("collections")
             )
-            deletedEntries = self._getJSONFromRequest(
+            deleted_entries = self._getJSONFromRequest(
                 flask.request.form.get("deletedEntries")
             )
+
+            # For auto updating lists
+            auto_update = flask.request.form.get(
+                "auto_update", False, type=boolean_value
+            )
+            auto_update_query = flask.request.form.get("auto_update_query")
+            auto_update_facets = flask.request.form.get("auto_update_facets")
+
             return self._create_or_update_list(
                 library,
                 name,
                 entries,
                 collections,
-                deletedEntries=deletedEntries,
+                deleted_entries=deleted_entries,
                 id=list_id,
+                auto_update=auto_update,
+                auto_update_query=auto_update_query,
+                auto_update_facets=auto_update_facets,
             )
 
         elif flask.request.method == "DELETE":
             # Deleting requires a library manager.
             self.require_library_manager(flask.request.library)
+
+            if len(list.shared_locally_with_libraries) > 0:
+                return CANNOT_DELETE_SHARED_LIST
 
             # Build the list of affected lanes before modifying the
             # CustomList.
@@ -997,6 +1135,37 @@ class CustomListsController(AdminCirculationManagerController):
             for lane in surviving_lanes:
                 lane.update_size(self._db, self.search_engine)
             return Response(str(_("Deleted")), 200)
+
+    def share_locally(self, customlist_id: int) -> Union[ProblemDetail, Response]:
+        """Share this customlist with all libraries on this local CM"""
+        if not customlist_id:
+            return INVALID_INPUT
+
+        customlist: CustomList = get_one(self._db, CustomList, id=customlist_id)
+        library: Library = None
+        successes = []
+        failures = []
+        for library in self._db.query(Library).all():
+            # Do not share with self
+            if library == customlist.library:
+                continue
+
+            # Do not attempt to re-share
+            if library in customlist.shared_locally_with_libraries:
+                continue
+
+            # Attempt to share the list
+            response = CustomListQueries.share_locally_with_library(
+                self._db, customlist, library
+            )
+
+            if response is not True:
+                failures.append(library)
+            else:
+                successes.append(library)
+
+        self._db.commit()
+        return dict(successes=len(successes), failures=len(failures))
 
 
 class LanesController(AdminCirculationManagerController):
@@ -1048,16 +1217,21 @@ class LanesController(AdminCirculationManagerController):
             if not display_name:
                 return NO_DISPLAY_NAME_FOR_LANE
 
-            if not custom_list_ids or len(custom_list_ids) == 0:
-                return NO_CUSTOM_LISTS_FOR_LANE
-
             if id:
                 is_new = False
                 lane = get_one(self._db, Lane, id=id, library=library)
                 if not lane:
                     return MISSING_LANE
+
                 if not lane.customlists:
-                    return CANNOT_EDIT_DEFAULT_LANE
+                    # just update what is allowed for default lane, and exit out
+                    lane.display_name = display_name
+                    return Response(str(lane.id), 200)
+                else:
+                    # In case we are not a default lane, the lane MUST have custom lists
+                    if not custom_list_ids or len(custom_list_ids) == 0:
+                        return NO_CUSTOM_LISTS_FOR_LANE
+
                 if display_name != lane.display_name:
                     old_lane = get_one(
                         self._db, Lane, display_name=display_name, parent=lane.parent
@@ -1066,6 +1240,9 @@ class LanesController(AdminCirculationManagerController):
                         return LANE_WITH_PARENT_AND_DISPLAY_NAME_ALREADY_EXISTS
                 lane.display_name = display_name
             else:
+                if not custom_list_ids or len(custom_list_ids) == 0:
+                    return NO_CUSTOM_LISTS_FOR_LANE
+
                 parent = None
                 if parent_id:
                     parent = get_one(self._db, Lane, id=parent_id, library=library)
@@ -1108,6 +1285,14 @@ class LanesController(AdminCirculationManagerController):
 
             for list_id in custom_list_ids:
                 list = get_one(self._db, CustomList, library=library, id=list_id)
+                if not list:
+                    # We did not find a list, is this a shared list?
+                    list = (
+                        self._db.query(CustomList)
+                        .join(CustomList.shared_locally_with_libraries)
+                        .filter(CustomList.id == list_id, Library.id == library.id)
+                        .first()
+                    )
                 if not list:
                     self._db.rollback()
                     return MISSING_CUSTOM_LIST.detailed(
@@ -1338,6 +1523,11 @@ class DashboardController(AdminCirculationManagerController):
 
             library_collection_counts = dict()
             for collection in library.all_collections:
+                # sometimes a parent collection may be dissociated from a library
+                # in this case we may not have access to the collection as a library staff member
+                if collection.name not in collection_counts:
+                    continue
+
                 counts = collection_counts[collection.name]
                 library_collection_counts[collection.name] = counts
                 title_count += counts.get("licensed_titles", 0) + counts.get(
@@ -1507,6 +1697,63 @@ class SettingsController(AdminCirculationManagerController):
         FeedbooksOPDSImporter,
         LCPAPI,
     ]
+
+    def _set_storage_external_integration_link(
+        self, service: ExternalIntegration, purpose: str, setting_key: str
+    ) -> Optional[ProblemDetail]:
+        """Either set or delete the external integration link between the
+        service and the storage integration.
+
+        :param service: Service's ExternalIntegration object
+
+        :param purpose: Service's purpose
+
+        :param setting_key: Key of the configuration setting that must be set in the storage integration.
+            For example, a specific bucket (MARC, Analytics, etc.).
+
+        :return: ProblemDetail object if the operation failed
+        """
+        mirror_integration_id = flask.request.form.get("mirror_integration_id")
+
+        if not mirror_integration_id:
+            return
+
+        # If no storage integration was selected, then delete the existing
+        # external integration link.
+        if mirror_integration_id == self.NO_MIRROR_INTEGRATION:
+
+            current_integration_link = get_one(
+                self._db,
+                ExternalIntegrationLink,
+                library_id=None,
+                external_integration_id=service.id,
+                purpose=purpose,
+            )
+
+            if current_integration_link:
+                self._db.delete(current_integration_link)
+        else:
+            storage_integration = get_one(
+                self._db, ExternalIntegration, id=mirror_integration_id
+            )
+
+            # Only get storage integrations that have a specific configuration setting set.
+            # For example: a specific bucket.
+            if (
+                not storage_integration
+                or not storage_integration.setting(setting_key).value
+            ):
+                return MISSING_INTEGRATION
+
+            current_integration_link, ignore = get_one_or_create(
+                self._db,
+                ExternalIntegrationLink,
+                library_id=None,
+                external_integration_id=service.id,
+                purpose=purpose,
+            )
+
+            current_integration_link.other_integration_id = storage_integration.id
 
     @classmethod
     def _get_integration_protocols(cls, provider_apis, protocol_name_attr="__module__"):
@@ -1907,6 +2154,10 @@ class SettingsController(AdminCirculationManagerController):
                 S3UploaderConfiguration.PROTECTED_CONTENT_BUCKET_KEY
             ).value
 
+            analytics_bucket = integration.setting(
+                S3UploaderConfiguration.ANALYTICS_BUCKET_KEY
+            ).value
+
             for setting in mirror_integration_settings:
                 if (
                     setting["key"] == ExternalIntegrationLink.COVERS_KEY
@@ -1923,6 +2174,11 @@ class SettingsController(AdminCirculationManagerController):
                 elif (
                     setting["key"] == ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS_KEY
                 ):
+                    if protected_access_bucket:
+                        setting["options"].append(
+                            {"key": str(integration.id), "label": integration.name}
+                        )
+                elif setting["key"] == ExternalIntegrationLink.ANALYTICS_KEY:
                     if protected_access_bucket:
                         setting["options"].append(
                             {"key": str(integration.id), "label": integration.name}

@@ -39,6 +39,11 @@
           "rel": "self",
           "href": "http://example.org/publication.json",
           "type": "application/opds-publication+json"
+        },
+        {
+          "rel": "http://opds-spec.org/acquisition/sample",
+          "href": "https://market.feedbooks.com/item/example/preview",
+          "type": "application/epub+zip"
         }
       ],
       "images": [

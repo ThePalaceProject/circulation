@@ -10,6 +10,7 @@ from werkzeug.exceptions import HTTPException
 
 from core.app_server import ErrorHandler, compressible, returns_problem_detail
 from core.model import HasSessionCache
+from core.util.cache import CachedData
 from core.util.problem_detail import ProblemDetail
 
 from .app import app, babel
@@ -34,6 +35,9 @@ def initialize_circulation_manager():
             # Make sure that any changes to the database (as might happen
             # on initial setup) are committed before continuing.
             app.manager._db.commit()
+
+            # setup the cache data object
+            CachedData.initialize(app._db)
 
 
 @babel.localeselector
@@ -385,6 +389,24 @@ def crawlable_collection_feed(collection_name):
     return app.manager.opds_feeds.crawlable_collection_feed(collection_name)
 
 
+@library_route("/opds2/publications")
+@has_library
+@allows_patron_web
+@returns_problem_detail
+@compressible
+def opds2_publications():
+    return app.manager.opds2_feeds.publications()
+
+
+@library_route("/opds2/navigation")
+@has_library
+@allows_patron_web
+@returns_problem_detail
+@compressible
+def opds2_navigation():
+    return app.manager.opds2_feeds.navigation()
+
+
 @app.route("/collections/<collection_name>")
 @returns_problem_detail
 def shared_collection_info(collection_name):
@@ -497,6 +519,15 @@ def patron_devices():
 @returns_problem_detail
 def put_patron_devices():
     return app.manager.patron_devices.create_patron_device()
+
+
+@library_dir_route("/patrons/me/devices", methods=["DELETE"])
+@has_library
+@allows_patron_web
+@requires_auth
+@returns_problem_detail
+def delete_patron_devices():
+    return app.manager.patron_devices.delete_patron_device()
 
 
 @library_dir_route("/loans", methods=["GET", "HEAD"])

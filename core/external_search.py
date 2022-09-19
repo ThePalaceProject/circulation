@@ -5,8 +5,9 @@ import logging
 import re
 import time
 from collections import defaultdict
-from typing import Optional
+from typing import Dict, Optional, Union
 
+from attr import define
 from elasticsearch import Elasticsearch
 from elasticsearch.exceptions import ElasticsearchException, RequestError
 from elasticsearch.helpers import bulk as elasticsearch_bulk
@@ -24,9 +25,11 @@ from elasticsearch_dsl.query import (
     Nested,
 )
 from elasticsearch_dsl.query import Query as BaseQuery
-from elasticsearch_dsl.query import Term, Terms
+from elasticsearch_dsl.query import Range, Regexp, Term, Terms
 from flask_babel import lazy_gettext as _
 from spellchecker import SpellChecker
+
+from core.util import Values
 
 from .classifier import (
     AgeClassifier,
@@ -54,6 +57,7 @@ from .model import (
 )
 from .problem_details import INVALID_INPUT
 from .selftest import HasSelfTests
+from .util.cache import CachedData
 from .util.datetime_helpers import from_timestamp
 from .util.personal_names import display_name_to_sort_name
 from .util.problem_detail import ProblemDetail
@@ -208,6 +212,10 @@ class ExternalSearchIndex(HasSelfTests):
             raise CannotLoadConfiguration(
                 "Cannot load Elasticsearch configuration without a database.",
             )
+
+        # initialize the cached data if not already done so
+        CachedData.initialize(_db)
+
         if not url or not works_index:
             integration = self.search_integration(_db)
             if not integration:
@@ -261,6 +269,9 @@ class ExternalSearchIndex(HasSelfTests):
 
         self.bulk = bulk
 
+    def prime_query_values(self, _db):
+        JSONQuery.data_sources = _db.query(DataSource).all()
+
     def set_works_index_and_alias(self, _db):
         """Finds or creates the works_index and works_alias based on
         the current configuration.
@@ -271,12 +282,37 @@ class ExternalSearchIndex(HasSelfTests):
         if not self.indices.exists(self.works_index):
             # That index doesn't actually exist. Set it up.
             self.setup_index()
+        else:
+            # Update the mapping incase there are any new properties
+            self._update_index_mapping()
 
         # Make sure the alias points to the most recent index.
         self.setup_current_alias(_db)
 
         # Make sure the stored scripts for the latest mapping exist.
         self.set_stored_scripts()
+
+    def _update_index_mapping(self, dry_run=False) -> Dict:
+        """Updates the index mapping with any NEW properties added"""
+
+        current_mapping: Dict = self.indices.get_mapping(self.works_index)[
+            self.works_index
+        ]["mappings"][self.work_document_type]["properties"]
+        new_mapping = self.mapping.body()["mappings"][self.work_document_type][
+            "properties"
+        ]
+        puts = {}
+        for name, v in new_mapping.items():
+            split_name = name.split(".")[0]  # dot based names become dicts
+            if split_name not in current_mapping:
+                puts[name] = v
+
+        if not dry_run and puts:
+            self.indices.put_mapping(
+                dict(properties=puts), self.work_document_type, self.works_index
+            )
+            self.log.info(f"Updated {self.works_index} mapping with {puts}")
+        return puts
 
     def setup_current_alias(self, _db):
         """Finds or creates the works_alias as named by the current site
@@ -410,7 +446,11 @@ class ExternalSearchIndex(HasSelfTests):
 
     def create_search_doc(self, query_string, filter, pagination, debug):
 
-        query = Query(query_string, filter)
+        if filter and filter.search_type == "json":
+            query = JSONQuery(query_string, filter)
+        else:
+            query = Query(query_string, filter)
+
         search = query.build(self.search, pagination)
         if debug:
             search = search.extra(explain=True)
@@ -436,6 +476,7 @@ class ExternalSearchIndex(HasSelfTests):
         # we're asking for.
         if fields:
             search = search.source(fields)
+
         return search
 
     def query_works(self, query_string, filter=None, pagination=None, debug=False):
@@ -1093,7 +1134,7 @@ class CurrentMapping(Mapping):
             "icu_collation_keyword": ["sort_title"],
             "sort_author_keyword": ["sort_author"],
             "integer": ["series_position", "work_id"],
-            "long": ["last_update_time"],
+            "long": ["last_update_time", "published"],
         }
         self.add_properties(fields_by_type)
 
@@ -1911,6 +1952,255 @@ class Query(SearchBase):
         return hypotheses
 
 
+class JSONQuery(Query):
+    """An ES query created out of a JSON based query language
+    Eg. { "query": { "and": [{"key": "title", "value": "book" }, {"key": "author", "value": "robert" }] } }
+    Simply means "title=book and author=robert". The language is extensible, and easy to understand for clients to implement
+    """
+
+    class Conjunctives(Values):
+        AND = "and"
+        OR = "or"
+        NOT = "not"
+
+    class QueryLeaf(Values):
+        KEY = "key"
+        VALUE = "value"
+        OP = "op"
+
+    class Operators(Values):
+        EQ = "eq"
+        NEQ = "neq"
+        GTE = "gte"
+        LTE = "lte"
+        LT = "lt"
+        GT = "gt"
+        REGEX = "regex"
+        CONTAINS = "contains"
+
+    _KEYWORD_ONLY = {"keyword": True}
+
+    # The fields mappings in the search DB
+    FIELD_MAPPING: Dict[str, Dict] = {
+        "audience": _KEYWORD_ONLY,
+        "author": _KEYWORD_ONLY,
+        "classifications.scheme": _KEYWORD_ONLY,
+        "classifications.term": _KEYWORD_ONLY,
+        "contributors.display_name": {**_KEYWORD_ONLY, **dict(path="contributors")},
+        "contributors.family_name": {**_KEYWORD_ONLY, **dict(path="contributors")},
+        "contributors.lc": dict(path="contributors"),
+        "contributors.role": dict(path="contributors"),
+        "contributors.sort_name": {**_KEYWORD_ONLY, **dict(path="contributors")},
+        "contributors.viaf": dict(path="contributors"),
+        "fiction": _KEYWORD_ONLY,
+        "genres.name": dict(path="genres"),
+        "genres.scheme": dict(path="genres"),
+        "genres.term": dict(path="genres"),
+        "genres.weight": dict(path="genres"),
+        "identifiers.identifier": dict(path="identifiers"),
+        "identifiers.type": dict(path="identifiers"),
+        "imprint": _KEYWORD_ONLY,
+        "language": _KEYWORD_ONLY,
+        "licensepools.available": dict(path="licensepools"),
+        "licensepools.availability_time": dict(path="licensepools"),
+        "licensepools.collection_id": dict(path="licensepools"),
+        "licensepools.data_source_id": dict(path="licensepools", ops=[Operators.EQ]),
+        "licensepools.licensed": dict(path="licensepools"),
+        "licensepools.medium": dict(path="licensepools"),
+        "licensepools.open_access": dict(path="licensepools"),
+        "licensepools.quality": dict(path="licensepools"),
+        "licensepools.suppressed": dict(path="licensepools"),
+        "medium": _KEYWORD_ONLY,
+        "presentation_ready": dict(),
+        "publisher": _KEYWORD_ONLY,
+        "quality": dict(),
+        "series": _KEYWORD_ONLY,
+        "sort_author": dict(),
+        "sort_title": dict(),
+        "subtitle": _KEYWORD_ONLY,
+        "target_age": dict(),
+        "title": _KEYWORD_ONLY,
+        "published": dict(),
+    }
+
+    # From the client, some field names may be abstracted
+    FIELD_TRANSFORMS = {
+        "genre": "genres.name",
+        "open_access": "licensepools.open_access",
+        "available": "licensepools.available",
+        "classification": "classifications.term",
+        "data_source": "licensepools.data_source_id",
+    }
+
+    class ValueTransforms:
+        @staticmethod
+        def data_source(value: str) -> int:
+            """Transform a datasource name into a datasource id"""
+            sources = CachedData.cache.data_sources()
+            for source in sources:
+                if source.name == value:
+                    return source.id
+
+            # No such value was found, so return a non-id
+            return 0
+
+        @staticmethod
+        def published(value: str) -> float:
+            """Expects a YYYY-MM-DD format string and returns a timestamp from epoch"""
+            try:
+                values = value.split("-")
+                return datetime.datetime(
+                    int(values[0]), int(values[1]), int(values[2])
+                ).timestamp()
+            except Exception as e:
+                raise QueryParseException(
+                    detail=f"Could not parse 'published' value '{value}'. Only use 'YYYY-MM-DD'"
+                )
+
+    VALUE_TRANSORMS = {
+        "data_source": ValueTransforms.data_source,
+        "published": ValueTransforms.published,
+    }
+
+    def __init__(self, query: Union[str, Dict], filter=None):
+        if type(query) is str:
+            try:
+                query = json.loads(query)
+            except Exception as e:
+                raise QueryParseException(
+                    detail=f"'{query}' is not a valid json"
+                ) from None
+
+        self.query = query
+        self.filter = filter
+
+    @property
+    def elasticsearch_query(self):
+        query = None
+        if "query" not in self.query:
+            raise QueryParseException("'query' key must be present as the root")
+        query = self._parse_json_query(self.query["query"])
+        return query
+
+    def _is_keyword(self, name: str) -> bool:
+        return self.FIELD_MAPPING[name].get("keyword") == True
+
+    def _nested_path(self, name: str) -> Union[str, None]:
+        return self.FIELD_MAPPING[name].get("path")
+
+    def _parse_json_query(self, query: Dict):
+        """Eventually recursive json query parser"""
+        es_query = None
+
+        # Empty query remains empty
+        if not query:
+            return {}
+
+        # This is minimal set of leaf keys, op is optional
+        leaves = {self.QueryLeaf.KEY, self.QueryLeaf.VALUE}
+
+        # Are we a {key, value, [op]} query
+        if set(query.keys()).intersection(leaves) == leaves:
+            es_query = self._parse_json_leaf(query)
+        # Are we an {and, or} query
+        elif set(self.Conjunctives.values()).issuperset(query.keys()):
+            es_query = self._parse_json_join(query)
+        else:
+            raise QueryParseException(
+                detail=f"Could not make sense of the query: {query}"
+            )
+
+        return es_query
+
+    def _parse_json_leaf(self, query: Dict) -> Dict:
+        """We have a leaf query, which means this becomes a keyword.term query"""
+        op = query.get(self.QueryLeaf.OP, self.Operators.EQ)
+
+        if op not in self.Operators:
+            raise QueryParseException(detail=f"Unrecognized operator: {op}")
+
+        old_key = query[self.QueryLeaf.KEY]
+        value = query[self.QueryLeaf.VALUE]
+
+        # In case values need to be transformed
+        if old_key in self.VALUE_TRANSORMS:
+            value = self.VALUE_TRANSORMS[old_key](value)
+
+        key = self.FIELD_TRANSFORMS.get(
+            old_key, old_key
+        )  # Transform field name, if applicable
+
+        if key not in self.FIELD_MAPPING.keys():
+            raise QueryParseException(f"Unrecognized key: {old_key}")
+        mapping = self.FIELD_MAPPING[key]
+
+        nested_path = self._nested_path(key)
+        if self._is_keyword(key):
+            key = key + ".keyword"
+
+        # Validate operator restrictions
+        allowed_ops = mapping.get("ops")
+        if allowed_ops is not None and op not in allowed_ops:
+            raise QueryParseException(
+                detail=f"Operator '{op}' is not allowed for '{old_key}'. Only use {allowed_ops}"
+            )
+
+        es_query = None
+
+        if op == self.Operators.EQ:
+            es_query = Term(**{key: value})
+        elif op == self.Operators.NEQ:
+            es_query = Bool(must_not=[Term(**{key: value})])
+        elif op in {
+            self.Operators.GT,
+            self.Operators.GTE,
+            self.Operators.LT,
+            self.Operators.LTE,
+        }:
+            es_query = Range(**{key: {op: value}})
+        elif op == self.Operators.REGEX:
+            regex_query = dict(value=value, flags="ALL")
+            es_query = Regexp(**{key: regex_query})
+        elif op == self.Operators.CONTAINS:
+            regex_query = dict(value=f".*{value}.*", flags="ALL")
+            es_query = Regexp(**{key: regex_query})
+
+        # For nested paths
+        if nested_path:
+            es_query = Nested(path=nested_path, query=es_query)
+
+        if es_query is None:
+            raise QueryParseException(detail=f"Could not parse query: {query}")
+
+        return es_query
+
+    def _parse_json_join(self, query: Dict) -> Dict:
+        if len(query.keys()) != 1:
+            raise QueryParseException(
+                detail="A conjuction cannot have multiple parts in the same sub-query"
+            )
+
+        join = list(query.keys())[0]
+        to_join = []
+        for query_part in query[join]:
+            q = self._parse_json_query(query_part)
+            to_join.append(q)
+
+        if join == self.Conjunctives.AND:
+            joined_query = Bool(must=to_join)
+        elif join == self.Conjunctives.OR:
+            joined_query = Bool(should=to_join)
+        elif join == self.Conjunctives.NOT:
+            joined_query = Bool(must_not=to_join)
+
+        return joined_query
+
+
+@define
+class QueryParseException(Exception):
+    detail: str = ""
+
+
 class QueryParser:
     """Attempt to parse filter information out of a query string.
 
@@ -2324,8 +2614,14 @@ class Filter(SearchBase):
         if facets:
             facets.modify_search_filter(self)
             self.scoring_functions = facets.scoring_functions(self)
+            self.search_type = getattr(facets, "search_type", "default")
         else:
             self.scoring_functions = []
+            self.search_type = "default"
+
+        # JSON type searches are exact matches and do not have scoring
+        if self.search_type == "json":
+            self.min_score = None
 
     @property
     def audiences(self):

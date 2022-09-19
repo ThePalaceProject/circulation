@@ -6,6 +6,7 @@ from io import BytesIO
 import flask
 import pytest
 from PIL import Image
+from werkzeug import Response
 from werkzeug.datastructures import MultiDict
 
 from api.admin.announcement_list_validator import AnnouncementListValidator
@@ -238,6 +239,23 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
             )
             response = self.manager.admin_library_settings_controller.process_post()
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
+
+        # Either patron support email or website MUST be present
+        with self.request_context_with_admin("/", method="POST"):
+            flask.request.form = MultiDict(
+                [
+                    ("name", "Email or Website Library"),
+                    ("short_name", "Email or Website"),
+                    ("website", "http://example.org"),
+                    ("default_notification_email_address", "email@example.org"),
+                ]
+            )
+            response = self.manager.admin_library_settings_controller.process_post()
+            assert response.uri == INCOMPLETE_CONFIGURATION.uri
+            assert (
+                "Patron support email address or Patron support web site"
+                in response.detail
+            )
 
         # Test a web primary and secondary color that doesn't contrast
         # well on white. Here primary will, secondary should not.
@@ -539,6 +557,72 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
         assert (
             "A tiny image"
             == ConfigurationSetting.for_library(Configuration.LOGO, library).value
+        )
+
+    def test_library_post_empty_values_edit(self):
+        library = self._library("New York Public Library", "nypl")
+        ConfigurationSetting.for_library(
+            Configuration.LIBRARY_DESCRIPTION, library
+        ).value = "description"
+
+        with self.request_context_with_admin("/", method="POST"):
+            flask.request.form = MultiDict(
+                [
+                    ("uuid", library.uuid),
+                    ("name", "The New York Public Library"),
+                    ("short_name", "nypl"),
+                    (Configuration.LIBRARY_DESCRIPTION, ""),  # empty value
+                    (Configuration.WEBSITE_URL, "https://library.library/"),
+                    (Configuration.HELP_EMAIL, "help@example.com"),
+                ]
+            )
+            response = self.manager.admin_library_settings_controller.process_post()
+            assert response.status_code == 200
+
+        assert (
+            ConfigurationSetting.for_library(
+                Configuration.LIBRARY_DESCRIPTION, library
+            )._value
+            == ""
+        )
+        # ConfigurationSetting.value property.getter sets "" to None
+        assert (
+            ConfigurationSetting.for_library(
+                Configuration.LIBRARY_DESCRIPTION, library
+            ).value
+            == None
+        )
+
+    def test_library_post_empty_values_create(self):
+        with self.request_context_with_admin("/", method="POST"):
+            flask.request.form = MultiDict(
+                [
+                    ("name", "The New York Public Library"),
+                    ("short_name", "nypl"),
+                    (Configuration.LIBRARY_DESCRIPTION, ""),  # empty value
+                    (Configuration.WEBSITE_URL, "https://library.library/"),
+                    (Configuration.HELP_EMAIL, "help@example.com"),
+                ]
+            )
+            response: Response = (
+                self.manager.admin_library_settings_controller.process_post()
+            )
+            assert response.status_code == 201
+            uuid = response.get_data(as_text=True)
+
+        library = get_one(self._db, Library, uuid=uuid)
+        assert (
+            ConfigurationSetting.for_library(
+                Configuration.LIBRARY_DESCRIPTION, library
+            )._value
+            == ""
+        )
+        # ConfigurationSetting.value property.getter sets "" to None
+        assert (
+            ConfigurationSetting.for_library(
+                Configuration.LIBRARY_DESCRIPTION, library
+            ).value
+            == None
         )
 
     def test_library_delete(self):

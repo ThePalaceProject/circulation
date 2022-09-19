@@ -24,6 +24,7 @@ from core.model import (
 )
 from core.model.configuration import ConfigurationFactory, ConfigurationStorage
 from core.model.constants import IdentifierConstants
+from core.model.resource import Hyperlink
 from tests.api.test_odl import LicenseHelper, LicenseInfoHelper, TestODLImporter
 
 
@@ -120,6 +121,9 @@ class TestODL2Importer(TestODLImporter):
         assert isinstance(moby_dick_edition, Edition)
         assert moby_dick_edition.primary_identifier.identifier == "978-3-16-148410-0"
         assert moby_dick_edition.primary_identifier.type == "ISBN"
+        assert Hyperlink.SAMPLE in {
+            l.rel for l in moby_dick_edition.primary_identifier.links
+        }
 
         assert "Moby-Dick" == moby_dick_edition.title
         assert "eng" == moby_dick_edition.language

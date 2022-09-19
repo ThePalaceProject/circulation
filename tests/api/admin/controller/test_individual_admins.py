@@ -34,6 +34,9 @@ class TestIndividualAdmins(SettingsControllerTest):
         admin5, ignore = create(self._db, Admin, email="admin5@l2.org")
         admin5.add_role(AdminRole.LIBRARIAN, library2)
 
+        admin6, ignore = create(self._db, Admin, email="admin6@l2.org")
+        admin6.add_role(AdminRole.SITEWIDE_LIBRARY_MANAGER)
+
         with self.request_context_with_admin("/", admin=admin1):
             # A system admin can see all other admins' roles.
             response = (
@@ -83,6 +86,14 @@ class TestIndividualAdmins(SettingsControllerTest):
                             }
                         ],
                     },
+                    {
+                        "email": "admin6@l2.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.SITEWIDE_LIBRARY_MANAGER,
+                            }
+                        ],
+                    },
                 ],
                 key=lambda x: x["email"],
             ) == sorted(admins, key=lambda x: x["email"])
@@ -96,10 +107,6 @@ class TestIndividualAdmins(SettingsControllerTest):
             assert sorted(
                 [
                     {
-                        "email": "admin1@nypl.org",
-                        "roles": [{"role": AdminRole.SYSTEM_ADMIN}],
-                    },
-                    {
                         "email": "admin2@nypl.org",
                         "roles": [
                             {
@@ -119,20 +126,10 @@ class TestIndividualAdmins(SettingsControllerTest):
                         ],
                     },
                     {
-                        "email": "admin4@l2.org",
+                        "email": "admin6@l2.org",
                         "roles": [
                             {
-                                "role": AdminRole.LIBRARY_MANAGER,
-                                "library": library2.short_name,
-                            }
-                        ],
-                    },
-                    {
-                        "email": "admin5@l2.org",
-                        "roles": [
-                            {
-                                "role": AdminRole.LIBRARIAN,
-                                "library": library2.short_name,
+                                "role": AdminRole.SITEWIDE_LIBRARY_MANAGER,
                             }
                         ],
                     },
@@ -141,42 +138,11 @@ class TestIndividualAdmins(SettingsControllerTest):
             ) == sorted(admins, key=lambda x: x["email"])
 
         with self.request_context_with_admin("/", admin=admin3):
-            # A librarian or library manager of a specific library can see all admins, but only
-            # roles that affect their libraries.
-            response = (
-                self.manager.admin_individual_admin_settings_controller.process_get()
+            # A librarian cannot view this API anymore
+            pytest.raises(
+                AdminNotAuthorized,
+                self.manager.admin_individual_admin_settings_controller.process_get,
             )
-            admins = response.get("individualAdmins")
-            assert sorted(
-                [
-                    {
-                        "email": "admin1@nypl.org",
-                        "roles": [{"role": AdminRole.SYSTEM_ADMIN}],
-                    },
-                    {
-                        "email": "admin2@nypl.org",
-                        "roles": [
-                            {
-                                "role": AdminRole.LIBRARY_MANAGER,
-                                "library": self._default_library.short_name,
-                            },
-                            {"role": AdminRole.SITEWIDE_LIBRARIAN},
-                        ],
-                    },
-                    {
-                        "email": "admin3@nypl.org",
-                        "roles": [
-                            {
-                                "role": AdminRole.LIBRARIAN,
-                                "library": self._default_library.short_name,
-                            }
-                        ],
-                    },
-                    {"email": "admin4@l2.org", "roles": []},
-                    {"email": "admin5@l2.org", "roles": []},
-                ],
-                key=lambda x: x["email"],
-            ) == sorted(admins, key=lambda x: x["email"])
 
         with self.request_context_with_admin("/", admin=admin4):
             response = (
@@ -186,14 +152,9 @@ class TestIndividualAdmins(SettingsControllerTest):
             assert sorted(
                 [
                     {
-                        "email": "admin1@nypl.org",
-                        "roles": [{"role": AdminRole.SYSTEM_ADMIN}],
-                    },
-                    {
                         "email": "admin2@nypl.org",
                         "roles": [{"role": AdminRole.SITEWIDE_LIBRARIAN}],
                     },
-                    {"email": "admin3@nypl.org", "roles": []},
                     {
                         "email": "admin4@l2.org",
                         "roles": [
@@ -209,6 +170,14 @@ class TestIndividualAdmins(SettingsControllerTest):
                             {
                                 "role": AdminRole.LIBRARIAN,
                                 "library": library2.short_name,
+                            }
+                        ],
+                    },
+                    {
+                        "email": "admin6@l2.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.SITEWIDE_LIBRARY_MANAGER,
                             }
                         ],
                     },
@@ -217,6 +186,12 @@ class TestIndividualAdmins(SettingsControllerTest):
             ) == sorted(admins, key=lambda x: x["email"])
 
         with self.request_context_with_admin("/", admin=admin5):
+            pytest.raises(
+                AdminNotAuthorized,
+                self.manager.admin_individual_admin_settings_controller.process_get,
+            )
+
+        with self.request_context_with_admin("/", admin=admin6):
             response = (
                 self.manager.admin_individual_admin_settings_controller.process_get()
             )
@@ -224,14 +199,24 @@ class TestIndividualAdmins(SettingsControllerTest):
             assert sorted(
                 [
                     {
-                        "email": "admin1@nypl.org",
-                        "roles": [{"role": AdminRole.SYSTEM_ADMIN}],
+                        "email": "admin2@nypl.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARY_MANAGER,
+                                "library": self._default_library.short_name,
+                            },
+                            {"role": AdminRole.SITEWIDE_LIBRARIAN},
+                        ],
                     },
                     {
-                        "email": "admin2@nypl.org",
-                        "roles": [{"role": AdminRole.SITEWIDE_LIBRARIAN}],
+                        "email": "admin3@nypl.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARIAN,
+                                "library": self._default_library.short_name,
+                            }
+                        ],
                     },
-                    {"email": "admin3@nypl.org", "roles": []},
                     {
                         "email": "admin4@l2.org",
                         "roles": [
@@ -247,6 +232,14 @@ class TestIndividualAdmins(SettingsControllerTest):
                             {
                                 "role": AdminRole.LIBRARIAN,
                                 "library": library2.short_name,
+                            }
+                        ],
+                    },
+                    {
+                        "email": "admin6@l2.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.SITEWIDE_LIBRARY_MANAGER,
                             }
                         ],
                     },

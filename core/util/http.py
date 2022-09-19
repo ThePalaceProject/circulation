@@ -8,43 +8,11 @@ from requests import sessions
 from requests.adapters import HTTPAdapter, Response
 from urllib3 import Retry
 
+from core.config import Configuration
+from core.exceptions import IntegrationException
+from core.problem_details import INTEGRATION_ERROR
+
 from .problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
-from .problem_detail import ProblemDetail as pd
-
-INTEGRATION_ERROR = pd(
-    "http://librarysimplified.org/terms/problem/remote-integration-failed",
-    502,
-    _("Third-party service failed."),
-    _("A third-party service has failed."),
-)
-
-
-class IntegrationException(Exception):
-    """An exception that happens when the site's connection to a
-    third-party service is broken.
-
-    This may be because communication failed
-    (RemoteIntegrationException), or because local configuration is
-    missing or obviously wrong (CannotLoadConfiguration).
-    """
-
-    def __init__(self, message, debug_message=None):
-        """Constructor.
-
-        :param message: The normal message passed to any Exception
-        constructor.
-
-        :param debug_message: An extra human-readable explanation of the
-        problem, shown to admins but not to patrons. This may include
-        instructions on what bits of the integration configuration might need
-        to be changed.
-
-        For example, an API key might be wrong, or the API key might
-        be correct but the API provider might not have granted that
-        key enough permissions.
-        """
-        super().__init__(message)
-        self.debug_message = debug_message
 
 
 class RemoteIntegrationException(IntegrationException):
@@ -252,16 +220,25 @@ class HTTP:
         if "data" in kwargs and isinstance(kwargs["data"], str):
             kwdata: str = kwargs["data"]
             kwargs["data"] = kwdata.encode("utf8")
-        if "headers" in kwargs:
-            headers = kwargs["headers"]
-            new_headers = {}
-            for k, v in list(headers.items()):
-                if isinstance(k, str):
-                    k = k.encode("utf8")
-                if isinstance(v, str):
-                    v = v.encode("utf8")
-                new_headers[k] = v
-            kwargs["headers"] = new_headers
+
+        headers = kwargs.get("headers", {})
+        # Set a user-agent if not already present
+        if "User-Agent" not in headers:
+            version = Configuration.app_version()
+            version = (
+                version
+                if version and version != Configuration.NO_APP_VERSION_FOUND
+                else Configuration.DEFAULT_USER_AGENT_VERSION
+            )
+            headers["User-Agent"] = f"Palace Manager/{version}"
+        new_headers = {}
+        for k, v in list(headers.items()):
+            if isinstance(k, str):
+                k = k.encode("utf8")
+            if isinstance(v, str):
+                v = v.encode("utf8")
+            new_headers[k] = v
+        kwargs["headers"] = new_headers
 
         try:
             if verbose:
@@ -414,7 +391,7 @@ class HTTP:
         http_method: str,
         url: str,
         make_request_with: Optional[Callable[..., Response]] = None,
-        **kwargs
+        **kwargs,
     ) -> Response:
         """Make a request that returns a detailed problem detail document on
         error, rather than a generic "an integration error occured"
@@ -436,7 +413,7 @@ class HTTP:
             make_request_with,
             http_method,
             process_response_with=cls.process_debuggable_response,
-            **kwargs
+            **kwargs,
         )
 
     @classmethod

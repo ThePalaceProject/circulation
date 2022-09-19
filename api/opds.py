@@ -170,7 +170,7 @@ class CirculationManagerAnnotator(Annotator):
             _external=True,
         )
 
-    def active_licensepool_for(self, work):
+    def active_licensepool_for(self, work, library=None):
         loan = self.active_loans_by_work.get(work) or self.active_holds_by_work.get(
             work
         )
@@ -181,7 +181,7 @@ class CirculationManagerAnnotator(Annotator):
         else:
             # There is no active loan. Use the default logic for
             # determining the active license pool.
-            return super().active_licensepool_for(work)
+            return super().active_licensepool_for(work, library=library)
 
     @staticmethod
     def _prioritized_formats_for_pool(
@@ -211,6 +211,27 @@ class CirculationManagerAnnotator(Annotator):
 
         return prioritized_drm_schemes, prioritized_content_types
 
+    @staticmethod
+    def _deprioritized_lcp_content(
+        licensepool: LicensePool,
+    ) -> bool:
+        collection: Collection = licensepool.collection
+        external: ExternalIntegration = collection.external_integration
+
+        # Consult the configuration information for the external integration
+        # that underlies the license pool's collection. The configuration
+        # information _might_ contain a flag that indicates whether to deprioritize
+        # LCP content. By default, if no configuration value is specified, then
+        # the priority of LCP content will be left completely unchanged.
+
+        drm_setting: ConfigurationSetting = (
+            ConfigurationSetting.for_externalintegration(
+                FormatPriorities.DEPRIORITIZE_LCP_NON_EPUBS_KEY, external
+            )
+        )
+        _prioritize: bool = drm_setting.bool_value or False
+        return _prioritize
+
     def visible_delivery_mechanisms(
         self, licensepool: Optional[LicensePool]
     ) -> List[LicensePoolDeliveryMechanism]:
@@ -226,6 +247,9 @@ class CirculationManagerAnnotator(Annotator):
             prioritized_drm_schemes=prioritized_drm_schemes,
             prioritized_content_types=prioritized_content_types,
             hidden_content_types=self.hidden_content_types,
+            deprioritize_lcp_non_epubs=CirculationManagerAnnotator._deprioritized_lcp_content(
+                licensepool
+            ),
         ).prioritize_for_pool(licensepool)
 
     def annotate_work_entry(
@@ -1417,6 +1441,10 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                 _external=True,
             ),
         )
+
+    def active_licensepool_for(self, work):
+        """Get an active licensepool, always within the scope of the library"""
+        return super().active_licensepool_for(work, library=self.library)
 
 
 class SharedCollectionAnnotator(CirculationManagerAnnotator):

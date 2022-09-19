@@ -1,8 +1,8 @@
 from typing import Type, TypeVar, Union
 
-from sqlalchemy import Column, Enum, ForeignKey, Integer, Unicode
+from sqlalchemy import Column, Enum, ForeignKey, Index, Integer, Unicode
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import backref, relationship
 
 from core.model.patron import Patron
 
@@ -24,15 +24,28 @@ class DeviceToken(Base):
     __tablename__ = "devicetokens"
 
     id = Column("id", Integer, primary_key=True)
-    patron_id = Column(Integer, ForeignKey("patrons.id"), index=True, nullable=False)
-    patron = relationship("Patron", backref="device_tokens", cascade="delete")
+    patron_id = Column(
+        Integer,
+        ForeignKey("patrons.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    patron = relationship(
+        "Patron", backref=backref("device_tokens", passive_deletes=True)
+    )
 
     token_type_enum = Enum(
         DeviceTokenTypes.FCM_ANDROID, DeviceTokenTypes.FCM_IOS, name="token_types"
     )
     token_type = Column(token_type_enum, nullable=False)
 
-    device_token = Column(Unicode, nullable=False, unique=True, index=True)
+    device_token = Column(Unicode, nullable=False, index=True)
+
+    __table_args__ = (
+        Index(
+            "ix_devicetokens_device_token_patron", device_token, patron_id, unique=True
+        ),
+    )
 
     @classmethod
     def create(
@@ -59,6 +72,7 @@ class DeviceToken(Base):
             db.add(device)
             db.commit()
         except IntegrityError as e:
+            db.rollback()
             if "device_token" in e.args[0]:
                 raise DuplicateDeviceTokenError() from e
             else:

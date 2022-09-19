@@ -49,6 +49,7 @@ from core.model import (
     Session,
     create,
 )
+from core.model.constants import LinkRelations
 from core.opds import OPDSFeed
 from core.testing import DatabaseTest
 from core.user_profile import ProfileController
@@ -1203,6 +1204,7 @@ class TestLibraryAuthenticator(AuthenticatorTest):
             LibraryAnnotator.ABOUT: "http://about",
             LibraryAnnotator.LICENSE: "http://license/",
             LibraryAnnotator.REGISTER: "custom-registration-hook://library/",
+            LinkRelations.PATRON_PASSWORD_RESET: "https://example.org/reset",
             Configuration.LOGO: "image data",
             Configuration.WEB_CSS_FILE: "http://style.css",
         }
@@ -1278,6 +1280,25 @@ class TestLibraryAuthenticator(AuthenticatorTest):
             Announcements.SETTING_NAME, library
         )
         announcement_setting.value = json.dumps(announcements)
+        announcement_for_all_setting = ConfigurationSetting.sitewide(
+            self._db, Announcements.GLOBAL_SETTING_NAME
+        )
+        announcement_for_all_setting.value = json.dumps(
+            [
+                dict(
+                    id="all1",
+                    content="test announcement",
+                    start=yesterday,
+                    finish=today,
+                ),
+                dict(
+                    id="all2",
+                    content="test announcement",
+                    start=two_days_ago,
+                    finish=yesterday,
+                ),
+            ]
+        )
 
         with self.app.test_request_context("/"):
             url = authenticator.authentication_document_url(library)
@@ -1322,6 +1343,7 @@ class TestLibraryAuthenticator(AuthenticatorTest):
                 help_web,
                 help_email,
                 copyright_agent,
+                reset_link,
                 profile,
                 loans,
                 license,
@@ -1366,6 +1388,8 @@ class TestLibraryAuthenticator(AuthenticatorTest):
             assert "type" not in register
             assert "custom-registration-hook://library/" == register["href"]
 
+            assert "https://example.org/reset" == reset_link["href"]
+
             # The logo link has type "image/png".
             assert "image/png" == logo["type"]
 
@@ -1395,9 +1419,10 @@ class TestLibraryAuthenticator(AuthenticatorTest):
             )
 
             # Active announcements are published; inactive announcements are not.
-            a1, a3 = doc["announcements"]
+            all1, a1, a3 = doc["announcements"]
             assert dict(id="a1", content="this is announcement 1") == a1
             assert dict(id="a3", content="this is announcement 3") == a3
+            assert dict(id="all1", content="test announcement") == all1
 
             # Features that are enabled for this library are communicated
             # through the 'features' item.
@@ -1422,9 +1447,15 @@ class TestLibraryAuthenticator(AuthenticatorTest):
             for key in ("focus_area", "service_area"):
                 assert key not in doc
 
+            # Only global anouncements
+            announcement_setting.value = None
+            doc = json.loads(authenticator.create_authentication_document())
+            assert [dict(id="all1", content="test announcement")] == doc[
+                "announcements"
+            ]
             # If there are no announcements, the list of announcements is present
             # but empty.
-            announcement_setting.value = None
+            announcement_for_all_setting.value = None
             doc = json.loads(authenticator.create_authentication_document())
             assert [] == doc["announcements"]
 

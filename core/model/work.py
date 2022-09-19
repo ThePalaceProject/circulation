@@ -1,11 +1,14 @@
 # WorkGenre, Work
 
+from __future__ import annotations
+
 import logging
 from collections import Counter
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type, TypeVar, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
+import pytz
 from sqlalchemy import (
     Boolean,
     Column,
@@ -50,7 +53,12 @@ from .measurement import Measurement
 
 # Import related models when doing type checking
 if TYPE_CHECKING:
-    from core.model import CachedFeed, CustomListEntry, LicensePool  # noqa: autoflake
+    from core.model import (  # noqa: autoflake
+        CachedFeed,
+        CustomListEntry,
+        Library,
+        LicensePool,
+    )
 
 
 class WorkGenre(Base):
@@ -782,13 +790,10 @@ class Work(Base):
 
     @property
     def language_code(self):
-        """A single 2-letter language code for display purposes."""
+        """A single BCP47 language code for display purposes."""
         if not self.language:
             return None
-        language = self.language
-        if language in LanguageCodes.three_to_two:
-            language = LanguageCodes.three_to_two[language]
-        return language
+        return LanguageCodes.bcp47_for_locale(self.language, default=self.language)
 
     def age_appropriate_for_patron(self, patron):
         """Is this Work age-appropriate for the given Patron?
@@ -886,7 +891,7 @@ class Work(Base):
         )
         return changed
 
-    def _get_default_audience(self) -> Optional[str]:
+    def _get_default_audience(self) -> str | None:
         """Return the default audience.
 
         :return: Default audience
@@ -1011,7 +1016,11 @@ class Work(Base):
             or classification_changed
             or summary != self.summary
             or summary_text != new_summary_text
-            or float(quality) != float(self.quality)
+            or (
+                policy.calculate_quality
+                and float(quality or default_quality)
+                != float(self.quality or default_quality)
+            )
         )
 
         if changed:
@@ -1177,12 +1186,15 @@ class Work(Base):
             self, operation=WorkCoverageRecord.GENERATE_MARC_OPERATION
         )
 
-    def active_license_pool(self):
+    def active_license_pool(self, library: Library = None) -> LicensePool | None:
         # The active license pool is the one that *would* be
         # associated with a loan, were a loan to be issued right
         # now.
         active_license_pool = None
+        collections = [] if not library else [c for c in library.collections]
         for p in self.license_pools:
+            if collections and p.collection not in collections:
+                continue
             if p.superceded:
                 continue
             edition = p.presentation_edition
@@ -1428,8 +1440,8 @@ class Work(Base):
 
     @classmethod
     def to_search_documents(
-        cls: Type[WorkTypevar], works: List[WorkTypevar]
-    ) -> List[Dict]:
+        cls: type[WorkTypevar], works: list[WorkTypevar]
+    ) -> list[dict]:
         """In app to search documents needed to ease off the burden
         of complex queries from the DB cluster
         No recursive identifier policy is taken here as using the
@@ -1441,12 +1453,12 @@ class Work(Base):
         qu = qu.options(
             joinedload(Work.presentation_edition)
             .joinedload(Edition.contributions)
-            .joinedload(Contribution.contributor),  # type: ignore
+            .joinedload(Contribution.contributor),
             joinedload(Work.work_genres).joinedload(WorkGenre.genre),  # type: ignore
             joinedload(Work.custom_list_entries),
         )
 
-        rows: List[Work] = qu.all()
+        rows: list[Work] = qu.all()
 
         ## IDENTIFIERS START
         ## Identifiers is a house of cards, it comes crashing down if anything is changed here
@@ -1549,13 +1561,17 @@ class Work(Base):
             item.classifications = list(  # type: ignore
                 filter(lambda idx: idx[0] == item.id, all_subjects)
             )
-            search_doc = cls.search_doc_as_dict(cast(WorkTypevar, item))
-            results.append(search_doc)
+
+            try:
+                search_doc = cls.search_doc_as_dict(cast(WorkTypevar, item))
+                results.append(search_doc)
+            except:
+                logging.exception(f"Could not create search document for {item}")
 
         return results
 
     @classmethod
-    def search_doc_as_dict(cls: Type[WorkTypevar], doc: WorkTypevar):
+    def search_doc_as_dict(cls: type[WorkTypevar], doc: WorkTypevar):
         columns = {
             "work": [
                 "fiction",
@@ -1579,6 +1595,7 @@ class Work(Base):
                 "publisher",
                 "imprint",
                 "permanent_work_id",
+                "published",
             ],
             "contribution": ["role"],
             "contributor": ["display_name", "sort_name", "family_name", "lc", "viaf"],
@@ -1594,13 +1611,32 @@ class Work(Base):
             "custom_list_entries": ["list_id", "featured", "first_appearance"],
         }
 
-        result: Dict = {}
+        result: dict = {}
 
         def _convert(value):
             if isinstance(value, Decimal):
                 return float(value)
             elif isinstance(value, datetime):
-                return value.timestamp()
+                try:
+                    # If we do not have a timezone, force UTC
+                    if value.tzinfo is None:
+                        value = value.replace(tzinfo=pytz.UTC)
+                    return value.timestamp()
+                except (ValueError, OverflowError) as e:
+                    logging.error(
+                        f"Could not convert date value {value} for document {doc.id}: {e}"
+                    )
+                    return 0
+            elif isinstance(value, date):
+                try:
+                    return datetime(
+                        value.year, value.month, value.day, tzinfo=pytz.UTC
+                    ).timestamp()
+                except (ValueError, OverflowError) as e:
+                    logging.error(
+                        f"Could not convert date value {value} for document {doc.id}: {e}"
+                    )
+                    return 0
             return value
 
         def _set_value(parent, key, target):
@@ -1636,7 +1672,7 @@ class Work(Base):
         result["contributors"] = []
         if doc.presentation_edition and doc.presentation_edition.contributions:
             for item in doc.presentation_edition.contributions:
-                contributor: Dict = {}
+                contributor: dict = {}
                 _set_value(item.contributor, "contributor", contributor)
                 _set_value(item, "contribution", contributor)
                 result["contributors"].append(contributor)
@@ -1652,7 +1688,7 @@ class Work(Base):
                 ):
                     continue
 
-                lc: Dict = {}
+                lc: dict = {}
                 _set_value(item, "licensepools", lc)
                 # lc["availability_time"] = getattr(item, "availability_time").timestamp()
                 lc["available"] = (
@@ -1663,7 +1699,8 @@ class Work(Base):
                 lc["licensed"] = (
                     item.unlimited_access or item.self_hosted or item.licenses_owned > 0
                 )
-                lc["medium"] = doc.presentation_edition.medium
+                if doc.presentation_edition:
+                    lc["medium"] = doc.presentation_edition.medium
                 lc["licensepool_id"] = item.id
                 lc["quality"] = doc.quality
                 result["licensepools"].append(lc)
@@ -1683,21 +1720,21 @@ class Work(Base):
         result["identifiers"] = []
         if doc.identifiers:  # type: ignore
             for item in doc.identifiers:  # type: ignore
-                identifier: Dict = {}
+                identifier: dict = {}
                 _set_value(item, "identifiers", identifier)
                 result["identifiers"].append(identifier)
 
         result["classifications"] = []
         if doc.classifications:  # type: ignore
             for item in doc.classifications:  # type: ignore
-                classification: Dict = {}
+                classification: dict = {}
                 _set_value(item, "classifications", classification)
                 result["classifications"].append(classification)
 
         result["customlists"] = []
         if doc.custom_list_entries:
             for item in doc.custom_list_entries:  # type: ignore
-                customlist: Dict = {}
+                customlist: dict = {}
                 _set_value(item, "custom_list_entries", customlist)
                 result["customlists"].append(customlist)
 

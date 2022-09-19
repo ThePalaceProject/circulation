@@ -99,9 +99,6 @@ class EditionConstants:
     IMAGE_MEDIUM = "Image"
     COURSEWARE_MEDIUM = "Courseware"
 
-    ELECTRONIC_FORMAT = "Electronic"
-    CODEX_FORMAT = "Codex"
-
     # These are all media known to the system.
     KNOWN_MEDIA = (
         BOOK_MEDIUM,
@@ -235,6 +232,14 @@ class LinkRelations:
     AUTHOR = "http://schema.org/author"
     ALTERNATE = "alternate"
 
+    # The rel for a link we feed to clients for samples/previews.
+    CLIENT_SAMPLE = "preview"
+
+    # A uri rel type for authentication documents with a vendor specific "link"
+    PATRON_PASSWORD_RESET = (
+        "http://librarysimplified.org/terms/rel/patron-password-reset"
+    )
+
     # TODO: Is this the appropriate relation?
     DRM_ENCRYPTED_DOWNLOAD = "http://opds-spec.org/acquisition/"
     BORROW = "http://opds-spec.org/acquisition/borrow"
@@ -269,6 +274,7 @@ class MediaTypes:
     TEXT_XML_MEDIA_TYPE = "text/xml"
     TEXT_HTML_MEDIA_TYPE = "text/html"
     APPLICATION_XML_MEDIA_TYPE = "application/xml"
+    APPLICATION_JSON_MEDIA_TYPE = "application/json"
     JPEG_MEDIA_TYPE = "image/jpeg"
     PNG_MEDIA_TYPE = "image/png"
     GIF_MEDIA_TYPE = "image/gif"

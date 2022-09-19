@@ -5,10 +5,12 @@ import re
 from contextlib import contextmanager
 from datetime import timedelta
 from io import StringIO
+from unittest import mock
 
 import feedparser
 import flask
 import pytest
+from attrs import define
 from werkzeug.datastructures import MultiDict
 from werkzeug.http import dump_cookie
 
@@ -52,11 +54,14 @@ from core.model import (
     get_one,
     get_one_or_create,
 )
+from core.model.collection import Collection
 from core.opds_import import OPDSImporter, OPDSImportMonitor
+from core.query.customlist import CustomListQueries
 from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
 from core.util.datetime_helpers import utc_now
 from core.util.http import HTTP
+from core.util.problem_detail import ProblemDetail
 from tests.api.test_controller import CirculationControllerTest
 
 
@@ -1047,8 +1052,14 @@ class TestCustomListsController(AdminControllerTest):
         # This list has no associated Library and should not be included.
         no_library, ignore = create(self._db, CustomList, name=self._str)
 
+        auto_update_query = json.dumps(dict(query=dict(key="key", value="value")))
         one_entry, ignore = create(
-            self._db, CustomList, name=self._str, library=self._default_library
+            self._db,
+            CustomList,
+            name=self._str,
+            library=self._default_library,
+            auto_update_enabled=True,
+            auto_update_query=auto_update_query,
         )
         edition = self._edition()
         one_entry.add_entry(edition)
@@ -1056,7 +1067,20 @@ class TestCustomListsController(AdminControllerTest):
         collection.customlists = [one_entry]
 
         no_entries, ignore = create(
-            self._db, CustomList, name=self._str, library=self._default_library
+            self._db,
+            CustomList,
+            name=self._str,
+            library=self._default_library,
+            auto_update_enabled=False,
+        )
+
+        # This will set the is_shared attribute
+        shared_library = self._library()
+        assert (
+            CustomListQueries.share_locally_with_library(
+                self._db, no_entries, shared_library
+            )
+            == True
         )
 
         with self.request_context_with_library_and_admin("/"):
@@ -1073,11 +1097,21 @@ class TestCustomListsController(AdminControllerTest):
             assert collection.name == c.get("name")
             assert collection.id == c.get("id")
             assert collection.protocol == c.get("protocol")
+            assert True == l1.get("auto_update")
+            assert auto_update_query == l1.get("auto_update_query")
+            assert CustomList.INIT == l1.get("auto_update_status")
+            assert False == l1.get("is_shared")
+            assert True == l1.get("is_owner")
 
             assert no_entries.id == l2.get("id")
             assert no_entries.name == l2.get("name")
             assert 0 == l2.get("entry_count")
             assert 0 == len(l2.get("collections"))
+            assert False == l2.get("auto_update")
+            assert None == l2.get("auto_update_query")
+            assert CustomList.INIT == l2.get("auto_update_status")
+            assert True == l2.get("is_shared")
+            assert True == l2.get("is_owner")
 
         self.admin.remove_role(AdminRole.LIBRARIAN, self._default_library)
         with self.request_context_with_library_and_admin("/"):
@@ -1222,6 +1256,79 @@ class TestCustomListsController(AdminControllerTest):
             assert work.presentation_edition == list.entries[0].edition
             assert True == list.entries[0].featured
             assert [collection] == list.collections
+            assert False == list.auto_update_enabled
+
+        # On an error of auto_update, rollbacks should occur
+        with self.request_context_with_library_and_admin("/", method="POST"):
+            flask.request.form = MultiDict(
+                [
+                    ("name", "400List"),
+                    (
+                        "entries",
+                        "[]",
+                    ),
+                    ("collections", "[]"),
+                    ("auto_update", True),
+                ]
+            )
+            response = self.manager.admin_custom_lists_controller.custom_lists()
+            assert 400 == response.status_code
+            # List was not created
+            assert None == get_one(self._db, CustomList, name="400List")
+
+        with self.request_context_with_library_and_admin("/", method="POST"):
+            flask.request.form = MultiDict(
+                [
+                    ("name", "400List"),
+                    (
+                        "entries",
+                        json.dumps(
+                            [dict(id=work.presentation_edition.primary_identifier.urn)]
+                        ),
+                    ),
+                    ("collections", json.dumps([collection.id])),
+                    ("auto_update", True),
+                    (
+                        "auto_update_query",
+                        json.dumps({"query": {"key": "title", "value": "A Title"}}),
+                    ),
+                    ("auto_update_facets", json.dumps({})),
+                ]
+            )
+
+            response = self.manager.admin_custom_lists_controller.custom_lists()
+            assert response == AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES
+            assert 400 == response.status_code
+
+        # Valid auto update query request
+        with self.request_context_with_library_and_admin(
+            "/", method="POST"
+        ), mock.patch("api.admin.controller.CustomListQueries") as mock_query:
+            flask.request.form = MultiDict(
+                [
+                    ("name", "200List"),
+                    ("collections", json.dumps([collection.id])),
+                    ("auto_update", True),
+                    (
+                        "auto_update_query",
+                        json.dumps({"query": {"key": "title", "value": "A Title"}}),
+                    ),
+                    ("auto_update_facets", json.dumps({})),
+                ]
+            )
+
+            response = self.manager.admin_custom_lists_controller.custom_lists()
+            assert 201 == response.status_code
+            [list] = (
+                self._db.query(CustomList).filter(CustomList.name == "200List").all()
+            )
+            assert True == list.auto_update_enabled
+            assert (
+                json.dumps({"query": {"key": "title", "value": "A Title"}})
+                == list.auto_update_query
+            )
+            assert json.dumps({}) == list.auto_update_facets
+            assert mock_query.populate_query_pages.call_count == 1
 
     def test_custom_list_get(self):
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
@@ -1387,6 +1494,27 @@ class TestCustomListsController(AdminControllerTest):
         # set to 3 shows that .update_size() was called during the call to custom_list().
         assert lane.size == 3
 
+        # Edit for auto update values
+        update_query = {"query": {"key": "title", "value": "title"}}
+        update_facets = {"order": "title"}
+        with self.request_context_with_library_and_admin("/", method="POST"):
+            flask.request.form = MultiDict(
+                [
+                    ("id", str(list.id)),
+                    ("name", "new name"),
+                    ("collections", json.dumps([c.id for c in new_collections])),
+                    ("auto_update", "true"),
+                    ("auto_update_query", json.dumps(update_query)),
+                    ("auto_update_facets", json.dumps(update_facets)),
+                ]
+            )
+
+            response = self.manager.admin_custom_lists_controller.custom_list(list.id)
+
+        assert True == list.auto_update_enabled
+        assert json.dumps(update_query) == list.auto_update_query
+        assert json.dumps(update_facets) == list.auto_update_facets
+
         self.admin.remove_role(AdminRole.LIBRARIAN, self._default_library)
         with self.request_context_with_library_and_admin("/", method="POST"):
             flask.request.form = MultiDict(
@@ -1401,6 +1529,72 @@ class TestCustomListsController(AdminControllerTest):
                 AdminNotAuthorized,
                 self.manager.admin_custom_lists_controller.custom_list,
                 list.id,
+            )
+
+    def test_custom_list_auto_update_cases(self):
+        list, _ = self._customlist(
+            data_source_name=DataSource.LIBRARY_STAFF,
+        )
+        list.library = self._default_library
+
+        update_query = {"query": {"key": "title", "value": "title"}}
+        update_facets = {"order": "title"}
+        with self.request_context_with_library_and_admin("/", method="POST"):
+            flask.request.form = MultiDict(
+                [
+                    ("id", str(list.id)),
+                    ("name", "new name"),
+                    ("entries", "[]"),
+                    ("deletedEntries", "[]"),
+                    ("collections", "[]"),
+                    ("auto_update", "true"),
+                    ("auto_update_query", json.dumps(update_query)),
+                    ("auto_update_facets", "Bad facets"),
+                ]
+            )
+
+            response = self.manager.admin_custom_lists_controller.custom_list(list.id)
+            assert type(response) == ProblemDetail
+            assert response.status_code == 400
+            assert response.detail == "auto_update_facets is not JSON serializable"
+
+        with self.request_context_with_library_and_admin("/", method="POST"):
+            flask.request.form = MultiDict(
+                [
+                    ("id", str(list.id)),
+                    ("name", "new name"),
+                    ("entries", "[]"),
+                    ("deletedEntries", "[]"),
+                    ("collections", "[]"),
+                    ("auto_update", "true"),
+                    ("auto_update_query", "Bad query"),
+                ]
+            )
+
+            response = self.manager.admin_custom_lists_controller.custom_list(list.id)
+            assert type(response) == ProblemDetail
+            assert response.status_code == 400
+            assert response.detail == "auto_update_query is not JSON serializable"
+
+        with self.request_context_with_library_and_admin("/", method="POST"):
+            flask.request.form = MultiDict(
+                [
+                    ("id", str(list.id)),
+                    ("name", "new name"),
+                    ("entries", "[]"),
+                    ("deletedEntries", "[]"),
+                    ("collections", "[]"),
+                    ("auto_update", "true"),
+                    ("auto_update_query", None),
+                ]
+            )
+
+            response = self.manager.admin_custom_lists_controller.custom_list(list.id)
+            assert type(response) == ProblemDetail
+            assert response.status_code == 400
+            assert (
+                response.detail
+                == "auto_update_query must be present when auto_update is enabled"
             )
 
     def test_custom_list_delete_success(self):
@@ -1493,6 +1687,156 @@ class TestCustomListsController(AdminControllerTest):
         with self.request_context_with_library_and_admin("/", method="DELETE"):
             response = self.manager.admin_custom_lists_controller.custom_list(123)
             assert MISSING_CUSTOM_LIST == response
+
+        library = self._library()
+        self.admin.add_role(AdminRole.LIBRARY_MANAGER, library)
+        CustomListQueries.share_locally_with_library(self._db, list, library)
+        with self.request_context_with_library_and_admin("/", method="DELETE"):
+            response = self.manager.admin_custom_lists_controller.custom_list(list.id)
+            assert response == CANNOT_DELETE_SHARED_LIST
+
+    @define
+    class ShareLocallySetup:
+        shared_with: Library = None
+        primary_library: Library = None
+        collection1: Collection = None
+        list: CustomList = None
+
+    def _setup_share_locally(self):
+        shared_with = self._library("shared_with")
+        primary_library = self._library("primary")
+        collection1 = self._collection("c1")
+        primary_library.collections.append(collection1)
+
+        data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
+        list, ignore = create(
+            self._db,
+            CustomList,
+            name=self._str,
+            data_source=data_source,
+            library=primary_library,
+            collections=[collection1],
+        )
+
+        return self.ShareLocallySetup(
+            shared_with=shared_with,
+            primary_library=primary_library,
+            collection1=collection1,
+            list=list,
+        )
+
+    def _share_locally(self, customlist):
+        with self.request_context_with_library_and_admin("/", method="POST"):
+            response = self.manager.admin_custom_lists_controller.share_locally(
+                customlist.id
+            )
+        return response
+
+    def _share_locally_with_collection(self, customlist, collection):
+        with self.request_context_with_library_and_admin("/", method="POST") as c:
+            flask.request.form = MultiDict(
+                [
+                    ("collection", collection.id),
+                ]
+            )
+            response = self.manager.admin_custom_lists_controller.share_locally_with_library_collection(
+                customlist.id
+            )
+        return response
+
+    def test_share_locally_missing_collection(self):
+        s = self._setup_share_locally()
+        response = self._share_locally(s.list)
+        assert response["failures"] == 2
+        assert response["successes"] == 0
+
+    def test_share_locally_success(self):
+        s = self._setup_share_locally()
+        s.shared_with.collections.append(s.collection1)
+        response = self._share_locally(s.list)
+        assert response["successes"] == 1
+        assert response["failures"] == 1  # The default library
+
+        self._db.refresh(s.list)
+        assert len(s.list.shared_locally_with_libraries) == 1
+
+        # Try again should have 0 more libraries as successes
+        response = self._share_locally(s.list)
+        assert response["successes"] == 0
+        assert response["failures"] == 1  # The default library
+
+    def test_share_locally_with_invalid_entries(self):
+        s = self._setup_share_locally()
+        s.shared_with.collections.append(s.collection1)
+
+        # Second collection with work in list
+        collection2 = self._collection()
+        s.primary_library.collections.append(collection2)
+        w = self._work(collection=collection2)
+        s.list.add_entry(w)
+
+        response = self._share_locally(s.list)
+        assert response["failures"] == 2
+        assert response["successes"] == 0
+
+    def test_share_locally_get(self):
+        """Does the GET method fetch shared lists"""
+        s = self._setup_share_locally()
+        s.shared_with.collections.append(s.collection1)
+
+        resp = self._share_locally(s.list)
+        assert resp["successes"] == 1
+
+        self.admin.add_role(AdminRole.LIBRARIAN, s.shared_with)
+        with self.request_context_with_library_and_admin(
+            "/", method="GET", library=s.shared_with
+        ):
+            response = self.manager.admin_custom_lists_controller.custom_lists()
+            assert len(response["custom_lists"]) == 1
+            collections = [
+                dict(id=c.id, name=c.name, protocol=c.protocol)
+                for c in s.list.collections
+            ]
+            assert response["custom_lists"][0] == dict(
+                id=s.list.id,
+                name=s.list.name,
+                collections=collections,
+                entry_count=s.list.size,
+                auto_update=False,
+                auto_update_query=None,
+                auto_update_facets=None,
+                auto_update_status=CustomList.INIT,
+                is_owner=False,
+                is_shared=True,
+            )
+
+    def test_auto_update_edit(self):
+        w1 = self._work()
+        custom_list: CustomList
+        custom_list, _ = self._customlist(
+            data_source_name=DataSource.LIBRARY_STAFF, num_entries=0
+        )
+        custom_list.add_entry(w1)
+        custom_list.auto_update_enabled = True
+        custom_list.auto_update_query = '{"query":"...."}'
+        custom_list.auto_update_status = CustomList.UPDATED
+        self._db.commit()
+
+        response = self.manager.admin_custom_lists_controller._create_or_update_list(
+            custom_list.library,
+            custom_list.name,
+            [],
+            [],
+            [],
+            id=custom_list.id,
+            auto_update=True,
+            auto_update_query='{"query": "...changed"}',
+        )
+
+        assert response.status_code == 200
+        assert custom_list.auto_update_query == '{"query": "...changed"}'
+        assert custom_list.auto_update_status == CustomList.REPOPULATE
+        assert [e.work_id for e in custom_list.entries] == [w1.id]
 
 
 class TestLanesController(AdminControllerTest):
@@ -1633,18 +1977,6 @@ class TestLanesController(AdminControllerTest):
 
         lane1 = self._lane("lane1")
         lane2 = self._lane("lane2")
-
-        with self.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = MultiDict(
-                [
-                    ("id", lane1.id),
-                    ("display_name", "lane1"),
-                    ("custom_list_ids", json.dumps([list.id])),
-                ]
-            )
-            response = self.manager.admin_lanes_controller.lanes()
-            assert CANNOT_EDIT_DEFAULT_LANE == response
-
         lane1.customlists += [list]
 
         with self.request_context_with_library_and_admin("/", method="POST"):
@@ -1726,6 +2058,48 @@ class TestLanesController(AdminControllerTest):
             # The sibling's priority has been shifted down to put the new lane at the top.
             assert 1 == sibling.priority
 
+    def test_lanes_create_shared_list(self):
+        list, ignore = self._customlist(
+            data_source_name=DataSource.LIBRARY_STAFF, num_entries=0
+        )
+        list.library = self._default_library
+        library = self._library()
+        self.admin.add_role(AdminRole.LIBRARY_MANAGER, library=library)
+
+        with self.request_context_with_library_and_admin(
+            "/", method="POST", library=library
+        ):
+            flask.request.form = MultiDict(
+                [
+                    ("display_name", "lane"),
+                    ("custom_list_ids", json.dumps([list.id])),
+                    ("inherit_parent_restrictions", "false"),
+                ]
+            )
+            response = self.manager.admin_lanes_controller.lanes()
+            assert 404 == response.status_code
+
+        success = CustomListQueries.share_locally_with_library(self._db, list, library)
+        assert success == True
+
+        with self.request_context_with_library_and_admin(
+            "/", method="POST", library=library
+        ):
+            flask.request.form = MultiDict(
+                [
+                    ("display_name", "lane"),
+                    ("custom_list_ids", json.dumps([list.id])),
+                    ("inherit_parent_restrictions", "false"),
+                ]
+            )
+            response = self.manager.admin_lanes_controller.lanes()
+            assert 201 == response.status_code
+            lane_id = int(response.data)
+
+        lane: Lane = get_one(self._db, Lane, id=lane_id)
+        assert lane.customlists == [list]
+        assert lane.library == library
+
     def test_lanes_edit(self):
 
         work = self._work(with_license_pool=True)
@@ -1768,6 +2142,31 @@ class TestLanesController(AdminControllerTest):
             assert True == lane.inherit_parent_restrictions
             assert None == lane.media
             assert 2 == lane.size
+
+    def test_default_lane_edit(self):
+        """Default lanes only allow the display_name to be edited"""
+        lane: Lane = self._lane("default")
+        customlist, _ = self._customlist()
+        with self.request_context_with_library_and_admin("/", method="POST"):
+            flask.request.form = MultiDict(
+                [
+                    ("id", str(lane.id)),
+                    ("parent_id", "12345"),
+                    ("display_name", "new name"),
+                    ("custom_list_ids", json.dumps([customlist.id])),
+                    ("inherit_parent_restrictions", "false"),
+                ]
+            )
+            response = self.manager.admin_lanes_controller.lanes()
+
+        assert 200 == response.status_code
+        assert lane.id == int(response.get_data(as_text=True))
+
+        assert "new name" == lane.display_name
+        # Nothing else changes
+        assert [] == lane.customlists
+        assert True == lane.inherit_parent_restrictions
+        assert None == lane.parent_id
 
     def test_lane_delete_success(self):
         library = self._library()
@@ -2358,6 +2757,23 @@ class TestDashboardController(AdminControllerTest):
                 assert 0 == c3_data.get("open_access_titles")
                 assert 0 == c3_data.get("licenses")
                 assert 0 == c3_data.get("available_licenses")
+
+    def test_stats_parent_collection_permissions(self):
+        """A parent collection may be dissociated from a library"""
+        parent: Collection = self._collection()
+        child: Collection = self._collection()
+        child.parent = parent
+        library = self._library()
+        child.libraries.append(library)
+        self.admin.add_role(AdminRole.LIBRARIAN, library)
+
+        with self.request_context_with_library_and_admin("/", library=library):
+            response = self.manager.admin_dashboard_controller.stats()
+            stats = response["total"]["collections"]
+        # Child is in stats, but parent is not
+        # No exceptions were thrown
+        assert child.name in stats
+        assert parent.name not in stats
 
 
 class SettingsControllerTest(AdminControllerTest):

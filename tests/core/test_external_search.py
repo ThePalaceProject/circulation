@@ -1,6 +1,8 @@
 import json
 import re
 import time
+import uuid
+from datetime import datetime
 
 import pytest
 from elasticsearch.exceptions import ElasticsearchException
@@ -18,6 +20,7 @@ from elasticsearch_dsl.query import (
 )
 from elasticsearch_dsl.query import Query as elasticsearch_dsl_query
 from elasticsearch_dsl.query import Range, Term, Terms
+from parameterized import parameterized
 from psycopg2.extras import NumericRange
 
 from core.classifier import Classifier
@@ -26,9 +29,11 @@ from core.external_search import (
     CurrentMapping,
     ExternalSearchIndex,
     Filter,
+    JSONQuery,
     MockExternalSearchIndex,
     MockSearchResult,
     Query,
+    QueryParseException,
     QueryParser,
     SearchBase,
     SearchIndexCoverageProvider,
@@ -350,6 +355,25 @@ class TestExternalSearch(ExternalSearchTest):
         assert True == test_results[5].success
         result = json.loads(test_results[5].result)
         assert {collection.name: 1} == result
+
+    def test_update_mapping(self):
+        self.search.mapping.add_properties({"long": ["new_long_property"]})
+        put_mapping = self.search._update_index_mapping(dry_run=True)
+        assert "new_long_property" in put_mapping
+        put_mapping = self.search._update_index_mapping(dry_run=False)
+        assert "new_long_property" in put_mapping
+        put_mapping = self.search._update_index_mapping(dry_run=True)
+        assert "new_long_property" not in put_mapping
+
+        new_mapping = self.search.indices.get_mapping(
+            self.search.works_index, self.search.work_document_type
+        )
+        assert (
+            "new_long_property"
+            in new_mapping[self.search.works_index]["mappings"][
+                self.search.work_document_type
+            ]["properties"]
+        )
 
 
 class TestCurrentMapping:
@@ -4479,7 +4503,6 @@ class TestSearchIndexCoverageProvider(DatabaseTest):
 
         # Top level keys should be the same
         assert len(result) == len(inapp)
-        assert result[0].keys() == inapp[0].keys()
 
         inapp_work1 = list(filter(lambda x: x["work_id"] == work1.id, inapp))[0]
         inapp_work2 = list(filter(lambda x: x["work_id"] == work2.id, inapp))[0]
@@ -4580,3 +4603,307 @@ class TestSearchIndexCoverageProvider(DatabaseTest):
         assert work == record.obj
         assert True == record.transient
         assert "There was an error!" == record.exception
+
+
+class TestJSONQuery(ExternalSearchTest):
+    def _leaf(self, key, value, op="eq"):
+        return dict(key=key, value=value, op=op)
+
+    def _jq(self, query):
+        return JSONQuery(dict(query=query))
+
+    def test_elasticsearch_query(self):
+        q = {"key": "medium", "value": "Book"}
+        q = self._jq(q)
+        q.elasticsearch_query.to_dict() == {"term": {"medium.keyword": "Book"}}
+
+        q = {"or": [self._leaf("medium", "Book"), self._leaf("medium", "Audio")]}
+        q = self._jq(q)
+        q.elasticsearch_query.to_dict() == {
+            "bool": {
+                "should": [
+                    {"term": {"medium.keyword": "Book"}},
+                    {"term": {"medium.keyword": "Audio"}},
+                ]
+            }
+        }
+
+        q = {"and": [self._leaf("medium", "Book"), self._leaf("medium", "Audio")]}
+        q = self._jq(q)
+        q.elasticsearch_query.to_dict() == {
+            "bool": {
+                "must": [
+                    {"term": {"medium.keyword": "Book"}},
+                    {"term": {"medium.keyword": "Audio"}},
+                ]
+            }
+        }
+
+        q = {
+            "and": [
+                self._leaf("title", "Title"),
+                {"or": [self._leaf("medium", "Book"), self._leaf("medium", "Audio")]},
+            ]
+        }
+        q = self._jq(q)
+        q.elasticsearch_query.to_dict() == {
+            "bool": {
+                "must": [
+                    {
+                        "bool": {
+                            "should": [
+                                {"term": {"medium.keyword": "Book"}},
+                                {"term": {"medium.keyword": "Audio"}},
+                            ]
+                        }
+                    },
+                    {"term": {"title.keyword": "Title"}},
+                ]
+            }
+        }
+
+        q = {"or": [self._leaf("medium", "Book"), self._leaf("medium", "Audio", "neq")]}
+        q = self._jq(q)
+        assert q.elasticsearch_query.to_dict() == {
+            "bool": {
+                "should": [
+                    {"term": {"medium.keyword": "Book"}},
+                    {"bool": {"must_not": [{"term": {"medium.keyword": "Audio"}}]}},
+                ]
+            }
+        }
+
+        q = {
+            "and": [
+                self._leaf("title", "Title"),
+                {"not": [self._leaf("author", "Geoffrey")]},
+            ]
+        }
+        q = self._jq(q)
+        assert q.elasticsearch_query.to_dict() == {
+            "bool": {
+                "must": [
+                    {"term": {"title.keyword": "Title"}},
+                    {"bool": {"must_not": [{"term": {"author.keyword": "Geoffrey"}}]}},
+                ]
+            }
+        }
+
+    @parameterized.expand(
+        [
+            ("target_age", 18, "lte"),
+            ("target_age", 18, "lt"),
+            ("target_age", 18, "gt"),
+            ("target_age", 18, "gte"),
+        ]
+    )
+    def test_elasticsearch_query_range(self, key, value, op):
+        q = self._leaf(key, value, op)
+        q = self._jq(q)
+        assert q.elasticsearch_query.to_dict() == {"range": {f"{key}": {op: value}}}
+
+    @parameterized.expand(
+        [
+            ("contributors.display_name", "name", True),
+            ("contributors.lc", "name", False),
+            ("genres.name", "name", False),
+            ("licensepools.open_access", True, False),
+        ]
+    )
+    def test_elasticsearch_query_nested(self, key, value, is_keyword):
+        q = self._jq(self._leaf(key, value))
+        term = key if not is_keyword else f"{key}.keyword"
+        root = key.split(".")[0]
+        assert q.elasticsearch_query.to_dict() == {
+            "nested": {"path": root, "query": {"term": {term: value}}}
+        }
+
+    @parameterized.expand(
+        [
+            (dict(key="author", op="eg", value="name"), "Unrecognized operator: eg"),
+            (dict(key="arthur", op="eq", value="name"), "Unrecognized key: arthur"),
+            (
+                dict(kew="author", op="eq", value="name"),
+                "Could not make sense of the query",
+            ),
+            ({"and": [], "or": []}, "A conjuction cannot have multiple parts"),
+        ]
+    )
+    def test_errors(self, query, error_match):
+        q = self._jq(query)
+
+        with pytest.raises(QueryParseException, match=error_match):
+            q.elasticsearch_query  # fetch the property
+
+    def test_regex_query(self):
+        q = self._jq(self._leaf("title", "book", op="regex"))
+        assert q.elasticsearch_query.to_dict() == {
+            "regexp": {
+                "title.keyword": {
+                    "flags": "ALL",
+                    "value": "book",
+                }
+            }
+        }
+
+    def test_field_transforms(self):
+        q = self._jq(self._leaf("classification", "cls"))
+        assert q.elasticsearch_query.to_dict() == {
+            "term": {"classifications.term.keyword": "cls"}
+        }
+        q = self._jq(self._leaf("open_access", True))
+        assert q.elasticsearch_query.to_dict() == {
+            "nested": {
+                "path": "licensepools",
+                "query": {"term": {"licensepools.open_access": True}},
+            }
+        }
+
+    def test_value_transforms(self):
+        gutenberg = (
+            self._db.query(DataSource)
+            .filter(DataSource.name == DataSource.GUTENBERG)
+            .first()
+        )
+        q = self._jq(self._leaf("data_source", DataSource.GUTENBERG))
+        assert q.elasticsearch_query.to_dict() == {
+            "nested": {
+                "path": "licensepools",
+                "query": {"term": {"licensepools.data_source_id": gutenberg.id}},
+            }
+        }
+
+        dt = datetime(1990, 1, 1)
+        q = self._jq(self._leaf("published", "1990-01-01"))
+        assert q.elasticsearch_query.to_dict() == {
+            "term": {"published": dt.timestamp()}
+        }
+
+        with pytest.raises(QueryParseException) as exc:
+            q = self._jq(self._leaf("published", "1990-01-x1"))
+            q.elasticsearch_query
+            assert (
+                "Could not parse 'published' value '1990-01-x1'. Only use 'YYYY-MM-DD'"
+            )
+
+    def test_operator_restrictions(self):
+        q = self._jq(self._leaf("data_source", DataSource.GUTENBERG, "gt"))
+        with pytest.raises(QueryParseException) as exc:
+            q.elasticsearch_query
+        assert "Operator 'gt' is not allowed for 'data_source'. Only use ['eq']" == str(
+            exc.value
+        )
+
+
+class TestExternalSearchJSONQuery(EndToEndSearchTest):
+    def _leaf(self, key, value, op="eq"):
+        return dict(key=key, value=value, op=op)
+
+    def _jq(self, query):
+        return JSONQuery(dict(query=query))
+
+    def populate_works(self):
+        self.book_work: Work = self._work(with_open_access_download=True)
+        self.book_work.presentation_edition.medium = "Book"
+
+        self.audio_work: Work = self._work(with_open_access_download=True)
+        self.audio_work.presentation_edition.medium = "Audio"
+
+        self.random_works = []
+        specifics = [
+            dict(language="Spanish", authors=["charlie"]),
+            dict(language="Spanish", authors=["alpha"]),
+            dict(language="German", authors=["beta"]),
+            dict(
+                with_open_access_download=False,
+                with_license_pool=True,
+                authors=["delta"],
+            ),
+        ]
+        for i in range(4):
+            data = dict(
+                title=uuid.uuid4(),
+                with_open_access_download=True,
+            )
+            data.update(**specifics[i])
+            w = self._work(**data)
+            self.random_works.append(w)
+
+        self._db.commit()
+
+        self.facets = facets = SearchFacets(search_type="json")
+        self.filter = Filter(facets=facets)
+
+    def expect(self, partial_query, works):
+
+        query = dict(query=partial_query)
+        resp = self.search.query_works(query, self.filter)
+
+        assert len(resp.hits) == len(works)
+
+        respids = {h.work_id for h in resp.hits}
+        expectedids = {w.id for w in works}
+        assert respids == expectedids
+        return resp
+
+    def test_search_basic(self):
+        self.expect(self._leaf("medium", "Audio"), [self.audio_work])
+
+        w1: Work = self.random_works[0]
+        self.expect(self._leaf("title", w1.title), [w1])
+        self.expect(
+            self._leaf(
+                "contributors.display_name",
+                w1.presentation_edition.contributions[0].contributor.display_name,
+            ),
+            [w1],
+        )
+
+        w2: Work = self.random_works[1]
+        self.expect(
+            {"or": [self._leaf("title", w1.title), self._leaf("title", w2.title)]},
+            [w1, w2],
+        )
+        self.expect(
+            {"and": [self._leaf("title", w1.title), self._leaf("title", w2.title)]},
+            [],
+        )
+
+        self.expect(
+            {"and": [self._leaf("language", "German")]},
+            [self.random_works[2]],
+        )
+
+    def test_field_transform(self):
+        """Fields transforms should apply and criterias should match"""
+        self.expect(self._leaf("open_access", False), [self.random_works[3]])
+
+    def test_search_not(self):
+        self.expect(
+            {
+                "and": [
+                    self._leaf("medium", "Book"),
+                    {"not": [self._leaf("language", "Spanish")]},
+                ]
+            },
+            [self.book_work, self.random_works[2], self.random_works[3]],
+        )
+
+    def test_search_with_facets_ordering(self):
+        self.facets = SearchFacets(order="author", search_type="json")
+        self.filter = Filter(facets=self.facets)
+        assert self.filter.min_score == None
+
+        w = self.random_works
+        expected = [w[1], w[2], w[0]]
+        response = self.expect(
+            {
+                "or": [
+                    self._leaf("language", "Spanish"),
+                    self._leaf("language", "German"),
+                ]
+            },
+            expected,
+        )
+        # assert the ordering is as expected
+        assert [h.work_id for h in response.hits] == [e.id for e in expected]

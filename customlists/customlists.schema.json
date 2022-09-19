@@ -40,25 +40,35 @@
           "type": "string",
           "const": "book"
         },
-        "id": {
-          "$comment": "The primary identifier used for the book (typically an ISBN or similar)",
+        "id-value": {
+          "$comment": "The value part of an identifier (such as 614ed125-d7e5-4cff-b3de-6b6c90ff853c, in urn:librarysimplified.org/terms/id/Overdrive ID/614ed125-d7e5-4cff-b3de-6b6c90ff853c)",
           "type": "string"
         },
         "id-type": {
           "$comment": "The type of the primary identifier",
           "type": "string"
         },
+        "id-full": {
+          "$comment": "The full, raw primary identifier for the book as it appeared on the exporting CM",
+          "type": "string"
+        },
         "title": {
           "$comment": "The book title",
+          "type": "string"
+        },
+        "author": {
+          "$comment": "The book (primary) author",
           "type": "string"
         }
       },
       "additionalProperties": false,
       "required": [
         "%type",
-        "id",
+        "id-value",
         "id-type",
-        "title"
+        "id-full",
+        "title",
+        "author"
       ]
     },
 
@@ -100,8 +110,16 @@
           "type": "string",
           "const": "problematic-book"
         },
-        "id": {
-          "$comment": "The primary identifier used for the book (typically an ISBN or similar)",
+        "id-value": {
+          "$comment": "The value part of an identifier (such as 614ed125-d7e5-4cff-b3de-6b6c90ff853c, in urn:librarysimplified.org/terms/id/Overdrive ID/614ed125-d7e5-4cff-b3de-6b6c90ff853c)",
+          "type": "string"
+        },
+        "id-type": {
+          "$comment": "The type of the primary identifier",
+          "type": "string"
+        },
+        "id-full": {
+          "$comment": "The full, raw primary identifier for the book as it appeared on the exporting CM",
           "type": "string"
         },
         "title": {
@@ -111,14 +129,21 @@
         "message": {
           "$comment": "The error message",
           "type": "string"
+        },
+        "author": {
+          "$comment": "The book (primary) author",
+          "type": "string"
         }
       },
       "additionalProperties": false,
       "required": [
         "%type",
-        "id",
-        "title",
-        "message"
+        "author",
+        "id-value",
+        "id-type",
+        "id-full",
+        "message",
+        "title"
       ]
     },
 

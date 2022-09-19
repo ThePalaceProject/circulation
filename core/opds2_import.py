@@ -488,29 +488,44 @@ class OPDS2Importer(
 
         media_types_and_drm_scheme = []
 
-        if link.properties:
-            if (
-                not link.properties.availability
-                or link.properties.availability.state
-                == opds2_ast.OPDS2AvailabilityType.AVAILABLE.value
-            ):
-                for acquisition_object in link.properties.indirect_acquisition:
-                    nested_acquisition_object = acquisition_object
+        if (
+            link.properties
+            and link.properties.availability
+            and link.properties.availability.state
+            != opds2_ast.OPDS2AvailabilityType.AVAILABLE.value
+        ):
+            self._logger.info(f"Link unavailable. Skipping. {encode(link)}")
+            return []
 
-                    while nested_acquisition_object.child:
-                        nested_acquisition_object = first_or_default(
-                            acquisition_object.child
-                        )
+        # We need to take into account indirect acquisition links
+        if link.properties and link.properties.indirect_acquisition:
+            # We make the assumption that when we have nested indirect acquisition links
+            # that the most deeply nested link is the content type, and the link at the nesting
+            # level above that is the DRM. We discard all other levels of indirection, assuming
+            # that they don't matter for us.
+            #
+            # This may not cover all cases, but it lets us deal with CM style acquisition links
+            # where the top level link is a OPDS feed and the common case of a single
+            # indirect_acquisition link.
+            for acquisition_object in link.properties.indirect_acquisition:
+                nested_acquisition = acquisition_object
+                nested_types = [link.type]
+                while nested_acquisition:
+                    nested_types.append(nested_acquisition.type)
+                    nested_acquisition = first_or_default(nested_acquisition.child)
+                [drm_type, media_type] = nested_types[-2:]
 
-                    drm_scheme = (
-                        acquisition_object.type
-                        if acquisition_object.type in DeliveryMechanism.KNOWN_DRM_TYPES
-                        else DeliveryMechanism.NO_DRM
-                    )
+                # We then check this returned pair of content types to make sure they match known
+                # book or audiobook and DRM types. If they do not match known types, then we skip
+                # this link.
+                if (
+                    media_type in MediaTypes.BOOK_MEDIA_TYPES
+                    or media_type in MediaTypes.AUDIOBOOK_MEDIA_TYPES
+                ) and drm_type in DeliveryMechanism.KNOWN_DRM_TYPES:
+                    media_types_and_drm_scheme.append((media_type, drm_type))
 
-                    media_types_and_drm_scheme.append(
-                        (nested_acquisition_object.type, drm_scheme)
-                    )
+        # There are no indirect links, then the link type points to the media, and
+        # there is no DRM for this link.
         else:
             if (
                 link.type in MediaTypes.BOOK_MEDIA_TYPES

@@ -17,6 +17,7 @@ from api.saml.provider import SAMLWebSSOAuthenticationProvider
 from api.simple_authentication import SimpleAuthenticationProvider
 from api.sip import SIP2AuthenticationProvider
 from core.model import ConfigurationSetting, ExternalIntegration, get_one
+from core.util.cache import memoize
 from core.util.problem_detail import ProblemDetail
 
 
@@ -33,7 +34,6 @@ class PatronAuthServicesController(SettingsController):
             KansasAuthenticationAPI,
             SAMLWebSSOAuthenticationProvider,
         ]
-        self.protocols = self._get_integration_protocols(self.provider_apis)
 
         self.basic_auth_protocols = [
             SimpleAuthenticationProvider.__module__,
@@ -45,6 +45,16 @@ class PatronAuthServicesController(SettingsController):
         ]
         self.type = _("patron authentication service")
         self._validator_factory = PatronAuthenticationValidatorFactory()
+
+    @memoize(ttls=1800)
+    def _cached_protocols(self):
+        """Cached result for integration protocols"""
+        return self._get_integration_protocols(self.provider_apis)
+
+    @property
+    def protocols(self):
+        """Use a property for protocols to allow expiring cached results"""
+        return self._cached_protocols()
 
     def process_patron_auth_services(self):
         self.require_system_admin()

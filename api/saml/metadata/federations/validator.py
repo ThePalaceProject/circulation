@@ -1,10 +1,12 @@
 import datetime
 import logging
 from abc import ABCMeta
+from typing import Union
 
 from onelogin.saml2.utils import OneLogin_Saml2_Utils
 from onelogin.saml2.xmlparser import fromstring
 
+from api.saml.metadata.federations.model import SAMLFederation
 from core.exceptions import BaseError
 from core.util.datetime_helpers import from_timestamp, utc_now
 
@@ -90,14 +92,12 @@ class SAMLFederatedMetadataExpirationValidator(SAMLFederatedMetadataValidator):
 
         return parsed_date_time
 
-    def validate(self, federation, metadata):
+    def validate(self, federation: SAMLFederation, metadata: Union[str, bytes]) -> None:
         """Verify that federated SAML metadata has not expired.
 
         :param federation: SAML federation
-        :type federation: api.saml.metadata.federations.model.SAMLFederation
 
         :param metadata: SAML federation's aggregated metadata
-        :type metadata: str
 
         :raises SAMLFederatedMetadataValidationError: in the case of validation errors
         """
@@ -107,8 +107,11 @@ class SAMLFederatedMetadataExpirationValidator(SAMLFederatedMetadataValidator):
             )
         )
 
+        if isinstance(metadata, str):
+            metadata = metadata.encode()
+
         try:
-            root = fromstring(metadata.encode("utf-8"))
+            root = fromstring(metadata)
         except Exception as exception:
             raise SAMLFederatedMetadataValidationError(
                 "Metadata's XML is not valid", str(exception)

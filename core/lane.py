@@ -952,6 +952,10 @@ class SearchFacets(Facets):
             default_min_score = self.DEFAULT_MIN_SCORE
         self.min_score = kwargs.pop("min_score", default_min_score)
 
+        self.search_type = kwargs.pop("search_type", "default")
+        if self.search_type not in ["default", "json"]:
+            raise ValueError(f"Invalid search type: {self.search_type}")
+
         super().__init__(**kwargs)
         if media == Edition.ALL_MEDIUM:
             self.media = media
@@ -1040,6 +1044,10 @@ class SearchFacets(Facets):
         # in the search request.
         if languageQuery != "all":
             extra["languages"] = languages
+
+        search_type = get_argument("search_type")
+        if search_type:
+            extra["search_type"] = search_type
 
         return cls._from_request(
             config, get_argument, get_header, worklist, default_entrypoint, **extra
@@ -1884,6 +1892,10 @@ class WorkList:
         # performance isn't a big concern -- it's just ugly.
         wl = SpecificWorkList(work_ids)
         wl.initialize(self.get_library(_db))
+        # If we are specifically targeting a collection and not a library
+        # ensure the worklist is aware of this
+        if not self.library_id and self.collection_ids:
+            wl.collection_ids = self.collection_ids
         qu = wl.works_from_database(_db, facets=facets)
         a = time.time()
         all_works = qu.all()

@@ -10,6 +10,7 @@
     <title>Something Else</title>
     <updated>2022-04-25T19:31:37+00:00</updated>
     <link href="http://localhost:6500/HAZELNUT/admin/custom_list/90?list_name=Something+Else" rel="self"/>
+
     <entry schema:additionalType="http://schema.org/EBook">
         <title>Chameleon</title>
         <author>

@@ -1,15 +1,17 @@
 import datetime
 import json
 import re
+import time
 import urllib.parse
 from typing import Any, Dict, Optional, Tuple, Union
 
 import dateutil
 import flask
 from flask_babel import lazy_gettext as _
+from sqlalchemy.orm.exc import StaleDataError
 
 from core.analytics import Analytics
-from core.metadata_layer import ReplacementPolicy
+from core.metadata_layer import ReplacementPolicy, TimestampData
 from core.model import (
     Collection,
     Credential,
@@ -577,6 +579,12 @@ class OverdriveAPI(
 
             raise e
 
+        # In case we are a non-drm asset, we should just redirect the client to the asset directly
+        fulfillment_force_redirect = internal_format in [
+            "ebook-epub-open",
+            "ebook-pdf-open",
+        ]
+
         return FulfillmentInfo(
             licensepool.collection,
             licensepool.data_source.name,
@@ -586,6 +594,7 @@ class OverdriveAPI(
             content_type=media_type,
             content=None,
             content_expires=None,
+            content_link_redirect=fulfillment_force_redirect,
         )
 
     def get_fulfillment_link(
@@ -1296,6 +1305,7 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
     basic Editions for any new LicensePools that show up.
     """
 
+    MAXIMUM_BOOK_RETRIES = 3
     SERVICE_NAME = "Overdrive Circulation Monitor"
     PROTOCOL = ExternalIntegration.OVERDRIVE
     OVERLAP = datetime.timedelta(minutes=1)
@@ -1311,7 +1321,7 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
     def recently_changed_ids(self, start, cutoff):
         return self.api.recently_changed_ids(start, cutoff)
 
-    def catch_up_from(self, start, cutoff, progress):
+    def catch_up_from(self, start, cutoff, progress: TimestampData):
         """Find Overdrive books that changed recently.
 
         :progress: A TimestampData representing the time previously
@@ -1328,13 +1338,37 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
                 self.log.info("%s books processed", total_books)
             if not book:
                 continue
-            _, _, is_changed = self.api.update_licensepool(book)
 
-            self._db.commit()
-            if self.should_stop(start, book, is_changed):
+            # Attempt to create/update the book up to MAXIMUM_BOOK_RETRIES times.
+            book_changed = False
+            book_succeeded = False
+            for attempt in range(OverdriveCirculationMonitor.MAXIMUM_BOOK_RETRIES):
+                if book_succeeded:
+                    break
+
+                try:
+                    _, _, is_changed = self.api.update_licensepool(book)
+                    self._db.commit()
+                    book_succeeded = True
+                    book_changed = is_changed
+                except StaleDataError as e:
+                    self.log.exception("encountered stale data exception: ", exc_info=e)
+                    self._db.rollback()
+                    if attempt + 1 == OverdriveCirculationMonitor.MAXIMUM_BOOK_RETRIES:
+                        progress.exception = e
+                    else:
+                        time.sleep(1)
+                        self.log.warning(
+                            f"retrying book {book} (attempt {attempt} of {OverdriveCirculationMonitor.MAXIMUM_BOOK_RETRIES})"
+                        )
+
+            if self.should_stop(start, book, book_changed):
                 break
 
         progress.achievements = "Books processed: %d." % total_books
+
+    def should_stop(self, start, api_description, is_changed):
+        pass
 
 
 class NewTitlesOverdriveCollectionMonitor(OverdriveCirculationMonitor):
