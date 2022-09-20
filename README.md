@@ -362,6 +362,16 @@ Examining collection "Palace Bookshelf"
 We can see from the above output that the vast majority of the books in the _Open Bookshelf_ collection
 were indexed correctly.
 
+### Sitewide Settings
+
+Some settings have been provided in the admin UI that configure or toggle various functions of the Circulation Manager.
+These can be found at `/admin/web/config/SitewideSettings`
+
+#### Push Notification Status
+
+This setting is a toggle that may be used to turn on or off the ability for the the system
+to send the Loan and Hold reminder mobile notifications.
+
 ### Installation Issues
 
 When running the `poetry install ...` command, you may run into installation issues. On newer macos machines, you may
@@ -384,6 +394,24 @@ the `xcode-select --install` command. If it does not work, you can try adding th
 ```sh
 export CPPFLAGS="-DXMLSEC_NO_XKMS=1"
 ```
+
+## Scheduled Jobs
+
+Currently all jobs are scheduled as cron job, that should be installed as indicated by the `simplified_crontab` file
+It contains all the import and reaper jobs, as well as other necessary background tasks such as maintaining
+the search index and feed caches
+
+### Job Requirements
+
+#### hold_notifications
+
+Requires the `SIMPLIFIED_FCM_CREDENTIALS_FILE` to be present
+and the sitewide `PUSH_NOTIFICATIONS_STATUS` to be either `unset` or `true`
+
+#### loan_notifications
+
+Requires the `SIMPLIFIED_FCM_CREDENTIALS_FILE` to be present
+and the sitewide `PUSH_NOTIFICATIONS_STATUS` to be either `unset` or `true`
 
 ## Code Style
 
