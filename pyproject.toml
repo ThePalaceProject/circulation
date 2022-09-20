@@ -138,7 +138,7 @@ wcag-contrast-ratio = "0.9"
 Werkzeug = "1.0.1"
 
 [tool.poetry.dev-dependencies]
-boto3-stubs = "^1.24.24"
+boto3-stubs = "^1.24.76"
 botocore-stubs = "^1.27.8"
 freezegun = "~1.2"
 Jinja2 = "2.11.3"
