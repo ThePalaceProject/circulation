@@ -437,14 +437,14 @@ crt = ["awscrt (==0.12.5)"]
 
 [[package]]
 name = "botocore-stubs"
-version = "1.27.8"
-description = "Type annotations for botocore 1.27.8 generated with mypy-boto3-builder 7.6.1"
+version = "1.27.76"
+description = "Type annotations and code completion for botocore"
 category = "dev"
 optional = false
-python-versions = ">=3.6"
+python-versions = ">=3.7,<4.0"
 
 [package.dependencies]
-typing-extensions = ">=4.1.0"
+types-awscrt = "*"
 
 [[package]]
 name = "cachetools"
@@ -1597,6 +1597,14 @@ optional = false
 python-versions = ">=3.6"
 
 [[package]]
+name = "types-awscrt"
+version = "0.14.6"
+description = "Type annotations and code completion for awscrt"
+category = "dev"
+optional = false
+python-versions = ">=3.7,<4.0"
+
+[[package]]
 name = "types-click"
 version = "7.1.8"
 description = "Typing stubs for click"
@@ -1865,7 +1873,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.7,<4"
-content-hash = "90f47e1028795cbc0045d3a8a292e89feb708a2afb8419c9a46fbf6fe4e5abc3"
+content-hash = "30a67ba0ea051dc52cc05f40351bbd18fe4799d6383065339517eecd3a763f69"
 
 [metadata.files]
 atomicwrites = [
@@ -1905,8 +1913,8 @@ botocore = [
     {file = "botocore-1.21.65.tar.gz", hash = "sha256:6437d6a3999a189e7d45b3fcd8f794a46670fb255ae670c946d3f224caa8b46a"},
 ]
 botocore-stubs = [
-    {file = "botocore-stubs-1.27.8.tar.gz", hash = "sha256:974c6e6ba3c5876634ccefad756b1c16cf1aa51fc1430510e44f10812bcfd896"},
-    {file = "botocore_stubs-1.27.8-py3-none-any.whl", hash = "sha256:8bd49183a6bc8b3970990706b70f72909fc97b284bc8f09fe5c084aa895e052c"},
+    {file = "botocore-stubs-1.27.76.tar.gz", hash = "sha256:615b2eb884f4b9395ff834a36f3d73254baa616f9d941f00b123ec33f3c3f8ec"},
+    {file = "botocore_stubs-1.27.76-py3-none-any.whl", hash = "sha256:cf9bb2a4be45131e177df48d14d9d94013583d358814de4caa833b3ebfffe824"},
 ]
 cachetools = [
     {file = "cachetools-5.1.0-py3-none-any.whl", hash = "sha256:4ebbd38701cdfd3603d1f751d851ed248ab4570929f2d8a7ce69e30c420b141c"},
@@ -2900,6 +2908,10 @@ typed-ast = [
     {file = "typed_ast-1.5.4-cp39-cp39-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:98f80dee3c03455e92796b58b98ff6ca0b2a6f652120c263efdba4d6c5e58f72"},
     {file = "typed_ast-1.5.4-cp39-cp39-win_amd64.whl", hash = "sha256:0fdbcf2fef0ca421a3f5912555804296f0b0960f0418c440f5d6d3abb549f3e1"},
     {file = "typed_ast-1.5.4.tar.gz", hash = "sha256:39e21ceb7388e4bb37f4c679d72707ed46c2fbf2a5609b8b8ebc4b067d977df2"},
+]
+types-awscrt = [
+    {file = "types-awscrt-0.14.6.tar.gz", hash = "sha256:f20f83420b5276966e91d94a5dbf8f66822524d9d9aba1c56be4783323ec6b56"},
+    {file = "types_awscrt-0.14.6-py3-none-any.whl", hash = "sha256:f8b1bf874c2e38deb390fcadc1177df760eebe85116398a359c49423b70b1b64"},
 ]
 types-click = [
     {file = "types-click-7.1.8.tar.gz", hash = "sha256:b6604968be6401dc516311ca50708a0a28baa7a0cb840efd7412f0dbbff4e092"},
