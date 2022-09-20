@@ -65,12 +65,12 @@ def _parse_unary_expression(
     :return: UnaryExpression node
     """
     if len(tokens) >= 2:
-        tokens = list(reversed(tokens))
-        argument = tokens[0]
-        operator_type = tokens[1]
+        token_list = list(reversed(tokens))
+        argument = token_list[0]
+        operator_type = token_list[1]
         expression = expression_type(operator_type, argument)
 
-        for tokens_chunk in chunks(tokens, 1, 2):
+        for tokens_chunk in chunks(token_list, 1, 2):
             operator_type = tokens_chunk[0]
             expression = expression_type(operator_type, expression)
 
