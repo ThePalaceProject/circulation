@@ -437,14 +437,14 @@ crt = ["awscrt (==0.12.5)"]
 
 [[package]]
 name = "botocore-stubs"
-version = "1.27.8"
-description = "Type annotations for botocore 1.27.8 generated with mypy-boto3-builder 7.6.1"
+version = "1.27.75"
+description = "Type annotations and code completion for botocore"
 category = "dev"
 optional = false
-python-versions = ">=3.6"
+python-versions = ">=3.7,<4.0"
 
 [package.dependencies]
-typing-extensions = ">=4.1.0"
+types-awscrt = "*"
 
 [[package]]
 name = "cachetools"
@@ -1597,6 +1597,14 @@ optional = false
 python-versions = ">=3.6"
 
 [[package]]
+name = "types-awscrt"
+version = "0.14.6"
+description = "Type annotations and code completion for awscrt"
+category = "dev"
+optional = false
+python-versions = ">=3.7,<4.0"
+
+[[package]]
 name = "types-click"
 version = "7.1.8"
 description = "Typing stubs for click"
@@ -1737,15 +1745,15 @@ python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
 
 [[package]]
 name = "urllib3"
-version = "1.26.9"
+version = "1.26.12"
 description = "HTTP library with thread-safe connection pooling, file post, and more."
 category = "main"
 optional = false
-python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, <4"
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*, <4"
 
 [package.extras]
 brotli = ["brotli (>=1.0.9)", "brotlicffi (>=0.8.0)", "brotlipy (>=0.6.0)"]
-secure = ["certifi", "cryptography (>=1.3.4)", "idna (>=2.0.0)", "ipaddress", "pyOpenSSL (>=0.14)"]
+secure = ["certifi", "cryptography (>=1.3.4)", "idna (>=2.0.0)", "ipaddress", "pyOpenSSL (>=0.14)", "urllib3-secure-extra"]
 socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
 
 [[package]]
@@ -1865,7 +1873,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.7,<4"
-content-hash = "86d30aaac16ebde62a96b3f89c813eb5afb98b4df5f73d7ba98002da8fcbdd58"
+content-hash = "9fa714a30db9c95a207ac0eff6e102bb8dda7778dda349f8e90d985d4fdc92f5"
 
 [metadata.files]
 atomicwrites = [
@@ -1905,8 +1913,8 @@ botocore = [
     {file = "botocore-1.21.65.tar.gz", hash = "sha256:6437d6a3999a189e7d45b3fcd8f794a46670fb255ae670c946d3f224caa8b46a"},
 ]
 botocore-stubs = [
-    {file = "botocore-stubs-1.27.8.tar.gz", hash = "sha256:974c6e6ba3c5876634ccefad756b1c16cf1aa51fc1430510e44f10812bcfd896"},
-    {file = "botocore_stubs-1.27.8-py3-none-any.whl", hash = "sha256:8bd49183a6bc8b3970990706b70f72909fc97b284bc8f09fe5c084aa895e052c"},
+    {file = "botocore-stubs-1.27.75.tar.gz", hash = "sha256:7cedf22251ffb459f5a645f2c0baba6f1940804e33b12f0011be6c58fc3a8db9"},
+    {file = "botocore_stubs-1.27.75-py3-none-any.whl", hash = "sha256:fa8c8492a17044b917d4db5de7333f07d41dd3f2f04fcad134e92d882114944a"},
 ]
 cachetools = [
     {file = "cachetools-5.1.0-py3-none-any.whl", hash = "sha256:4ebbd38701cdfd3603d1f751d851ed248ab4570929f2d8a7ce69e30c420b141c"},
@@ -2901,6 +2909,10 @@ typed-ast = [
     {file = "typed_ast-1.5.4-cp39-cp39-win_amd64.whl", hash = "sha256:0fdbcf2fef0ca421a3f5912555804296f0b0960f0418c440f5d6d3abb549f3e1"},
     {file = "typed_ast-1.5.4.tar.gz", hash = "sha256:39e21ceb7388e4bb37f4c679d72707ed46c2fbf2a5609b8b8ebc4b067d977df2"},
 ]
+types-awscrt = [
+    {file = "types-awscrt-0.14.6.tar.gz", hash = "sha256:f20f83420b5276966e91d94a5dbf8f66822524d9d9aba1c56be4783323ec6b56"},
+    {file = "types_awscrt-0.14.6-py3-none-any.whl", hash = "sha256:f8b1bf874c2e38deb390fcadc1177df760eebe85116398a359c49423b70b1b64"},
+]
 types-click = [
     {file = "types-click-7.1.8.tar.gz", hash = "sha256:b6604968be6401dc516311ca50708a0a28baa7a0cb840efd7412f0dbbff4e092"},
     {file = "types_click-7.1.8-py3-none-any.whl", hash = "sha256:8cb030a669e2e927461be9827375f83c16b8178c365852c060a34e24871e7e81"},
@@ -2965,8 +2977,8 @@ uritemplate = [
     {file = "uritemplate-3.0.1.tar.gz", hash = "sha256:5af8ad10cec94f215e3f48112de2022e1d5a37ed427fbd88652fa908f2ab7cae"},
 ]
 urllib3 = [
-    {file = "urllib3-1.26.9-py2.py3-none-any.whl", hash = "sha256:44ece4d53fb1706f667c9bd1c648f5469a2ec925fcf3a776667042d645472c14"},
-    {file = "urllib3-1.26.9.tar.gz", hash = "sha256:aabaf16477806a5e1dd19aa41f8c2b7950dd3c746362d7e3223dbe6de6ac448e"},
+    {file = "urllib3-1.26.12-py2.py3-none-any.whl", hash = "sha256:b930dd878d5a8afb066a637fbb35144fe7901e3b209d1cd4f524bd0e9deee997"},
+    {file = "urllib3-1.26.12.tar.gz", hash = "sha256:3fa96cf423e6987997fc326ae8df396db2a8b7c667747d47ddd8ecba91f4a74e"},
 ]
 uszipcode = [
     {file = "uszipcode-0.2.6-py2.py3-none-any.whl", hash = "sha256:f1b30034d1d634bdf440f62ef61dbe2d3d6d9021c939ff9499b15e0a779fec18"},
