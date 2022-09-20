@@ -1287,7 +1287,7 @@ six = "*"
 
 [[package]]
 name = "pyspellchecker"
-version = "0.6.3"
+version = "0.7.0"
 description = "Pure python spell checker based on work by Peter Norvig"
 category = "main"
 optional = false
@@ -1863,7 +1863,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.7,<4"
-content-hash = "f22524575b42aee285009441c9c82cc499945cc1218406e49c1713fda0b92edf"
+content-hash = "488cffb335e4ca0d6a7d7442776bc2eb2c9b8da522821a632942217910e79f77"
 
 [metadata.files]
 atomicwrites = [
@@ -2630,8 +2630,8 @@ pyrsistent = [
     {file = "pyrsistent-0.16.1.tar.gz", hash = "sha256:aa2ae1c2e496f4d6777f869ea5de7166a8ccb9c2e06ebcf6c7ff1b670c98c5ef"},
 ]
 pyspellchecker = [
-    {file = "pyspellchecker-0.6.3-py3-none-any.whl", hash = "sha256:9e19a683bd8d77b2668b1ffce2fd0e0a0e63b6ea3f6819aabc08f115ca1d1d88"},
-    {file = "pyspellchecker-0.6.3.tar.gz", hash = "sha256:764dfe1bcbd4d860b74205402167d55a02910870c07b83678e7d6b5a4d471909"},
+    {file = "pyspellchecker-0.7.0-py3-none-any.whl", hash = "sha256:c0332adc4bfb41a3bf440d93d3b949e54568153b49c9c6705a6599e7bed5e6d6"},
+    {file = "pyspellchecker-0.7.0.tar.gz", hash = "sha256:cca6c32428ee388d15b1b87e94afc3bf94fb1862ba848a3b449becd629d26ad3"},
 ]
 pytest = [
     {file = "pytest-7.1.3-py3-none-any.whl", hash = "sha256:1377bda3466d70b55e3f5cecfa55bb7cfcf219c7964629b967c37cf0bda818b7"},
