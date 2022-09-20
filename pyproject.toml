@@ -80,7 +80,7 @@ repository = "https://github.com/ThePalaceProject/circulation"
 version = "0" # Version number is managed with tags in git
 
 [tool.poetry.dependencies]
-aws-xray-sdk = "~2.9"
+aws-xray-sdk = "~2.10"
 boto3 = "~1.18"
 botocore = "~1.21"
 certifi = "*"
