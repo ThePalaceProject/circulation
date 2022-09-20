@@ -1188,11 +1188,11 @@ python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
 
 [[package]]
 name = "pyfakefs"
-version = "4.5.6"
+version = "4.7.0"
 description = "pyfakefs implements a fake file system that mocks the Python file system modules."
 category = "dev"
 optional = false
-python-versions = ">=3.6"
+python-versions = ">=3.7"
 
 [[package]]
 name = "pyinstrument"
@@ -1873,7 +1873,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.7,<4"
-content-hash = "f9a6ae3775b3cbedc25f1bbb5fdb049962cfd2a6d67f7076092820496948caf4"
+content-hash = "89c42ccda2a2ca44c782a14f9ec39a9766e58c3703d2a01d4c9c6773277702b9"
 
 [metadata.files]
 atomicwrites = [
@@ -2562,8 +2562,8 @@ pycryptodome = [
     {file = "pycryptodome-3.14.1.tar.gz", hash = "sha256:e04e40a7f8c1669195536a37979dd87da2c32dbdc73d6fe35f0077b0c17c803b"},
 ]
 pyfakefs = [
-    {file = "pyfakefs-4.5.6-py3-none-any.whl", hash = "sha256:6bb4e27457b0bc90e3ebfe5aed4f1b8c32a18713ba44e925f304bb9b9816a03c"},
-    {file = "pyfakefs-4.5.6.tar.gz", hash = "sha256:914d7bf994406cfbefee0b4d45918f60c15b406afe93f8194a804da5a450a822"},
+    {file = "pyfakefs-4.7.0-py3-none-any.whl", hash = "sha256:29203a7482b25406dd3ea41c8740be2697c6058b0f6577485c3ae9cd4c5e96cd"},
+    {file = "pyfakefs-4.7.0.tar.gz", hash = "sha256:f22d30d93d2989bf2d2c67b606a14cbab2df0be912c09dcdb590ea4931073ade"},
 ]
 pyinstrument = [
     {file = "pyinstrument-4.3.0-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:a641c1c37dd9259162b76c28b2a846f66d5b2c91825c8eaf536329c127855e01"},
