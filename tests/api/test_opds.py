@@ -7,6 +7,7 @@ from unittest.mock import create_autospec
 import dateutil
 import feedparser
 import pytest
+from freezegun import freeze_time
 from lxml import etree
 
 from api.adobe_vendor_id import AuthdataUtility
@@ -492,6 +493,12 @@ class TestLibraryAnnotator(VendorIDTest):
         link = self.annotator.fulfill_link(pool, None, lpdm, OPDSFeed.OPEN_ACCESS_REL)
         assert OPDSFeed.OPEN_ACCESS_REL == link.attrib["rel"]
 
+    # We freeze the test time here, because this test checks that the client token
+    # in the feed matches a generated client token. The client token contains an
+    # expiry date based on the current time, so this test can be flaky in a slow
+    # integration environment unless we make sure the clock does not change as this
+    # test is being performed.
+    @freeze_time("1867-07-01")
     def test_fulfill_link_includes_device_registration_tags(self):
         """Verify that when Adobe Vendor ID delegation is included, the
         fulfill link for an Adobe delivery mechanism includes instructions
