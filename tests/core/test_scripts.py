@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from api.lanes import create_default_lanes
 from core.classifier import Classifier
-from core.config import CannotLoadConfiguration
+from core.config import CannotLoadConfiguration, Configuration, ConfigurationConstants
 from core.external_search import Filter, MockExternalSearchIndex
 from core.lane import Lane, WorkList
 from core.metadata_layer import LinkData, TimestampData
@@ -2886,6 +2886,14 @@ class TestLoanNotificationsScript:
                 loan2,
             ),
         ]
+
+        # Sitewide notifications are turned off
+        self.script.process_loan.reset_mock()
+        ConfigurationSetting.sitewide(
+            self._db, Configuration.PUSH_NOTIFICATIONS_STATUS
+        ).value = ConfigurationConstants.FALSE
+        self.script.do_run()
+        assert self.script.process_loan.call_count == 0
 
 
 class TestGenerateOverdriveAdvantageAccountList:

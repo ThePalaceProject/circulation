@@ -42,6 +42,9 @@ class ConfigurationConstants:
     SYS_ADMIN_OR_MANAGER = 2
     SYS_ADMIN_ONLY = 3
 
+    TRUE = "true"
+    FALSE = "false"
+
 
 class Configuration(ConfigurationConstants):
 
@@ -68,6 +71,9 @@ class Configuration(ConfigurationConstants):
 
     # ConfigurationSetting to enable the MeasurementReaper script
     MEASUREMENT_REAPER = "measurement_reaper_enabled"
+
+    # Configuration key for push notifications status
+    PUSH_NOTIFICATIONS_STATUS = "push_notifications_status"
 
     # Lane policies
     DEFAULT_OPDS_FORMAT = "verbose_opds_entry"
@@ -166,6 +172,19 @@ class Configuration(ConfigurationConstants):
             ),
             "options": {"true": "true", "false": "false"},
             "default": "true",
+        },
+        {
+            "key": PUSH_NOTIFICATIONS_STATUS,
+            "label": _("Push notifications status"),
+            "type": "select",
+            "description": _(
+                "If this settings is 'true' push notification jobs will run as scheduled, and attempt to notify patrons via mobile push notifications."
+            ),
+            "options": [
+                {"key": ConfigurationConstants.TRUE, "label": _("True")},
+                {"key": ConfigurationConstants.FALSE, "label": _("False")},
+            ],
+            "default": ConfigurationConstants.TRUE,
         },
     ]
 

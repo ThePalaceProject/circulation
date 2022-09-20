@@ -26,7 +26,7 @@ from core.model.patron import Loan
 from core.query.customlist import CustomListQueries
 from core.util.notifications import PushNotifications
 
-from .config import CannotLoadConfiguration, Configuration
+from .config import CannotLoadConfiguration, Configuration, ConfigurationConstants
 from .coverage import CollectionCoverageProviderJob, CoverageProviderProgress
 from .external_search import ExternalSearchIndex, Filter, SearchIndexCoverageProvider
 from .lane import Lane
@@ -3089,10 +3089,21 @@ class LoanNotificationsScript(Script):
 
     def do_run(self):
         self.log.info("Loan Notifications Job started")
+
+        setting = ConfigurationSetting.sitewide(
+            self._db, Configuration.PUSH_NOTIFICATIONS_STATUS
+        )
+        if setting.value == ConfigurationConstants.FALSE:
+            self.log.info(
+                "Push notifications have been turned off in the sitewide settings, skipping this job"
+            )
+            return
+
         _query = self._db.query(Loan).order_by(Loan.id)
         last_loan_id = None
         processed_loans = 0
-        for _ in range(100000):  # failsafe max 100000 loops
+
+        while True:
             query = _query.limit(self.BATCH_SIZE)
             if last_loan_id:
                 query = _query.filter(Loan.id > last_loan_id)

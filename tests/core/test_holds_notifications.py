@@ -1,6 +1,8 @@
 from unittest.mock import call, patch
 
+from core.config import Configuration, ConfigurationConstants
 from core.jobs.holds_notification import HoldsNotificationMonitor
+from core.model.configuration import ConfigurationSetting
 from core.testing import DatabaseTest
 
 
@@ -35,3 +37,11 @@ class TestHoldsNotifications(DatabaseTest):
         assert mock_notf.send_holds_notifications.call_args_list == [
             call([hold1, hold2])
         ]
+
+        # Sitewide notifications are turned off
+        mock_notf.send_holds_notifications.reset_mock()
+        ConfigurationSetting.sitewide(
+            self._db, Configuration.PUSH_NOTIFICATIONS_STATUS
+        ).value = ConfigurationConstants.FALSE
+        self.monitor.run()
+        assert mock_notf.send_holds_notifications.call_count == 0
