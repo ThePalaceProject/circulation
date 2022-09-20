@@ -19,6 +19,7 @@ class TestLocalAnalyticsExporter(DatabaseTest):
         [lp2] = w2.license_pools
         lp1.collection = c1
         lp2.collection = c2
+
         edition1 = w1.presentation_edition
         edition1.publisher = "A publisher"
         edition1.imprint = "An imprint"
@@ -104,11 +105,12 @@ class TestLocalAnalyticsExporter(DatabaseTest):
             "",
             "",
             edition1.medium,
+            lp1.data_source.name,
         ]
 
-        expected_row_count = 18
+        expected_column_count = 19
         for row in rows:
-            assert expected_row_count == len(row)
+            assert expected_column_count == len(row)
             assert constant == row[2:]
 
         # Now run a query that includes the last event created.
@@ -124,7 +126,7 @@ class TestLocalAnalyticsExporter(DatabaseTest):
         all_but_last_row = rows[:-1]
         assert types == [row[1] for row in all_but_last_row]
         for row in all_but_last_row:
-            assert expected_row_count == len(row)
+            assert expected_column_count == len(row)
             assert constant == row[2:]
 
         # Now let's look at the last row. It's got metadata from a
@@ -148,6 +150,7 @@ class TestLocalAnalyticsExporter(DatabaseTest):
             "",
             "",
             edition1.medium,
+            lp2.data_source.name,
         ] == rows[-1][1:]
 
         output = exporter.export(self._db, today, today)
@@ -205,7 +208,7 @@ class TestLocalAnalyticsExporter(DatabaseTest):
         assert num == len(rows)
         assert types == [row[1] for row in rows]
         for row in rows:
-            assert expected_row_count == len(row)
+            assert expected_column_count == len(row)
             assert constant_with_library == row[2:]
 
         # We are looking for events from a different library but there
@@ -311,5 +314,5 @@ class TestLocalAnalyticsExporter(DatabaseTest):
         # After the start time and event type, the rest of the row is
         # the same content we've come to expect.
         for row in rows:
-            assert expected_row_count == len(row)
+            assert expected_column_count == len(row)
             assert constant == row[2:]

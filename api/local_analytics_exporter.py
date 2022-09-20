@@ -7,6 +7,7 @@ from sqlalchemy.sql.expression import and_, case, join, literal_column, or_
 from core.model import (
     CirculationEvent,
     Collection,
+    DataSource,
     Edition,
     Genre,
     Identifier,
@@ -46,6 +47,7 @@ class LocalAnalyticsExporter:
             "library_short_name",
             "library_name",
             "medium",
+            "distributor",
         ]
         output = BytesIO()
         writer = csv.writer(output, encoding="utf-8")
@@ -114,6 +116,7 @@ class LocalAnalyticsExporter:
                     Library.short_name.label("library_short_name"),
                     Library.name.label("library_name"),
                     Edition.medium,
+                    DataSource.name.label("distributor"),
                 ],
             )
             .select_from(
@@ -126,6 +129,7 @@ class LocalAnalyticsExporter:
                 .join(Work, Work.id == LicensePool.work_id)
                 .join(Edition, Work.presentation_edition_id == Edition.id)
                 .join(Collection, LicensePool.collection_id == Collection.id)
+                .join(DataSource, LicensePool.data_source_id == DataSource.id)
                 .outerjoin(Library, CirculationEvent.library_id == Library.id)
             )
             .where(and_(*clauses))
@@ -210,6 +214,7 @@ class LocalAnalyticsExporter:
                 events.library_short_name,
                 events.library_name,
                 events.medium,
+                events.distributor,
             ]
         ).select_from(events_alias)
         return query
