@@ -332,7 +332,7 @@ class CustomListImporter:
             response = self._session.post(
                 server_list_endpoint,
                 headers=headers,
-                files=(  # type: ignore
+                files=(
                     ("name", (None, customlist.name())),
                     ("entries", (None, json.dumps(output_books, sort_keys=True))),
                     ("deletedEntries", (None, b"[]")),
