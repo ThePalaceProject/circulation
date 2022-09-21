@@ -363,14 +363,10 @@ class TestExternalSearch(ExternalSearchTest):
         put_mapping = self.search._update_index_mapping(dry_run=True)
         assert "new_long_property" not in put_mapping
 
-        new_mapping = self.search.indices.get_mapping(
-            self.search.works_index, self.search.work_document_type
-        )
+        new_mapping = self.search.indices.get_mapping(self.search.works_index)
         assert (
             "new_long_property"
-            in new_mapping[self.search.works_index]["mappings"][
-                self.search.work_document_type
-            ]["properties"]
+            in new_mapping[self.search.works_index]["mappings"]["properties"]
         )
 
 

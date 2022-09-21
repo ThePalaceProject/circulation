@@ -294,10 +294,8 @@ class ExternalSearchIndex(HasSelfTests):
 
         current_mapping: Dict = self.indices.get_mapping(self.works_index)[
             self.works_index
-        ]["mappings"][self.work_document_type]["properties"]
-        new_mapping = self.mapping.body()["mappings"][self.work_document_type][
-            "properties"
-        ]
+        ]["mappings"]["properties"]
+        new_mapping = self.mapping.body()["mappings"]["properties"]
         puts = {}
         for name, v in new_mapping.items():
             split_name = name.split(".")[0]  # dot based names become dicts
@@ -305,9 +303,7 @@ class ExternalSearchIndex(HasSelfTests):
                 puts[name] = v
 
         if not dry_run and puts:
-            self.indices.put_mapping(
-                dict(properties=puts), self.work_document_type, self.works_index
-            )
+            self.indices.put_mapping(dict(properties=puts), index=self.works_index)
             self.log.info(f"Updated {self.works_index} mapping with {puts}")
         return puts
 
