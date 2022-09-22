@@ -78,7 +78,7 @@ def mock_search_index(mock=None):
 
 class ExternalSearchIndex(HasSelfTests):
 
-    NAME = ExternalIntegration.OPENSEARCH
+    NAME = ExternalIntegration.ELASTICSEARCH
 
     # A test may temporarily set this to a mock of this class.
     # While that's true, load() will return the mock instead of
@@ -91,6 +91,12 @@ class ExternalSearchIndex(HasSelfTests):
     TEST_SEARCH_TERM_KEY = "test_search_term"
     DEFAULT_TEST_SEARCH_TERM = "test"
 
+    SEARCH_VERSION = "search_version"
+    SEARCH_VERSION_ES6_86 = "Elasticsearch 6.8.6"
+    SEARCH_VERSION_OS1_2 = "Opensearch 1.2"
+    DEFAULT_SEARCH_VERSION = SEARCH_VERSION_ES6_86
+
+    work_document_type = None
     __client = None
 
     CURRENT_ALIAS_SUFFIX = "current"
@@ -118,6 +124,17 @@ class ExternalSearchIndex(HasSelfTests):
             "default": DEFAULT_TEST_SEARCH_TERM,
             "description": _("Self tests will use this value as the search term."),
         },
+        {
+            "key": SEARCH_VERSION,
+            "label": _("The search service version"),
+            "default": DEFAULT_SEARCH_VERSION,
+            "description": _("Which version of the search engine is being used."),
+            "type": "select",
+            "options": [
+                {"key": SEARCH_VERSION_ES6_86, "label": SEARCH_VERSION_ES6_86},
+                {"key": SEARCH_VERSION_OS1_2, "label": SEARCH_VERSION_OS1_2},
+            ],
+        },
     ]
 
     SITEWIDE = True
@@ -132,10 +149,10 @@ class ExternalSearchIndex(HasSelfTests):
         cls.__client = None
 
     @classmethod
-    def search_integration(cls, _db):
+    def search_integration(cls, _db) -> ExternalIntegration:
         """Look up the ExternalIntegration for ElasticSearch."""
         return ExternalIntegration.lookup(
-            _db, ExternalIntegration.OPENSEARCH, goal=ExternalIntegration.SEARCH_GOAL
+            _db, ExternalIntegration.ELASTICSEARCH, goal=ExternalIntegration.SEARCH_GOAL
         )
 
     @classmethod
@@ -184,6 +201,7 @@ class ExternalSearchIndex(HasSelfTests):
         test_search_term=None,
         in_testing=False,
         mapping=None,
+        version=None,
     ):
         """Constructor
 
@@ -200,7 +218,27 @@ class ExternalSearchIndex(HasSelfTests):
         self.works_alias = None
         integration = None
 
-        self.mapping = mapping or CurrentMapping()
+        self.version = None
+        integration = self.search_integration(_db)
+        if not integration:
+            raise CannotLoadConfiguration("No search integration configured.")
+
+        valid_versions = [self.SEARCH_VERSION_OS1_2, self.SEARCH_VERSION_ES6_86]
+        if version and version not in valid_versions:
+            raise ValueError(
+                f"{version} is not a valid search version, must be one of {valid_versions}"
+            )
+        elif version:
+            self.version = version
+        else:
+            self.version = integration.setting(self.SEARCH_VERSION).value_or_default(
+                self.DEFAULT_SEARCH_VERSION
+            )
+
+        if self.version == self.SEARCH_VERSION_ES6_86:
+            self.work_document_type = "works-type"
+
+        self.mapping = mapping or CurrentMapping(self)
 
         if isinstance(url, ExternalIntegration):
             # This is how the self-test initializes this object.
@@ -216,21 +254,19 @@ class ExternalSearchIndex(HasSelfTests):
         CachedData.initialize(_db)
 
         if not url or not works_index:
-            integration = self.search_integration(_db)
-            if not integration:
-                raise CannotLoadConfiguration("No Opensearch integration configured.")
             url = url or integration.url
             if not works_index:
                 works_index = self.works_index_name(_db)
             test_search_term = integration.setting(self.TEST_SEARCH_TERM_KEY).value
         if not url:
-            raise CannotLoadConfiguration("No URL configured to Opensearch server.")
+            raise CannotLoadConfiguration("No URL configured to the search server.")
         self.test_search_term = test_search_term or self.DEFAULT_TEST_SEARCH_TERM
+
         if not in_testing:
             if not ExternalSearchIndex.__client:
                 use_ssl = url.startswith("https://")
                 self.log.info(
-                    "Connecting to index %s in Opensearch cluster at %s",
+                    "Connecting to index %s in the search cluster at %s",
                     works_index,
                     url,
                 )
@@ -292,10 +328,16 @@ class ExternalSearchIndex(HasSelfTests):
     def _update_index_mapping(self, dry_run=False) -> Dict:
         """Updates the index mapping with any NEW properties added"""
 
-        current_mapping: Dict = self.indices.get_mapping(self.works_index)[
-            self.works_index
-        ]["mappings"]["properties"]
-        new_mapping = self.mapping.body()["mappings"]["properties"]
+        def _properties(mapping: Dict) -> Dict:
+            """We may or may not have doc types depending on the versioning"""
+            if self.work_document_type:
+                mapping = mapping[self.work_document_type]
+            return mapping["properties"]
+
+        current_mapping: Dict = _properties(
+            self.indices.get_mapping(self.works_index)[self.works_index]["mappings"]
+        )
+        new_mapping = _properties(self.mapping.body()["mappings"])
         puts = {}
         for name, v in new_mapping.items():
             split_name = name.split(".")[0]  # dot based names become dicts
@@ -303,7 +345,11 @@ class ExternalSearchIndex(HasSelfTests):
                 puts[name] = v
 
         if not dry_run and puts:
-            self.indices.put_mapping(dict(properties=puts), index=self.works_index)
+            self.indices.put_mapping(
+                dict(properties=puts),
+                index=self.works_index,
+                doc_type=self.work_document_type,
+            )
             self.log.info(f"Updated {self.works_index} mapping with {puts}")
         return puts
 
@@ -601,6 +647,8 @@ class ExternalSearchIndex(HasSelfTests):
         docs = Work.to_search_documents(needs_add)
 
         for doc in docs:
+            if self.work_document_type:
+                doc["_type"] = self.work_document_type
             doc["_index"] = self.works_index
         time2 = time.time()
 
@@ -679,6 +727,8 @@ class ExternalSearchIndex(HasSelfTests):
     def remove_work(self, work):
         """Remove the search document for `work` from the search index."""
         args = dict(index=self.works_index, id=work.id)
+        args["doc_type"] = self.work_document_type or "_doc"
+
         if self.exists(**args):
             self.delete(**args)
 
@@ -761,7 +811,9 @@ class MappingDocument:
     created.
     """
 
-    def __init__(self):
+    def __init__(self, service: ExternalSearchIndex):
+        self.service = service
+        self.has_document_types = self.service.work_document_type is not None
         self.properties = {}
         self.subdocuments = {}
 
@@ -808,7 +860,7 @@ class MappingDocument:
         """Create a new HasProperties object and register it as a
         sub-document of this one.
         """
-        subdocument = MappingDocument()
+        subdocument = MappingDocument(self.service)
         self.subdocuments[name] = subdocument
         return subdocument
 
@@ -882,8 +934,8 @@ class Mapping(MappingDocument):
         """
         return f"simplified.{base_name}.{cls.version_name()}"
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, service):
+        super().__init__(service)
         self.filters = {}
         self.char_filters = {}
         self.normalizers = {}
@@ -928,6 +980,8 @@ class Mapping(MappingDocument):
             properties[name] = dict(type="nested", properties=subdocument.properties)
 
         mappings = dict(properties=properties)
+        if self.has_document_types:
+            mappings = {self.service.work_document_type: mappings}
         return dict(settings=settings, mappings=mappings)
 
 
@@ -981,8 +1035,8 @@ class CurrentMapping(Mapping):
         CHAR_FILTERS[name] = normalizer
         AUTHOR_CHAR_FILTER_NAMES.append(name)
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, service):
+        super().__init__(service)
 
         # Set up character filters.
         #
@@ -3379,9 +3433,9 @@ class WorkSearchResult:
 
 class MockExternalSearchIndex(ExternalSearchIndex):
 
-    work_document_type = "work-type"
+    work_document_type = None
 
-    def __init__(self, url=None):
+    def __init__(self, url=None, version=ExternalSearchIndex.SEARCH_VERSION_ES6_86):
         self.url = url
         self.docs = {}
         self.works_index = "works"
@@ -3390,9 +3444,16 @@ class MockExternalSearchIndex(ExternalSearchIndex):
         self.queries = []
         self.search = list(self.docs.keys())
         self.test_search_term = "a search term"
+        self.version = version
+        if version == ExternalSearchIndex.SEARCH_VERSION_ES6_86:
+            self.work_document_type = "works-type"
 
     def _key(self, index, id):
-        return (index, id)
+        return (
+            (index, id)
+            if not self.work_document_type
+            else (index, self.work_document_type, id)
+        )
 
     def index(self, index, id, body):
         self.docs[self._key(index, id)] = body
@@ -3403,7 +3464,7 @@ class MockExternalSearchIndex(ExternalSearchIndex):
         if key in self.docs:
             del self.docs[key]
 
-    def exists(self, index, id):
+    def exists(self, index, id, doc_type=None):
         return self._key(index, id) in self.docs
 
     def create_search_doc(
