@@ -365,12 +365,12 @@ were indexed correctly.
 ### Sitewide Settings
 
 Some settings have been provided in the admin UI that configure or toggle various functions of the Circulation Manager.
-These can be found at `/admin/web/config/SitewideSettings`
+These can be found at `/admin/web/config/SitewideSettings` in the admin interface.
 
 #### Push Notification Status
 
 This setting is a toggle that may be used to turn on or off the ability for the the system
-to send the Loan and Hold reminder mobile notifications.
+to send the Loan and Hold reminders to the mobile applications.
 
 ### Installation Issues
 
@@ -397,21 +397,21 @@ export CPPFLAGS="-DXMLSEC_NO_XKMS=1"
 
 ## Scheduled Jobs
 
-Currently all jobs are scheduled as cron job, that should be installed as indicated by the `simplified_crontab` file
-It contains all the import and reaper jobs, as well as other necessary background tasks such as maintaining
-the search index and feed caches
+All jobs are scheduled via `cron`, as specified in the `docker/services/simplified_crontab` file.
+This includes all the import and reaper jobs, as well as other necessary background tasks, such as maintaining
+the search index and feed caches.
 
 ### Job Requirements
 
 #### hold_notifications
 
 Requires the `SIMPLIFIED_FCM_CREDENTIALS_FILE` to be present
-and the sitewide `PUSH_NOTIFICATIONS_STATUS` to be either `unset` or `true`
+and the sitewide `PUSH_NOTIFICATIONS_STATUS` setting to be either `unset` or `true`
 
 #### loan_notifications
 
 Requires the `SIMPLIFIED_FCM_CREDENTIALS_FILE` to be present
-and the sitewide `PUSH_NOTIFICATIONS_STATUS` to be either `unset` or `true`
+and the sitewide `PUSH_NOTIFICATIONS_STATUS` setting to be either `unset` or `true`
 
 ## Code Style
 
