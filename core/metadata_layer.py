@@ -1285,7 +1285,7 @@ class CirculationData(MetaToModelUtility):
                     data_source=data_source,
                     media_type=link.media_type,
                     content=link.content,
-                    tempalted=link.templated,
+                    templated=link.templated,
                 )
                 link_objects[link] = link_obj
 

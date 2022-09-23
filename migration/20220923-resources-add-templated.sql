@@ -1,0 +1,5 @@
+DO $$
+ BEGIN
+  ALTER TABLE resources ADD COLUMN IF NOT EXISTS templated BOOLEAN DEFAULT false;
+ END;
+$$;

@@ -14,9 +14,9 @@ from core.model import (
     Edition,
     EditionConstants,
     ExternalIntegration,
-    Hyperlink,
     LicensePool,
     MediaTypes,
+    Resource,
     Work,
 )
 from core.model.collection import Collection
@@ -427,7 +427,4 @@ class TestOPDS2Importer(OPDS2Test):
         )
 
         # Were all the acquisition links maintained as templated links?
-        for edition in imported_editions:
-            for link in edition.primary_identifier.links:
-                if link.rel in Hyperlink.CIRCULATION_ALLOWED:
-                    assert link.resource.templated == True
+        assert self._db.query(Resource).filter(Resource.templated == True).count() == 4
