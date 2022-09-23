@@ -774,6 +774,7 @@ class CirculationAPI:
         from .odilo import OdiloAPI
         from .odl import ODLAPI, SharedODLAPI
         from .odl2 import ODL2API
+        from .opds2 import OPDS2API
         from .opds_for_distributors import OPDSForDistributorsAPI
         from .overdrive import OverdriveAPI
 
@@ -789,6 +790,7 @@ class CirculationAPI:
             SharedODLAPI.NAME: SharedODLAPI,
             LCPAPI.NAME: LCPAPI,
             ProQuestOPDS2Importer.NAME: ProQuestOPDS2Importer,
+            ExternalIntegration.OPDS2_IMPORT: OPDS2API,
         }
 
     @property
