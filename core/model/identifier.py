@@ -706,6 +706,7 @@ class Identifier(Base, IdentifierConstants):
         rights_explanation=None,
         original_resource=None,
         transformation_settings=None,
+        templated=None,
     ):
         """Create a link between this Identifier and a (potentially new)
         Resource.
@@ -716,7 +717,6 @@ class Identifier(Base, IdentifierConstants):
         from .resource import Hyperlink, Representation, Resource
 
         _db = Session.object_session(self)
-
         # Find or create the Resource.
         if not href:
             href = Hyperlink.generic_uri(data_source, self, rel, content)
@@ -731,6 +731,7 @@ class Identifier(Base, IdentifierConstants):
                 data_source=data_source,
                 rights_status=rights_status,
                 rights_explanation=rights_explanation,
+                templated=templated,
             ),
         )
 

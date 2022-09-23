@@ -14,6 +14,7 @@ from core.model import (
     Edition,
     EditionConstants,
     ExternalIntegration,
+    Hyperlink,
     LicensePool,
     MediaTypes,
     Work,
@@ -412,11 +413,21 @@ class TestOPDS2Importer(OPDS2Test):
 
     def test_auth_token_feed(self):
         content = self.sample_opds("pq_auth_token_feed.json")
-        _ = self._importer.import_from_feed(content)
+        imported_editions, pools, works, failures = self._importer.import_from_feed(
+            content
+        )
         setting = ConfigurationSetting.for_externalintegration(
             ExternalIntegration.TOKEN_AUTH, self._collection.external_integration
         )
+
+        # Did the token endpoint get stored correctly?
         assert (
             setting.value
             == "http://ebookcentral.proquest.com/auth/ws/auth/PartnerAuthToken/columbia{?patron_id}"
         )
+
+        # Were all the acquisition links maintained as templated links?
+        for edition in imported_editions:
+            for link in edition.primary_identifier.links:
+                if link.rel in Hyperlink.CIRCULATION_ALLOWED:
+                    assert link.resource.templated == True

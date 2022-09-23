@@ -349,6 +349,7 @@ class OPDS2Importer(
             media_type=media_type,
             rights_uri=rights_uri,
             content=None,
+            templated=link.templated,
         )
 
         self._logger.debug(

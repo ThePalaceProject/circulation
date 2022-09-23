@@ -516,6 +516,7 @@ class LinkData:
         rights_explanation=None,
         original=None,
         transformation_settings=None,
+        templated=None,
     ):
         if not rel:
             raise ValueError("rel is required")
@@ -535,6 +536,7 @@ class LinkData:
         # and the settings used to transform the original into the derivative.
         self.original = original
         self.transformation_settings = transformation_settings or {}
+        self.templated = templated
 
     @property
     def guessed_media_type(self):
@@ -1283,6 +1285,7 @@ class CirculationData(MetaToModelUtility):
                     data_source=data_source,
                     media_type=link.media_type,
                     content=link.content,
+                    tempalted=link.templated,
                 )
                 link_objects[link] = link_obj
 
@@ -1981,6 +1984,7 @@ class Metadata(MetaToModelUtility):
                     rights_explanation=link.rights_explanation,
                     original_resource=original_resource,
                     transformation_settings=link.transformation_settings,
+                    templated=link.templated,
                 )
                 if link.rel in self.REL_REQUIRES_NEW_PRESENTATION_EDITION:
                     work_requires_new_presentation_edition = True

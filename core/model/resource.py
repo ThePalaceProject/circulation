@@ -16,6 +16,7 @@ from urllib.parse import quote, urlparse, urlsplit
 import requests
 from PIL import Image
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     Float,
@@ -68,6 +69,9 @@ class Resource(Base):
     # this will be an HTTP URL, which is why we're calling it 'url',
     # but it may also be a made-up URI.
     url = Column(Unicode, index=True)
+
+    # Is the href related to this resource templated?
+    templated = Column(Boolean, default=False)
 
     # Many Editions may choose this resource (as opposed to other
     # resources linked to them with rel="image") as their cover image.
