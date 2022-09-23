@@ -41,6 +41,7 @@ from .metadata_layer import (
     SubjectData,
 )
 from .model import (
+    ConfigurationSetting,
     Contributor,
     DeliveryMechanism,
     Edition,
@@ -128,6 +129,16 @@ class OPDS2ImporterConfiguration(ConfigurationGrouping, BaseImporterConfiguratio
         default="{}, {};q=0.9, */*;q=0.1".format(
             OPDS2MediaTypesRegistry.OPDS_FEED.key, "application/json"
         ),
+    )
+
+    token_authentication_setting = ConfigurationMetadata(
+        key=ExternalIntegration.TOKEN_AUTH,
+        label=_("Token Authentication Endpoint"),
+        description=_(
+            "The token authentication endpoint for this feed. Will be automatically populated if available in the feed."
+        ),
+        required=False,
+        type=ConfigurationAttributeType.TEXT,
     )
 
 
@@ -937,6 +948,16 @@ class OPDS2Importer(
 
         return dates
 
+    def _parse_feed_links(self, links: List["ast.core.Link"]) -> None:
+        """Parse the global feed links. Currently only parses the token endpoint link"""
+        for link in links:
+            if first_or_default(link.rels) == Hyperlink.TOKEN_AUTH:
+                # Save the collection-wide token authentication endpoint
+                auth_setting = ConfigurationSetting.for_externalintegration(
+                    ExternalIntegration.TOKEN_AUTH, self.collection.external_integration
+                )
+                auth_setting.value = link.href
+
     def extract_feed_data(
         self, feed: Union[str, opds2_ast.OPDS2Feed], feed_url: Optional[str] = None
     ) -> Tuple[Dict, Dict]:
@@ -948,6 +969,9 @@ class OPDS2Importer(
         feed = parser_result.root
         publication_metadata_dictionary = {}
         failures = {}
+
+        if feed.links:
+            self._parse_feed_links(feed.links)
 
         for publication in self._get_publications(feed):
             recognized_identifier = self._extract_identifier(publication)

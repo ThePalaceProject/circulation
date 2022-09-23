@@ -1,0 +1,146 @@
+{
+    "metadata": {
+        "title": "Ebook Central OPDS Feed for columbia",
+        "itemsPerPage": 3000,
+        "currentPage": 1,
+        "numberOfItems": 2
+    },
+    "links": [
+        {
+            "href": "http://localhost:8000/catalog.json",
+            "type": "application/opds+json",
+            "rel": "last"
+        },
+        {
+            "href": "http://localhost:8000/catalog.json",
+            "type": "application/opds+json",
+            "rel": "self"
+        },
+        {
+            "type": "application/vnd.proquest.token.response+json",
+            "rel": "http://thepalaceproject.org/rel/token-authentication",
+            "href": "http://ebookcentral.proquest.com/auth/ws/auth/PartnerAuthToken/columbia{?patron_id}",
+            "templated": true
+        }
+    ],
+    "publications": [
+        {
+            "metadata": {
+                "identifier": "urn:proquest.com/document-id/4453281",
+                "@type": "http://schema.org/Book",
+                "title": "Speaking Truth to Power : Confidential Informants and Police Investigations",
+                "modified": "2022-09-09T15:11:00.000Z",
+                "published": "2016-08-02T00:00:00.000Z",
+                "language": [
+                    "eng"
+                ]
+            },
+            "links": [
+                {
+                    "href": "https://ebookcentral.proquest.com/lib/columbia/getDrmFreeFile.action?documentId=4453281&mediaType=pdf{&authentication_token}",
+                    "type": "application/pdf",
+                    "rel": "http://opds-spec.org/acquisition",
+                    "templated": true
+                },
+                {
+                    "href": "https://ebookcentral.proquest.com/lib/columbia/getDrmFreeFile.action?documentId=4453281&mediaType=epub{&authentication_token}",
+                    "type": "application/epub+zip",
+                    "rel": "http://opds-spec.org/acquisition",
+                    "templated": true
+                }
+            ],
+            "images": [
+                {
+                    "href": "https://ebookcentral.proquest.com/covers/4453281-s.jpg",
+                    "type": "image/jpeg",
+                    "height": 140,
+                    "width": 100
+                },
+                {
+                    "href": "https://ebookcentral.proquest.com/covers/4453281-m.jpg",
+                    "type": "image/jpeg",
+                    "height": 238,
+                    "width": 170
+                },
+                {
+                    "href": "https://ebookcentral.proquest.com/covers/4453281-l.jpg",
+                    "type": "image/jpeg",
+                    "height": 277,
+                    "width": 198
+                },
+                {
+                    "href": "https://ebookcentral.proquest.com/covers/4453281-x.jpg",
+                    "type": "image/jpeg",
+                    "height": 350,
+                    "width": 250
+                }
+            ]
+        },
+        {
+            "metadata": {
+                "identifier": "urn:proquest.com/document-id/181639",
+                "@type": "http://schema.org/Book",
+                "title": "The Politics of Postmodernism",
+                "modified": "2022-09-12T21:04:00.000Z",
+                "published": "2002-07-05T00:00:00.000Z",
+                "language": [
+                    "eng"
+                ]
+            },
+            "links": [
+                {
+                    "type": "application/vnd.adobe.adept+xml",
+                    "rel": "http://opds-spec.org/acquisition",
+                    "href": "https://ebookcentral.proquest.com/lib/nyulibrary-ebooks/getAcsmFile.action?documentId=181639&mediaType=epub{&authentication_token}",
+                    "templated": true,
+                    "properties": {
+                        "indirectAcquisition": [
+                            {
+                                "type": "application/epub+zip"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "type": "application/vnd.adobe.adept+xml",
+                    "rel": "http://opds-spec.org/acquisition",
+                    "href": "https://ebookcentral.proquest.com/lib/nyulibrary-ebooks/getAcsmFile.action?documentId=181639&mediaType=pdf{&authentication_token}",
+                    "templated": true,
+                    "properties": {
+                        "indirectAcquisition": [
+                            {
+                                "type": "application/pdf"
+                            }
+                        ]
+                    }
+                }
+            ],
+            "images": [
+                {
+                    "href": "https://ebookcentral.proquest.com/covers/181639-s.jpg",
+                    "type": "image/jpeg",
+                    "height": 140,
+                    "width": 100
+                },
+                {
+                    "href": "https://ebookcentral.proquest.com/covers/181639-m.jpg",
+                    "type": "image/jpeg",
+                    "height": 238,
+                    "width": 170
+                },
+                {
+                    "href": "https://ebookcentral.proquest.com/covers/181639-l.jpg",
+                    "type": "image/jpeg",
+                    "height": 277,
+                    "width": 198
+                },
+                {
+                    "href": "https://ebookcentral.proquest.com/covers/181639-x.jpg",
+                    "type": "image/jpeg",
+                    "height": 350,
+                    "width": 250
+                }
+            ]
+        }
+    ]
+}

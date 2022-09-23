@@ -240,6 +240,9 @@ class LinkRelations:
         "http://librarysimplified.org/terms/rel/patron-password-reset"
     )
 
+    # Proquest auth token rel
+    TOKEN_AUTH = "http://thepalaceproject.org/rel/token-authentication"
+
     # TODO: Is this the appropriate relation?
     DRM_ENCRYPTED_DOWNLOAD = "http://opds-spec.org/acquisition/"
     BORROW = "http://opds-spec.org/acquisition/borrow"
