@@ -131,16 +131,6 @@ class OPDS2ImporterConfiguration(ConfigurationGrouping, BaseImporterConfiguratio
         ),
     )
 
-    token_authentication_setting = ConfigurationMetadata(
-        key=ExternalIntegration.TOKEN_AUTH,
-        label=_("Token Authentication Endpoint"),
-        description=_(
-            "The token authentication endpoint for this feed. Will be automatically populated if available in the feed."
-        ),
-        required=False,
-        type=ConfigurationAttributeType.TEXT,
-    )
-
 
 class OPDS2Importer(
     IgnoredIdentifierImporterMixin, OPDSImporter, HasExternalIntegration
