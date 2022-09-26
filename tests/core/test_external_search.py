@@ -110,7 +110,7 @@ class TestExternalSearch(ExternalSearchTest):
 
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             Mock(self._db)
-        assert "Exception communicating with Opensearch server: " in str(excinfo.value)
+        assert "Exception communicating with Search server: " in str(excinfo.value)
         assert "very bad" in str(excinfo.value)
 
     def test_works_index_name(self):
