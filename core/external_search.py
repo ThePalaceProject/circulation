@@ -5,7 +5,7 @@ import logging
 import re
 import time
 from collections import defaultdict
-from typing import Dict, Optional, Union
+from typing import Any, Dict, Optional, Union
 
 from attr import define
 from elasticsearch import Elasticsearch
@@ -96,7 +96,7 @@ class ExternalSearchIndex(HasSelfTests):
     SEARCH_VERSION_OS1_2 = "Opensearch 1.2"
     DEFAULT_SEARCH_VERSION = SEARCH_VERSION_ES6_86
 
-    work_document_type = None
+    work_document_type: Optional[str] = None
     __client = None
 
     CURRENT_ALIAS_SUFFIX = "current"
@@ -115,7 +115,7 @@ class ExternalSearchIndex(HasSelfTests):
             "default": DEFAULT_WORKS_INDEX_PREFIX,
             "required": True,
             "description": _(
-                "Any Opensearch indexes needed for this application will be created with this unique prefix. In most cases, the default will work fine. You may need to change this if you have multiple application servers using a single Opensearch server."
+                "Any Search indexes needed for this application will be created with this unique prefix. In most cases, the default will work fine. You may need to change this if you have multiple application servers using a single Search server."
             ),
         },
         {
@@ -247,7 +247,7 @@ class ExternalSearchIndex(HasSelfTests):
 
         if not _db:
             raise CannotLoadConfiguration(
-                "Cannot load Opensearch configuration without a database.",
+                "Cannot load Search configuration without a database.",
             )
 
         # initialize the cached data if not already done so
@@ -292,7 +292,7 @@ class ExternalSearchIndex(HasSelfTests):
                 raise
             except ElasticsearchException as e:
                 raise CannotLoadConfiguration(
-                    "Exception communicating with Opensearch server: %s" % repr(e)
+                    "Exception communicating with Search server: %s" % repr(e)
                 )
 
         self.search = Search(using=self.__client, index=self.works_alias)
@@ -594,9 +594,7 @@ class ExternalSearchIndex(HasSelfTests):
 
         if debug:
             b = time.time()
-            self.log.debug(
-                "Opensearch query %r completed in %.3fsec", query_string, b - a
-            )
+            self.log.debug("Search query %r completed in %.3fsec", query_string, b - a)
             for results in resultset:
                 for i, result in enumerate(results):
                     self.log.debug(
@@ -814,8 +812,8 @@ class MappingDocument:
     def __init__(self, service: ExternalSearchIndex):
         self.service = service
         self.has_document_types = self.service.work_document_type is not None
-        self.properties = {}
-        self.subdocuments = {}
+        self.properties: Dict[str, Any] = {}
+        self.subdocuments: Dict[str, Any] = {}
 
     def add_property(self, name, type, **description):
         """Add a field to the list of properties.

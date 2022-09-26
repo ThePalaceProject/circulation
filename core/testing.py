@@ -7,7 +7,7 @@ import time
 import uuid
 from datetime import timedelta
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Set, Union
 from unittest import mock
 
 import pytest
@@ -1165,7 +1165,7 @@ class ExternalSearchTest(DatabaseTest):
         "SIMPLIFIED_TEST_ELASTICSEARCH", "http://localhost:9200"
     )
 
-    DUAL_TESTS_RUN = set()
+    DUAL_TESTS_RUN: Set[str] = set()
 
     def setup_method(self, request):
 
