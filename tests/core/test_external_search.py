@@ -123,9 +123,7 @@ class TestExternalSearch:
 
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             Mock(session)
-        assert "Exception communicating with Elasticsearch server: " in str(
-            excinfo.value
-        )
+        assert "Exception communicating with Search server: " in str(excinfo.value)
         assert "very bad" in str(excinfo.value)
 
     def test_works_index_name(self, external_search_fixture: ExternalSearchFixture):
@@ -355,8 +353,8 @@ class TestExternalSearch:
         collection = transaction.collection()
 
         search_result = MockSearchResult("Sample Book Title", "author", {}, "id")
-        index.index("index", "doc type", "id", search_result)
-        test_results = [x for x in index._run_self_tests(self._db, in_testing=True)]
+        index.index("index", "id", search_result)
+        test_results = [x for x in index._run_self_tests(session, in_testing=True)]
 
         assert "Search results for 'a search term':" == test_results[0].name
         assert True == test_results[0].success
@@ -406,9 +404,11 @@ class TestExternalSearch:
         assert "new_long_property" not in put_mapping
 
         new_mapping = search.indices.get_mapping(search.works_index)
-        assert (
-            "new_long_property"
-            in new_mapping[search.works_index]["mappings"]["properties"]
+        new_mapping = new_mapping[search.works_index]["mappings"]
+        assert "new_long_property" in (
+            new_mapping["properties"]
+            if not search.work_document_type
+            else new_mapping[search.work_document_type]["properties"]
         )
 
 
@@ -1299,6 +1299,16 @@ class TestExternalSearchWithWorks:
 
         # Case-insensitive genre search, genre is saved as 'Fantasy'
         expect([data.lincoln_vampire], "fantasy")
+
+    def test_remove_work(self, end_to_end_search_fixture: EndToEndSearchFixture):
+        search = end_to_end_search_fixture.external_search.search
+        data = self._populate_works(end_to_end_search_fixture)
+        end_to_end_search_fixture.populate_search_index()
+        search.remove_work(data.moby_dick)
+        search.remove_work(data.moby_duck)
+        # Immediately querying never works, the search index needs a second to refresh its cache/index/data
+        time.sleep(1)
+        end_to_end_search_fixture.expect_results([], "Moby")
 
 
 class TestFacetFiltersData:
