@@ -64,6 +64,8 @@ RESEARCH = Term(audience=Classifier.AUDIENCE_RESEARCH.lower())
 
 
 class TestExternalSearch(ExternalSearchTest):
+    DUAL_SEARCH_TEST = True
+
     def test_load(self):
         # Normally, load() returns a brand new ExternalSearchIndex
         # object.
@@ -108,7 +110,7 @@ class TestExternalSearch(ExternalSearchTest):
 
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             Mock(self._db)
-        assert "Exception communicating with Opensearch server: " in str(excinfo.value)
+        assert "Exception communicating with Search server: " in str(excinfo.value)
         assert "very bad" in str(excinfo.value)
 
     def test_works_index_name(self):
@@ -364,9 +366,11 @@ class TestExternalSearch(ExternalSearchTest):
         assert "new_long_property" not in put_mapping
 
         new_mapping = self.search.indices.get_mapping(self.search.works_index)
-        assert (
-            "new_long_property"
-            in new_mapping[self.search.works_index]["mappings"]["properties"]
+        new_mapping = new_mapping[self.search.works_index]["mappings"]
+        assert "new_long_property" in (
+            new_mapping["properties"]
+            if not self.search.work_document_type
+            else new_mapping[self.search.work_document_type]["properties"]
         )
 
 
@@ -424,6 +428,8 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
     Don't add new methods to this class - add more tests into test_query_works,
     or add a new test class.
     """
+
+    DUAL_SEARCH_TEST = True
 
     def populate_works(self):
         _work = self.default_work
@@ -1093,6 +1099,13 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
                 (None, match_nothing, first_item),
             ],
         )
+
+    def test_remove_work(self):
+        self.search.remove_work(self.moby_dick)
+        self.search.remove_work(self.moby_duck)
+        # Immediately querying never works, the search index needs a second to refresh its cache/index/data
+        time.sleep(1)
+        self._expect_results([], "Moby")
 
 
 class TestFacetFilters(EndToEndSearchTest):
