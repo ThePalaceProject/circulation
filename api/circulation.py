@@ -31,6 +31,7 @@ from core.model import (
     Session,
     get_one,
 )
+from core.opds2_import import OPDS2Importer
 from core.util.datetime_helpers import utc_now
 
 from .circulation_exceptions import *
@@ -774,7 +775,6 @@ class CirculationAPI:
         from .odilo import OdiloAPI
         from .odl import ODLAPI, SharedODLAPI
         from .odl2 import ODL2API
-        from .opds2 import OPDS2API
         from .opds_for_distributors import OPDSForDistributorsAPI
         from .overdrive import OverdriveAPI
 
@@ -790,7 +790,6 @@ class CirculationAPI:
             SharedODLAPI.NAME: SharedODLAPI,
             LCPAPI.NAME: LCPAPI,
             ProQuestOPDS2Importer.NAME: ProQuestOPDS2Importer,
-            ExternalIntegration.OPDS2_IMPORT: OPDS2API,
         }
 
     @property
@@ -801,12 +800,14 @@ class CirculationAPI:
 
         :return: Mapping of protocols to fulfillment post-processors.
         """
+        from api.opds2 import OPDS2TokenAuthenticationFulfillmentProcessor
         from core.opds_import import OPDSImporter
 
         from .saml.wayfless import SAMLWAYFlessAcquisitionLinkProcessor
 
         return {
             OPDSImporter.NAME: SAMLWAYFlessAcquisitionLinkProcessor,
+            OPDS2Importer.NAME: OPDS2TokenAuthenticationFulfillmentProcessor,
         }
 
     def api_for_license_pool(self, licensepool):

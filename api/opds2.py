@@ -6,27 +6,26 @@ from typing import TYPE_CHECKING
 from flask import url_for
 from uritemplate import URITemplate
 
-from api.circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
-from api.circulation_exceptions import NoLicenses, NotCheckedOut
-from api.problem_details import CANNOT_FULFILL, INVALID_CREDENTIALS
-from core.model import (
-    Collection,
-    ConfigurationSetting,
-    ExternalIntegration,
-    LicensePoolDeliveryMechanism,
+from api.circulation import (
+    BaseCirculationAPI,
+    CirculationFulfillmentPostProcessor,
+    FulfillmentInfo,
 )
+from api.circulation_exceptions import CannotFulfill
+from core.model import ConfigurationSetting, ExternalIntegration
 from core.model.edition import Edition
 from core.model.identifier import Identifier
+from core.model.licensing import DeliveryMechanism
 from core.model.resource import Hyperlink
 from core.opds2 import OPDS2Annotator
-from core.util.datetime_helpers import utc_now
+from core.problem_details import INVALID_CREDENTIALS
 from core.util.http import HTTP
 from core.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:
-    from sqlalchemy.orm import Session
+    pass
 
-    from core.model import LicensePool, Loan, Patron
+    from core.model import LicensePool, Patron
 
 
 class OPDS2PublicationsAnnotator(OPDS2Annotator):
@@ -87,121 +86,66 @@ class OPDS2API(BaseCirculationAPI):
     This should be a pure implementation with no references to daatasources
     """
 
-    def __init__(self, db: Session, collection: Collection) -> None:
-        self._db = db
-        self.collection = collection
-        self.log = logging.getLogger("OPDS2API")
-        self.token_auth_url = self._get_setting(ExternalIntegration.TOKEN_AUTH)
-
-    def _get_setting(self, key) -> str | None:
-        return ConfigurationSetting.for_externalintegration(
-            key, self.collection.external_integration
-        ).value
-
-    def _get_authentication_token(self, patron: Patron) -> ProblemDetail | str:
+    @classmethod
+    def get_authentication_token(
+        cls, patron: Patron, token_auth_url: str
+    ) -> ProblemDetail | str:
         """Get the authentication token for a patron"""
-        url = URITemplate(self.token_auth_url).expand(patron_id=patron.username)
+        url = URITemplate(token_auth_url).expand(patron_id=patron.username)
+        log = logging.getLogger("OPDS2API")
         response = HTTP.get_with_timeout(url)
         if response.status_code != 200:
-            self.log.error(
+            log.error(
                 f"Could not authenticate the patron({patron.username}): {response.content}"
             )
             return INVALID_CREDENTIALS
 
         # The response should be the JWT token, not wrapped in any format like JSON
-        token = response.json().get("token")
+        token = response.content
         if not token:
-            self.log.error(
+            log.error(
                 f"Could not authenticate the patron({patron.username}): {response.content}"
             )
             return INVALID_CREDENTIALS
 
-        return token
+        return token.decode()
 
-    def checkout(
-        self, patron: Patron, pin: str, licensepool: LicensePool, internal_format
-    ):
-        # If we have authentication on this feed then authenticate before a checkout
-        if self.token_auth_url:
-            token = self._get_authentication_token(patron)
-            if type(token) == ProblemDetail:
-                return token
 
-        if not licensepool.unlimited_access:
-            if licensepool.licenses_available <= 0:
-                raise NoLicenses
+class OPDS2TokenAuthenticationFulfillmentProcessor(CirculationFulfillmentPostProcessor):
+    """In case a feed has a token auth endpoint and the content_link requires an authentication token
+    Then we must fetch the required authentication token from the token_auth endpoint and
+    expand the templated url with the received token.
+    The content link should also be a redirect and not a proxy download"""
 
-        return LoanInfo(
-            self.collection,
-            self.collection.data_source.name,
-            licensepool.identifier.type,
-            licensepool.identifier.identifier,
-            utc_now(),
-            None,
-        )
-
-    def internal_format(self, delivery_mechanism: LicensePoolDeliveryMechanism):
-        # TODO: This thing
-        return delivery_mechanism
-
-    def checkin(self, patron: Patron, pin: str, licensepool: LicensePool):
-        """Check if the patron has a loan on this pool
-        The rest is managed by the CirculationAPI"""
-        # If we have authentication on this feed then authenticate before a checkout
-        if self.token_auth_url:
-            token = self._get_authentication_token(patron)
-            if type(token) == ProblemDetail:
-                return token
-
-        loan: Loan = None
-        for loan in licensepool.loans:
-            if loan.patron == patron:
-                break
-        else:
-            raise NotCheckedOut
+    def __init__(self, collection) -> None:
+        pass
 
     def fulfill(
         self,
         patron: Patron,
         pin: str,
         licensepool: LicensePool,
-        internal_format=None,
-        part=None,
-        fulfill_part_url=None,
-    ):
-        # If we have authentication on this feed then authenticate before a checkout
-        if self.token_auth_url:
-            token = self._get_authentication_token(patron)
-            if type(token) == ProblemDetail:
-                return token
+        delivery_mechanism: DeliveryMechanism | None,
+        fulfillment: FulfillmentInfo,
+    ) -> FulfillmentInfo:
+        if not fulfillment.content_link:
+            return fulfillment
 
-        if (
-            internal_format is None
-            or type(internal_format) is not LicensePoolDeliveryMechanism
-        ):
-            self.log(f"No internal format provided, cannot fulfill")
-            return CANNOT_FULFILL
+        if "{authentication_token}" not in fulfillment.content_link:
+            return fulfillment
 
-        content_url = internal_format.resource.url
-        if internal_format.resource.templated and "authentication_token" in content_url:
-            content_url = URITemplate(content_url).expand(authentication_token=token)
-
-        return FulfillmentInfo(
-            self.collection,
-            self.collection.data_source.name,
-            licensepool.identifier.type,
-            licensepool.identifier.identifier,
-            content_url,
-            internal_format.delivery_mechanism.content_type,
-            None,
-            None,
+        token_auth = ConfigurationSetting.for_externalintegration(
+            ExternalIntegration.TOKEN_AUTH, licensepool.collection.external_integration
         )
+        if not token_auth or token_auth.value is None:
+            return fulfillment
 
-    def patron_activity(self, patron, pin):
-        return super().patron_activity(patron, pin)
+        token = OPDS2API.get_authentication_token(patron, token_auth.value)
+        if type(token) == ProblemDetail:
+            raise CannotFulfill()
 
-    def place_hold(self, patron, pin, licensepool, notification_email_address):
-        return super().place_hold(patron, pin, licensepool, notification_email_address)
-
-    def release_hold(self, patron, pin, licensepool):
-        return super().release_hold(patron, pin, licensepool)
+        fulfillment.content_link = URITemplate(fulfillment.content_link).expand(
+            authentication_token=token
+        )
+        fulfillment.content_link_redirect = True
+        return fulfillment

@@ -241,7 +241,7 @@ class LinkRelations:
     )
 
     # Proquest auth token rel
-    TOKEN_AUTH = "http://thepalaceproject.org/rel/token-authentication"
+    TOKEN_AUTH = "token_endpoint"
 
     # TODO: Is this the appropriate relation?
     DRM_ENCRYPTED_DOWNLOAD = "http://opds-spec.org/acquisition/"

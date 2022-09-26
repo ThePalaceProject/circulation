@@ -1,75 +1,86 @@
 {
     "metadata": {
         "title": "Ebook Central OPDS Feed for columbia",
-        "itemsPerPage": 3000,
+        "itemsPerPage": 2,
         "currentPage": 1,
         "numberOfItems": 2
     },
     "links": [
         {
-            "href": "http://localhost:8000/catalog.json",
-            "type": "application/opds+json",
-            "rel": "last"
+            "href": "https://ebookcentral.proquest.com/auth/ws/auth/PlainPartnerAuthToken/columbia?userName={patron_id}",
+            "type": "application/jwt",
+            "templated": true,
+            "rel": "token_endpoint"
         },
         {
-            "href": "http://localhost:8000/catalog.json",
+            "href": "https://ebookcentral.proquest.com/lib/columbia/opds/catalog.json?page=1&hitsPerPage=2",
             "type": "application/opds+json",
             "rel": "self"
-        },
-        {
-            "type": "application/vnd.proquest.token.response+json",
-            "rel": "http://thepalaceproject.org/rel/token-authentication",
-            "href": "http://ebookcentral.proquest.com/auth/ws/auth/PartnerAuthToken/columbia{?patron_id}",
-            "templated": true
         }
     ],
     "publications": [
         {
             "metadata": {
-                "identifier": "urn:proquest.com/document-id/4453281",
+                "identifier": "urn:proquest.com/document-id/1543720",
                 "@type": "http://schema.org/Book",
-                "title": "Speaking Truth to Power : Confidential Informants and Police Investigations",
-                "modified": "2022-09-09T15:11:00.000Z",
-                "published": "2016-08-02T00:00:00.000Z",
+                "title": "Cherokee Sister : The Collected Writings of Catharine Brown, 1818-1823",
+                "modified": "2022-09-26T07:47:00.000Z",
+                "published": "2022-06-13T00:00:00.000Z",
                 "language": [
                     "eng"
-                ]
+                ],
+                "editor": [
+                    {
+                        "name": "Brown, Catharine"
+                    }
+                ],
+                "publisher": {
+                    "name": "Nebraska"
+                },
+                "subject": [
+                    {
+                        "code": "HIS036040",
+                        "name": "HISTORY / United States / 19th Century",
+                        "scheme": "https://bisg.org/page/BISACEdition"
+                    }
+                ],
+                "description": "Theresa Strouth Gaul is a professor of English at Texas Christian University. She is the editor of To Marry an Indian: The Marriage of Harriett Gold and Elias Boudinot in Letters, 1823–1839 and a coeditor of Legacy: A Journal of American Women Writers."
             },
             "links": [
                 {
-                    "href": "https://ebookcentral.proquest.com/lib/columbia/getDrmFreeFile.action?documentId=4453281&mediaType=pdf{&authentication_token}",
+                    "href": "https://ebookcentral.proquest.com/lib/columbia/getDrmFreeFile.action?documentId=1543720&mediaType=pdf&authToken={authentication_token}",
                     "type": "application/pdf",
-                    "rel": "http://opds-spec.org/acquisition",
-                    "templated": true
+                    "templated": true,
+                    "rel": "http://opds-spec.org/acquisition"
                 },
                 {
-                    "href": "https://ebookcentral.proquest.com/lib/columbia/getDrmFreeFile.action?documentId=4453281&mediaType=epub{&authentication_token}",
+                    "href": "https://ebookcentral.proquest.com/lib/columbia/getDrmFreeFile.action?documentId=1543720&mediaType=epub&authToken={authentication_token}",
                     "type": "application/epub+zip",
-                    "rel": "http://opds-spec.org/acquisition",
-                    "templated": true
+                    "templated": true,
+                    "rel": "http://opds-spec.org/acquisition"
                 }
             ],
             "images": [
                 {
-                    "href": "https://ebookcentral.proquest.com/covers/4453281-s.jpg",
+                    "href": "https://ebookcentral.proquest.com/covers/1543720-s.jpg",
                     "type": "image/jpeg",
                     "height": 140,
                     "width": 100
                 },
                 {
-                    "href": "https://ebookcentral.proquest.com/covers/4453281-m.jpg",
+                    "href": "https://ebookcentral.proquest.com/covers/1543720-m.jpg",
                     "type": "image/jpeg",
                     "height": 238,
                     "width": 170
                 },
                 {
-                    "href": "https://ebookcentral.proquest.com/covers/4453281-l.jpg",
+                    "href": "https://ebookcentral.proquest.com/covers/1543720-l.jpg",
                     "type": "image/jpeg",
                     "height": 277,
                     "width": 198
                 },
                 {
-                    "href": "https://ebookcentral.proquest.com/covers/4453281-x.jpg",
+                    "href": "https://ebookcentral.proquest.com/covers/1543720-x.jpg",
                     "type": "image/jpeg",
                     "height": 350,
                     "width": 250
@@ -78,64 +89,65 @@
         },
         {
             "metadata": {
-                "identifier": "urn:proquest.com/document-id/181639",
+                "identifier": "urn:proquest.com/document-id/6940768",
                 "@type": "http://schema.org/Book",
-                "title": "The Politics of Postmodernism",
-                "modified": "2022-09-12T21:04:00.000Z",
-                "published": "2002-07-05T00:00:00.000Z",
+                "title": "Sports and Aging : A Prescription for Longevity",
+                "modified": "2022-09-26T07:47:00.000Z",
+                "published": "2022-06-01T00:00:00.000Z",
                 "language": [
                     "eng"
-                ]
+                ],
+                "author": [
+                    {
+                        "name": "Gems, Gerald R."
+                    }
+                ],
+                "publisher": {
+                    "name": "Nebraska"
+                },
+                "subject": [
+                    {
+                        "name": "Health; Sport &amp; Recreation",
+                        "scheme": "https://ebookcentral.proquest.com/lib/columbia/browseSubject.action"
+                    }
+                ],
+                "description": "In Sports and Aging a wide-ranging group of physically active people, including many scholar-athletes, discuss sports in the context of aging and their own athletic experiences."
             },
             "links": [
                 {
-                    "type": "application/vnd.adobe.adept+xml",
-                    "rel": "http://opds-spec.org/acquisition",
-                    "href": "https://ebookcentral.proquest.com/lib/nyulibrary-ebooks/getAcsmFile.action?documentId=181639&mediaType=epub{&authentication_token}",
+                    "href": "https://ebookcentral.proquest.com/lib/columbia/getDrmFreeFile.action?documentId=6940768&mediaType=pdf&authToken={authentication_token}",
+                    "type": "application/pdf",
                     "templated": true,
-                    "properties": {
-                        "indirectAcquisition": [
-                            {
-                                "type": "application/epub+zip"
-                            }
-                        ]
-                    }
+                    "rel": "http://opds-spec.org/acquisition"
                 },
                 {
-                    "type": "application/vnd.adobe.adept+xml",
-                    "rel": "http://opds-spec.org/acquisition",
-                    "href": "https://ebookcentral.proquest.com/lib/nyulibrary-ebooks/getAcsmFile.action?documentId=181639&mediaType=pdf{&authentication_token}",
+                    "href": "https://ebookcentral.proquest.com/lib/columbia/getDrmFreeFile.action?documentId=6940768&mediaType=epub&authToken={authentication_token}",
+                    "type": "application/epub+zip",
                     "templated": true,
-                    "properties": {
-                        "indirectAcquisition": [
-                            {
-                                "type": "application/pdf"
-                            }
-                        ]
-                    }
+                    "rel": "http://opds-spec.org/acquisition"
                 }
             ],
             "images": [
                 {
-                    "href": "https://ebookcentral.proquest.com/covers/181639-s.jpg",
+                    "href": "https://ebookcentral.proquest.com/covers/6940768-s.jpg",
                     "type": "image/jpeg",
                     "height": 140,
                     "width": 100
                 },
                 {
-                    "href": "https://ebookcentral.proquest.com/covers/181639-m.jpg",
+                    "href": "https://ebookcentral.proquest.com/covers/6940768-m.jpg",
                     "type": "image/jpeg",
                     "height": 238,
                     "width": 170
                 },
                 {
-                    "href": "https://ebookcentral.proquest.com/covers/181639-l.jpg",
+                    "href": "https://ebookcentral.proquest.com/covers/6940768-l.jpg",
                     "type": "image/jpeg",
                     "height": 277,
                     "width": 198
                 },
                 {
-                    "href": "https://ebookcentral.proquest.com/covers/181639-x.jpg",
+                    "href": "https://ebookcentral.proquest.com/covers/6940768-x.jpg",
                     "type": "image/jpeg",
                     "height": 350,
                     "width": 250

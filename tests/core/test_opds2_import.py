@@ -423,7 +423,7 @@ class TestOPDS2Importer(OPDS2Test):
         # Did the token endpoint get stored correctly?
         assert (
             setting.value
-            == "http://ebookcentral.proquest.com/auth/ws/auth/PartnerAuthToken/columbia{?patron_id}"
+            == "https://ebookcentral.proquest.com/auth/ws/auth/PlainPartnerAuthToken/columbia?userName={patron_id}"
         )
 
         # Were all the acquisition links maintained as templated links?
