@@ -16,7 +16,6 @@ from core.model import (
     ExternalIntegration,
     LicensePool,
     MediaTypes,
-    Resource,
     Work,
 )
 from core.model.collection import Collection
@@ -425,6 +424,3 @@ class TestOPDS2Importer(OPDS2Test):
             setting.value
             == "https://ebookcentral.proquest.com/auth/ws/auth/PlainPartnerAuthToken/columbia?userName={patron_id}"
         )
-
-        # Were all the acquisition links maintained as templated links?
-        assert self._db.query(Resource).filter(Resource.templated == True).count() == 4

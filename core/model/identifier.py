@@ -706,7 +706,6 @@ class Identifier(Base, IdentifierConstants):
         rights_explanation=None,
         original_resource=None,
         transformation_settings=None,
-        templated=None,
     ):
         """Create a link between this Identifier and a (potentially new)
         Resource.
@@ -731,7 +730,6 @@ class Identifier(Base, IdentifierConstants):
                 data_source=data_source,
                 rights_status=rights_status,
                 rights_explanation=rights_explanation,
-                templated=templated,
             ),
         )
 
