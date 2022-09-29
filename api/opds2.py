@@ -23,8 +23,6 @@ from core.util.http import HTTP
 from core.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:
-    pass
-
     from core.model import LicensePool, Patron
 
 
