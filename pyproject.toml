@@ -122,7 +122,7 @@ pyspellchecker = "0.7.0"
 pytest = "^7"  # Can't be made a dev dep because mocks included beside prod code.
 python = ">=3.7,<4"
 python-dateutil = "2.8.2"
-python-Levenshtein = "~0.12"
+python-Levenshtein = "~0.20"
 python3-saml = "1.12.0"  # python-saml is required for SAML authentication
 pytz = "2021.3"
 requests = "~2.28"
