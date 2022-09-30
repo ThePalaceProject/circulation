@@ -5,10 +5,12 @@ from urllib.parse import quote
 
 import pytest
 from requests import Response
+from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
 from api.app import app
 from api.circulation import FulfillmentInfo
 from api.circulation_exceptions import CannotFulfill
+from api.controller import CirculationManager
 from api.opds2 import (
     OPDS2NavigationsAnnotator,
     OPDS2PublicationsAnnotator,
@@ -17,10 +19,13 @@ from api.opds2 import (
 from core.lane import Facets, Pagination
 from core.model.collection import Collection
 from core.model.configuration import ConfigurationSetting, ExternalIntegration
+from core.model.datasource import DataSource
+from core.model.patron import Loan
 from core.model.resource import Hyperlink
+from core.opds2_import import OPDS2Importer, RWPMManifestParser
 from core.problem_details import INVALID_CREDENTIALS
 from core.testing import DatabaseTest
-from tests.api.test_controller import CirculationControllerTest
+from tests.api.test_controller import CirculationControllerTest, ControllerTest
 
 
 class TestOPDS2FeedController(CirculationControllerTest):
@@ -213,3 +218,48 @@ class TestTokenAuthenticationFulfillmentProcessor(DatabaseTest):
         )
 
         assert token == INVALID_CREDENTIALS
+
+
+class TestOPDS2WithTokens(ControllerTest):
+    def test_opds2_with_authentication_tokens(self):
+        """Test the end to end workflow from importing the feed to a fulfill"""
+        collection = self._collection(
+            protocol=ExternalIntegration.OPDS2_IMPORT,
+            data_source_name=DataSource.PROQUEST,
+        )
+        self._default_library.collections.append(collection)
+        # Import the test feed first
+        importer: OPDS2Importer = OPDS2Importer(
+            self._db, collection, RWPMManifestParser(OPDS2FeedParserFactory())
+        )
+        with open("tests/core/files/opds2/auth_token_feed.json") as fp:
+            editions, pools, works, failures = importer.import_from_feed(fp.read())
+
+        work = works[0]
+        identifier = work.presentation_edition.primary_identifier
+
+        manager = CirculationManager(self._db)
+        patron = self._patron()
+
+        # Borrow the book from the library
+        with self.request_context_with_library("/") as ctx:
+            ctx.request.patron = patron
+            manager.loans.borrow(identifier.type, identifier.identifier)
+
+        loans = self._db.query(Loan).filter(Loan.patron == patron)
+        assert loans.count() == 1
+
+        loan = loans.first()
+        mechanism_id = loan.license_pool.delivery_mechanisms[0].delivery_mechanism.id
+        manager.loans.authenticated_patron_from_request = lambda: patron
+
+        # Fulfill (Download) the book, should redirect to an authenticated URL
+        with self.request_context_with_library("/") as ctx, patch.object(
+            TokenAuthenticationFulfillmentProcessor, "get_authentication_token"
+        ) as mock_auth:
+            ctx.request.patron = patron
+            mock_auth.return_value = "plaintext-token"
+            response = manager.loans.fulfill(loan.license_pool.id, mechanism_id)
+
+        assert response.status_code == 302
+        assert "authToken=plaintext-token" in response.location

@@ -63,7 +63,6 @@ from .util.opds_writer import OPDSFeed
 
 if TYPE_CHECKING:
     from webpub_manifest_parser.core import ast as core_ast
-    from webpub_manifest_parser.opds2 import ast as opds2_ast
 
 
 class RWPMManifestParser:
