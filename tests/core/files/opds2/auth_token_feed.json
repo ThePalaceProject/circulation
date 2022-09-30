@@ -1,19 +1,19 @@
 {
     "metadata": {
-        "title": "Ebook Central OPDS Feed for columbia",
+        "title": "Example feed with auth token endpoints",
         "itemsPerPage": 2,
         "currentPage": 1,
         "numberOfItems": 2
     },
     "links": [
         {
-            "href": "https://ebookcentral.proquest.com/auth/ws/auth/PlainPartnerAuthToken/columbia?userName={patron_id}",
+            "href": "http://example.org/auth?userName={patron_id}",
             "type": "application/jwt",
             "templated": true,
             "rel": "token_endpoint"
         },
         {
-            "href": "https://ebookcentral.proquest.com/lib/columbia/opds/catalog.json?page=1&hitsPerPage=2",
+            "href": "http://example.org/catalog.json?page=1&hitsPerPage=2",
             "type": "application/opds+json",
             "rel": "self"
         }
@@ -48,13 +48,13 @@
             },
             "links": [
                 {
-                    "href": "https://ebookcentral.proquest.com/lib/columbia/getDrmFreeFile.action?documentId=1543720&mediaType=pdf&authToken={authentication_token}",
+                    "href": "http://example.org//getDrmFreeFile.action?documentId=1543720&mediaType=pdf&authToken={authentication_token}",
                     "type": "application/pdf",
                     "templated": true,
                     "rel": "http://opds-spec.org/acquisition"
                 },
                 {
-                    "href": "https://ebookcentral.proquest.com/lib/columbia/getDrmFreeFile.action?documentId=1543720&mediaType=epub&authToken={authentication_token}",
+                    "href": "http://example.org//getDrmFreeFile.action?documentId=1543720&mediaType=epub&authToken={authentication_token}",
                     "type": "application/epub+zip",
                     "templated": true,
                     "rel": "http://opds-spec.org/acquisition"
@@ -62,25 +62,25 @@
             ],
             "images": [
                 {
-                    "href": "https://ebookcentral.proquest.com/covers/1543720-s.jpg",
+                    "href": "http://example.org/covers/1543720-s.jpg",
                     "type": "image/jpeg",
                     "height": 140,
                     "width": 100
                 },
                 {
-                    "href": "https://ebookcentral.proquest.com/covers/1543720-m.jpg",
+                    "href": "http://example.org/covers/1543720-m.jpg",
                     "type": "image/jpeg",
                     "height": 238,
                     "width": 170
                 },
                 {
-                    "href": "https://ebookcentral.proquest.com/covers/1543720-l.jpg",
+                    "href": "http://example.org/covers/1543720-l.jpg",
                     "type": "image/jpeg",
                     "height": 277,
                     "width": 198
                 },
                 {
-                    "href": "https://ebookcentral.proquest.com/covers/1543720-x.jpg",
+                    "href": "http://example.org/covers/1543720-x.jpg",
                     "type": "image/jpeg",
                     "height": 350,
                     "width": 250
@@ -108,20 +108,20 @@
                 "subject": [
                     {
                         "name": "Health; Sport &amp; Recreation",
-                        "scheme": "https://ebookcentral.proquest.com/lib/columbia/browseSubject.action"
+                        "scheme": "http://example.org//browseSubject.action"
                     }
                 ],
                 "description": "In Sports and Aging a wide-ranging group of physically active people, including many scholar-athletes, discuss sports in the context of aging and their own athletic experiences."
             },
             "links": [
                 {
-                    "href": "https://ebookcentral.proquest.com/lib/columbia/getDrmFreeFile.action?documentId=6940768&mediaType=pdf&authToken={authentication_token}",
+                    "href": "http://example.org//getDrmFreeFile.action?documentId=6940768&mediaType=pdf&authToken={authentication_token}",
                     "type": "application/pdf",
                     "templated": true,
                     "rel": "http://opds-spec.org/acquisition"
                 },
                 {
-                    "href": "https://ebookcentral.proquest.com/lib/columbia/getDrmFreeFile.action?documentId=6940768&mediaType=epub&authToken={authentication_token}",
+                    "href": "http://example.org//getDrmFreeFile.action?documentId=6940768&mediaType=epub&authToken={authentication_token}",
                     "type": "application/epub+zip",
                     "templated": true,
                     "rel": "http://opds-spec.org/acquisition"
@@ -129,25 +129,25 @@
             ],
             "images": [
                 {
-                    "href": "https://ebookcentral.proquest.com/covers/6940768-s.jpg",
+                    "href": "http://example.org/covers/6940768-s.jpg",
                     "type": "image/jpeg",
                     "height": 140,
                     "width": 100
                 },
                 {
-                    "href": "https://ebookcentral.proquest.com/covers/6940768-m.jpg",
+                    "href": "http://example.org/covers/6940768-m.jpg",
                     "type": "image/jpeg",
                     "height": 238,
                     "width": 170
                 },
                 {
-                    "href": "https://ebookcentral.proquest.com/covers/6940768-l.jpg",
+                    "href": "http://example.org/covers/6940768-l.jpg",
                     "type": "image/jpeg",
                     "height": 277,
                     "width": 198
                 },
                 {
-                    "href": "https://ebookcentral.proquest.com/covers/6940768-x.jpg",
+                    "href": "http://example.org/covers/6940768-x.jpg",
                     "type": "image/jpeg",
                     "height": 350,
                     "width": 250

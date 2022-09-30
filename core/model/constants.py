@@ -240,7 +240,7 @@ class LinkRelations:
         "http://librarysimplified.org/terms/rel/patron-password-reset"
     )
 
-    # Proquest auth token rel
+    # opds/opds2 auth token rel
     TOKEN_AUTH = "token_endpoint"
 
     # TODO: Is this the appropriate relation?

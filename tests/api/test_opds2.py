@@ -10,10 +10,9 @@ from api.app import app
 from api.circulation import FulfillmentInfo
 from api.circulation_exceptions import CannotFulfill
 from api.opds2 import (
-    OPDS2API,
     OPDS2NavigationsAnnotator,
     OPDS2PublicationsAnnotator,
-    OPDS2TokenAuthenticationFulfillmentProcessor,
+    TokenAuthenticationFulfillmentProcessor,
 )
 from core.lane import Facets, Pagination
 from core.model.collection import Collection
@@ -103,34 +102,7 @@ class TestOPDS2NavigationAnnotator(DatabaseTest):
         )
 
 
-class TestOPDS2API(DatabaseTest):
-    @patch("api.opds2.HTTP")
-    def test_get_authentication_token(self, mock_http):
-        resp = Response()
-        resp.status_code = 200
-        resp.raw = io.BytesIO(b"plaintext-auth-token")
-        mock_http.get_with_timeout.return_value = resp
-        token = OPDS2API.get_authentication_token(
-            self._patron(), "http://example.org/token"
-        )
-
-        assert token == "plaintext-auth-token"
-        assert mock_http.get_with_timeout.call_count == 1
-
-    @patch("api.opds2.HTTP")
-    def test_get_authentication_token_errors(self, mock_http):
-        resp = Response()
-        resp.status_code = 400
-        mock_http.get_with_timeout.return_value = resp
-
-        token = OPDS2API.get_authentication_token(
-            self._patron(), "http://example.org/token"
-        )
-
-        assert token == INVALID_CREDENTIALS
-
-
-class TestOPDS2TokenAuthenticationFulfillmentProcessor(DatabaseTest):
+class TestTokenAuthenticationFulfillmentProcessor(DatabaseTest):
     @patch("api.opds2.HTTP")
     def test_fulfill(self, mock_http):
         patron = self._patron()
@@ -163,8 +135,7 @@ class TestOPDS2TokenAuthenticationFulfillmentProcessor(DatabaseTest):
         resp.raw = io.BytesIO(b"plaintext-auth-token")
         mock_http.get_with_timeout.return_value = resp
 
-        processor = OPDS2TokenAuthenticationFulfillmentProcessor(collection)
-
+        processor = TokenAuthenticationFulfillmentProcessor(collection)
         ff_info = processor.fulfill(patron, None, work.license_pools[0], None, ff_info)
 
         assert mock_http.get_with_timeout.call_count == 1
@@ -178,6 +149,15 @@ class TestOPDS2TokenAuthenticationFulfillmentProcessor(DatabaseTest):
             == "http://example.org/11234/fulfill?authToken=plaintext-auth-token"
         )
         assert ff_info.content_link_redirect == True
+
+        # Alternative templating
+        ff_info.content_link = "http://example.org/11234/fulfill{?authentication_token}"
+        ff_info = processor.fulfill(patron, None, work.license_pools[0], None, ff_info)
+
+        assert (
+            ff_info.content_link
+            == "http://example.org/11234/fulfill?authentication_token=plaintext-auth-token"
+        )
 
         ## Test error case
         # Reset the content link
@@ -208,3 +188,28 @@ class TestOPDS2TokenAuthenticationFulfillmentProcessor(DatabaseTest):
         setting.value = None
         ff_info = processor.fulfill(patron, None, work.license_pools[0], None, ff_info)
         assert ff_info.content_link_redirect == False
+
+    @patch("api.opds2.HTTP")
+    def test_get_authentication_token(self, mock_http):
+        resp = Response()
+        resp.status_code = 200
+        resp.raw = io.BytesIO(b"plaintext-auth-token")
+        mock_http.get_with_timeout.return_value = resp
+        token = TokenAuthenticationFulfillmentProcessor.get_authentication_token(
+            self._patron(), "http://example.org/token"
+        )
+
+        assert token == "plaintext-auth-token"
+        assert mock_http.get_with_timeout.call_count == 1
+
+    @patch("api.opds2.HTTP")
+    def test_get_authentication_token_errors(self, mock_http):
+        resp = Response()
+        resp.status_code = 400
+        mock_http.get_with_timeout.return_value = resp
+
+        token = TokenAuthenticationFulfillmentProcessor.get_authentication_token(
+            self._patron(), "http://example.org/token"
+        )
+
+        assert token == INVALID_CREDENTIALS

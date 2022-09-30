@@ -411,7 +411,7 @@ class TestOPDS2Importer(OPDS2Test):
         assert edition is not None
 
     def test_auth_token_feed(self):
-        content = self.sample_opds("pq_auth_token_feed.json")
+        content = self.sample_opds("auth_token_feed.json")
         imported_editions, pools, works, failures = self._importer.import_from_feed(
             content
         )
@@ -420,7 +420,4 @@ class TestOPDS2Importer(OPDS2Test):
         )
 
         # Did the token endpoint get stored correctly?
-        assert (
-            setting.value
-            == "https://ebookcentral.proquest.com/auth/ws/auth/PlainPartnerAuthToken/columbia?userName={patron_id}"
-        )
+        assert setting.value == "http://example.org/auth?userName={patron_id}"

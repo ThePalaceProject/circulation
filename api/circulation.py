@@ -800,14 +800,14 @@ class CirculationAPI:
 
         :return: Mapping of protocols to fulfillment post-processors.
         """
-        from api.opds2 import OPDS2TokenAuthenticationFulfillmentProcessor
+        from api.opds2 import TokenAuthenticationFulfillmentProcessor
         from core.opds_import import OPDSImporter
 
         from .saml.wayfless import SAMLWAYFlessAcquisitionLinkProcessor
 
         return {
             OPDSImporter.NAME: SAMLWAYFlessAcquisitionLinkProcessor,
-            OPDS2Importer.NAME: OPDS2TokenAuthenticationFulfillmentProcessor,
+            OPDS2Importer.NAME: TokenAuthenticationFulfillmentProcessor,
         }
 
     def api_for_license_pool(self, licensepool):

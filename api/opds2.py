@@ -6,11 +6,7 @@ from typing import TYPE_CHECKING
 from flask import url_for
 from uritemplate import URITemplate
 
-from api.circulation import (
-    BaseCirculationAPI,
-    CirculationFulfillmentPostProcessor,
-    FulfillmentInfo,
-)
+from api.circulation import CirculationFulfillmentPostProcessor, FulfillmentInfo
 from api.circulation_exceptions import CannotFulfill
 from core.model import ConfigurationSetting, ExternalIntegration
 from core.model.edition import Edition
@@ -78,38 +74,7 @@ class OPDS2NavigationsAnnotator(OPDS2Annotator):
         ]
 
 
-class OPDS2API(BaseCirculationAPI):
-    """
-    Generic OPDS2 Circulation APIs
-    This should be a pure implementation with no references to daatasources
-    """
-
-    @classmethod
-    def get_authentication_token(
-        cls, patron: Patron, token_auth_url: str
-    ) -> ProblemDetail | str:
-        """Get the authentication token for a patron"""
-        url = URITemplate(token_auth_url).expand(patron_id=patron.username)
-        log = logging.getLogger("OPDS2API")
-        response = HTTP.get_with_timeout(url)
-        if response.status_code != 200:
-            log.error(
-                f"Could not authenticate the patron({patron.username}): {response.content}"
-            )
-            return INVALID_CREDENTIALS
-
-        # The response should be the JWT token, not wrapped in any format like JSON
-        token = response.content
-        if not token:
-            log.error(
-                f"Could not authenticate the patron({patron.username}): {response.content}"
-            )
-            return INVALID_CREDENTIALS
-
-        return token.decode()
-
-
-class OPDS2TokenAuthenticationFulfillmentProcessor(CirculationFulfillmentPostProcessor):
+class TokenAuthenticationFulfillmentProcessor(CirculationFulfillmentPostProcessor):
     """In case a feed has a token auth endpoint and the content_link requires an authentication token
     Then we must fetch the required authentication token from the token_auth endpoint and
     expand the templated url with the received token.
@@ -129,7 +94,8 @@ class OPDS2TokenAuthenticationFulfillmentProcessor(CirculationFulfillmentPostPro
         if not fulfillment.content_link:
             return fulfillment
 
-        if "{authentication_token}" not in fulfillment.content_link:
+        templated = URITemplate(fulfillment.content_link)
+        if "authentication_token" not in templated.variable_names:
             return fulfillment
 
         token_auth = ConfigurationSetting.for_externalintegration(
@@ -138,12 +104,34 @@ class OPDS2TokenAuthenticationFulfillmentProcessor(CirculationFulfillmentPostPro
         if not token_auth or token_auth.value is None:
             return fulfillment
 
-        token = OPDS2API.get_authentication_token(patron, token_auth.value)
+        token = self.get_authentication_token(patron, token_auth.value)
         if type(token) == ProblemDetail:
             raise CannotFulfill()
 
-        fulfillment.content_link = URITemplate(fulfillment.content_link).expand(
-            authentication_token=token
-        )
+        fulfillment.content_link = templated.expand(authentication_token=token)
         fulfillment.content_link_redirect = True
         return fulfillment
+
+    @classmethod
+    def get_authentication_token(
+        cls, patron: Patron, token_auth_url: str
+    ) -> ProblemDetail | str:
+        """Get the authentication token for a patron"""
+        url = URITemplate(token_auth_url).expand(patron_id=patron.username)
+        log = logging.getLogger("OPDS2API")
+        response = HTTP.get_with_timeout(url)
+        if response.status_code != 200:
+            log.error(
+                f"Could not authenticate the patron({patron.username}): {response.content}"
+            )
+            return INVALID_CREDENTIALS
+
+        # The response should be the JWT token, not wrapped in any format like JSON
+        token = response.text
+        if not token:
+            log.error(
+                f"Could not authenticate the patron({patron.username}): {response.content}"
+            )
+            return INVALID_CREDENTIALS
+
+        return token
