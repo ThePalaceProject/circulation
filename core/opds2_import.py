@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import logging
 from contextlib import contextmanager
 from datetime import datetime
 from io import BytesIO, StringIO
-from typing import Callable, Collection, Dict, Iterable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Callable, Collection, Iterable
 from urllib.parse import urljoin, urlparse
 
 import sqlalchemy
@@ -41,6 +43,7 @@ from .metadata_layer import (
     SubjectData,
 )
 from .model import (
+    ConfigurationSetting,
     Contributor,
     DeliveryMechanism,
     Edition,
@@ -57,6 +60,9 @@ from .model import (
 from .opds_import import OPDSImporter, OPDSImportMonitor, SimplifiedOPDSLookup
 from .util.http import BadResponseException
 from .util.opds_writer import OPDSFeed
+
+if TYPE_CHECKING:
+    from webpub_manifest_parser.core import ast as core_ast
 
 
 class RWPMManifestParser:
@@ -76,7 +82,7 @@ class RWPMManifestParser:
         self._manifest_parser_factory = manifest_parser_factory
 
     def parse_manifest(
-        self, manifest: Union[str, Dict, Manifestlike]
+        self, manifest: str | dict | Manifestlike
     ) -> ManifestParserResult:
         """Parse the feed into an RPWM-like AST object.
 
@@ -147,12 +153,12 @@ class OPDS2Importer(
         collection: Collection,
         parser: RWPMManifestParser,
         data_source_name: str = None,
-        identifier_mapping: Dict = None,
+        identifier_mapping: dict = None,
         http_get: Callable = None,
         metadata_client: SimplifiedOPDSLookup = None,
         content_modifier: Callable = None,
-        map_from_collection: Dict = None,
-        mirrors: Dict[str, MirrorUploader] = None,
+        map_from_collection: dict = None,
+        mirrors: dict[str, MirrorUploader] = None,
     ):
         """Initialize a new instance of OPDS2Importer class.
 
@@ -214,9 +220,7 @@ class OPDS2Importer(
 
         return identifier.type not in ignored_identifier_types
 
-    def _extract_subjects(
-        self, subjects: List["core_ast.Subject"]
-    ) -> List["SubjectMetadata"]:
+    def _extract_subjects(self, subjects: list[core_ast.Subject]) -> list[SubjectData]:
         """Extract a list of SubjectData objects from the webpub-manifest-parser's subject.
 
         :param subjects: Parsed subject object
@@ -261,9 +265,9 @@ class OPDS2Importer(
 
     def _extract_contributors(
         self,
-        contributors: List["core_ast.Contributor"],
-        default_role: Optional[str] = Contributor.AUTHOR_ROLE,
-    ) -> List[ContributorData]:
+        contributors: list[core_ast.Contributor],
+        default_role: str | None = Contributor.AUTHOR_ROLE,
+    ) -> list[ContributorData]:
         """Extract a list of ContributorData objects from the webpub-manifest-parser's contributor.
 
         :param contributors: Parsed contributor object
@@ -380,8 +384,8 @@ class OPDS2Importer(
         return description_link
 
     def _extract_image_links(
-        self, publication: "ast_core.Publication", feed_self_url: str
-    ) -> List[LinkData]:
+        self, publication: opds2_ast.OPDS2Publication, feed_self_url: str
+    ) -> list[LinkData]:
         """Extracts a list of LinkData objects containing information about artwork.
 
         :param publication: Publication object
@@ -440,8 +444,8 @@ class OPDS2Importer(
         return image_links
 
     def _extract_links(
-        self, publication: "ast_core.Publication", feed_self_url: str
-    ) -> List[LinkData]:
+        self, publication: opds2_ast.OPDS2Publication, feed_self_url: str
+    ) -> list[LinkData]:
         """Extract a list of LinkData objects from a list of webpub-manifest-parser links.
 
         :param publication: Publication object
@@ -473,8 +477,8 @@ class OPDS2Importer(
         return links
 
     def _extract_media_types_and_drm_scheme_from_link(
-        self, link: "ast_core.Link"
-    ) -> List[Tuple[str, str]]:
+        self, link: core_ast.Link
+    ) -> list[tuple[str, str]]:
         """Extract information about content's media type and used DRM schema from the link.
 
         :param link: Link object
@@ -541,7 +545,7 @@ class OPDS2Importer(
 
         return media_types_and_drm_scheme
 
-    def _extract_medium_from_links(self, links: "ast_core.LinkList") -> Optional[str]:
+    def _extract_medium_from_links(self, links: core_ast.LinkList) -> str | None:
         """Extract the publication's medium from its links.
 
         :param links: List of links
@@ -738,11 +742,11 @@ class OPDS2Importer(
 
     def _find_formats_in_non_open_access_acquisition_links(
         self,
-        ast_link_list: List["ast_core.Link"],
-        link_data_list: List[LinkData],
+        ast_link_list: list[core_ast.Link],
+        link_data_list: list[LinkData],
         rights_uri: str,
         circulation_data: CirculationData,
-    ) -> List[FormatData]:
+    ) -> list[FormatData]:
         """Find circulation formats in non open-access acquisition links.
 
         :param ast_link_list: List of Link objects
@@ -813,7 +817,7 @@ class OPDS2Importer(
                     yield from group.publications
 
     @staticmethod
-    def _is_acquisition_link(link: "ast_core.Link") -> bool:
+    def _is_acquisition_link(link: core_ast.Link) -> bool:
         """Return a boolean value indicating whether a link can be considered an acquisition link.
 
         :param link: Link object
@@ -851,7 +855,7 @@ class OPDS2Importer(
 
     def _record_coverage_failure(
         self,
-        failures: Dict[str, List[CoverageFailure]],
+        failures: dict[str, list[CoverageFailure]],
         identifier: Identifier,
         error_message: str,
         transient: bool = True,
@@ -898,7 +902,7 @@ class OPDS2Importer(
                 f"Publication # {original_identifier} ('{title}') has an unrecognizable identifier."
             )
 
-    def extract_next_links(self, feed: Union[str, opds2_ast.OPDS2Feed]) -> List[str]:
+    def extract_next_links(self, feed: str | opds2_ast.OPDS2Feed) -> list[str]:
         """Extracts "next" links from the feed.
 
         :param feed: OPDS 2.0 feed
@@ -916,8 +920,8 @@ class OPDS2Importer(
         return next_links
 
     def extract_last_update_dates(
-        self, feed: Union[str, opds2_ast.OPDS2Feed]
-    ) -> List[Tuple[str, datetime]]:
+        self, feed: str | opds2_ast.OPDS2Feed
+    ) -> list[tuple[str, datetime]]:
         """Extract last update date of the feed.
 
         :param feed: OPDS 2.0 feed
@@ -937,9 +941,19 @@ class OPDS2Importer(
 
         return dates
 
+    def _parse_feed_links(self, links: list[core_ast.Link]) -> None:
+        """Parse the global feed links. Currently only parses the token endpoint link"""
+        for link in links:
+            if first_or_default(link.rels) == Hyperlink.TOKEN_AUTH:
+                # Save the collection-wide token authentication endpoint
+                auth_setting = ConfigurationSetting.for_externalintegration(
+                    ExternalIntegration.TOKEN_AUTH, self.collection.external_integration
+                )
+                auth_setting.value = link.href
+
     def extract_feed_data(
-        self, feed: Union[str, opds2_ast.OPDS2Feed], feed_url: Optional[str] = None
-    ) -> Tuple[Dict, Dict]:
+        self, feed: str | opds2_ast.OPDS2Feed, feed_url: str | None = None
+    ) -> tuple[dict, dict]:
         """Turn an OPDS 2.0 feed into lists of Metadata and CirculationData objects.
         :param feed: OPDS 2.0 feed
         :param feed_url: Feed URL used to resolve relative links
@@ -948,6 +962,9 @@ class OPDS2Importer(
         feed = parser_result.root
         publication_metadata_dictionary = {}
         failures = {}
+
+        if feed.links:
+            self._parse_feed_links(feed.links)
 
         for publication in self._get_publications(feed):
             recognized_identifier = self._extract_identifier(publication)

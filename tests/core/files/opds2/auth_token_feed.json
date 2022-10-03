@@ -1,0 +1,158 @@
+{
+    "metadata": {
+        "title": "Example feed with auth token endpoints",
+        "itemsPerPage": 2,
+        "currentPage": 1,
+        "numberOfItems": 2
+    },
+    "links": [
+        {
+            "href": "http://example.org/auth?userName={patron_id}",
+            "type": "application/jwt",
+            "templated": true,
+            "rel": "token_endpoint"
+        },
+        {
+            "href": "http://example.org/catalog.json?page=1&hitsPerPage=2",
+            "type": "application/opds+json",
+            "rel": "self"
+        }
+    ],
+    "publications": [
+        {
+            "metadata": {
+                "identifier": "urn:proquest.com/document-id/1543720",
+                "@type": "http://schema.org/Book",
+                "title": "Cherokee Sister : The Collected Writings of Catharine Brown, 1818-1823",
+                "modified": "2022-09-26T07:47:00.000Z",
+                "published": "2022-06-13T00:00:00.000Z",
+                "language": [
+                    "eng"
+                ],
+                "editor": [
+                    {
+                        "name": "Brown, Catharine"
+                    }
+                ],
+                "publisher": {
+                    "name": "Nebraska"
+                },
+                "subject": [
+                    {
+                        "code": "HIS036040",
+                        "name": "HISTORY / United States / 19th Century",
+                        "scheme": "https://bisg.org/page/BISACEdition"
+                    }
+                ],
+                "description": "Theresa Strouth Gaul is a professor of English at Texas Christian University. She is the editor of To Marry an Indian: The Marriage of Harriett Gold and Elias Boudinot in Letters, 1823–1839 and a coeditor of Legacy: A Journal of American Women Writers."
+            },
+            "links": [
+                {
+                    "href": "http://example.org//getDrmFreeFile.action?documentId=1543720&mediaType=pdf&authToken={authentication_token}",
+                    "type": "application/pdf",
+                    "templated": true,
+                    "rel": "http://opds-spec.org/acquisition"
+                },
+                {
+                    "href": "http://example.org//getDrmFreeFile.action?documentId=1543720&mediaType=epub&authToken={authentication_token}",
+                    "type": "application/epub+zip",
+                    "templated": true,
+                    "rel": "http://opds-spec.org/acquisition"
+                }
+            ],
+            "images": [
+                {
+                    "href": "http://example.org/covers/1543720-s.jpg",
+                    "type": "image/jpeg",
+                    "height": 140,
+                    "width": 100
+                },
+                {
+                    "href": "http://example.org/covers/1543720-m.jpg",
+                    "type": "image/jpeg",
+                    "height": 238,
+                    "width": 170
+                },
+                {
+                    "href": "http://example.org/covers/1543720-l.jpg",
+                    "type": "image/jpeg",
+                    "height": 277,
+                    "width": 198
+                },
+                {
+                    "href": "http://example.org/covers/1543720-x.jpg",
+                    "type": "image/jpeg",
+                    "height": 350,
+                    "width": 250
+                }
+            ]
+        },
+        {
+            "metadata": {
+                "identifier": "urn:proquest.com/document-id/6940768",
+                "@type": "http://schema.org/Book",
+                "title": "Sports and Aging : A Prescription for Longevity",
+                "modified": "2022-09-26T07:47:00.000Z",
+                "published": "2022-06-01T00:00:00.000Z",
+                "language": [
+                    "eng"
+                ],
+                "author": [
+                    {
+                        "name": "Gems, Gerald R."
+                    }
+                ],
+                "publisher": {
+                    "name": "Nebraska"
+                },
+                "subject": [
+                    {
+                        "name": "Health; Sport &amp; Recreation",
+                        "scheme": "http://example.org//browseSubject.action"
+                    }
+                ],
+                "description": "In Sports and Aging a wide-ranging group of physically active people, including many scholar-athletes, discuss sports in the context of aging and their own athletic experiences."
+            },
+            "links": [
+                {
+                    "href": "http://example.org//getDrmFreeFile.action?documentId=6940768&mediaType=pdf&authToken={authentication_token}",
+                    "type": "application/pdf",
+                    "templated": true,
+                    "rel": "http://opds-spec.org/acquisition"
+                },
+                {
+                    "href": "http://example.org//getDrmFreeFile.action?documentId=6940768&mediaType=epub&authToken={authentication_token}",
+                    "type": "application/epub+zip",
+                    "templated": true,
+                    "rel": "http://opds-spec.org/acquisition"
+                }
+            ],
+            "images": [
+                {
+                    "href": "http://example.org/covers/6940768-s.jpg",
+                    "type": "image/jpeg",
+                    "height": 140,
+                    "width": 100
+                },
+                {
+                    "href": "http://example.org/covers/6940768-m.jpg",
+                    "type": "image/jpeg",
+                    "height": 238,
+                    "width": 170
+                },
+                {
+                    "href": "http://example.org/covers/6940768-l.jpg",
+                    "type": "image/jpeg",
+                    "height": 277,
+                    "width": 198
+                },
+                {
+                    "href": "http://example.org/covers/6940768-x.jpg",
+                    "type": "image/jpeg",
+                    "height": 350,
+                    "width": 250
+                }
+            ]
+        }
+    ]
+}

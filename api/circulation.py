@@ -31,6 +31,7 @@ from core.model import (
     Session,
     get_one,
 )
+from core.opds2_import import OPDS2Importer
 from core.util.datetime_helpers import utc_now
 
 from .circulation_exceptions import *
@@ -799,12 +800,14 @@ class CirculationAPI:
 
         :return: Mapping of protocols to fulfillment post-processors.
         """
+        from api.opds2 import TokenAuthenticationFulfillmentProcessor
         from core.opds_import import OPDSImporter
 
         from .saml.wayfless import SAMLWAYFlessAcquisitionLinkProcessor
 
         return {
             OPDSImporter.NAME: SAMLWAYFlessAcquisitionLinkProcessor,
+            OPDS2Importer.NAME: TokenAuthenticationFulfillmentProcessor,
         }
 
     def api_for_license_pool(self, licensepool):

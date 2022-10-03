@@ -289,6 +289,9 @@ class ExternalIntegration(Base):
     # If the library-collection pair should display books with holds when no loans are available
     DISPLAY_RESERVES = "dont_display_reserves"
 
+    # The token auth for an opds/opds2 feed
+    TOKEN_AUTH = "token_auth_endpoint"
+
     __tablename__ = "externalintegrations"
     id = Column(Integer, primary_key=True)
 

@@ -716,7 +716,6 @@ class Identifier(Base, IdentifierConstants):
         from .resource import Hyperlink, Representation, Resource
 
         _db = Session.object_session(self)
-
         # Find or create the Resource.
         if not href:
             href = Hyperlink.generic_uri(data_source, self, rel, content)

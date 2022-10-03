@@ -6,12 +6,14 @@ from parameterized import parameterized
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
 from core.model import (
+    ConfigurationSetting,
     Contribution,
     Contributor,
     DataSource,
     DeliveryMechanism,
     Edition,
     EditionConstants,
+    ExternalIntegration,
     LicensePool,
     MediaTypes,
     Work,
@@ -407,3 +409,15 @@ class TestOPDS2Importer(OPDS2Test):
         # Ensure that it was parsed correctly and available by its identifier.
         edition = self._get_edition_by_identifier(imported_editions, identifier)
         assert edition is not None
+
+    def test_auth_token_feed(self):
+        content = self.sample_opds("auth_token_feed.json")
+        imported_editions, pools, works, failures = self._importer.import_from_feed(
+            content
+        )
+        setting = ConfigurationSetting.for_externalintegration(
+            ExternalIntegration.TOKEN_AUTH, self._collection.external_integration
+        )
+
+        # Did the token endpoint get stored correctly?
+        assert setting.value == "http://example.org/auth?userName={patron_id}"

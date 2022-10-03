@@ -240,6 +240,9 @@ class LinkRelations:
         "http://librarysimplified.org/terms/rel/patron-password-reset"
     )
 
+    # opds/opds2 auth token rel
+    TOKEN_AUTH = "token_endpoint"
+
     # TODO: Is this the appropriate relation?
     DRM_ENCRYPTED_DOWNLOAD = "http://opds-spec.org/acquisition/"
     BORROW = "http://opds-spec.org/acquisition/borrow"
