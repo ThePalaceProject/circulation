@@ -31,6 +31,8 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider):
         email = request.get("email")
         password = request.get("password")
         redirect_url = request.get("redirect")
+        if redirect_url in (None, "None", "null"):
+            redirect_url = "/admin/web"
 
         if email and password:
             match = Admin.authenticate(_db, email, password)

@@ -63,6 +63,14 @@ class TestPasswordAdminAuthenticationProvider(DatabaseTest):
         assert INVALID_ADMIN_CREDENTIALS == admin_details
         assert None == redirect
 
+        # Test with "empty" redirect urls, should redirect to admin home page
+        for redirect in (None, "None", "null"):
+            admin_details, redirect = password_auth.sign_in(
+                self._db,
+                dict(email="admin1@nypl.org", password="pass1", redirect=redirect),
+            )
+            assert redirect == "/admin/web"
+
     def test_sign_in_case_insensitive(self):
         password_auth = PasswordAdminAuthenticationProvider(None)
 
