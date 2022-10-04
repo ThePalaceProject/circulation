@@ -58,6 +58,12 @@ from .util.datetime_helpers import strptime_utc, utc_now
 from .util.http import HTTP, BadResponseException
 from .util.string_helpers import base64
 
+"""
+An OverDrive defined constant indicating the "main" or parent account associated
+with an OverDrive collection.
+"""
+OVERDRIVE_MAIN_ACCOUNT_ID: int = -1
+
 
 class OverdriveConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
     """The basic Overdrive configuration"""
@@ -367,8 +373,9 @@ class OverdriveCoreAPI(HasExternalIntegration):
         """The library ID for this library, as we should look for it in
         certain API documents served by Overdrive.
 
-        For ordinary collections, and for consortial collections
-        shared among libraries, this will be -1.
+        For ordinary collections (ie non-Advantage) with or without associated
+        Advantage (ie child) collections shared among libraries, this will be .
+        equal to the OVERDRIVE_MAIN_ACCOUNT_ID.
 
         For Overdrive Advantage accounts, this will be the numeric
         value of the Overdrive library ID.
@@ -377,8 +384,8 @@ class OverdriveCoreAPI(HasExternalIntegration):
             # This is not an Overdrive Advantage collection.
             #
             # Instead of looking for the library ID itself in these
-            # documents, we should look for the constant -1.
-            return -1
+            # documents, we should look for the constant main account id.
+            return OVERDRIVE_MAIN_ACCOUNT_ID
         return int(self._library_id)
 
     def check_creds(self, force_refresh=False):
@@ -1062,10 +1069,11 @@ class OverdriveRepresentationExtractor:
         we will be counting it with the parent collection.
         """
 
-        if self.library_id == -1:
+        if self.library_id == OVERDRIVE_MAIN_ACCOUNT_ID:
             # this is a parent collection
             filtered_result = filter(
-                lambda account: account.get("id") == -1 or account.get("shared", False),
+                lambda account: account.get("id") == OVERDRIVE_MAIN_ACCOUNT_ID
+                or account.get("shared", False),
                 accounts,
             )
         else:
