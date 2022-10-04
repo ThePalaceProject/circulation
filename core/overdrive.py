@@ -2,7 +2,7 @@ import datetime
 import json
 import logging
 from threading import RLock
-from typing import Dict, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import quote, urlsplit, urlunsplit
 
 import isbnlib
@@ -1024,55 +1024,12 @@ class OverdriveRepresentationExtractor:
             patrons_in_hold_queue = 0
         elif book.get("isOwnedByCollections") is not False:
             # We own this book.
-            accounts = book.get("accounts", [])
-            # TODO: verify that the logic is correct with Overdrive.
-            #
-            # This section of code is convoluted in part because I don't fully
-            # understand the relationship between overdrive, overdrive
-            # advantage, and overdrive consortial accounts and how related
-            # information is returned by the API or not depending on the
-            # the type of API token used.
-            # Questions: Are "shared" accounts ever returned in the feed
-            # results of  Overdrive Advantage accounts? If so should they be
-            # counted?Are "unshared" accounts ever returned in the feed
-            # results of  Overdrive Advantage accounts? If so how should they be
-            # handled?  Can a consortial account also be an Overdrive Advantage
-            # account? Can two Palace Libraries use tokens whose associated
-            # accounts overlap? What is the relationship between a token and an
-            # account? One to many? Many to many? Does it make a difference to
-            # us?
-            #
-            # The problem as I see it (if there is a problem)  is that the
-            # feed response is overloaded:
-            # you need to know what kind of API token (consortial or not) you've
-            # got in order to properly interpret the JSON response...maybe.
-            is_consortium = len([a for a in accounts if a["id"] == -1]) == 1
             licenses_owned = 0
             licenses_available = 0
-            if self.library_id != -1:
-                # This is an Overdrive Advantage account. For the sake of
-                # making as few changes with possibly unexpected consequences
-                # as possible, just do what we were doing before I made these
-                # changes.
-                for account in accounts:
-                    if account["id"] == self.library_id:
-                        if "copiesOwned" in account:
-                            licenses_owned += int(account["copiesOwned"])
-                        if "copiesAvailable" in account:
-                            licenses_available += int(account["copiesAvailable"])
-            elif not is_consortium:
-                # This is a non-consortial, non-advantage overdrive account:
-                # just get the values from the book object.
-                licenses_owned = book.get("copiesOwned", 0)
-                licenses_available = book.get("copiesAvailable", 0)
-            else:
-                for account in accounts:
-                    shared = "shared" in account and account["shared"]
-                    if shared or account["id"] == -1:
-                        if "copiesOwned" in account:
-                            licenses_owned += int(account["copiesOwned"])
-                        if "copiesAvailable" in account:
-                            licenses_available += int(account["copiesAvailable"])
+
+            for account in self._get_applicable_accounts(book.get("accounts", [])):
+                licenses_owned += int(account.get("copiesOwned", 0))
+                licenses_available += int(account.get("copiesAvailable", 0))
 
             if "numberOfHolds" in book:
                 if patrons_in_hold_queue is None:
@@ -1087,6 +1044,39 @@ class OverdriveRepresentationExtractor:
             licenses_reserved=licenses_reserved,
             patrons_in_hold_queue=patrons_in_hold_queue,
         )
+
+    def _get_applicable_accounts(
+        self, accounts: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        Returns those accounts from the accounts array that apply the
+        current overdrive collection context.
+
+        If this is an overdrive parent collection, we want to return accounts
+        associated with the main OverDrive "library" and any non-main account
+        with sharing enabled.
+
+        If this is a child OverDrive collection, then we return only the
+        account associated with that child's OverDrive Advantage "library".
+        Additionally, we want to exclude the account if it is "shared" since
+        we will be counting it with the parent collection.
+        """
+
+        if self.library_id == -1:
+            # this is a parent collection
+            filtered_result = filter(
+                lambda account: account.get("id") == -1 or account.get("shared", False),
+                accounts,
+            )
+        else:
+            # this is child collection
+            filtered_result = filter(
+                lambda account: account.get("id") == self.library_id
+                and not account.get("shared", False),
+                accounts,
+            )
+
+        return list(filtered_result)
 
     @classmethod
     def image_link_to_linkdata(cls, link, rel):

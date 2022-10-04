@@ -513,16 +513,17 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         )
 
     def test_book_info_to_circulation_advantage(self):
-        # Overdrive Advantage accounts derive different information
-        # from the same API responses as regular Overdrive accounts.
+        # Overdrive Advantage accounts (a.k.a. "child" or "sub" accounts derive
+        # different information from the same API responses as "main" Overdrive
+        # accounts.
         raw, info = self.sample_json("overdrive_availability_advantage.json")
 
         extractor = OverdriveRepresentationExtractor(self.api)
-        # consortial data means data that is available to a consortial account
-        # in other words, the consortial account itself + any shared accounts
+        # Calling in the context of a main account should return a count of
+        # the main account and any shared sub account owned and available.
         consortial_data = extractor.book_info_to_circulation(info)
-        assert 4 == consortial_data.licenses_owned
-        assert 4 == consortial_data.licenses_available
+        assert 10 == consortial_data.licenses_owned
+        assert 10 == consortial_data.licenses_available
 
         class MockAPI:
             # Pretend to be an API for an Overdrive Advantage collection with
@@ -554,6 +555,19 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
 
         extractor = OverdriveRepresentationExtractor(MockAPI())
         advantage_data = extractor.book_info_to_circulation(info)
+        assert 0 == advantage_data.licenses_owned
+        assert 0 == advantage_data.licenses_available
+        assert 0 == consortial_data.patrons_in_hold_queue
+
+        class MockAPI:
+            # Pretend to be an API for an Overdrive Advantage collection with
+            # library ID 63 which contains shared copies.
+            advantage_library_id = 63
+
+        extractor = OverdriveRepresentationExtractor(MockAPI())
+        advantage_data = extractor.book_info_to_circulation(info)
+        # since these copies are shared and counted as part of the main
+        # context we do not count them here.
         assert 0 == advantage_data.licenses_owned
         assert 0 == advantage_data.licenses_available
         assert 0 == consortial_data.patrons_in_hold_queue
