@@ -27,13 +27,13 @@ target_metadata = Base.metadata
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
+
+# Import the models not included in models/__init__.py
+# This is required for autogenerate to work correctly
 from api.saml.metadata.federations.model import (  # noqa: autoflake
     SAMLFederatedIdentityProvider,
     SAMLFederation,
 )
-
-# Import the models not included in models/__init__.py
-# This is required for autogenerate to work correctly
 from core.lane import Lane, LaneGenre  # noqa: autoflake
 
 
