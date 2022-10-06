@@ -1,7 +1,30 @@
-#!/usr/bin/env python
-"""Run any new migrations from the database"""
-import startup  # noqa: autoflake
+#!/usr/bin/env sh
+# Run any new migrations from the database
 
-from core.scripts import DatabaseMigrationScript
+TARGET="head"
+DIRECTION="upgrade"
 
-DatabaseMigrationScript().run()
+while getopts "hu:d:" opt; do
+    case $opt in
+        h)      echo "Database migration script"
+                echo "Options"
+                echo "  -h     This help text."
+                echo "  -u     Run an 'alembic upgrade'. An additional target migration must be provided."
+                echo "  -d     Run an 'alembic downgrade'. An additional target migration must be provided."
+                echo ""
+                echo "Example: migrate_database -u 87c65"
+                echo "By default if no -u or -d options are provided an 'alembic upgrade head' is run."
+            exit 0
+        ;;
+        u) DIRECTION="upgrade"; TARGET="$OPTARG"
+        ;;
+        d) DIRECTION="downgrade"; TARGET="$OPTARG"
+        ;;
+        *) exit 1
+        ;;
+    esac
+
+done
+
+echo "Running 'alembic ${DIRECTION} ${TARGET}'"
+alembic ${DIRECTION} ${TARGET}
