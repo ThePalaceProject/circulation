@@ -62,7 +62,6 @@ from core.model import (
     RightsStatus,
     SessionManager,
     Subject,
-    Timestamp,
     get_one,
 )
 from core.model.configuration import ExternalIntegrationLink
@@ -70,7 +69,6 @@ from core.opds import AcquisitionFeed
 from core.opds_import import MetadataWranglerOPDSLookup, OPDSImporter
 from core.scripts import (
     CollectionType,
-    DatabaseMigrationInitializationScript,
     IdentifierInputScript,
     LaneSweeperScript,
     LibraryInputScript,
@@ -1010,19 +1008,6 @@ class InstanceInitializationScript(TimestampScript):
             except CannotLoadConfiguration as e:
                 # Elasticsearch isn't configured, so do nothing.
                 pass
-
-        # Set a timestamp that represents the new database's version.
-        db_init_script = DatabaseMigrationInitializationScript(_db=self._db)
-        existing = get_one(
-            self._db,
-            Timestamp,
-            service=db_init_script.name,
-            service_type=Timestamp.SCRIPT_TYPE,
-        )
-        if existing:
-            # No need to run the script. We already have a timestamp.
-            return
-        db_init_script.run()
 
         # Create a secret key if one doesn't already exist.
         ConfigurationSetting.sitewide_secret(self._db, Configuration.SECRET_KEY)

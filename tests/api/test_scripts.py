@@ -33,9 +33,7 @@ from core.model import (
     LicensePool,
     Representation,
     RightsStatus,
-    Timestamp,
     create,
-    get_one,
 )
 from core.model.configuration import ExternalIntegrationLink
 from core.opds import AcquisitionFeed
@@ -680,17 +678,6 @@ class TestInstanceInitializationScript(DatabaseTest):
         assert True == script.was_run
 
     def test_do_run(self):
-        # Normally, do_run is only called by run() if the database has
-        # not yet meen initialized. But we can test it by calling it
-        # directly.
-        timestamp = get_one(
-            self._db,
-            Timestamp,
-            service="Database Migration",
-            service_type=Timestamp.SCRIPT_TYPE,
-        )
-        assert None == timestamp
-
         # Remove all secret keys, should they exist, before running the
         # script.
         secret_keys = self._db.query(ConfigurationSetting).filter(
@@ -700,15 +687,6 @@ class TestInstanceInitializationScript(DatabaseTest):
 
         script = InstanceInitializationScript(_db=self._db)
         script.do_run(ignore_search=True)
-
-        # It initializes the database.
-        timestamp = get_one(
-            self._db,
-            Timestamp,
-            service="Database Migration",
-            service_type=Timestamp.SCRIPT_TYPE,
-        )
-        assert timestamp
 
         # It creates a secret key.
         assert 1 == secret_keys.count()
