@@ -557,7 +557,6 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         advantage_data = extractor.book_info_to_circulation(info)
         assert 0 == advantage_data.licenses_owned
         assert 0 == advantage_data.licenses_available
-        assert 0 == consortial_data.patrons_in_hold_queue
 
         class MockAPI:
             # Pretend to be an API for an Overdrive Advantage collection with
@@ -570,7 +569,6 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         # context we do not count them here.
         assert 0 == advantage_data.licenses_owned
         assert 0 == advantage_data.licenses_available
-        assert 0 == consortial_data.patrons_in_hold_queue
 
     def test_not_found_error_to_circulationdata(self):
         raw, info = self.sample_json("overdrive_availability_not_found.json")
