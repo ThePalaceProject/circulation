@@ -1687,7 +1687,7 @@ python-versions = "*"
 
 [[package]]
 name = "types-psycopg2"
-version = "2.9.21"
+version = "2.9.21.1"
 description = "Typing stubs for psycopg2"
 category = "dev"
 optional = false
@@ -3279,8 +3279,8 @@ types-Pillow = [
     {file = "types_Pillow-9.2.2-py3-none-any.whl", hash = "sha256:bfe14afa1e9047a52b3dc326c93b4f57db72641794e194f11b511f68b0061814"},
 ]
 types-psycopg2 = [
-    {file = "types-psycopg2-2.9.21.tar.gz", hash = "sha256:16a16a7e147597040bd46b3d2ecaae198ef88e400b540c110efdf05673e5f3f4"},
-    {file = "types_psycopg2-2.9.21-py3-none-any.whl", hash = "sha256:6f05af9369abe1ffbbe86abcae23dd61cd607141349957eebd30331b36d216f2"},
+    {file = "types-psycopg2-2.9.21.1.tar.gz", hash = "sha256:f5532cf15afdc6b5ebb1e59b7d896617217321f488fd1fbd74e7efb94decfab6"},
+    {file = "types_psycopg2-2.9.21.1-py3-none-any.whl", hash = "sha256:858838f1972f39da2a6e28274201fed8619a40a235dd86e7f66f4548ec474395"},
 ]
 types-python-dateutil = [
     {file = "types-python-dateutil-2.8.19.tar.gz", hash = "sha256:bfd3eb39c7253aea4ba23b10f69b017d30b013662bb4be4ab48b20bbd763f309"},
