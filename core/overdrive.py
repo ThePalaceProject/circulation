@@ -2,7 +2,7 @@ import datetime
 import json
 import logging
 from threading import RLock
-from typing import Dict, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import quote, urlsplit, urlunsplit
 
 import isbnlib
@@ -122,6 +122,10 @@ class OverdriveConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
 
 
 class OverdriveCoreAPI(HasExternalIntegration):
+    # An OverDrive defined constant indicating the "main" or parent account
+    # associated with an OverDrive collection.
+    OVERDRIVE_MAIN_ACCOUNT_ID = -1
+
     log = logging.getLogger("Overdrive API")
 
     # A lock for threaded usage.
@@ -367,8 +371,9 @@ class OverdriveCoreAPI(HasExternalIntegration):
         """The library ID for this library, as we should look for it in
         certain API documents served by Overdrive.
 
-        For ordinary collections, and for consortial collections
-        shared among libraries, this will be -1.
+        For ordinary collections (ie non-Advantage) with or without associated
+        Advantage (ie child) collections shared among libraries, this will be
+        equal to the OVERDRIVE_MAIN_ACCOUNT_ID.
 
         For Overdrive Advantage accounts, this will be the numeric
         value of the Overdrive library ID.
@@ -377,8 +382,8 @@ class OverdriveCoreAPI(HasExternalIntegration):
             # This is not an Overdrive Advantage collection.
             #
             # Instead of looking for the library ID itself in these
-            # documents, we should look for the constant -1.
-            return -1
+            # documents, we should look for the constant main account id.
+            return self.OVERDRIVE_MAIN_ACCOUNT_ID
         return int(self._library_id)
 
     def check_creds(self, force_refresh=False):
@@ -1024,24 +1029,18 @@ class OverdriveRepresentationExtractor:
             patrons_in_hold_queue = 0
         elif book.get("isOwnedByCollections") is not False:
             # We own this book.
-            for account in book.get("accounts", []):
-                # Only keep track of copies owned by the collection
-                # we're tracking.
-                if account.get("id") != self.library_id:
-                    continue
+            licenses_owned = 0
+            licenses_available = 0
 
-                if "copiesOwned" in account:
-                    if licenses_owned is None:
-                        licenses_owned = 0
-                    licenses_owned += int(account["copiesOwned"])
-                if "copiesAvailable" in account:
-                    if licenses_available is None:
-                        licenses_available = 0
-                    licenses_available += int(account["copiesAvailable"])
+            for account in self._get_applicable_accounts(book.get("accounts", [])):
+                licenses_owned += int(account.get("copiesOwned", 0))
+                licenses_available += int(account.get("copiesAvailable", 0))
+
             if "numberOfHolds" in book:
                 if patrons_in_hold_queue is None:
                     patrons_in_hold_queue = 0
                 patrons_in_hold_queue += book["numberOfHolds"]
+
         return CirculationData(
             data_source=DataSource.OVERDRIVE,
             primary_identifier=primary_identifier,
@@ -1050,6 +1049,41 @@ class OverdriveRepresentationExtractor:
             licenses_reserved=licenses_reserved,
             patrons_in_hold_queue=patrons_in_hold_queue,
         )
+
+    def _get_applicable_accounts(
+        self, accounts: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        Returns those accounts from the accounts array that apply the
+        current overdrive collection context.
+
+        If this is an overdrive parent collection, we want to return accounts
+        associated with the main OverDrive "library" and any non-main account
+        with sharing enabled.
+
+        If this is a child OverDrive collection, then we return only the
+        account associated with that child's OverDrive Advantage "library".
+        Additionally, we want to exclude the account if it is "shared" since
+        we will be counting it with the parent collection.
+        """
+
+        if self.library_id == OverdriveCoreAPI.OVERDRIVE_MAIN_ACCOUNT_ID:
+            # this is a parent collection
+            filtered_result = filter(
+                lambda account: account.get("id")
+                == OverdriveCoreAPI.OVERDRIVE_MAIN_ACCOUNT_ID
+                or account.get("shared", False),
+                accounts,
+            )
+        else:
+            # this is child collection
+            filtered_result = filter(
+                lambda account: account.get("id") == self.library_id
+                and not account.get("shared", False),
+                accounts,
+            )
+
+        return list(filtered_result)
 
     @classmethod
     def image_link_to_linkdata(cls, link, rel):
