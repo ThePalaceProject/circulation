@@ -55,7 +55,7 @@ class TestPushNotifications(DatabaseTest):
         assert messaging.send.call_count == 1
         assert messaging.send.call_args_list[0] == [
             (messaging.Message(),),
-            {"dry_run": True, "app": mock_fcm},
+            {"dry_run": True, "app": mock_fcm()},
         ]
 
     @mock.patch("core.util.notifications.PushNotifications.fcm_app")

@@ -36,7 +36,6 @@ class PushNotifications:
         ]
 
     @classmethod
-    @property
     def fcm_app(cls):
         if not cls._fcm_app:
             cls._fcm_app = firebase_admin.initialize_app(
@@ -82,7 +81,7 @@ class PushNotifications:
                     days_to_expiry=days_to_expiry,
                 ),
             )
-            resp = messaging.send(msg, dry_run=cls.TESTING_MODE, app=cls.fcm_app)
+            resp = messaging.send(msg, dry_run=cls.TESTING_MODE, app=cls.fcm_app())
             responses.append(resp)
         return responses
 
@@ -112,7 +111,7 @@ class PushNotifications:
                 )
                 msgs.append(msg)
         batch: messaging.BatchResponse = messaging.send_all(
-            msgs, dry_run=cls.TESTING_MODE, app=cls.fcm_app
+            msgs, dry_run=cls.TESTING_MODE, app=cls.fcm_app()
         )
         return [resp.message_id for resp in batch.responses]
 
@@ -146,6 +145,6 @@ class PushNotifications:
                 )
                 msgs.append(msg)
         batch: messaging.BatchResponse = messaging.send_all(
-            msgs, dry_run=cls.TESTING_MODE, app=cls.fcm_app
+            msgs, dry_run=cls.TESTING_MODE, app=cls.fcm_app()
         )
         return [resp.message_id for resp in batch.responses]
