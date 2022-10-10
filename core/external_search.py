@@ -236,7 +236,7 @@ class ExternalSearchIndex(HasSelfTests):
             )
 
         if self.version == self.SEARCH_VERSION_ES6_86:
-            self.work_document_type = "works-type"
+            self.work_document_type = "work-type"
 
         self.mapping = mapping or CurrentMapping(self)
 
@@ -3449,7 +3449,7 @@ class MockExternalSearchIndex(ExternalSearchIndex):
         self.test_search_term = "a search term"
         self.version = version
         if version == ExternalSearchIndex.SEARCH_VERSION_ES6_86:
-            self.work_document_type = "works-type"
+            self.work_document_type = "work-type"
 
     def _key(self, index, id):
         return (
