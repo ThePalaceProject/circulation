@@ -1707,7 +1707,8 @@ class TestLibraryAnnotator(VendorIDTest):
 
         availability = opds_parser._xpath1(fulfill, "opds:availability")
         assert _strftime(loan1.start) == availability.attrib.get("since")
-        assert loan1.end == availability.attrib.get("until")  # None
+        assert loan1.end == availability.attrib.get("until")
+        assert None == loan1.end
 
         loan2_links = annotator.acquisition_links(
             loan2.license_pool, loan2, None, None, feed, loan2.license_pool.identifier
@@ -1789,7 +1790,8 @@ class TestLibraryAnnotator(VendorIDTest):
 
         availability = opds_parser._xpath1(fulfill, "opds:availability")
         assert _strftime(loan5.start) == availability.attrib.get("since")
-        assert loan5.end == availability.attrib.get("until")  # None
+        assert loan5.end == availability.attrib.get("until")
+        assert None == loan5.end
 
         # If patron authentication is turned off for the library, then
         # only open-access links are displayed.
