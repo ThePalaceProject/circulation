@@ -655,16 +655,6 @@ class TestCacheMARCFiles(TestLaneScript):
 
 class TestInstanceInitializationScript(DatabaseTest):
     def test_run(self):
-
-        # If the database has been initialized -- which happened
-        # during the test suite setup -- run() will bail out and never
-        # call do_run().
-        class Mock(InstanceInitializationScript):
-            def do_run(self):
-                raise Exception("I'll never be called.")
-
-        Mock().run()
-
         # If the database has not been initialized, run() will detect
         # this and call do_run().
 
@@ -711,7 +701,7 @@ class TestInstanceInitializationScript(DatabaseTest):
         # Re-running will not call the alembic functions
         # Mock the do_run
         script.do_run = MagicMock()
-        script.run
+        script.run()
         assert script.do_run.call_count == 0
 
     def test_do_run(self):
