@@ -9,6 +9,7 @@ from io import StringIO
 
 from sqlalchemy import or_
 
+from alembic import command, config
 from api.adobe_vendor_id import AuthdataUtility
 from api.authenticator import LibraryAuthenticator
 from api.bibliotheca import BibliothecaCirculationSweep
@@ -961,7 +962,7 @@ class InstanceInitializationScript(TimestampScript):
 
     name = "Instance initialization"
 
-    TEST_SQL = "select * from timestamps limit 1"
+    TEST_SQL = "select * from alembic_version limit 1"
 
     def run(self, *args, **kwargs):
         # Create a special database session that doesn't initialize
@@ -975,7 +976,7 @@ class InstanceInitializationScript(TimestampScript):
             url, initialize_data=False, initialize_schema=False
         )
 
-        results = None
+        result = None
         try:
             # We need to check for the existence of a known table --
             # this will demonstrate that this script has been run before --
@@ -984,7 +985,7 @@ class InstanceInitializationScript(TimestampScript):
             #
             # Basically, if this succeeds, we can bail out and not run
             # the rest of the script.
-            results = list(_db.execute(self.TEST_SQL))
+            result = _db.execute(self.TEST_SQL).first()
         except Exception as e:
             # This did _not_ succeed, so the schema is probably not
             # initialized and we do need to run this script.. This
@@ -993,7 +994,7 @@ class InstanceInitializationScript(TimestampScript):
             # work.
             _db.close()
 
-        if results is None:
+        if result is None:
             super().run(*args, **kwargs)
         else:
             self.log.error(
@@ -1008,6 +1009,11 @@ class InstanceInitializationScript(TimestampScript):
             except CannotLoadConfiguration as e:
                 # Elasticsearch isn't configured, so do nothing.
                 pass
+
+        # Stamp the most recent migration as the current state of the DB
+        conf = config.Config("alembic.ini")
+        conf.set_main_option("sqlalchemy.url", Configuration.database_url())
+        command.stamp(conf, "head")
 
         # Create a secret key if one doesn't already exist.
         ConfigurationSetting.sitewide_secret(self._db, Configuration.SECRET_KEY)

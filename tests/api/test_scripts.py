@@ -1,9 +1,13 @@
 import contextlib
 import datetime
 import json
+import logging
+from functools import partial
 from io import StringIO
+from unittest.mock import MagicMock
 
 import pytest
+from psycopg2 import ProgrammingError
 
 from api.adobe_vendor_id import (
     AdobeVendorIDModel,
@@ -33,6 +37,7 @@ from core.model import (
     LicensePool,
     Representation,
     RightsStatus,
+    SessionManager,
     create,
 )
 from core.model.configuration import ExternalIntegrationLink
@@ -676,6 +681,38 @@ class TestInstanceInitializationScript(DatabaseTest):
         script = Mock()
         script.run()
         assert True == script.was_run
+
+    def test_alembic_state(self):
+        # Delete the table data, we should run the script
+        # Using a session that is not locked into the current transaction (as the script does)
+        url = Configuration.database_url()
+        _db = SessionManager.session(
+            url, initialize_data=False, initialize_schema=False
+        )
+        try:
+            _db.execute("DELETE FROM alembic_version")
+        except ProgrammingError as ex:
+            logging.getLogger().info(
+                "The alembic_version table does not exists yet!! Continuing... "
+            )
+            # If the table was not present, first testing run ever
+        finally:
+            _db.close()
+
+        script = InstanceInitializationScript(_db=self._db)
+        # Ensure search is skipped
+        script.do_run = partial(script.do_run, ignore_search=True)
+        script.run()
+
+        # Alembic version got stamped
+        result = self._db.execute("select * from alembic_version")
+        assert result.first() is not None
+
+        # Re-running will not call the alembic functions
+        # Mock the do_run
+        script.do_run = MagicMock()
+        script.run
+        assert script.do_run.call_count == 0
 
     def test_do_run(self):
         # Remove all secret keys, should they exist, before running the
