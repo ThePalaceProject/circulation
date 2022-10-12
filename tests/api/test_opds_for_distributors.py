@@ -1,6 +1,7 @@
 import datetime
 import json
 import os
+from typing import Callable
 
 import pytest
 
@@ -28,6 +29,40 @@ from core.model import (
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import OPDSFeed
+
+
+@pytest.fixture()
+def authentication_document() -> Callable[[str], str]:
+    """Returns a method that computes an authentication document."""
+
+    def _auth_doc(without_links=False) -> str:
+        """Returns an authentication document.
+
+        :param without_links: Whether or not to include an authenticate link.
+        """
+        links = (
+            {
+                "links": [
+                    {
+                        "rel": "authenticate",
+                        "href": "http://authenticate",
+                    }
+                ],
+            }
+            if not without_links
+            else {}
+        )
+        doc = {
+            "authentication": [
+                {
+                    **{"type": "http://opds-spec.org/auth/oauth/client_credentials"},
+                    **links,
+                },
+            ]
+        }
+        return json.dumps(doc)
+
+    return _auth_doc
 
 
 class BaseOPDSForDistributorsTest:
@@ -120,27 +155,13 @@ class TestOPDSForDistributorsAPI(DatabaseTest):
         lpdm.delivery_mechanism.drm_scheme = DeliveryMechanism.BEARER_TOKEN
         assert True == m(patron, pool, lpdm)
 
-    def test_get_token_success(self):
+    def test_get_token_success(self, authentication_document):
         # The API hasn't been used yet, so it will need to find the auth
         # document and authenticate url.
         feed = '<feed><link rel="http://opds-spec.org/auth/document" href="http://authdoc"/></feed>'
+
         self.api.queue_response(200, content=feed)
-        auth_doc = json.dumps(
-            {
-                "authentication": [
-                    {
-                        "type": "http://opds-spec.org/auth/oauth/client_credentials",
-                        "links": [
-                            {
-                                "rel": "authenticate",
-                                "href": "http://authenticate",
-                            }
-                        ],
-                    }
-                ]
-            }
-        )
-        self.api.queue_response(200, content=auth_doc)
+        self.api.queue_response(200, content=authentication_document())
         token = self._str
         token_response = json.dumps({"access_token": token, "expires_in": 60})
         self.api.queue_response(200, content=token_response)
@@ -165,29 +186,64 @@ class TestOPDSForDistributorsAPI(DatabaseTest):
         self.api = MockOPDSForDistributorsAPI(self._db, self.collection)
 
         # This feed requires authentication and returns the auth document.
-        auth_doc = json.dumps(
-            {
-                "authentication": [
-                    {
-                        "type": "http://opds-spec.org/auth/oauth/client_credentials",
-                        "links": [
-                            {
-                                "rel": "authenticate",
-                                "href": "http://authenticate",
-                            }
-                        ],
-                    }
-                ]
-            }
-        )
-        self.api.queue_response(401, content=auth_doc)
+        self.api.queue_response(401, content=authentication_document())
         token = self._str
         token_response = json.dumps({"access_token": token, "expires_in": 60})
         self.api.queue_response(200, content=token_response)
 
         assert token == self.api._get_token(self._db).credential
 
-    def test_get_token_errors(self):
+    def test_credentials_for_multiple_collections(self, authentication_document):
+        # We should end up with distinct credentials for each collection.
+        # We have an existing credential from the collection
+        # [credential1] = self._db.query(Credential).all()
+        # assert credential1.collection_id is not None
+
+        feed = '<feed><link rel="http://opds-spec.org/auth/document" href="http://authdoc"/></feed>'
+
+        # Getting a token for a collection should result in a cached credential.
+        collection1 = MockOPDSForDistributorsAPI.mock_collection(
+            self._db, name="Collection 1"
+        )
+        api1 = MockOPDSForDistributorsAPI(self._db, collection1)
+        token1 = self._str
+        token1_response = json.dumps({"access_token": token1, "expires_in": 60})
+        api1.queue_response(200, content=feed)
+        api1.queue_response(200, content=authentication_document())
+        api1.queue_response(200, content=token1_response)
+        credential1 = api1._get_token(self._db)
+        all_credentials = self._db.query(Credential).all()
+
+        assert token1 == credential1.credential
+        assert credential1.collection_id == collection1.id
+        assert 1 == len(all_credentials)
+
+        # Getting a token for a second collection should result in an
+        # additional cached credential.
+        collection2 = MockOPDSForDistributorsAPI.mock_collection(
+            self._db, name="Collection 2"
+        )
+        api2 = MockOPDSForDistributorsAPI(self._db, collection2)
+        token2 = self._str
+        token2_response = json.dumps({"access_token": token2, "expires_in": 60})
+        api2.queue_response(200, content=feed)
+        api2.queue_response(200, content=authentication_document())
+        api2.queue_response(200, content=token2_response)
+
+        credential2 = api2._get_token(self._db)
+        all_credentials = self._db.query(Credential).all()
+
+        assert token2 == credential2.credential
+        assert credential2.collection_id == collection2.id
+
+        # Both credentials should now be present.
+        assert 2 == len(all_credentials)
+        assert credential1 != credential2
+        assert credential1 in all_credentials
+        assert credential2 in all_credentials
+        assert token1 != token2
+
+    def test_get_token_errors(self, authentication_document):
         no_auth_document = "<feed></feed>"
         self.api.queue_response(200, content=no_auth_document)
         with pytest.raises(LibraryAuthorizationFailedException) as excinfo:
@@ -207,17 +263,12 @@ class TestOPDSForDistributorsAPI(DatabaseTest):
             in str(excinfo.value)
         )
 
+        # If our authentication document doesn't have a `rel="authenticate"` link
+        # then we will not be able to fetch a token, so should raise and exception.
         self.api.queue_response(200, content=feed)
-        auth_doc_without_links = json.dumps(
-            {
-                "authentication": [
-                    {
-                        "type": "http://opds-spec.org/auth/oauth/client_credentials",
-                    }
-                ]
-            }
+        self.api.queue_response(
+            200, content=authentication_document(without_links=True)
         )
-        self.api.queue_response(200, content=auth_doc_without_links)
         with pytest.raises(LibraryAuthorizationFailedException) as excinfo:
             self.api._get_token(self._db)
         assert "Could not find any authentication links in http://authdoc" in str(
@@ -225,22 +276,7 @@ class TestOPDSForDistributorsAPI(DatabaseTest):
         )
 
         self.api.queue_response(200, content=feed)
-        auth_doc = json.dumps(
-            {
-                "authentication": [
-                    {
-                        "type": "http://opds-spec.org/auth/oauth/client_credentials",
-                        "links": [
-                            {
-                                "rel": "authenticate",
-                                "href": "http://authenticate",
-                            }
-                        ],
-                    }
-                ]
-            }
-        )
-        self.api.queue_response(200, content=auth_doc)
+        self.api.queue_response(200, content=authentication_document())
         token_response = json.dumps({"error": "unexpected error"})
         self.api.queue_response(200, content=token_response)
         with pytest.raises(LibraryAuthorizationFailedException) as excinfo:
