@@ -35,6 +35,7 @@ class OPDSForDistributorsAPI(BaseCirculationAPI, HasSelfTests):
     DESCRIPTION = _(
         "Import books from a distributor that requires authentication to get the OPDS feed and download books."
     )
+    BEARER_TOKEN_CREDENTIAL_TYPE = "OPDS For Distributors Bearer Token"
 
     SETTINGS = OPDSImporter.BASE_SETTINGS + [
         {
@@ -89,7 +90,7 @@ class OPDSForDistributorsAPI(BaseCirculationAPI, HasSelfTests):
         """Wrapper around HTTP.request_with_timeout to be overridden for tests."""
         return HTTP.request_with_timeout(method, url, *args, **kwargs)
 
-    def _get_token(self, _db):
+    def _get_token(self, _db) -> Credential:
         # If this is the first time we're getting a token, we
         # need to find the authenticate url in the OPDS
         # authentication document.
@@ -141,7 +142,7 @@ class OPDSForDistributorsAPI(BaseCirculationAPI, HasSelfTests):
                 )
             self.auth_url = auth_links[0].get("href")
 
-        def refresh(credential):
+        def refresh(credential: Credential) -> None:
             headers = dict()
             auth_header = "Basic %s" % base64.b64encode(
                 f"{self.username}:{self.password}"
@@ -175,7 +176,8 @@ class OPDSForDistributorsAPI(BaseCirculationAPI, HasSelfTests):
         return Credential.lookup(
             _db,
             self.data_source_name,
-            "OPDS For Distributors Bearer Token",
+            self.BEARER_TOKEN_CREDENTIAL_TYPE,
+            collection=Collection.by_id(_db, self.collection_id),
             patron=None,
             refresher_method=refresh,
         )
