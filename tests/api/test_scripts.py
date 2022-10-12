@@ -7,7 +7,7 @@ from io import StringIO
 from unittest.mock import MagicMock
 
 import pytest
-from psycopg2 import ProgrammingError
+from sqlalchemy.exc import ProgrammingError
 
 from api.adobe_vendor_id import (
     AdobeVendorIDModel,
