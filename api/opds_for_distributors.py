@@ -414,13 +414,19 @@ class OPDSForDistributorsReaperMonitor(OPDSForDistributorsImportMonitor):
 
 class MockOPDSForDistributorsAPI(OPDSForDistributorsAPI):
     @classmethod
-    def mock_collection(self, _db):
-        """Create a mock OPDS For Distributors collection to use in tests."""
+    def mock_collection(
+        self, _db, name="Test OPDS For Distributors Collection"
+    ) -> Collection:
+        """Create a mock OPDS For Distributors collection to use in tests.
+
+        :param _db: Database session.
+        :param name: A name for the collection.
+        """
         library = DatabaseTest.make_default_library(_db)
         collection, ignore = get_one_or_create(
             _db,
             Collection,
-            name="Test OPDS For Distributors Collection",
+            name=name,
             create_method_kwargs=dict(
                 external_account_id="http://opds",
             ),
