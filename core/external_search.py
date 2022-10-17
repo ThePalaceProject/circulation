@@ -128,7 +128,9 @@ class ExternalSearchIndex(HasSelfTests):
             "key": SEARCH_VERSION,
             "label": _("The search service version"),
             "default": DEFAULT_SEARCH_VERSION,
-            "description": _("Which version of the search engine is being used."),
+            "description": _(
+                "Which version of the search engine is being used. Changing this value will require a CM restart."
+            ),
             "required": True,
             "type": "select",
             "options": [
