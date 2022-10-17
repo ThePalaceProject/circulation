@@ -92,9 +92,9 @@ class ExternalSearchIndex(HasSelfTests):
     DEFAULT_TEST_SEARCH_TERM = "test"
 
     SEARCH_VERSION = "search_version"
-    SEARCH_VERSION_ES6_86 = "Elasticsearch 6.8.6"
-    SEARCH_VERSION_OS1_2 = "Opensearch 1.2"
-    DEFAULT_SEARCH_VERSION = SEARCH_VERSION_ES6_86
+    SEARCH_VERSION_ES6_8 = "Elasticsearch 6.8"
+    SEARCH_VERSION_OS1_X = "Opensearch 1.x"
+    DEFAULT_SEARCH_VERSION = SEARCH_VERSION_ES6_8
 
     work_document_type: Optional[str] = None
     __client = None
@@ -129,10 +129,11 @@ class ExternalSearchIndex(HasSelfTests):
             "label": _("The search service version"),
             "default": DEFAULT_SEARCH_VERSION,
             "description": _("Which version of the search engine is being used."),
+            "required": True,
             "type": "select",
             "options": [
-                {"key": SEARCH_VERSION_ES6_86, "label": SEARCH_VERSION_ES6_86},
-                {"key": SEARCH_VERSION_OS1_2, "label": SEARCH_VERSION_OS1_2},
+                {"key": SEARCH_VERSION_ES6_8, "label": SEARCH_VERSION_ES6_8},
+                {"key": SEARCH_VERSION_OS1_X, "label": SEARCH_VERSION_OS1_X},
             ],
         },
     ]
@@ -223,7 +224,7 @@ class ExternalSearchIndex(HasSelfTests):
         if not integration:
             raise CannotLoadConfiguration("No search integration configured.")
 
-        valid_versions = [self.SEARCH_VERSION_OS1_2, self.SEARCH_VERSION_ES6_86]
+        valid_versions = [self.SEARCH_VERSION_OS1_X, self.SEARCH_VERSION_ES6_8]
         if version and version not in valid_versions:
             raise ValueError(
                 f"{version} is not a valid search version, must be one of {valid_versions}"
@@ -235,7 +236,7 @@ class ExternalSearchIndex(HasSelfTests):
                 self.DEFAULT_SEARCH_VERSION
             )
 
-        if self.version == self.SEARCH_VERSION_ES6_86:
+        if self.version == self.SEARCH_VERSION_ES6_8:
             self.work_document_type = "work-type"
 
         self.mapping = mapping or CurrentMapping(self)
@@ -3438,7 +3439,7 @@ class MockExternalSearchIndex(ExternalSearchIndex):
 
     work_document_type = None
 
-    def __init__(self, url=None, version=ExternalSearchIndex.SEARCH_VERSION_ES6_86):
+    def __init__(self, url=None, version=ExternalSearchIndex.SEARCH_VERSION_ES6_8):
         self.url = url
         self.docs = {}
         self.works_index = "works"
@@ -3448,7 +3449,7 @@ class MockExternalSearchIndex(ExternalSearchIndex):
         self.search = list(self.docs.keys())
         self.test_search_term = "a search term"
         self.version = version
-        if version == ExternalSearchIndex.SEARCH_VERSION_ES6_86:
+        if version == ExternalSearchIndex.SEARCH_VERSION_ES6_8:
             self.work_document_type = "work-type"
 
     def _key(self, index, id):

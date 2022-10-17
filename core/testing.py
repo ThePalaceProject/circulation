@@ -1159,7 +1159,7 @@ class ExternalSearchTest(DatabaseTest):
     to ensure that it works well overall, with a realistic index.
     """
 
-    TESTING_VERSION = ExternalSearchIndex.SEARCH_VERSION_ES6_86
+    TESTING_VERSION = ExternalSearchIndex.SEARCH_VERSION_ES6_8
 
     SIMPLIFIED_TEST_ELASTICSEARCH = os.environ.get(
         "SIMPLIFIED_TEST_ELASTICSEARCH", "http://localhost:9200"
@@ -1210,18 +1210,18 @@ class ExternalSearchTest(DatabaseTest):
         # mark this test function for dual testing if required
         name = f"{request.__self__.__class__}.{request.__name__}"
 
-        self.TESTING_VERSION = ExternalSearchIndex.SEARCH_VERSION_ES6_86
+        self.TESTING_VERSION = ExternalSearchIndex.SEARCH_VERSION_ES6_8
         if getattr(self, "DUAL_SEARCH_TEST", None):
             if name not in ExternalSearchTest.DUAL_TESTS_RUN:
                 # This is a dual run test, but it's the first run
                 ExternalSearchTest.DUAL_TESTS_RUN.add(name)
             else:
                 # This is the second run
-                self.TESTING_VERSION = ExternalSearchIndex.SEARCH_VERSION_OS1_2
+                self.TESTING_VERSION = ExternalSearchIndex.SEARCH_VERSION_OS1_X
 
         self.SIMPLIFIED_TEST_ELASTICSEARCH = os.environ.get(
             "SIMPLIFIED_TEST_OPENSEARCH"
-            if self.TESTING_VERSION == ExternalSearchIndex.SEARCH_VERSION_OS1_2
+            if self.TESTING_VERSION == ExternalSearchIndex.SEARCH_VERSION_OS1_X
             else "SIMPLIFIED_TEST_ELASTICSEARCH",
             "http://localhost:9200",
         )
