@@ -77,7 +77,6 @@ class SirsiDynixAuthenticationProvider(BasicAuthenticationProvider):
             "x-sirs-clientID": self.sirsi_client_id,
         }
         url = urljoin(self.server_url, path)
-        print(url)
         return HTTP.request_with_timeout(method, url, headers=headers, json=json)
 
     def api_patron_login(self, username: str, password: str) -> bool | dict:
@@ -88,7 +87,6 @@ class SirsiDynixAuthenticationProvider(BasicAuthenticationProvider):
         response = self._request(
             "POST", "user/patron/login", json=dict(login=username, password=password)
         )
-        print("LOGIN RESPONSE", response, response.text)
         if response.status_code != 200:
             self.log.info(
                 f"Authentication failed for username {username}: {response.text}"
