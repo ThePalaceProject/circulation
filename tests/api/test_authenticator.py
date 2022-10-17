@@ -10,7 +10,7 @@ import urllib.parse
 import urllib.request
 from decimal import Decimal
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import flask
 import pytest
@@ -38,6 +38,7 @@ from api.opds import LibraryAnnotator
 from api.problem_details import *
 from api.problem_details import PATRON_OF_ANOTHER_LIBRARY
 from api.simple_authentication import SimpleAuthenticationProvider
+from api.sirsidynix_authentication_provider import SirsiDynixAuthenticationProvider
 from api.util.patron import PatronUtility
 from core.mock_analytics_provider import MockAnalyticsProvider
 from core.model import (
@@ -53,6 +54,7 @@ from core.model import (
 )
 from core.model.constants import LinkRelations
 from core.opds import OPDSFeed
+from core.testing import MockRequestsResponse
 from core.user_profile import ProfileController
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from core.util.datetime_helpers import utc_now
@@ -3308,4 +3310,71 @@ class TestOAuthController:
         problem = oauth_fixture.library_auth.authenticated_patron(
             db.session, "Bearer - this is a bad token"
         )
-        assert INVALID_OAUTH_BEARER_TOKEN == problem  # type: ignore
+        assert INVALID_OAUTH_BEARER_TOKEN == problem
+
+
+class SirsiDynixAuthenticatorFixture:
+    
+    def __init__(self, db: DatabaseTransactionFixture) -> None:
+        self.integration = db.external_integration(
+            "api.sirsidynix",
+            goal=ExternalIntegration.PATRON_AUTH_GOAL,
+            settings={
+                ExternalIntegration.URL: "http://example.org/sirsi",
+                SirsiDynixAuthenticationProvider.Keys.APP_ID: "appid",
+                SirsiDynixAuthenticationProvider.Keys.CLIENT_ID: "clientid",
+            },
+        )
+        self.api = SirsiDynixAuthenticationProvider(
+            db.default_library(), self.integration
+        )
+        
+
+@pytest.fixture(scope="function")
+def sirsi_fixture(db: DatabaseTransactionFixture) -> SirsiDynixAuthenticatorFixture:
+    return SirsiDynixAuthenticatorFixture(db)
+
+class TestSirsiDynixAuthenticationProvider:
+
+    def _headers(self, api):
+        return {
+            "SD-Originating-App-Id": api.sirsi_app_id,
+            "x-sirs-clientID": api.sirsi_client_id,
+        }
+
+    def test_settings(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
+        # with leading slash
+        assert sirsi_fixture.api.server_url == "http://example.org/sirsi/"
+        assert sirsi_fixture.api.sirsi_client_id == "clientid"
+        assert sirsi_fixture.api.sirsi_app_id == "appid"
+
+    def test_api_patron_login(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
+        response_dict = {"sessionToken": "xxxx"}
+        with patch("api.sirsidynix_authentication_provider.HTTP.request_with_timeout") as mock_request:
+            mock_request.return_value = MockRequestsResponse(200, content=response_dict)
+            response = sirsi_fixture.api.api_patron_login("username", "pwd")
+
+            assert mock_request.call_count == 1
+            assert mock_request.call_args_list[0] == call(
+                "POST",
+                "http://example.org/sirsi/user/patron/login",
+                json=dict(login="username", password="pwd"),
+                headers=self._headers(sirsi_fixture.api),
+            )
+            assert response == response_dict
+
+            mock_request.return_value = MockRequestsResponse(401, content=response_dict)
+            assert sirsi_fixture.api.api_patron_login("username", "pwd") == False
+
+    def test_remote_authenticate(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
+        with patch("api.sirsidynix_authentication_provider.HTTP.request_with_timeout") as mock_request:
+            response_dict = {"sessionToken": "xxxx"}
+            mock_request.return_value = MockRequestsResponse(200, content=response_dict)
+
+            response = sirsi_fixture.api.remote_authenticate("username", "pwd")
+            assert type(response) == PatronData
+            assert response.authorization_identifier == "username"
+            assert response.username == "username"
+
+            mock_request.return_value = MockRequestsResponse(401, content=response_dict)
+            assert sirsi_fixture.api.remote_authenticate("username", "pwd") == False
