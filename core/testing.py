@@ -1159,8 +1159,6 @@ class ExternalSearchTest(DatabaseTest):
     to ensure that it works well overall, with a realistic index.
     """
 
-    TESTING_VERSION = ExternalSearchIndex.SEARCH_VERSION_ES6_8
-
     SIMPLIFIED_TEST_ELASTICSEARCH = os.environ.get(
         "SIMPLIFIED_TEST_ELASTICSEARCH", "http://localhost:9200"
     )
@@ -1175,7 +1173,7 @@ class ExternalSearchTest(DatabaseTest):
         self.indexes = []
 
         self.TESTING_VERSION = os.environ.get(
-            "SIMPLIFIED_TEST_SEARCH_VERSION", ExternalSearchIndex
+            "SIMPLIFIED_TEST_SEARCH_VERSION", ExternalSearchIndex.SEARCH_VERSION_ES6_8
         )
 
         self.integration = self._external_integration(
