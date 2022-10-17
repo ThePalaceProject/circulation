@@ -1168,18 +1168,15 @@ class ExternalSearchTest(DatabaseTest):
     DUAL_TESTS_RUN: Set[str] = set()
 
     def setup_method(self, request):
-
         super().setup_method()
-
-        # We always default to elasticsearch, unless both indices are available
-        from tests.core.conftest import DUAL_SEARCH_PRESENT
-
-        if DUAL_SEARCH_PRESENT:
-            self._setup_dual_search_test(request)
 
         # Track the indexes created so they can be torn down at the
         # end of the test.
         self.indexes = []
+
+        self.TESTING_VERSION = os.environ.get(
+            "SIMPLIFIED_TEST_SEARCH_VERSION", ExternalSearchIndex
+        )
 
         self.integration = self._external_integration(
             ExternalIntegration.ELASTICSEARCH,
@@ -1200,31 +1197,6 @@ class ExternalSearchTest(DatabaseTest):
                 "Unable to set up elasticsearch index, search tests will be skipped.",
                 exc_info=e,
             )
-
-    def _setup_dual_search_test(self, request):
-        """In case we have dual search service testing for this test class
-        we do the following to switch around which search index we're testing against.
-        - We do not have access to the "dual_search_test" fixture so we don't know which run this is
-        - We store the method name in a list of previously run tests
-        - If it is the second run of the method, we switch the search index"""
-        # mark this test function for dual testing if required
-        name = f"{request.__self__.__class__}.{request.__name__}"
-
-        self.TESTING_VERSION = ExternalSearchIndex.SEARCH_VERSION_ES6_8
-        if getattr(self, "DUAL_SEARCH_TEST", None):
-            if name not in ExternalSearchTest.DUAL_TESTS_RUN:
-                # This is a dual run test, but it's the first run
-                ExternalSearchTest.DUAL_TESTS_RUN.add(name)
-            else:
-                # This is the second run
-                self.TESTING_VERSION = ExternalSearchIndex.SEARCH_VERSION_OS1_X
-
-        self.SIMPLIFIED_TEST_ELASTICSEARCH = os.environ.get(
-            "SIMPLIFIED_TEST_OPENSEARCH"
-            if self.TESTING_VERSION == ExternalSearchIndex.SEARCH_VERSION_OS1_X
-            else "SIMPLIFIED_TEST_ELASTICSEARCH",
-            "http://localhost:9200",
-        )
 
     def setup_index(self, new_index):
         "Create an index and register it to be destroyed during teardown."

@@ -70,6 +70,7 @@ from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixture
 RESEARCH = Term(audience=Classifier.AUDIENCE_RESEARCH.lower())
 
 
+@pytest.mark.dual_search
 class TestExternalSearch:
     def test_load(self, external_search_fixture: ExternalSearchFixture):
         session = external_search_fixture.db.session
@@ -500,6 +501,7 @@ class TestExternalSearchWithWorksData:
     ya_work: Work
 
 
+@pytest.mark.dual_search
 class TestExternalSearchWithWorks:
     """These tests run against a real search index with works in it.
     The setup is very slow, so all the tests are in the same method.

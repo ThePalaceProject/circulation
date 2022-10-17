@@ -204,6 +204,7 @@ addopts = "--strict-markers"
 markers = [
     "elasticsearch: mark test as requiring elasticsearch",
     "minio: mark test as requiring minio",
+    "dual_search: Marks tests for use with both types of search engines"
 ]
 timeout = "600"
 timeout_method = "thread"
