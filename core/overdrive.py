@@ -1235,6 +1235,7 @@ class OverdriveRepresentationExtractor:
 
             identifiers = []
             links = []
+            sample_hrefs = set()
             for format in book.get("formats", []):
                 for new_id in format.get("identifiers", []):
                     t = new_id["type"]
@@ -1267,15 +1268,21 @@ class OverdriveRepresentationExtractor:
 
                 # Samples become links.
                 if "samples" in format:
-                    overdrive_name = format["id"]
-                    internal_names = list(cls.internal_formats(overdrive_name))
-                    if not internal_names:
-                        # Useless to us.
-                        continue
-                    for content_type, drm_scheme in internal_names:
-                        if Representation.is_media_type(content_type):
-                            for sample_info in format["samples"]:
-                                href = sample_info["url"]
+                    for sample_info in format["samples"]:
+                        href = sample_info["url"]
+                        # Have we already parsed this sample? Overdrive repeats samples per format
+                        if href in sample_hrefs:
+                            continue
+
+                        # Every sample has its own format type
+                        overdrive_name = sample_info["formatType"]
+                        internal_names = list(cls.internal_formats(overdrive_name))
+                        if not internal_names:
+                            # Useless to us.
+                            continue
+
+                        for content_type, drm_scheme in internal_names:
+                            if Representation.is_media_type(content_type):
                                 links.append(
                                     LinkData(
                                         rel=Hyperlink.SAMPLE,
@@ -1283,6 +1290,7 @@ class OverdriveRepresentationExtractor:
                                         media_type=content_type,
                                     )
                                 )
+                                sample_hrefs.add(href)
 
             # A cover and its thumbnail become a single LinkData.
             if "images" in book:

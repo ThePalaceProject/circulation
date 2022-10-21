@@ -752,6 +752,14 @@ class Identifier(Base, IdentifierConstants):
             resource.representation, is_new = get_one_or_create(
                 _db, Representation, url=resource.url, media_type=media_type
             )
+        elif (
+            media_type
+            and resource.representation
+            and resource.representation.media_type != media_type
+        ):
+            # We have a representation that is not the same media type we previously knew of
+            resource.representation.media_type = media_type
+            resource.representation.url = resource.url
 
         if original_resource:
             original_resource.add_derivative(link.resource, transformation_settings)
