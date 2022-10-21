@@ -1275,7 +1275,10 @@ class OverdriveRepresentationExtractor:
                             continue
 
                         # Every sample has its own format type
-                        overdrive_name = sample_info["formatType"]
+                        overdrive_name = sample_info.get("formatType")
+                        if not overdrive_name:
+                            # Malformed sample
+                            continue
                         internal_names = list(cls.internal_formats(overdrive_name))
                         if not internal_names:
                             # Useless to us.
