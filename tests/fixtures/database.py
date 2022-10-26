@@ -2,7 +2,8 @@ import logging
 import os
 import shutil
 import tempfile
-from typing import Any, Iterable, Tuple
+import uuid
+from typing import Any, Iterable, Optional, Tuple
 
 import pytest
 from sqlalchemy.engine import Connection, Engine, Transaction
@@ -12,7 +13,14 @@ import core.lane
 from core.analytics import Analytics
 from core.config import Configuration
 from core.log import LogConfiguration
-from core.model import Base, ExternalIntegration, SessionManager
+from core.model import (
+    Base,
+    Collection,
+    ExternalIntegration,
+    Library,
+    SessionManager,
+    get_one_or_create,
+)
 from core.model.devicetokens import DeviceToken
 
 
@@ -80,7 +88,7 @@ class DatabaseFixture:
         # are actually loaded. The entire application database is therefore dependent on
         # unspecified class initialization behaviour. The only safe way to guarantee
         # that all tables are created is to refer to all of those classes before
-        # starting SQLAlchemy in order to ensure that all of the classes are loaded
+        # starting SQLAlchemy in order to ensure that all the classes are loaded
         # in the interpreter.
 
         tables = [
@@ -172,6 +180,8 @@ class DatabaseTransactionFixture:
     """A fixture representing a single transaction. The transaction is automatically rolled back."""
 
     _database: DatabaseFixture
+    _default_library: Optional[Library]
+    _default_collection: Optional[Collection]
     _session: Session
     _transaction: Transaction
 
@@ -181,6 +191,30 @@ class DatabaseTransactionFixture:
         self._database = database
         self._session = session
         self._transaction = transaction
+        self._default_library = None
+        self._default_collection = None
+
+    def _make_default_library(self):
+        """Ensure that the default library exists in the given database."""
+        library, ignore = get_one_or_create(
+            self._session,
+            Library,
+            create_method_kwargs=dict(
+                uuid=str(uuid.uuid4()),
+                name="default",
+            ),
+            short_name="default",
+        )
+        collection, ignore = get_one_or_create(
+            self._session, Collection, name="Default Collection"
+        )
+        integration = collection.create_external_integration(
+            ExternalIntegration.OPDS_IMPORT
+        )
+        integration.goal = ExternalIntegration.LICENSE_GOAL
+        if collection not in library.collections:
+            library.collections.append(collection)
+        return library
 
     @staticmethod
     def create(database: DatabaseFixture) -> "DatabaseTransactionFixture":
@@ -215,6 +249,31 @@ class DatabaseTransactionFixture:
 
     def session(self) -> Session:
         return self._session
+
+    def default_collection(self):
+        """A Collection that will only be created once throughout
+        a given test.
+
+        For most tests there's no need to create a different
+        Collection for every LicensePool. Using
+        default_collection() instead of calling collection()
+        saves time.
+        """
+        if not self._default_collection:
+            self._default_collection = self.default_library().collections[0]
+
+        return self._default_collection
+
+    def default_library(self):
+        """A Library that will only be created once throughout a given test.
+
+        By default, the `default_collection()` will be associated with
+        the default library.
+        """
+        if not self._default_library:
+            self._default_library = self._make_default_library()
+
+        return self._default_library
 
 
 @pytest.fixture(scope="session")
