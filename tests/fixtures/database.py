@@ -184,6 +184,7 @@ class DatabaseTransactionFixture:
     _default_collection: Optional[Collection]
     _session: Session
     _transaction: Transaction
+    _counter: int
 
     def __init__(
         self, database: DatabaseFixture, session: Session, transaction: Transaction
@@ -193,6 +194,7 @@ class DatabaseTransactionFixture:
         self._transaction = transaction
         self._default_library = None
         self._default_collection = None
+        self._counter = 2000
 
     def _make_default_library(self):
         """Ensure that the default library exists in the given database."""
@@ -264,7 +266,7 @@ class DatabaseTransactionFixture:
 
         return self._default_collection
 
-    def default_library(self):
+    def default_library(self) -> Library:
         """A Library that will only be created once throughout a given test.
 
         By default, the `default_collection()` will be associated with
@@ -274,6 +276,47 @@ class DatabaseTransactionFixture:
             self._default_library = self._make_default_library()
 
         return self._default_library
+
+    def fresh_id(self) -> int:
+        self._counter += 1
+        return self._counter
+
+    def library(
+        self, name: Optional[str] = None, short_name: Optional[str] = None
+    ) -> Library:
+        name = name or str(self.fresh_id())
+        short_name = short_name or str(self.fresh_id)
+        library, ignore = get_one_or_create(
+            self.session(),
+            Library,
+            name=name,
+            short_name=short_name,
+            create_method_kwargs=dict(uuid=str(uuid.uuid4())),
+        )
+        return library
+
+    def collection(
+        self,
+        name=None,
+        protocol=ExternalIntegration.OPDS_IMPORT,
+        external_account_id=None,
+        url=None,
+        username=None,
+        password=None,
+        data_source_name=None,
+    ):
+        name = name or str(self.fresh_id())
+        collection, ignore = get_one_or_create(self.session(), Collection, name=name)
+        collection.external_account_id = external_account_id
+        integration = collection.create_external_integration(protocol)
+        integration.goal = ExternalIntegration.LICENSE_GOAL
+        integration.url = url
+        integration.username = username
+        integration.password = password
+
+        if data_source_name:
+            collection.data_source = data_source_name
+        return collection
 
 
 @pytest.fixture(scope="session")
