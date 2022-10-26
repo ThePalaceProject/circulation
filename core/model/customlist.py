@@ -113,7 +113,7 @@ class CustomList(Base):
         )
 
     @classmethod
-    def list_entries(cls, _db: Session, list_id: int):
+    def entries_having_works(cls, _db: Session, list_id: int):
         return (
             _db.query(Work)
             .join(Work.custom_list_entries)
@@ -327,7 +327,7 @@ class CustomList(Base):
         return qu
 
     def update_size(self, db: Session):
-        self.size = CustomList.list_entries(db, self.id).count()
+        self.size = CustomList.entries_having_works(db, self.id).count()
 
 
 customlist_sharedlibrary = Table(

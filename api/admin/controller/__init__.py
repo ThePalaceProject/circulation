@@ -1053,7 +1053,7 @@ class CustomListsController(AdminCirculationManagerController):
             if isinstance(pagination, ProblemDetail):
                 return pagination
 
-            query = CustomList.list_entries(self._db, list_id)
+            query = CustomList.entries_having_works(self._db, list_id)
             url = self.url_for(
                 "custom_list",
                 list_name=list.name,
