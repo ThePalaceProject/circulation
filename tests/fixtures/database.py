@@ -32,6 +32,7 @@ from core.model import (
     RightsStatus,
     SessionManager,
     Work,
+    create,
     get_one_or_create,
 )
 from core.model.devicetokens import DeviceToken
@@ -375,9 +376,7 @@ class DatabaseTransactionFixture:
             data_source_name = DataSource.GUTENBERG
         if fiction is None:
             fiction = True
-        new_edition = False
         if not presentation_edition:
-            new_edition = True
             presentation_edition = self.edition(
                 title=title,
                 language=language,
@@ -435,6 +434,10 @@ class DatabaseTransactionFixture:
             work.calculate_opds_entries(verbose=False)
 
         return work
+
+    def contributor(self, sort_name=None, name=None, **kw_args):
+        name = sort_name or name or self.fresh_str()
+        return get_one_or_create(self.session(), Contributor, sort_name=str(name), **kw_args)
 
     def edition(
         self,
@@ -511,7 +514,8 @@ class DatabaseTransactionFixture:
         source = DataSource.lookup(self.session(), data_source_name)
         if not edition:
             edition = self.edition(data_source_name)
-        collection = collection or self._default_collection
+        collection = collection or self.default_collection()
+        assert collection
         pool, ignore = get_one_or_create(
             self.session(),
             LicensePool,
@@ -574,6 +578,42 @@ class DatabaseTransactionFixture:
                 repr.mirror_url = "http://foo.com/" + self.fresh_str()
                 repr.mirrored_at = utc_now()
         return repr, is_new
+
+    def lane(
+        self,
+        display_name=None,
+        library=None,
+        parent=None,
+        genres=None,
+        languages=None,
+        fiction=None,
+        inherit_parent_restrictions=True,
+    ):
+        display_name = display_name or self.fresh_str()
+        library = library or self.default_library()
+        lane, is_new = create(
+            self.session(),
+            core.lane.Lane,
+            library=library,
+            parent=parent,
+            display_name=display_name,
+            fiction=fiction,
+            inherit_parent_restrictions=inherit_parent_restrictions,
+        )
+        if is_new and parent:
+            lane.priority = len(parent.sublanes) - 1
+        if genres:
+            if not isinstance(genres, list):
+                genres = [genres]
+            for genre in genres:
+                if isinstance(genre, str):
+                    genre, ignore = Genre.lookup(self.session(), genre)
+                lane.genres.append(genre)
+        if languages:
+            if not isinstance(languages, list):
+                languages = [languages]
+            lane.languages = languages
+        return lane
 
 
 @pytest.fixture(scope="session")
