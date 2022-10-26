@@ -18,6 +18,7 @@ from core.model import (
     Base,
     Collection,
     Contributor,
+    CoverageRecord,
     DataSource,
     DeliveryMechanism,
     Edition,
@@ -31,6 +32,7 @@ from core.model import (
     Representation,
     RightsStatus,
     SessionManager,
+    Subject,
     Work,
     create,
     get_one_or_create,
@@ -437,7 +439,9 @@ class DatabaseTransactionFixture:
 
     def contributor(self, sort_name=None, name=None, **kw_args):
         name = sort_name or name or self.fresh_str()
-        return get_one_or_create(self.session(), Contributor, sort_name=str(name), **kw_args)
+        return get_one_or_create(
+            self.session(), Contributor, sort_name=str(name), **kw_args
+        )
 
     def edition(
         self,
@@ -614,6 +618,46 @@ class DatabaseTransactionFixture:
                 languages = [languages]
             lane.languages = languages
         return lane
+
+    def subject(self, type, identifier):
+        return get_one_or_create(
+            self.session(), Subject, type=type, identifier=identifier
+        )[0]
+
+    def coverage_record(
+        self,
+        edition,
+        coverage_source,
+        operation=None,
+        status=CoverageRecord.SUCCESS,
+        collection=None,
+        exception=None,
+    ):
+        if isinstance(edition, Identifier):
+            identifier = edition
+        else:
+            identifier = edition.primary_identifier
+        record, ignore = get_one_or_create(
+            self.session(),
+            CoverageRecord,
+            identifier=identifier,
+            data_source=coverage_source,
+            operation=operation,
+            collection=collection,
+            create_method_kwargs=dict(
+                timestamp=utc_now(),
+                status=status,
+                exception=exception,
+            ),
+        )
+        return record
+
+    def identifier(self, identifier_type=Identifier.GUTENBERG_ID, foreign_id=None):
+        if foreign_id:
+            id_value = foreign_id
+        else:
+            id_value = self.fresh_str()
+        return Identifier.for_foreign_id(self.session(), identifier_type, id_value)[0]
 
 
 @pytest.fixture(scope="session")
