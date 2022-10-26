@@ -11,17 +11,31 @@ from sqlalchemy.orm import Session
 
 import core.lane
 from core.analytics import Analytics
+from core.classifier import Classifier
 from core.config import Configuration
 from core.log import LogConfiguration
 from core.model import (
     Base,
     Collection,
+    Contributor,
+    DataSource,
+    DeliveryMechanism,
+    Edition,
     ExternalIntegration,
+    Genre,
+    Hyperlink,
+    Identifier,
     Library,
+    LicensePool,
+    MediaTypes,
+    Representation,
+    RightsStatus,
     SessionManager,
+    Work,
     get_one_or_create,
 )
 from core.model.devicetokens import DeviceToken
+from core.util.datetime_helpers import utc_now
 
 
 class ApplicationFixture:
@@ -281,10 +295,13 @@ class DatabaseTransactionFixture:
         self._counter += 1
         return self._counter
 
+    def fresh_str(self) -> str:
+        return str(self.fresh_id())
+
     def library(
         self, name: Optional[str] = None, short_name: Optional[str] = None
     ) -> Library:
-        name = name or str(self.fresh_id())
+        name = name or self.fresh_str()
         short_name = short_name or str(self.fresh_id)
         library, ignore = get_one_or_create(
             self.session(),
@@ -305,7 +322,7 @@ class DatabaseTransactionFixture:
         password=None,
         data_source_name=None,
     ):
-        name = name or str(self.fresh_id())
+        name = name or self.fresh_str()
         collection, ignore = get_one_or_create(self.session(), Collection, name=name)
         collection.external_account_id = external_account_id
         integration = collection.create_external_integration(protocol)
@@ -317,6 +334,246 @@ class DatabaseTransactionFixture:
         if data_source_name:
             collection.data_source = data_source_name
         return collection
+
+    def work(
+        self,
+        title=None,
+        authors=None,
+        genre=None,
+        language=None,
+        audience=None,
+        fiction=True,
+        with_license_pool=False,
+        with_open_access_download=False,
+        quality=0.5,
+        series=None,
+        presentation_edition=None,
+        collection=None,
+        data_source_name=None,
+        self_hosted=False,
+        unlimited_access=False,
+    ):
+        """Create a Work.
+
+        For performance reasons, this method does not generate OPDS
+        entries or calculate a presentation edition for the new
+        Work. Tests that rely on this information being present
+        should call _slow_work() instead, which takes more care to present
+        the sort of Work that would be created in a real environment.
+        """
+        pools = []
+        if with_open_access_download:
+            with_license_pool = True
+        language = language or "eng"
+        title = str(title or self.fresh_str())
+        audience = audience or Classifier.AUDIENCE_ADULT
+        if audience == Classifier.AUDIENCE_CHILDREN and not data_source_name:
+            # TODO: This is necessary because Gutenberg's childrens books
+            # get filtered out at the moment.
+            data_source_name = DataSource.OVERDRIVE
+        elif not data_source_name:
+            data_source_name = DataSource.GUTENBERG
+        if fiction is None:
+            fiction = True
+        new_edition = False
+        if not presentation_edition:
+            new_edition = True
+            presentation_edition = self.edition(
+                title=title,
+                language=language,
+                authors=authors,
+                with_license_pool=with_license_pool,
+                with_open_access_download=with_open_access_download,
+                data_source_name=data_source_name,
+                series=series,
+                collection=collection,
+                self_hosted=self_hosted,
+                unlimited_access=unlimited_access,
+            )
+            if with_license_pool:
+                presentation_edition, pool = presentation_edition
+                if with_open_access_download:
+                    pool.open_access = True
+                if self_hosted:
+                    pool.open_access = False
+                    pool.self_hosted = True
+                if unlimited_access:
+                    pool.open_access = False
+                    pool.unlimited_access = True
+
+                pools = [pool]
+        else:
+            pools = presentation_edition.license_pools
+        work, ignore = get_one_or_create(
+            self.session(),
+            Work,
+            create_method_kwargs=dict(
+                audience=audience, fiction=fiction, quality=quality
+            ),
+            id=self.fresh_id(),
+        )
+        if genre:
+            if not isinstance(genre, Genre):
+                genre, ignore = Genre.lookup(self.session(), genre, autocreate=True)
+            work.genres = [genre]
+        work.random = 0.5
+        work.set_presentation_edition(presentation_edition)
+
+        if pools:
+            # make sure the pool's presentation_edition is set,
+            # bc loan tests assume that.
+            if not work.license_pools:
+                for pool in pools:
+                    work.license_pools.append(pool)
+
+            for pool in pools:
+                pool.set_presentation_edition()
+
+            # This is probably going to be used in an OPDS feed, so
+            # fake that the work is presentation ready.
+            work.presentation_ready = True
+            work.calculate_opds_entries(verbose=False)
+
+        return work
+
+    def edition(
+        self,
+        data_source_name=DataSource.GUTENBERG,
+        identifier_type=Identifier.GUTENBERG_ID,
+        with_license_pool=False,
+        with_open_access_download=False,
+        title=None,
+        language="eng",
+        authors=None,
+        identifier_id=None,
+        series=None,
+        collection=None,
+        publication_date=None,
+        self_hosted=False,
+        unlimited_access=False,
+    ):
+        id = identifier_id or self.fresh_str()
+        source = DataSource.lookup(self.session(), data_source_name)
+        wr = Edition.for_foreign_id(self.session(), source, identifier_type, id)[0]
+        if not title:
+            title = self.fresh_str()
+        wr.title = str(title)
+        wr.medium = Edition.BOOK_MEDIUM
+        if series:
+            wr.series = series
+        if language:
+            wr.language = language
+        if authors is None:
+            authors = self.fresh_str()
+        if isinstance(authors, str):
+            authors = [authors]
+        if authors:
+            primary_author_name = str(authors[0])
+            contributor = wr.add_contributor(
+                primary_author_name, Contributor.PRIMARY_AUTHOR_ROLE
+            )
+            # add_contributor assumes authors[0] is a sort_name,
+            # but it may be a display name. If so, set that field as well.
+            if not contributor.display_name and "," not in primary_author_name:
+                contributor.display_name = primary_author_name
+            wr.author = primary_author_name
+
+        for author in authors[1:]:
+            wr.add_contributor(str(author), Contributor.AUTHOR_ROLE)
+        if publication_date:
+            wr.published = publication_date
+
+        if with_license_pool or with_open_access_download:
+            pool = self.licensepool(
+                wr,
+                data_source_name=data_source_name,
+                with_open_access_download=with_open_access_download,
+                collection=collection,
+                self_hosted=self_hosted,
+                unlimited_access=unlimited_access,
+            )
+
+            pool.set_presentation_edition()
+            return wr, pool
+        return wr
+
+    def licensepool(
+        self,
+        edition,
+        open_access=True,
+        data_source_name=DataSource.GUTENBERG,
+        with_open_access_download=False,
+        set_edition_as_presentation=False,
+        collection=None,
+        self_hosted=False,
+        unlimited_access=False,
+    ):
+        source = DataSource.lookup(self.session(), data_source_name)
+        if not edition:
+            edition = self.edition(data_source_name)
+        collection = collection or self._default_collection
+        pool, ignore = get_one_or_create(
+            self.session(),
+            LicensePool,
+            create_method_kwargs=dict(open_access=open_access),
+            identifier=edition.primary_identifier,
+            data_source=source,
+            collection=collection,
+            availability_time=utc_now(),
+            self_hosted=self_hosted,
+            unlimited_access=unlimited_access,
+        )
+
+        if set_edition_as_presentation:
+            pool.presentation_edition = edition
+
+        if with_open_access_download:
+            pool.open_access = True
+            url = "http://foo.com/" + self.fresh_str()
+            media_type = MediaTypes.EPUB_MEDIA_TYPE
+            link, new = pool.identifier.add_link(
+                Hyperlink.OPEN_ACCESS_DOWNLOAD, url, source, media_type
+            )
+
+            # Add a DeliveryMechanism for this download
+            pool.set_delivery_mechanism(
+                media_type,
+                DeliveryMechanism.NO_DRM,
+                RightsStatus.GENERIC_OPEN_ACCESS,
+                link.resource,
+            )
+
+            representation, is_new = self.representation(
+                url, media_type, "Dummy content", mirrored=True
+            )
+            link.resource.representation = representation
+        else:
+            # Add a DeliveryMechanism for this licensepool
+            pool.set_delivery_mechanism(
+                MediaTypes.EPUB_MEDIA_TYPE,
+                DeliveryMechanism.ADOBE_DRM,
+                RightsStatus.UNKNOWN,
+                None,
+            )
+
+            if not unlimited_access:
+                pool.licenses_owned = pool.licenses_available = 1
+
+        return pool
+
+    def representation(self, url=None, media_type=None, content=None, mirrored=False):
+        url = url or "http://foo.com/" + self.fresh_str()
+        repr, is_new = get_one_or_create(self.session(), Representation, url=url)
+        repr.media_type = media_type
+        if media_type and content:
+            if isinstance(content, str):
+                content = content.encode("utf8")
+            repr.content = content
+            repr.fetched_at = utc_now()
+            if mirrored:
+                repr.mirror_url = "http://foo.com/" + self.fresh_str()
+                repr.mirrored_at = utc_now()
+        return repr, is_new
 
 
 @pytest.fixture(scope="session")

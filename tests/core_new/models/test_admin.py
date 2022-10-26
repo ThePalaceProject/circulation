@@ -22,7 +22,6 @@ def admin_fixture(database_transaction: DatabaseTransactionFixture) -> AdminFixt
 
 
 class TestAdmin:
-
     def test_password_hashed(self, admin_fixture: AdminFixture):
         pytest.raises(NotImplementedError, lambda: admin_fixture.admin.password)
         assert admin_fixture.admin.password_hashed.startswith("$2a$")
@@ -57,7 +56,9 @@ class TestAdmin:
         session = admin_fixture.database_fixture.session()
         other_admin, ignore = create(session, Admin, email="other@nypl.org")
         other_admin.password = "banana"
-        assert admin_fixture.admin == Admin.authenticate(session, "admin@nypl.org", "password")
+        assert admin_fixture.admin == Admin.authenticate(
+            session, "admin@nypl.org", "password"
+        )
         assert None == Admin.authenticate(session, "other@nypl.org", "password")
         assert None == Admin.authenticate(session, "example@nypl.org", "password")
 
