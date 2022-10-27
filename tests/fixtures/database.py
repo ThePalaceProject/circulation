@@ -44,7 +44,7 @@ from core.model import (
     get_one_or_create,
 )
 from core.model.devicetokens import DeviceToken
-from core.model.licensing import License, LicenseStatus
+from core.model.licensing import License, LicensePoolDeliveryMechanism, LicenseStatus
 from core.util.datetime_helpers import utc_now
 
 
@@ -857,6 +857,16 @@ class DatabaseTransactionFixture:
             customlist.add_entry(edition, "Annotation %s" % i, first_appearance=now)
             editions.append(edition)
         return customlist, editions
+
+    def add_generic_delivery_mechanism(self, license_pool: LicensePool):
+        """Give a license pool a generic non-open-access delivery mechanism."""
+        data_source = license_pool.data_source
+        identifier = license_pool.identifier
+        content_type = Representation.EPUB_MEDIA_TYPE
+        drm_scheme = DeliveryMechanism.NO_DRM
+        return LicensePoolDeliveryMechanism.set(
+            data_source, identifier, content_type, drm_scheme, RightsStatus.IN_COPYRIGHT
+        )
 
 
 @pytest.fixture(scope="session")
