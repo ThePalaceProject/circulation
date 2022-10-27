@@ -20,6 +20,7 @@ from core.model import (
     Collection,
     Contributor,
     CoverageRecord,
+    CustomList,
     DataSource,
     DeliveryMechanism,
     Edition,
@@ -820,6 +821,42 @@ class DatabaseTransactionFixture:
             data_source=data_source,
             weight=weight,
         )[0]
+
+    def customlist(
+        self,
+        foreign_identifier=None,
+        name=None,
+        data_source_name=DataSource.NYT,
+        num_entries=1,
+        entries_exist_as_works=True,
+    ):
+        data_source = DataSource.lookup(self.session(), data_source_name)
+        foreign_identifier = foreign_identifier or self.fresh_str()
+        now = utc_now()
+        customlist, ignore = get_one_or_create(
+            self.session(),
+            CustomList,
+            create_method_kwargs=dict(
+                created=now,
+                updated=now,
+                name=name or self.fresh_str(),
+                description=self.fresh_str(),
+            ),
+            data_source=data_source,
+            foreign_identifier=foreign_identifier,
+        )
+
+        editions = []
+        for i in range(num_entries):
+            if entries_exist_as_works:
+                work = self.work(with_open_access_download=True)
+                edition = work.presentation_edition
+            else:
+                edition = self.edition(data_source_name, title="Item %s" % i)
+                edition.permanent_work_id = "Permanent work ID %s" % self.fresh_str()
+            customlist.add_entry(edition, "Annotation %s" % i, first_appearance=now)
+            editions.append(edition)
+        return customlist, editions
 
 
 @pytest.fixture(scope="session")
