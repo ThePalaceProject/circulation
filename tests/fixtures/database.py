@@ -16,6 +16,7 @@ from core.config import Configuration
 from core.log import LogConfiguration
 from core.model import (
     Base,
+    Classification,
     Collection,
     Contributor,
     CoverageRecord,
@@ -37,6 +38,7 @@ from core.model import (
     SessionManager,
     Subject,
     Work,
+    WorkCoverageRecord,
     create,
     get_one_or_create,
 )
@@ -790,6 +792,33 @@ class DatabaseTransactionFixture:
         )
 
         return external_integration_link
+
+    def work_coverage_record(
+        self, work, operation=None, status=CoverageRecord.SUCCESS
+    ) -> WorkCoverageRecord:
+        record, ignore = get_one_or_create(
+            self.session(),
+            WorkCoverageRecord,
+            work=work,
+            operation=operation,
+            create_method_kwargs=dict(
+                timestamp=utc_now(),
+                status=status,
+            ),
+        )
+        return record
+
+    def classification(
+        self, identifier, subject, data_source, weight=1
+    ) -> Classification:
+        return get_one_or_create(
+            self.session(),
+            Classification,
+            identifier=identifier,
+            subject=subject,
+            data_source=data_source,
+            weight=weight,
+        )[0]
 
 
 @pytest.fixture(scope="session")
