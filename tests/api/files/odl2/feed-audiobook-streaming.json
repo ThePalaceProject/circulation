@@ -109,7 +109,8 @@
             "identifier": "urn:uuid:a44b9e96-7ad6-42b5-a86d-786563f32b12",
             "format": [
               "application/audiobook+lcp",
-              "text/html"
+              "text/html",
+              "application/audiobook+json; protection=http://www.feedbooks.com/audiobooks/access-restriction"
             ],
             "created": "2021-10-07T22:23:45+02:00",
             "source": "http://www.cantook.net/",
