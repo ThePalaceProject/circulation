@@ -3,19 +3,17 @@ import datetime
 import pytest
 
 from core.model.integrationclient import IntegrationClient
-from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestIntegrationClient(DatabaseTest):
-    def setup_method(self):
-        super().setup_method()
-        self.client = self._integration_client()
+class TestIntegrationClient:
+    def test_for_url(self, database_transaction: DatabaseTransactionFixture):
+        session = database_transaction.session()
 
-    def test_for_url(self):
         now = utc_now()
-        url = self._url
-        client, is_new = IntegrationClient.for_url(self._db, url)
+        url = database_transaction.fresh_url()
+        client, is_new = IntegrationClient.for_url(session, url)
 
         # A new IntegrationClient has been created.
         assert True == is_new
@@ -33,12 +31,16 @@ class TestIntegrationClient(DatabaseTest):
         assert None == client.shared_secret
 
         # Calling it again on the same URL gives the same object.
-        client2, is_new = IntegrationClient.for_url(self._db, url)
+        client2, is_new = IntegrationClient.for_url(session, url)
         assert client == client2
 
-    def test_register(self):
+    def test_register(self, database_transaction: DatabaseTransactionFixture):
+        session = database_transaction.session()
+
         now = utc_now()
-        client, is_new = IntegrationClient.register(self._db, self._url)
+        client, is_new = IntegrationClient.register(
+            session, database_transaction.fresh_url()
+        )
 
         # It creates a shared_secret.
         assert client.shared_secret
@@ -50,17 +52,19 @@ class TestIntegrationClient(DatabaseTest):
 
         # It raises an error if the url is already registered and the
         # submitted shared_secret is inaccurate.
-        pytest.raises(ValueError, IntegrationClient.register, self._db, client.url)
+        pytest.raises(ValueError, IntegrationClient.register, session, client.url)
         pytest.raises(
-            ValueError, IntegrationClient.register, self._db, client.url, "wrong"
+            ValueError, IntegrationClient.register, session, client.url, "wrong"
         )
 
-    def test_authenticate(self):
+    def test_authenticate(self, database_transaction: DatabaseTransactionFixture):
+        session = database_transaction.session()
+        client = database_transaction.integration_client()
 
-        result = IntegrationClient.authenticate(self._db, "secret")
-        assert self.client == result
+        result = IntegrationClient.authenticate(session, "secret")
+        assert client == result
 
-        result = IntegrationClient.authenticate(self._db, "wrong_secret")
+        result = IntegrationClient.authenticate(session, "wrong_secret")
         assert None == result
 
     def test_normalize_url(self):
