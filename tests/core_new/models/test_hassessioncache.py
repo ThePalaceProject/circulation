@@ -4,7 +4,7 @@ import pytest
 
 from core.model import ConfigurationSetting
 from core.model.hassessioncache import HasSessionCache
-from core.testing import DatabaseTest
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestHasSessionCache:
@@ -211,31 +211,35 @@ class TestHasSessionCache:
         assert len(cache.key) == 0
 
 
-class TestHasFullTableCacheDatabase(DatabaseTest):
-    def test_cached_values_are_properly_updated(self):
+class TestHasFullTableCacheDatabase:
+    def test_cached_values_are_properly_updated(
+        self, database_transaction: DatabaseTransactionFixture
+    ):
+        session = database_transaction.session()
+
         setting_key = "key"
         setting_old_value = "old value"
         setting_new_value = "new value"
 
         # First, let's create a ConfigurationSetting instance and save it in the database.
         setting = ConfigurationSetting(key=setting_key, _value=setting_old_value)
-        self._db.add(setting)
-        self._db.commit()
+        session.add(setting)
+        session.commit()
 
         # Let's save ConfigurationSetting's ID to find it later.
         setting_id = setting.id
 
         # Now let's fetch the configuration setting from the database and add it to the cache.
         db_setting1 = (
-            self._db.query(ConfigurationSetting)
+            session.query(ConfigurationSetting)
             .filter(ConfigurationSetting.key == setting_key)
             .one()
         )
-        ConfigurationSetting.cache_warm(self._db, lambda: [db_setting1])
+        ConfigurationSetting.cache_warm(session, lambda: [db_setting1])
 
         # After, let's fetch it again and change its value.
         db_setting2 = (
-            self._db.query(ConfigurationSetting)
+            session.query(ConfigurationSetting)
             .filter(ConfigurationSetting.key == setting_key)
             .one()
         )
@@ -243,53 +247,65 @@ class TestHasFullTableCacheDatabase(DatabaseTest):
 
         # Now let's make sure that the cached value has also been updated.
         assert (
-            ConfigurationSetting.by_id(self._db, setting_id)._value == setting_new_value
+            ConfigurationSetting.by_id(session, setting_id)._value == setting_new_value
         )
 
-    def test_cached_value_deleted(self):
+    def test_cached_value_deleted(
+        self, database_transaction: DatabaseTransactionFixture
+    ):
+        session = database_transaction.session()
+
         # Get setting
-        setting = ConfigurationSetting.sitewide(self._db, "test")
+        setting = ConfigurationSetting.sitewide(session, "test")
         setting.value = "testing"
 
         # Delete setting
-        self._db.delete(setting)
+        session.delete(setting)
 
         # we should no longer be able to get setting from cache
-        cached = ConfigurationSetting.by_id(self._db, setting.id)
-        cache = ConfigurationSetting._cache_from_session(self._db)
+        cached = ConfigurationSetting.by_id(session, setting.id)
+        cache = ConfigurationSetting._cache_from_session(session)
         assert cached is None
         assert len(cache.id) == 0
         assert len(cache.key) == 0
 
-    def test_cached_value_deleted_flushed(self):
+    def test_cached_value_deleted_flushed(
+        self, database_transaction: DatabaseTransactionFixture
+    ):
+        session = database_transaction.session()
+
         # Get setting
-        setting = ConfigurationSetting.sitewide(self._db, "test")
+        setting = ConfigurationSetting.sitewide(session, "test")
         setting.value = "testing"
 
         # Delete setting and flush
-        self._db.delete(setting)
-        self._db.flush()
+        session.delete(setting)
+        session.flush()
 
         # we should no longer be able to get setting from cache
-        cached = ConfigurationSetting.by_id(self._db, setting.id)
-        cache = ConfigurationSetting._cache_from_session(self._db)
+        cached = ConfigurationSetting.by_id(session, setting.id)
+        cache = ConfigurationSetting._cache_from_session(session)
         assert cached is None
         assert len(cache.id) == 0
         assert len(cache.key) == 0
 
-    def test_cached_value_deleted_committed(self):
+    def test_cached_value_deleted_committed(
+        self, database_transaction: DatabaseTransactionFixture
+    ):
+        session = database_transaction.session()
+
         # Get setting
-        setting = ConfigurationSetting.sitewide(self._db, "test")
+        setting = ConfigurationSetting.sitewide(session, "test")
         setting.value = "testing"
-        self._db.commit()
+        session.commit()
 
         # Delete setting and commit
-        self._db.delete(setting)
-        self._db.commit()
+        session.delete(setting)
+        session.commit()
 
         # We should no longer be able to get setting from cache
-        cached = ConfigurationSetting.by_id(self._db, setting.id)
-        cache = ConfigurationSetting._cache_from_session(self._db)
+        cached = ConfigurationSetting.by_id(session, setting.id)
+        cache = ConfigurationSetting._cache_from_session(session)
         assert cached is None
         assert len(cache.id) == 0
         assert len(cache.key) == 0
