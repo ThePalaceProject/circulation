@@ -1652,7 +1652,7 @@ class TestMultipleLibraries(CirculationControllerTest):
                     == response.headers["location"]
                 )
 
-# PORIN: u ovoj klasi dodati testove
+
 class TestLoanController(CirculationControllerTest):
     def setup_method(self):
         super().setup_method()
@@ -1747,7 +1747,6 @@ class TestLoanController(CirculationControllerTest):
             assert (hold, other_pool) == result
 
     def test_borrow_success(self):
-        # PORIN
         with self.request_context_with_library(
             "/", headers=dict(Authorization=self.valid_auth)
         ):
@@ -2803,12 +2802,10 @@ class TestLoanController(CirculationControllerTest):
             self.manager.loans.authenticated_patron_from_request()
 
             def create_work_and_return_license_pool_and_loan_info(**kwargs):
-                loan_end = kwargs.pop('loan_end', None)
+                loan_end = kwargs.pop("loan_end", None)
 
                 work = self._work(
-                    with_license_pool=True,
-                    with_open_access_download=False,
-                    **kwargs
+                    with_license_pool=True, with_open_access_download=False, **kwargs
                 )
                 license_pool = work.license_pools[0]
 
@@ -2826,7 +2823,10 @@ class TestLoanController(CirculationControllerTest):
             # Let us first test default collection without any configured loan duration
 
             # Test loan with no loan.end
-            license_pool_1, loan_info_1 = create_work_and_return_license_pool_and_loan_info()
+            (
+                license_pool_1,
+                loan_info_1,
+            ) = create_work_and_return_license_pool_and_loan_info()
 
             self.manager.d_circulation.queue_checkout(license_pool_1, loan_info_1)
 
@@ -2852,10 +2852,9 @@ class TestLoanController(CirculationControllerTest):
             # Loan record end is None and response until field is set to STANDARD_DEFAULT_LOAN_PERIOD
             # TODO: this should not be the case
             assert loan_1_response_until == datetime.datetime.strftime(
-                loan_1.start + datetime.timedelta(
-                    days=Collection.STANDARD_DEFAULT_LOAN_PERIOD
-                ),
-                "%Y-%m-%dT%H:%M:%S+00:00"
+                loan_1.start
+                + datetime.timedelta(days=Collection.STANDARD_DEFAULT_LOAN_PERIOD),
+                "%Y-%m-%dT%H:%M:%S+00:00",
             )
 
             # TODO: loan_1_response_until should be None
@@ -2864,8 +2863,15 @@ class TestLoanController(CirculationControllerTest):
             # assert loan_1.end == loan_1_response_until
 
             # Test loan with loan duration less than STANDARD_DEFAULT_LOAN_PERIOD days
-            loan_2_target_end = utc_now() + datetime.timedelta(days=Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1)
-            license_pool_2, loan_info_2 = create_work_and_return_license_pool_and_loan_info(loan_end=loan_2_target_end)
+            loan_2_target_end = utc_now() + datetime.timedelta(
+                days=Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1
+            )
+            (
+                license_pool_2,
+                loan_info_2,
+            ) = create_work_and_return_license_pool_and_loan_info(
+                loan_end=loan_2_target_end
+            )
 
             self.manager.d_circulation.queue_checkout(license_pool_2, loan_info_2)
 
@@ -2881,11 +2887,20 @@ class TestLoanController(CirculationControllerTest):
             # Loan end in the loan record and in the response are the same as the set value
             # which is less than STANDARD_DEFAULT_LOAN_PERIOD days
             assert loan_2.end == loan_2_target_end
-            assert loan_2_response_until == datetime.datetime.strftime(loan_2.end, "%Y-%m-%dT%H:%M:%S+00:00")
+            assert loan_2_response_until == datetime.datetime.strftime(
+                loan_2.end, "%Y-%m-%dT%H:%M:%S+00:00"
+            )
 
             # Test loan with loan duration more than STANDARD_DEFAULT_LOAN_PERIOD days
-            loan_3_target_end = utc_now() + datetime.timedelta(days=Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1)
-            license_pool_3, loan_info_3 = create_work_and_return_license_pool_and_loan_info(loan_end=loan_3_target_end)
+            loan_3_target_end = utc_now() + datetime.timedelta(
+                days=Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1
+            )
+            (
+                license_pool_3,
+                loan_info_3,
+            ) = create_work_and_return_license_pool_and_loan_info(
+                loan_end=loan_3_target_end
+            )
 
             self.manager.d_circulation.queue_checkout(license_pool_3, loan_info_3)
 
@@ -2901,24 +2916,33 @@ class TestLoanController(CirculationControllerTest):
             # Loan end in the loan record and in the response are the same as the set value
             # which is more than STANDARD_DEFAULT_LOAN_PERIOD days
             assert loan_3.end == loan_3_target_end
-            assert loan_3_response_until == datetime.datetime.strftime(loan_3.end, "%Y-%m-%dT%H:%M:%S+00:00")
+            assert loan_3_response_until == datetime.datetime.strftime(
+                loan_3.end, "%Y-%m-%dT%H:%M:%S+00:00"
+            )
 
             # Now lets test with a collection with configured loan period that is less than STANDARD_DEFAULT_LOAN_PERIOD
             collection_with_short_configuration = self._collection(
                 protocol=ExternalIntegration.BIBLIOTHECA,
-                data_source_name=DataSource.BIBLIOTHECA
+                data_source_name=DataSource.BIBLIOTHECA,
             )
-            loan_period_shorter_than_default = Collection.STANDARD_DEFAULT_LOAN_PERIOD - 2
+            loan_period_shorter_than_default = (
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD - 2
+            )
             collection_with_short_configuration.default_loan_period_setting(
                 self._default_library
             ).value = loan_period_shorter_than_default
 
-            self._default_library.collections.append(collection_with_short_configuration)
+            self._default_library.collections.append(
+                collection_with_short_configuration
+            )
 
             # Test loan with no loan.end
-            license_pool_4, loan_info_4 = create_work_and_return_license_pool_and_loan_info(
+            (
+                license_pool_4,
+                loan_info_4,
+            ) = create_work_and_return_license_pool_and_loan_info(
                 data_source_name=DataSource.BIBLIOTHECA,
-                collection=collection_with_short_configuration
+                collection=collection_with_short_configuration,
             )
 
             self.manager.d_circulation.queue_checkout(license_pool_4, loan_info_4)
@@ -2938,16 +2962,21 @@ class TestLoanController(CirculationControllerTest):
 
             assert loan_4_response_until == datetime.datetime.strftime(
                 loan_4.start + datetime.timedelta(loan_period_shorter_than_default),
-                "%Y-%m-%dT%H:%M:%S+00:00"
+                "%Y-%m-%dT%H:%M:%S+00:00",
             )
 
             # Test loan with loan duration shorter than collection configuration
-            loan_5_target_end = utc_now() + datetime.timedelta(days=loan_period_shorter_than_default - 1)
+            loan_5_target_end = utc_now() + datetime.timedelta(
+                days=loan_period_shorter_than_default - 1
+            )
 
-            license_pool_5, loan_info_5 = create_work_and_return_license_pool_and_loan_info(
+            (
+                license_pool_5,
+                loan_info_5,
+            ) = create_work_and_return_license_pool_and_loan_info(
                 loan_end=loan_5_target_end,
                 data_source_name=DataSource.BIBLIOTHECA,
-                collection=collection_with_short_configuration
+                collection=collection_with_short_configuration,
             )
 
             self.manager.d_circulation.queue_checkout(license_pool_5, loan_info_5)
@@ -2964,16 +2993,23 @@ class TestLoanController(CirculationControllerTest):
             # Loan end in the loan record and in the response are the same as the set value
             # which is shorter than the collection configuration and STANDARD_DEFAULT_LOAN_PERIOD
             assert loan_5.end == loan_5_target_end
-            assert loan_5_response_until == datetime.datetime.strftime(loan_5.end, "%Y-%m-%dT%H:%M:%S+00:00")
+            assert loan_5_response_until == datetime.datetime.strftime(
+                loan_5.end, "%Y-%m-%dT%H:%M:%S+00:00"
+            )
 
             # Test loan with loan duration longer than collection configuration
             # but shorter than STANDARD_DEFAULT_LOAN_PERIOD
-            loan_6_target_end = utc_now() + datetime.timedelta(days=loan_period_shorter_than_default + 1)
+            loan_6_target_end = utc_now() + datetime.timedelta(
+                days=loan_period_shorter_than_default + 1
+            )
 
-            license_pool_6, loan_info_6 = create_work_and_return_license_pool_and_loan_info(
+            (
+                license_pool_6,
+                loan_info_6,
+            ) = create_work_and_return_license_pool_and_loan_info(
                 loan_end=loan_6_target_end,
                 data_source_name=DataSource.BIBLIOTHECA,
-                collection=collection_with_short_configuration
+                collection=collection_with_short_configuration,
             )
 
             self.manager.d_circulation.queue_checkout(license_pool_6, loan_info_6)
@@ -2990,15 +3026,22 @@ class TestLoanController(CirculationControllerTest):
             # Loan end in the loan record and in the response are the same as the set value
             # which is longer than the collection configuration and shorter than the STANDARD_DEFAULT_LOAN_PERIOD
             assert loan_6.end == loan_6_target_end
-            assert loan_6_response_until == datetime.datetime.strftime(loan_6.end, "%Y-%m-%dT%H:%M:%S+00:00")
+            assert loan_6_response_until == datetime.datetime.strftime(
+                loan_6.end, "%Y-%m-%dT%H:%M:%S+00:00"
+            )
 
             # Test loan with loan duration longer than the STANDARD_DEFAULT_LOAN_PERIOD
-            loan_7_target_end = utc_now() + datetime.timedelta(days=Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1)
+            loan_7_target_end = utc_now() + datetime.timedelta(
+                days=Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1
+            )
 
-            license_pool_7, loan_info_7 = create_work_and_return_license_pool_and_loan_info(
+            (
+                license_pool_7,
+                loan_info_7,
+            ) = create_work_and_return_license_pool_and_loan_info(
                 loan_end=loan_7_target_end,
                 data_source_name=DataSource.BIBLIOTHECA,
-                collection=collection_with_short_configuration
+                collection=collection_with_short_configuration,
             )
 
             self.manager.d_circulation.queue_checkout(license_pool_7, loan_info_7)
@@ -3015,16 +3058,20 @@ class TestLoanController(CirculationControllerTest):
             # Loan end in the loan record and in the response are the same as the set value
             # which is longer than the STANDARD_DEFAULT_LOAN_PERIOD
             assert loan_7.end == loan_7_target_end
-            assert loan_7_response_until == datetime.datetime.strftime(loan_7.end, "%Y-%m-%dT%H:%M:%S+00:00")
+            assert loan_7_response_until == datetime.datetime.strftime(
+                loan_7.end, "%Y-%m-%dT%H:%M:%S+00:00"
+            )
 
             # Finally, lets test with collection with configured loan period that is longer than
             # the STANDARD_DEFAULT_LOAN_PERIOD
             collection_with_long_configuration = self._collection(
                 protocol=ExternalIntegration.BIBLIOTHECA,
-                data_source_name=DataSource.BIBLIOTHECA
+                data_source_name=DataSource.BIBLIOTHECA,
             )
 
-            loan_period_longer_than_default = Collection.STANDARD_DEFAULT_LOAN_PERIOD + 2
+            loan_period_longer_than_default = (
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD + 2
+            )
             collection_with_long_configuration.default_loan_period_setting(
                 self._default_library
             ).value = loan_period_longer_than_default
@@ -3032,9 +3079,12 @@ class TestLoanController(CirculationControllerTest):
             self._default_library.collections.append(collection_with_long_configuration)
 
             # Test loan with no loan.end
-            license_pool_8, loan_info_8 = create_work_and_return_license_pool_and_loan_info(
+            (
+                license_pool_8,
+                loan_info_8,
+            ) = create_work_and_return_license_pool_and_loan_info(
                 data_source_name=DataSource.BIBLIOTHECA,
-                collection=collection_with_long_configuration
+                collection=collection_with_long_configuration,
             )
 
             self.manager.d_circulation.queue_checkout(license_pool_8, loan_info_8)
@@ -3054,16 +3104,21 @@ class TestLoanController(CirculationControllerTest):
 
             assert loan_8_response_until == datetime.datetime.strftime(
                 loan_8.start + datetime.timedelta(loan_period_longer_than_default),
-                "%Y-%m-%dT%H:%M:%S+00:00"
+                "%Y-%m-%dT%H:%M:%S+00:00",
             )
 
             # Test loan with loan duration shorter than both STANDARD_DEFAULT_LOAN_PERIOD and collection configuration
-            loan_9_target_end = utc_now() + datetime.timedelta(days=Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1)
+            loan_9_target_end = utc_now() + datetime.timedelta(
+                days=Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1
+            )
 
-            license_pool_9, loan_info_9 = create_work_and_return_license_pool_and_loan_info(
+            (
+                license_pool_9,
+                loan_info_9,
+            ) = create_work_and_return_license_pool_and_loan_info(
                 loan_end=loan_9_target_end,
                 data_source_name=DataSource.BIBLIOTHECA,
-                collection=collection_with_long_configuration
+                collection=collection_with_long_configuration,
             )
 
             self.manager.d_circulation.queue_checkout(license_pool_9, loan_info_9)
@@ -3080,15 +3135,22 @@ class TestLoanController(CirculationControllerTest):
             # Loan end in the loan record and in the response are the same as the set value
             # which is shorter than the collection configuration and STANDARD_DEFAULT_LOAN_PERIOD
             assert loan_9.end == loan_9_target_end
-            assert loan_9_response_until == datetime.datetime.strftime(loan_9.end, "%Y-%m-%dT%H:%M:%S+00:00")
+            assert loan_9_response_until == datetime.datetime.strftime(
+                loan_9.end, "%Y-%m-%dT%H:%M:%S+00:00"
+            )
 
             # Test loan with duration longer than STANDARD_DEFAULT_LOAN_PERIOD but shorter than collection configuration
-            loan_10_target_end = utc_now() + datetime.timedelta(days=loan_period_longer_than_default - 1)
+            loan_10_target_end = utc_now() + datetime.timedelta(
+                days=loan_period_longer_than_default - 1
+            )
 
-            license_pool_10, loan_info_10 = create_work_and_return_license_pool_and_loan_info(
+            (
+                license_pool_10,
+                loan_info_10,
+            ) = create_work_and_return_license_pool_and_loan_info(
                 loan_end=loan_10_target_end,
                 data_source_name=DataSource.BIBLIOTHECA,
-                collection=collection_with_long_configuration
+                collection=collection_with_long_configuration,
             )
 
             self.manager.d_circulation.queue_checkout(license_pool_10, loan_info_10)
@@ -3105,15 +3167,22 @@ class TestLoanController(CirculationControllerTest):
             # Loan end in the loan record and in the response are the same as the set value
             # which is in between STANDARD_DEFAULT_LOAN_PERIOD and the collection configuration
             assert loan_10.end == loan_10_target_end
-            assert loan_10_response_until == datetime.datetime.strftime(loan_10.end, "%Y-%m-%dT%H:%M:%S+00:00")
+            assert loan_10_response_until == datetime.datetime.strftime(
+                loan_10.end, "%Y-%m-%dT%H:%M:%S+00:00"
+            )
 
             # Test loan with duration longer than both STANDARD_DEFAULT_LOAN_PERIOD and collection configuration
-            loan_11_target_end = utc_now() + datetime.timedelta(days=loan_period_longer_than_default + 1)
+            loan_11_target_end = utc_now() + datetime.timedelta(
+                days=loan_period_longer_than_default + 1
+            )
 
-            license_pool_11, loan_info_11 = create_work_and_return_license_pool_and_loan_info(
+            (
+                license_pool_11,
+                loan_info_11,
+            ) = create_work_and_return_license_pool_and_loan_info(
                 loan_end=loan_11_target_end,
                 data_source_name=DataSource.BIBLIOTHECA,
-                collection=collection_with_long_configuration
+                collection=collection_with_long_configuration,
             )
 
             self.manager.d_circulation.queue_checkout(license_pool_11, loan_info_11)
@@ -3130,7 +3199,9 @@ class TestLoanController(CirculationControllerTest):
             # Loan end in the loan record and in the response are the same as the set value
             # which is longer than STANDARD_DEFAULT_LOAN_PERIOD and the collection configuration
             assert loan_11.end == loan_11_target_end
-            assert loan_11_response_until == datetime.datetime.strftime(loan_11.end, "%Y-%m-%dT%H:%M:%S+00:00")
+            assert loan_11_response_until == datetime.datetime.strftime(
+                loan_11.end, "%Y-%m-%dT%H:%M:%S+00:00"
+            )
 
 
 class TestAnnotationController(CirculationControllerTest):
