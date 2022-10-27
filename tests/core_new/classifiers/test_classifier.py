@@ -2,9 +2,8 @@
 
 from collections import Counter
 
-from psycopg2.extras import NumericRange
-
 import pytest
+from psycopg2.extras import NumericRange
 
 from core import classifier
 from core.classifier import (

@@ -687,7 +687,8 @@ class DatabaseTransactionFixture:
 
     def patron(self, external_identifier=None, library=None) -> Patron:
         external_identifier = external_identifier or self.fresh_str()
-        library = library or self._default_library
+        library = library or self.default_library()
+        assert library
         return get_one_or_create(
             self.session(),
             Patron,
