@@ -3,7 +3,7 @@ import os
 import shutil
 import tempfile
 import uuid
-from typing import Any, Iterable, Optional, Tuple
+from typing import Any, Iterable, List, Optional, Tuple
 
 import pytest
 from sqlalchemy.engine import Connection, Engine, Transaction
@@ -23,12 +23,15 @@ from core.model import (
     DeliveryMechanism,
     Edition,
     ExternalIntegration,
+    ExternalIntegrationLink,
     Genre,
     Hyperlink,
     Identifier,
+    IntegrationClient,
     Library,
     LicensePool,
     MediaTypes,
+    Patron,
     Representation,
     RightsStatus,
     SessionManager,
@@ -38,6 +41,7 @@ from core.model import (
     get_one_or_create,
 )
 from core.model.devicetokens import DeviceToken
+from core.model.licensing import License, LicenseStatus
 from core.util.datetime_helpers import utc_now
 
 
@@ -202,6 +206,7 @@ class DatabaseTransactionFixture:
     _session: Session
     _transaction: Transaction
     _counter: int
+    _isbns: List[str]
 
     def __init__(
         self, database: DatabaseFixture, session: Session, transaction: Transaction
@@ -212,6 +217,12 @@ class DatabaseTransactionFixture:
         self._default_library = None
         self._default_collection = None
         self._counter = 2000
+        self._isbns = [
+            "9780674368279",
+            "0636920028468",
+            "9781936460236",
+            "9780316075978",
+        ]
 
     def _make_default_library(self):
         """Ensure that the default library exists in the given database."""
@@ -324,7 +335,7 @@ class DatabaseTransactionFixture:
         username=None,
         password=None,
         data_source_name=None,
-    ):
+    ) -> Collection:
         name = name or self.fresh_str()
         collection, ignore = get_one_or_create(self.session(), Collection, name=name)
         collection.external_account_id = external_account_id
@@ -619,7 +630,7 @@ class DatabaseTransactionFixture:
             lane.languages = languages
         return lane
 
-    def subject(self, type, identifier):
+    def subject(self, type, identifier) -> Subject:
         return get_one_or_create(
             self.session(), Subject, type=type, identifier=identifier
         )[0]
@@ -632,7 +643,7 @@ class DatabaseTransactionFixture:
         status=CoverageRecord.SUCCESS,
         collection=None,
         exception=None,
-    ):
+    ) -> CoverageRecord:
         if isinstance(edition, Identifier):
             identifier = edition
         else:
@@ -658,6 +669,127 @@ class DatabaseTransactionFixture:
         else:
             id_value = self.fresh_str()
         return Identifier.for_foreign_id(self.session(), identifier_type, id_value)[0]
+
+    def integration_client(self, url=None, shared_secret=None) -> IntegrationClient:
+        url = url or self.fresh_url()
+        secret = shared_secret or "secret"
+        return get_one_or_create(
+            self.session(),
+            IntegrationClient,
+            shared_secret=secret,
+            create_method_kwargs=dict(url=url),
+        )[0]
+
+    def fresh_url(self) -> str:
+        return "http://foo.com/" + self.fresh_str()
+
+    def patron(self, external_identifier=None, library=None) -> Patron:
+        external_identifier = external_identifier or self.fresh_str()
+        library = library or self._default_library
+        return get_one_or_create(
+            self.session(),
+            Patron,
+            external_identifier=external_identifier,
+            library=library,
+        )[0]
+
+    def license(
+        self,
+        pool,
+        identifier=None,
+        checkout_url=None,
+        status_url=None,
+        expires=None,
+        checkouts_left=None,
+        checkouts_available=None,
+        status=LicenseStatus.available,
+        terms_concurrency=None,
+    ) -> License:
+        identifier = identifier or self.fresh_str()
+        checkout_url = checkout_url or self.fresh_str()
+        status_url = status_url or self.fresh_str()
+        license, ignore = get_one_or_create(
+            self.session(),
+            License,
+            identifier=identifier,
+            license_pool=pool,
+            checkout_url=checkout_url,
+            status_url=status_url,
+            expires=expires,
+            checkouts_left=checkouts_left,
+            checkouts_available=checkouts_available,
+            status=status,
+            terms_concurrency=terms_concurrency,
+        )
+        return license
+
+    def isbn_take(self) -> str:
+        return self._isbns.pop()
+
+    def external_integration(
+        self, protocol, goal=None, settings=None, libraries=None, **kwargs
+    ) -> ExternalIntegration:
+        integration = None
+        if not libraries:
+            integration, ignore = get_one_or_create(
+                self.session(), ExternalIntegration, protocol=protocol, goal=goal
+            )
+        else:
+            if not isinstance(libraries, list):
+                libraries = [libraries]
+
+            # Try to find an existing integration for one of the given
+            # libraries.
+            for library in libraries:
+                integration = ExternalIntegration.lookup(
+                    self.session(), protocol, goal, library=libraries[0]
+                )
+                if integration:
+                    break
+
+            if not integration:
+                # Otherwise, create a brand new integration specifically
+                # for the library.
+                integration = ExternalIntegration(
+                    protocol=protocol,
+                    goal=goal,
+                )
+                integration.libraries.extend(libraries)
+                self.session().add(integration)
+
+        for attr, value in list(kwargs.items()):
+            setattr(integration, attr, value)
+
+        settings = settings or dict()
+        for key, value in list(settings.items()):
+            integration.set_setting(key, value)
+
+        return integration
+
+    def external_integration_link(
+        self,
+        integration=None,
+        library=None,
+        other_integration=None,
+        purpose="covers_mirror",
+    ):
+        integration = integration or self.external_integration("some protocol")
+        other_integration = other_integration or self.external_integration(
+            "some other protocol"
+        )
+
+        library_id = library.id if library else None
+
+        external_integration_link, ignore = get_one_or_create(
+            self.session(),
+            ExternalIntegrationLink,
+            library_id=library_id,
+            external_integration_id=integration.id,
+            other_integration_id=other_integration.id,
+            purpose=purpose,
+        )
+
+        return external_integration_link
 
 
 @pytest.fixture(scope="session")
