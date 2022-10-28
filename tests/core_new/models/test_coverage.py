@@ -578,6 +578,7 @@ class TestWorkCoverageRecord:
 
 class ExampleEquivalencyCoverageRecordFixture:
     identifiers: List[Identifier]
+    equivalencies: List[Equivalency]
     transaction: DatabaseTransactionFixture
 
     def __init__(self, transaction: DatabaseTransactionFixture):
