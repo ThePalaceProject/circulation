@@ -139,7 +139,7 @@ Werkzeug = "1.0.1"
 
 [tool.poetry.dev-dependencies]
 boto3-stubs = "^1.25.1"
-botocore-stubs = "^1.27.86"
+botocore-stubs = "^1.28.3"
 freezegun = "~1.2"
 Jinja2 = "2.11.3"
 markupsafe = "2.0.1"
