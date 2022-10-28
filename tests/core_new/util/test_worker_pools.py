@@ -1,8 +1,8 @@
 import threading
 
 from core.model import Identifier, SessionManager
-from core.testing import DatabaseTest
 from core.util.worker_pools import DatabaseJob, DatabasePool, Pool, Queue, Worker
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestPool:
@@ -66,9 +66,10 @@ class TestPool:
         assert 1 / 3.0 == pool.success_rate
 
 
-class TestDatabasePool(DatabaseTest):
-    def test_workers_are_created_with_sessions(self):
-        session_factory = SessionManager.sessionmaker(session=self._db)
+class TestDatabasePool:
+    def test_workers_are_created_with_sessions(self, database_transaction: DatabaseTransactionFixture):
+        session = database_transaction.session()
+        session_factory = SessionManager.sessionmaker(session=session)
         bind = session_factory.kw["bind"]
         pool = DatabasePool(2, session_factory)
         try:
@@ -135,7 +136,8 @@ class TestWorker:
         assert sorted(original) == sorted(results)
 
 
-class TestDatabaseJob(DatabaseTest):
+class TestDatabaseJob:
+
     class WorkingJob(DatabaseJob):
         def do_run(self, _db):
             identifier = Identifier(type="Keep It", identifier="100")
@@ -147,13 +149,14 @@ class TestDatabaseJob(DatabaseTest):
             _db.add(identifier)
             raise RuntimeError
 
-    def test_manages_database_for_job_success_and_failure(self):
-        self.WorkingJob().run(self._db)
+    def test_manages_database_for_job_success_and_failure(self, database_transaction: DatabaseTransactionFixture):
+        session = database_transaction.session()
+        self.WorkingJob().run(session)
         try:
-            self.BrokenJob().run(self._db)
+            self.BrokenJob().run(session)
         except RuntimeError:
             pass
 
-        [identifier] = self._db.query(Identifier).all()
+        [identifier] = session.query(Identifier).all()
         assert "Keep It" == identifier.type
         assert "100" == identifier.identifier
