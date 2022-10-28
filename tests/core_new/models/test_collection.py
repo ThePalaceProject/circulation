@@ -29,7 +29,7 @@ from core.util.string_helpers import base64
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestCollectionFixture:
+class ExampleCollectionFixture:
     collection: Collection
     database_fixture: DatabaseTransactionFixture
 
@@ -41,18 +41,20 @@ class TestCollectionFixture:
 
 
 @pytest.fixture()
-def test_collection_fixture(
+def example_collection_fixture(
     database_transaction: DatabaseTransactionFixture,
-) -> TestCollectionFixture:
+) -> ExampleCollectionFixture:
     c = database_transaction.collection(
         name="test collection", protocol=ExternalIntegration.OVERDRIVE
     )
-    return TestCollectionFixture(c, database_transaction)
+    return ExampleCollectionFixture(c, database_transaction)
 
 
 class TestCollection:
-    def test_by_name_and_protocol(self, test_collection_fixture: TestCollectionFixture):
-        db = test_collection_fixture.database_fixture
+    def test_by_name_and_protocol(
+        self, example_collection_fixture: ExampleCollectionFixture
+    ):
+        db = example_collection_fixture.database_fixture
         session = db.session()
 
         name = "A name"
@@ -98,13 +100,13 @@ class TestCollection:
             excinfo.value
         )
 
-    def test_by_protocol(self, test_collection_fixture: TestCollectionFixture):
+    def test_by_protocol(self, example_collection_fixture: ExampleCollectionFixture):
         """Verify the ability to find all collections that implement
         a certain protocol.
         """
-        db = test_collection_fixture.database_fixture
+        db = example_collection_fixture.database_fixture
         session = db.session()
-        test_collection = test_collection_fixture.collection
+        test_collection = example_collection_fixture.collection
 
         overdrive = ExternalIntegration.OVERDRIVE
         bibliotheca = ExternalIntegration.BIBLIOTHECA
@@ -123,9 +125,9 @@ class TestCollection:
         c1.marked_for_deletion = True
         assert [test_collection] == Collection.by_protocol(session, overdrive).all()
 
-    def test_by_datasource(self, test_collection_fixture: TestCollectionFixture):
+    def test_by_datasource(self, example_collection_fixture: ExampleCollectionFixture):
         """Collections can be found by their associated DataSource"""
-        db = test_collection_fixture.database_fixture
+        db = example_collection_fixture.database_fixture
         session = db.session()
 
         c1 = db.collection(data_source_name=DataSource.GUTENBERG)
@@ -144,8 +146,8 @@ class TestCollection:
         c2.marked_for_deletion = True
         assert 0 == Collection.by_datasource(session, overdrive).count()
 
-    def test_parents(self, test_collection_fixture: TestCollectionFixture):
-        db = test_collection_fixture.database_fixture
+    def test_parents(self, example_collection_fixture: ExampleCollectionFixture):
+        db = example_collection_fixture.database_fixture
 
         # Collections can return all their parents recursively.
         c1 = db.collection()
@@ -160,10 +162,10 @@ class TestCollection:
         assert [c2, c1] == list(c3.parents)
 
     def test_create_external_integration(
-        self, test_collection_fixture: TestCollectionFixture
+        self, example_collection_fixture: ExampleCollectionFixture
     ):
         # A newly created Collection has no associated ExternalIntegration.
-        db = test_collection_fixture.database_fixture
+        db = example_collection_fixture.database_fixture
         session = db.session()
 
         collection, ignore = get_one_or_create(session, Collection, name=db.fresh_str())
@@ -192,8 +194,10 @@ class TestCollection:
             in str(excinfo.value)
         )
 
-    def test_unique_account_id(self, test_collection_fixture: TestCollectionFixture):
-        db = test_collection_fixture.database_fixture
+    def test_unique_account_id(
+        self, example_collection_fixture: ExampleCollectionFixture
+    ):
+        db = example_collection_fixture.database_fixture
 
         # Most collections work like this:
         overdrive = db.collection(
@@ -229,9 +233,11 @@ class TestCollection:
         enki_child.parent = enki
         assert DataSource.ENKI + "+enkichild" == enki_child.unique_account_id
 
-    def test_change_protocol(self, test_collection_fixture: TestCollectionFixture):
-        db = test_collection_fixture.database_fixture
-        test_collection = test_collection_fixture.collection
+    def test_change_protocol(
+        self, example_collection_fixture: ExampleCollectionFixture
+    ):
+        db = example_collection_fixture.database_fixture
+        test_collection = example_collection_fixture.collection
 
         overdrive = ExternalIntegration.OVERDRIVE
         bibliotheca = ExternalIntegration.BIBLIOTHECA
@@ -260,8 +266,8 @@ class TestCollection:
         test_collection.protocol = bibliotheca
         assert bibliotheca == child.protocol
 
-    def test_data_source(self, test_collection_fixture: TestCollectionFixture):
-        db = test_collection_fixture.database_fixture
+    def test_data_source(self, example_collection_fixture: ExampleCollectionFixture):
+        db = example_collection_fixture.database_fixture
 
         opds = db.collection()
         bibliotheca = db.collection(protocol=ExternalIntegration.BIBLIOTHECA)
@@ -288,9 +294,11 @@ class TestCollection:
         opds.data_source = None
         assert None == opds.data_source
 
-    def test_default_loan_period(self, test_collection_fixture: TestCollectionFixture):
-        db = test_collection_fixture.database_fixture
-        test_collection = test_collection_fixture.collection
+    def test_default_loan_period(
+        self, example_collection_fixture: ExampleCollectionFixture
+    ):
+        db = example_collection_fixture.database_fixture
+        test_collection = example_collection_fixture.collection
 
         library = db.default_library()
         library.collections.append(test_collection)
@@ -353,10 +361,10 @@ class TestCollection:
         assert 349 == test_collection.default_loan_period(client, audio)
 
     def test_default_reservation_period(
-        self, test_collection_fixture: TestCollectionFixture
+        self, example_collection_fixture: ExampleCollectionFixture
     ):
-        db = test_collection_fixture.database_fixture
-        test_collection = test_collection_fixture.collection
+        db = example_collection_fixture.database_fixture
+        test_collection = example_collection_fixture.collection
 
         library = db.default_library()
         # The default when no value is set.
@@ -376,9 +384,9 @@ class TestCollection:
         assert 954 == test_collection.default_reservation_period
 
     def test_pools_with_no_delivery_mechanisms(
-        self, test_collection_fixture: TestCollectionFixture
+        self, example_collection_fixture: ExampleCollectionFixture
     ):
-        db = test_collection_fixture.database_fixture
+        db = example_collection_fixture.database_fixture
         session = db.session()
 
         # Collection.pools_with_no_delivery_mechanisms returns a query
@@ -403,12 +411,12 @@ class TestCollection:
         assert [pool1] == qu.all()
         assert [pool2] == collection2.pools_with_no_delivery_mechanisms.all()
 
-    def test_explain(self, test_collection_fixture: TestCollectionFixture):
+    def test_explain(self, example_collection_fixture: ExampleCollectionFixture):
         """Test that Collection.explain gives all relevant information
         about a Collection.
         """
-        db = test_collection_fixture.database_fixture
-        test_collection = test_collection_fixture.collection
+        db = example_collection_fixture.database_fixture
+        test_collection = example_collection_fixture.collection
 
         library = db.default_library()
         library.name = "The only library"
@@ -449,9 +457,11 @@ class TestCollection:
             'External account ID: "id2"',
         ] == data
 
-    def test_metadata_identifier(self, test_collection_fixture: TestCollectionFixture):
-        db = test_collection_fixture.database_fixture
-        test_collection = test_collection_fixture.collection
+    def test_metadata_identifier(
+        self, example_collection_fixture: ExampleCollectionFixture
+    ):
+        db = example_collection_fixture.database_fixture
+        test_collection = example_collection_fixture.collection
 
         # If the collection doesn't have its unique identifier, an error
         # is raised.
@@ -493,11 +503,11 @@ class TestCollection:
         assert expected == opds.metadata_identifier
 
     def test_from_metadata_identifier(
-        self, test_collection_fixture: TestCollectionFixture
+        self, example_collection_fixture: ExampleCollectionFixture
     ):
-        db = test_collection_fixture.database_fixture
+        db = example_collection_fixture.database_fixture
         session = db.session()
-        test_collection = test_collection_fixture.collection
+        test_collection = example_collection_fixture.collection
 
         data_source = "New data source"
 
@@ -567,10 +577,12 @@ class TestCollection:
         assert "New data source" == source.name
         assert source == mirror_collection.data_source
 
-    def test_catalog_identifier(self, test_collection_fixture: TestCollectionFixture):
+    def test_catalog_identifier(
+        self, example_collection_fixture: ExampleCollectionFixture
+    ):
         """#catalog_identifier associates an identifier with the catalog"""
-        db = test_collection_fixture.database_fixture
-        test_collection = test_collection_fixture.collection
+        db = example_collection_fixture.database_fixture
+        test_collection = example_collection_fixture.collection
 
         identifier = db.identifier()
         test_collection.catalog_identifier(identifier)
@@ -578,10 +590,12 @@ class TestCollection:
         assert 1 == len(test_collection.catalog)
         assert identifier == test_collection.catalog[0]
 
-    def test_catalog_identifiers(self, test_collection_fixture: TestCollectionFixture):
+    def test_catalog_identifiers(
+        self, example_collection_fixture: ExampleCollectionFixture
+    ):
         """#catalog_identifier associates multiple identifiers with a catalog"""
-        db = test_collection_fixture.database_fixture
-        test_collection = test_collection_fixture.collection
+        db = example_collection_fixture.database_fixture
+        test_collection = example_collection_fixture.collection
 
         i1 = db.identifier()
         i2 = db.identifier()
@@ -595,10 +609,12 @@ class TestCollection:
         # Now all three identifiers are in the catalog.
         assert sorted([i1, i2, i3]) == sorted(test_collection.catalog)
 
-    def test_unresolved_catalog(self, test_collection_fixture: TestCollectionFixture):
-        db = test_collection_fixture.database_fixture
+    def test_unresolved_catalog(
+        self, example_collection_fixture: ExampleCollectionFixture
+    ):
+        db = example_collection_fixture.database_fixture
         session = db.session()
-        test_collection = test_collection_fixture.collection
+        test_collection = example_collection_fixture.collection
 
         # A regular schmegular identifier: untouched, pure.
         pure_id = db.identifier()
@@ -634,8 +650,10 @@ class TestCollection:
         # Only the failing identifier is in the query.
         assert [unresolved_id] == result.all()
 
-    def test_disassociate_library(self, test_collection_fixture: TestCollectionFixture):
-        db = test_collection_fixture.database_fixture
+    def test_disassociate_library(
+        self, example_collection_fixture: ExampleCollectionFixture
+    ):
+        db = example_collection_fixture.database_fixture
         session = db.session()
 
         # Here's a Collection.
@@ -698,11 +716,11 @@ class TestCollection:
         assert "No known external integration for collection" in str(excinfo.value)
 
     def test_licensepools_with_works_updated_since(
-        self, test_collection_fixture: TestCollectionFixture
+        self, example_collection_fixture: ExampleCollectionFixture
     ):
-        db = test_collection_fixture.database_fixture
+        db = example_collection_fixture.database_fixture
         session = db.session()
-        test_collection = test_collection_fixture.collection
+        test_collection = example_collection_fixture.collection
 
         m = test_collection.licensepools_with_works_updated_since
 
@@ -741,10 +759,12 @@ class TestCollection:
         w1_coverage_record.timestamp = utc_now()
         assert [w1] == [x.work for x in m(session, timestamp)]
 
-    def test_isbns_updated_since(self, test_collection_fixture: TestCollectionFixture):
-        db = test_collection_fixture.database_fixture
+    def test_isbns_updated_since(
+        self, example_collection_fixture: ExampleCollectionFixture
+    ):
+        db = example_collection_fixture.database_fixture
         session = db.session()
-        test_collection = test_collection_fixture.collection
+        test_collection = example_collection_fixture.collection
 
         i1 = db.identifier(identifier_type=Identifier.ISBN, foreign_id=db.isbn_take())
         i2 = db.identifier(identifier_type=Identifier.ISBN, foreign_id=db.isbn_take())
@@ -796,10 +816,10 @@ class TestCollection:
         updated_isbns = test_collection.isbns_updated_since(session, timestamp)
         assert_isbns([i1], updated_isbns)
 
-    def test_custom_lists(self, test_collection_fixture: TestCollectionFixture):
-        db = test_collection_fixture.database_fixture
+    def test_custom_lists(self, example_collection_fixture: ExampleCollectionFixture):
+        db = example_collection_fixture.database_fixture
         session = db.session()
-        test_collection = test_collection_fixture.collection
+        test_collection = example_collection_fixture.collection
 
         # A Collection can be associated with one or more CustomLists.
         list1, ignore = get_one_or_create(session, CustomList, name=db.fresh_str())
@@ -841,7 +861,7 @@ class TestCollection:
         assert 1 == len(list2.entries)
 
     def test_restrict_to_ready_deliverable_works(
-        self, test_collection_fixture: TestCollectionFixture
+        self, example_collection_fixture: ExampleCollectionFixture
     ):
         """A partial test of restrict_to_ready_deliverable_works.
 
@@ -851,7 +871,7 @@ class TestCollection:
 
         The other cases are tested indirectly in lane.py, but could use a more explicit test here.
         """
-        db = test_collection_fixture.database_fixture
+        db = example_collection_fixture.database_fixture
         session = db.session()
 
         # Create two audiobooks and one ebook.
@@ -933,12 +953,12 @@ class TestCollection:
         setting.value = json.dumps([DataSource.OVERDRIVE, DataSource.FEEDBOOKS])
         expect(qu, [overdrive_ebook, self_hosted_lcp_book, unlimited_access_book])
 
-    def test_delete(self, test_collection_fixture: TestCollectionFixture):
+    def test_delete(self, example_collection_fixture: ExampleCollectionFixture):
         """Verify that Collection.delete will only operate on collections
         flagged for deletion, and that deletion cascades to all
         relevant related database objects.
         """
-        db = test_collection_fixture.database_fixture
+        db = example_collection_fixture.database_fixture
         session = db.session()
 
         # This collection is doomed.
@@ -1094,12 +1114,12 @@ class TestCollectionForMetadataWrangler:
     """
 
     def test_only_name_is_required(
-        self, test_collection_fixture: TestCollectionFixture
+        self, example_collection_fixture: ExampleCollectionFixture
     ):
         """Test that only name is a required field on
         the Collection class.
         """
-        db = test_collection_fixture.database_fixture
+        db = example_collection_fixture.database_fixture
         session = db.session()
 
         collection = create(session, Collection, name="banana")[0]
@@ -1107,8 +1127,8 @@ class TestCollectionForMetadataWrangler:
 
 
 class TestCollectionConfigurationStorage:
-    def test_load(self, test_collection_fixture: TestCollectionFixture):
-        db = test_collection_fixture.database_fixture
+    def test_load(self, example_collection_fixture: ExampleCollectionFixture):
+        db = example_collection_fixture.database_fixture
         session = db.session()
 
         # Arrange

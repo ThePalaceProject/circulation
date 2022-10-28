@@ -17,7 +17,7 @@ from core.model.identifier import (
 from core.model.resource import Hyperlink, Representation
 from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import AtomFeed
-from tests.core_new.models.test_coverage import TestEquivalencyCoverageRecordFixture
+from tests.core_new.models.test_coverage import ExampleEquivalencyCoverageRecordFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -796,18 +796,18 @@ class TestIdentifier:
 
 
 @pytest.fixture()
-def test_equivalency_coverage_record_fixture(
+def example_equivalency_coverage_record_fixture(
     database_transaction: DatabaseTransactionFixture,
-) -> TestEquivalencyCoverageRecordFixture:
-    return TestEquivalencyCoverageRecordFixture(database_transaction)
+) -> ExampleEquivalencyCoverageRecordFixture:
+    return ExampleEquivalencyCoverageRecordFixture(database_transaction)
 
 
 class TestRecursiveEquivalencyCache:
     def test_is_parent(
         self,
-        test_equivalency_coverage_record_fixture: TestEquivalencyCoverageRecordFixture,
+        example_equivalency_coverage_record_fixture: ExampleEquivalencyCoverageRecordFixture,
     ):
-        data = test_equivalency_coverage_record_fixture
+        data = example_equivalency_coverage_record_fixture
         session = data.transaction.session()
 
         rec_eq = (
@@ -821,9 +821,9 @@ class TestRecursiveEquivalencyCache:
 
     def test_identifier_delete_cascade_parent(
         self,
-        test_equivalency_coverage_record_fixture: TestEquivalencyCoverageRecordFixture,
+        example_equivalency_coverage_record_fixture: ExampleEquivalencyCoverageRecordFixture,
     ):
-        data = test_equivalency_coverage_record_fixture
+        data = example_equivalency_coverage_record_fixture
         session = data.transaction.session()
 
         all_recursives = session.query(RecursiveEquivalencyCache).all()

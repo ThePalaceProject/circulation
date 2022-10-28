@@ -536,7 +536,7 @@ class TestExternalIntegrationLink:
         assert external_integration_links[0].other_integration_id == storage2.id
 
 
-class TestExternalIntegrationFixture:
+class ExampleExternalIntegrationFixture:
     external_integration: ExternalIntegration
     database_fixture: DatabaseTransactionFixture
 
@@ -550,22 +550,22 @@ class TestExternalIntegrationFixture:
 
 
 @pytest.fixture()
-def test_externalintegration_fixture(
+def example_externalintegration_fixture(
     database_transaction: DatabaseTransactionFixture,
-) -> TestExternalIntegrationFixture:
+) -> ExampleExternalIntegrationFixture:
     e = database_transaction.external_integration(
         goal=database_transaction.fresh_str(), protocol=database_transaction.fresh_str()
     )
-    return TestExternalIntegrationFixture(e, database_transaction)
+    return ExampleExternalIntegrationFixture(e, database_transaction)
 
 
 class TestExternalIntegration:
     def test_for_library_and_goal(
-        self, test_externalintegration_fixture: TestExternalIntegrationFixture
+        self, example_externalintegration_fixture: ExampleExternalIntegrationFixture
     ):
-        db = test_externalintegration_fixture.database_fixture
+        db = example_externalintegration_fixture.database_fixture
         session = db.session()
-        external_integration = test_externalintegration_fixture.external_integration
+        external_integration = example_externalintegration_fixture.external_integration
 
         goal = external_integration.goal
         qu = ExternalIntegration.for_library_and_goal(
@@ -605,9 +605,9 @@ class TestExternalIntegration:
         ) in str(excinfo.value)
 
     def test_for_collection_and_purpose(
-        self, test_externalintegration_fixture: TestExternalIntegrationFixture
+        self, example_externalintegration_fixture: ExampleExternalIntegrationFixture
     ):
-        db = test_externalintegration_fixture.database_fixture
+        db = example_externalintegration_fixture.database_fixture
         session = db.session()
         wrong_purpose = "isbn"
         collection = db.collection()
@@ -633,9 +633,9 @@ class TestExternalIntegration:
         assert isinstance(integration, ExternalIntegration)
 
     def test_with_setting_value(
-        self, test_externalintegration_fixture: TestExternalIntegrationFixture
+        self, example_externalintegration_fixture: ExampleExternalIntegrationFixture
     ):
-        db = test_externalintegration_fixture.database_fixture
+        db = example_externalintegration_fixture.database_fixture
         session = db.session()
 
         def results():
@@ -681,9 +681,9 @@ class TestExternalIntegration:
         assert [] == results()
 
     def test_data_source(
-        self, test_externalintegration_fixture: TestExternalIntegrationFixture
+        self, example_externalintegration_fixture: ExampleExternalIntegrationFixture
     ):
-        db = test_externalintegration_fixture.database_fixture
+        db = example_externalintegration_fixture.database_fixture
 
         # For most collections, the protocol determines the
         # data source.
@@ -701,12 +701,12 @@ class TestExternalIntegration:
         assert "New Data Source" == db.default_collection().data_source.name
 
     def test_set_key_value_pair(
-        self, test_externalintegration_fixture: TestExternalIntegrationFixture
+        self, example_externalintegration_fixture: ExampleExternalIntegrationFixture
     ):
         """Test the ability to associate extra key-value pairs with
         an ExternalIntegration.
         """
-        integration = test_externalintegration_fixture.external_integration
+        integration = example_externalintegration_fixture.external_integration
         assert [] == integration.settings
 
         setting = integration.set_setting("website_id", "id1")
@@ -722,9 +722,9 @@ class TestExternalIntegration:
         assert setting2 == integration.setting("website_id")
 
     def test_explain(
-        self, test_externalintegration_fixture: TestExternalIntegrationFixture
+        self, example_externalintegration_fixture: ExampleExternalIntegrationFixture
     ):
-        db = test_externalintegration_fixture.database_fixture
+        db = example_externalintegration_fixture.database_fixture
         session = db.session()
 
         integration = db.external_integration("protocol", "goal")
@@ -777,9 +777,9 @@ username='someuser'"""
         assert "password='somepass'" in with_secrets
 
     def test_custom_accept_header(
-        self, test_externalintegration_fixture: TestExternalIntegrationFixture
+        self, example_externalintegration_fixture: ExampleExternalIntegrationFixture
     ):
-        db = test_externalintegration_fixture.database_fixture
+        db = example_externalintegration_fixture.database_fixture
 
         integration = db.external_integration("protocol", "goal")
         # Must be empty if not set
@@ -790,11 +790,11 @@ username='someuser'"""
         assert integration.custom_accept_header == "custom header"
 
     def test_delete(
-        self, test_externalintegration_fixture: TestExternalIntegrationFixture
+        self, example_externalintegration_fixture: ExampleExternalIntegrationFixture
     ):
         """Ensure that ExternalIntegration.delete clears all orphan ExternalIntegrationLinks."""
-        session = test_externalintegration_fixture.database_fixture.session()
-        db = test_externalintegration_fixture.database_fixture
+        session = example_externalintegration_fixture.database_fixture.session()
+        db = example_externalintegration_fixture.database_fixture
 
         integration1 = db.external_integration(
             ExternalIntegration.MANUAL,

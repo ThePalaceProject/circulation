@@ -576,7 +576,7 @@ class TestWorkCoverageRecord:
         assert irrelevant_record.timestamp < new_timestamp
 
 
-class TestEquivalencyCoverageRecordFixture:
+class ExampleEquivalencyCoverageRecordFixture:
     identifiers: List[Identifier]
     transaction: DatabaseTransactionFixture
 
@@ -600,20 +600,20 @@ class TestEquivalencyCoverageRecordFixture:
 
 
 @pytest.fixture()
-def test_equivalency_coverage_record_fixture(
+def example_equivalency_coverage_record_fixture(
     database_transaction: DatabaseTransactionFixture,
-) -> TestEquivalencyCoverageRecordFixture:
-    return TestEquivalencyCoverageRecordFixture(database_transaction)
+) -> ExampleEquivalencyCoverageRecordFixture:
+    return ExampleEquivalencyCoverageRecordFixture(database_transaction)
 
 
 class TestEquivalencyCoverageRecord:
     def test_add_for(
         self,
-        test_equivalency_coverage_record_fixture: TestEquivalencyCoverageRecordFixture,
+        example_equivalency_coverage_record_fixture: ExampleEquivalencyCoverageRecordFixture,
     ):
         operation = EquivalencyCoverageRecord.RECURSIVE_EQUIVALENCY_REFRESH
-        equivalencies = test_equivalency_coverage_record_fixture.equivalencies
-        session = test_equivalency_coverage_record_fixture.transaction.session()
+        equivalencies = example_equivalency_coverage_record_fixture.equivalencies
+        session = example_equivalency_coverage_record_fixture.transaction.session()
 
         for eq in equivalencies:
             record, is_new = EquivalencyCoverageRecord.add_for(
@@ -626,10 +626,10 @@ class TestEquivalencyCoverageRecord:
 
     def test_bulk_add(
         self,
-        test_equivalency_coverage_record_fixture: TestEquivalencyCoverageRecordFixture,
+        example_equivalency_coverage_record_fixture: ExampleEquivalencyCoverageRecordFixture,
     ):
-        equivalencies = test_equivalency_coverage_record_fixture.equivalencies
-        session = test_equivalency_coverage_record_fixture.transaction.session()
+        equivalencies = example_equivalency_coverage_record_fixture.equivalencies
+        session = example_equivalency_coverage_record_fixture.transaction.session()
 
         operation = EquivalencyCoverageRecord.RECURSIVE_EQUIVALENCY_REFRESH
         EquivalencyCoverageRecord.bulk_add(session, equivalencies, operation)
@@ -641,10 +641,10 @@ class TestEquivalencyCoverageRecord:
 
     def test_delete_identifier(
         self,
-        test_equivalency_coverage_record_fixture: TestEquivalencyCoverageRecordFixture,
+        example_equivalency_coverage_record_fixture: ExampleEquivalencyCoverageRecordFixture,
     ):
-        equivalencies = test_equivalency_coverage_record_fixture.equivalencies
-        session = test_equivalency_coverage_record_fixture.transaction.session()
+        equivalencies = example_equivalency_coverage_record_fixture.equivalencies
+        session = example_equivalency_coverage_record_fixture.transaction.session()
 
         for eq in equivalencies:
             record, is_new = EquivalencyCoverageRecord.add_for(
@@ -657,7 +657,7 @@ class TestEquivalencyCoverageRecord:
         all_equivs = session.query(EquivalencyCoverageRecord).all()
         assert len(all_equivs) == 3
 
-        session.delete(test_equivalency_coverage_record_fixture.identifiers[0])
+        session.delete(example_equivalency_coverage_record_fixture.identifiers[0])
         session.commit()
 
         all_equivs = session.query(EquivalencyCoverageRecord).all()
