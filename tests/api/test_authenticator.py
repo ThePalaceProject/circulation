@@ -3314,7 +3314,6 @@ class TestOAuthController:
 
 
 class SirsiDynixAuthenticatorFixture:
-    
     def __init__(self, db: DatabaseTransactionFixture) -> None:
         self.integration = db.external_integration(
             "api.sirsidynix",
@@ -3328,14 +3327,14 @@ class SirsiDynixAuthenticatorFixture:
         self.api = SirsiDynixAuthenticationProvider(
             db.default_library(), self.integration
         )
-        
+
 
 @pytest.fixture(scope="function")
 def sirsi_fixture(db: DatabaseTransactionFixture) -> SirsiDynixAuthenticatorFixture:
     return SirsiDynixAuthenticatorFixture(db)
 
-class TestSirsiDynixAuthenticationProvider:
 
+class TestSirsiDynixAuthenticationProvider:
     def _headers(self, api):
         return {
             "SD-Originating-App-Id": api.sirsi_app_id,
@@ -3343,19 +3342,21 @@ class TestSirsiDynixAuthenticationProvider:
         }
 
     def test_settings(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
-        # with leading slash
+        # trailing slash appended to the preset server url
         assert sirsi_fixture.api.server_url == "http://example.org/sirsi/"
         assert sirsi_fixture.api.sirsi_client_id == "clientid"
         assert sirsi_fixture.api.sirsi_app_id == "appid"
 
     def test_api_patron_login(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
         response_dict = {"sessionToken": "xxxx"}
-        with patch("api.sirsidynix_authentication_provider.HTTP.request_with_timeout") as mock_request:
+        with patch(
+            "api.sirsidynix_authentication_provider.HTTP.request_with_timeout"
+        ) as mock_request:
             mock_request.return_value = MockRequestsResponse(200, content=response_dict)
             response = sirsi_fixture.api.api_patron_login("username", "pwd")
 
             assert mock_request.call_count == 1
-            assert mock_request.call_args_list[0] == call(
+            assert mock_request.call_args == call(
                 "POST",
                 "http://example.org/sirsi/user/patron/login",
                 json=dict(login="username", password="pwd"),
@@ -3367,7 +3368,9 @@ class TestSirsiDynixAuthenticationProvider:
             assert sirsi_fixture.api.api_patron_login("username", "pwd") == False
 
     def test_remote_authenticate(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
-        with patch("api.sirsidynix_authentication_provider.HTTP.request_with_timeout") as mock_request:
+        with patch(
+            "api.sirsidynix_authentication_provider.HTTP.request_with_timeout"
+        ) as mock_request:
             response_dict = {"sessionToken": "xxxx"}
             mock_request.return_value = MockRequestsResponse(200, content=response_dict)
 
@@ -3378,3 +3381,8 @@ class TestSirsiDynixAuthenticationProvider:
 
             mock_request.return_value = MockRequestsResponse(401, content=response_dict)
             assert sirsi_fixture.api.remote_authenticate("username", "pwd") == False
+
+    def test__request(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
+        # Leading slash on the path is not allowed, as it overwrites the urljoin prefix
+        with pytest.raises(ValueError):
+            sirsi_fixture.api._request("GET", "/leadingslash")

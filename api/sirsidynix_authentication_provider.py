@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from gettext import gettext as _
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from urllib.parse import urljoin
 
 from api.authenticator import BasicAuthenticationProvider, PatronData
@@ -25,7 +25,7 @@ class SirsiDynixAuthenticationProvider(BasicAuthenticationProvider):
         {
             "key": ExternalIntegration.URL,
             "label": _("Server URL"),
-            "description": _("The external server url"),
+            "description": _("The external server url."),
             "required": True,
             "default": "https://vendor1-sym.sirsidynix.net/ilsws_current/",
         },
@@ -33,14 +33,14 @@ class SirsiDynixAuthenticationProvider(BasicAuthenticationProvider):
             "key": Keys.APP_ID,
             "label": _("Application ID"),
             "description": _(
-                "This can be anything, it is used to group all requests to the API"
+                "This can be anything, it is used to group all requests to the API."
             ),
             "required": True,
         },
         {
             "key": Keys.CLIENT_ID,
             "label": _("Client ID"),
-            "description": _("The client ID that should be used to identify this CM"),
+            "description": _("The client ID that should be used to identify this CM."),
             "required": True,
         },
     ]
@@ -49,13 +49,16 @@ class SirsiDynixAuthenticationProvider(BasicAuthenticationProvider):
         super().__init__(library, integration, analytics)
         self.server_url = integration.url
         # trailing slash, else urljoin has issues
-        if self.server_url[-1] != "/":
-            self.server_url = self.server_url + "/"
+        self.server_url = self.server_url + (
+            "/" if not self.server_url.endswith("/") else ""
+        )
         self.sirsi_client_id = integration.setting(self.Keys.CLIENT_ID).value
         self.sirsi_app_id = integration.setting(self.Keys.APP_ID).value
 
-    def remote_authenticate(self, username: str, password: str) -> PatronData | None:
-        """Authenticate this user with the remote server"""
+    def remote_authenticate(
+        self, username: str, password: str
+    ) -> PatronData | Literal[False]:
+        """Authenticate this user with the remote server."""
         data = self.api_patron_login(username, password)
         if not data:
             return False
@@ -67,11 +70,16 @@ class SirsiDynixAuthenticationProvider(BasicAuthenticationProvider):
     ###
 
     def _request(self, method: str, path: str, json=None) -> Response:
-        """Request wrapper that adds the relevant request headers
+        """Request wrapper that adds the relevant request headers.
+
         :param method: The HTTP method for the request
         :param path: The url path that will get joined to the server_url, should not have a leading '/'
         :param json: The json data to be sent to the API endpoint
         """
+        if path.startswith("/"):
+            raise ValueError(
+                f"Sirsidynix URL path {path} should not have a leading '/'"
+            )
         headers = {
             "SD-Originating-App-Id": self.sirsi_app_id,
             "x-sirs-clientID": self.sirsi_client_id,
@@ -80,7 +88,8 @@ class SirsiDynixAuthenticationProvider(BasicAuthenticationProvider):
         return HTTP.request_with_timeout(method, url, headers=headers, json=json)
 
     def api_patron_login(self, username: str, password: str) -> bool | dict:
-        """API request to verify credentials of a user
+        """API request to verify credentials of a user.
+
         :param username: The login username
         :param password: The login pin
         """
