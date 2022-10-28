@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from gettext import gettext as _
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 from urllib.parse import urljoin
 
 from api.authenticator import BasicAuthenticationProvider, PatronData
@@ -55,9 +55,7 @@ class SirsiDynixAuthenticationProvider(BasicAuthenticationProvider):
         self.sirsi_client_id = integration.setting(self.Keys.CLIENT_ID).value
         self.sirsi_app_id = integration.setting(self.Keys.APP_ID).value
 
-    def remote_authenticate(
-        self, username: str, password: str
-    ) -> PatronData | Literal[False]:
+    def remote_authenticate(self, username: str, password: str) -> PatronData | bool:
         """Authenticate this user with the remote server."""
         data = self.api_patron_login(username, password)
         if not data:
