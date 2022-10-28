@@ -67,7 +67,9 @@ class TestPool:
 
 
 class TestDatabasePool:
-    def test_workers_are_created_with_sessions(self, database_transaction: DatabaseTransactionFixture):
+    def test_workers_are_created_with_sessions(
+        self, database_transaction: DatabaseTransactionFixture
+    ):
         session = database_transaction.session()
         session_factory = SessionManager.sessionmaker(session=session)
         bind = session_factory.kw["bind"]
@@ -137,7 +139,6 @@ class TestWorker:
 
 
 class TestDatabaseJob:
-
     class WorkingJob(DatabaseJob):
         def do_run(self, _db):
             identifier = Identifier(type="Keep It", identifier="100")
@@ -149,7 +150,9 @@ class TestDatabaseJob:
             _db.add(identifier)
             raise RuntimeError
 
-    def test_manages_database_for_job_success_and_failure(self, database_transaction: DatabaseTransactionFixture):
+    def test_manages_database_for_job_success_and_failure(
+        self, database_transaction: DatabaseTransactionFixture
+    ):
         session = database_transaction.session()
         self.WorkingJob().run(session)
         try:
