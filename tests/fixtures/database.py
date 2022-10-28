@@ -3,7 +3,7 @@ import os
 import shutil
 import tempfile
 import uuid
-from typing import Any, Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 import pytest
 from sqlalchemy.engine import Connection, Engine, Transaction
@@ -82,20 +82,10 @@ class DatabaseFixture:
 
     _engine: Engine
     _connection: Connection
-    _old_data_dir: Any
-    _tmp_data_dir: str
 
-    def __init__(
-        self,
-        engine: Engine,
-        connection: Connection,
-        old_data_dir: Any,
-        tmp_data_dir: str,
-    ):
+    def __init__(self, engine: Engine, connection: Connection):
         self._engine = engine
         self._connection = connection
-        self._old_data_dir = old_data_dir
-        self._tmp_data_dir = tmp_data_dir
 
     @staticmethod
     def _get_database_connection() -> Tuple[Engine, Connection]:
@@ -167,34 +157,19 @@ class DatabaseFixture:
             core.model.resource.ResourceTransformation.__tablename__,
             customlist_sharedlibrary.name,
         ]
-
-        # Initialize a temporary data directory.
         engine, connection = DatabaseFixture._get_database_connection()
-        old_data_dir = Configuration.data_directory
-        tmp_data_dir = tempfile.mkdtemp(dir="/tmp")
-        Configuration.instance[Configuration.DATA_DIRECTORY] = tmp_data_dir
 
         # Avoid CannotLoadConfiguration errors related to CDN integrations.
         Configuration.instance[Configuration.INTEGRATIONS] = Configuration.instance.get(
             Configuration.INTEGRATIONS, {}
         )
         Configuration.instance[Configuration.INTEGRATIONS][ExternalIntegration.CDN] = {}
-        return DatabaseFixture(engine, connection, old_data_dir, tmp_data_dir)
+        return DatabaseFixture(engine, connection)
 
     def close(self):
         # Destroy the database connection and engine.
         self._connection.close()
         self._engine.dispose()
-
-        if self._tmp_data_dir.startswith("/tmp"):
-            logging.debug("Removing temporary directory %s" % self._tmp_data_dir)
-            shutil.rmtree(self._tmp_data_dir)
-        else:
-            logging.warning(
-                "Cowardly refusing to remove 'temporary' directory %s"
-                % self._tmp_data_dir
-            )
-        Configuration.instance[Configuration.DATA_DIRECTORY] = self._old_data_dir
 
     def connection(self) -> Connection:
         return self._connection
@@ -867,6 +842,42 @@ class DatabaseTransactionFixture:
         return LicensePoolDeliveryMechanism.set(
             data_source, identifier, content_type, drm_scheme, RightsStatus.IN_COPYRIGHT
         )
+
+
+class TemporaryDirectoryConfigurationFixture:
+    """A fixture that configures the Configuration system to use a temporary directory.
+    The directory is cleaned up when the fixture is closed."""
+
+    _directory: str
+
+    @classmethod
+    def create(cls) -> "TemporaryDirectoryConfigurationFixture":
+        fix = TemporaryDirectoryConfigurationFixture()
+        fix._directory = tempfile.mkdtemp(dir="/tmp")
+        assert isinstance(fix._directory, str)
+        Configuration.instance[Configuration.DATA_DIRECTORY] = fix._directory
+        return fix
+
+    def close(self):
+        if self._directory.startswith("/tmp"):
+            logging.debug("Removing temporary directory %s" % self._directory)
+            shutil.rmtree(self._directory)
+        else:
+            logging.warning(
+                "Cowardly refusing to remove 'temporary' directory %s" % self._directory
+            )
+
+    def directory(self) -> str:
+        return self._directory
+
+
+@pytest.fixture(scope="function")
+def temporary_directory_configuration() -> Iterable[
+    TemporaryDirectoryConfigurationFixture
+]:
+    fix = TemporaryDirectoryConfigurationFixture.create()
+    yield fix
+    fix.close()
 
 
 @pytest.fixture(scope="session")

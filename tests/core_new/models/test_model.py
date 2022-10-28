@@ -12,54 +12,59 @@ from core.model import (
     numericrange_to_tuple,
     tuple_to_numericrange,
 )
-from core.testing import DatabaseTest
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestDatabaseInterface(DatabaseTest):
-    def test_get_one(self):
+class TestDatabaseInterface:
+    def test_get_one(self, database_transaction: DatabaseTransactionFixture):
+        session = database_transaction.session()
 
         # When a matching object isn't found, None is returned.
-        result = get_one(self._db, Edition)
+        result = get_one(session, Edition)
         assert None == result
 
         # When a single item is found, it is returned.
-        edition = self._edition()
-        result = get_one(self._db, Edition)
+        edition = database_transaction.edition()
+        result = get_one(session, Edition)
         assert edition == result
 
         # When multiple items are found, an error is raised.
-        other_edition = self._edition()
-        pytest.raises(MultipleResultsFound, get_one, self._db, Edition)
+        other_edition = database_transaction.edition()
+        pytest.raises(MultipleResultsFound, get_one, session, Edition)
 
         # Unless they're interchangeable.
-        result = get_one(self._db, Edition, on_multiple="interchangeable")
-        assert result in self._db.query(Edition)
+        result = get_one(session, Edition, on_multiple="interchangeable")
+        assert result in session.query(Edition)
 
         # Or specific attributes are passed that limit the results to one.
         result = get_one(
-            self._db, Edition, title=other_edition.title, author=other_edition.author
+            session, Edition, title=other_edition.title, author=other_edition.author
         )
         assert other_edition == result
 
         # A particular constraint clause can also be passed in.
         titles = [ed.title for ed in (edition, other_edition)]
         constraint = not_(Edition.title.in_(titles))
-        result = get_one(self._db, Edition, constraint=constraint)
+        result = get_one(session, Edition, constraint=constraint)
         assert None == result
 
-    def test_initialize_data_does_not_reset_timestamp(self):
+    def test_initialize_data_does_not_reset_timestamp(
+        self, database_transaction: DatabaseTransactionFixture
+    ):
+        session = database_transaction.session()
+
         # initialize_data() has already been called, so the database is
         # initialized and the 'site configuration changed' Timestamp has
         # been set. Calling initialize_data() again won't change the
         # date on the timestamp.
         timestamp = get_one(
-            self._db,
+            session,
             Timestamp,
             collection=None,
             service=Configuration.SITE_CONFIGURATION_CHANGED,
         )
         old_timestamp = timestamp.finish
-        SessionManager.initialize_data(self._db)
+        SessionManager.initialize_data(session)
         assert old_timestamp == timestamp.finish
 
 
