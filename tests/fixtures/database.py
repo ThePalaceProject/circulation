@@ -294,7 +294,7 @@ class DatabaseTransactionFixture:
         self, name: Optional[str] = None, short_name: Optional[str] = None
     ) -> Library:
         name = name or self.fresh_str()
-        short_name = short_name or str(self.fresh_id)
+        short_name = short_name or self.fresh_str()
         library, ignore = get_one_or_create(
             self.session(),
             Library,
@@ -841,6 +841,80 @@ class DatabaseTransactionFixture:
         drm_scheme = DeliveryMechanism.NO_DRM
         return LicensePoolDeliveryMechanism.set(
             data_source, identifier, content_type, drm_scheme, RightsStatus.IN_COPYRIGHT
+        )
+
+    def slow_work(self, *args, **kwargs):
+        """Create a work that closely resembles one that might be found in the
+        wild.
+
+        This is significantly slower than _work() but more reliable.
+        """
+        work = self.work(*args, **kwargs)
+        work.calculate_presentation_edition()
+        work.calculate_opds_entries(verbose=False)
+        return work
+
+    def sample_ecosystem(self):
+        """Creates an ecosystem of some sample work, pool, edition, and author
+        objects that all know each other.
+        """
+        # make some authors
+        [bob], ignore = Contributor.lookup(self.session(), "Bitshifter, Bob")
+        bob.family_name, bob.display_name = bob.default_names()
+        [alice], ignore = Contributor.lookup(self.session(), "Adder, Alice")
+        alice.family_name, alice.display_name = alice.default_names()
+
+        edition_std_ebooks, pool_std_ebooks = self.edition(
+            DataSource.STANDARD_EBOOKS,
+            Identifier.URI,
+            with_license_pool=True,
+            with_open_access_download=True,
+            authors=[],
+        )
+        edition_std_ebooks.title = "The Standard Ebooks Title"
+        edition_std_ebooks.subtitle = "The Standard Ebooks Subtitle"
+        edition_std_ebooks.add_contributor(alice, Contributor.AUTHOR_ROLE)
+
+        edition_git, pool_git = self.edition(
+            DataSource.PROJECT_GITENBERG,
+            Identifier.GUTENBERG_ID,
+            with_license_pool=True,
+            with_open_access_download=True,
+            authors=[],
+        )
+        edition_git.title = "The GItenberg Title"
+        edition_git.subtitle = "The GItenberg Subtitle"
+        edition_git.add_contributor(bob, Contributor.AUTHOR_ROLE)
+        edition_git.add_contributor(alice, Contributor.AUTHOR_ROLE)
+
+        edition_gut, pool_gut = self.edition(
+            DataSource.GUTENBERG,
+            Identifier.GUTENBERG_ID,
+            with_license_pool=True,
+            with_open_access_download=True,
+            authors=[],
+        )
+        edition_gut.title = "The GUtenberg Title"
+        edition_gut.subtitle = "The GUtenberg Subtitle"
+        edition_gut.add_contributor(bob, Contributor.AUTHOR_ROLE)
+
+        work = self.work(presentation_edition=edition_git)
+
+        for p in pool_gut, pool_std_ebooks:
+            work.license_pools.append(p)
+
+        work.calculate_presentation()
+
+        return (
+            work,
+            pool_std_ebooks,
+            pool_git,
+            pool_gut,
+            edition_std_ebooks,
+            edition_git,
+            edition_gut,
+            alice,
+            bob,
         )
 
 
