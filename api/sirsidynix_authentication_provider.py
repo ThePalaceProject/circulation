@@ -12,10 +12,10 @@ if TYPE_CHECKING:
     from requests import Response
 
 
-class SirsiDynixAuthenticationProvider(BasicAuthenticationProvider):
-    NAME = "SirsiDynix Authentication"
-    DESCRIPTION = "SirsiDynix Symphony Webservice Authentication"
-    FLOW_TYPE = "http://librarysimplified.org/authtype/sirsidynix"
+class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
+    NAME = "SirsiDynix Horizon Authentication"
+    DESCRIPTION = "SirsiDynix Horizon Webservice Authentication"
+    FLOW_TYPE = "http://librarysimplified.org/authtype/sirsidynix-hsws"
 
     class Keys:
         APP_ID = "APP_ID"
@@ -61,7 +61,11 @@ class SirsiDynixAuthenticationProvider(BasicAuthenticationProvider):
         if not data:
             return False
 
-        return PatronData(username=username, authorization_identifier=username)
+        return PatronData(
+            username=username,
+            authorization_identifier=username,
+            permanent_id=data.get("patronKey"),
+        )
 
     ###
     # API requests
@@ -102,4 +106,4 @@ class SirsiDynixAuthenticationProvider(BasicAuthenticationProvider):
         return response.json()
 
 
-AuthenticationProvider = SirsiDynixAuthenticationProvider
+AuthenticationProvider = SirsiDynixHorizonAuthenticationProvider
