@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
     NAME = "SirsiDynix Horizon Authentication"
     DESCRIPTION = "SirsiDynix Horizon Webservice Authentication"
-    FLOW_TYPE = "http://librarysimplified.org/authtype/sirsidynix-hsws"
+    FLOW_TYPE = "http://librarysimplified.org/authtype/sirsidynix-horizon"
 
     class Keys:
         APP_ID = "APP_ID"
@@ -42,6 +42,17 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             "label": _("Client ID"),
             "description": _("The client ID that should be used to identify this CM."),
             "required": True,
+        },
+        {
+            "key": BasicAuthenticationProvider.TEST_IDENTIFIER,
+            "label": _("Test Identifier"),
+            "description": BasicAuthenticationProvider.TEST_IDENTIFIER_DESCRIPTION_FOR_OPTIONAL_PASSWORD,
+            "required": True,
+        },
+        {
+            "key": BasicAuthenticationProvider.TEST_PASSWORD,
+            "label": _("Test Password"),
+            "description": BasicAuthenticationProvider.TEST_PASSWORD_DESCRIPTION_OPTIONAL,
         },
     ]
 
