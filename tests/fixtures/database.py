@@ -20,6 +20,7 @@ from core.model import (
     Collection,
     Contributor,
     CoverageRecord,
+    Credential,
     CustomList,
     DataSource,
     DeliveryMechanism,
@@ -916,6 +917,15 @@ class DatabaseTransactionFixture:
             alice,
             bob,
         )
+
+    def credential(self, data_source_name=DataSource.GUTENBERG, type=None, patron=None):
+        data_source = DataSource.lookup(self.session(), data_source_name)
+        type = type or self.fresh_str()
+        patron = patron or self.patron()
+        credential, is_new = Credential.persistent_token_create(
+            self.session(), data_source, type, patron
+        )
+        return credential
 
 
 class TemporaryDirectoryConfigurationFixture:

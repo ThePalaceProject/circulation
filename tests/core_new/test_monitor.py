@@ -55,10 +55,11 @@ from core.monitor import (
 )
 from core.testing import (
     AlwaysSuccessfulCoverageProvider,
-    DatabaseTest,
     NeverSuccessfulCoverageProvider,
 )
 from core.util.datetime_helpers import datetime_utc, utc_now
+from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.time import Time
 
 
 class MockMonitor(Monitor):
@@ -78,23 +79,31 @@ class MockMonitor(Monitor):
         self.cleanup_records.append(True)
 
 
-class TestMonitor(DatabaseTest):
-    def test_must_define_service_name(self):
+class TestMonitor:
+    def test_must_define_service_name(
+        self, database_transaction: DatabaseTransactionFixture
+    ):
+        data, session = database_transaction, database_transaction.session()
+
         class NoServiceName(MockMonitor):
             SERVICE_NAME = None
 
         with pytest.raises(ValueError) as excinfo:
-            NoServiceName(self._db)
+            NoServiceName(session)
         assert "NoServiceName must define SERVICE_NAME." in str(excinfo.value)
 
-    def test_collection(self):
-        monitor = MockMonitor(self._db, self._default_collection)
-        assert self._default_collection == monitor.collection
+    def test_collection(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
+
+        monitor = MockMonitor(session, data.default_collection())
+        assert data.default_collection() == monitor.collection
         monitor.collection_id = None
         assert None == monitor.collection
 
-    def test_initial_start_time(self):
-        monitor = MockMonitor(self._db, self._default_collection)
+    def test_initial_start_time(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
+
+        monitor = MockMonitor(session, data.default_collection())
 
         # Setting the default start time to NEVER explicitly says to use
         # None as the initial time.
@@ -103,20 +112,22 @@ class TestMonitor(DatabaseTest):
 
         # Setting the value to None means "use the current time".
         monitor.default_start_time = None
-        self.time_eq(utc_now(), monitor.initial_start_time)
+        Time.time_eq(utc_now(), monitor.initial_start_time)
 
         # Any other value is returned as-is.
         default = object()
         monitor.default_start_time = default
         assert default == monitor.initial_start_time
 
-    def test_monitor_lifecycle(self):
-        monitor = MockMonitor(self._db, self._default_collection)
+    def test_monitor_lifecycle(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
+
+        monitor = MockMonitor(session, data.default_collection())
         monitor.default_start_time = datetime_utc(2010, 1, 1)
 
         # There is no timestamp for this monitor.
         def get_timestamp():
-            return get_one(self._db, Timestamp, service=monitor.service_name)
+            return get_one(session, Timestamp, service=monitor.service_name)
 
         assert None == get_timestamp()
 
@@ -137,19 +148,21 @@ class TestMonitor(DatabaseTest):
         timestamp = get_timestamp()
         assert timestamp.start > monitor.default_start_time
         assert timestamp.finish > timestamp.start
-        self.time_eq(utc_now(), timestamp.start)
+        Time.time_eq(utc_now(), timestamp.start)
 
         # cleanup() was called once.
         assert [True] == monitor.cleanup_records
 
-    def test_initial_timestamp(self):
+    def test_initial_timestamp(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
+
         class NeverRunMonitor(MockMonitor):
             SERVICE_NAME = "Never run"
             DEFAULT_START_TIME = MockMonitor.NEVER
 
         # The Timestamp object is created, but its .start is None,
         # indicating that it has never run to completion.
-        m = NeverRunMonitor(self._db, self._default_collection)
+        m = NeverRunMonitor(session, data.default_collection())
         assert None == m.timestamp().start
 
         class RunLongAgoMonitor(MockMonitor):
@@ -157,7 +170,7 @@ class TestMonitor(DatabaseTest):
             DEFAULT_START_TIME = MockMonitor.ONE_YEAR_AGO
 
         # The Timestamp object is created, and its .timestamp is long ago.
-        m = RunLongAgoMonitor(self._db, self._default_collection)
+        m = RunLongAgoMonitor(session, data.default_collection())
         timestamp = m.timestamp()
         now = utc_now()
         assert timestamp.start < now
@@ -166,7 +179,11 @@ class TestMonitor(DatabaseTest):
         # first run is still in progress.
         assert timestamp.finish == None
 
-    def test_run_once_returning_timestampdata(self):
+    def test_run_once_returning_timestampdata(
+        self, database_transaction: DatabaseTransactionFixture
+    ):
+        data, session = database_transaction, database_transaction.session()
+
         # If a Monitor's run_once implementation returns a TimestampData,
         # that's the data used to set the Monitor's Timestamp, even if
         # the data doesn't make sense by the standards used by the main
@@ -178,7 +195,7 @@ class TestMonitor(DatabaseTest):
             def run_once(self, progress):
                 return TimestampData(start=start, finish=finish, counter=-100)
 
-        monitor = Mock(self._db, self._default_collection)
+        monitor = Mock(session, data.default_collection())
         monitor.run()
 
         timestamp = monitor.timestamp()
@@ -186,7 +203,11 @@ class TestMonitor(DatabaseTest):
         assert finish == timestamp.finish
         assert -100 == timestamp.counter
 
-    def test_run_once_with_exception(self):
+    def test_run_once_with_exception(
+        self, database_transaction: DatabaseTransactionFixture
+    ):
+        data, session = database_transaction, database_transaction.session()
+
         # If an exception happens during a Monitor's run_once
         # implementation, a traceback for that exception is recorded
         # in the appropriate Timestamp, but the timestamp itself is
@@ -214,7 +235,7 @@ class TestMonitor(DatabaseTest):
             def run_once(self, *args, **kwargs):
                 raise Exception("I'm doomed")
 
-        m = DoomedMonitor(self._db, self._default_collection)
+        m = DoomedMonitor(session, data.default_collection())
         assert_run_sets_exception(m, "Exception: I'm doomed")
 
         # Try a monitor that sets .exception on the TimestampData it
@@ -225,17 +246,21 @@ class TestMonitor(DatabaseTest):
             def run_once(self, progress):
                 return TimestampData(exception="I'm also doomed")
 
-        m = AlsoDoomed(self._db, self._default_collection)
+        m = AlsoDoomed(session, data.default_collection())
         assert_run_sets_exception(m, "I'm also doomed")
 
-    def test_same_monitor_different_collections(self):
+    def test_same_monitor_different_collections(
+        self, database_transaction: DatabaseTransactionFixture
+    ):
         """A single Monitor has different Timestamps when run against
         different Collections.
         """
-        c1 = self._collection()
-        c2 = self._collection()
-        m1 = MockMonitor(self._db, c1)
-        m2 = MockMonitor(self._db, c2)
+        data, session = database_transaction, database_transaction.session()
+
+        c1 = data.collection()
+        c2 = data.collection()
+        m1 = MockMonitor(session, c1)
+        m2 = MockMonitor(session, c2)
 
         # The two Monitors have the same service name but are operating
         # on different Collections.
@@ -269,13 +294,16 @@ class TestMonitor(DatabaseTest):
         assert t2.start > t1.start
 
 
-class TestCollectionMonitor(DatabaseTest):
+class TestCollectionMonitor:
     """Test the special features of CollectionMonitor."""
 
-    def test_protocol_enforcement(self):
+    def test_protocol_enforcement(
+        self, database_transaction: DatabaseTransactionFixture
+    ):
         """A CollectionMonitor can require that it be instantiated
         with a Collection that implements a certain protocol.
         """
+        data, session = database_transaction, database_transaction.session()
 
         class NoProtocolMonitor(CollectionMonitor):
             SERVICE_NAME = "Test Monitor 1"
@@ -286,54 +314,55 @@ class TestCollectionMonitor(DatabaseTest):
             PROTOCOL = ExternalIntegration.OVERDRIVE
 
         # Two collections.
-        c1 = self._collection(protocol=ExternalIntegration.OVERDRIVE)
-        c2 = self._collection(protocol=ExternalIntegration.BIBLIOTHECA)
+        c1 = data.collection(protocol=ExternalIntegration.OVERDRIVE)
+        c2 = data.collection(protocol=ExternalIntegration.BIBLIOTHECA)
 
         # The NoProtocolMonitor can be instantiated with either one,
         # or with no Collection at all.
-        NoProtocolMonitor(self._db, c1)
-        NoProtocolMonitor(self._db, c2)
-        NoProtocolMonitor(self._db, None)
+        NoProtocolMonitor(session, c1)
+        NoProtocolMonitor(session, c2)
+        NoProtocolMonitor(session, None)
 
         # The OverdriveMonitor can only be instantiated with the first one.
-        OverdriveMonitor(self._db, c1)
+        OverdriveMonitor(session, c1)
         with pytest.raises(ValueError) as excinfo:
-            OverdriveMonitor(self._db, c2)
+            OverdriveMonitor(session, c2)
         assert (
             "Collection protocol (Bibliotheca) does not match Monitor protocol (Overdrive)"
             in str(excinfo.value)
         )
         with pytest.raises(CollectionMissing):
-            OverdriveMonitor(self._db, None)
+            OverdriveMonitor(session, None)
 
-    def test_all(self):
+    def test_all(self, database_transaction: DatabaseTransactionFixture):
         """Test that we can create a list of Monitors using all()."""
+        data, session = database_transaction, database_transaction.session()
 
         class OPDSCollectionMonitor(CollectionMonitor):
             SERVICE_NAME = "Test Monitor"
             PROTOCOL = ExternalIntegration.OPDS_IMPORT
 
         # Here we have three OPDS import Collections...
-        o1 = self._collection("o1")
-        o2 = self._collection("o2")
-        o3 = self._collection("o3")
+        o1 = data.collection("o1")
+        o2 = data.collection("o2")
+        o3 = data.collection("o3")
 
         # ...and a Bibliotheca collection.
-        b1 = self._collection(protocol=ExternalIntegration.BIBLIOTHECA)
+        b1 = data.collection(protocol=ExternalIntegration.BIBLIOTHECA)
 
         # o1 just had its Monitor run.
         Timestamp.stamp(
-            self._db, OPDSCollectionMonitor.SERVICE_NAME, Timestamp.MONITOR_TYPE, o1
+            session, OPDSCollectionMonitor.SERVICE_NAME, Timestamp.MONITOR_TYPE, o1
         )
 
         # o2 and b1 have never had their Monitor run, but o2 has had some other Monitor run.
-        Timestamp.stamp(self._db, "A Different Service", Timestamp.MONITOR_TYPE, o2)
+        Timestamp.stamp(session, "A Different Service", Timestamp.MONITOR_TYPE, o2)
 
         # o3 had its Monitor run an hour ago.
         now = utc_now()
         an_hour_ago = now - datetime.timedelta(seconds=3600)
         Timestamp.stamp(
-            self._db,
+            session,
             OPDSCollectionMonitor.SERVICE_NAME,
             Timestamp.MONITOR_TYPE,
             o3,
@@ -341,7 +370,7 @@ class TestCollectionMonitor(DatabaseTest):
             finish=an_hour_ago,
         )
 
-        monitors = list(OPDSCollectionMonitor.all(self._db))
+        monitors = list(OPDSCollectionMonitor.all(session))
 
         # Three OPDSCollectionMonitors were returned, one for each
         # appropriate collection. The monitor that needs to be run the
@@ -353,7 +382,7 @@ class TestCollectionMonitor(DatabaseTest):
         # If `collections` are specified, monitors should be yielded in the same order.
         opds_collections = [o3, o1, o2]
         monitors = list(
-            OPDSCollectionMonitor.all(self._db, collections=opds_collections)
+            OPDSCollectionMonitor.all(session, collections=opds_collections)
         )
         monitor_collections = [m.collection for m in monitors]
         # We should get a monitor for each collection.
@@ -364,7 +393,7 @@ class TestCollectionMonitor(DatabaseTest):
         # If `collections` are specified, monitors should be yielded in the same order.
         opds_collections = [o3, o1]
         monitors = list(
-            OPDSCollectionMonitor.all(self._db, collections=opds_collections)
+            OPDSCollectionMonitor.all(session, collections=opds_collections)
         )
         monitor_collections = [m.collection for m in monitors]
         # We should get a monitor for each collection.
@@ -374,7 +403,7 @@ class TestCollectionMonitor(DatabaseTest):
 
         # If collections are specified, they must match the monitor's protocol.
         with pytest.raises(ValueError) as excinfo:
-            monitors = list(OPDSCollectionMonitor.all(self._db, collections=[b1]))
+            monitors = list(OPDSCollectionMonitor.all(session, collections=[b1]))
         assert (
             "Collection protocol (Bibliotheca) does not match Monitor protocol (OPDS Import)"
             in str(excinfo.value)
@@ -382,8 +411,10 @@ class TestCollectionMonitor(DatabaseTest):
         assert "Only the following collections are available: " in str(excinfo.value)
 
 
-class TestTimelineMonitor(DatabaseTest):
-    def test_run_once(self):
+class TestTimelineMonitor:
+    def test_run_once(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
+
         class Mock(TimelineMonitor):
             SERVICE_NAME = "Just a timeline"
             catchups = []
@@ -391,7 +422,7 @@ class TestTimelineMonitor(DatabaseTest):
             def catch_up_from(self, start, cutoff, progress):
                 self.catchups.append((start, cutoff, progress))
 
-        m = Mock(self._db)
+        m = Mock(session)
         progress = m.timestamp().to_data()
         m.run_once(progress)
         now = utc_now()
@@ -399,19 +430,22 @@ class TestTimelineMonitor(DatabaseTest):
         # catch_up_from() was called once.
         (start, cutoff, progress) = m.catchups.pop()
         assert m.initial_start_time == start
-        self.time_eq(cutoff, now)
+        Time.time_eq(cutoff, now)
 
         # progress contains a record of the timespan now covered
         # by this Monitor.
         assert start == progress.start
         assert cutoff == progress.finish
 
-    def test_subclass_cannot_modify_dates(self):
+    def test_subclass_cannot_modify_dates(
+        self, database_transaction: DatabaseTransactionFixture
+    ):
         """The subclass can modify some fields of the TimestampData
         passed in to it, but it can't modify the start or end dates.
 
         If you want that, you shouldn't subclass TimelineMonitor.
         """
+        data, session = database_transaction, database_transaction.session()
 
         class Mock(TimelineMonitor):
             DEFAULT_START_TIME = Monitor.NEVER
@@ -423,7 +457,7 @@ class TestTimelineMonitor(DatabaseTest):
                 progress.counter = 3
                 progress.achievements = 4
 
-        m = Mock(self._db)
+        m = Mock(session)
         progress = m.timestamp().to_data()
         m.run_once(progress)
         now = utc_now()
@@ -431,16 +465,19 @@ class TestTimelineMonitor(DatabaseTest):
         # The timestamp values have been set to appropriate values for
         # the portion of the timeline covered, overriding our values.
         assert None == progress.start
-        self.time_eq(now, progress.finish)
+        Time.time_eq(now, progress.finish)
 
         # The non-timestamp values have been left alone.
         assert 3 == progress.counter
         assert 4 == progress.achievements
 
-    def test_timestamp_not_updated_on_exception(self):
+    def test_timestamp_not_updated_on_exception(
+        self, database_transaction: DatabaseTransactionFixture
+    ):
         """If the subclass sets .exception on the TimestampData
         passed into it, the dates aren't modified.
         """
+        data, session = database_transaction, database_transaction.session()
 
         class Mock(TimelineMonitor):
             DEFAULT_START_TIME = datetime_utc(2011, 1, 1)
@@ -450,7 +487,7 @@ class TestTimelineMonitor(DatabaseTest):
                 self.started_at = start
                 progress.exception = "oops"
 
-        m = Mock(self._db)
+        m = Mock(session)
         progress = m.timestamp().to_data()
         m.run_once(progress)
 
@@ -459,7 +496,8 @@ class TestTimelineMonitor(DatabaseTest):
         assert m.DEFAULT_START_TIME == progress.start
         assert None == progress.finish
 
-    def test_slice_timespan(self):
+    def test_slice_timespan(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
         # Test the slice_timespan utility method.
 
         # Slicing up the time between 121 minutes ago and now in increments
@@ -513,88 +551,137 @@ class MockSweepMonitor(SweepMonitor):
         self.cleanup_called.append(True)
 
 
-class TestSweepMonitor(DatabaseTest):
-    def setup_method(self):
-        super().setup_method()
-        self.monitor = MockSweepMonitor(self._db)
+class SweepMonitorFixture:
+    monitor: MockSweepMonitor
 
-    def test_model_class_is_required(self):
+
+@pytest.fixture()
+def sweep_monitor_fixture(
+    database_transaction: DatabaseTransactionFixture,
+) -> SweepMonitorFixture:
+    data = SweepMonitorFixture()
+    data.monitor = MockSweepMonitor(database_transaction.session())
+    return data
+
+
+class TestSweepMonitor:
+    def test_model_class_is_required(
+        self,
+        database_transaction: DatabaseTransactionFixture,
+        sweep_monitor_fixture: SweepMonitorFixture,
+    ):
+        data, session = database_transaction, database_transaction.session()
+
         class NoModelClass(SweepMonitor):
             MODEL_CLASS = None
 
         with pytest.raises(ValueError) as excinfo:
-            NoModelClass(self._db)
+            NoModelClass(session)
         assert "NoModelClass must define MODEL_CLASS" in str(excinfo.value)
 
-    def test_batch_size(self):
-        assert MockSweepMonitor.DEFAULT_BATCH_SIZE == self.monitor.batch_size
+    def test_batch_size(
+        self,
+        database_transaction: DatabaseTransactionFixture,
+        sweep_monitor_fixture: SweepMonitorFixture,
+    ):
+        data, session = database_transaction, database_transaction.session()
+        assert (
+            MockSweepMonitor.DEFAULT_BATCH_SIZE
+            == sweep_monitor_fixture.monitor.batch_size
+        )
 
-        monitor = MockSweepMonitor(self._db, batch_size=29)
+        monitor = MockSweepMonitor(session, batch_size=29)
         assert 29 == monitor.batch_size
 
         # If you pass in an invalid value you get the default.
-        monitor = MockSweepMonitor(self._db, batch_size=-1)
+        monitor = MockSweepMonitor(session, batch_size=-1)
         assert MockSweepMonitor.DEFAULT_BATCH_SIZE == monitor.batch_size
 
-    def test_run_against_empty_table(self):
+    def test_run_against_empty_table(
+        self,
+        database_transaction: DatabaseTransactionFixture,
+        sweep_monitor_fixture: SweepMonitorFixture,
+    ):
+        data, session = database_transaction, database_transaction.session()
+
         # If there's nothing in the table to be swept, a SweepMonitor runs
         # to completion and accomplishes nothing.
-        self.monitor.run()
-        timestamp = self.monitor.timestamp()
+        sweep_monitor_fixture.monitor.run()
+        timestamp = sweep_monitor_fixture.monitor.timestamp()
         assert "Records processed: 0." == timestamp.achievements
         assert None == timestamp.exception
 
-    def test_run_sweeps_entire_table(self):
+    def test_run_sweeps_entire_table(
+        self,
+        database_transaction: DatabaseTransactionFixture,
+        sweep_monitor_fixture: SweepMonitorFixture,
+    ):
+        data, session = database_transaction, database_transaction.session()
+
         # Three Identifiers -- the batch size is 2.
-        i1, i2, i3 = (self._identifier() for i in range(3))
-        assert 2 == self.monitor.batch_size
+        i1, i2, i3 = (data.identifier() for i in range(3))
+        assert 2 == sweep_monitor_fixture.monitor.batch_size
 
         # Run the monitor.
-        self.monitor.run()
+        sweep_monitor_fixture.monitor.run()
 
         # All three Identifiers, and no other items, were processed.
-        assert [i1, i2, i3] == self.monitor.processed
+        assert [i1, i2, i3] == sweep_monitor_fixture.monitor.processed
 
         # We ran process_batch() three times: once starting at zero,
         # once starting at the ID that ended the first batch, and
         # again starting at the ID that ended the second batch.
-        assert [0, i2.id, i3.id] == self.monitor.batches
+        assert [0, i2.id, i3.id] == sweep_monitor_fixture.monitor.batches
 
         # The cleanup method was called once.
-        assert [True] == self.monitor.cleanup_called
+        assert [True] == sweep_monitor_fixture.monitor.cleanup_called
 
         # The number of records processed reflects what happened over
         # the entire run, not just the final batch.
-        assert "Records processed: 3." == self.monitor.timestamp().achievements
+        assert (
+            "Records processed: 3."
+            == sweep_monitor_fixture.monitor.timestamp().achievements
+        )
 
-    def test_run_starts_at_previous_counter(self):
+    def test_run_starts_at_previous_counter(
+        self,
+        database_transaction: DatabaseTransactionFixture,
+        sweep_monitor_fixture: SweepMonitorFixture,
+    ):
+        data, session = database_transaction, database_transaction.session()
+
         # Two Identifiers.
-        i1, i2 = (self._identifier() for i in range(2))
+        i1, i2 = (data.identifier() for i in range(2))
 
         # The monitor was just run, but it was not able to proceed past
         # i1.
         timestamp = Timestamp.stamp(
-            self._db,
-            self.monitor.service_name,
+            session,
+            sweep_monitor_fixture.monitor.service_name,
             Timestamp.MONITOR_TYPE,
-            self.monitor.collection,
+            sweep_monitor_fixture.monitor.collection,
         )
         timestamp.counter = i1.id
 
         # Run the monitor.
-        self.monitor.run()
+        sweep_monitor_fixture.monitor.run()
 
         # The last item in the table was processed. i1 was not
         # processed, because it was processed in a previous run.
-        assert [i2] == self.monitor.processed
+        assert [i2] == sweep_monitor_fixture.monitor.processed
 
         # The monitor's counter has been reset.
         assert 0 == timestamp.counter
 
-    def test_exception_interrupts_run(self):
+    def test_exception_interrupts_run(
+        self,
+        database_transaction: DatabaseTransactionFixture,
+        sweep_monitor_fixture: SweepMonitorFixture,
+    ):
+        data, session = database_transaction, database_transaction.session()
 
         # Four Identifiers.
-        i1, i2, i3, i4 = (self._identifier() for i in range(4))
+        i1, i2, i3, i4 = (data.identifier() for i in range(4))
 
         # This monitor will never be able to process the fourth one.
         class IHateI4(MockSweepMonitor):
@@ -603,7 +690,7 @@ class TestSweepMonitor(DatabaseTest):
                     raise Exception("HOW DARE YOU")
                 super().process_item(item)
 
-        monitor = IHateI4(self._db)
+        monitor = IHateI4(session)
 
         timestamp = monitor.timestamp()
         original_start = timestamp.start
@@ -622,8 +709,8 @@ class TestSweepMonitor(DatabaseTest):
         # work that _was_ done.
         now = utc_now()
         assert timestamp.start > original_start
-        self.time_eq(now, timestamp.start)
-        self.time_eq(now, timestamp.finish)
+        Time.time_eq(now, timestamp.start)
+        Time.time_eq(now, timestamp.finish)
         assert timestamp.start < timestamp.finish
 
         assert "Records processed: 2." == timestamp.achievements
@@ -642,160 +729,170 @@ class TestSweepMonitor(DatabaseTest):
         assert [] == monitor.cleanup_called
 
 
-class TestIdentifierSweepMonitor(DatabaseTest):
-    def test_scope_to_collection(self):
+class TestIdentifierSweepMonitor:
+    def test_scope_to_collection(
+        self, database_transaction: DatabaseTransactionFixture
+    ):
+        data, session = database_transaction, database_transaction.session()
+
         # Two Collections, each with a LicensePool.
-        c1 = self._collection()
-        c2 = self._collection()
-        e1, p1 = self._edition(with_license_pool=True, collection=c1)
-        e2, p2 = self._edition(with_license_pool=True, collection=c2)
+        c1 = data.collection()
+        c2 = data.collection()
+        e1, p1 = data.edition(with_license_pool=True, collection=c1)
+        e2, p2 = data.edition(with_license_pool=True, collection=c2)
 
         # A Random Identifier not associated with any Collection.
-        i3 = self._identifier()
+        i3 = data.identifier()
 
         class Mock(IdentifierSweepMonitor):
             SERVICE_NAME = "Mock"
 
         # With a Collection, we only process items that are licensed through
         # that collection.
-        monitor = Mock(self._db, c1)
+        monitor = Mock(session, c1)
         assert [p1.identifier] == monitor.item_query().all()
 
         # With no Collection, we process all items.
-        monitor = Mock(self._db, None)
+        monitor = Mock(session, None)
         assert [p1.identifier, p2.identifier, i3] == monitor.item_query().all()
 
 
-class TestSubjectSweepMonitor(DatabaseTest):
-    def test_item_query(self):
+class TestSubjectSweepMonitor:
+    def test_item_query(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
+
         class Mock(SubjectSweepMonitor):
             SERVICE_NAME = "Mock"
 
-        s1, ignore = Subject.lookup(self._db, Subject.DDC, "100", None)
-        s2, ignore = Subject.lookup(
-            self._db, Subject.TAG, None, "100 Years of Solitude"
-        )
+        s1, ignore = Subject.lookup(session, Subject.DDC, "100", None)
+        s2, ignore = Subject.lookup(session, Subject.TAG, None, "100 Years of Solitude")
 
         # By default, SubjectSweepMonitor handles every Subject
         # in the database.
-        everything = Mock(self._db)
+        everything = Mock(session)
         assert [s1, s2] == everything.item_query().all()
 
         # But you can tell SubjectSweepMonitor to handle only Subjects
         # of a certain type.
-        dewey_monitor = Mock(self._db, subject_type=Subject.DDC)
+        dewey_monitor = Mock(session, subject_type=Subject.DDC)
         assert [s1] == dewey_monitor.item_query().all()
 
         # You can also SubjectSweepMonitor to handle only Subjects
         # whose names or identifiers match a certain string.
-        one_hundred_monitor = Mock(self._db, filter_string="100")
+        one_hundred_monitor = Mock(session, filter_string="100")
         assert [s1, s2] == one_hundred_monitor.item_query().all()
 
         specific_tag_monitor = Mock(
-            self._db, subject_type=Subject.TAG, filter_string="Years"
+            session, subject_type=Subject.TAG, filter_string="Years"
         )
         assert [s2] == specific_tag_monitor.item_query().all()
 
 
-class TestCustomListEntrySweepMonitor(DatabaseTest):
-    def test_item_query(self):
+class TestCustomListEntrySweepMonitor:
+    def test_item_query(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
+
         class Mock(CustomListEntrySweepMonitor):
             SERVICE_NAME = "Mock"
 
         # Three CustomLists, each containing one book.
-        list1, [edition1] = self._customlist(num_entries=1)
-        list2, [edition2] = self._customlist(num_entries=1)
-        list3, [edition3] = self._customlist(num_entries=1)
+        list1, [edition1] = data.customlist(num_entries=1)
+        list2, [edition2] = data.customlist(num_entries=1)
+        list3, [edition3] = data.customlist(num_entries=1)
 
         [entry1] = list1.entries
         [entry2] = list2.entries
         [entry3] = list3.entries
 
         # Two Collections, each with one book from one of the lists.
-        c1 = self._collection()
+        c1 = data.collection()
         c1.licensepools.extend(edition1.license_pools)
 
-        c2 = self._collection()
+        c2 = data.collection()
         c2.licensepools.extend(edition2.license_pools)
 
         # If we don't pass in a Collection to
         # CustomListEntrySweepMonitor, we get all three
         # CustomListEntries, in their order of creation.
-        monitor = Mock(self._db)
+        monitor = Mock(session)
         assert [entry1, entry2, entry3] == monitor.item_query().all()
 
         # If we pass in a Collection to CustomListEntrySweepMonitor,
         # we get only the CustomListEntry whose work is licensed
         # to that collection.
-        monitor = Mock(self._db, collection=c2)
+        monitor = Mock(session, collection=c2)
         assert [entry2] == monitor.item_query().all()
 
 
-class TestEditionSweepMonitor(DatabaseTest):
-    def test_item_query(self):
+class TestEditionSweepMonitor:
+    def test_item_query(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
+
         class Mock(EditionSweepMonitor):
             SERVICE_NAME = "Mock"
 
         # Three Editions, two of which have LicensePools.
-        e1, p1 = self._edition(with_license_pool=True)
-        e2, p2 = self._edition(with_license_pool=True)
-        e3 = self._edition(with_license_pool=False)
+        e1, p1 = data.edition(with_license_pool=True)
+        e2, p2 = data.edition(with_license_pool=True)
+        e3 = data.edition(with_license_pool=False)
 
         # Two Collections, each with one book.
-        c1 = self._collection()
+        c1 = data.collection()
         c1.licensepools.extend(e1.license_pools)
 
-        c2 = self._collection()
+        c2 = data.collection()
         c2.licensepools.extend(e2.license_pools)
 
         # If we don't pass in a Collection to EditionSweepMonitor, we
         # get all three Editions, in their order of creation.
-        monitor = Mock(self._db)
+        monitor = Mock(session)
         assert [e1, e2, e3] == monitor.item_query().all()
 
         # If we pass in a Collection to EditionSweepMonitor, we get
         # only the Edition whose work is licensed to that collection.
-        monitor = Mock(self._db, collection=c2)
+        monitor = Mock(session, collection=c2)
         assert [e2] == monitor.item_query().all()
 
 
-class TestWorkSweepMonitors(DatabaseTest):
+class TestWorkSweepMonitors:
     """To reduce setup costs, this class tests WorkSweepMonitor,
     PresentationReadyWorkSweepMonitor, and
     NotPresentationReadyWorkSweepMonitor at once.
     """
 
-    def test_item_query(self):
+    def test_item_query(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
+
         class Mock(WorkSweepMonitor):
             SERVICE_NAME = "Mock"
 
         # Three Works with LicensePools. Only one is presentation
         # ready.
-        w1, w2, w3 = (self._work(with_license_pool=True) for i in range(3))
+        w1, w2, w3 = (data.work(with_license_pool=True) for i in range(3))
 
         # Another Work that's presentation ready but has no
         # LicensePool.
-        w4 = self._work()
+        w4 = data.work()
         w4.presentation_ready = True
 
         w2.presentation_ready = False
         w3.presentation_ready = None
 
         # Two Collections, each with one book.
-        c1 = self._collection()
+        c1 = data.collection()
         c1.licensepools.append(w1.license_pools[0])
 
-        c2 = self._collection()
+        c2 = data.collection()
         c2.licensepools.append(w2.license_pools[0])
 
         # If we don't pass in a Collection to WorkSweepMonitor, we
         # get all four Works, in their order of creation.
-        monitor = Mock(self._db)
+        monitor = Mock(session)
         assert [w1, w2, w3, w4] == monitor.item_query().all()
 
         # If we pass in a Collection to EditionSweepMonitor, we get
         # only the Work licensed to that collection.
-        monitor = Mock(self._db, collection=c2)
+        monitor = Mock(session, collection=c2)
         assert [w2] == monitor.item_query().all()
 
         # PresentationReadyWorkSweepMonitor is the same, but it excludes
@@ -803,29 +900,30 @@ class TestWorkSweepMonitors(DatabaseTest):
         class Mock(PresentationReadyWorkSweepMonitor):
             SERVICE_NAME = "Mock"
 
-        assert [w1, w4] == Mock(self._db).item_query().all()
-        assert [w1] == Mock(self._db, collection=c1).item_query().all()
-        assert [] == Mock(self._db, collection=c2).item_query().all()
+        assert [w1, w4] == Mock(session).item_query().all()
+        assert [w1] == Mock(session, collection=c1).item_query().all()
+        assert [] == Mock(session, collection=c2).item_query().all()
 
         # NotPresentationReadyWorkSweepMonitor is the same, but it _only_
         # includes works that are not presentation ready.
         class Mock(NotPresentationReadyWorkSweepMonitor):
             SERVICE_NAME = "Mock"
 
-        assert [w2, w3] == Mock(self._db).item_query().all()
-        assert [] == Mock(self._db, collection=c1).item_query().all()
-        assert [w2] == Mock(self._db, collection=c2).item_query().all()
+        assert [w2, w3] == Mock(session).item_query().all()
+        assert [] == Mock(session, collection=c1).item_query().all()
+        assert [w2] == Mock(session, collection=c2).item_query().all()
 
 
-class TestOPDSEntryCacheMonitor(DatabaseTest):
-    def test_process_item(self):
+class TestOPDSEntryCacheMonitor:
+    def test_process_item(self, database_transaction: DatabaseTransactionFixture):
         """This Monitor calculates OPDS entries for works."""
+        data, session = database_transaction, database_transaction.session()
 
         class Mock(OPDSEntryCacheMonitor):
             SERVICE_NAME = "Mock"
 
-        monitor = Mock(self._db)
-        work = self._work()
+        monitor = Mock(session)
+        work = data.work()
         assert None == work.simple_opds_entry
         assert None == work.verbose_opds_entry
 
@@ -834,95 +932,138 @@ class TestOPDSEntryCacheMonitor(DatabaseTest):
         assert work.verbose_opds_entry != None
 
 
-class TestPermanentWorkIDRefresh(DatabaseTest):
-    def test_process_item(self):
+class TestPermanentWorkIDRefresh:
+    def test_process_item(self, database_transaction: DatabaseTransactionFixture):
         """This Monitor calculates an Editions' permanent work ID."""
+        data, session = database_transaction, database_transaction.session()
 
         class Mock(PermanentWorkIDRefreshMonitor):
             SERVICE_NAME = "Mock"
 
-        edition = self._edition()
+        edition = data.edition()
         assert None == edition.permanent_work_id
-        Mock(self._db).process_item(edition)
+        Mock(session).process_item(edition)
         assert edition.permanent_work_id != None
 
 
-class TestMakePresentationReadyMonitor(DatabaseTest):
-    def setup_method(self):
-        super().setup_method()
+class PresentationReadyMonitorFixture:
+    transaction: DatabaseTransactionFixture
+    success: AlwaysSuccessfulCoverageProvider
+    failure: NeverSuccessfulCoverageProvider
+    work: Work
 
-        # This CoverageProvider will always succeed.
-        class MockProvider1(AlwaysSuccessfulCoverageProvider):
-            SERVICE_NAME = "Provider 1"
-            INPUT_IDENTIFIER_TYPES = Identifier.GUTENBERG_ID
-            DATA_SOURCE_NAME = DataSource.OCLC
 
-        # This CoverageProvider will always fail.
-        class MockProvider2(NeverSuccessfulCoverageProvider):
-            SERVICE_NAME = "Provider 2"
-            INPUT_IDENTIFIER_TYPES = Identifier.GUTENBERG_ID
-            DATA_SOURCE_NAME = DataSource.OVERDRIVE
+@pytest.fixture()
+def presentation_ready_monitor_fixture(
+    database_transaction: DatabaseTransactionFixture,
+) -> PresentationReadyMonitorFixture:
+    data = PresentationReadyMonitorFixture()
+    data.transaction = database_transaction
+    session = database_transaction.session()
 
-        self.success = MockProvider1(self._db)
-        self.failure = MockProvider2(self._db)
+    # This CoverageProvider will always succeed.
+    class MockProvider1(AlwaysSuccessfulCoverageProvider):
+        SERVICE_NAME = "Provider 1"
+        INPUT_IDENTIFIER_TYPES = Identifier.GUTENBERG_ID
+        DATA_SOURCE_NAME = DataSource.OCLC
 
-        self.work = self._work(DataSource.GUTENBERG, with_license_pool=True)
-        # Don't fake that the work is presentation ready, as we usually do,
-        # because presentation readiness is what we're trying to test.
-        self.work.presentation_ready = False
+    # This CoverageProvider will always fail.
+    class MockProvider2(NeverSuccessfulCoverageProvider):
+        SERVICE_NAME = "Provider 2"
+        INPUT_IDENTIFIER_TYPES = Identifier.GUTENBERG_ID
+        DATA_SOURCE_NAME = DataSource.OVERDRIVE
 
-    def test_process_item_sets_presentation_ready_on_success(self):
+    data.success = MockProvider1(session)
+    data.failure = MockProvider2(session)
+
+    data.work = database_transaction.work(DataSource.GUTENBERG, with_license_pool=True)
+    # Don't fake that the work is presentation ready, as we usually do,
+    # because presentation readiness is what we're trying to test.
+    data.work.presentation_ready = False
+    return data
+
+
+class TestMakePresentationReadyMonitor:
+    def test_process_item_sets_presentation_ready_on_success(
+        self, presentation_ready_monitor_fixture: PresentationReadyMonitorFixture
+    ):
+        data, session = (
+            presentation_ready_monitor_fixture,
+            presentation_ready_monitor_fixture.transaction.session(),
+        )
+
         # Create a monitor that doesn't need to do anything.
-        monitor = MakePresentationReadyMonitor(self._db, [])
-        monitor.process_item(self.work)
+        monitor = MakePresentationReadyMonitor(session, [])
+        monitor.process_item(data.work)
 
         # When it's done doing nothing, it sets the work as
         # presentation-ready.
-        assert None == self.work.presentation_ready_exception
-        assert True == self.work.presentation_ready
+        assert None == data.work.presentation_ready_exception
+        assert True == data.work.presentation_ready
 
-    def test_process_item_sets_exception_on_failure(self):
-        monitor = MakePresentationReadyMonitor(self._db, [self.success, self.failure])
-        monitor.process_item(self.work)
-        assert (
-            "Provider(s) failed: %s" % self.failure.SERVICE_NAME
-            == self.work.presentation_ready_exception
+    def test_process_item_sets_exception_on_failure(
+        self, presentation_ready_monitor_fixture: PresentationReadyMonitorFixture
+    ):
+        data, session = (
+            presentation_ready_monitor_fixture,
+            presentation_ready_monitor_fixture.transaction.session(),
         )
-        assert False == self.work.presentation_ready
 
-    def test_prepare_raises_exception_with_failing_providers(self):
-        monitor = MakePresentationReadyMonitor(self._db, [self.success, self.failure])
+        monitor = MakePresentationReadyMonitor(session, [data.success, data.failure])
+        monitor.process_item(data.work)
+        assert (
+            "Provider(s) failed: %s" % data.failure.SERVICE_NAME
+            == data.work.presentation_ready_exception
+        )
+        assert False == data.work.presentation_ready
+
+    def test_prepare_raises_exception_with_failing_providers(
+        self, presentation_ready_monitor_fixture: PresentationReadyMonitorFixture
+    ):
+        data, session = (
+            presentation_ready_monitor_fixture,
+            presentation_ready_monitor_fixture.transaction.session(),
+        )
+
+        monitor = MakePresentationReadyMonitor(session, [data.success, data.failure])
         with pytest.raises(CoverageProvidersFailed) as excinfo:
-            monitor.prepare(self.work)
-        assert self.failure.service_name in str(excinfo.value)
+            monitor.prepare(data.work)
+        assert data.failure.service_name in str(excinfo.value)
 
-    def test_prepare_does_not_call_irrelevant_provider(self):
+    def test_prepare_does_not_call_irrelevant_provider(
+        self, presentation_ready_monitor_fixture: PresentationReadyMonitorFixture
+    ):
+        data, session = (
+            presentation_ready_monitor_fixture,
+            presentation_ready_monitor_fixture.transaction.session(),
+        )
 
-        monitor = MakePresentationReadyMonitor(self._db, [self.success])
-        result = monitor.prepare(self.work)
+        monitor = MakePresentationReadyMonitor(session, [data.success])
+        result = monitor.prepare(data.work)
 
         # There were no failures.
         assert [] == result
 
         # The 'success' monitor ran.
         assert [
-            self.work.presentation_edition.primary_identifier
-        ] == self.success.attempts
+            data.work.presentation_edition.primary_identifier
+        ] == data.success.attempts
 
         # The 'failure' monitor did not. (If it had, it would have
         # failed.)
-        assert [] == self.failure.attempts
+        assert [] == data.failure.attempts
 
         # The work has not been set to presentation ready--that's
         # handled in process_item().
-        assert False == self.work.presentation_ready
+        assert False == data.work.presentation_ready
 
 
-class TestCustomListEntryWorkUpdateMonitor(DatabaseTest):
-    def test_set_item(self):
+class TestCustomListEntryWorkUpdateMonitor:
+    def test_set_item(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
 
         # Create a CustomListEntry.
-        list1, [edition1] = self._customlist(num_entries=1)
+        list1, [edition1] = data.customlist(num_entries=1)
         [entry] = list1.entries
 
         # Pretend that its CustomListEntry's work was never set.
@@ -930,7 +1071,7 @@ class TestCustomListEntryWorkUpdateMonitor(DatabaseTest):
         entry.work = None
 
         # Running process_item resets it to the same value.
-        monitor = CustomListEntryWorkUpdateMonitor(self._db)
+        monitor = CustomListEntryWorkUpdateMonitor(session)
         monitor.process_item(entry)
         assert old_work == entry.work
 
@@ -940,52 +1081,57 @@ class MockReaperMonitor(ReaperMonitor):
     TIMESTAMP_FIELD = "timestamp"
 
 
-class TestReaperMonitor(DatabaseTest):
-    def test_cutoff(self):
+class TestReaperMonitor:
+    def test_cutoff(self, database_transaction: DatabaseTransactionFixture):
         """Test that cutoff behaves correctly when given different values for
         ReaperMonitor.MAX_AGE.
         """
-        m = MockReaperMonitor(self._db)
+        data, session = database_transaction, database_transaction.session()
+        m = MockReaperMonitor(session)
 
         # A number here means a number of days.
         for value in [1, 1.5, -1]:
             m.MAX_AGE = value
             expect = utc_now() - datetime.timedelta(days=value)
-            self.time_eq(m.cutoff, expect)
+            Time.time_eq(m.cutoff, expect)
 
         # But you can pass in a timedelta instead.
         m.MAX_AGE = datetime.timedelta(seconds=99)
-        self.time_eq(m.cutoff, utc_now() - m.MAX_AGE)
+        Time.time_eq(m.cutoff, utc_now() - m.MAX_AGE)
 
-    def test_specific_reapers(self):
-        assert CachedFeed.timestamp == CachedFeedReaper(self._db).timestamp_field
+    def test_specific_reapers(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
+        assert CachedFeed.timestamp == CachedFeedReaper(session).timestamp_field
         assert 30 == CachedFeedReaper.MAX_AGE
-        assert Credential.expires == CredentialReaper(self._db).timestamp_field
+        assert Credential.expires == CredentialReaper(session).timestamp_field
         assert 1 == CredentialReaper.MAX_AGE
         assert (
-            Patron.authorization_expires == PatronRecordReaper(self._db).timestamp_field
+            Patron.authorization_expires == PatronRecordReaper(session).timestamp_field
         )
         assert 60 == PatronRecordReaper.MAX_AGE
 
-    def test_where_clause(self):
-        m = CachedFeedReaper(self._db)
+    def test_where_clause(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
+        m = CachedFeedReaper(session)
         assert "cachedfeeds.timestamp < :timestamp_1" == str(m.where_clause)
 
-    def test_run_once(self):
+    def test_run_once(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
+
         # Create four Credentials: two expired, two valid.
-        expired1 = self._credential()
-        expired2 = self._credential()
+        expired1 = data.credential()
+        expired2 = data.credential()
         now = utc_now()
         expiration_date = now - datetime.timedelta(days=CredentialReaper.MAX_AGE + 1)
         for e in [expired1, expired2]:
             e.expires = expiration_date
 
-        active = self._credential()
+        active = data.credential()
         active.expires = now - datetime.timedelta(days=CredentialReaper.MAX_AGE - 1)
 
-        eternal = self._credential()
+        eternal = data.credential()
 
-        m = CredentialReaper(self._db)
+        m = CredentialReaper(session)
 
         # Set the batch size to 1 to make sure this works even
         # when there are multiple batches.
@@ -997,29 +1143,33 @@ class TestReaperMonitor(DatabaseTest):
 
         # The expired credentials have been reaped; the others
         # are still in the database.
-        remaining = set(self._db.query(Credential).all())
+        remaining = set(session.query(Credential).all())
         assert {active, eternal} == remaining
 
-    def test_reap_patrons(self):
-        m = PatronRecordReaper(self._db)
-        expired = self._patron()
-        credential = self._credential(patron=expired)
+    def test_reap_patrons(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
+
+        m = PatronRecordReaper(session)
+        expired = data.patron()
+        credential = data.credential(patron=expired)
         now = utc_now()
         expired.authorization_expires = now - datetime.timedelta(
             days=PatronRecordReaper.MAX_AGE + 1
         )
-        active = self._patron()
+        active = data.patron()
         active.expires = now - datetime.timedelta(days=PatronRecordReaper.MAX_AGE - 1)
         result = m.run_once()
         assert "Items deleted: 1" == result.achievements
-        remaining = self._db.query(Patron).all()
+        remaining = session.query(Patron).all()
         assert [active] == remaining
 
-        assert [] == self._db.query(Credential).all()
+        assert [] == session.query(Credential).all()
 
 
-class TestWorkReaper(DatabaseTest):
-    def test_end_to_end(self):
+class TestWorkReaper:
+    def test_end_to_end(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
+
         # Search mock
         class MockSearchIndex:
             removed = []
@@ -1030,18 +1180,18 @@ class TestWorkReaper(DatabaseTest):
         # First, create three works.
 
         # This work has a license pool.
-        has_license_pool = self._work(with_license_pool=True)
+        has_license_pool = data.work(with_license_pool=True)
 
         # This work had a license pool and then lost it.
-        had_license_pool = self._work(with_license_pool=True)
-        self._db.delete(had_license_pool.license_pools[0])
+        had_license_pool = data.work(with_license_pool=True)
+        session.delete(had_license_pool.license_pools[0])
 
         # This work never had a license pool.
-        never_had_license_pool = self._work(with_license_pool=False)
+        never_had_license_pool = data.work(with_license_pool=False)
 
         # Each work has a presentation edition -- keep track of these
         # for later.
-        works = self._db.query(Work)
+        works = session.query(Work)
         presentation_editions = [x.presentation_edition for x in works]
 
         # If and when Work gets database-level cascading deletes, this
@@ -1052,12 +1202,12 @@ class TestWorkReaper(DatabaseTest):
         # First, set up some related items for each Work.
 
         # Each work is assigned to a genre.
-        genre, ignore = Genre.lookup(self._db, "Science Fiction")
+        genre, ignore = Genre.lookup(session, "Science Fiction")
         for work in works:
             work.genres = [genre]
 
         # Each work is on the same CustomList.
-        l, ignore = self._customlist("a list", num_entries=0)
+        l, ignore = data.customlist("a list", num_entries=0)
         for work in works:
             l.add_entry(work)
 
@@ -1070,19 +1220,19 @@ class TestWorkReaper(DatabaseTest):
             feed = CachedFeed(
                 work=work, type="page", content="content", pagination="", facets=""
             )
-            self._db.add(feed)
+            session.add(feed)
 
         # Also create a CachedFeed that has no associated Work.
         workless_feed = CachedFeed(
             work=None, type="page", content="content", pagination="", facets=""
         )
-        self._db.add(workless_feed)
+        session.add(workless_feed)
 
-        self._db.commit()
+        session.commit()
 
         # Run the reaper.
         s = MockSearchIndex()
-        m = WorkReaper(self._db, search_index_client=s)
+        m = WorkReaper(session, search_index_client=s)
         print(m.search_index_client)
         m.run_once()
 
@@ -1097,14 +1247,14 @@ class TestWorkReaper(DatabaseTest):
 
         # The presentation editions are still around, since they might
         # theoretically be used by other parts of the system.
-        all_editions = self._db.query(Edition).all()
+        all_editions = session.query(Edition).all()
         for e in presentation_editions:
             assert e in all_editions
 
         # The surviving work is still assigned to the Genre, and still
         # has WorkCoverageRecords.
         assert [has_license_pool] == genre.works
-        surviving_records = self._db.query(WorkCoverageRecord)
+        surviving_records = session.query(WorkCoverageRecord)
         assert surviving_records.count() > 0
         assert all(x.work == has_license_pool for x in surviving_records)
 
@@ -1117,23 +1267,29 @@ class TestWorkReaper(DatabaseTest):
         # deleted. The surviving Work still has one, and the
         # CachedFeed that didn't have a work in the first place is
         # unaffected.
-        feeds = self._db.query(CachedFeed).all()
+        feeds = session.query(CachedFeed).all()
         assert [workless_feed] == [x for x in feeds if not x.work]
         assert [has_license_pool] == [x.work for x in feeds if x.work]
 
 
-class TestCollectionReaper(DatabaseTest):
-    def test_query(self):
+class TestCollectionReaper:
+    def test_query(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
+
         # This reaper is looking for collections that are marked for
         # deletion.
-        collection = self._default_collection
-        reaper = CollectionReaper(self._db)
+        collection = data.default_collection()
+        reaper = CollectionReaper(session)
         assert [] == reaper.query().all()
 
         collection.marked_for_deletion = True
         assert [collection] == reaper.query().all()
 
-    def test_reaper_delete_calls_collection_delete(self):
+    def test_reaper_delete_calls_collection_delete(
+        self, database_transaction: DatabaseTransactionFixture
+    ):
+        data, session = database_transaction, database_transaction.session()
+
         # Unlike most ReaperMonitors, CollectionReaper.delete()
         # is overridden to call delete() on the object it was passed,
         # rather than just doing a database delete.
@@ -1142,92 +1298,102 @@ class TestCollectionReaper(DatabaseTest):
                 self.was_called = True
 
         collection = MockCollection()
-        reaper = CollectionReaper(self._db)
+        reaper = CollectionReaper(session)
         reaper.delete(collection)
         assert True == collection.was_called
 
-    def test_run_once(self):
+    def test_run_once(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
+
         # End-to-end test
-        c1 = self._default_collection
-        c2 = self._collection()
+        c1 = data.default_collection()
+        c2 = data.collection()
         c2.marked_for_deletion = True
-        reaper = CollectionReaper(self._db)
+        reaper = CollectionReaper(session)
         result = reaper.run_once()
 
         # The Collection marked for deletion has been deleted; the other
         # one is unaffected.
-        assert [c1] == self._db.query(Collection).all()
+        assert [c1] == session.query(Collection).all()
         assert "Items deleted: 1" == result.achievements
 
 
-class TestMeasurementReaper(DatabaseTest):
-    def test_query(self):
+class TestMeasurementReaper:
+    def test_query(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
+
         # This reaper is looking for measurements that are not current.
         measurement, created = get_one_or_create(
-            self._db, Measurement, is_most_recent=True
+            session, Measurement, is_most_recent=True
         )
-        reaper = MeasurementReaper(self._db)
+        reaper = MeasurementReaper(session)
         assert [] == reaper.query().all()
         measurement.is_most_recent = False
         assert [measurement] == reaper.query().all()
 
-    def test_run_once(self):
+    def test_run_once(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
+
         # End-to-end test
         measurement1, created = get_one_or_create(
-            self._db,
+            session,
             Measurement,
             quantity_measured="answer",
             value=12,
             is_most_recent=True,
         )
         measurement2, created = get_one_or_create(
-            self._db,
+            session,
             Measurement,
             quantity_measured="answer",
             value=42,
             is_most_recent=False,
         )
-        reaper = MeasurementReaper(self._db)
+        reaper = MeasurementReaper(session)
         result = reaper.run_once()
-        assert [measurement1] == self._db.query(Measurement).all()
+        assert [measurement1] == session.query(Measurement).all()
         assert "Items deleted: 1" == result.achievements
 
-    def test_disable(self):
+    def test_disable(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
+
         # This reaper can be disabled with a configuration setting
         enabled = ConfigurationSetting.sitewide(
-            self._db, Configuration.MEASUREMENT_REAPER
+            session, Configuration.MEASUREMENT_REAPER
         )
         enabled.value = False
         measurement1, created = get_one_or_create(
-            self._db,
+            session,
             Measurement,
             quantity_measured="answer",
             value=12,
             is_most_recent=True,
         )
         measurement2, created = get_one_or_create(
-            self._db,
+            session,
             Measurement,
             quantity_measured="answer",
             value=42,
             is_most_recent=False,
         )
-        reaper = MeasurementReaper(self._db)
+        reaper = MeasurementReaper(session)
         reaper.run()
-        assert [measurement1, measurement2] == self._db.query(Measurement).all()
+        assert [measurement1, measurement2] == session.query(Measurement).all()
         enabled.value = True
         reaper.run()
-        assert [measurement1] == self._db.query(Measurement).all()
+        assert [measurement1] == session.query(Measurement).all()
 
 
-class TestScrubberMonitor(DatabaseTest):
-    def test_run_once(self):
+class TestScrubberMonitor:
+    def test_run_once(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
+
         # ScrubberMonitor is basically an abstract class, with
         # subclasses doing nothing but define missing constants. This
         # is an end-to-end test using a specific subclass,
         # CirculationEventLocationScrubber.
 
-        m = CirculationEventLocationScrubber(self._db)
+        m = CirculationEventLocationScrubber(session)
         assert "Scrubber for CirculationEvent.location" == m.SERVICE_NAME
 
         # CirculationEvents are only scrubbed if they have a location
@@ -1236,13 +1402,13 @@ class TestScrubberMonitor(DatabaseTest):
         not_long_ago = m.cutoff + datetime.timedelta(days=1)
         long_ago = m.cutoff - datetime.timedelta(days=1)
 
-        new, ignore = create(self._db, CirculationEvent, start=now, location="loc")
+        new, ignore = create(session, CirculationEvent, start=now, location="loc")
         recent, ignore = create(
-            self._db, CirculationEvent, start=not_long_ago, location="loc"
+            session, CirculationEvent, start=not_long_ago, location="loc"
         )
-        old, ignore = create(self._db, CirculationEvent, start=long_ago, location="loc")
+        old, ignore = create(session, CirculationEvent, start=long_ago, location="loc")
         already_scrubbed, ignore = create(
-            self._db, CirculationEvent, start=long_ago, location=None
+            session, CirculationEvent, start=long_ago, location=None
         )
 
         # Only the old unscrubbed CirculationEvent is eligible
@@ -1259,15 +1425,17 @@ class TestScrubberMonitor(DatabaseTest):
         for untouched in (new, recent):
             assert "loc" == untouched.location
 
-    def test_specific_scrubbers(self):
+    def test_specific_scrubbers(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
+
         # Check that all specific ScrubberMonitors are set up
         # correctly.
-        circ = CirculationEventLocationScrubber(self._db)
+        circ = CirculationEventLocationScrubber(session)
         assert CirculationEvent.start == circ.timestamp_field
         assert CirculationEvent.location == circ.scrub_field
         assert 365 == circ.MAX_AGE
 
-        patron = PatronNeighborhoodScrubber(self._db)
+        patron = PatronNeighborhoodScrubber(session)
         assert Patron.last_external_sync == patron.timestamp_field
         assert Patron.cached_neighborhood == patron.scrub_field
         assert Patron.MAX_SYNC_TIME == patron.MAX_AGE
