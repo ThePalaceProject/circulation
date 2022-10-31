@@ -1,36 +1,65 @@
+import pytest
+
+from datetime import datetime
+
 from core.external_list import (
     ClassificationBasedMembershipManager,
     CustomListFromCSV,
     MembershipManager,
 )
-from core.model import DataSource, Edition, Identifier, Subject
-from core.testing import DatabaseTest, DummyMetadataClient
+from core.model import CustomList, DataSource, Edition, Identifier, Subject
+from core.testing import DummyMetadataClient
 from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
+from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.time import Time
 
 
-class TestCustomListFromCSV(DatabaseTest):
-    def setup_method(self):
-        super().setup_method()
-        self.data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
-        self.metadata = DummyMetadataClient()
-        self.metadata.lookups["Octavia Butler"] = "Butler, Octavia"
-        self.l = CustomListFromCSV(
-            self.data_source.name,
-            "Test list",
-            metadata_client=self.metadata,
-            display_author_field="author",
-            identifier_fields={Identifier.ISBN: "isbn"},
-        )
-        self.custom_list, ignore = self._customlist(
-            data_source_name=self.data_source.name, num_entries=0
-        )
-        self.now = utc_now()
+class CustomListFromCSVFixture:
+    transaction: DatabaseTransactionFixture
+    data_source: DataSource
+    metadata: DummyMetadataClient()
+    l: CustomListFromCSV
+    custom_list: CustomList
+    now: datetime
+
+
+@pytest.fixture()
+def customlist_from_csv_fixture(
+    database_transaction: DatabaseTransactionFixture,
+) -> CustomListFromCSVFixture:
+    session = database_transaction.session()
+    data = CustomListFromCSVFixture()
+    data.transaction = database_transaction
+    data.data_source = DataSource.lookup(session, DataSource.LIBRARY_STAFF)
+    data.metadata = DummyMetadataClient()
+    data.metadata.lookups["Octavia Butler"] = "Butler, Octavia"
+    data.l = CustomListFromCSV(
+        data.data_source.name,
+        "Test list",
+        metadata_client=data.metadata,
+        display_author_field="author",
+        identifier_fields={Identifier.ISBN: "isbn"},
+    )
+    data.custom_list, ignore = database_transaction.customlist(
+        data_source_name=data.data_source.name, num_entries=0
+    )
+    data.now = utc_now()
+    return data
+
+
+class TestCustomListFromCSV:
 
     DATE_FORMAT = "%Y/%m/%d %H:%M:%S"
 
-    def create_row(self, display_author=None, sort_author=None):
+    def create_row(
+        self,
+        data: CustomListFromCSVFixture,
+        time: Time,
+        display_author=None,
+        sort_author=None,
+    ):
         """Create a dummy row for this tests's custom list."""
-        l = self.l
+        l = data.l
         row = dict()
         for scalarkey in (
             l.title_field,
@@ -38,57 +67,70 @@ class TestCustomListFromCSV(DatabaseTest):
             l.annotation_author_name_field,
             l.annotation_author_affiliation_field,
         ):
-            row[scalarkey] = self._str
+            row[scalarkey] = data.transaction.fresh_str()
 
-        display_author = display_author or self._str
+        display_author = display_author or data.transaction.fresh_str()
         fn = l.sort_author_field
         if isinstance(fn, list):
             fn = fn[0]
         row[fn] = sort_author
-        row["isbn"] = self._isbn
+        row["isbn"] = data.transaction.isbn_take()
 
         for key in list(l.subject_fields.keys()):
-            row[key] = ", ".join([self._str, self._str])
+            row[key] = ", ".join(
+                [data.transaction.fresh_str(), data.transaction.fresh_str()]
+            )
 
         for timekey in (l.first_appearance_field, l.published_field):
             if isinstance(timekey, list):
                 timekey = timekey[0]
-            row[timekey] = self._time.strftime(self.DATE_FORMAT)
-        row[self.l.display_author_field] = display_author
+            row[timekey] = time.time().strftime(self.DATE_FORMAT)
+        row[data.l.display_author_field] = display_author
         return row
 
-    def test_annotation_citation(self):
-        m = self.l.annotation_citation
+    def test_annotation_citation(
+        self, customlist_from_csv_fixture: CustomListFromCSVFixture
+    ):
+        data = customlist_from_csv_fixture
+
+        m = data.l.annotation_citation
         row = dict()
         assert None == m(row)
-        row[self.l.annotation_author_name_field] = "Alice"
+        row[data.l.annotation_author_name_field] = "Alice"
         assert " —Alice" == m(row)
-        row[self.l.annotation_author_affiliation_field] = "2nd Street Branch"
+        row[data.l.annotation_author_affiliation_field] = "2nd Street Branch"
         assert " —Alice, 2nd Street Branch" == m(row)
-        del row[self.l.annotation_author_name_field]
+        del row[data.l.annotation_author_name_field]
         assert None == m(row)
 
-    def test_row_to_metadata_complete_success(self):
+    def test_row_to_metadata_complete_success(
+        self, customlist_from_csv_fixture: CustomListFromCSVFixture, time_fixture: Time
+    ):
+        data = customlist_from_csv_fixture
 
-        row = self.create_row()
-        metadata = self.l.row_to_metadata(row)
-        assert row[self.l.title_field] == metadata.title
+        row = self.create_row(data, time_fixture)
+        metadata = data.l.row_to_metadata(row)
+        assert row[data.l.title_field] == metadata.title
         assert row["author"] == metadata.contributors[0].display_name
         assert row["isbn"] == metadata.identifiers[0].identifier
 
         expect_pub = strptime_utc(row["published"], self.DATE_FORMAT)
         assert expect_pub == metadata.published
-        assert self.l.default_language == metadata.language
+        assert data.l.default_language == metadata.language
 
-    def test_metadata_to_list_entry_complete_success(self):
-        row = self.create_row(display_author="Octavia Butler")
-        metadata = self.l.row_to_metadata(row)
-        list_entry = self.l.metadata_to_list_entry(
-            self.custom_list, self.data_source, self.now, metadata
+    def test_metadata_to_list_entry_complete_success(
+        self, customlist_from_csv_fixture: CustomListFromCSVFixture, time_fixture: Time
+    ):
+        data = customlist_from_csv_fixture
+
+        row = self.create_row(data, time_fixture, display_author="Octavia Butler")
+        metadata = data.l.row_to_metadata(row)
+        list_entry = data.l.metadata_to_list_entry(
+            data.custom_list, data.data_source, data.now, metadata
         )
         e = list_entry.edition
 
-        assert row[self.l.title_field] == e.title
+        assert row[data.l.title_field] == e.title
         assert "Octavia Butler" == e.author
         assert "Butler, Octavia" == e.sort_author
 
@@ -97,7 +139,7 @@ class TestCustomListFromCSV(DatabaseTest):
         assert row["isbn"] == i.identifier
 
         # There should be one description.
-        expect = row[self.l.annotation_field] + self.l.annotation_citation(row)
+        expect = row[data.l.annotation_field] + data.l.annotation_citation(row)
         assert expect == list_entry.annotation
 
         classifications = i.classifications
@@ -118,59 +160,73 @@ class TestCustomListFromCSV(DatabaseTest):
         assert 2 == len(age_ranges)
 
         expect_first = strptime_utc(
-            row[self.l.first_appearance_field], self.DATE_FORMAT
+            row[data.l.first_appearance_field], self.DATE_FORMAT
         )
         assert expect_first == list_entry.first_appearance
-        assert self.now == list_entry.most_recent_appearance
+        assert data.now == list_entry.most_recent_appearance
 
-    def test_row_to_item_matching_work_found(self):
-        row = self.create_row(display_author="Octavia Butler")
-        work = self._work(title=row[self.l.title_field], authors=["Butler, Octavia"])
-        self._db.commit()
-        metadata = self.l.row_to_metadata(row)
-        list_entry = self.l.metadata_to_list_entry(
-            self.custom_list, self.data_source, self.now, metadata
+    def test_row_to_item_matching_work_found(
+        self, customlist_from_csv_fixture: CustomListFromCSVFixture, time_fixture: Time
+    ):
+        data = customlist_from_csv_fixture
+
+        row = self.create_row(data, time_fixture, display_author="Octavia Butler")
+        work = data.transaction.work(
+            title=row[data.l.title_field], authors=["Butler, Octavia"]
+        )
+        data.transaction.session().commit()
+        metadata = data.l.row_to_metadata(row)
+        list_entry = data.l.metadata_to_list_entry(
+            data.custom_list, data.data_source, data.now, metadata
         )
 
         e = list_entry.edition
-        assert row[self.l.title_field] == e.title
+        assert row[data.l.title_field] == e.title
         assert "Octavia Butler" == e.author
         assert "Butler, Octavia" == e.sort_author
 
-    def test_non_default_language(self):
-        row = self.create_row()
-        row[self.l.language_field] = "Spanish"
-        metadata = self.l.row_to_metadata(row)
-        list_entry = self.l.metadata_to_list_entry(
-            self.custom_list, self.data_source, self.now, metadata
+    def test_non_default_language(
+        self, customlist_from_csv_fixture: CustomListFromCSVFixture, time_fixture: Time
+    ):
+        data = customlist_from_csv_fixture
+
+        row = self.create_row(data, time_fixture)
+        row[data.l.language_field] = "Spanish"
+        metadata = data.l.row_to_metadata(row)
+        list_entry = data.l.metadata_to_list_entry(
+            data.custom_list, data.data_source, data.now, metadata
         )
         assert "spa" == list_entry.edition.language
 
-    def test_overwrite_old_data(self):
-        self.l.overwrite_old_data = True
-        row1 = self.create_row()
-        row2 = self.create_row()
-        row3 = self.create_row()
+    def test_overwrite_old_data(
+        self, customlist_from_csv_fixture: CustomListFromCSVFixture, time_fixture: Time
+    ):
+        data = customlist_from_csv_fixture
+
+        data.l.overwrite_old_data = True
+        row1 = self.create_row(data, time_fixture)
+        row2 = self.create_row(data, time_fixture)
+        row3 = self.create_row(data, time_fixture)
         for f in (
-            self.l.title_field,
-            self.l.sort_author_field,
-            self.l.display_author_field,
+            data.l.title_field,
+            data.l.sort_author_field,
+            data.l.display_author_field,
             "isbn",
         ):
             row2[f] = row1[f]
             row3[f] = row1[f]
 
-        metadata = self.l.row_to_metadata(row1)
-        list_entry_1 = self.l.metadata_to_list_entry(
-            self.custom_list, self.data_source, self.now, metadata
+        metadata = data.l.row_to_metadata(row1)
+        list_entry_1 = data.l.metadata_to_list_entry(
+            data.custom_list, data.data_source, data.now, metadata
         )
 
         # Import from the second row, and (e.g.) the new annotation
         # will overwrite the old annotation.
 
-        metadata2 = self.l.row_to_metadata(row2)
-        list_entry_2 = self.l.metadata_to_list_entry(
-            self.custom_list, self.data_source, self.now, metadata2
+        metadata2 = data.l.row_to_metadata(row2)
+        list_entry_2 = data.l.metadata_to_list_entry(
+            data.custom_list, data.data_source, data.now, metadata2
         )
 
         assert list_entry_1 == list_entry_2
@@ -183,11 +239,11 @@ class TestCustomListFromCSV(DatabaseTest):
 
         # Now import from the third row, but with
         # overwrite_old_data set to False.
-        self.l.overwrite_old_data = False
+        data.l.overwrite_old_data = False
 
-        metadata3 = self.l.row_to_metadata(row3)
-        list_entry_3 = self.l.metadata_to_list_entry(
-            self.custom_list, self.data_source, self.now, metadata3
+        metadata3 = data.l.row_to_metadata(row3)
+        list_entry_3 = data.l.metadata_to_list_entry(
+            data.custom_list, data.data_source, data.now, metadata3
         )
         assert list_entry_3 == list_entry_1
 
@@ -206,17 +262,19 @@ class BooksInSeries(MembershipManager):
         return self._db.query(Edition).filter(Edition.series != None)
 
 
-class TestMembershipManager(DatabaseTest):
-    def test_update(self):
+class TestMembershipManager:
+    def test_update(self, database_transaction: DatabaseTransactionFixture):
+        data, session = database_transaction, database_transaction.session()
+
         # Create two books that are part of series, and one book that
         # is not.
-        series1 = self._edition()
+        series1 = data.edition()
         series1.series = "Series 1"
 
-        series2 = self._edition()
+        series2 = data.edition()
         series2.series = "Series Two"
 
-        no_series = self._edition()
+        no_series = data.edition()
         assert None == no_series.series
 
         update_time = datetime_utc(2015, 1, 1)
@@ -225,7 +283,7 @@ class TestMembershipManager(DatabaseTest):
         # _customlist calls _work
         #    which calls _edition, which makes an edition and a pool (through _licensepool)
         #    then makes work through get_one_or_create
-        custom_list, ignore = self._customlist()
+        custom_list, ignore = data.customlist()
         manager = BooksInSeries(custom_list)
         manager.update(update_time)
 
@@ -240,7 +298,7 @@ class TestMembershipManager(DatabaseTest):
         # have a series actually does.
         series2.series = None
         no_series.series = "Actually I do have a series."
-        self._db.commit()
+        session.commit()
 
         new_update_time = datetime_utc(2016, 1, 1)
 
@@ -258,16 +316,20 @@ class TestMembershipManager(DatabaseTest):
         assert new_update_time == new_entry.first_appearance
         assert new_update_time == new_entry.most_recent_appearance
 
-    def test_classification_based_membership_manager(self):
-        e1 = self._edition()
-        e2 = self._edition()
-        e3 = self._edition()
+    def test_classification_based_membership_manager(
+        self, database_transaction: DatabaseTransactionFixture
+    ):
+        data, session = database_transaction, database_transaction.session()
+
+        e1 = data.edition()
+        e2 = data.edition()
+        e3 = data.edition()
         source = e1.data_source
         e1.primary_identifier.classify(source, Subject.TAG, "GOOD FOOD")
         e2.primary_identifier.classify(source, Subject.TAG, "barflies")
         e3.primary_identifier.classify(source, Subject.TAG, "irrelevant")
 
-        custom_list, ignore = self._customlist()
+        custom_list, ignore = data.customlist()
         fragments = ["foo", "bar"]
         manager = ClassificationBasedMembershipManager(custom_list, fragments)
         members = list(manager.new_membership)
