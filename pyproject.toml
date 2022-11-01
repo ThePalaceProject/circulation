@@ -12,7 +12,6 @@ exclude = [
     'core/bin',
     'core/classifier',
     'core/configuration/ignored_identifier.py',
-    'core/opds2_import.py',
     'core/opds_schema.py',
     'tests/core/test_opds2_import.py',
     'tests/core/test_opds_validate.py'
