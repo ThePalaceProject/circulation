@@ -1,6 +1,6 @@
-import pytest
-
 from datetime import datetime
+
+import pytest
 
 from core.external_list import (
     ClassificationBasedMembershipManager,

@@ -163,5 +163,10 @@ pg = ["psycopg2"]
 pg-binary = ["psycopg2-binary"]
 
 [tool.pytest.ini_options]
+addopts = "--strict-markers"
+markers = [
+    "elasticsearch: mark test as requiring elasticsearch",
+    "minio: mark test as requiring minio",
+]
 timeout = "600"
 timeout_method = "thread"

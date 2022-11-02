@@ -1651,11 +1651,3 @@ def session_fixture():
 
     if "TESTING" in os.environ:
         del os.environ["TESTING"]
-
-
-def pytest_configure(config):
-    # register our custom marks with pytest
-    config.addinivalue_line(
-        "markers", "elasticsearch: mark test as requiring elasticsearch"
-    )
-    config.addinivalue_line("markers", "minio: mark test as requiring minio")
