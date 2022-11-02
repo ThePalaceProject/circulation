@@ -10,7 +10,8 @@ import urllib.parse
 import urllib.request
 from decimal import Decimal
 from typing import Any
-from unittest.mock import call, patch
+
+from unittest.mock import MagicMock, call, patch
 
 import flask
 import pytest
@@ -40,6 +41,7 @@ from api.problem_details import PATRON_OF_ANOTHER_LIBRARY
 from api.simple_authentication import SimpleAuthenticationProvider
 from api.sirsidynix_authentication_provider import (
     SirsiDynixHorizonAuthenticationProvider,
+    SirsiDynixPatronData,
 )
 from api.util.patron import PatronUtility
 from core.mock_analytics_provider import MockAnalyticsProvider
@@ -3324,6 +3326,7 @@ class SirsiDynixAuthenticatorFixture:
                 ExternalIntegration.URL: "http://example.org/sirsi",
                 SirsiDynixHorizonAuthenticationProvider.Keys.APP_ID: "appid",
                 SirsiDynixHorizonAuthenticationProvider.Keys.CLIENT_ID: "clientid",
+                SirsiDynixHorizonAuthenticationProvider.Keys.LIBRARY_ID: "libraryid",
             },
         )
         self.api = SirsiDynixHorizonAuthenticationProvider(
@@ -3340,6 +3343,7 @@ class TestSirsiDynixAuthenticationProvider:
     def _headers(self, api):
         return {
             "SD-Originating-App-Id": api.sirsi_app_id,
+            "SD-Working-LibraryID": api.sirsi_library_id,
             "x-sirs-clientID": api.sirsi_client_id,
         }
 
@@ -3348,6 +3352,7 @@ class TestSirsiDynixAuthenticationProvider:
         assert sirsi_fixture.api.server_url == "http://example.org/sirsi/"
         assert sirsi_fixture.api.sirsi_client_id == "clientid"
         assert sirsi_fixture.api.sirsi_app_id == "appid"
+        assert sirsi_fixture.api.sirsi_library_id == "libraryid"
 
     def test_api_patron_login(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
         response_dict = {"sessionToken": "xxxx", "patronKey": "test"}
@@ -3377,13 +3382,63 @@ class TestSirsiDynixAuthenticationProvider:
             mock_request.return_value = MockRequestsResponse(200, content=response_dict)
 
             response = sirsi_fixture.api.remote_authenticate("username", "pwd")
-            assert type(response) == PatronData
+            assert type(response) == SirsiDynixPatronData
             assert response.authorization_identifier == "username"
             assert response.username == "username"
             assert response.permanent_id == "test"
 
             mock_request.return_value = MockRequestsResponse(401, content=response_dict)
             assert sirsi_fixture.api.remote_authenticate("username", "pwd") == False
+
+    def test_remote_patron_lookup(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
+        # Test the happy path, patron OK, some fines
+        ok_patron_resp = {
+            "fields": {"displayName": "Test User", "standing": {"key": "OK"}}
+        }
+        patron_status_resp = {
+            "fields": {
+                "estimatedFines": {
+                    "amount": "50.00",
+                    "currencyCode": "USD",
+                }
+            }
+        }
+        sirsi_fixture.api.api_read_patron_data = MagicMock(return_value=ok_patron_resp)
+        sirsi_fixture.api.api_patron_status_info = MagicMock(return_value=patron_status_resp)
+        patrondata = sirsi_fixture.api._remote_patron_lookup(
+            SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
+        )
+
+        assert sirsi_fixture.api.api_read_patron_data.call_count == 1
+        assert sirsi_fixture.api.api_patron_status_info.call_count == 1
+        assert patrondata.personal_name == "Test User"
+        assert patrondata.fines == 50.00
+        assert patrondata.block_reason == None
+
+        # Test for patron standing not OK, with a policy resource
+        barred_patron_resp = {
+            "fields": {
+                "displayName": "Test User",
+                "standing": {"key": "BARRED", "resource": "/policy/patronStanding"},
+            }
+        }
+        patron_standing_policy_resp = {
+            "fields": {"translatedMessage": "This card is BARRED"}
+        }
+        sirsi_fixture.api.api_read_patron_data = MagicMock(return_value=barred_patron_resp)
+        sirsi_fixture.api.api_policy_query = MagicMock(
+            return_value=[patron_standing_policy_resp]
+        )
+        sirsi_fixture.api.api_patron_status_info.reset_mock()
+        patrondata = sirsi_fixture.api._remote_patron_lookup(
+            SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
+        )
+
+        assert sirsi_fixture.api.api_policy_query.call_count == 1
+        assert sirsi_fixture.api.api_policy_query.call_args == call(
+            "/policy/patronStanding", key="BARRED"
+        )
+        assert patrondata.block_reason == "This card is BARRED"
 
     def test__request(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
         # Leading slash on the path is not allowed, as it overwrites the urljoin prefix

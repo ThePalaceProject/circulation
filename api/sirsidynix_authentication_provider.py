@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from gettext import gettext as _
 from typing import TYPE_CHECKING
 from urllib.parse import urljoin
@@ -12,6 +13,8 @@ from core.util.http import HTTP
 
 if TYPE_CHECKING:
     from requests import Response
+
+    from core.model.patron import Patron
 
 
 class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
@@ -99,13 +102,19 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             complete=False,
         )
 
-    def _remote_patron_lookup(self, patron_or_patrondata):
-
+    def _remote_patron_lookup(
+        self, patron_or_patrondata: Patron | SirsiDynixPatronData
+    ) -> None | SirsiDynixPatronData:
+        """Do a remote patron lookup, this method can only lookup a patron with a patrondata object
+        with a session_token already setup within it."""
         # We cannot do a remote lookup without a session token
         if not isinstance(patron_or_patrondata, SirsiDynixPatronData):
-            return patron_or_patrondata
+            return None
+        elif not patron_or_patrondata.session_token:
+            return None
 
         patrondata = patron_or_patrondata
+        # Pull and parse the basic patron information
         data = self.api_read_patron_data(
             patron_key=patrondata.permanent_id,
             session_token=patrondata.session_token,
@@ -115,11 +124,36 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
 
         data = data["fields"]
         patrondata.personal_name = data.get("displayName")
-        patron_ok = data.get("standing", {}).get("key")
-        if patron_ok != "OK":
-            patrondata.block_reason = patron_ok
-        patrondata.complete = True
+        standing = data.get("standing", {})
+        patron_ok = standing.get("key")
 
+        # If the patron is not "OK", then pull the detailed reason of the issue
+        if patron_ok != "OK":
+            status_info = self.api_policy_query(standing["resource"], key=patron_ok)
+            if status_info and len(status_info) > 0:
+                patrondata.block_reason = (
+                    status_info[0].get("fields", {}).get("translatedMessage")
+                )
+            # fallback block reason
+            if not patrondata.block_reason:
+                patrondata.block_reason = patron_ok
+
+        # Get patron "fines" information
+        status = self.api_patron_status_info(
+            patron_key=patrondata.permanent_id,
+            session_token=patrondata.session_token,
+        )
+
+        if not status or "fields" not in status:
+            return None
+
+        status = status["fields"]
+        fines = status.get("estimatedFines")
+        if fines is not None:
+            # We ignore currency for now, and assume USD
+            patrondata.fines = float(fines.get("amount"))
+
+        patrondata.complete = True
         return patrondata
 
     ###
@@ -166,7 +200,12 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             return False
         return response.json()
 
-    def api_read_patron_data(self, patron_key, session_token):
+    def api_read_patron_data(self, patron_key: str, session_token: str) -> bool | dict:
+        """API request to pull basic patron information
+
+        :param patron_key: The permanent external identifier for a patron
+        :param session_token: The session token for a logged in user
+        """
         response = self._request(
             "GET", f"user/patron/key/{patron_key}", session_token=session_token
         )
@@ -177,8 +216,55 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             return False
         return response.json()
 
+    def api_patron_status_info(
+        self, patron_key: str, session_token: str
+    ) -> bool | dict:
+        """API request to pull patron status information, like fines
+
+        :param patron_key: The permanent external identifier for a patron
+        :param session_token: The session token for a logged in user
+        """
+        response = self._request(
+            "GET",
+            f"user/patronStatusInfo/key/{patron_key}",
+            session_token=session_token,
+        )
+        if response.status_code != 200:
+            self.log.info(
+                f"Could not fetch patron status info for {patron_key}: {response.text}"
+            )
+            return False
+        return response.json()
+
+    @lru_cache
+    def api_policy_query(self, policy_resource: str, key: str = "*") -> bool | list:
+        """API request to get detailed information about a policy.
+        Cached, since policy information is static
+
+        :param policy_resource: The policy resource uri
+        :param key: The specific key of the policy to query for, defaults to all keys(*)
+        """
+        # Drop the leading slash for policy resources
+        if policy_resource.startswith("/"):
+            policy_resource = policy_resource[1:]
+
+        response = self._request(
+            "GET",
+            f"{policy_resource}/simpleQuery?key={key}",
+        )
+        if response.status_code != 200:
+            self.log.info(
+                f"Could not fetch policy info for {policy_resource}[{key}]: {response.text}"
+            )
+            return False
+        return response.json()
+
 
 class SirsiDynixPatronData(PatronData):
+    """Sirsi specific version of patron data.
+    Only adds an extra `session_token` to track logged in users
+    """
+
     def __init__(self, session_token=None, **kwargs):
         super().__init__(**kwargs)
         self.session_token = session_token
