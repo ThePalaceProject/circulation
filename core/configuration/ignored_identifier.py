@@ -1,5 +1,5 @@
 import json
-from typing import List, Set, Tuple
+from typing import Sequence, Set, Union
 
 from flask_babel import lazy_gettext as _
 
@@ -51,7 +51,7 @@ class IgnoredIdentifierConfiguration(ConfigurationTrait):
 
     def set_ignored_identifier_types(
         self,
-        value: Tuple[List[str], Set[str], List[IdentifierType], Set[IdentifierType]],
+        value: Sequence[Union[str, IdentifierType]],
     ) -> None:
         """Update the list of ignored identifier types.
 

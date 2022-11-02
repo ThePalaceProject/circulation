@@ -57,7 +57,7 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
     )
 
     # One DataSource can generate many Editions.
-    editions = relationship("Edition", backref="data_source")
+    editions = relationship("Edition", back_populates="data_source")
 
     # One DataSource can generate many CoverageRecords.
     coverage_records = relationship("CoverageRecord", backref="data_source")

@@ -24,7 +24,7 @@ from .licensing import DeliveryMechanism, LicensePool
 if TYPE_CHECKING:
     # This is needed during type checking so we have the
     # types of related models.
-    from core.model import CustomListEntry, Work  # noqa: autoflake
+    from core.model import CustomListEntry, DataSource, Work  # noqa: autoflake
 
 
 class Edition(Base, EditionConstants):
@@ -38,6 +38,7 @@ class Edition(Base, EditionConstants):
     id = Column(Integer, primary_key=True)
 
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
+    data_source = relationship("DataSource", back_populates="editions")
 
     MAX_THUMBNAIL_HEIGHT = 300
     MAX_THUMBNAIL_WIDTH = 200
@@ -78,7 +79,7 @@ class Edition(Base, EditionConstants):
     author = Column(Unicode, index=True)
     sort_author = Column(Unicode, index=True)
 
-    contributions = relationship("Contribution", backref="edition", uselist=True)
+    contributions = relationship("Contribution", back_populates="edition", uselist=True)
 
     language = Column(Unicode, index=True)
     publisher = Column(Unicode, index=True)
