@@ -4,8 +4,10 @@ from gettext import gettext as _
 from typing import TYPE_CHECKING
 from urllib.parse import urljoin
 
+from sqlalchemy.orm import object_session
+
 from api.authenticator import BasicAuthenticationProvider, PatronData
-from core.model.configuration import ExternalIntegration
+from core.model.configuration import ConfigurationSetting, ExternalIntegration
 from core.util.http import HTTP
 
 if TYPE_CHECKING:
@@ -20,6 +22,7 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
     class Keys:
         APP_ID = "APP_ID"
         CLIENT_ID = "CLIENT_ID"
+        LIBRARY_ID = "LIBRARY_ID"
 
     SETTINGS = [
         {
@@ -56,6 +59,17 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
         },
     ]
 
+    LIBRARY_SETTINGS = [
+        {
+            "key": Keys.LIBRARY_ID,
+            "label": _("Library ID"),
+            "description": _(
+                "This can be anything. It is used to identifiy a unique library on the API."
+            ),
+            "required": True,
+        }
+    ]
+
     def __init__(self, library, integration: ExternalIntegration, analytics=None):
         super().__init__(library, integration, analytics)
         self.server_url = integration.url
@@ -65,6 +79,11 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
         )
         self.sirsi_client_id = integration.setting(self.Keys.CLIENT_ID).value
         self.sirsi_app_id = integration.setting(self.Keys.APP_ID).value
+        self.sirsi_library_id = (
+            ConfigurationSetting.for_library_and_externalintegration(
+                object_session(library), self.Keys.LIBRARY_ID, library, integration
+            ).value
+        )
 
     def remote_authenticate(self, username: str, password: str) -> PatronData | bool:
         """Authenticate this user with the remote server."""
@@ -72,17 +91,44 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
         if not data:
             return False
 
-        return PatronData(
+        return SirsiDynixPatronData(
             username=username,
             authorization_identifier=username,
             permanent_id=data.get("patronKey"),
+            session_token=data.get("sessionToken"),
+            complete=False,
         )
+
+    def _remote_patron_lookup(self, patron_or_patrondata):
+
+        # We cannot do a remote lookup without a session token
+        if not isinstance(patron_or_patrondata, SirsiDynixPatronData):
+            return patron_or_patrondata
+
+        patrondata = patron_or_patrondata
+        data = self.api_read_patron_data(
+            patron_key=patrondata.permanent_id,
+            session_token=patrondata.session_token,
+        )
+        if not data or "fields" not in data:
+            return None
+
+        data = data["fields"]
+        patrondata.personal_name = data.get("displayName")
+        patron_ok = data.get("standing", {}).get("key")
+        if patron_ok != "OK":
+            patrondata.block_reason = patron_ok
+        patrondata.complete = True
+
+        return patrondata
 
     ###
     # API requests
     ###
 
-    def _request(self, method: str, path: str, json=None) -> Response:
+    def _request(
+        self, method: str, path: str, json=None, session_token=None
+    ) -> Response:
         """Request wrapper that adds the relevant request headers.
 
         :param method: The HTTP method for the request
@@ -95,8 +141,12 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             )
         headers = {
             "SD-Originating-App-Id": self.sirsi_app_id,
+            "SD-Working-LibraryID": self.sirsi_library_id,
             "x-sirs-clientID": self.sirsi_client_id,
         }
+        if session_token:
+            headers["x-sirs-sessionToken"] = session_token
+
         url = urljoin(self.server_url, path)
         return HTTP.request_with_timeout(method, url, headers=headers, json=json)
 
@@ -115,6 +165,23 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             )
             return False
         return response.json()
+
+    def api_read_patron_data(self, patron_key, session_token):
+        response = self._request(
+            "GET", f"user/patron/key/{patron_key}", session_token=session_token
+        )
+        if response.status_code != 200:
+            self.log.info(
+                f"Could not fetch patron data for {patron_key}: {response.text}"
+            )
+            return False
+        return response.json()
+
+
+class SirsiDynixPatronData(PatronData):
+    def __init__(self, session_token=None, **kwargs):
+        super().__init__(**kwargs)
+        self.session_token = session_token
 
 
 AuthenticationProvider = SirsiDynixHorizonAuthenticationProvider
