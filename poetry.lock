@@ -1671,6 +1671,14 @@ python-versions = "*"
 types-MarkupSafe = "*"
 
 [[package]]
+name = "types-jsonschema"
+version = "4.16.1.1"
+description = "Typing stubs for jsonschema"
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "types-markupsafe"
 version = "1.1.10"
 description = "Typing stubs for MarkupSafe"
@@ -1899,7 +1907,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.7,<4"
-content-hash = "71f56b127d62a5f83f760c2c43f707a0365805e14a920a4b9e4652739d014f10"
+content-hash = "e87a22e2986fdab53275a2853fbc06f99fb2e9391cef49f6997b49e8215eb12b"
 
 [metadata.files]
 atomicwrites = [
@@ -3270,6 +3278,10 @@ types-freezegun = [
 types-jinja2 = [
     {file = "types-Jinja2-2.11.9.tar.gz", hash = "sha256:dbdc74a40aba7aed520b7e4d89e8f0fe4286518494208b35123bcf084d4b8c81"},
     {file = "types_Jinja2-2.11.9-py3-none-any.whl", hash = "sha256:60a1e21e8296979db32f9374d8a239af4cb541ff66447bb915d8ad398f9c63b2"},
+]
+types-jsonschema = [
+    {file = "types-jsonschema-4.16.1.1.tar.gz", hash = "sha256:3f647809078a153cbd8675aa3f72574963894d856b9be5d18f862f9cc3319f85"},
+    {file = "types_jsonschema-4.16.1.1-py3-none-any.whl", hash = "sha256:e2945f4eac446dd2fbbc042c0c5bc7b45c2904ad6a111aefd87596b21a4bd646"},
 ]
 types-markupsafe = [
     {file = "types-MarkupSafe-1.1.10.tar.gz", hash = "sha256:85b3a872683d02aea3a5ac2a8ef590193c344092032f58457287fbf8e06711b1"},
