@@ -236,7 +236,7 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             return False
         return response.json()
 
-    @lru_cache
+    @lru_cache()
     def api_policy_query(self, policy_resource: str, key: str = "*") -> bool | list:
         """API request to get detailed information about a policy.
         Cached, since policy information is static
