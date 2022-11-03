@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from gettext import gettext as _
 from typing import TYPE_CHECKING
@@ -8,6 +9,7 @@ from urllib.parse import urljoin
 from sqlalchemy.orm import object_session
 
 from api.authenticator import BasicAuthenticationProvider, PatronData
+from core.config import Configuration
 from core.model.configuration import ConfigurationSetting, ExternalIntegration
 from core.util.http import HTTP
 
@@ -18,12 +20,21 @@ if TYPE_CHECKING:
 
 
 class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
+    """SirsiDynix Authentication API implementation.
+
+    Currently is only used to authenticate patrons, there is no CRUD implemented for patron profiles.
+    It is recommended to have the environment variable `SIRSI_DYNIX_APP_ID` set.
+    """
+
     NAME = "SirsiDynix Horizon Authentication"
     DESCRIPTION = "SirsiDynix Horizon Webservice Authentication"
     FLOW_TYPE = "http://librarysimplified.org/authtype/sirsidynix-horizon"
 
+    DEFAULT_APP_ID = "PALACE"
+
     class Keys:
-        APP_ID = "APP_ID"
+        """Keys relevant to the Settings module"""
+
         CLIENT_ID = "CLIENT_ID"
         LIBRARY_ID = "LIBRARY_ID"
 
@@ -34,14 +45,6 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             "description": _("The external server url."),
             "required": True,
             "default": "https://vendor1-sym.sirsidynix.net/ilsws_current/",
-        },
-        {
-            "key": Keys.APP_ID,
-            "label": _("Application ID"),
-            "description": _(
-                "This can be anything, it is used to group all requests to the API."
-            ),
-            "required": True,
         },
         {
             "key": Keys.CLIENT_ID,
@@ -80,8 +83,11 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
         self.server_url = self.server_url + (
             "/" if not self.server_url.endswith("/") else ""
         )
+
         self.sirsi_client_id = integration.setting(self.Keys.CLIENT_ID).value
-        self.sirsi_app_id = integration.setting(self.Keys.APP_ID).value
+        self.sirsi_app_id = os.environ.get(
+            Configuration.SIRSI_DYNIX_APP_ID, default=self.DEFAULT_APP_ID
+        )
         self.sirsi_library_id = (
             ConfigurationSetting.for_library_and_externalintegration(
                 object_session(library), self.Keys.LIBRARY_ID, library, integration

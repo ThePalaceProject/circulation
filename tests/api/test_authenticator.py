@@ -3324,14 +3324,17 @@ class SirsiDynixAuthenticatorFixture:
             goal=ExternalIntegration.PATRON_AUTH_GOAL,
             settings={
                 ExternalIntegration.URL: "http://example.org/sirsi",
-                SirsiDynixHorizonAuthenticationProvider.Keys.APP_ID: "appid",
                 SirsiDynixHorizonAuthenticationProvider.Keys.CLIENT_ID: "clientid",
                 SirsiDynixHorizonAuthenticationProvider.Keys.LIBRARY_ID: "libraryid",
             },
         )
-        self.api = SirsiDynixHorizonAuthenticationProvider(
-            db.default_library(), self.integration
-        )
+
+        with patch.dict(
+            os.environ, {Configuration.SIRSI_DYNIX_APP_ID: "UNITTEST"}
+        ):
+            self.api = SirsiDynixHorizonAuthenticationProvider(
+                db.default_library(), self.integration
+            )
 
 
 @pytest.fixture(scope="function")
@@ -3351,7 +3354,7 @@ class TestSirsiDynixAuthenticationProvider:
         # trailing slash appended to the preset server url
         assert sirsi_fixture.api.server_url == "http://example.org/sirsi/"
         assert sirsi_fixture.api.sirsi_client_id == "clientid"
-        assert sirsi_fixture.api.sirsi_app_id == "appid"
+        assert sirsi_fixture.api.sirsi_app_id == "UNITTEST"
         assert sirsi_fixture.api.sirsi_library_id == "libraryid"
 
     def test_api_patron_login(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
