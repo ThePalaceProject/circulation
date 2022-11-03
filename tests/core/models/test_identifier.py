@@ -760,7 +760,7 @@ class TestIdentifier(DatabaseTest):
         assert link.resource.url == "http://example.org/sample"
         assert link.resource.representation.media_type == MediaTypes.EPUB_MEDIA_TYPE
 
-        # Updating the media type only, updates the same links representation
+        # Changing only the media type should update the same link's representation.
         identifier.add_link(
             Hyperlink.SAMPLE,
             "http://example.org/sample",
