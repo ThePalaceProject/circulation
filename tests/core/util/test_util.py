@@ -1,6 +1,11 @@
 """Test functionality of util/ that doesn't have its own module."""
-from collections import defaultdict
 
+from __future__ import annotations
+
+from collections import defaultdict
+from decimal import Decimal
+
+import pytest
 from money import Money
 
 from core.model import Edition, Identifier
@@ -432,11 +437,30 @@ class TestSlugify:
 
 
 class TestMoneyUtility:
-    def test_parse(self):
-        p = MoneyUtility.parse
-        assert Money("0", "USD") == p(None)
-        assert Money("4.00", "USD") == p("4")
-        assert Money("-4.00", "USD") == p("-4")
-        assert Money("4.40", "USD") == p("4.40")
-        assert Money("4.40", "USD") == p("$4.40")
-        assert Money("4.4", "USD") == p(4.4)
+    @pytest.mark.parametrize(
+        "expected_amount, input_amount, money_amount, money_currency",
+        [
+            [Decimal("0"), None, "0", "USD"],
+            [Decimal("4.00"), "4", "4.00", "USD"],
+            [Decimal("-4.00"), "-4", "-4.00", "USD"],
+            [Decimal("4.40"), "4.40", "4.40", "USD"],
+            [Decimal("4.40"), "$4.40", "4.40", "USD"],
+            [Decimal("4.4"), 4.4, "4.40", "USD"],
+            [Decimal("4"), 4, "4", "USD"],
+            [Decimal("0.4"), 0.4, ".4", "USD"],
+            [Decimal("0.4"), ".4", ".4", "USD"],
+            [Decimal("4444.40"), "4,444.40", "4444.40", "USD"],
+        ],
+    )
+    def test_parse(
+        self,
+        expected_amount: Decimal,
+        input_amount: str | float | int | None,
+        money_amount: str,
+        money_currency: str,
+    ):
+        parsed = MoneyUtility.parse(input_amount)
+        money = Money(money_amount, money_currency)
+
+        assert money == parsed
+        assert expected_amount == parsed.amount
