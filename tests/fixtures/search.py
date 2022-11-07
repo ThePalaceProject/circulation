@@ -88,7 +88,7 @@ class ExternalSearchFixture:
         return work
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def external_search_fixture(
     database_transaction: DatabaseTransactionFixture,
 ) -> Iterable[ExternalSearchFixture]:
@@ -100,6 +100,9 @@ def external_search_fixture(
 
 
 class EndToEndSearchFixture:
+    """An external search system fixture that can be populated with data for end-to-end tests."""
+
+    """Tests are expected to call the `populate()` method to populate the fixture with test-specific data."""
     external_search: ExternalSearchFixture
 
     @classmethod
@@ -109,6 +112,8 @@ class EndToEndSearchFixture:
         return fixture
 
     def populate(self, callback: Callable[["EndToEndSearchFixture"], Any]):
+        """Populate the search index with a set of works. The given callback is passed this fixture instance."""
+
         # Create some works.
         if not self.external_search.search:
             # No search index is configured -- nothing to do.
@@ -125,7 +130,8 @@ class EndToEndSearchFixture:
         # Sleep to give the index time to catch up.
         time.sleep(2)
 
-    def _assert_works(self, description, expect, actual, should_be_ordered=True):
+    @staticmethod
+    def assert_works(description, expect, actual, should_be_ordered=True):
         """Verify that two lists of works are the same."""
         # Get the titles of the works that were actually returned, to
         # make comparisons easier.
@@ -161,7 +167,7 @@ class EndToEndSearchFixture:
             ", ".join(actual_titles),
         )
 
-    def _expect_results(
+    def expect_results(
         self, expect, query_string=None, filter=None, pagination=None, **kwargs
     ):
         """Helper function to call query_works() and verify that it
@@ -183,7 +189,7 @@ class EndToEndSearchFixture:
         query_args = (query_string, filter, pagination)
         self._compare_hits(expect, hits, query_args, should_be_ordered, **kwargs)
 
-    def _expect_results_multi(self, expect, queries, **kwargs):
+    def expect_results_multi(self, expect, queries, **kwargs):
         """Helper function to call query_works_multi() and verify that it
         returns certain work IDs.
 
@@ -228,7 +234,7 @@ class EndToEndSearchFixture:
             ]
 
         query_args = (query_string, filter, pagination)
-        self._assert_works(query_args, expect, actual, should_be_ordered)
+        self.assert_works(query_args, expect, actual, should_be_ordered)
 
         if query_string is None and pagination is None and not kwargs:
             # Only a filter was provided -- this means if we pass the
@@ -242,7 +248,7 @@ class EndToEndSearchFixture:
         self.external_search.close()
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def end_to_end_search_fixture(
     database_transaction: DatabaseTransactionFixture,
 ) -> Iterable[EndToEndSearchFixture]:
@@ -256,7 +262,7 @@ class ExternalSearchPatchFixture:
     """A class that represents the fact that the external search class has been patched with a mock."""
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def external_search_patch_fixture(request) -> Iterable[ExternalSearchPatchFixture]:
     """Ask for the external search class to be patched with a mock."""
     fixture = ExternalSearchPatchFixture()

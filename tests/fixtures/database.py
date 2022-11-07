@@ -253,6 +253,9 @@ class DatabaseTransactionFixture:
             if key in Configuration.instance:
                 del Configuration.instance[key]
 
+    def database(self) -> DatabaseFixture:
+        return self._database
+
     def transaction(self) -> Transaction:
         return self._transaction
 
