@@ -119,6 +119,7 @@ class CustomList(Base):
             .join(Work.custom_list_entries)
             .filter(CustomListEntry.list_id == list_id)
             .order_by(Work.id)
+            .distinct()
         )
 
     @classmethod
