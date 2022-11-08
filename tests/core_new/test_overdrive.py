@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 
 import pytest
 
@@ -28,38 +27,14 @@ from core.overdrive import (
     OverdriveRepresentationExtractor,
 )
 from core.scripts import RunCollectionCoverageProviderScript
-from core.testing import DatabaseTest, MockRequestsResponse
+from core.testing import MockRequestsResponse
 from core.util.http import BadResponseException
 from core.util.string_helpers import base64
-from tests.core.util.test_mock_web_server import MockAPIServer, MockAPIServerResponse
-
-
-class OverdriveTest(DatabaseTest):
-    def setup_method(self):
-        super().setup_method()
-        self.collection = MockOverdriveCoreAPI.mock_collection(self._db)
-        base_path = os.path.split(__file__)[0]
-        self.resource_path = os.path.join(base_path, "files", "overdrive")
-
-    def sample_json(self, filename):
-        path = os.path.join(self.resource_path, filename)
-        data = open(path).read()
-        return data, json.loads(data)
-
-
-class OverdriveTestWithAPI(OverdriveTest):
-    """Automatically create a MockOverdriveCoreAPI class during setup.
-
-    We don't always do this because
-    TestOverdriveBibliographicCoverageProvider needs to create a
-    MockOverdriveCoreAPI during the test, and at the moment the second
-    MockOverdriveCoreAPI request created in a test behaves differently
-    from the first one.
-    """
-
-    def setup_method(self):
-        super().setup_method()
-        self.api = MockOverdriveCoreAPI(self._db, self.collection)
+from tests.core_new.util.test_mock_web_server import (
+    MockAPIServer,
+    MockAPIServerResponse,
+)
+from tests.fixtures.overdrive import OverdriveFixture, OverdriveWithAPIFixture
 
 
 @pytest.fixture
@@ -75,9 +50,14 @@ def mock_web_server():
     _server.stop()
 
 
-class TestOverdriveCoreAPI(OverdriveTestWithAPI):
-    def test_errors_not_retried(self, mock_web_server: MockAPIServer):
-        collection = MockOverdriveCoreAPI.mock_collection(self._db)
+class TestOverdriveCoreAPI:
+    def test_errors_not_retried(
+        self,
+        overdrive_with_api_fixture: OverdriveWithAPIFixture,
+        mock_web_server: MockAPIServer,
+    ):
+        session = overdrive_with_api_fixture.overdrive.transaction.session()
+        collection = MockOverdriveCoreAPI.mock_collection(session)
 
         # Enqueue a response for the request that the server will make for a token.
         _r = MockAPIServerResponse()
@@ -91,7 +71,7 @@ class TestOverdriveCoreAPI(OverdriveTestWithAPI):
         )
         mock_web_server.enqueue_response("POST", "/oauth/token", _r)
 
-        api = OverdriveCoreAPI(self._db, collection)
+        api = OverdriveCoreAPI(session, collection)
         api._hosts["oauth_host"] = mock_web_server.url("/oauth")
 
         # Try a get() call for each error code
@@ -114,10 +94,13 @@ class TestOverdriveCoreAPI(OverdriveTestWithAPI):
         # Exactly one request was made for each error code, plus one for a token
         assert len(mock_web_server.requests()) == 8
 
-    def test_constructor_makes_no_requests(self):
+    def test_constructor_makes_no_requests(
+        self, overdrive_with_api_fixture: OverdriveWithAPIFixture
+    ):
+        session = overdrive_with_api_fixture.overdrive.transaction.session()
         # Invoking the OverdriveCoreAPI constructor does not, by itself,
         # make any HTTP requests.
-        collection = MockOverdriveCoreAPI.mock_collection(self._db)
+        collection = MockOverdriveCoreAPI.mock_collection(session)
 
         class NoRequests(OverdriveCoreAPI):
             MSG = "This is a unit test, you can't make HTTP requests!"
@@ -129,7 +112,7 @@ class TestOverdriveCoreAPI(OverdriveTestWithAPI):
             _do_post = no_requests
             _make_request = no_requests
 
-        api = NoRequests(self._db, collection)
+        api = NoRequests(session, collection)
 
         # Attempting to access .token or .collection_token _will_
         # try to make an HTTP request.
@@ -138,17 +121,20 @@ class TestOverdriveCoreAPI(OverdriveTestWithAPI):
                 getattr(api, field)
             assert api.MSG in str(excinfo.value)
 
-    def test_ils_name(self):
+    def test_ils_name(self, overdrive_with_api_fixture: OverdriveWithAPIFixture):
+        fixture = overdrive_with_api_fixture
+        transaction = fixture.overdrive.transaction
+
         """The 'ils_name' setting (defined in
         MockOverdriveCoreAPI.mock_collection) is available through
         OverdriveCoreAPI.ils_name().
         """
-        assert "e" == self.api.ils_name(self._default_library)
+        assert "e" == fixture.api.ils_name(transaction.default_library())
 
         # The value must be explicitly set for a given library, or
         # else the default will be used.
-        l2 = self._library()
-        assert "default" == self.api.ils_name(l2)
+        l2 = transaction.library()
+        assert "default" == fixture.api.ils_name(l2)
 
     def test_make_link_safe(self):
         # Unsafe characters are escaped.
@@ -172,19 +158,21 @@ class TestOverdriveCoreAPI(OverdriveTestWithAPI):
         leave_alone = "https://qa.api.overdrive.com/v1/collections/abcde/products/12345"
         assert leave_alone == OverdriveCoreAPI.make_link_safe(leave_alone)
 
-    def test_hosts(self):
+    def test_hosts(self, overdrive_with_api_fixture: OverdriveWithAPIFixture):
+        fixture = overdrive_with_api_fixture
+        session = fixture.overdrive.transaction.session()
         c = OverdriveCoreAPI
 
         # By default, OverdriveCoreAPI is initialized with the production
         # set of hostnames.
-        assert self.api.hosts() == c.HOSTS[OverdriveConfiguration.PRODUCTION_SERVERS]
+        assert fixture.api.hosts() == c.HOSTS[OverdriveConfiguration.PRODUCTION_SERVERS]
 
         # You can instead initialize it to use the testing set of
         # hostnames.
         def api_with_setting(x):
-            integration = self.collection.external_integration
+            integration = fixture.overdrive.collection.external_integration
             integration.setting("overdrive_server_nickname").value = x
-            return c(self._db, self.collection)
+            return c(session, fixture.overdrive.collection)
 
         testing = api_with_setting(OverdriveConfiguration.TESTING_SERVERS)
         assert testing.hosts() == c.HOSTS[OverdriveConfiguration.TESTING_SERVERS]
@@ -194,17 +182,19 @@ class TestOverdriveCoreAPI(OverdriveTestWithAPI):
         bad = api_with_setting("nonsensical")
         assert bad.hosts() == c.HOSTS[OverdriveConfiguration.PRODUCTION_SERVERS]
 
-    def test_endpoint(self):
+    def test_endpoint(self, overdrive_with_api_fixture: OverdriveWithAPIFixture):
+        fixture = overdrive_with_api_fixture
+
         # The .endpoint() method performs string interpolation, including
         # the names of servers.
         template = (
             "%(host)s %(patron_host)s %(oauth_host)s %(oauth_patron_host)s %(extra)s"
         )
-        result = self.api.endpoint(template, extra="val")
+        result = fixture.api.endpoint(template, extra="val")
 
         # The host names and the 'extra' argument have been used to
         # fill in the string interpolations.
-        expect_args = dict(self.api.hosts())
+        expect_args = dict(fixture.api.hosts())
         expect_args["extra"] = "val"
         assert result == template % expect_args
 
@@ -212,46 +202,66 @@ class TestOverdriveCoreAPI(OverdriveTestWithAPI):
         assert "%" not in result
 
         # Once interpolation has happened, doing it again has no effect.
-        assert result == self.api.endpoint(result, extra="something else")
+        assert result == fixture.api.endpoint(result, extra="something else")
 
         # This is important because an interpolated URL may superficially
         # appear to contain extra formatting characters.
-        assert result + "%3A" == self.api.endpoint(
+        assert result + "%3A" == fixture.api.endpoint(
             result + "%3A", extra="something else"
         )
 
-    def test_token_authorization_header(self):
+    def test_token_authorization_header(
+        self, overdrive_with_api_fixture: OverdriveWithAPIFixture
+    ):
+        fixture = overdrive_with_api_fixture
+
         # Verify that the Authorization header needed to get an access
         # token for a given collection is encoded properly.
-        assert self.api.token_authorization_header == "Basic YTpi"
+        assert fixture.api.token_authorization_header == "Basic YTpi"
         assert (
-            self.api.token_authorization_header
+            fixture.api.token_authorization_header
             == "Basic "
             + base64.standard_b64encode(
-                b"%s:%s" % (self.api.client_key(), self.api.client_secret())
+                b"%s:%s" % (fixture.api.client_key(), fixture.api.client_secret())
             )
         )
 
-    def test_token_post_success(self):
-        self.api.queue_response(200, content="some content")
-        response = self.api.token_post(self._url, "the payload")
-        assert 200 == response.status_code
-        assert self.api.access_token_response.content == response.content
+    def test_token_post_success(
+        self, overdrive_with_api_fixture: OverdriveWithAPIFixture
+    ):
+        fixture = overdrive_with_api_fixture
+        transaction = fixture.overdrive.transaction
 
-    def test_get_success(self):
-        self.api.queue_response(200, content="some content")
-        status_code, headers, content = self.api.get(self._url, {})
+        fixture.api.queue_response(200, content="some content")
+        response = fixture.api.token_post(transaction.fresh_url(), "the payload")
+        assert 200 == response.status_code
+        assert fixture.api.access_token_response.content == response.content
+
+    def test_get_success(self, overdrive_with_api_fixture: OverdriveWithAPIFixture):
+        fixture = overdrive_with_api_fixture
+        transaction = fixture.overdrive.transaction
+
+        fixture.api.queue_response(200, content="some content")
+        status_code, headers, content = fixture.api.get(transaction.fresh_url(), {})
         assert 200 == status_code
         assert b"some content" == content
 
-    def test_failure_to_get_library_is_fatal(self):
-        self.api.queue_response(500)
+    def test_failure_to_get_library_is_fatal(
+        self, overdrive_with_api_fixture: OverdriveWithAPIFixture
+    ):
+        fixture = overdrive_with_api_fixture
 
+        fixture.api.queue_response(500)
         with pytest.raises(BadResponseException) as excinfo:
-            self.api.get_library()
+            fixture.api.get_library()
         assert "Got status code 500" in str(excinfo.value)
 
-    def test_error_getting_library(self):
+    def test_error_getting_library(
+        self, overdrive_with_api_fixture: OverdriveWithAPIFixture
+    ):
+        fixture = overdrive_with_api_fixture
+        session = fixture.overdrive.transaction.session()
+
         class MisconfiguredOverdriveCoreAPI(MockOverdriveCoreAPI):
             """This Overdrive client has valid credentials but the library
             can't be found -- probably because the library ID is wrong."""
@@ -264,7 +274,7 @@ class TestOverdriveCoreAPI(OverdriveTestWithAPI):
                 }
 
         # Just instantiating the API doesn't cause this error.
-        api = MisconfiguredOverdriveCoreAPI(self._db, self.collection)
+        api = MisconfiguredOverdriveCoreAPI(session, fixture.overdrive.collection)
 
         # But trying to access the collection token will cause it.
         with pytest.raises(CannotLoadConfiguration) as excinfo:
@@ -274,91 +284,112 @@ class TestOverdriveCoreAPI(OverdriveTestWithAPI):
             in str(excinfo.value)
         )
 
-    def test_401_on_get_refreshes_bearer_token(self):
+    def test_401_on_get_refreshes_bearer_token(
+        self, overdrive_with_api_fixture: OverdriveWithAPIFixture
+    ):
+        fixture = overdrive_with_api_fixture
+        transaction = fixture.overdrive.transaction
+
         # We have a token.
-        assert "bearer token" == self.api.token
+        assert "bearer token" == fixture.api.token
 
         # But then we try to GET, and receive a 401.
-        self.api.queue_response(401)
+        fixture.api.queue_response(401)
 
         # We refresh the bearer token. (This happens in
         # MockOverdriveCoreAPI.token_post, so we don't mock the response
         # in the normal way.)
-        self.api.access_token_response = self.api.mock_access_token_response(
+        fixture.api.access_token_response = fixture.api.mock_access_token_response(
             "new bearer token"
         )
 
         # Then we retry the GET and it succeeds this time.
-        self.api.queue_response(200, content="at last, the content")
+        fixture.api.queue_response(200, content="at last, the content")
 
-        status_code, headers, content = self.api.get(self._url, {})
+        status_code, headers, content = fixture.api.get(transaction.fresh_url(), {})
 
         assert 200 == status_code
         assert b"at last, the content" == content
 
         # The bearer token has been updated.
-        assert "new bearer token" == self.api.token
+        assert "new bearer token" == fixture.api.token
 
-    def test_credential_refresh_success(self):
+    def test_credential_refresh_success(
+        self, overdrive_with_api_fixture: OverdriveWithAPIFixture
+    ):
+        fixture = overdrive_with_api_fixture
+
         """Verify the process of refreshing the Overdrive bearer token."""
         # Perform the initial credential check.
-        self.api.check_creds()
-        credential = self.api.credential_object(lambda x: x)
+        fixture.api.check_creds()
+        credential = fixture.api.credential_object(lambda x: x)
         assert "bearer token" == credential.credential
-        assert self.api.token == credential.credential
+        assert fixture.api.token == credential.credential
 
-        self.api.access_token_response = self.api.mock_access_token_response(
+        fixture.api.access_token_response = fixture.api.mock_access_token_response(
             "new bearer token"
         )
 
         # Refresh the credentials and the token will change to
         # the mocked value.
-        self.api.refresh_creds(credential)
+        fixture.api.refresh_creds(credential)
         assert "new bearer token" == credential.credential
-        assert self.api.token == credential.credential
+        assert fixture.api.token == credential.credential
 
-    def test_401_after_token_refresh_raises_error(self):
+    def test_401_after_token_refresh_raises_error(
+        self, overdrive_with_api_fixture: OverdriveWithAPIFixture
+    ):
+        fixture = overdrive_with_api_fixture
 
-        assert "bearer token" == self.api.token
+        assert "bearer token" == fixture.api.token
 
         # We try to GET and receive a 401.
-        self.api.queue_response(401)
+        fixture.api.queue_response(401)
 
         # We refresh the bearer token.
-        self.api.access_token_response = self.api.mock_access_token_response(
+        fixture.api.access_token_response = fixture.api.mock_access_token_response(
             "new bearer token"
         )
 
         # Then we retry the GET but we get another 401.
-        self.api.queue_response(401)
+        fixture.api.queue_response(401)
 
-        credential = self.api.credential_object(lambda x: x)
-        self.api.refresh_creds(credential)
+        credential = fixture.api.credential_object(lambda x: x)
+        fixture.api.refresh_creds(credential)
 
         # That raises a BadResponseException
         with pytest.raises(BadResponseException) as excinfo:
-            self.api.get_library()
+            fixture.api.get_library()
         assert "Bad response from" in str(excinfo.value)
         assert "Something's wrong with the Overdrive OAuth Bearer Token!" in str(
             excinfo.value
         )
 
-    def test_401_during_refresh_raises_error(self):
+    def test_401_during_refresh_raises_error(
+        self, overdrive_with_api_fixture: OverdriveWithAPIFixture
+    ):
+        fixture = overdrive_with_api_fixture
+
         """If we fail to refresh the OAuth bearer token, an exception is
         raised.
         """
-        self.api.access_token_response = MockRequestsResponse(401, {}, "")
+        fixture.api.access_token_response = MockRequestsResponse(401, {}, "")
         with pytest.raises(BadResponseException) as excinfo:
-            self.api.refresh_creds(None)
+            fixture.api.refresh_creds(None)
         assert "Got status code 401" in str(excinfo.value)
         assert "can only continue on: 200." in str(excinfo.value)
 
-    def test_advantage_differences(self):
+    def test_advantage_differences(
+        self, overdrive_with_api_fixture: OverdriveWithAPIFixture
+    ):
+        transaction = overdrive_with_api_fixture.overdrive.transaction
+        session = transaction.session()
+
         # Test the differences between Advantage collections and
         # regular Overdrive collections.
 
         # Here's a regular Overdrive collection.
-        main = self._collection(
+        main = transaction.collection(
             protocol=ExternalIntegration.OVERDRIVE,
             external_account_id="1",
         )
@@ -368,7 +399,7 @@ class TestOverdriveCoreAPI(OverdriveTestWithAPI):
         main.external_integration.setting("ils_name").value = "default"
 
         # Here's an Overdrive API client for that collection.
-        overdrive_main = MockOverdriveCoreAPI(self._db, main)
+        overdrive_main = MockOverdriveCoreAPI(session, main)
 
         # Note the "library" endpoint.
         assert (
@@ -383,12 +414,12 @@ class TestOverdriveCoreAPI(OverdriveTestWithAPI):
 
         # Here's an Overdrive Advantage collection associated with the
         # main Overdrive collection.
-        child = self._collection(
+        child = transaction.collection(
             protocol=ExternalIntegration.OVERDRIVE,
             external_account_id="2",
         )
         child.parent = main
-        overdrive_child = MockOverdriveCoreAPI(self._db, child)
+        overdrive_child = MockOverdriveCoreAPI(session, child)
 
         # In URL-space, the "library" endpoint for the Advantage
         # collection is beneath the the parent collection's "library"
@@ -403,7 +434,11 @@ class TestOverdriveCoreAPI(OverdriveTestWithAPI):
         assert "2" == overdrive_child.library_id()
         assert 2 == overdrive_child.advantage_library_id
 
-    def test__get_book_list_page(self):
+    def test__get_book_list_page(
+        self, overdrive_with_api_fixture: OverdriveWithAPIFixture
+    ):
+        fixture = overdrive_with_api_fixture
+
         # Test the internal method that retrieves a list of books and
         # preprocesses it.
 
@@ -423,14 +458,14 @@ class TestOverdriveCoreAPI(OverdriveTestWithAPI):
             json.dumps(original_data).encode("utf8"),
         ):
             extractor = MockExtractor()
-            self.api.queue_response(200, content=content)
-            result = self.api._get_book_list_page(
+            fixture.api.queue_response(200, content=content)
+            result = fixture.api._get_book_list_page(
                 "http://first-page/", "some-rel", extractor
             )
 
             # A single request was made to the requested page.
-            (url, headers, body) = self.api.requests.pop()
-            assert len(self.api.requests) == 0
+            (url, headers, body) = fixture.api.requests.pop()
+            assert len(fixture.api.requests) == 0
             assert url == "http://first-page/"
 
             # The extractor was used to extract a link to the page
@@ -450,9 +485,9 @@ class TestOverdriveCoreAPI(OverdriveTestWithAPI):
             assert result == (["an availability queue"], "http://next-page/")
 
 
-class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
-    def test_availability_info(self):
-        data, raw = self.sample_json("overdrive_book_list.json")
+class TestOverdriveRepresentationExtractor:
+    def test_availability_info(self, overdrive_fixture: OverdriveFixture):
+        data, raw = overdrive_fixture.sample_json("overdrive_book_list.json")
         availability = OverdriveRepresentationExtractor.availability_link_list(raw)
         # Every item in the list has a few important values.
         for item in availability:
@@ -466,10 +501,12 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         assert "David Baldacci" == spot["author_name"]
         assert "2013-11-12T14:13:00-05:00" == spot["date_added"]
 
-    def test_availability_info_missing_data(self):
+    def test_availability_info_missing_data(self, overdrive_fixture: OverdriveFixture):
         # overdrive_book_list_missing_data.json has two products. One
         # only has a title, the other only has an ID.
-        data, raw = self.sample_json("overdrive_book_list_missing_data.json")
+        data, raw = overdrive_fixture.sample_json(
+            "overdrive_book_list_missing_data.json"
+        )
         [item] = OverdriveRepresentationExtractor.availability_link_list(raw)
 
         # We got a data structure -- full of missing data -- for the
@@ -483,18 +520,22 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         # title, because an ID is required -- otherwise we don't know
         # what book we're talking about.
 
-    def test_link(self):
-        data, raw = self.sample_json("overdrive_book_list.json")
+    def test_link(self, overdrive_fixture: OverdriveFixture):
+        data, raw = overdrive_fixture.sample_json("overdrive_book_list.json")
         expect = OverdriveCoreAPI.make_link_safe(
             "http://api.overdrive.com/v1/collections/collection-id/products?limit=300&offset=0&lastupdatetime=2014-04-28%2009:25:09&sort=popularity:desc&formats=ebook-epub-open,ebook-epub-adobe,ebook-pdf-adobe,ebook-pdf-open"
         )
         assert expect == OverdriveRepresentationExtractor.link(raw, "first")
 
-    def test_book_info_to_circulation(self):
+    def test_book_info_to_circulation(
+        self, overdrive_with_api_fixture: OverdriveWithAPIFixture
+    ):
         # Tests that can convert an overdrive json block into a CirculationData object.
+        overdrive = overdrive_with_api_fixture.overdrive
+        session = overdrive.transaction.session()
 
-        raw, info = self.sample_json("overdrive_availability_information.json")
-        extractor = OverdriveRepresentationExtractor(self.api)
+        raw, info = overdrive.sample_json("overdrive_availability_information.json")
+        extractor = OverdriveRepresentationExtractor(overdrive_with_api_fixture.api)
         circulationdata = extractor.book_info_to_circulation(info)
 
         # NOTE: It's not realistic for licenses_available and
@@ -506,19 +547,22 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         assert 10 == circulationdata.patrons_in_hold_queue
 
         # Related IDs.
-        identifier = circulationdata.primary_identifier(self._db)
+        identifier = circulationdata.primary_identifier(session)
         assert (Identifier.OVERDRIVE_ID, "2a005d55-a417-4053-b90d-7a38ca6d2065") == (
             identifier.type,
             identifier.identifier,
         )
 
-    def test_book_info_to_circulation_advantage(self):
+    def test_book_info_to_circulation_advantage(
+        self, overdrive_with_api_fixture: OverdriveWithAPIFixture
+    ):
         # Overdrive Advantage accounts (a.k.a. "child" or "sub" accounts derive
         # different information from the same API responses as "main" Overdrive
         # accounts.
-        raw, info = self.sample_json("overdrive_availability_advantage.json")
+        overdrive = overdrive_with_api_fixture.overdrive
+        raw, info = overdrive.sample_json("overdrive_availability_advantage.json")
 
-        extractor = OverdriveRepresentationExtractor(self.api)
+        extractor = OverdriveRepresentationExtractor(overdrive_with_api_fixture.api)
         # Calling in the context of a main account should return a count of
         # the main account and any shared sub account owned and available.
         consortial_data = extractor.book_info_to_circulation(info)
@@ -570,31 +614,35 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         assert 0 == advantage_data.licenses_owned
         assert 0 == advantage_data.licenses_available
 
-    def test_not_found_error_to_circulationdata(self):
-        raw, info = self.sample_json("overdrive_availability_not_found.json")
+    def test_not_found_error_to_circulationdata(
+        self, overdrive_with_api_fixture: OverdriveWithAPIFixture
+    ):
+        overdrive = overdrive_with_api_fixture.overdrive
+        transaction = overdrive.transaction
+        raw, info = overdrive.sample_json("overdrive_availability_not_found.json")
 
         # By default, a "NotFound" error can't be converted to a
         # CirculationData object, because we don't know _which_ book it
         # was that wasn't found.
-        extractor = OverdriveRepresentationExtractor(self.api)
+        extractor = OverdriveRepresentationExtractor(overdrive_with_api_fixture.api)
         m = extractor.book_info_to_circulation
         assert None == m(info)
 
         # However, if an ID was added to `info` ahead of time (as the
         # circulation code does), we do know, and we can create a
         # CirculationData.
-        identifier = self._identifier(identifier_type=Identifier.OVERDRIVE_ID)
+        identifier = transaction.identifier(identifier_type=Identifier.OVERDRIVE_ID)
         info["id"] = identifier.identifier
         data = m(info)
-        assert identifier == data.primary_identifier(self._db)
+        assert identifier == data.primary_identifier(transaction.session())
         assert 0 == data.licenses_owned
         assert 0 == data.licenses_available
         assert 0 == data.patrons_in_hold_queue
 
-    def test_book_info_with_metadata(self):
+    def test_book_info_with_metadata(self, overdrive_fixture: OverdriveFixture):
         # Tests that can convert an overdrive json block into a Metadata object.
 
-        raw, info = self.sample_json("overdrive_metadata.json")
+        raw, info = overdrive_fixture.sample_json("overdrive_metadata.json")
         metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
 
         assert "Agile Documentation" == metadata.title
@@ -718,12 +766,12 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         assert Representation.PDF_MEDIA_TYPE == pdf.content_type
         assert DeliveryMechanism.ADOBE_DRM == pdf.drm_scheme
 
-    def test_audiobook_info(self):
+    def test_audiobook_info(self, overdrive_fixture: OverdriveFixture):
         # This book will be available in three formats: a link to the
         # Overdrive Read website, a manifest file that SimplyE can
         # download, and the legacy format used by the mobile app
         # called 'Overdrive'.
-        raw, info = self.sample_json("audiobook.json")
+        raw, info = overdrive_fixture.sample_json("audiobook.json")
         metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
         streaming, manifest, legacy = sorted(
             metadata.circulation.formats, key=lambda x: x.content_type
@@ -734,10 +782,10 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         )
         assert "application/x-od-media" == legacy.content_type
 
-    def test_book_info_with_sample(self):
+    def test_book_info_with_sample(self, overdrive_fixture: OverdriveFixture):
         # This book has two samples; one available as a direct download and
         # one available through a manifest file.
-        raw, info = self.sample_json("has_sample.json")
+        raw, info = overdrive_fixture.sample_json("has_sample.json")
         metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
         samples = [x for x in metadata.links if x.rel == Hyperlink.SAMPLE]
         epub_sample, manifest_sample = sorted(samples, key=lambda x: x.media_type)
@@ -758,8 +806,8 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
             MediaTypes.OVERDRIVE_EBOOK_MANIFEST_MEDIA_TYPE == manifest_sample.media_type
         )
 
-    def test_book_info_with_grade_levels(self):
-        raw, info = self.sample_json("has_grade_levels.json")
+    def test_book_info_with_grade_levels(self, overdrive_fixture: OverdriveFixture):
+        raw, info = overdrive_fixture.sample_json("has_grade_levels.json")
         metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
 
         grade_levels = sorted(
@@ -767,8 +815,8 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         )
         assert ["Grade 4", "Grade 5", "Grade 6", "Grade 7", "Grade 8"] == grade_levels
 
-    def test_book_info_with_awards(self):
-        raw, info = self.sample_json("has_awards.json")
+    def test_book_info_with_awards(self, overdrive_fixture: OverdriveFixture):
+        raw, info = overdrive_fixture.sample_json("has_awards.json")
         metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
 
         [awards] = [
@@ -858,19 +906,25 @@ class TestOverdriveRepresentationExtractor(OverdriveTestWithAPI):
         assert_formats("no-such-format")
 
 
-class TestOverdriveAdvantageAccount(OverdriveTestWithAPI):
-    def test_no_advantage_accounts(self):
+class TestOverdriveAdvantageAccount:
+    def test_no_advantage_accounts(
+        self, overdrive_with_api_fixture: OverdriveWithAPIFixture
+    ):
         """When there are no Advantage accounts, get_advantage_accounts()
         returns an empty list.
         """
-        self.api.queue_collection_token()
-        assert [] == self.api.get_advantage_accounts()
+        fixture = overdrive_with_api_fixture
+        fixture.api.queue_collection_token()
+        assert [] == fixture.api.get_advantage_accounts()
 
-    def test_from_representation(self):
+    def test_from_representation(
+        self, overdrive_with_api_fixture: OverdriveWithAPIFixture
+    ):
         """Test the creation of OverdriveAdvantageAccount objects
         from Overdrive's representation of a list of accounts.
         """
-        raw, data = self.sample_json("advantage_accounts.json")
+        fixture = overdrive_with_api_fixture
+        raw, data = fixture.overdrive.sample_json("advantage_accounts.json")
         [ac1, ac2] = OverdriveAdvantageAccount.from_representation(raw)
 
         # The two Advantage accounts have the same parent library ID.
@@ -884,9 +938,14 @@ class TestOverdriveAdvantageAccount(OverdriveTestWithAPI):
         assert "9" == ac2.library_id
         assert "The Common Community Library" == ac2.name
 
-    def test_to_collection(self):
+    def test_to_collection(self, overdrive_with_api_fixture: OverdriveWithAPIFixture):
         # Test that we can turn an OverdriveAdvantageAccount object into
         # a Collection object.
+        fixture = overdrive_with_api_fixture
+        transaction, session = (
+            fixture.overdrive.transaction,
+            fixture.overdrive.transaction.session(),
+        )
 
         account = OverdriveAdvantageAccount(
             "parent_id",
@@ -897,20 +956,20 @@ class TestOverdriveAdvantageAccount(OverdriveTestWithAPI):
         # We can't just create a Collection object for this object because
         # the parent doesn't exist.
         with pytest.raises(ValueError) as excinfo:
-            account.to_collection(self._db)
+            account.to_collection(session)
         assert "Cannot create a Collection whose parent does not already exist." in str(
             excinfo.value
         )
 
         # So, create a Collection to be the parent.
-        parent = self._collection(
+        parent = transaction.collection(
             name="Parent",
             protocol=ExternalIntegration.OVERDRIVE,
             external_account_id="parent_id",
         )
 
         # Now it works.
-        p, collection = account.to_collection(self._db)
+        p, collection = account.to_collection(session)
         assert p == parent
         assert parent == collection.parent
         assert collection.external_account_id == account.library_id
@@ -922,40 +981,65 @@ class TestOverdriveAdvantageAccount(OverdriveTestWithAPI):
         assert f"{parent.name} / {account.name}" == collection.name
 
 
-class TestOverdriveBibliographicCoverageProvider(OverdriveTest):
+class OverdriveBibliographicCoverageProviderFixture:
+    overdrive: OverdriveFixture
+    provider: OverdriveBibliographicCoverageProvider
+    api: MockOverdriveCoreAPI
+
+
+@pytest.fixture
+def overdrive_biblio_provider_fixture(
+    overdrive_fixture: OverdriveFixture,
+) -> OverdriveBibliographicCoverageProviderFixture:
+    fix = OverdriveBibliographicCoverageProviderFixture()
+    fix.overdrive = overdrive_fixture
+    fix.provider = OverdriveBibliographicCoverageProvider(
+        overdrive_fixture.collection, api_class=MockOverdriveCoreAPI
+    )
+    fix.api = fix.provider.api
+    return fix
+
+
+class TestOverdriveBibliographicCoverageProvider:
     """Test the code that looks up bibliographic information from Overdrive."""
 
-    def setup_method(self):
-        super().setup_method()
-        self.provider = OverdriveBibliographicCoverageProvider(
-            self.collection, api_class=MockOverdriveCoreAPI
-        )
-        self.api = self.provider.api
-
-    def test_script_instantiation(self):
+    def test_script_instantiation(
+        self,
+        overdrive_biblio_provider_fixture: OverdriveBibliographicCoverageProviderFixture,
+    ):
         """Test that RunCoverageProviderScript can instantiate
         the coverage provider.
         """
+
+        fixture = overdrive_biblio_provider_fixture
+        transaction = fixture.overdrive.transaction
+
         script = RunCollectionCoverageProviderScript(
             OverdriveBibliographicCoverageProvider,
-            self._db,
+            transaction.session(),
             api_class=MockOverdriveCoreAPI,
         )
         [provider] = script.providers
         assert isinstance(provider, OverdriveBibliographicCoverageProvider)
         assert isinstance(provider.api, MockOverdriveCoreAPI)
-        assert self.collection == provider.collection
+        assert fixture.overdrive.collection == provider.collection
 
-    def test_invalid_or_unrecognized_guid(self):
+    def test_invalid_or_unrecognized_guid(
+        self,
+        overdrive_biblio_provider_fixture: OverdriveBibliographicCoverageProviderFixture,
+    ):
         """A bad or malformed GUID can't get coverage."""
-        identifier = self._identifier()
+        fixture = overdrive_biblio_provider_fixture
+        transaction = fixture.overdrive.transaction
+
+        identifier = transaction.identifier()
         identifier.identifier = "bad guid"
-        self.api.queue_collection_token()
+        fixture.api.queue_collection_token()
 
         error = '{"errorCode": "InvalidGuid", "message": "An invalid guid was given.", "token": "7aebce0e-2e88-41b3-b6d3-82bf15f8e1a2"}'
-        self.api.queue_response(200, content=error)
+        fixture.api.queue_response(200, content=error)
 
-        failure = self.provider.process_item(identifier)
+        failure = fixture.provider.process_item(identifier)
         assert isinstance(failure, CoverageFailure)
         assert False == failure.transient
         assert "Invalid Overdrive ID: bad guid" == failure.exception
@@ -963,31 +1047,37 @@ class TestOverdriveBibliographicCoverageProvider(OverdriveTest):
         # This is for when the GUID is well-formed but doesn't
         # correspond to any real Overdrive book.
         error = '{"errorCode": "NotFound", "message": "Not found in Overdrive collection.", "token": "7aebce0e-2e88-41b3-b6d3-82bf15f8e1a2"}'
-        self.api.queue_response(200, content=error)
+        fixture.api.queue_response(200, content=error)
 
-        failure = self.provider.process_item(identifier)
+        failure = fixture.provider.process_item(identifier)
         assert isinstance(failure, CoverageFailure)
         assert False == failure.transient
         assert "ID not recognized by Overdrive: bad guid" == failure.exception
 
-    def test_process_item_creates_presentation_ready_work(self):
+    def test_process_item_creates_presentation_ready_work(
+        self,
+        overdrive_biblio_provider_fixture: OverdriveBibliographicCoverageProviderFixture,
+    ):
         """Test the normal workflow where we ask Overdrive for data,
         Overdrive provides it, and we create a presentation-ready work.
         """
-        self.api.queue_collection_token()
+        fixture = overdrive_biblio_provider_fixture
+        transaction = fixture.overdrive.transaction
+
+        fixture.api.queue_collection_token()
 
         # Here's the book mentioned in overdrive_metadata.json.
-        identifier = self._identifier(identifier_type=Identifier.OVERDRIVE_ID)
+        identifier = transaction.identifier(identifier_type=Identifier.OVERDRIVE_ID)
         identifier.identifier = "3896665d-9d81-4cac-bd43-ffc5066de1f5"
 
         # This book has no LicensePool.
         assert [] == identifier.licensed_through
 
         # Run it through the OverdriveBibliographicCoverageProvider
-        raw, info = self.sample_json("overdrive_metadata.json")
-        self.api.queue_response(200, content=raw)
+        raw, info = fixture.overdrive.sample_json("overdrive_metadata.json")
+        fixture.api.queue_response(200, content=raw)
 
-        [result] = self.provider.process_batch([identifier])
+        [result] = fixture.provider.process_batch([identifier])
         assert identifier == result
 
         # A LicensePool was created, not because we know anything
