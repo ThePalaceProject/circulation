@@ -102,7 +102,7 @@ oauth2client = "4.1.3"  # Deprecated and should be replaced.
 palace-webpub-manifest-parser = "~3.0.0"
 Pillow = "9.2.0"
 psycopg2 = { version = "~2.9.4", optional = true }
-psycopg2-binary = { version = "~2.9.4", optional = true }
+psycopg2-binary = { version = "~2.9.5", optional = true }
 py-bcrypt = "0.4"
 pycryptodome = "3.15.0"
 pyinstrument = "<4.4"
@@ -133,7 +133,7 @@ wcag-contrast-ratio = "0.9"
 Werkzeug = "1.0.1"
 
 [tool.poetry.dev-dependencies]
-boto3-stubs = "^1.25.1"
+boto3-stubs = "^1.26.1"
 botocore-stubs = "^1.28.3"
 freezegun = "~1.2"
 Jinja2 = "2.11.3"
@@ -141,7 +141,7 @@ markupsafe = "2.0.1"
 mypy = "^0.982"
 parameterized = "0.8.1"
 pre-commit = "~2.20"
-pyfakefs = "4.7.0"
+pyfakefs = "5.0.0"
 pytest-timeout = "*"
 requests-mock = "1.10.0"
 sqlalchemy-stubs = "^0.4"
