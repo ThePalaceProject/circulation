@@ -677,14 +677,14 @@ class OverdriveCoreAPI(HasExternalIntegration):
     def _do_get(self, url: str, headers, **kwargs) -> Response:
         """This method is overridden in MockOverdriveAPI."""
         url = self.endpoint(url)
-        kwargs["max_retry_count"] = self._configuration.max_retry_count
+        kwargs["max_retry_count"] = int(self._configuration.max_retry_count)
         kwargs["timeout"] = 120
         return HTTP.get_with_timeout(url, headers=headers, **kwargs)
 
     def _do_post(self, url: str, payload, headers, **kwargs) -> Response:
         """This method is overridden in MockOverdriveAPI."""
         url = self.endpoint(url)
-        kwargs["max_retry_count"] = self._configuration.max_retry_count
+        kwargs["max_retry_count"] = int(self._configuration.max_retry_count)
         kwargs["timeout"] = 120
         return HTTP.post_with_timeout(url, payload, headers=headers, **kwargs)
 
