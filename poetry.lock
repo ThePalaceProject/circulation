@@ -439,7 +439,7 @@ crt = ["awscrt (==0.12.5)"]
 
 [[package]]
 name = "botocore-stubs"
-version = "1.28.3"
+version = "1.29.5"
 description = "Type annotations and code completion for botocore"
 category = "dev"
 optional = false
@@ -1902,7 +1902,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.7,<4"
-content-hash = "7f8627a9c1557f16c5ccdf02d502997e08bd86bcfd323ea081477bc5c9ab9d0b"
+content-hash = "e1ce35602a7a6629a15644d77a874356dd904a6beb7716291a0cfa0a61c0c124"
 
 [metadata.files]
 atomicwrites = [
@@ -1942,8 +1942,8 @@ botocore = [
     {file = "botocore-1.21.65.tar.gz", hash = "sha256:6437d6a3999a189e7d45b3fcd8f794a46670fb255ae670c946d3f224caa8b46a"},
 ]
 botocore-stubs = [
-    {file = "botocore_stubs-1.28.3-py3-none-any.whl", hash = "sha256:adeb7b8a1ff3f796a2f4e5bd8e4c9d391438ba5194f99d27b7ff347908f93283"},
-    {file = "botocore_stubs-1.28.3.tar.gz", hash = "sha256:84c1cacd735f1bf16a3cb96cbf89f3e5fe571ad8e01505747b77a5b6b000d096"},
+    {file = "botocore_stubs-1.29.5-py3-none-any.whl", hash = "sha256:5cf5a110d017f8838fa6337a13f32920febbcf9a88af880567918788d8b8f567"},
+    {file = "botocore_stubs-1.29.5.tar.gz", hash = "sha256:7294857ee6b982e3f297ce2d271e70eb47e0ca47e8674725f83bcaa409d2f4f2"},
 ]
 cachetools = [
     {file = "cachetools-5.1.0-py3-none-any.whl", hash = "sha256:4ebbd38701cdfd3603d1f751d851ed248ab4570929f2d8a7ce69e30c420b141c"},
@@ -2713,6 +2713,8 @@ psycopg2-binary = [
     {file = "psycopg2_binary-2.9.5-cp311-cp311-musllinux_1_1_i686.whl", hash = "sha256:e67b3c26e9b6d37b370c83aa790bbc121775c57bfb096c2e77eacca25fd0233b"},
     {file = "psycopg2_binary-2.9.5-cp311-cp311-musllinux_1_1_ppc64le.whl", hash = "sha256:5fc447058d083b8c6ac076fc26b446d44f0145308465d745fba93a28c14c9e32"},
     {file = "psycopg2_binary-2.9.5-cp311-cp311-musllinux_1_1_x86_64.whl", hash = "sha256:d892bfa1d023c3781a3cab8dd5af76b626c483484d782e8bd047c180db590e4c"},
+    {file = "psycopg2_binary-2.9.5-cp311-cp311-win32.whl", hash = "sha256:2abccab84d057723d2ca8f99ff7b619285d40da6814d50366f61f0fc385c3903"},
+    {file = "psycopg2_binary-2.9.5-cp311-cp311-win_amd64.whl", hash = "sha256:bef7e3f9dc6f0c13afdd671008534be5744e0e682fb851584c8c3a025ec09720"},
     {file = "psycopg2_binary-2.9.5-cp36-cp36m-macosx_10_14_x86_64.macosx_10_9_intel.macosx_10_9_x86_64.macosx_10_10_intel.macosx_10_10_x86_64.whl", hash = "sha256:6e63814ec71db9bdb42905c925639f319c80e7909fb76c3b84edc79dadef8d60"},
     {file = "psycopg2_binary-2.9.5-cp36-cp36m-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:212757ffcecb3e1a5338d4e6761bf9c04f750e7d027117e74aa3cd8a75bb6fbd"},
     {file = "psycopg2_binary-2.9.5-cp36-cp36m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:6f8a9bcab7b6db2e3dbf65b214dfc795b4c6b3bb3af922901b6a67f7cb47d5f8"},
