@@ -61,8 +61,7 @@ from core.opds_import import OPDSXMLParser
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse, Response
 from core.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
-from tests.core.utils import DBStatementCounter
-from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.database import DatabaseTransactionFixture, DBStatementCounter
 from tests.fixtures.search import ExternalSearchPatchFixture
 
 
