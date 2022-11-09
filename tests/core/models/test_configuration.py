@@ -785,6 +785,14 @@ SETTING4_OPTIONS = None
 SETTING4_DEFAULT = None
 SETTING4_CATEGORY = "Settings"
 
+SETTING5_KEY = "setting5"
+SETTING5_LABEL = "Setting 5's label"
+SETTING5_DESCRIPTION = "Setting 5's description"
+SETTING5_TYPE = ConfigurationAttributeType.NUMBER
+SETTING5_REQUIRED = False
+SETTING5_DEFAULT = 12345
+SETTING5_CATEGORY = "Settings"
+
 
 class MockConfiguration(ConfigurationGrouping):
     setting1 = ConfigurationMetadata(
@@ -828,6 +836,16 @@ class MockConfiguration(ConfigurationGrouping):
         default=SETTING4_DEFAULT,
         options=SETTING4_OPTIONS,
         category=SETTING4_CATEGORY,
+    )
+
+    setting5 = ConfigurationMetadata(
+        key=SETTING5_KEY,
+        label=SETTING5_LABEL,
+        description=SETTING5_DESCRIPTION,
+        type=SETTING5_TYPE,
+        required=SETTING5_REQUIRED,
+        default=SETTING5_DEFAULT,
+        category=SETTING5_CATEGORY,
     )
 
 
@@ -977,10 +995,12 @@ class TestConfigurationGrouping:
         configuration = MockConfiguration(configuration_storage, db)
 
         # Act
-        setting_value = configuration.setting1
+        setting1_value = configuration.setting1
+        setting5_value = configuration.setting5
 
         # Assert
-        assert SETTING1_DEFAULT == setting_value
+        assert SETTING1_DEFAULT == setting1_value
+        assert SETTING5_DEFAULT == setting5_value
 
     @parameterized.expand(
         [("setting1", "setting1", 12345), ("setting2", "setting2", "12345")]
@@ -1005,7 +1025,7 @@ class TestConfigurationGrouping:
         settings = MockConfiguration.to_settings()
 
         # Assert
-        assert len(settings) == 4
+        assert len(settings) == 5
 
         assert settings[0][ConfigurationAttribute.KEY.value] == SETTING1_KEY
         assert settings[0][ConfigurationAttribute.LABEL.value] == SETTING1_LABEL
