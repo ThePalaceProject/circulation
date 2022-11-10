@@ -1122,7 +1122,8 @@ class TestNumberConfigurationMetadata(DatabaseTest):
         configuration = MockConfiguration(configuration_storage, self._db)
 
         configuration.setting5 = "abc"
-        assert configuration.setting5 == SETTING5_DEFAULT
+        with pytest.raises(CannotLoadConfiguration):
+            configuration.setting5
 
         configuration.setting5 = "123"
         assert configuration.setting5 == 123.0

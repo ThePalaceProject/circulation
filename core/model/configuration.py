@@ -1140,6 +1140,11 @@ class ConfigurationMetadata:
                 logging.getLogger(self.__class__.__name__).error(
                     f"Could not typecast {self.label} value '{setting_value}'. Falling back to default"
                 )
+                if setting_value != "":
+                    # A non-empty value is a "bad" value, and should raise an exception
+                    raise CannotLoadConfiguration(
+                        f"Could not typecast {self.label} value '{setting_value}'. Falling back to default"
+                    )
                 setting_value = self.default
         else:
             # LIST and MENU configuration settings are stored as JSON-serialized lists in the database.
