@@ -1,8 +1,9 @@
 import logging
 import os
 import time
-from typing import Any, Callable, Iterable, List, Optional
+from typing import Any, Callable, Generic, Iterable, List, Optional, Type, TypeVar
 from unittest import mock
+from unittest.mock import patch
 
 import pytest
 
@@ -99,19 +100,23 @@ def external_search_fixture(
     data.close()
 
 
-class EndToEndSearchFixture:
+T = TypeVar("T")
+
+
+class EndToEndSearchFixture(Generic[T]):
     """An external search system fixture that can be populated with data for end-to-end tests."""
 
     """Tests are expected to call the `populate()` method to populate the fixture with test-specific data."""
     external_search: ExternalSearchFixture
+    test_data: T
 
     @classmethod
-    def create(cls, data: DatabaseTransactionFixture) -> "EndToEndSearchFixture":
-        fixture = EndToEndSearchFixture()
-        fixture.external_search = ExternalSearchFixture.create(data)
-        return fixture
+    def create(cls, transaction: DatabaseTransactionFixture) -> "EndToEndSearchFixture":
+        data = EndToEndSearchFixture()
+        data.external_search = ExternalSearchFixture.create(transaction)
+        return data
 
-    def populate(self, callback: Callable[["EndToEndSearchFixture"], Any]):
+    def populate(self, callback: Callable[["EndToEndSearchFixture[T]"], T]):
         """Populate the search index with a set of works. The given callback is passed this fixture instance."""
 
         # Create some works.
@@ -119,7 +124,7 @@ class EndToEndSearchFixture:
             # No search index is configured -- nothing to do.
             return
 
-        callback(self)
+        self.test_data = callback(self)
 
         # Add all the works created in the setup to the search index.
         SearchIndexCoverageProvider(
@@ -260,6 +265,8 @@ def end_to_end_search_fixture(
 
 class ExternalSearchPatchFixture:
     """A class that represents the fact that the external search class has been patched with a mock."""
+
+    search_mock: "patch[Type[MockExternalSearchIndex]]"
 
 
 @pytest.fixture(scope="function")

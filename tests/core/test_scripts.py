@@ -3502,26 +3502,39 @@ class TestUpdateCustomListSizeScript:
         assert 1 == customlist.size
 
 
+class TestCustomListUpdateEntriesScriptData:
+    populated_books: list[Work]
+    unpopular_books: list[Work]
+
+
 class TestCustomListUpdateEntriesScript:
     @staticmethod
-    def _populate_works(data: EndToEndSearchFixture):
+    def _populate_works(
+        data: EndToEndSearchFixture[TestCustomListUpdateEntriesScriptData],
+    ) -> TestCustomListUpdateEntriesScriptData:
         transaction = data.external_search.transaction
-        data.populated_books: list[Work] = [
+
+        result = TestCustomListUpdateEntriesScriptData()
+        result.populated_books = [
             transaction.work(with_license_pool=True, title="Populated Book")
             for _ in range(5)
         ]
-        data.unpopular_books: list[Work] = [
+        result.unpopular_books = [
             transaction.work(with_license_pool=True, title="Unpopular Book")
             for _ in range(3)
         ]
         # This is for back population only
-        data.populated_books[0].license_pools[0].availability_time = datetime.datetime(
-            1900, 1, 1
-        )
+        result.populated_books[0].license_pools[
+            0
+        ].availability_time = datetime.datetime(1900, 1, 1)
         transaction.session().commit()
+        return result
 
     def test_process_custom_list(
-        self, end_to_end_search_fixture: EndToEndSearchFixture
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture[
+            TestCustomListUpdateEntriesScriptData
+        ],
     ):
         data = end_to_end_search_fixture
         transaction, session = (
@@ -3561,18 +3574,23 @@ class TestCustomListUpdateEntriesScript:
         session.refresh(custom_list)
         session.refresh(custom_list1)
         assert (
-            len(custom_list.entries) == 1 + len(data.populated_books) - 1
+            len(custom_list.entries) == 1 + len(data.test_data.populated_books) - 1
         )  # default + new - one past availability time
-        assert custom_list.size == 1 + len(data.populated_books) - 1
+        assert custom_list.size == 1 + len(data.test_data.populated_books) - 1
         assert len(custom_list1.entries) == 1 + len(
-            data.unpopular_books
+            data.test_data.unpopular_books
         )  # default + new
-        assert custom_list1.size == 1 + len(data.unpopular_books)
+        assert custom_list1.size == 1 + len(data.test_data.unpopular_books)
         # last updated time has updated correctly
         assert custom_list.auto_update_last_update == frozen_time.time_to_freeze
         assert custom_list1.auto_update_last_update == frozen_time.time_to_freeze
 
-    def test_search_facets(self, end_to_end_search_fixture: EndToEndSearchFixture):
+    def test_search_facets(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture[
+            TestCustomListUpdateEntriesScriptData
+        ],
+    ):
         with patch("core.query.customlist.ExternalSearchIndex") as mock_index:
             fixture = end_to_end_search_fixture
             transaction, session = (
@@ -3606,7 +3624,11 @@ class TestCustomListUpdateEntriesScript:
 
     @freeze_time("2022-01-01", as_kwarg="frozen_time")
     def test_no_last_update(
-        self, end_to_end_search_fixture: EndToEndSearchFixture, frozen_time=None
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture[
+            TestCustomListUpdateEntriesScriptData
+        ],
+        frozen_time=None,
     ):
         fixture = end_to_end_search_fixture
         transaction, session = (
@@ -3626,7 +3648,12 @@ class TestCustomListUpdateEntriesScript:
         script.process_custom_list(custom_list)
         assert custom_list.auto_update_last_update == frozen_time.time_to_freeze
 
-    def test_init_backpopulates(self, end_to_end_search_fixture: EndToEndSearchFixture):
+    def test_init_backpopulates(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture[
+            TestCustomListUpdateEntriesScriptData
+        ],
+    ):
         with patch("core.scripts.CustomListQueries") as mock_queries:
             data = end_to_end_search_fixture
             transaction, session = (
@@ -3649,7 +3676,12 @@ class TestCustomListUpdateEntriesScript:
             assert args[1]["start_page"] == 2
             assert custom_list.auto_update_status == CustomList.UPDATED
 
-    def test_repopulate_state(self, end_to_end_search_fixture: EndToEndSearchFixture):
+    def test_repopulate_state(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture[
+            TestCustomListUpdateEntriesScriptData
+        ],
+    ):
         """The repopulate deletes all entries and runs the query again"""
         data = end_to_end_search_fixture
         transaction, session = (
@@ -3667,7 +3699,7 @@ class TestCustomListUpdateEntriesScript:
         custom_list.auto_update_status = CustomList.REPOPULATE
 
         # Previously the list would have had Unpopular books
-        for w in data.unpopular_books:
+        for w in data.test_data.unpopular_books:
             custom_list.add_entry(w)
         prev_entry = custom_list.entries[0]
 
@@ -3679,13 +3711,13 @@ class TestCustomListUpdateEntriesScript:
 
         # Now the entries are only the Popular books
         assert {e.work_id for e in custom_list.entries} == {
-            w.id for w in data.populated_books
+            w.id for w in data.test_data.populated_books
         }
         # The previous entries should have been deleted, not just un-related
         with pytest.raises(InvalidRequestError):
             session.refresh(prev_entry)
         assert custom_list.auto_update_status == CustomList.UPDATED
-        assert custom_list.size == len(data.populated_books)
+        assert custom_list.size == len(data.test_data.populated_books)
 
 
 class TestWorkConsolidationScript:
