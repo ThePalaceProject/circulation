@@ -30,7 +30,7 @@ from core.scripts import RunCollectionCoverageProviderScript
 from core.testing import MockRequestsResponse
 from core.util.http import BadResponseException
 from core.util.string_helpers import base64
-from tests.core_new.util.test_mock_web_server import (
+from tests.core.util.test_mock_web_server import (
     MockAPIServer,
     MockAPIServerResponse,
 )

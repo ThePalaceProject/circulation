@@ -17,7 +17,7 @@ from core.model.identifier import (
 from core.model.resource import Hyperlink, Representation
 from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import AtomFeed
-from tests.core_new.models.test_coverage import ExampleEquivalencyCoverageRecordFixture
+from tests.core.models.test_coverage import ExampleEquivalencyCoverageRecordFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

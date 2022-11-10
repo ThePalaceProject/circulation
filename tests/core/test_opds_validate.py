@@ -8,7 +8,7 @@ from core.model.configuration import ExternalIntegration
 from core.model.datasource import DataSource
 from core.opds2_import import OPDS2Importer, RWPMManifestParser
 from core.opds_schema import ODL2SchemaValidation, OPDS2SchemaValidation
-from tests.core_new.test_opds2_import import OPDS2Test
+from tests.core.test_opds2_import import OPDS2Test
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.opds_files import OPDSFilesFixture
 
