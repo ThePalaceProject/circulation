@@ -1110,6 +1110,27 @@ class TestConfigurationGrouping:
         assert settings[1][ConfigurationAttribute.CATEGORY.value] == SETTING1_CATEGORY
 
 
+class TestNumberConfigurationMetadata(DatabaseTest):
+    def test_number_type_getter(self):
+        # Arrange
+        external_integration = self._external_integration("test")
+        external_integration_association = create_autospec(spec=HasExternalIntegration)
+        external_integration_association.external_integration = MagicMock(
+            return_value=external_integration
+        )
+        configuration_storage = ConfigurationStorage(external_integration_association)
+        configuration = MockConfiguration(configuration_storage, self._db)
+
+        configuration.setting5 = "abc"
+        assert configuration.setting5 == SETTING5_DEFAULT
+
+        configuration.setting5 = "123"
+        assert configuration.setting5 == 123.0
+
+        configuration.setting5 = ""
+        assert configuration.setting5 == SETTING5_DEFAULT
+
+
 class TestBooleanConfigurationMetadata(DatabaseTest):
     @parameterized.expand(
         [

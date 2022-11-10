@@ -1132,9 +1132,15 @@ class ConfigurationMetadata:
 
         if setting_value is None:
             setting_value = self.default
-        elif self.type == ConfigurationAttributeType.NUMBER and setting_value == "":
-            # In case we're a number, the default should take precendence over an empty value
-            setting_value = self.default
+        elif self.type == ConfigurationAttributeType.NUMBER:
+            # In case we're a number, the default should replace any incorrect formatting
+            try:
+                setting_value = float(setting_value)
+            except ValueError:
+                logging.getLogger(self.__class__.__name__).error(
+                    f"Could not typecast {self.label} value '{setting_value}'. Falling back to default"
+                )
+                setting_value = self.default
         else:
             # LIST and MENU configuration settings are stored as JSON-serialized lists in the database.
             # We need to deserialize them to get actual values.

@@ -482,7 +482,7 @@ class OverdriveCoreAPI(HasExternalIntegration):
         payload: Dict[str, str],
         is_fulfillment=False,
         headers={},
-        **kwargs
+        **kwargs,
     ) -> Response:
         """Make an HTTP POST request for purposes of getting an OAuth token."""
         headers = dict(headers)
