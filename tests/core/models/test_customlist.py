@@ -361,7 +361,7 @@ class TestCustomList:
         list, ignore = database_transaction.customlist(num_entries=4)
         # This list has an incorrect cached size.
         list.size = 44
-        list.update_size()
+        list.update_size(self._db)
         assert 4 == list.size
 
 

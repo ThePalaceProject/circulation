@@ -113,6 +113,15 @@ class CustomList(Base):
         )
 
     @classmethod
+    def entries_having_works(cls, _db: Session, list_id: int):
+        return (
+            _db.query(Work)
+            .join(Work.custom_list_entries)
+            .filter(CustomListEntry.list_id == list_id)
+            .order_by(Work.id)
+        )
+
+    @classmethod
     def all_from_data_sources(cls, _db, data_sources):
         """All custom lists from the given data sources."""
         if not isinstance(data_sources, list):
@@ -317,8 +326,8 @@ class CustomList(Base):
         )
         return qu
 
-    def update_size(self):
-        self.size = len(self.entries)
+    def update_size(self, db: Session):
+        self.size = CustomList.entries_having_works(db, self.id).count()
 
 
 customlist_sharedlibrary = Table(

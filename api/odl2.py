@@ -200,12 +200,7 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
                 if parsed_license is not None:
                     licenses.append(parsed_license)
 
-                # DPLA feed doesn't have information about a DRM protection used for audiobooks.
-                # We want to try to extract that information from the License Info Document it's present there.
                 license_formats = set(odl_license.metadata.formats)
-                if parsed_license and parsed_license.content_types:
-                    license_formats |= set(parsed_license.content_types)
-
                 for license_format in license_formats:
                     if (
                         skipped_license_formats
@@ -217,8 +212,11 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
                         medium = Edition.medium_from_media_type(license_format)
 
                     if license_format in ODLImporter.LICENSE_FORMATS:
-                        # Special case to handle DeMarque audiobooks which
-                        # include the protection in the content type
+                        # Special case to handle DeMarque audiobooks which include the protection
+                        # in the content type. When we see a license format of
+                        # application/audiobook+json; protection=http://www.feedbooks.com/audiobooks/access-restriction
+                        # it means that this audiobook title is available through the DeMarque streaming manifest
+                        # endpoint.
                         drm_schemes = [
                             ODLImporter.LICENSE_FORMATS[license_format][
                                 ODLImporter.DRM_SCHEME
