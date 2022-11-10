@@ -59,7 +59,11 @@ from core.model.classification import Subject
 from core.model.work import Work
 from core.problem_details import INVALID_INPUT
 from core.util.datetime_helpers import datetime_utc, from_timestamp
-from tests.fixtures.database import DatabaseTransactionFixture, DBStatementCounter, PerfTimer
+from tests.fixtures.database import (
+    DatabaseTransactionFixture,
+    DBStatementCounter,
+    PerfTimer,
+)
 from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixture
 
 RESEARCH = Term(audience=Classifier.AUDIENCE_RESEARCH.lower())

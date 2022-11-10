@@ -2,6 +2,7 @@ pytest_plugins = [
     "tests.fixtures.csv_files",
     "tests.fixtures.database",
     "tests.fixtures.marc_files",
+    "tests.fixtures.opds2_files",
     "tests.fixtures.opds_files",
     "tests.fixtures.overdrive",
     "tests.fixtures.s3",
