@@ -1137,13 +1137,10 @@ class ConfigurationMetadata:
             try:
                 setting_value = float(setting_value)
             except ValueError:
-                logging.getLogger(self.__class__.__name__).error(
-                    f"Could not typecast {self.label} value '{setting_value}'. Falling back to default"
-                )
                 if setting_value != "":
                     # A non-empty value is a "bad" value, and should raise an exception
                     raise CannotLoadConfiguration(
-                        f"Could not typecast {self.label} value '{setting_value}'. Falling back to default"
+                        f"Could not covert {self.label}'s value '{setting_value}'."
                     )
                 setting_value = self.default
         else:
