@@ -28,6 +28,9 @@ from .library import Library
 if TYPE_CHECKING:
     # This is needed during type checking so we have the
     # types of related models.
+    from core.configuration.ignored_identifier import (  # noqa: autoflake
+        IgnoredIdentifierConfiguration,
+    )
     from core.model import Collection  # noqa: autoflake
 
 
@@ -1106,7 +1109,9 @@ class ConfigurationMetadata:
 
     def __get__(
         self,
-        owner_instance: HasConfigurationSettings | None,
+        owner_instance: HasConfigurationSettings
+        | IgnoredIdentifierConfiguration
+        | None,
         owner_type: type | None,
     ) -> Any:
         """Returns a value of the setting
@@ -1125,7 +1130,7 @@ class ConfigurationMetadata:
 
         if not isinstance(owner_instance, HasConfigurationSettings):
             raise Exception(
-                "owner must be an instance of ConfigurationSettingsMetadataOwner type"
+                "owner must be an instance of HasConfigurationSettings type"
             )
 
         setting_value = owner_instance.get_setting_value(self._key)
@@ -1154,7 +1159,11 @@ class ConfigurationMetadata:
         return setting_value
 
     def __set__(
-        self, owner_instance: HasConfigurationSettings | None, value: Any
+        self,
+        owner_instance: HasConfigurationSettings
+        | IgnoredIdentifierConfiguration
+        | None,
+        value: Any,
     ) -> Any:
         """Updates the setting's value
 
@@ -1164,7 +1173,7 @@ class ConfigurationMetadata:
         """
         if not isinstance(owner_instance, HasConfigurationSettings):
             raise Exception(
-                "owner must be an instance ConfigurationSettingsMetadataOwner type"
+                "owner must be an instance of HasConfigurationSettings type"
             )
 
         return owner_instance.set_setting_value(self._key, value)

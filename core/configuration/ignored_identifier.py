@@ -1,5 +1,5 @@
 import json
-from typing import List, Set, Tuple
+from typing import Optional, Sequence, Set, Union
 
 from flask_babel import lazy_gettext as _
 
@@ -40,7 +40,7 @@ class IgnoredIdentifierConfiguration(ConfigurationTrait):
         format="narrow",
     )
 
-    def get_ignored_identifier_types(self) -> Set[str]:
+    def get_ignored_identifier_types(self) -> Union[Set[str], tuple]:
         """Return the list of ignored identifier types.
 
         By default, when the configuration setting hasn't been set yet, it returns no identifier types.
@@ -51,7 +51,7 @@ class IgnoredIdentifierConfiguration(ConfigurationTrait):
 
     def set_ignored_identifier_types(
         self,
-        value: Tuple[List[str], Set[str], List[IdentifierType], Set[IdentifierType]],
+        value: Sequence[Union[str, IdentifierType]],
     ) -> None:
         """Update the list of ignored identifier types.
 
@@ -83,11 +83,11 @@ class IgnoredIdentifierImporterMixin:
 
     def __init__(self, *args, **kargs) -> None:
         super().__init__(*args, **kargs)
-        self._ignored_identifier_types = None
+        self._ignored_identifier_types: Optional[Union[Set[str], tuple]] = None
 
     def _get_ignored_identifier_types(
         self, configuration: IgnoredIdentifierConfiguration
-    ) -> Set[int]:
+    ) -> Union[Set[str], tuple]:
         """Return a set of ignored identifier types.
         :return: Set of ignored identifier types
         """
