@@ -464,3 +464,17 @@ class TestMoneyUtility:
 
         assert money == parsed
         assert expected_amount == parsed.amount
+
+    @pytest.mark.parametrize(
+        "bad_value",
+        [
+            "abc",
+            "12abc",
+            "4,444.40.40",
+            "4,444.40 40",
+            "4,444 40",
+        ],
+    )
+    def test_parsing_bad_value_raises_valueerror(self, bad_value):
+        with pytest.raises(ValueError):
+            MoneyUtility.parse(bad_value)
