@@ -1133,7 +1133,6 @@ class ConfigurationMetadata:
         if setting_value is None:
             setting_value = self.default
         elif self.type == ConfigurationAttributeType.NUMBER:
-            # In case we're a number, the default should replace any incorrect formatting
             try:
                 setting_value = float(setting_value)
             except ValueError:
