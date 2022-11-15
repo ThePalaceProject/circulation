@@ -68,9 +68,9 @@ class ExampleSiteConfigurationHasChangedFixture:
 
 @pytest.fixture()
 def example_site_configuration_changed_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db: DatabaseTransactionFixture,
 ) -> Iterable[ExampleSiteConfigurationHasChangedFixture]:
-    data = ExampleSiteConfigurationHasChangedFixture.create(database_transaction)
+    data = ExampleSiteConfigurationHasChangedFixture.create(db)
     yield data
     data.close()
 
@@ -254,12 +254,12 @@ class TestListeners:
     )
     def test_licensepool_storage_status_change(
         self,
-        database_transaction: DatabaseTransactionFixture,
+        db,
         name,
         status_property_setter,
     ):
         # Arrange
-        work = database_transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         [pool] = work.license_pools
 
         # Clear out any WorkCoverageRecords created as the work was initialized.

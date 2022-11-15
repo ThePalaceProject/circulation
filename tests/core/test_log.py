@@ -104,12 +104,12 @@ class TestLogConfiguration:
         integration.set_setting(CloudwatchLogs.CREATE_GROUP, "FALSE")
         return integration
 
-    def test_from_configuration(self, database_transaction: DatabaseTransactionFixture):
+    def test_from_configuration(self, db):
         cls = LogConfiguration
         config = Configuration
         m = cls.from_configuration
-        data = database_transaction
-        session = database_transaction.session()
+        data = db
+        session = db.session()
 
         # When logging is configured on initial startup, with no
         # database connection, these are the defaults.
@@ -132,8 +132,8 @@ class TestLogConfiguration:
         assert isinstance(handler.formatter, JSONFormatter)
 
         # Let's set up a integrations and change the defaults.
-        self.loggly_integration(database_transaction)
-        self.cloudwatch_integration(database_transaction)
+        self.loggly_integration(db)
+        self.cloudwatch_integration(db)
         internal = data.external_integration(
             protocol=ExternalIntegration.INTERNAL_LOGGING,
             goal=ExternalIntegration.LOGGING_GOAL,
@@ -230,10 +230,10 @@ class TestLogConfiguration:
         assert isinstance(formatter, JSONFormatter)
         assert "some app" == formatter.app_name
 
-    def test_loggly_handler(self, database_transaction: DatabaseTransactionFixture):
+    def test_loggly_handler(self, db):
         """Turn an appropriate ExternalIntegration into a LogglyHandler."""
 
-        integration = self.loggly_integration(database_transaction)
+        integration = self.loggly_integration(db)
         handler = Loggly.loggly_handler(integration)
         assert isinstance(handler, LogglyHandler)
         assert "http://example.com/a_token/" == handler.url
@@ -244,10 +244,10 @@ class TestLogConfiguration:
         handler = Loggly.loggly_handler(integration)
         assert Loggly.DEFAULT_LOGGLY_URL % dict(token="a_token") == handler.url
 
-    def test_cloudwatch_handler(self, database_transaction: DatabaseTransactionFixture):
+    def test_cloudwatch_handler(self, db):
         """Turn an appropriate ExternalIntegration into a CloudWatchLogHandler."""
 
-        integration = self.cloudwatch_integration(database_transaction)
+        integration = self.cloudwatch_integration(db)
         integration.set_setting(CloudwatchLogs.GROUP, "test_group")
         integration.set_setting(CloudwatchLogs.STREAM, "test_stream")
         integration.set_setting(CloudwatchLogs.INTERVAL, 120)
@@ -284,21 +284,17 @@ class TestLogConfiguration:
         pytest.raises(TypeError, m, "http://%s/%s", "token")
         pytest.raises(KeyError, m, "http://%(atoken)s/", "token")
 
-    def test_cloudwatch_initialization_exception(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_cloudwatch_initialization_exception(self, db):
         # Make sure if an exception is thrown during initalization its caught.
 
-        integration = self.cloudwatch_integration(database_transaction)
+        integration = self.cloudwatch_integration(db)
         integration.set_setting(CloudwatchLogs.CREATE_GROUP, "TRUE")
         (
             internal_log_level,
             database_log_level,
             [handler],
             [error],
-        ) = LogConfiguration.from_configuration(
-            database_transaction.session(), testing=False
-        )
+        ) = LogConfiguration.from_configuration(db.session(), testing=False)
         assert isinstance(handler, logging.StreamHandler)
         assert (
             "Error creating logger AWS Cloudwatch Logs Unable to locate credentials"

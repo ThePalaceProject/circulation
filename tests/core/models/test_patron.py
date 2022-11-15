@@ -16,14 +16,14 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestAnnotation:
-    def test_set_inactive(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_set_inactive(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        pool = database_transaction.licensepool(None)
+        pool = db.licensepool(None)
         annotation, ignore = create(
             session,
             Annotation,
-            patron=database_transaction.patron(),
+            patron=db.patron(),
             identifier=pool.identifier,
             motivation=Annotation.IDLING,
             content="The content",
@@ -37,14 +37,12 @@ class TestAnnotation:
         assert None == annotation.content
         assert annotation.timestamp > yesterday
 
-    def test_patron_annotations_are_descending(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_patron_annotations_are_descending(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        pool1 = database_transaction.licensepool(None)
-        pool2 = database_transaction.licensepool(None)
-        patron = database_transaction.patron()
+        pool1 = db.licensepool(None)
+        pool2 = db.licensepool(None)
+        patron = db.patron()
         annotation1, ignore = create(
             session,
             Annotation,
@@ -75,13 +73,13 @@ class TestAnnotation:
 
 
 class TestHold:
-    def test_on_hold_to(self, database_transaction: DatabaseTransactionFixture):
+    def test_on_hold_to(self, db: DatabaseTransactionFixture):
         now = utc_now()
         later = now + datetime.timedelta(days=1)
-        patron = database_transaction.patron()
-        edition = database_transaction.edition()
-        pool = database_transaction.licensepool(edition)
-        database_transaction.default_library().setting(Library.ALLOW_HOLDS).value = True
+        patron = db.patron()
+        edition = db.edition()
+        pool = db.licensepool(edition)
+        db.default_library().setting(Library.ALLOW_HOLDS).value = True
         hold, is_new = pool.on_hold_to(patron, now, later, 4)
         assert True == is_new
         assert now == hold.start
@@ -98,7 +96,7 @@ class TestHold:
         assert 0 == hold.position
 
         # Make sure we can also hold this book for an IntegrationClient.
-        client = database_transaction.integration_client()
+        client = db.integration_client()
         hold, was_new = pool.on_hold_to(client)
         assert True == was_new
         assert client == hold.integration_client
@@ -112,28 +110,26 @@ class TestHold:
         assert pool == hold2.license_pool
         assert hold != hold2
 
-    def test_holds_not_allowed(self, database_transaction: DatabaseTransactionFixture):
-        patron = database_transaction.patron()
-        edition = database_transaction.edition()
-        pool = database_transaction.licensepool(edition)
+    def test_holds_not_allowed(self, db: DatabaseTransactionFixture):
+        patron = db.patron()
+        edition = db.edition()
+        pool = db.licensepool(edition)
 
-        database_transaction.default_library().setting(
-            Library.ALLOW_HOLDS
-        ).value = False
+        db.default_library().setting(Library.ALLOW_HOLDS).value = False
         with pytest.raises(PolicyException) as excinfo:
             pool.on_hold_to(patron, utc_now(), 4)
         assert "Holds are disabled for this library." in str(excinfo.value)
 
-    def test_work(self, database_transaction: DatabaseTransactionFixture):
+    def test_work(self, db: DatabaseTransactionFixture):
         # We don't need to test the functionality--that's tested in
         # Loan--just that Hold also has access to .work.
-        patron = database_transaction.patron()
-        work = database_transaction.work(with_license_pool=True)
+        patron = db.patron()
+        work = db.work(with_license_pool=True)
         pool = work.license_pools[0]
         hold, is_new = pool.on_hold_to(patron)
         assert work == hold.work
 
-    def test_until(self, database_transaction: DatabaseTransactionFixture):
+    def test_until(self, db: DatabaseTransactionFixture):
 
         one_day = datetime.timedelta(days=1)
         two_days = datetime.timedelta(days=2)
@@ -142,8 +138,8 @@ class TestHold:
         the_past = now - datetime.timedelta(seconds=1)
         the_future = now + two_days
 
-        patron = database_transaction.patron()
-        pool = database_transaction.licensepool(None)
+        patron = db.patron()
+        pool = db.licensepool(None)
         pool.patrons_in_hold_queue = 100
         hold, ignore = pool.on_hold_to(patron)
         hold.position = 10
@@ -254,7 +250,7 @@ class TestHold:
         assert e == None
 
     def test_vendor_hold_end_value_takes_precedence_over_calculated_value(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
         """If the vendor has provided an estimated availability time,
         that is used in preference to the availability time we
@@ -263,8 +259,8 @@ class TestHold:
         now = utc_now()
         tomorrow = now + datetime.timedelta(days=1)
 
-        patron = database_transaction.patron()
-        pool = database_transaction.licensepool(edition=None)
+        patron = db.patron()
+        pool = db.licensepool(edition=None)
         hold, is_new = pool.on_hold_to(patron)
         hold.position = 1
         hold.end = tomorrow
@@ -297,9 +293,9 @@ class TestHold:
 
 
 class TestLoans:
-    def test_open_access_loan(self, database_transaction: DatabaseTransactionFixture):
-        patron = database_transaction.patron()
-        work = database_transaction.work(with_license_pool=True)
+    def test_open_access_loan(self, db: DatabaseTransactionFixture):
+        patron = db.patron()
+        work = db.work(with_license_pool=True)
         pool = work.license_pools[0]
         pool.is_open_access = True
 
@@ -330,7 +326,7 @@ class TestLoans:
         assert False == was_new
 
         # Make sure we can also loan this book to an IntegrationClient.
-        client = database_transaction.integration_client()
+        client = db.integration_client()
         loan, was_new = pool.loan_to(client)
         assert True == was_new
         assert client == loan.integration_client
@@ -344,10 +340,10 @@ class TestLoans:
         assert pool == loan2.license_pool
         assert loan != loan2
 
-    def test_work(self, database_transaction: DatabaseTransactionFixture):
+    def test_work(self, db: DatabaseTransactionFixture):
         """Test the attribute that finds the Work for a Loan or Hold."""
-        patron = database_transaction.patron()
-        work = database_transaction.work(with_license_pool=True)
+        patron = db.patron()
+        work = db.work(with_license_pool=True)
         pool = work.license_pools[0]
 
         # The easy cases.
@@ -368,30 +364,30 @@ class TestLoans:
         pool.presentation_edition.work = None
         assert None == loan.work
 
-    def test_library(self, database_transaction: DatabaseTransactionFixture):
-        patron = database_transaction.patron()
-        work = database_transaction.work(with_license_pool=True)
+    def test_library(self, db: DatabaseTransactionFixture):
+        patron = db.patron()
+        work = db.work(with_license_pool=True)
         pool = work.license_pools[0]
 
         loan, is_new = pool.loan_to(patron)
-        assert database_transaction.default_library() == loan.library
+        assert db.default_library() == loan.library
 
         loan.patron = None
-        client = database_transaction.integration_client()
+        client = db.integration_client()
         loan.integration_client = client
         assert None == loan.library
 
         loan.integration_client = None
         assert None == loan.library
 
-        patron.library = database_transaction.library()
+        patron.library = db.library()
         loan.patron = patron
         assert patron.library == loan.library
 
 
 class TestPatron:
-    def test_repr(self, database_transaction: DatabaseTransactionFixture):
-        patron = database_transaction.patron(external_identifier="a patron")
+    def test_repr(self, db: DatabaseTransactionFixture):
+        patron = db.patron(external_identifier="a patron")
 
         patron.authorization_expires = datetime_utc(2018, 1, 2, 3, 4, 5)
         patron.last_external_sync = None
@@ -400,13 +396,11 @@ class TestPatron:
             == repr(patron)
         )
 
-    def test_identifier_to_remote_service(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_identifier_to_remote_service(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Here's a patron.
-        patron = database_transaction.patron()
+        patron = db.patron()
 
         # Get identifiers to use when identifying that patron on two
         # different remote services.
@@ -443,16 +437,14 @@ class TestPatron:
             axis, fake_generator
         )
 
-    def test_set_synchronize_annotations(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_set_synchronize_annotations(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Two patrons.
-        p1 = database_transaction.patron()
-        p2 = database_transaction.patron()
+        p1 = db.patron()
+        p2 = db.patron()
 
-        identifier = database_transaction.identifier()
+        identifier = db.identifier()
 
         for patron in [p1, p2]:
             # Each patron decides they want to synchronize annotations
@@ -495,7 +487,7 @@ class TestPatron:
         i2, is_new = Annotation.get_one_or_create(
             session,
             patron=p2,
-            identifier=database_transaction.identifier(),
+            identifier=db.identifier(),
             motivation=Annotation.IDLING,
         )
         assert True == is_new
@@ -507,22 +499,22 @@ class TestPatron:
 
         pytest.raises(ValueError, try_to_set_none, p2)
 
-    def test_cascade_delete(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_cascade_delete(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Create a patron and check that it has  been created
-        patron = database_transaction.patron()
+        patron = db.patron()
         assert len(session.query(Patron).all()) == 1
 
         # Give the patron a loan, and check that it has been created
-        work_for_loan = database_transaction.work(with_license_pool=True)
+        work_for_loan = db.work(with_license_pool=True)
         pool = work_for_loan.license_pools[0]
         loan, is_new = pool.loan_to(patron)
         assert [loan] == patron.loans
         assert len(session.query(Loan).all()) == 1
 
         # Give the patron a hold and check that it has been created
-        work_for_hold = database_transaction.work(with_license_pool=True)
+        work_for_hold = db.work(with_license_pool=True)
         pool = work_for_hold.license_pools[0]
         hold, is_new = pool.on_hold_to(patron)
         assert [hold] == patron.holds
@@ -548,19 +540,15 @@ class TestPatron:
         assert session.query(Annotation).all() == []
         assert session.query(Credential).all() == []
 
-    def test_loan_activity_max_age(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_loan_activity_max_age(self, db: DatabaseTransactionFixture):
         # Currently, patron.loan_activity_max_age is a constant
         # and cannot be changed.
-        assert 15 * 60 == database_transaction.patron().loan_activity_max_age
+        assert 15 * 60 == db.patron().loan_activity_max_age
 
-    def test_last_loan_activity_sync(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_last_loan_activity_sync(self, db: DatabaseTransactionFixture):
         # Verify that last_loan_activity_sync is cleared out
         # beyond a certain point.
-        patron = database_transaction.patron()
+        patron = db.patron()
         now = utc_now()
         max_age = patron.loan_activity_max_age
         recently = now - datetime.timedelta(seconds=max_age / 2)
@@ -579,15 +567,15 @@ class TestPatron:
         assert None == patron.last_loan_activity_sync
         assert None == patron._last_loan_activity_sync
 
-    def test_root_lane(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_root_lane(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        root_1 = database_transaction.lane()
-        root_2 = database_transaction.lane()
+        root_1 = db.lane()
+        root_2 = db.lane()
 
         # If a library has no root lanes, its patrons have no root
         # lanes.
-        patron = database_transaction.patron()
+        patron = db.patron()
         patron.external_type = "x"
         assert None == patron.root_lane
 
@@ -621,14 +609,12 @@ class TestPatron:
         root_1.root_for_patron_type = ["1", "2", "3"]
         assert root_1 == patron.root_lane
 
-    def test_work_is_age_appropriate(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_work_is_age_appropriate(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # The target audience and age of a patron's root lane controls
         # whether a given book is 'age-appropriate' for them.
-        lane = database_transaction.lane()
+        lane = db.lane()
         lane.audiences = [Classifier.AUDIENCE_CHILDREN, Classifier.AUDIENCE_YOUNG_ADULT]
         lane.target_age = (9, 14)
         lane.root_for_patron_type = ["1"]
@@ -644,7 +630,7 @@ class TestPatron:
                 return True
             return False
 
-        patron = database_transaction.patron()
+        patron = db.patron()
         mock = MagicMock(side_effect=mock_age_appropriate)
         patron.age_appropriate_match = mock
         self.calls = []
@@ -831,9 +817,9 @@ class ExamplePatronProfileStorageFixture:
 
 @pytest.fixture()
 def example_patron_profile_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db,
 ) -> ExamplePatronProfileStorageFixture:
-    return ExamplePatronProfileStorageFixture.create(database_transaction)
+    return ExamplePatronProfileStorageFixture.create(db)
 
 
 class TestPatronProfileStorage(DatabaseTest):

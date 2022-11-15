@@ -24,18 +24,18 @@ from tests.fixtures.sample_covers import SampleCoversFixture
 
 
 class TestWork:
-    def test_all_identifier_ids(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_all_identifier_ids(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        work = database_transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         lp = work.license_pools[0]
-        identifier = database_transaction.identifier()
+        identifier = db.identifier()
         data_source = DataSource.lookup(session, DataSource.OCLC)
         identifier.equivalent_to(data_source, lp.identifier, 1)
 
         # Make sure there aren't duplicates in the list, if an
         # identifier's equivalent to two of the primary identifiers.
-        lp2 = database_transaction.licensepool(None)
+        lp2 = db.licensepool(None)
         work.license_pools.append(lp2)
         identifier.equivalent_to(data_source, lp2.identifier, 1)
 
@@ -45,17 +45,13 @@ class TestWork:
 
         assert expect_all_ids == all_identifier_ids
 
-    def test_from_identifiers(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_from_identifiers(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Prep a work to be identified and a work to be ignored.
-        work = database_transaction.work(
-            with_license_pool=True, with_open_access_download=True
-        )
+        work = db.work(with_license_pool=True, with_open_access_download=True)
         lp = work.license_pools[0]
-        ignored_work = database_transaction.work(
-            with_license_pool=True, with_open_access_download=True
-        )
+        ignored_work = db.work(with_license_pool=True, with_open_access_download=True)
 
         # No identifiers returns None.
         result = Work.from_identifiers(session, [])
@@ -68,7 +64,7 @@ class TestWork:
         assert [work] == result
 
         # When the work has an equivalent identifier.
-        isbn = database_transaction.identifier(Identifier.ISBN)
+        isbn = db.identifier(Identifier.ISBN)
         source = lp.data_source
         lp.identifier.equivalent_to(source, isbn, 1)
 
@@ -103,10 +99,8 @@ class TestWork:
         # Because the work's license_pool isn't suppressed, it isn't returned.
         assert [] == result
 
-    def test_calculate_presentation(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_calculate_presentation(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Test that:
         # - work coverage records are made on work creation and primary edition selection.
@@ -124,7 +118,7 @@ class TestWork:
         [bob], ignore = Contributor.lookup(session, "Bitshifter, Bob")
         bob.family_name, bob.display_name = bob.default_names()
 
-        edition1, pool1 = database_transaction.edition(
+        edition1, pool1 = db.edition(
             gitenberg_source,
             Identifier.GUTENBERG_ID,
             with_license_pool=True,
@@ -135,7 +129,7 @@ class TestWork:
         edition1.subtitle = "The 1st Subtitle"
         edition1.add_contributor(bob, Contributor.AUTHOR_ROLE)
 
-        edition2, pool2 = database_transaction.edition(
+        edition2, pool2 = db.edition(
             gitenberg_source,
             Identifier.GUTENBERG_ID,
             with_license_pool=True,
@@ -149,7 +143,7 @@ class TestWork:
         alice.family_name, alice.display_name = alice.default_names()
         edition2.add_contributor(alice, Contributor.AUTHOR_ROLE)
 
-        edition3, pool3 = database_transaction.edition(
+        edition3, pool3 = db.edition(
             gutenberg_source,
             Identifier.GUTENBERG_ID,
             with_license_pool=True,
@@ -188,7 +182,7 @@ class TestWork:
         # same source as the LicensePool, which is good, but it's not
         # directly associated with any of the LicensePools, so it
         # won't be chosen.
-        related_identifier = database_transaction.identifier()
+        related_identifier = db.identifier()
         pool3.identifier.equivalent_to(
             pool3.data_source, related_identifier, strength=1
         )
@@ -199,7 +193,7 @@ class TestWork:
             content="This is an indirect summary. It's much longer, and looks more 'real', so you'd think it would be prefered, but it won't be.",
         )
 
-        work = database_transaction.slow_work(presentation_edition=edition2)
+        work = db.slow_work(presentation_edition=edition2)
 
         # The work starts out with no description, even though its
         # presentation was calculated, because a description can only
@@ -329,7 +323,7 @@ class TestWork:
         # except when it has no contributors, and they do.
         pool2.suppressed = False
 
-        staff_edition = database_transaction.edition(
+        staff_edition = db.edition(
             data_source_name=DataSource.LIBRARY_STAFF,
             with_license_pool=False,
             authors=[],
@@ -352,14 +346,14 @@ class TestWork:
         assert "Adder, Alice ; Bitshifter, Bob" == work.sort_author
 
     def test_calculate_presentation_with_no_presentation_edition(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        session = database_transaction.session()
+        session = db.session()
 
         # Calling calculate_presentation() on a work with no
         # presentation edition won't do anything, but at least it doesn't
         # crash.
-        work = database_transaction.work()
+        work = db.work()
         work.presentation_edition = None
         work.coverage_records = []
         session.commit()
@@ -374,13 +368,13 @@ class TestWork:
         assert WorkCoverageRecord.CHOOSE_EDITION_OPERATION == choose_edition.operation
 
     def test_calculate_presentation_sets_presentation_ready_based_on_content(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        session = database_transaction.session()
+        session = db.session()
 
         # This work is incorrectly presentation-ready; its presentation
         # edition has no language.
-        work = database_transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         edition = work.presentation_edition
         edition.language = None
 
@@ -394,19 +388,19 @@ class TestWork:
         assert True == work.presentation_ready
 
     def test_calculate_presentation_uses_default_audience_set_as_collection_setting(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db
     ):
         default_audience = Classifier.AUDIENCE_ADULT
-        collection = database_transaction.default_collection()
+        collection = db.default_collection()
         collection.default_audience = default_audience
-        edition, pool = database_transaction.edition(
+        edition, pool = db.edition(
             DataSource.GUTENBERG,
             Identifier.GUTENBERG_ID,
             collection=collection,
             with_license_pool=True,
             with_open_access_download=True,
         )
-        work = database_transaction.slow_work(presentation_edition=edition)
+        work = db.slow_work(presentation_edition=edition)
         work.last_update_time = None
         work.presentation_ready = True
 
@@ -414,8 +408,8 @@ class TestWork:
 
         assert default_audience == work.audience
 
-    def test__choose_summary(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test__choose_summary(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Test the _choose_summary helper method, called by
         # calculate_presentation().
@@ -440,14 +434,14 @@ class TestWork:
         source1 = DataSource.lookup(session, DataSource.OVERDRIVE)
         source2 = DataSource.lookup(session, DataSource.BIBLIOTHECA)
 
-        i1 = database_transaction.identifier()
+        i1 = db.identifier()
         l1, ignore = i1.add_link(
             Hyperlink.DESCRIPTION, None, source1, content="ok summary"
         )
         good_summary = "This summary is great! It's more than one sentence long and features some noun phrases."
         i1.add_link(Hyperlink.DESCRIPTION, None, source2, content=good_summary)
 
-        i2 = database_transaction.identifier()
+        i2 = db.identifier()
         i2.add_link(Hyperlink.DESCRIPTION, None, source2, content="not too bad")
 
         # Now we can test out the rules for choosing summaries.
@@ -484,9 +478,9 @@ class TestWork:
         assert l1.resource.representation.content.decode("utf-8") == w.summary_text
 
     def test_set_presentation_ready_based_on_content(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        work = database_transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
 
         search = MockExternalSearchIndex()
         # This is how the work will be represented in the dummy search
@@ -561,12 +555,10 @@ class TestWork:
         work.set_presentation_ready_based_on_content(search_index_client=search)
         assert True == work.presentation_ready
 
-    def test_assign_genres_from_weights(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_assign_genres_from_weights(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        work = database_transaction.work()
+        work = db.work()
 
         # This work was once classified under Fantasy and Romance.
         work.assign_genres_from_weights({Romance: 1000, Fantasy: 1000})
@@ -580,28 +572,26 @@ class TestWork:
         after = sorted((x.genre.name, x.affinity) for x in work.work_genres)
         assert [("Romance", 0.25), ("Science Fiction", 0.75)] == after
 
-    def test_classifications_with_genre(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_classifications_with_genre(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        work = database_transaction.work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
         identifier = work.presentation_edition.primary_identifier
         genres = session.query(Genre).all()
-        subject1 = database_transaction.subject(type="type1", identifier="subject1")
+        subject1 = db.subject(type="type1", identifier="subject1")
         subject1.genre = genres[0]
-        subject2 = database_transaction.subject(type="type2", identifier="subject2")
+        subject2 = db.subject(type="type2", identifier="subject2")
         subject2.genre = genres[1]
-        subject3 = database_transaction.subject(type="type2", identifier="subject3")
+        subject3 = db.subject(type="type2", identifier="subject3")
         subject3.genre = None
         source = DataSource.lookup(session, DataSource.AXIS_360)
-        classification1 = database_transaction.classification(
+        classification1 = db.classification(
             identifier=identifier, subject=subject1, data_source=source, weight=1
         )
-        classification2 = database_transaction.classification(
+        classification2 = db.classification(
             identifier=identifier, subject=subject2, data_source=source, weight=2
         )
-        classification3 = database_transaction.classification(
+        classification3 = db.classification(
             identifier=identifier, subject=subject3, data_source=source, weight=2
         )
 
@@ -609,16 +599,12 @@ class TestWork:
 
         assert [classification2, classification1] == results
 
-    def test_mark_licensepools_as_superceded(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_mark_licensepools_as_superceded(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # A commercial LP that somehow got superceded will be
         # un-superceded.
-        commercial = database_transaction.licensepool(
-            None, data_source_name=DataSource.OVERDRIVE
-        )
+        commercial = db.licensepool(None, data_source_name=DataSource.OVERDRIVE)
         work, is_new = commercial.calculate_work()
         commercial.superceded = True
         work.mark_licensepools_as_superceded()
@@ -626,7 +612,7 @@ class TestWork:
 
         # An open-access LP that was superceded will be un-superceded if
         # chosen.
-        gutenberg = database_transaction.licensepool(
+        gutenberg = db.licensepool(
             None,
             data_source_name=DataSource.GUTENBERG,
             open_access=True,
@@ -640,7 +626,7 @@ class TestWork:
         # Of two open-access LPs, the one from the higher-quality data
         # source will be un-superceded, and the one from the
         # lower-quality data source will be superceded.
-        standard_ebooks = database_transaction.licensepool(
+        standard_ebooks = db.licensepool(
             None,
             data_source_name=DataSource.STANDARD_EBOOKS,
             open_access=True,
@@ -654,28 +640,28 @@ class TestWork:
         assert False == standard_ebooks.superceded
 
         # Of three open-access pools, 1 and only 1 will be chosen as non-superceded.
-        gitenberg1 = database_transaction.licensepool(
+        gitenberg1 = db.licensepool(
             edition=None,
             open_access=True,
             data_source_name=DataSource.PROJECT_GITENBERG,
             with_open_access_download=True,
         )
 
-        gitenberg2 = database_transaction.licensepool(
+        gitenberg2 = db.licensepool(
             edition=None,
             open_access=True,
             data_source_name=DataSource.PROJECT_GITENBERG,
             with_open_access_download=True,
         )
 
-        gutenberg1 = database_transaction.licensepool(
+        gutenberg1 = db.licensepool(
             edition=None,
             open_access=True,
             data_source_name=DataSource.GUTENBERG,
             with_open_access_download=True,
         )
 
-        work_multipool = database_transaction.work(presentation_edition=None)
+        work_multipool = db.work(presentation_edition=None)
         work_multipool.license_pools.append(gutenberg1)
         work_multipool.license_pools.append(gitenberg2)
         work_multipool.license_pools.append(gitenberg1)
@@ -707,7 +693,7 @@ class TestWork:
         assert gitenberg2.superceded == False
 
         # A suppressed pool won't be superceded if it's the only pool for a work.
-        only_pool = database_transaction.licensepool(
+        only_pool = db.licensepool(
             None, open_access=True, with_open_access_download=True
         )
         work, ignore = only_pool.calculate_work()
@@ -716,9 +702,9 @@ class TestWork:
         assert False == only_pool.superceded
 
     def test_work_remains_viable_on_pools_suppressed(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        session = database_transaction.session()
+        session = db.session()
 
         """If a work has all of its pools suppressed, the work's author, title,
         and subtitle still have the last best-known info in them.
@@ -733,7 +719,7 @@ class TestWork:
             edition_gut,
             alice,
             bob,
-        ) = database_transaction.sample_ecosystem()
+        ) = db.sample_ecosystem()
 
         # make sure the setup is what we expect
         assert pool_std_ebooks.suppressed == False
@@ -782,10 +768,8 @@ class TestWork:
         assert "Alice Adder" == work.author
         assert "Adder, Alice" == work.sort_author
 
-    def test_work_updates_info_on_pool_suppressed(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_work_updates_info_on_pool_suppressed(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         """If the provider of the work's presentation edition gets suppressed,
         the work will choose another child license pool's presentation edition as
@@ -801,7 +785,7 @@ class TestWork:
             edition_gut,
             alice,
             bob,
-        ) = database_transaction.sample_ecosystem()
+        ) = db.sample_ecosystem()
 
         # make sure the setup is what we expect
         assert pool_std_ebooks.suppressed == False
@@ -849,9 +833,9 @@ class TestWork:
         assert "Adder, Alice ; Bitshifter, Bob" == work.sort_author
 
     def test_different_language_means_different_work(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        session = database_transaction.session()
+        session = db.session()
 
         """There are two open-access LicensePools for the same book in
         different languages. The author and title information is the
@@ -860,7 +844,7 @@ class TestWork:
         """
         title = "Siddhartha"
         author = ["Herman Hesse"]
-        edition1, lp1 = database_transaction.edition(
+        edition1, lp1 = db.edition(
             title=title,
             authors=author,
             language="eng",
@@ -868,7 +852,7 @@ class TestWork:
             with_open_access_download=True,
         )
         w1 = lp1.calculate_work()
-        edition2, lp2 = database_transaction.edition(
+        edition2, lp2 = db.edition(
             title=title,
             authors=author,
             language="ger",
@@ -882,12 +866,12 @@ class TestWork:
 
     def test_reject_covers(
         self,
-        database_transaction: DatabaseTransactionFixture,
+        db,
         sample_covers_fixture: SampleCoversFixture,
     ):
-        session = database_transaction.session()
+        session = db.session()
 
-        edition, lp = database_transaction.edition(with_open_access_download=True)
+        edition, lp = db.edition(with_open_access_download=True)
 
         # Create a cover and thumbnail for the edition.
         sample_cover_path = sample_covers_fixture.sample_cover_path(
@@ -903,7 +887,7 @@ class TestWork:
         )[0]
 
         thumbnail_href = "http://thumbnail.png"
-        thumbnail_rep = database_transaction.representation(
+        thumbnail_rep = db.representation(
             url=thumbnail_href,
             media_type=Representation.PNG_MEDIA_TYPE,
             content=open(sample_cover_path, "rb").read(),
@@ -920,7 +904,7 @@ class TestWork:
         thumbnail_url = thumbnail_rep.mirror_url
 
         # A Work created from this edition has cover details.
-        work = database_transaction.work(presentation_edition=edition)
+        work = db.work(presentation_edition=edition)
         assert work.cover_full_url and work.cover_thumbnail_url
 
         # A couple helper methods to make these tests more readable.
@@ -967,31 +951,29 @@ class TestWork:
 
         # When other Works or Editions share a cover, they are also
         # updated during the suppression process.
-        other_edition = database_transaction.edition()
+        other_edition = db.edition()
         other_edition.set_cover(cover_link.resource)
-        other_work_ed = database_transaction.edition()
+        other_work_ed = db.edition()
         other_work_ed.set_cover(cover_link.resource)
-        other_work = database_transaction.work(presentation_edition=other_work_ed)
+        other_work = db.work(presentation_edition=other_work_ed)
 
         Work.reject_covers(session, [work], search_index_client=index)
         assert has_no_cover(other_edition)
         assert has_no_cover(other_work)
 
-    def test_missing_coverage_from(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_missing_coverage_from(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         operation = "the_operation"
 
         # Here's a work with a coverage record.
-        work = database_transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
 
         # It needs coverage.
         assert [work] == Work.missing_coverage_from(session, operation).all()
 
         # Let's give it coverage.
-        record = database_transaction.work_coverage_record(work, operation)
+        record = db.work_coverage_record(work, operation)
 
         # It no longer needs coverage!
         assert [] == Work.missing_coverage_from(session, operation).all()
@@ -1004,17 +986,15 @@ class TestWork:
             session, operation, count_as_missing_before=cutoff
         ).all()
 
-    def test_missing_coverage_from_sorts_results(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_missing_coverage_from_sorts_results(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         """Ensure that Work objects returned by Work.missing_coverage_from are sorted by their identifier."""
         operation = "the_operation"
 
         # Create two Work objects.
-        work1 = database_transaction.work(with_license_pool=True)
-        work2 = database_transaction.work(with_license_pool=True)
+        work1 = db.work(with_license_pool=True)
+        work2 = db.work(with_license_pool=True)
         works = [work1, work2]
 
         session.commit()
@@ -1025,10 +1005,10 @@ class TestWork:
         # Ensure that the Work objects returned by Work.missing_coverage_from are sorted.
         assert works == Work.missing_coverage_from(session, operation).all()
 
-    def test_top_genre(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_top_genre(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        work = database_transaction.work()
+        work = db.work()
         identifier = work.presentation_edition.primary_identifier
         genres = session.query(Genre).all()
         source = DataSource.lookup(session, DataSource.AXIS_360)
@@ -1049,28 +1029,26 @@ class TestWork:
         )
         assert genres[1].name == work.top_genre()
 
-    def test_to_search_document(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_to_search_document(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Set up an edition and work.
-        edition, pool1 = database_transaction.edition(
+        edition, pool1 = db.edition(
             authors=[
-                database_transaction.fresh_str(),
-                database_transaction.fresh_str(),
+                db.fresh_str(),
+                db.fresh_str(),
             ],
             with_license_pool=True,
             publication_date=utc_now(),
         )
-        work = database_transaction.work(presentation_edition=edition)
+        work = db.work(presentation_edition=edition)
 
         # Create a second Collection that has a different LicensePool
         # for the same Work.
-        collection1 = database_transaction.default_collection()
-        collection2 = database_transaction.collection()
-        database_transaction.default_library().collections.append(collection2)
-        pool2 = database_transaction.licensepool(
-            edition=edition, collection=collection2
-        )
+        collection1 = db.default_collection()
+        collection2 = db.collection()
+        db.default_library().collections.append(collection2)
+        pool2 = db.licensepool(edition=edition, collection=collection2)
         pool2.work_id = work.id
         pool2.licenses_available = 0
         pool2.licenses_owned = 10
@@ -1078,7 +1056,7 @@ class TestWork:
 
         # Create a third Collection that's just hanging around, not
         # doing anything.
-        collection3 = database_transaction.collection()
+        collection3 = db.collection()
 
         # These are the edition's authors.
         [contributor1] = [
@@ -1086,10 +1064,10 @@ class TestWork:
             for c in edition.contributions
             if c.role == Contributor.PRIMARY_AUTHOR_ROLE
         ]
-        contributor1.display_name = database_transaction.fresh_str()
-        contributor1.family_name = database_transaction.fresh_str()
-        contributor1.viaf = database_transaction.fresh_str()
-        contributor1.lc = database_transaction.fresh_str()
+        contributor1.display_name = db.fresh_str()
+        contributor1.family_name = db.fresh_str()
+        contributor1.viaf = db.fresh_str()
+        contributor1.lc = db.fresh_str()
         [contributor2] = [
             c.contributor
             for c in edition.contributions
@@ -1099,17 +1077,17 @@ class TestWork:
         data_source = DataSource.lookup(session, DataSource.THREEM)
 
         # This identifier is strongly equivalent to the edition's.
-        identifier1 = database_transaction.identifier(identifier_type=Identifier.ISBN)
+        identifier1 = db.identifier(identifier_type=Identifier.ISBN)
         identifier1.equivalent_to(data_source, edition.primary_identifier, 0.9)
 
         # This identifier is equivalent to the other identifier, but the strength
         # is too weak for it to be used.
-        identifier2 = database_transaction.identifier(identifier_type=Identifier.ISBN)
+        identifier2 = db.identifier(identifier_type=Identifier.ISBN)
         identifier2.equivalent_to(data_source, identifier2, 0.1)
 
         # This identifier is equivalent to the _edition's_, but too weak to
         # be used.
-        identifier3 = database_transaction.identifier(identifier_type=Identifier.ISBN)
+        identifier3 = db.identifier(identifier_type=Identifier.ISBN)
         identifier3.equivalent_to(data_source, edition.primary_identifier, 0.1)
 
         # Add some classifications.
@@ -1133,23 +1111,17 @@ class TestWork:
         identifier1.classify(
             data_source,
             Subject.FAST,
-            database_transaction.fresh_str(),
+            db.fresh_str(),
             "Sea Stories",
             7,
         )
 
         # This classification will be left out because its subject type isn't useful for search.
-        identifier1.classify(
-            data_source, Subject.DDC, database_transaction.fresh_str(), None
-        )
+        identifier1.classify(data_source, Subject.DDC, db.fresh_str(), None)
 
         # These classifications will be left out because their identifiers aren't sufficiently equivalent to the edition's.
-        identifier2.classify(
-            data_source, Subject.FAST, database_transaction.fresh_str(), None
-        )
-        identifier3.classify(
-            data_source, Subject.FAST, database_transaction.fresh_str(), None
-        )
+        identifier2.classify(data_source, Subject.FAST, db.fresh_str(), None)
+        identifier3.classify(data_source, Subject.FAST, db.fresh_str(), None)
 
         # Add some genres.
         genre1, ignore = Genre.lookup(session, "Science Fiction")
@@ -1161,14 +1133,14 @@ class TestWork:
         # not the other.
         appeared_1 = datetime_utc(2010, 1, 1)
         appeared_2 = datetime_utc(2011, 1, 1)
-        l1, ignore = database_transaction.customlist(num_entries=0)
+        l1, ignore = db.customlist(num_entries=0)
         l1.add_entry(
             work,
             featured=False,
             update_external_index=False,
             first_appearance=appeared_1,
         )
-        l2, ignore = database_transaction.customlist(num_entries=0)
+        l2, ignore = db.customlist(num_entries=0)
         l2.add_entry(
             work,
             featured=True,
@@ -1178,14 +1150,14 @@ class TestWork:
 
         # Add the other fields used in the search document.
         work.target_age = NumericRange(7, 8, "[]")
-        edition.subtitle = database_transaction.fresh_str()
-        edition.series = database_transaction.fresh_str()
+        edition.subtitle = db.fresh_str()
+        edition.series = db.fresh_str()
         edition.series_position = 99
-        edition.publisher = database_transaction.fresh_str()
-        edition.imprint = database_transaction.fresh_str()
+        edition.publisher = db.fresh_str()
+        edition.imprint = db.fresh_str()
         work.fiction = False
         work.audience = Classifier.AUDIENCE_YOUNG_ADULT
-        work.summary_text = database_transaction.fresh_str()
+        work.summary_text = db.fresh_str()
         work.rating = 5
         work.popularity = 4
         work.last_update_time = utc_now()
@@ -1391,12 +1363,10 @@ class TestWork:
             x["collection_id"] for x in search_doc["licensepools"]
         }
 
-    def test_to_search_doc_no_edition(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_to_search_doc_no_edition(self, db: DatabaseTransactionFixture):
         """There was a bug where to_search_documents would crash if
         a presentation_edition was missing"""
-        work = database_transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         work.presentation_edition = None
         search_doc = work.to_search_document()
 
@@ -1406,12 +1376,10 @@ class TestWork:
             "medium" not in search_doc["licensepools"][0]
         )  # No presentation edition means no medium
 
-    def test_to_search_doc_datetime_cases(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_to_search_doc_datetime_cases(self, db: DatabaseTransactionFixture):
         # datetime.dates are tz unaware and converting to timestamps may cause errors
         # if the local timezone pushes it out of a valid date range (eg. year 0)
-        work = database_transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         work.presentation_edition.published = datetime.date(1, 1, 1)
         # naive datetimes would also cause the same issue
         work.license_pools[0].availability_time = datetime.datetime(1, 1, 1)
@@ -1425,13 +1393,11 @@ class TestWork:
             == datetime.datetime(1, 1, 1, tzinfo=pytz.UTC).timestamp()
         )
 
-    def test_age_appropriate_for_patron(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        work = database_transaction.work()
+    def test_age_appropriate_for_patron(self, db: DatabaseTransactionFixture):
+        work = db.work()
         work.audience = Classifier.AUDIENCE_YOUNG_ADULT
         work.target_age = tuple_to_numericrange((12, 15))
-        patron = database_transaction.patron()
+        patron = db.patron()
 
         # If no Patron is specified, the method always returns True.
         assert True == work.age_appropriate_for_patron(None)
@@ -1446,7 +1412,7 @@ class TestWork:
         )
 
     def test_age_appropriate_for_patron_end_to_end(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
         # A test of age_appropriate_for_patron without any mocks.
         # More detailed unit tests are in test_patron.py.
@@ -1455,12 +1421,12 @@ class TestWork:
         # 'age-appropriate' logic is quite complicated, and because
         # target age ranges are sometimes passed around as tuples and
         # sometimes as NumericRange objects.
-        patron = database_transaction.patron()
+        patron = db.patron()
         patron.external_type = "a"
 
         # This Lane contains books at the old end of the "children"
         # range and the young end of the "young adult" range.
-        lane = database_transaction.lane()
+        lane = db.lane()
         lane.root_for_patron_type = ["a"]
 
         # A patron with this root lane can see children's and YA
@@ -1472,7 +1438,7 @@ class TestWork:
         lane.target_age = (9, 14)
 
         # This work is a YA title within the age range.
-        work = database_transaction.work()
+        work = db.work()
         work.audience = Classifier.AUDIENCE_YOUNG_ADULT
         work.target_age = tuple_to_numericrange((12, 15))
         assert True == work.age_appropriate_for_patron(patron)
@@ -1492,19 +1458,19 @@ class TestWork:
         assert False == work.age_appropriate_for_patron(patron)
 
     def test_unlimited_access_books_are_available_by_default(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        session = database_transaction.session()
+        session = db.session()
 
         # Set up an edition and work.
-        edition, pool = database_transaction.edition(
+        edition, pool = db.edition(
             authors=[
-                database_transaction.fresh_str(),
-                database_transaction.fresh_str(),
+                db.fresh_str(),
+                db.fresh_str(),
             ],
             with_license_pool=True,
         )
-        work = database_transaction.work(presentation_edition=edition)
+        work = db.work(presentation_edition=edition)
 
         pool.open_access = False
         pool.self_hosted = False
@@ -1523,19 +1489,19 @@ class TestWork:
         assert licensepools[0]["available"] == True
 
     def test_self_hosted_books_are_available_by_default(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        session = database_transaction.session()
+        session = db.session()
 
         # Set up an edition and work.
-        edition, pool = database_transaction.edition(
+        edition, pool = db.edition(
             authors=[
-                database_transaction.fresh_str(),
-                database_transaction.fresh_str(),
+                db.fresh_str(),
+                db.fresh_str(),
             ],
             with_license_pool=True,
         )
-        work = database_transaction.work(presentation_edition=edition)
+        work = db.work(presentation_edition=edition)
 
         pool.licenses_owned = 0
         pool.licenses_available = 0
@@ -1553,8 +1519,8 @@ class TestWork:
         assert licensepools[0]["open_access"] == False
         assert licensepools[0]["available"] == True
 
-    def test_target_age_string(self, database_transaction: DatabaseTransactionFixture):
-        work = database_transaction.work()
+    def test_target_age_string(self, db: DatabaseTransactionFixture):
+        work = db.work()
         work.target_age = NumericRange(7, 8, "[]")
         assert "7-8" == work.target_age_string
 
@@ -1591,10 +1557,8 @@ class TestWork:
         work.target_age = None
         assert "" == work.target_age_string
 
-    def test_reindex_on_availability_change(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_reindex_on_availability_change(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # A change in a LicensePool's availability creates a
         # WorkCoverageRecord indicating that the work needs to be
@@ -1620,12 +1584,12 @@ class TestWork:
         # A Work with no LicensePool isn't registered as needing
         # indexing. (It will be indexed anyway, but it's not registered
         # as needing it.)
-        no_licensepool = database_transaction.work()
+        no_licensepool = db.work()
         assert None == find_record(no_licensepool)
 
         # A Work with a LicensePool starts off in a state where it
         # needs to be indexed.
-        work = database_transaction.work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
         [pool] = work.license_pools
         record = find_record(work)
         assert registered == record.status
@@ -1653,7 +1617,7 @@ class TestWork:
         # If its collection changes (which shouldn't happen), it needs
         # to be reindexed.
         record.status = success
-        collection2 = database_transaction.collection()
+        collection2 = db.collection()
         pool.collection_id = collection2.id
         assert registered == record.status
 
@@ -1668,7 +1632,7 @@ class TestWork:
         # If a LicensePool is moved in from another Work, _both_ Works
         # need to be reindexed.
         record.status = success
-        another_work = database_transaction.work(with_license_pool=True)
+        another_work = db.work(with_license_pool=True)
         [another_pool] = another_work.license_pools
         work.license_pools.append(another_pool)
         assert [] == another_work.license_pools
@@ -1677,11 +1641,11 @@ class TestWork:
             record = find_record(work)
             assert registered == record.status
 
-    def test_reset_coverage(self, database_transaction: DatabaseTransactionFixture):
+    def test_reset_coverage(self, db: DatabaseTransactionFixture):
         # Test the methods that reset coverage for works, indicating
         # that some task needs to be performed again.
         WCR = WorkCoverageRecord
-        work = database_transaction.work()
+        work = db.work()
         work.presentation_ready = True
         index = MockExternalSearchIndex()
 
@@ -1717,13 +1681,11 @@ class TestWork:
         # WorkCoverageRecord is processed.
         assert [] == list(index.docs.values())
 
-    def test_for_unchecked_subjects(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_for_unchecked_subjects(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        w1 = database_transaction.work(with_license_pool=True)
-        w2 = database_transaction.work()
+        w1 = db.work(with_license_pool=True)
+        w2 = db.work()
         identifier = w1.license_pools[0].identifier
 
         # Neither of these works is associated with any subjects, so
@@ -1746,13 +1708,11 @@ class TestWork:
         classification2.subject.checked = True
         assert [] == qu.all()
 
-    def test_calculate_opds_entries(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_calculate_opds_entries(self, db: DatabaseTransactionFixture):
         """Verify that calculate_opds_entries sets both simple and verbose
         entries.
         """
-        work = database_transaction.work()
+        work = db.work()
         work.simple_opds_entry = None
         work.verbose_opds_entry = None
 
@@ -1771,10 +1731,8 @@ class TestWork:
         assert work.verbose_opds_entry.startswith("<entry")
         assert len(work.verbose_opds_entry) > len(simple_entry)
 
-    def test_calculate_marc_record(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        work = database_transaction.work(with_license_pool=True)
+    def test_calculate_marc_record(self, db: DatabaseTransactionFixture):
+        work = db.work(with_license_pool=True)
         work.marc_record = None
 
         work.calculate_marc_record()
@@ -1782,13 +1740,11 @@ class TestWork:
         assert "online resource" in work.marc_record
 
     def test_active_licensepool_ignores_superceded_licensepools(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        work = database_transaction.work(
-            with_license_pool=True, with_open_access_download=True
-        )
+        work = db.work(with_license_pool=True, with_open_access_download=True)
         [pool1] = work.license_pools
-        edition, pool2 = database_transaction.edition(with_license_pool=True)
+        edition, pool2 = db.edition(with_license_pool=True)
         work.license_pools.append(pool2)
 
         # Start off with neither LicensePool being open-access. pool1
@@ -1849,26 +1805,24 @@ class TestWork:
         assert pool1 == work.active_license_pool()
 
     def test_active_license_pool_accounts_for_library(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        session = database_transaction.session()
+        session = db.session()
 
         """2 libraries, 2 collections, and 2 pools, always select the right pool in a scoped request"""
-        l1 = database_transaction.library()
-        l2 = database_transaction.library()
-        c1 = database_transaction.collection()
-        c2 = database_transaction.collection()
+        l1 = db.library()
+        l2 = db.library()
+        c1 = db.collection()
+        c2 = db.collection()
         l1.collections = [c1]
         l2.collections = [c2]
-        work: Work = database_transaction.work(
-            presentation_edition=database_transaction.edition()
-        )
-        lp1: LicensePool = database_transaction.licensepool(
+        work: Work = db.work(presentation_edition=db.edition())
+        lp1: LicensePool = db.licensepool(
             work.presentation_edition,
             collection=c1,
             unlimited_access=True,
         )
-        lp2 = database_transaction.licensepool(
+        lp2 = db.licensepool(
             work.presentation_edition,
             collection=c2,
             unlimited_access=True,
@@ -1885,8 +1839,8 @@ class TestWork:
         assert work.active_license_pool() == lp1
         assert work.active_license_pool(library=l2) == lp2
 
-    def test_delete_work(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_delete_work(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Search mock
         class MockSearchIndex:
@@ -1896,7 +1850,7 @@ class TestWork:
                 self.removed.append(work)
 
         s = MockSearchIndex()
-        work = database_transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         work.delete(search_index=s)
 
         assert [] == session.query(Work).filter(Work.id == work.id).all()
@@ -1905,18 +1859,14 @@ class TestWork:
 
 
 class TestWorkConsolidation:
-    def test_calculate_work_success(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        e, p = database_transaction.edition(with_license_pool=True)
+    def test_calculate_work_success(self, db: DatabaseTransactionFixture):
+        e, p = db.edition(with_license_pool=True)
         work, new = p.calculate_work()
         assert p.presentation_edition == work.presentation_edition
         assert True == new
 
-    def test_calculate_work_bails_out_if_no_title(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        e, p = database_transaction.edition(with_license_pool=True)
+    def test_calculate_work_bails_out_if_no_title(self, db: DatabaseTransactionFixture):
+        e, p = db.edition(with_license_pool=True)
         e.title = None
         work, new = p.calculate_work()
         assert None == work
@@ -1929,24 +1879,20 @@ class TestWorkConsolidation:
         assert None == work.title
         assert None == work.presentation_edition.permanent_work_id
 
-    def test_calculate_work_even_if_no_author(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_calculate_work_even_if_no_author(self, db: DatabaseTransactionFixture):
         title = "Book"
-        e, p = database_transaction.edition(
-            with_license_pool=True, authors=[], title=title
-        )
+        e, p = db.edition(with_license_pool=True, authors=[], title=title)
         work, new = p.calculate_work()
         assert title == work.title
         assert True == new
 
     def test_calculate_work_matches_based_on_permanent_work_id(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
         # Here are two Editions with the same permanent work ID,
         # since they have the same title/author.
-        edition1, ignore = database_transaction.edition(with_license_pool=True)
-        edition2, ignore = database_transaction.edition(
+        edition1, ignore = db.edition(with_license_pool=True)
+        edition2, ignore = db.edition(
             title=edition1.title, authors=edition1.author, with_license_pool=True
         )
 
@@ -1971,13 +1917,13 @@ class TestWorkConsolidation:
         assert set(expect) == set(work1.license_pools)
 
     def test_calculate_work_for_licensepool_creates_new_work(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        edition1, ignore = database_transaction.edition(
+        edition1, ignore = db.edition(
             data_source_name=DataSource.GUTENBERG,
             identifier_type=Identifier.GUTENBERG_ID,
-            title=database_transaction.fresh_str(),
-            authors=[database_transaction.fresh_str()],
+            title=db.fresh_str(),
+            authors=[db.fresh_str()],
             with_license_pool=True,
         )
 
@@ -1986,11 +1932,11 @@ class TestWorkConsolidation:
         preexisting_work.set_presentation_edition(edition1)
 
         # This edition is unique to the new LicensePool
-        edition2, pool = database_transaction.edition(
+        edition2, pool = db.edition(
             data_source_name=DataSource.GUTENBERG,
             identifier_type=Identifier.GUTENBERG_ID,
-            title=database_transaction.fresh_str(),
-            authors=[database_transaction.fresh_str()],
+            title=db.fresh_str(),
+            authors=[db.fresh_str()],
             with_license_pool=True,
         )
 
@@ -2000,11 +1946,11 @@ class TestWorkConsolidation:
         assert work != preexisting_work
 
     def test_calculate_work_does_nothing_unless_edition_has_title(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        session = database_transaction.session()
+        session = db.session()
 
-        collection = database_transaction.collection()
+        collection = db.collection()
         edition, ignore = Edition.for_foreign_id(
             session,
             DataSource.GUTENBERG,
@@ -2033,21 +1979,21 @@ class TestWorkConsolidation:
         assert "[Unknown]" == work.author
 
     def test_calculate_work_fails_when_presentation_edition_identifier_does_not_match_license_pool(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db
     ):
         # Here's a LicensePool with an Edition.
-        edition1, pool = database_transaction.edition(
+        edition1, pool = db.edition(
             data_source_name=DataSource.GUTENBERG, with_license_pool=True
         )
 
         # Here's a second Edition that's talking about a different Identifier
         # altogether, and has no LicensePool.
-        edition2 = database_transaction.edition()
+        edition2 = db.edition()
         assert edition1.primary_identifier != edition2.primary_identifier
 
         # Here's a third Edition that's tied to a totally different
         # LicensePool.
-        edition3, pool2 = database_transaction.edition(with_license_pool=True)
+        edition3, pool2 = db.edition(with_license_pool=True)
         assert edition1.primary_identifier != edition3.primary_identifier
 
         # When we calculate a Work for a LicensePool, we can pass in
@@ -2066,30 +2012,24 @@ class TestWorkConsolidation:
                 in str(excinfo.value)
             )
 
-    def test_open_access_pools_grouped_together(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_open_access_pools_grouped_together(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # We have four editions with exactly the same title and author.
         # Two of them are open-access, two are not.
         title = "The Only Title"
         author = "Single Author"
-        ed1, open1 = database_transaction.edition(
-            title=title, authors=author, with_license_pool=True
-        )
-        ed2, open2 = database_transaction.edition(
-            title=title, authors=author, with_license_pool=True
-        )
+        ed1, open1 = db.edition(title=title, authors=author, with_license_pool=True)
+        ed2, open2 = db.edition(title=title, authors=author, with_license_pool=True)
         open1.open_access = True
         open2.open_access = True
-        ed3, restricted3 = database_transaction.edition(
+        ed3, restricted3 = db.edition(
             title=title,
             authors=author,
             data_source_name=DataSource.OVERDRIVE,
             with_license_pool=True,
         )
-        ed4, restricted4 = database_transaction.edition(
+        ed4, restricted4 = db.edition(
             title=title,
             authors=author,
             data_source_name=DataSource.OVERDRIVE,
@@ -2126,15 +2066,15 @@ class TestWorkConsolidation:
         assert restricted3.work != open1.work
 
     def test_all_licensepools_with_same_identifier_get_same_work(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
         # Here are two LicensePools for the same Identifier and
         # DataSource, but different Collections.
-        edition1, pool1 = database_transaction.edition(with_license_pool=True)
+        edition1, pool1 = db.edition(with_license_pool=True)
         identifier = pool1.identifier
-        collection2 = database_transaction.collection()
+        collection2 = db.collection()
 
-        edition2, pool2 = database_transaction.edition(
+        edition2, pool2 = db.edition(
             with_license_pool=True,
             identifier_type=identifier.type,
             identifier_id=identifier.identifier,
@@ -2143,7 +2083,7 @@ class TestWorkConsolidation:
 
         assert pool1.identifier == pool2.identifier
         assert pool1.data_source == pool2.data_source
-        assert database_transaction.default_collection() == pool1.collection
+        assert db.default_collection() == pool1.collection
         assert collection2 == pool2.collection
 
         # The two LicensePools have the same Edition (since a given
@@ -2161,27 +2101,25 @@ class TestWorkConsolidation:
         assert edition1 == work1.presentation_edition
 
     def test_calculate_work_fixes_work_in_invalid_state(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        session = database_transaction.session()
+        session = db.session()
 
         # Here's a Work with a commercial edition of "abcd".
-        work = database_transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         [abcd_commercial] = work.license_pools
         abcd_commercial.open_access = False
         abcd_commercial.presentation_edition.permanent_work_id = "abcd"
 
         # Due to a earlier error, the Work also contains a _second_
         # commercial edition of "abcd"...
-        edition, abcd_commercial_2 = database_transaction.edition(
-            with_license_pool=True
-        )
+        edition, abcd_commercial_2 = db.edition(with_license_pool=True)
         abcd_commercial_2.open_access = False
         abcd_commercial_2.presentation_edition.permanent_work_id = "abcd"
         work.license_pools.append(abcd_commercial_2)
 
         # ...as well as an open-access edition of "abcd".
-        edition, abcd_open_access = database_transaction.edition(
+        edition, abcd_open_access = db.edition(
             with_license_pool=True, with_open_access_download=True
         )
         abcd_open_access.open_access = True
@@ -2257,19 +2195,19 @@ class TestWorkConsolidation:
         assert (commercial_work, False) == abcd_commercial.calculate_work()
 
     def test_calculate_work_fixes_incorrectly_grouped_books(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        session = database_transaction.session()
+        session = db.session()
 
         # Here's a Work with an open-access edition of "abcd".
-        work = database_transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         [book] = work.license_pools
         book.open_access = True
         book.presentation_edition.permanent_work_id = "abcd"
 
         # Due to a earlier error, the Work also contains an
         # open-access _audiobook_ of "abcd".
-        edition, audiobook = database_transaction.edition(with_license_pool=True)
+        edition, audiobook = db.edition(with_license_pool=True)
         audiobook.open_access = True
         audiobook.presentation_edition.medium = Edition.AUDIO_MEDIUM
         audiobook.presentation_edition.permanent_work_id = "abcd"
@@ -2277,7 +2215,7 @@ class TestWorkConsolidation:
 
         # And the Work _also_ contains an open-access book of "abcd"
         # in a different language.
-        edition, spanish = database_transaction.edition(with_license_pool=True)
+        edition, spanish = db.edition(with_license_pool=True)
         spanish.open_access = True
         spanish.presentation_edition.language = "spa"
         spanish.presentation_edition.permanent_work_id = "abcd"
@@ -2334,10 +2272,10 @@ class TestWorkConsolidation:
         assert "spa" == expect_spanish_work.language
 
     def test_calculate_work_detaches_licensepool_with_no_title(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
         # Here's a Work with an open-access edition of "abcd".
-        work = database_transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         [book] = work.license_pools
         book.presentation_edition.permanent_work_id = "abcd"
 
@@ -2353,16 +2291,16 @@ class TestWorkConsolidation:
         assert [] == work.license_pools
 
     def test_calculate_work_detaches_licensepool_with_no_pwid(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
         # Here's a Work with an open-access edition of "abcd".
-        work = database_transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         [book] = work.license_pools
         book.presentation_edition.permanent_work_id = "abcd"
 
         # Due to a earlier error, the Work also contains an edition
         # with no title or author, and thus no permanent work ID.
-        edition, no_title = database_transaction.edition(with_license_pool=True)
+        edition, no_title = db.edition(with_license_pool=True)
 
         no_title.presentation_edition.title = None
         no_title.presentation_edition.author = None
@@ -2394,16 +2332,16 @@ class TestWorkConsolidation:
         work_after, is_new = no_title.calculate_work()
         assert [book] == work.license_pools
 
-    def test_pwids(self, database_transaction: DatabaseTransactionFixture):
+    def test_pwids(self, db: DatabaseTransactionFixture):
         """Test the property that finds all permanent work IDs
         associated with a Work.
         """
         # Create a (bad) situation in which LicensePools associated
         # with two different PWIDs are associated with the same work.
-        work = database_transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         [lp1] = work.license_pools
         assert {lp1.presentation_edition.permanent_work_id} == work.pwids
-        edition, lp2 = database_transaction.edition(with_license_pool=True)
+        edition, lp2 = db.edition(with_license_pool=True)
         work.license_pools.append(lp2)
 
         # Work.pwids finds both PWIDs.
@@ -2413,9 +2351,9 @@ class TestWorkConsolidation:
         } == work.pwids
 
     def test_open_access_for_permanent_work_id_no_licensepools(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        session = database_transaction.session()
+        session = db.session()
 
         # There are no LicensePools, which short-circuilts
         # open_access_for_permanent_work_id.
@@ -2424,7 +2362,7 @@ class TestWorkConsolidation:
         )
 
         # Now it works.
-        w = database_transaction.work(
+        w = db.work(
             language="eng", with_license_pool=True, with_open_access_download=True
         )
         w.presentation_edition.permanent_work_id = "permid"
@@ -2445,26 +2383,20 @@ class TestWorkConsolidation:
             session, "differentid", Edition.AUDIO_MEDIUM, "eng"
         )
 
-    def test_open_access_for_permanent_work_id(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_open_access_for_permanent_work_id(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Two different works full of open-access license pools.
-        w1 = database_transaction.work(
-            with_license_pool=True, with_open_access_download=True
-        )
+        w1 = db.work(with_license_pool=True, with_open_access_download=True)
 
-        w2 = database_transaction.work(
-            with_license_pool=True, with_open_access_download=True
-        )
+        w2 = db.work(with_license_pool=True, with_open_access_download=True)
 
         [lp1] = w1.license_pools
         [lp2] = w2.license_pools
 
         # Work #2 has two different license pools grouped
         # together. Work #1 only has one.
-        edition, lp3 = database_transaction.edition(
+        edition, lp3 = db.edition(
             with_license_pool=True, with_open_access_download=True
         )
         w2.license_pools.append(lp3)
@@ -2480,7 +2412,7 @@ class TestWorkConsolidation:
 
         # We've also got Work #3, which provides a commercial license
         # for that book.
-        w3 = database_transaction.work(with_license_pool=True)
+        w3 = db.work(with_license_pool=True)
         w3_pool = w3.license_pools[0]
         w3_pool.presentation_edition.permanent_work_id = "abcd"
         w3_pool.open_access = False
@@ -2517,12 +2449,12 @@ class TestWorkConsolidation:
         )
 
     def test_open_access_for_permanent_work_id_can_create_work(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        session = database_transaction.session()
+        session = db.session()
 
         # Here's a LicensePool with no corresponding Work.
-        edition, lp = database_transaction.edition(with_license_pool=True)
+        edition, lp = db.edition(with_license_pool=True)
         lp.open_access = True
         edition.permanent_work_id = "abcd"
 
@@ -2534,9 +2466,9 @@ class TestWorkConsolidation:
         assert True == is_new
 
     def test_potential_open_access_works_for_permanent_work_id(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        session = database_transaction.session()
+        session = db.session()
 
         # Test of the _potential_open_access_works_for_permanent_work_id
         # helper method.
@@ -2544,7 +2476,7 @@ class TestWorkConsolidation:
         # Here are two editions of the same book with the same PWID.
         title = "Siddhartha"
         author = ["Herman Hesse"]
-        e1, lp1 = database_transaction.edition(
+        e1, lp1 = db.edition(
             data_source_name=DataSource.STANDARD_EBOOKS,
             title=title,
             authors=author,
@@ -2553,7 +2485,7 @@ class TestWorkConsolidation:
         )
         e1.permanent_work_id = "pwid"
 
-        e2, lp2 = database_transaction.edition(
+        e2, lp2 = db.edition(
             data_source_name=DataSource.GUTENBERG,
             title=title,
             authors=author,
@@ -2595,7 +2527,7 @@ class TestWorkConsolidation:
         # _potential_open_access_works_for_permanent_work_id, the Work
         # does not show up in `counts`, indicating that a new Work
         # should to be created to hold those books.
-        bad_pe = database_transaction.edition()
+        bad_pe = db.edition()
         bad_pe.permanent_work_id = "pwid"
         w1.presentation_edition = bad_pe
 
@@ -2669,19 +2601,17 @@ class TestWorkConsolidation:
         assert {w1: 1, w2: 1} == counts
 
     def test_make_exclusive_open_access_for_permanent_work_id(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
         # Here's a work containing an open-access LicensePool for
         # literary work "abcd".
-        work1 = database_transaction.work(
-            with_license_pool=True, with_open_access_download=True
-        )
+        work1 = db.work(with_license_pool=True, with_open_access_download=True)
         [abcd_oa] = work1.license_pools
         abcd_oa.presentation_edition.permanent_work_id = "abcd"
 
         # Unfortunately, a commercial LicensePool for the literary
         # work "abcd" has gotten associated with the same work.
-        edition, abcd_commercial = database_transaction.edition(
+        edition, abcd_commercial = db.edition(
             with_license_pool=True, with_open_access_download=True
         )
         abcd_commercial.open_access = False
@@ -2690,16 +2620,14 @@ class TestWorkConsolidation:
 
         # Here's another Work containing an open-access LicensePool
         # for literary work "efgh".
-        work2 = database_transaction.work(
-            with_license_pool=True, with_open_access_download=True
-        )
+        work2 = db.work(with_license_pool=True, with_open_access_download=True)
         [efgh_1] = work2.license_pools
         efgh_1.presentation_edition.permanent_work_id = "efgh"
 
         # Unfortunately, there's another open-access LicensePool for
         # "efgh", and it's incorrectly associated with the "abcd"
         # work.
-        edition, efgh_2 = database_transaction.edition(
+        edition, efgh_2 = db.edition(
             with_license_pool=True, with_open_access_download=True
         )
         efgh_2.presentation_edition.permanent_work_id = "efgh"
@@ -2723,13 +2651,11 @@ class TestWorkConsolidation:
         assert abcd_commercial.work not in (work1, work2)
 
     def test_make_exclusive_open_access_for_null_permanent_work_id(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
         # Here's a LicensePool that, due to a previous error, has
         # a null PWID in its presentation edition.
-        work = database_transaction.work(
-            with_license_pool=True, with_open_access_download=True
-        )
+        work = db.work(with_license_pool=True, with_open_access_download=True)
         [null1] = work.license_pools
         null1.presentation_edition.title = None
         null1.presentation_edition.sort_author = None
@@ -2737,7 +2663,7 @@ class TestWorkConsolidation:
 
         # Here's another LicensePool associated with the same work and
         # with the same problem.
-        edition, null2 = database_transaction.edition(
+        edition, null2 = db.edition(
             with_license_pool=True, with_open_access_download=True
         )
         work.license_pools.append(null2)
@@ -2758,13 +2684,11 @@ class TestWorkConsolidation:
         assert None == null1.work
         assert None == null2.work
 
-    def test_merge_into_success(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_merge_into_success(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Here's a work with an open-access LicensePool.
-        work1 = database_transaction.work(
-            with_license_pool=True, with_open_access_download=True
-        )
+        work1 = db.work(with_license_pool=True, with_open_access_download=True)
         [lp1] = work1.license_pools
         lp1.presentation_edition.permanent_work_id = "abcd"
 
@@ -2775,9 +2699,7 @@ class TestWorkConsolidation:
 
         # Here's another work with an open-access LicensePool for the
         # same book.
-        work2 = database_transaction.work(
-            with_license_pool=True, with_open_access_download=True
-        )
+        work2 = db.work(with_license_pool=True, with_open_access_download=True)
         [lp2] = work2.license_pools
         lp2.presentation_edition.permanent_work_id = "abcd"
 
@@ -2796,16 +2718,14 @@ class TestWorkConsolidation:
         )
 
     def test_open_access_for_permanent_work_id_fixes_mismatched_works_incidentally(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db
     ):
-        session = database_transaction.session()
+        session = db.session()
 
         # Here's a work with two open-access LicensePools for the book "abcd".
-        work1 = database_transaction.work(
-            with_license_pool=True, with_open_access_download=True
-        )
+        work1 = db.work(with_license_pool=True, with_open_access_download=True)
         [abcd_1] = work1.license_pools
-        edition, abcd_2 = database_transaction.edition(
+        edition, abcd_2 = db.edition(
             with_license_pool=True, with_open_access_download=True
         )
         work1.license_pools.append(abcd_2)
@@ -2813,21 +2733,19 @@ class TestWorkConsolidation:
         # Unfortunately, due to an earlier error, that work also
         # contains a _third_ open-access LicensePool, and this one
         # belongs to a totally separate book, "efgh".
-        edition, efgh = database_transaction.edition(
+        edition, efgh = db.edition(
             with_license_pool=True, with_open_access_download=True
         )
         work1.license_pools.append(efgh)
 
         # Here's another work with an open-access LicensePool for the
         # book "abcd".
-        work2 = database_transaction.work(
-            with_license_pool=True, with_open_access_download=True
-        )
+        work2 = db.work(with_license_pool=True, with_open_access_download=True)
         [abcd_3] = work2.license_pools
 
         # Unfortunately, this work also contains an open-access Licensepool
         # for the totally separate book, 'ijkl".
-        edition, ijkl = database_transaction.edition(
+        edition, ijkl = db.edition(
             with_license_pool=True, with_open_access_download=True
         )
         work2.license_pools.append(ijkl)
@@ -2889,19 +2807,15 @@ class TestWorkConsolidation:
         assert 3 == len(abcd_work.license_pools)
 
     def test_open_access_for_permanent_work_untangles_tangled_works(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        session = database_transaction.session()
+        session = db.session()
 
         # Here are three works for the books "abcd", "efgh", and "ijkl".
-        abcd_work = database_transaction.work(
-            with_license_pool=True, with_open_access_download=True
-        )
+        abcd_work = db.work(with_license_pool=True, with_open_access_download=True)
         [abcd_1] = abcd_work.license_pools
 
-        efgh_work = database_transaction.work(
-            with_license_pool=True, with_open_access_download=True
-        )
+        efgh_work = db.work(with_license_pool=True, with_open_access_download=True)
         [efgh_1] = efgh_work.license_pools
 
         # Unfortunately, due to an earlier error, the 'abcd' work
@@ -2910,12 +2824,12 @@ class TestWorkConsolidation:
         #
         # (This is pretty much impossible, but bear with me...)
 
-        abcd_edition, abcd_2 = database_transaction.edition(
+        abcd_edition, abcd_2 = db.edition(
             with_license_pool=True, with_open_access_download=True
         )
         efgh_work.license_pools.append(abcd_2)
 
-        efgh_edition, efgh_2 = database_transaction.edition(
+        efgh_edition, efgh_2 = db.edition(
             with_license_pool=True, with_open_access_download=True
         )
         abcd_work.license_pools.append(efgh_2)
@@ -2972,20 +2886,16 @@ class TestWorkConsolidation:
         assert [] == other.license_pools
 
     def test_merge_into_raises_exception_if_grouping_rules_violated(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
         # Here's a work with an open-access LicensePool.
-        work1 = database_transaction.work(
-            with_license_pool=True, with_open_access_download=True
-        )
+        work1 = db.work(with_license_pool=True, with_open_access_download=True)
         [lp1] = work1.license_pools
         lp1.presentation_edition.permanent_work_id = "abcd"
 
         # Here's another work with a commercial LicensePool for the
         # same book.
-        work2 = database_transaction.work(
-            with_license_pool=True, with_open_access_download=True
-        )
+        work2 = db.work(with_license_pool=True, with_open_access_download=True)
         [lp2] = work2.license_pools
         lp2.open_access = False
         lp2.presentation_edition.permanent_work_id = "abcd"
@@ -3000,17 +2910,13 @@ class TestWorkConsolidation:
         )
 
     def test_merge_into_raises_exception_if_pwids_differ(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        work1 = database_transaction.work(
-            with_license_pool=True, with_open_access_download=True
-        )
+        work1 = db.work(with_license_pool=True, with_open_access_download=True)
         [abcd_oa] = work1.license_pools
         abcd_oa.presentation_edition.permanent_work_id = "abcd"
 
-        work2 = database_transaction.work(
-            with_license_pool=True, with_open_access_download=True
-        )
+        work2 = db.work(with_license_pool=True, with_open_access_download=True)
         [efgh_oa] = work2.license_pools
         efgh_oa.presentation_edition.permanent_work_id = "efgh"
 
@@ -3023,9 +2929,9 @@ class TestWorkConsolidation:
         )
 
     def test_licensepool_without_identifier_gets_no_work(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        work = database_transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         [lp] = work.license_pools
         lp.identifier = None
 
@@ -3034,9 +2940,9 @@ class TestWorkConsolidation:
         assert None == lp.work
 
     def test_licensepool_without_presentation_edition_gets_no_work(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        work = database_transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         [lp] = work.license_pools
 
         # This LicensePool has no presentation edition and no way of

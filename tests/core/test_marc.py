@@ -30,10 +30,8 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestAnnotator:
-    def test_annotate_work_record(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session, data = database_transaction.session(), database_transaction
+    def test_annotate_work_record(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Verify that annotate_work_record adds the distributor and formats.
         class MockAnnotator(Annotator):
@@ -48,17 +46,17 @@ class TestAnnotator:
 
         annotator = MockAnnotator()
         record = Record()
-        work = data.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         pool = work.license_pools[0]
 
         annotator.annotate_work_record(work, pool, None, None, record)
         assert [record, pool] == annotator.add_distributor_called_with
         assert [record, pool] == annotator.add_formats_called_with
 
-    def test_leader(self, database_transaction: DatabaseTransactionFixture):
-        session, data = database_transaction.session(), database_transaction
+    def test_leader(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        work = data.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         leader = Annotator.leader(work)
         assert "00000nam  2200000   4500" == leader
 
@@ -79,11 +77,11 @@ class TestAnnotator:
         for subfield, value in expected_subfields.items():
             assert value == field.get_subfields(subfield)[0]
 
-    def test_add_control_fields(self, database_transaction: DatabaseTransactionFixture):
-        session, data = database_transaction.session(), database_transaction
+    def test_add_control_fields(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # This edition has one format and was published before 1900.
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
         identifier = pool.identifier
         edition.issued = datetime_utc(956, 1, 1)
 
@@ -100,7 +98,7 @@ class TestAnnotator:
         )
 
         # This French edition has two formats and was published in 2018.
-        edition2, pool2 = data.edition(with_license_pool=True)
+        edition2, pool2 = db.edition(with_license_pool=True)
         identifier2 = pool2.identifier
         edition2.issued = datetime_utc(2018, 2, 3)
         edition2.language = "fre"
@@ -127,17 +125,17 @@ class TestAnnotator:
         Annotator.add_marc_organization_code(record, "US-MaBoDPL")
         self._check_control_field(record, "003", "US-MaBoDPL")
 
-    def test_add_isbn(self, database_transaction: DatabaseTransactionFixture):
-        session, data = database_transaction.session(), database_transaction
+    def test_add_isbn(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        isbn = data.identifier(identifier_type=Identifier.ISBN)
+        isbn = db.identifier(identifier_type=Identifier.ISBN)
         record = Record()
         Annotator.add_isbn(record, isbn)
         self._check_field(record, "020", {"a": isbn.identifier})
 
         # If the identifier isn't an ISBN, but has an equivalent that is, it still
         # works.
-        equivalent = data.identifier()
+        equivalent = db.identifier()
         data_source = DataSource.lookup(session, DataSource.OCLC)
         equivalent.equivalent_to(data_source, isbn, 1)
         record = Record()
@@ -145,15 +143,15 @@ class TestAnnotator:
         self._check_field(record, "020", {"a": isbn.identifier})
 
         # If there is no ISBN, the field is left out.
-        non_isbn = data.identifier()
+        non_isbn = db.identifier()
         record = Record()
         Annotator.add_isbn(record, non_isbn)
         assert [] == record.get_fields("020")
 
-    def test_add_title(self, database_transaction: DatabaseTransactionFixture):
-        session, data = database_transaction.session(), database_transaction
+    def test_add_title(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        edition = data.edition()
+        edition = db.edition()
         edition.title = "The Good Soldier"
         edition.sort_title = "Good Soldier, The"
         edition.subtitle = "A Tale of Passion"
@@ -190,15 +188,15 @@ class TestAnnotator:
         assert [] == field.get_subfields("b")
         assert [] == field.get_subfields("c")
 
-    def test_add_contributors(self, database_transaction: DatabaseTransactionFixture):
-        session, data = database_transaction.session(), database_transaction
+    def test_add_contributors(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         author = "a"
         author2 = "b"
         translator = "c"
 
         # Edition with one author gets a 100 field and no 700 fields.
-        edition = data.edition(authors=[author])
+        edition = db.edition(authors=[author])
         edition.sort_author = "sorted"
 
         record = Record()
@@ -207,7 +205,7 @@ class TestAnnotator:
         self._check_field(record, "100", {"a": edition.sort_author}, ["1", " "])
 
         # Edition with two authors and a translator gets three 700 fields and no 100 fields.
-        edition = data.edition(authors=[author, author2])
+        edition = db.edition(authors=[author, author2])
         edition.add_contributor(translator, Contributor.TRANSLATOR_ROLE)
 
         record = Record()
@@ -226,11 +224,11 @@ class TestAnnotator:
         assert translator == translator_field.get_subfields("a")[0]
         assert Contributor.TRANSLATOR_ROLE == translator_field.get_subfields("e")[0]
 
-    def test_add_publisher(self, database_transaction: DatabaseTransactionFixture):
-        session, data = database_transaction.session(), database_transaction
+    def test_add_publisher(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        edition = data.edition()
-        edition.publisher = data.fresh_str()
+        edition = db.edition()
+        edition.publisher = db.fresh_str()
         edition.issued = datetime_utc(1894, 4, 5)
 
         record = Record()
@@ -252,22 +250,20 @@ class TestAnnotator:
         Annotator.add_publisher(record, edition)
         assert [] == record.get_fields("264")
 
-    def test_add_distributor(self, database_transaction: DatabaseTransactionFixture):
-        session, data = database_transaction.session(), database_transaction
+    def test_add_distributor(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
         record = Record()
         Annotator.add_distributor(record, pool)
         self._check_field(record, "264", {"b": pool.data_source.name}, [" ", "2"])
 
-    def test_add_physical_description(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session, data = database_transaction.session(), database_transaction
+    def test_add_physical_description(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        book = data.edition()
+        book = db.edition()
         book.medium = Edition.BOOK_MEDIUM
-        audio = data.edition()
+        audio = db.edition()
         audio.medium = Edition.AUDIO_MEDIUM
 
         record = Record()
@@ -364,11 +360,11 @@ class TestAnnotator:
         )
         assert [] == record.get_fields("380")
 
-    def test_add_audience(self, database_transaction: DatabaseTransactionFixture):
-        session, data = database_transaction.session(), database_transaction
+    def test_add_audience(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         for audience, term in list(Annotator.AUDIENCE_TERMS.items()):
-            work = data.work(audience=audience)
+            work = db.work(audience=audience)
             record = Record()
             Annotator.add_audience(record, work)
             self._check_field(
@@ -380,11 +376,11 @@ class TestAnnotator:
                 },
             )
 
-    def test_add_series(self, database_transaction: DatabaseTransactionFixture):
-        session, data = database_transaction.session(), database_transaction
+    def test_add_series(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        edition = data.edition()
-        edition.series = data.fresh_str()
+        edition = db.edition()
+        edition.series = db.fresh_str()
         edition.series_position = 5
         record = Record()
         Annotator.add_series(record, edition)
@@ -425,10 +421,10 @@ class TestAnnotator:
         Annotator.add_system_details(record)
         self._check_field(record, "538", {"a": "Mode of access: World Wide Web."})
 
-    def test_add_formats(self, database_transaction: DatabaseTransactionFixture):
-        session, data = database_transaction.session(), database_transaction
+    def test_add_formats(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
         epub_no_drm, ignore = DeliveryMechanism.lookup(
             session, Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM
         )
@@ -451,22 +447,20 @@ class TestAnnotator:
         assert "EPUB eBook" == epub.get_subfields("a")[0]
         assert [" ", " "] == epub.indicators
 
-    def test_add_summary(self, database_transaction: DatabaseTransactionFixture):
-        session, data = database_transaction.session(), database_transaction
+    def test_add_summary(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        work = data.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         work.summary_text = "<p>Summary</p>"
 
         record = Record()
         Annotator.add_summary(record, work)
         self._check_field(record, "520", {"a": b" Summary "})
 
-    def test_add_simplified_genres(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session, data = database_transaction.session(), database_transaction
+    def test_add_simplified_genres(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        work = data.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         fantasy, ignore = Genre.lookup(session, "Fantasy", autocreate=True)
         romance, ignore = Genre.lookup(session, "Romance", autocreate=True)
         work.genres = [fantasy, romance]
@@ -491,32 +485,33 @@ class TestAnnotator:
 
 
 class TestMARCExporter:
-    def _integration(self, data: DatabaseTransactionFixture):
-        return data.external_integration(
+    @staticmethod
+    def _integration(db: DatabaseTransactionFixture):
+        return db.external_integration(
             ExternalIntegration.MARC_EXPORT,
             ExternalIntegration.CATALOG_GOAL,
-            libraries=[data.default_library()],
+            libraries=[db.default_library()],
         )
 
-    def test_from_config(self, database_transaction: DatabaseTransactionFixture):
-        session, data = database_transaction.session(), database_transaction
+    def test_from_config(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         pytest.raises(
-            CannotLoadConfiguration, MARCExporter.from_config, data.default_library()
+            CannotLoadConfiguration, MARCExporter.from_config, db.default_library()
         )
 
-        integration = self._integration(data)
-        exporter = MARCExporter.from_config(data.default_library())
+        integration = self._integration(db)
+        exporter = MARCExporter.from_config(db.default_library())
         assert integration == exporter.integration
-        assert data.default_library() == exporter.library
+        assert db.default_library() == exporter.library
 
-        other_library = data.library()
+        other_library = db.library()
         pytest.raises(CannotLoadConfiguration, MARCExporter.from_config, other_library)
 
-    def test_create_record(self, database_transaction: DatabaseTransactionFixture):
-        session, data = database_transaction.session(), database_transaction
+    def test_create_record(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        work = data.work(
+        work = db.work(
             with_license_pool=True,
             title="old title",
             authors=["old author"],
@@ -570,7 +565,7 @@ class TestMARCExporter:
         assert "author, new" in cached
 
         # If we pass in an integration, it's passed along to the annotator.
-        integration = self._integration(data)
+        integration = self._integration(db)
 
         class MockAnnotator(Annotator):
             integration = None
@@ -585,9 +580,7 @@ class TestMARCExporter:
         assert integration == annotator.integration
 
     @freeze_time("2020-01-01 00:00:00")
-    def test_create_record_roundtrip(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_create_record_roundtrip(self, db: DatabaseTransactionFixture):
         # Create a marc record from a work with special characters
         # in both the title and author name and round-trip it to
         # the DB and back again to make sure we are creating records
@@ -597,11 +590,11 @@ class TestMARCExporter:
         # a timestamp when it was created and we need the created
         # records to match.
 
-        session, data = database_transaction.session(), database_transaction
+        session = db.session()
         annotator = Annotator()
 
         # Creates a new record and saves it to the database
-        work = data.work(
+        work = db.work(
             title="Little Mimi\u2019s First Counting Lesson",
             authors=["Lagerlo\xf6f, Selma Ottiliana Lovisa,"],
             with_license_pool=True,
@@ -615,16 +608,16 @@ class TestMARCExporter:
         new_record = MARCExporter.create_record(new_work, annotator)
         assert record.as_marc() == new_record.as_marc()
 
-    def test_records(self, database_transaction: DatabaseTransactionFixture):
-        session, data = database_transaction.session(), database_transaction
+    def test_records(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        integration = self._integration(data)
+        integration = self._integration(db)
         now = utc_now()
-        exporter = MARCExporter.from_config(data.default_library())
+        exporter = MARCExporter.from_config(db.default_library())
         annotator = Annotator()
-        lane = data.lane("Test Lane", genres=["Mystery"])
-        w1 = data.work(genre="Mystery", with_open_access_download=True)
-        w2 = data.work(genre="Mystery", with_open_access_download=True)
+        lane = db.lane("Test Lane", genres=["Mystery"])
+        w1 = db.work(genre="Mystery", with_open_access_download=True)
+        w2 = db.work(genre="Mystery", with_open_access_download=True)
 
         search_engine = MockExternalSearchIndex()
         search_engine.bulk_update([w1, w2])
@@ -634,7 +627,7 @@ class TestMARCExporter:
         pytest.raises(Exception, exporter.records, lane, annotator)
 
         # If there is a storage integration, the output file is mirrored.
-        mirror_integration = data.external_integration(
+        mirror_integration = db.external_integration(
             ExternalIntegration.S3,
             ExternalIntegration.STORAGE_GOAL,
             username="username",
@@ -656,14 +649,14 @@ class TestMARCExporter:
         # The file was mirrored and a CachedMARCFile was created to track the mirrored file.
         assert 1 == len(mirror.uploaded)
         [cache] = session.query(CachedMARCFile).all()
-        assert data.default_library() == cache.library
+        assert db.default_library() == cache.library
         assert lane == cache.lane
         assert mirror.uploaded[0] == cache.representation
         assert None == cache.representation.content
         assert (
             "https://test-marc-bucket.s3.amazonaws.com/%s/%s/%s.mrc"
             % (
-                data.default_library().short_name,
+                db.default_library().short_name,
                 quote(str(cache.representation.fetched_at)),
                 quote(lane.display_name),
             )
@@ -690,7 +683,7 @@ class TestMARCExporter:
         # It also works with a WorkList instead of a Lane, in which case
         # there will be no lane in the CachedMARCFile.
         worklist = WorkList()
-        worklist.initialize(data.default_library(), display_name="All Books")
+        worklist.initialize(db.default_library(), display_name="All Books")
 
         mirror = MockS3Uploader()
         exporter.records(
@@ -705,14 +698,14 @@ class TestMARCExporter:
 
         assert 1 == len(mirror.uploaded)
         [cache] = session.query(CachedMARCFile).all()
-        assert data.default_library() == cache.library
+        assert db.default_library() == cache.library
         assert None == cache.lane
         assert mirror.uploaded[0] == cache.representation
         assert None == cache.representation.content
         assert (
             "https://test-marc-bucket.s3.amazonaws.com/%s/%s/%s.mrc"
             % (
-                data.default_library().short_name,
+                db.default_library().short_name,
                 quote(str(cache.representation.fetched_at)),
                 quote(worklist.display_name),
             )
@@ -749,14 +742,14 @@ class TestMARCExporter:
         )
         [cache] = session.query(CachedMARCFile).all()
 
-        assert data.default_library() == cache.library
+        assert db.default_library() == cache.library
         assert lane == cache.lane
         assert mirror.uploaded[0] == cache.representation
         assert None == cache.representation.content
         assert (
             "https://test-marc-bucket.s3.amazonaws.com/%s/%s-%s/%s.mrc"
             % (
-                data.default_library().short_name,
+                db.default_library().short_name,
                 quote(str(start_time)),
                 quote(str(cache.representation.fetched_at)),
                 quote(lane.display_name),
@@ -784,7 +777,7 @@ class TestMARCExporter:
         assert [] == mirror.content[0]
         [cache] = session.query(CachedMARCFile).all()
         assert cache.representation == mirror.uploaded[0]
-        assert data.default_library() == cache.library
+        assert db.default_library() == cache.library
         assert lane == cache.lane
         assert None == cache.representation.content
         assert None == cache.start_time

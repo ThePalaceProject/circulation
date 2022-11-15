@@ -74,11 +74,11 @@ class URNLookupHandlerFixture:
 
 @pytest.fixture()
 def urn_lookup_handler_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db: DatabaseTransactionFixture,
 ) -> URNLookupHandlerFixture:
     data = URNLookupHandlerFixture()
-    data.transaction = database_transaction
-    data.handler = URNLookupHandler(database_transaction.session())
+    data.transaction = db
+    data.handler = URNLookupHandler(db.session())
     return data
 
 
@@ -223,11 +223,11 @@ class URNLookupControllerFixture:
 
 @pytest.fixture()
 def urn_lookup_controller_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db,
 ) -> Iterable[URNLookupControllerFixture]:
     data = URNLookupControllerFixture()
-    data.transaction = database_transaction
-    data.controller = URNLookupController(database_transaction.session())
+    data.transaction = db
+    data.controller = URNLookupController(db.session())
     data.app = Flask(URNLookupControllerFixture.__name__)
 
     # Register endpoints manually, because using decorators seems to
@@ -313,10 +313,10 @@ class LoadMethodsFixture:
 
 @pytest.fixture()
 def load_methods_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db,
 ) -> LoadMethodsFixture:
     data = LoadMethodsFixture()
-    data.transaction = database_transaction
+    data.transaction = db
     data.app = Flask(LoadMethodsFixture.__name__)
     Babel(data.app)
     return data
@@ -463,9 +463,9 @@ class ErrorHandlerFixture:
 
 @pytest.fixture()
 def error_handler_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db,
 ) -> ErrorHandlerFixture:
-    session = database_transaction.session()
+    session = db.session()
 
     class MockManager:
         """Simulate an application manager object such as
@@ -477,7 +477,7 @@ def error_handler_fixture(
         _db = session
 
     data = ErrorHandlerFixture()
-    data.transaction = database_transaction
+    data.transaction = db
     data.app = Flask(ErrorHandlerFixture.__name__)
     data.app.manager = MockManager()
     Babel(data.app)

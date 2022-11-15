@@ -152,9 +152,9 @@ class ExampleMeasurementDataFixture:
 
 @pytest.fixture()
 def example_measurement_data_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db,
 ) -> ExampleMeasurementDataFixture:
-    return ExampleMeasurementDataFixture.create(database_transaction)
+    return ExampleMeasurementDataFixture.create(db)
 
 
 class TestMeasurement:

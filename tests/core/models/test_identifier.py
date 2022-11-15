@@ -22,8 +22,8 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestIdentifier:
-    def test_for_foreign_id(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_for_foreign_id(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         identifier_type = Identifier.ISBN
         isbn = "3293000061"
@@ -42,29 +42,23 @@ class TestIdentifier:
         # If we pass in no data we get nothing back.
         assert None == Identifier.for_foreign_id(session, None, None)
 
-    def test_for_foreign_id_by_deprecated_type(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_for_foreign_id_by_deprecated_type(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        threem_id, is_new = Identifier.for_foreign_id(
-            session, "3M ID", database_transaction.fresh_str()
-        )
+        threem_id, is_new = Identifier.for_foreign_id(session, "3M ID", db.fresh_str())
         assert Identifier.BIBLIOTHECA_ID == threem_id.type
         assert Identifier.BIBLIOTHECA_ID != "3M ID"
 
     def test_for_foreign_id_rejects_invalid_identifiers(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        session = database_transaction.session()
+        session = db.session()
 
         with pytest.raises(ValueError) as excinfo:
             Identifier.for_foreign_id(session, Identifier.BIBLIOTHECA_ID, "foo/bar")
         assert '"foo/bar" is not a valid Bibliotheca ID.' in str(excinfo.value)
 
-    def test_valid_as_foreign_identifier(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_valid_as_foreign_identifier(self, db: DatabaseTransactionFixture):
         m = Identifier.valid_as_foreign_identifier
 
         assert True == m(Identifier.BIBLIOTHECA_ID, "bhhot389")
@@ -74,13 +68,11 @@ class TestIdentifier:
         assert True == m(Identifier.BIBLIOTHECA_ID, "0015142259")
         assert False == m(Identifier.BIBLIOTHECA_ID, "0015142259,0015187940")
 
-    def test_for_foreign_id_without_autocreate(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_for_foreign_id_without_autocreate(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         identifier_type = Identifier.ISBN
-        isbn = database_transaction.fresh_str()
+        isbn = db.fresh_str()
 
         # We don't want to auto-create a database record, so we set
         # autocreate=False
@@ -90,8 +82,8 @@ class TestIdentifier:
         assert None == identifier
         assert False == was_new
 
-    def test_from_asin(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_from_asin(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         isbn10 = "1449358063"
         isbn13 = "9781449358068"
@@ -116,8 +108,8 @@ class TestIdentifier:
         assert Identifier.ASIN == i_asin.type
         assert asin == i_asin.identifier
 
-    def test_urn(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_urn(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # ISBN identifiers use the ISBN URN scheme.
         identifier, ignore = Identifier.for_foreign_id(
@@ -132,20 +124,20 @@ class TestIdentifier:
         assert identifier.identifier == identifier.urn
 
         # Gutenberg identifiers use Gutenberg's URL-based sceheme
-        identifier = database_transaction.identifier(Identifier.GUTENBERG_ID)
+        identifier = db.identifier(Identifier.GUTENBERG_ID)
         assert (
             Identifier.GUTENBERG_URN_SCHEME_PREFIX + identifier.identifier
             == identifier.urn
         )
 
         # All other identifiers use our custom URN scheme.
-        identifier = database_transaction.identifier(Identifier.OVERDRIVE_ID)
+        identifier = db.identifier(Identifier.OVERDRIVE_ID)
         assert identifier.urn.startswith(Identifier.URN_SCHEME_PREFIX)
 
-    def test_parse_urns(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_parse_urns(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        identifier = database_transaction.identifier()
+        identifier = db.identifier()
         fake_urn = "what_even_is_this"
         new_urn = Identifier.URN_SCHEME_PREFIX + "Overdrive%20ID/nosuchidentifier"
         # Also create a different URN that would result in the same identifier.
@@ -211,11 +203,11 @@ class TestIdentifier:
         assert new_urn in failure
         assert isbn_urn in failure
 
-    def test_parse_urn(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_parse_urn(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # We can parse our custom URNs back into identifiers.
-        identifier = database_transaction.identifier()
+        identifier = db.identifier()
         session.commit()
         new_identifier, ignore = Identifier.parse_urn(session, identifier.urn)
         assert identifier == new_identifier
@@ -294,29 +286,29 @@ class TestIdentifier:
         )
 
     def test_recursively_equivalent_identifier_ids(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        session = database_transaction.session()
+        session = db.session()
 
-        identifier = database_transaction.identifier()
+        identifier = db.identifier()
         data_source = DataSource.lookup(session, DataSource.MANUAL)
 
-        strong_equivalent = database_transaction.identifier()
+        strong_equivalent = db.identifier()
         identifier.equivalent_to(data_source, strong_equivalent, 0.9)
 
-        weak_equivalent = database_transaction.identifier()
+        weak_equivalent = db.identifier()
         identifier.equivalent_to(data_source, weak_equivalent, 0.2)
 
-        level_2_equivalent = database_transaction.identifier()
+        level_2_equivalent = db.identifier()
         strong_equivalent.equivalent_to(data_source, level_2_equivalent, 0.5)
 
-        level_3_equivalent = database_transaction.identifier()
+        level_3_equivalent = db.identifier()
         level_2_equivalent.equivalent_to(data_source, level_3_equivalent, 0.9)
 
-        level_4_equivalent = database_transaction.identifier()
+        level_4_equivalent = db.identifier()
         level_3_equivalent.equivalent_to(data_source, level_4_equivalent, 0.6)
 
-        unrelated = database_transaction.identifier()
+        unrelated = db.identifier()
 
         # With a low threshold and enough levels, we find all the identifiers.
         high_levels_low_threshold = PresentationCalculationPolicy(
@@ -422,10 +414,10 @@ class TestIdentifier:
         # A chain of very strong equivalents can keep a high strength
         # even at deep levels. This wouldn't work if we changed the strength
         # threshold by level instead of accumulating a strength product.
-        another_identifier = database_transaction.identifier()
-        l2 = database_transaction.identifier()
-        l3 = database_transaction.identifier()
-        l4 = database_transaction.identifier()
+        another_identifier = db.identifier()
+        l2 = db.identifier()
+        l3 = db.identifier()
+        l4 = db.identifier()
         l2.equivalent_to(data_source, another_identifier, 1)
         l3.equivalent_to(data_source, l2, 1)
         l4.equivalent_to(data_source, l3, 0.9)
@@ -508,17 +500,13 @@ class TestIdentifier:
             level_3_equivalent.id,
         } == set(equivalent_ids)
 
-    def test_licensed_through_collection(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        c1 = database_transaction.default_collection()
-        c2 = database_transaction.collection()
-        c3 = database_transaction.collection()
+    def test_licensed_through_collection(self, db: DatabaseTransactionFixture):
+        c1 = db.default_collection()
+        c2 = db.collection()
+        c3 = db.collection()
 
-        edition, lp1 = database_transaction.edition(
-            collection=c1, with_license_pool=True
-        )
-        lp2 = database_transaction.licensepool(collection=c2, edition=edition)
+        edition, lp1 = db.edition(collection=c1, with_license_pool=True)
+        lp2 = db.licensepool(collection=c2, edition=edition)
 
         identifier = lp1.identifier
         assert lp2.identifier == identifier
@@ -527,10 +515,8 @@ class TestIdentifier:
         assert lp2 == identifier.licensed_through_collection(c2)
         assert None == identifier.licensed_through_collection(c3)
 
-    def test_missing_coverage_from(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_missing_coverage_from(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         gutenberg = DataSource.lookup(session, DataSource.GUTENBERG)
         oclc = DataSource.lookup(session, DataSource.OCLC)
@@ -546,10 +532,10 @@ class TestIdentifier:
         )
 
         # One of them has coverage from OCLC Classify
-        c1 = database_transaction.coverage_record(g1, oclc)
+        c1 = db.coverage_record(g1, oclc)
 
         # The other has coverage from a specific operation on OCLC Classify
-        c2 = database_transaction.coverage_record(g2, oclc, "some operation")
+        c2 = db.coverage_record(g2, oclc, "some operation")
 
         # Here's a web record, just sitting there.
         w, ignore = Edition.for_foreign_id(
@@ -593,17 +579,15 @@ class TestIdentifier:
         )
 
     def test_missing_coverage_from_with_collection(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        session = database_transaction.session()
+        session = db.session()
 
         gutenberg = DataSource.lookup(session, DataSource.GUTENBERG)
-        identifier = database_transaction.identifier()
-        collection1 = database_transaction.default_collection()
-        collection2 = database_transaction.collection()
-        database_transaction.coverage_record(
-            identifier, gutenberg, collection=collection1
-        )
+        identifier = db.identifier()
+        collection1 = db.default_collection()
+        collection2 = db.collection()
+        db.coverage_record(identifier, gutenberg, collection=collection1)
 
         # The Identifier has coverage in collection 1.
         assert (
@@ -626,9 +610,9 @@ class TestIdentifier:
         ).all()
 
     def test_missing_coverage_from_with_cutoff_date(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        session = database_transaction.session()
+        session = db.session()
 
         gutenberg = DataSource.lookup(session, DataSource.GUTENBERG)
         oclc = DataSource.lookup(session, DataSource.OCLC)
@@ -640,7 +624,7 @@ class TestIdentifier:
         )
         identifier = gutenberg.primary_identifier
         oclc = DataSource.lookup(session, DataSource.OCLC)
-        coverage = database_transaction.coverage_record(gutenberg, oclc)
+        coverage = db.coverage_record(gutenberg, oclc)
 
         # The CoverageRecord knows when the coverage was provided.
         timestamp = coverage.timestamp
@@ -663,10 +647,10 @@ class TestIdentifier:
             count_as_missing_before=timestamp + datetime.timedelta(seconds=1),
         ).all()
 
-    def test_opds_entry(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_opds_entry(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        identifier = database_transaction.identifier()
+        identifier = db.identifier()
         source = DataSource.lookup(session, DataSource.CONTENT_CAFE)
 
         summary = identifier.add_link(
@@ -700,7 +684,7 @@ class TestIdentifier:
         assert [] == identifier.coverage_records
 
         # This may be the time the cover image was mirrored.
-        cover.resource.representation.set_as_mirrored(database_transaction.fresh_url())
+        cover.resource.representation.set_as_mirrored(db.fresh_url())
         now = utc_now()
         cover.resource.representation.mirrored_at = now
         entry = get_entry_dict(identifier.opds_entry())
@@ -712,14 +696,12 @@ class TestIdentifier:
         # For whatever reason, this coverage record is missing its
         # timestamp. This indicates an error elsewhere, but it
         # doesn't crash the method we're testing.
-        no_timestamp = database_transaction.coverage_record(
-            identifier, source, operation="bad operation"
-        )
+        no_timestamp = db.coverage_record(identifier, source, operation="bad operation")
         no_timestamp.timestamp = None
 
         # If a coverage record is dated after the cover image's mirror
         # time, That becomes the new updated time.
-        record = database_transaction.coverage_record(identifier, source)
+        record = db.coverage_record(identifier, source)
         the_future = now + datetime.timedelta(minutes=60)
         record.timestamp = the_future
         identifier.opds_entry()
@@ -797,9 +779,9 @@ class TestIdentifier:
 
 @pytest.fixture()
 def example_equivalency_coverage_record_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db,
 ) -> ExampleEquivalencyCoverageRecordFixture:
-    return ExampleEquivalencyCoverageRecordFixture(database_transaction)
+    return ExampleEquivalencyCoverageRecordFixture(db)
 
 
 class TestRecursiveEquivalencyCache:

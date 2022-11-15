@@ -7,16 +7,15 @@ from core.model import CirculationEvent, ExternalIntegration, Library, create
 # and we can't tell Analytics to do so either. We need to tell
 # it to perform an import relative to the module the Analytics
 # class is in.
+from tests.fixtures.database import DatabaseTransactionFixture
 
 MOCK_PROTOCOL = "..mock_analytics_provider"
 
-from tests.fixtures.database import DatabaseTransactionFixture
-
 
 class TestAnalytics:
-    def test_initialize(self, database_transaction: DatabaseTransactionFixture):
+    def test_initialize(self, db: DatabaseTransactionFixture):
         # supports multiple analytics providers, site-wide or with libraries
-        session = database_transaction.session()
+        session = db.session()
 
         # Two site-wide integrations
         site_wide_integration1, ignore = create(
@@ -25,7 +24,7 @@ class TestAnalytics:
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol=MOCK_PROTOCOL,
         )
-        site_wide_integration1.url = database_transaction.fresh_str()
+        site_wide_integration1.url = db.fresh_str()
         site_wide_integration2, ignore = create(
             session,
             ExternalIntegration,
@@ -105,12 +104,12 @@ class TestAnalytics:
         assert Analytics.GLOBAL_ENABLED is False
         assert {l2.id} == Analytics.LIBRARY_ENABLED
 
-    def test_is_configured(self, database_transaction: DatabaseTransactionFixture):
+    def test_is_configured(self, db: DatabaseTransactionFixture):
         # If the Analytics constructor has not been called, then
         # is_configured() calls it so that the values are populated.
         Analytics.GLOBAL_ENABLED = None
         Analytics.LIBRARY_ENABLED = object()
-        library = database_transaction.default_library()
+        library = db.default_library()
         assert False == Analytics.is_configured(library)
         assert False == Analytics.GLOBAL_ENABLED
         assert set() == Analytics.LIBRARY_ENABLED
@@ -127,8 +126,8 @@ class TestAnalytics:
         Analytics.LIBRARY_ENABLED.add(library.id)
         assert True == Analytics.is_configured(library)
 
-    def test_collect_event(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_collect_event(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # This will be a site-wide integration because it will have no
         # associated libraries when the Analytics singleton is instantiated.
@@ -151,14 +150,14 @@ class TestAnalytics:
         library, ignore = create(session, Library, short_name="library")
         library_integration.libraries += [library]
 
-        work = database_transaction.work(title="title", with_license_pool=True)
+        work = db.work(title="title", with_license_pool=True)
         [lp] = work.license_pools
         analytics = Analytics(session)
         sitewide_provider = analytics.sitewide_providers[0]
         library_provider = analytics.library_providers[library.id][0]
 
         analytics.collect_event(
-            database_transaction.default_library(),
+            db.default_library(),
             lp,
             CirculationEvent.DISTRIBUTOR_CHECKIN,
             None,

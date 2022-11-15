@@ -3,10 +3,8 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestEquivalency:
-    def test_register_equivalency(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_register_equivalency(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         data_source = DataSource.lookup(session, DataSource.GUTENBERG)
         id = "549"
@@ -34,10 +32,8 @@ class TestEquivalency:
 
         assert {record, record2} == set(record.equivalent_editions().all())
 
-    def test_recursively_equivalent_identifiers(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_recursively_equivalent_identifiers(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # We start with a Gutenberg book.
         gutenberg = DataSource.lookup(session, DataSource.GUTENBERG)

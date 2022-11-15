@@ -7,8 +7,8 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestDataSource:
-    def test_lookup(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_lookup(self, db: DatabaseTransactionFixture):
+        session = db.session()
         key = DataSource.GUTENBERG
 
         gutenberg = DataSource.lookup(session, DataSource.GUTENBERG)
@@ -31,41 +31,35 @@ class TestDataSource:
 
         assert (new_source, False) == DataSource.by_cache_key(session, key, None)
 
-    def test_lookup_by_deprecated_name(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_lookup_by_deprecated_name(self, db: DatabaseTransactionFixture):
+        session = db.session()
         threem = DataSource.lookup(session, "3M")
         assert DataSource.BIBLIOTHECA == threem.name
         assert DataSource.BIBLIOTHECA != "3M"
 
     def test_lookup_returns_none_for_nonexistent_source(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        session = database_transaction.session()
+        session = db.session()
         assert None == DataSource.lookup(
-            session, "No such data source " + database_transaction.fresh_str()
+            session, "No such data source " + db.fresh_str()
         )
 
-    def test_lookup_with_autocreate(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
-        name = "Brand new data source " + database_transaction.fresh_str()
+    def test_lookup_with_autocreate(self, db: DatabaseTransactionFixture):
+        session = db.session()
+        name = "Brand new data source " + db.fresh_str()
         new_source = DataSource.lookup(session, name, autocreate=True)
         assert name == new_source.name
         assert False == new_source.offers_licenses
 
-        name = "New data source with licenses" + database_transaction.fresh_str()
+        name = "New data source with licenses" + db.fresh_str()
         new_source = DataSource.lookup(
             session, name, autocreate=True, offers_licenses=True
         )
         assert True == new_source.offers_licenses
 
-    def test_metadata_sources_for(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_metadata_sources_for(self, db: DatabaseTransactionFixture):
+        session = db.session()
         content_cafe = DataSource.lookup(session, DataSource.CONTENT_CAFE)
         isbn_metadata_sources = DataSource.metadata_sources_for(
             session, Identifier.ISBN
@@ -74,22 +68,20 @@ class TestDataSource:
         assert 1 == len(isbn_metadata_sources)
         assert [content_cafe] == isbn_metadata_sources
 
-    def test_license_source_for(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
-        identifier = database_transaction.identifier(Identifier.OVERDRIVE_ID)
+    def test_license_source_for(self, db: DatabaseTransactionFixture):
+        session = db.session()
+        identifier = db.identifier(Identifier.OVERDRIVE_ID)
         source = DataSource.license_source_for(session, identifier)
         assert DataSource.OVERDRIVE == source.name
 
-    def test_license_source_for_string(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_license_source_for_string(self, db: DatabaseTransactionFixture):
+        session = db.session()
         source = DataSource.license_source_for(session, Identifier.THREEM_ID)
         assert DataSource.THREEM == source.name
 
     def test_license_source_fails_if_identifier_type_does_not_provide_licenses(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db
     ):
-        session = database_transaction.session()
-        identifier = database_transaction.identifier(DataSource.MANUAL)
+        session = db.session()
+        identifier = db.identifier(DataSource.MANUAL)
         pytest.raises(NoResultFound, DataSource.license_source_for, session, identifier)

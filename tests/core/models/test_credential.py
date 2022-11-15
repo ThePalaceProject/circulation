@@ -15,13 +15,13 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestCredentials:
-    def test_temporary_token(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_temporary_token(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Create a temporary token good for one hour.
         duration = datetime.timedelta(hours=1)
         data_source = DataSource.lookup(session, DataSource.ADOBE)
-        patron = database_transaction.patron()
+        patron = db.patron()
         now = utc_now()
         expect_expires = now + duration
         token, is_new = Credential.temporary_token_create(
@@ -75,16 +75,14 @@ class TestCredentials:
         )
         assert token == no_expiration_token
 
-    def test_specify_value_of_temporary_token(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_specify_value_of_temporary_token(self, db: DatabaseTransactionFixture):
         """By default, a temporary token has a randomly generated value, but
         you can give a specific value to represent a temporary token you got
         from somewhere else.
         """
-        session = database_transaction.session()
+        session = db.session()
 
-        patron = database_transaction.patron()
+        patron = db.patron()
         duration = datetime.timedelta(hours=1)
         data_source = DataSource.lookup(session, DataSource.ADOBE)
         token, is_new = Credential.temporary_token_create(
@@ -97,14 +95,12 @@ class TestCredentials:
         )
         assert "Some random value" == token.credential
 
-    def test_temporary_token_overwrites_old_token(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_temporary_token_overwrites_old_token(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         duration = datetime.timedelta(hours=1)
         data_source = DataSource.lookup(session, DataSource.ADOBE)
-        patron = database_transaction.patron()
+        patron = db.patron()
         old_token, is_new = Credential.temporary_token_create(
             session, data_source, "some random type", patron, duration
         )
@@ -119,12 +115,12 @@ class TestCredentials:
         assert token.id == old_token.id
         assert old_credential != token.credential
 
-    def test_persistent_token(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_persistent_token(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Create a persistent token.
         data_source = DataSource.lookup(session, DataSource.ADOBE)
-        patron = database_transaction.patron()
+        patron = db.patron()
         token, is_new = Credential.persistent_token_create(
             session, data_source, "some random type", patron
         )
@@ -156,10 +152,8 @@ class TestCredentials:
         assert again_token == new_token
         assert again_token.credential == credential
 
-    def test_cannot_look_up_nonexistent_token(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_cannot_look_up_nonexistent_token(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         data_source = DataSource.lookup(session, DataSource.ADOBE)
         new_token = Credential.lookup_by_token(
@@ -167,9 +161,9 @@ class TestCredentials:
         )
         assert None == new_token
 
-    def test_empty_token(self, database_transaction: DatabaseTransactionFixture):
+    def test_empty_token(self, db: DatabaseTransactionFixture):
         # Test the behavior when a credential is empty.
-        session = database_transaction.session()
+        session = db.session()
 
         # First, create a token with an empty credential.
         data_source = DataSource.lookup(session, DataSource.ADOBE)
@@ -203,10 +197,8 @@ class TestCredentials:
             )
         assert "Refresher method was called" in str(excinfo.value)
 
-    def test_force_refresher_method(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_force_refresher_method(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Ensure that passing `force_refresh=True` triggers the
         # refresher method, even when none of the usual conditions
@@ -217,7 +209,7 @@ class TestCredentials:
 
         # Create a persistent token and ensure that it's present
         data_source = DataSource.lookup(session, DataSource.ADOBE)
-        patron = database_transaction.patron()
+        patron = db.patron()
         token, is_new = Credential.persistent_token_create(
             session, data_source, "some random type", patron
         )
@@ -240,15 +232,15 @@ class TestCredentials:
             Credential.lookup(*args, allow_persistent_token=True, force_refresh=True)
         assert "Refresher method was called" in str(excinfo.value)
 
-    def test_collection_token(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_collection_token(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Make sure we can have two tokens from the same data_source with
         # different collections.
         data_source = DataSource.lookup(session, DataSource.FEEDBOOKS)
-        collection1 = database_transaction.collection("test collection 1")
-        collection2 = database_transaction.collection("test collection 2")
-        patron = database_transaction.patron()
+        collection1 = db.collection("test collection 1")
+        collection2 = db.collection("test collection 2")
+        patron = db.patron()
         type = "super secret"
 
         # Create our credentials
@@ -283,11 +275,11 @@ class TestCredentials:
 
 
 class TestDelegatedPatronIdentifier:
-    def test_get_one_or_create(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_get_one_or_create(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        library_uri = database_transaction.fresh_url()
-        patron_identifier = database_transaction.fresh_str()
+        library_uri = db.fresh_url()
+        patron_identifier = db.fresh_str()
         identifier_type = DelegatedPatronIdentifier.ADOBE_ACCOUNT_ID
 
         def make_id():
@@ -328,17 +320,15 @@ class TestUniquenessConstraintsFixture:
 
 @pytest.fixture()
 def test_uniqueness_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db: DatabaseTransactionFixture,
 ) -> TestUniquenessConstraintsFixture:
     fix = TestUniquenessConstraintsFixture()
-    fix.transaction = database_transaction
+    fix.transaction = db
     fix.type = "a credential type"
-    fix.data_source = DataSource.lookup(
-        database_transaction.session(), DataSource.OVERDRIVE
-    )
-    fix.patron = database_transaction.patron()
-    fix.col1 = database_transaction.default_collection()
-    fix.col2 = database_transaction.collection()
+    fix.data_source = DataSource.lookup(db.session(), DataSource.OVERDRIVE)
+    fix.patron = db.patron()
+    fix.col1 = db.default_collection()
+    fix.col2 = db.collection()
     return fix
 
 
@@ -434,16 +424,14 @@ class TestDRMDeviceIdentifierFixture:
 
 @pytest.fixture()
 def test_drm_device_id_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db: DatabaseTransactionFixture,
 ) -> TestDRMDeviceIdentifierFixture:
     fix = TestDRMDeviceIdentifierFixture()
-    fix.transaction = database_transaction
-    fix.data_source = DataSource.lookup(
-        database_transaction.session(), DataSource.OVERDRIVE
-    )
-    fix.patron = database_transaction.patron()
+    fix.transaction = db
+    fix.data_source = DataSource.lookup(db.session(), DataSource.OVERDRIVE)
+    fix.patron = db.patron()
     c, ignore = Credential.persistent_token_create(
-        database_transaction.session(), fix.data_source, "Some Credential", fix.patron
+        db.session(), fix.data_source, "Some Credential", fix.patron
     )
     fix.credential = c
     return fix

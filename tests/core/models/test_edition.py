@@ -30,13 +30,13 @@ class TestEdition:
 
         assert Edition.BOOK_MEDIUM == m(DeliveryMechanism.ADOBE_DRM)
 
-    def test_license_pools(self, database_transaction: DatabaseTransactionFixture):
+    def test_license_pools(self, db: DatabaseTransactionFixture):
         # Here are two collections that provide access to the same book.
-        c1 = database_transaction.collection()
-        c2 = database_transaction.collection()
+        c1 = db.collection()
+        c2 = db.collection()
 
-        edition, lp1 = database_transaction.edition(with_license_pool=True)
-        lp2 = database_transaction.licensepool(edition=edition, collection=c2)
+        edition, lp1 = db.edition(with_license_pool=True)
+        lp2 = db.licensepool(edition=edition, collection=c2)
 
         # Two LicensePools for the same work.
         assert lp1.identifier == lp2.identifier
@@ -44,12 +44,10 @@ class TestEdition:
         # Edition.license_pools contains both.
         assert {lp1, lp2} == set(edition.license_pools)
 
-    def test_author_contributors(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_author_contributors(self, db: DatabaseTransactionFixture):
+        session = db.session()
         data_source = DataSource.lookup(session, DataSource.GUTENBERG)
-        id = database_transaction.fresh_str()
+        id = db.fresh_str()
         type = Identifier.GUTENBERG_ID
 
         edition, was_new = Edition.for_foreign_id(session, data_source, type, id)
@@ -71,9 +69,9 @@ class TestEdition:
         # only shows up once.
         assert [alice] == edition.author_contributors
 
-    def test_for_foreign_id(self, database_transaction: DatabaseTransactionFixture):
+    def test_for_foreign_id(self, db: DatabaseTransactionFixture):
         """Verify we can get a data source's view of a foreign id."""
-        session = database_transaction.session()
+        session = db.session()
         data_source = DataSource.lookup(session, DataSource.GUTENBERG)
         id = "549"
         type = Identifier.GUTENBERG_ID
@@ -95,10 +93,8 @@ class TestEdition:
         assert identifier == record.primary_identifier
         assert False == was_new
 
-    def test_missing_coverage_from(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_missing_coverage_from(self, db: DatabaseTransactionFixture):
+        session = db.session()
         gutenberg = DataSource.lookup(session, DataSource.GUTENBERG)
         oclc = DataSource.lookup(session, DataSource.OCLC)
         web = DataSource.lookup(session, DataSource.WEB)
@@ -113,10 +109,10 @@ class TestEdition:
         )
 
         # One of them has coverage from OCLC Classify
-        c1 = database_transaction.coverage_record(g1, oclc)
+        c1 = db.coverage_record(g1, oclc)
 
         # The other has coverage from a specific operation on OCLC Classify
-        c2 = database_transaction.coverage_record(g2, oclc, "some operation")
+        c2 = db.coverage_record(g2, oclc, "some operation")
 
         # Here's a web record, just sitting there.
         w, ignore = Edition.for_foreign_id(
@@ -153,23 +149,21 @@ class TestEdition:
             x.id for x in Edition.missing_coverage_from(session, gutenberg, web)
         )
 
-    def test_sort_by_priority(self, database_transaction: DatabaseTransactionFixture):
+    def test_sort_by_priority(self, db: DatabaseTransactionFixture):
 
         # Make editions created by the license source, the metadata
         # wrangler, and library staff.
-        admin = database_transaction.edition(
+        admin = db.edition(
             data_source_name=DataSource.LIBRARY_STAFF, with_license_pool=False
         )
-        od = database_transaction.edition(
-            data_source_name=DataSource.OVERDRIVE, with_license_pool=False
-        )
-        mw = database_transaction.edition(
+        od = db.edition(data_source_name=DataSource.OVERDRIVE, with_license_pool=False)
+        mw = db.edition(
             data_source_name=DataSource.METADATA_WRANGLER, with_license_pool=False
         )
 
         # Create an invalid edition with no data source. (This shouldn't
         # happen.)
-        no_data_source = database_transaction.edition(with_license_pool=False)
+        no_data_source = db.edition(with_license_pool=False)
         no_data_source.data_source = None
 
         def ids(l):
@@ -189,13 +183,11 @@ class TestEdition:
         actual = Edition.sort_by_priority(expect, od.data_source)
         assert ids(expect) == ids(actual)
 
-    def test_equivalent_identifiers(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_equivalent_identifiers(self, db: DatabaseTransactionFixture):
 
-        edition = database_transaction.edition()
-        identifier = database_transaction.identifier()
-        session = database_transaction.session()
+        edition = db.edition()
+        identifier = db.identifier()
+        session = db.session()
         data_source = DataSource.lookup(session, DataSource.OCLC)
 
         identifier.equivalent_to(data_source, edition.primary_identifier, 0.6)
@@ -210,12 +202,10 @@ class TestEdition:
             edition.equivalent_identifiers(policy=policy)
         )
 
-    def test_recursive_edition_equivalence(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_recursive_edition_equivalence(self, db: DatabaseTransactionFixture):
 
         # Here's a Edition for a Project Gutenberg text.
-        gutenberg, gutenberg_pool = database_transaction.edition(
+        gutenberg, gutenberg_pool = db.edition(
             data_source_name=DataSource.GUTENBERG,
             identifier_type=Identifier.GUTENBERG_ID,
             identifier_id="1",
@@ -224,7 +214,7 @@ class TestEdition:
         )
 
         # Here's a Edition for an Open Library text.
-        open_library, open_library_pool = database_transaction.edition(
+        open_library, open_library_pool = db.edition(
             data_source_name=DataSource.OPEN_LIBRARY,
             identifier_type=Identifier.OPEN_LIBRARY_ID,
             identifier_id="W1111",
@@ -236,7 +226,7 @@ class TestEdition:
         # equivalent to a certain OCLC Number. We've learned from OCLC
         # Linked Data that the Open Library text is equivalent to the
         # same OCLC Number.
-        session = database_transaction.session()
+        session = db.session()
         oclc_classify = DataSource.lookup(session, DataSource.OCLC)
         oclc_linked_data = DataSource.lookup(session, DataSource.OCLC_LINKED_DATA)
 
@@ -265,7 +255,7 @@ class TestEdition:
 
         # Finally, here's a completely unrelated Edition, which
         # will not be showing up.
-        gutenberg2, gutenberg2_pool = database_transaction.edition(
+        gutenberg2, gutenberg2_pool = db.edition(
             data_source_name=DataSource.GUTENBERG,
             identifier_type=Identifier.GUTENBERG_ID,
             identifier_id="2",
@@ -289,7 +279,7 @@ class TestEdition:
         assert recovering in results
 
         # Here's a Work that incorporates one of the Gutenberg records.
-        work = database_transaction.work()
+        work = db.work()
         work.license_pools.extend([gutenberg2_pool])
 
         # Its set-of-all-editions contains only one record.
@@ -301,33 +291,29 @@ class TestEdition:
         work.license_pools.extend([gutenberg_pool])
         assert 4 == work.all_editions().count()
 
-    def test_calculate_presentation_title(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        wr = database_transaction.edition(title="The Foo")
+    def test_calculate_presentation_title(self, db: DatabaseTransactionFixture):
+        wr = db.edition(title="The Foo")
         wr.calculate_presentation()
         assert "Foo, The" == wr.sort_title
 
-        wr = database_transaction.edition(title="A Foo")
+        wr = db.edition(title="A Foo")
         wr.calculate_presentation()
         assert "Foo, A" == wr.sort_title
 
     def test_calculate_presentation_missing_author(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        wr = database_transaction.edition()
-        session = database_transaction.session()
+        wr = db.edition()
+        session = db.session()
         session.delete(wr.contributions[0])
         session.commit()
         wr.calculate_presentation()
         assert "[Unknown]" == wr.sort_author
         assert "[Unknown]" == wr.author
 
-    def test_calculate_presentation_author(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        bob, ignore = database_transaction.contributor(sort_name="Bitshifter, Bob")
-        wr = database_transaction.edition(authors=bob.sort_name)
+    def test_calculate_presentation_author(self, db: DatabaseTransactionFixture):
+        bob, ignore = db.contributor(sort_name="Bitshifter, Bob")
+        wr = db.edition(authors=bob.sort_name)
         wr.calculate_presentation()
         assert "Bob Bitshifter" == wr.author
         assert "Bitshifter, Bob" == wr.sort_author
@@ -337,16 +323,16 @@ class TestEdition:
         assert "Bob A. Bitshifter" == wr.author
         assert "Bitshifter, Bob" == wr.sort_author
 
-        kelly, ignore = database_transaction.contributor(sort_name="Accumulator, Kelly")
+        kelly, ignore = db.contributor(sort_name="Accumulator, Kelly")
         wr.add_contributor(kelly, Contributor.AUTHOR_ROLE)
         wr.calculate_presentation()
         assert "Kelly Accumulator, Bob A. Bitshifter" == wr.author
         assert "Accumulator, Kelly ; Bitshifter, Bob" == wr.sort_author
 
-    def test_set_summary(self, database_transaction: DatabaseTransactionFixture):
-        e, pool = database_transaction.edition(with_license_pool=True)
-        work = database_transaction.work(presentation_edition=e)
-        session = database_transaction.session()
+    def test_set_summary(self, db: DatabaseTransactionFixture):
+        e, pool = db.edition(with_license_pool=True)
+        work = db.work(presentation_edition=e)
+        session = db.session()
         overdrive = DataSource.lookup(session, DataSource.OVERDRIVE)
 
         # Set the work's summmary.
@@ -365,10 +351,10 @@ class TestEdition:
         assert "" == work.summary_text
 
     def test_calculate_evaluate_summary_quality_with_privileged_data_sources(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        e, pool = database_transaction.edition(with_license_pool=True)
-        session = database_transaction.session()
+        e, pool = db.edition(with_license_pool=True)
+        session = db.session()
         oclc = DataSource.lookup(session, DataSource.OCLC_LINKED_DATA)
         overdrive = DataSource.lookup(session, DataSource.OVERDRIVE)
 
@@ -436,11 +422,9 @@ class TestEdition:
         assert [staff_resource] == resources5
         assert staff_resource == champ5
 
-    def test_calculate_presentation_cover(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_calculate_presentation_cover(self, db: DatabaseTransactionFixture):
         # Here's a cover image with a thumbnail.
-        session = database_transaction.session()
+        session = db.session()
         representation, ignore = get_one_or_create(
             session, Representation, url="http://cover"
         )
@@ -454,7 +438,7 @@ class TestEdition:
         thumb.thumbnail_of_id = representation.id
 
         # Verify that a cover for the edition's primary identifier is used.
-        e, pool = database_transaction.edition(with_license_pool=True)
+        e, pool = db.edition(with_license_pool=True)
         link, ignore = e.primary_identifier.add_link(
             Hyperlink.IMAGE, "http://cover", e.data_source
         )
@@ -465,7 +449,7 @@ class TestEdition:
 
         # Verify that a cover will be used even if it's some
         # distance away along the identifier-equivalence line.
-        e, pool = database_transaction.edition(with_license_pool=True)
+        e, pool = db.edition(with_license_pool=True)
         oclc_classify = DataSource.lookup(session, DataSource.OCLC)
         oclc_number, ignore = Identifier.for_foreign_id(
             session, Identifier.OCLC_NUMBER, "22"
@@ -504,7 +488,7 @@ class TestEdition:
 
         # Verify that a thumbnail is used even if there's
         # no full-sized cover.
-        e, pool = database_transaction.edition(with_license_pool=True)
+        e, pool = db.edition(with_license_pool=True)
         link, ignore = e.primary_identifier.add_link(
             Hyperlink.THUMBNAIL_IMAGE, "http://thumb", e.data_source
         )
@@ -514,9 +498,9 @@ class TestEdition:
         assert "http://mirror/thumb" == e.cover_thumbnail_url
 
     def test_calculate_presentation_registers_coverage_records(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        edition = database_transaction.edition()
+        edition = db.edition()
         identifier = edition.primary_identifier
 
         # This Identifier has no CoverageRecords.
@@ -545,11 +529,11 @@ class TestEdition:
         ]
 
     def test_no_permanent_work_id_for_edition_without_title_or_medium(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
         # An edition with no title or medium is not assigned a permanent work
         # ID.
-        edition = database_transaction.edition()
+        edition = db.edition()
         assert None == edition.permanent_work_id
 
         edition.title = ""
@@ -565,9 +549,9 @@ class TestEdition:
         assert None == edition.permanent_work_id
 
     def test_choose_cover_can_choose_full_image_and_thumbnail_separately(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        edition = database_transaction.edition()
+        edition = db.edition()
 
         # This edition has a full-sized image and a thumbnail image,
         # but there is no evidence that they are the _same_ image.

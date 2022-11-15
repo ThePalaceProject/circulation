@@ -212,10 +212,8 @@ class TestHasSessionCache:
 
 
 class TestHasFullTableCacheDatabase:
-    def test_cached_values_are_properly_updated(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_cached_values_are_properly_updated(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         setting_key = "key"
         setting_old_value = "old value"
@@ -250,10 +248,8 @@ class TestHasFullTableCacheDatabase:
             ConfigurationSetting.by_id(session, setting_id)._value == setting_new_value
         )
 
-    def test_cached_value_deleted(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_cached_value_deleted(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Get setting
         setting = ConfigurationSetting.sitewide(session, "test")
@@ -269,10 +265,8 @@ class TestHasFullTableCacheDatabase:
         assert len(cache.id) == 0
         assert len(cache.key) == 0
 
-    def test_cached_value_deleted_flushed(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_cached_value_deleted_flushed(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Get setting
         setting = ConfigurationSetting.sitewide(session, "test")
@@ -289,10 +283,8 @@ class TestHasFullTableCacheDatabase:
         assert len(cache.id) == 0
         assert len(cache.key) == 0
 
-    def test_cached_value_deleted_committed(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_cached_value_deleted_committed(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Get setting
         setting = ConfigurationSetting.sitewide(session, "test")

@@ -32,9 +32,9 @@ class TestEntryPoint:
         for ep in (EbooksEntryPoint, AudiobooksEntryPoint):
             assert ep.URI == Edition.medium_to_additional_type[ep.INTERNAL_NAME]
 
-    def test_no_changes(self, database_transaction: DatabaseTransactionFixture):
+    def test_no_changes(self, db: DatabaseTransactionFixture):
         # EntryPoint doesn't modify queries or search filters.
-        session = database_transaction.session()
+        session = db.session()
         qu = session.query(Edition)
         assert qu == EntryPoint.modify_database_query(session, qu)
         args = dict(arg="value")
@@ -84,10 +84,10 @@ class TestEntryPoint:
 
 
 class TestEverythingEntryPoint:
-    def test_no_changes(self, database_transaction: DatabaseTransactionFixture):
+    def test_no_changes(self, db: DatabaseTransactionFixture):
         # EverythingEntryPoint doesn't modify queries or searches
         # beyond the default behavior for any entry point.
-        session = database_transaction.session()
+        session = db.session()
         assert "All" == EverythingEntryPoint.INTERNAL_NAME
 
         qu = session.query(Edition)
@@ -99,12 +99,10 @@ class TestEverythingEntryPoint:
 
 
 class TestMediumEntryPoint:
-    def test_modify_database_query(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_modify_database_query(self, db: DatabaseTransactionFixture):
         # Create a video, and a entry point that contains videos.
-        session = database_transaction.session()
-        work = database_transaction.work(with_license_pool=True)
+        session = db.session()
+        work = db.work(with_license_pool=True)
         work.license_pools[0].presentation_edition.medium = Edition.VIDEO_MEDIUM
 
         class Videos(MediumEntryPoint):
@@ -133,10 +131,8 @@ class TestMediumEntryPoint:
 class TestLibrary:
     """Test a Library's interaction with EntryPoints."""
 
-    def test_enabled_entrypoints(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        l = database_transaction.default_library()
+    def test_enabled_entrypoints(self, db: DatabaseTransactionFixture):
+        l = db.default_library()
 
         setting = l.setting(EntryPoint.ENABLED_SETTING)
 

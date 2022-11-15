@@ -42,12 +42,10 @@ class ExampleCollectionFixture:
 
 @pytest.fixture()
 def example_collection_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db: DatabaseTransactionFixture,
 ) -> ExampleCollectionFixture:
-    c = database_transaction.collection(
-        name="test collection", protocol=ExternalIntegration.OVERDRIVE
-    )
-    return ExampleCollectionFixture(c, database_transaction)
+    c = db.collection(name="test collection", protocol=ExternalIntegration.OVERDRIVE)
+    return ExampleCollectionFixture(c, db)
 
 
 class TestCollection:

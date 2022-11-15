@@ -55,9 +55,9 @@ class ExampleCredentialFixture:
 
 @pytest.fixture()
 def example_credential_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db: DatabaseTransactionFixture,
 ) -> ExampleCredentialFixture:
-    return ExampleCredentialFixture.create(database_transaction)
+    return ExampleCredentialFixture.create(db)
 
 
 class TestCredentialFactory:

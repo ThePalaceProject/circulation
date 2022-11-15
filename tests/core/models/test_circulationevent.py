@@ -79,10 +79,10 @@ class TestCirculationEvent:
         )
         return event, was_new
 
-    def test_new_title(self, database_transaction: DatabaseTransactionFixture):
+    def test_new_title(self, db: DatabaseTransactionFixture):
 
         # Here's a new title.
-        collection = database_transaction.collection()
+        collection = db.collection()
         data = self._event_data(
             source=DataSource.OVERDRIVE,
             id="{1-2-3}",
@@ -94,7 +94,7 @@ class TestCirculationEvent:
         )
 
         # Turn it into an event and see what happens.
-        event, ignore = self.from_dict(data, database_transaction)
+        event, ignore = self.from_dict(data, db)
 
         # The event is associated with the correct data source.
         assert DataSource.OVERDRIVE == event.license_pool.data_source.name
@@ -110,11 +110,11 @@ class TestCirculationEvent:
         # updating the dataset.
         assert 0 == event.license_pool.licenses_owned
 
-    def test_log(self, database_transaction: DatabaseTransactionFixture):
+    def test_log(self, db: DatabaseTransactionFixture):
         # Basic test of CirculationEvent.log.
 
-        pool = database_transaction.licensepool(edition=None)
-        library = database_transaction.default_library()
+        pool = db.licensepool(edition=None)
+        library = db.default_library()
         event_name = CirculationEvent.DISTRIBUTOR_CHECKOUT
         old_value = 10
         new_value = 8
@@ -123,7 +123,7 @@ class TestCirculationEvent:
         location = "Westgate Branch"
 
         m = CirculationEvent.log
-        session = database_transaction.session()
+        session = db.session()
         event, is_new = m(
             session,
             license_pool=pool,
@@ -187,18 +187,16 @@ class TestCirculationEvent:
         assert end == event.end
         assert location == event.location
 
-    def test_uniqueness_constraints_no_library(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_uniqueness_constraints_no_library(self, db: DatabaseTransactionFixture):
         # If library is null, then license_pool + type + start must be
         # unique.
-        pool = database_transaction.licensepool(edition=None)
+        pool = db.licensepool(edition=None)
         now = utc_now()
         kwargs = dict(
             license_pool=pool,
             type=CirculationEvent.DISTRIBUTOR_TITLE_ADD,
         )
-        session = database_transaction.session()
+        session = db.session()
         event = create(session, CirculationEvent, start=now, **kwargs)
 
         # Different timestamp -- no problem.
@@ -213,19 +211,17 @@ class TestCirculationEvent:
         )
         session.rollback()
 
-    def test_uniqueness_constraints_with_library(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_uniqueness_constraints_with_library(self, db: DatabaseTransactionFixture):
         # If library is provided, then license_pool + library + type +
         # start must be unique.
-        pool = database_transaction.licensepool(edition=None)
+        pool = db.licensepool(edition=None)
         now = utc_now()
         kwargs = dict(
             license_pool=pool,
-            library=database_transaction.default_library(),
+            library=db.default_library(),
             type=CirculationEvent.DISTRIBUTOR_TITLE_ADD,
         )
-        session = database_transaction.session()
+        session = db.session()
         event = create(session, CirculationEvent, start=now, **kwargs)
 
         # Different timestamp -- no problem.

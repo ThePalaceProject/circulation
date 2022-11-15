@@ -984,9 +984,9 @@ def database(application: ApplicationFixture) -> Iterable[DatabaseFixture]:
 
 
 @pytest.fixture(scope="function")
-def database_transaction(
+def db(
     database: DatabaseFixture,
-) -> Iterable[DatabaseTransactionFixture]:
+) -> DatabaseTransactionFixture:
     tr = DatabaseTransactionFixture.create(database)
     yield tr
     tr.close()

@@ -5,10 +5,10 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestOpenSearchDocument:
-    def test_search_info(self, database_transaction: DatabaseTransactionFixture):
+    def test_search_info(self, db: DatabaseTransactionFixture):
         # Searching this lane will use the language
         # and audience restrictions from the lane.
-        data = database_transaction
+        data = db
         lane = data.lane()
         lane.display_name = "Fiction"
         lane.languages = ["eng", "ger"]

@@ -8,11 +8,11 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestIntegrationClient:
-    def test_for_url(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_for_url(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         now = utc_now()
-        url = database_transaction.fresh_url()
+        url = db.fresh_url()
         client, is_new = IntegrationClient.for_url(session, url)
 
         # A new IntegrationClient has been created.
@@ -34,13 +34,11 @@ class TestIntegrationClient:
         client2, is_new = IntegrationClient.for_url(session, url)
         assert client == client2
 
-    def test_register(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_register(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         now = utc_now()
-        client, is_new = IntegrationClient.register(
-            session, database_transaction.fresh_url()
-        )
+        client, is_new = IntegrationClient.register(session, db.fresh_url())
 
         # It creates a shared_secret.
         assert client.shared_secret
@@ -57,9 +55,9 @@ class TestIntegrationClient:
             ValueError, IntegrationClient.register, session, client.url, "wrong"
         )
 
-    def test_authenticate(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
-        client = database_transaction.integration_client()
+    def test_authenticate(self, db: DatabaseTransactionFixture):
+        session = db.session()
+        client = db.integration_client()
 
         result = IntegrationClient.authenticate(session, "secret")
         assert client == result

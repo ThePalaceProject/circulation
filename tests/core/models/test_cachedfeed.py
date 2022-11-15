@@ -21,15 +21,15 @@ class MockFeedGenerator:
 
 
 class TestCachedFeed:
-    def test_fetch(self, database_transaction: DatabaseTransactionFixture):
+    def test_fetch(self, db: DatabaseTransactionFixture):
         # Verify that CachedFeed.fetch looks in the database for a
         # matching CachedFeed
         #
         # If a new feed needs to be generated, this is done by calling
         # a hook function, and the result is stored in the database.
 
-        work = database_transaction.work()
-        lane = database_transaction.lane()
+        work = db.work()
+        lane = db.lane()
 
         class Mock(CachedFeed):
             # Mock all of the helper methods, which are tested
@@ -44,7 +44,7 @@ class TestCachedFeed:
             # members to test different bits of fetch().
             _keys = CachedFeed.CachedFeedKeys(
                 feed_type="mock type",
-                library=database_transaction.default_library(),
+                library=db.default_library(),
                 work=work,
                 lane_id=lane.id,
                 unique_key="unique key",
@@ -88,7 +88,7 @@ class TestCachedFeed:
         pagination = object()
         max_age = object()
         result1 = m(
-            database_transaction.session(),
+            db.session(),
             worklist,
             facets,
             pagination,
@@ -124,7 +124,7 @@ class TestCachedFeed:
         # We called _prepare_keys with all the necessary information
         # to create a named tuple.
         assert (
-            database_transaction.session(),
+            db.session(),
             worklist,
             facets,
             pagination,
@@ -154,7 +154,7 @@ class TestCachedFeed:
         # refresher() will be called again.
         clear_helpers()
         result2 = m(
-            database_transaction.session(),
+            db.session(),
             worklist,
             facets,
             pagination,
@@ -180,7 +180,7 @@ class TestCachedFeed:
         clear_helpers()
         Mock.SHOULD_REFRESH = False
         result3 = m(
-            database_transaction.session(),
+            db.session(),
             worklist,
             facets,
             pagination,
@@ -200,7 +200,7 @@ class TestCachedFeed:
         Mock.MAX_CACHE_AGE = 0
         clear_helpers()
         m(
-            database_transaction.session(),
+            db.session(),
             worklist,
             facets,
             pagination,
@@ -214,7 +214,7 @@ class TestCachedFeed:
         # again after feed generation.
         assert (None, 0) == Mock._should_refresh_called_with
 
-    def test_no_race_conditions(self, database_transaction: DatabaseTransactionFixture):
+    def test_no_race_conditions(self, db: DatabaseTransactionFixture):
         # Why do we look up a CachedFeed again after feed generation?
         # Well, let's see what happens if someone else messes around
         # with the CachedFeed object _while the refresher is running_.
@@ -228,10 +228,10 @@ class TestCachedFeed:
         # The most up-to-date feed always wins, so background
         # modifications will take effect only if they made the
         # CachedFeed look _newer_ than the foreground process does.
-        facets = Facets.default(database_transaction.default_library())
+        facets = Facets.default(db.default_library())
         pagination = Pagination.default()
         wl = WorkList()
-        wl.initialize(database_transaction.default_library())
+        wl.initialize(db.default_library())
 
         m = CachedFeed.fetch
 
@@ -246,7 +246,7 @@ class TestCachedFeed:
                 return "Another thread made a feed."
 
             m(
-                database_transaction.session(),
+                db.session(),
                 wl,
                 facets,
                 pagination,
@@ -261,7 +261,7 @@ class TestCachedFeed:
         # CachedFeed.fetch() _again_, which will call
         # other_thread_refresher().
         result = m(
-            database_transaction.session(),
+            db.session(),
             wl,
             facets,
             pagination,
@@ -272,7 +272,7 @@ class TestCachedFeed:
 
         # We ended up with a single CachedFeed containing the
         # latest information.
-        assert [result] == database_transaction.session().query(CachedFeed).all()
+        assert [result] == db.session().query(CachedFeed).all()
         assert "Then this thread made a feed." == result.content
 
         # If two threads contend for an existing CachedFeed, the one that
@@ -290,7 +290,7 @@ class TestCachedFeed:
             return "Today's content can't compete."
 
         tomorrow_result = m(
-            database_transaction.session(),
+            db.session(),
             wl,
             facets,
             pagination,
@@ -313,7 +313,7 @@ class TestCachedFeed:
             return "Today's content is fresher."
 
         now_result = m(
-            database_transaction.session(),
+            db.session(),
             wl,
             facets,
             pagination,
@@ -345,7 +345,7 @@ class TestCachedFeed:
             return "Non-weird content."
 
         result2 = m(
-            database_transaction.session(),
+            db.session(),
             wl,
             facets,
             pagination,
@@ -373,7 +373,7 @@ class TestCachedFeed:
             return "Non-weird content."
 
         result3 = m(
-            database_transaction.session(),
+            db.session(),
             wl,
             facets,
             pagination,
@@ -394,22 +394,22 @@ class TestCachedFeed:
         assert None == result2.content
         assert tomorrow == result2.timestamp
 
-    def test_response_format(self, database_transaction: DatabaseTransactionFixture):
+    def test_response_format(self, db: DatabaseTransactionFixture):
         # Verify that fetch() can be told to return an appropriate
         # OPDSFeedResponse object. This is the default behavior, since
         # it preserves some useful information that would otherwise be
         # lost.
-        facets = Facets.default(database_transaction.default_library())
+        facets = Facets.default(db.default_library())
         pagination = Pagination.default()
         wl = WorkList()
-        wl.initialize(database_transaction.default_library())
+        wl.initialize(db.default_library())
 
         def refresh():
             return "Here's a feed."
 
         private = object()
         r = CachedFeed.fetch(
-            database_transaction.session(),
+            db.session(),
             wl,
             facets,
             pagination,
@@ -428,12 +428,12 @@ class TestCachedFeed:
         assert private == r.private
 
         # The CachedFeed was created; just not returned.
-        cf = database_transaction.session().query(CachedFeed).one()
+        cf = db.session().query(CachedFeed).one()
         assert "Here's a feed." == cf.content
 
         # Try it again as a cache hit.
         r = CachedFeed.fetch(
-            database_transaction.session(),
+            db.session(),
             wl,
             facets,
             pagination,
@@ -451,7 +451,7 @@ class TestCachedFeed:
         # applies to the _database_ cache. The client is told to cache
         # the feed for the default period.
         r = CachedFeed.fetch(
-            database_transaction.session(),
+            db.session(),
             wl,
             facets,
             pagination,
@@ -468,9 +468,9 @@ class TestCachedFeed:
 
         from core.model import Library
 
-        Library._has_root_lane_cache[database_transaction.default_library().id] = True
+        Library._has_root_lane_cache[db.default_library().id] = True
         r = CachedFeed.fetch(
-            database_transaction.session(),
+            db.session(),
             wl,
             facets,
             pagination,
@@ -556,7 +556,7 @@ class TestCachedFeed:
         # And an override takes precedence over that.
         assert 60 == m(wl, "expensive", facets, 60)
 
-    def test__prepare_keys(self, database_transaction: DatabaseTransactionFixture):
+    def test__prepare_keys(self, db: DatabaseTransactionFixture):
         # Verify the method that turns WorkList, Facets, and Pagination
         # into a unique set of values for CachedFeed fields.
 
@@ -578,15 +578,15 @@ class TestCachedFeed:
         m = MockCachedFeed._prepare_keys
         # A WorkList of some kind is required.
         with pytest.raises(ValueError) as excinfo:
-            m(database_transaction.session(), None, MockFacets, MockPagination)
+            m(db.session(), None, MockFacets, MockPagination)
         assert "Cannot prepare a CachedFeed without a WorkList." in str(excinfo.value)
 
         # Basic Lane case, no facets or pagination.
-        lane = database_transaction.lane()
+        lane = db.lane()
 
         # The response object is a named tuple. feed_type, library and
         # lane_id are the only members set.
-        keys = m(database_transaction.session(), lane, None, None)
+        keys = m(db.session(), lane, None, None)
         assert "mock type" == keys.feed_type
         assert lane.library == keys.library
         assert None == keys.work
@@ -597,7 +597,7 @@ class TestCachedFeed:
 
         # When pagination and/or facets are available, facets_key and
         # pagination_key are set appropriately.
-        keys = m(database_transaction.session(), lane, MockFacets, MockPagination)
+        keys = m(db.session(), lane, MockFacets, MockPagination)
         assert "facets query string" == keys.facets_key
         assert "pagination query string" == keys.pagination_key
 
@@ -610,15 +610,15 @@ class TestCachedFeed:
         # but keys.unique_key is set to worklist.unique_key.
         worklist = WorkList()
         worklist.initialize(
-            library=database_transaction.default_library(),
+            library=db.default_library(),
             display_name="wl",
             languages=["eng", "spa"],
             audiences=[Classifier.AUDIENCE_CHILDREN],
         )
 
-        keys = m(database_transaction.session(), worklist, None, None)
+        keys = m(db.session(), worklist, None, None)
         assert "mock type" == keys.feed_type
-        assert worklist.get_library(database_transaction.session()) == keys.library
+        assert worklist.get_library(db.session()) == keys.library
         assert None == keys.work
         assert None == keys.lane_id
         assert "wl-eng,spa-Children" == keys.unique_key
@@ -630,7 +630,7 @@ class TestCachedFeed:
         # that information is included as keys.work.
         work = object()
         worklist.work = work
-        keys = m(database_transaction.session(), worklist, None, None)
+        keys = m(db.session(), worklist, None, None)
         assert work == keys.work
 
     def test__should_refresh(self):
@@ -669,16 +669,14 @@ class TestCachedFeed:
 
     # Realistic end-to-end tests.
 
-    def test_lifecycle_with_lane(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        facets = Facets.default(database_transaction.default_library())
+    def test_lifecycle_with_lane(self, db: DatabaseTransactionFixture):
+        facets = Facets.default(db.default_library())
         pagination = Pagination.default()
-        lane = database_transaction.lane("My Lane", languages=["eng", "chi"])
+        lane = db.lane("My Lane", languages=["eng", "chi"])
 
         # Fetch a cached feed from the database. It comes out updated.
         refresher = MockFeedGenerator()
-        args = (database_transaction.session(), lane, facets, pagination, refresher)
+        args = (db.session(), lane, facets, pagination, refresher)
         feed = CachedFeed.fetch(*args, max_age=0, raw=True)
         assert "This is feed #1" == feed.content
 
@@ -698,17 +696,15 @@ class TestCachedFeed:
         feed = CachedFeed.fetch(*args, max_age=CachedFeed.CACHE_FOREVER, raw=True)
         assert "This is feed #2" == feed.content
 
-    def test_lifecycle_with_worklist(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        facets = Facets.default(database_transaction.default_library())
+    def test_lifecycle_with_worklist(self, db: DatabaseTransactionFixture):
+        facets = Facets.default(db.default_library())
         pagination = Pagination.default()
         lane = WorkList()
-        lane.initialize(database_transaction.default_library())
+        lane.initialize(db.default_library())
 
         # Fetch a cached feed from the database. It comes out updated.
         refresher = MockFeedGenerator()
-        args = (database_transaction.session(), lane, facets, pagination, refresher)
+        args = (db.session(), lane, facets, pagination, refresher)
         feed = CachedFeed.fetch(*args, max_age=0, raw=True)
         assert "This is feed #1" == feed.content
 

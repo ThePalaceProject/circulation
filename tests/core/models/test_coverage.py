@@ -18,11 +18,11 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestTimestamp:
-    def test_lookup(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_lookup(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        c1 = database_transaction.default_collection()
-        c2 = database_transaction.collection()
+        c1 = db.default_collection()
+        c2 = db.collection()
 
         # Create a timestamp.
         timestamp = Timestamp.stamp(session, "service", Timestamp.SCRIPT_TYPE, c1)
@@ -46,8 +46,8 @@ class TestTimestamp:
         )
         assert None == Timestamp.value(session, "service", Timestamp.SCRIPT_TYPE, c2)
 
-    def test_stamp(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_stamp(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         service = "service"
         type = Timestamp.SCRIPT_TYPE
@@ -82,10 +82,10 @@ class TestTimestamp:
 
         # Passing in a different collection will create a new Timestamp.
         stamp3 = Timestamp.stamp(
-            session, service, type, collection=database_transaction.default_collection()
+            session, service, type, collection=db.default_collection()
         )
         assert stamp3 != stamp
-        assert database_transaction.default_collection() == stamp3.collection
+        assert db.default_collection() == stamp3.collection
 
         # Passing in CLEAR_VALUE for start, end, or exception will
         # clear an existing Timestamp.
@@ -102,17 +102,17 @@ class TestTimestamp:
         assert None == stamp4.finish
         assert None == stamp4.exception
 
-    def test_update(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_update(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # update() can modify the fields of a Timestamp that aren't
         # used to identify it.
         stamp = Timestamp.stamp(session, "service", Timestamp.SCRIPT_TYPE)
         start = datetime_utc(2010, 1, 2)
         finish = datetime_utc(2018, 3, 4)
-        achievements = database_transaction.fresh_str()
-        counter = database_transaction.fresh_id()
-        exception = database_transaction.fresh_str()
+        achievements = db.fresh_str()
+        counter = db.fresh_id()
+        exception = db.fresh_str()
         stamp.update(start, finish, achievements, counter, exception)
 
         assert start == stamp.start
@@ -158,8 +158,8 @@ class TestTimestamp:
 
 
 class TestBaseCoverageRecord:
-    def test_not_covered(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_not_covered(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         source = DataSource.lookup(session, DataSource.OCLC)
 
@@ -167,21 +167,21 @@ class TestBaseCoverageRecord:
         # certain coverage provider: no coverage at all, successful
         # coverage, a transient failure and a permanent failure.
 
-        no_coverage = database_transaction.identifier()
+        no_coverage = db.identifier()
 
-        success = database_transaction.identifier()
-        success_record = database_transaction.coverage_record(success, source)
+        success = db.identifier()
+        success_record = db.coverage_record(success, source)
         success_record.timestamp = utc_now() - datetime.timedelta(seconds=3600)
         assert CoverageRecord.SUCCESS == success_record.status
 
-        transient = database_transaction.identifier()
-        transient_record = database_transaction.coverage_record(
+        transient = db.identifier()
+        transient_record = db.coverage_record(
             transient, source, status=CoverageRecord.TRANSIENT_FAILURE
         )
         assert CoverageRecord.TRANSIENT_FAILURE == transient_record.status
 
-        persistent = database_transaction.identifier()
-        persistent_record = database_transaction.coverage_record(
+        persistent = db.identifier()
+        persistent_record = db.coverage_record(
             persistent, source, status=BaseCoverageRecord.PERSISTENT_FAILURE
         )
         assert CoverageRecord.PERSISTENT_FAILURE == persistent_record.status
@@ -234,16 +234,14 @@ class TestBaseCoverageRecord:
 
 
 class TestCoverageRecord:
-    def test_lookup(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_lookup(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         source = DataSource.lookup(session, DataSource.OCLC)
-        edition = database_transaction.edition()
+        edition = db.edition()
         operation = "foo"
-        collection = database_transaction.default_collection()
-        record = database_transaction.coverage_record(
-            edition, source, operation, collection=collection
-        )
+        collection = db.default_collection()
+        record = db.coverage_record(edition, source, operation, collection=collection)
 
         # To find the CoverageRecord, edition, source, operation,
         # and collection must all match.
@@ -258,7 +256,7 @@ class TestCoverageRecord:
             edition.primary_identifier,
             source,
             operation,
-            collection=database_transaction.default_collection(),
+            collection=db.default_collection(),
         )
         assert lookup == record
 
@@ -282,11 +280,11 @@ class TestCoverageRecord:
         )
         assert None == result
 
-    def test_add_for(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_add_for(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         source = DataSource.lookup(session, DataSource.OCLC)
-        edition = database_transaction.edition()
+        edition = db.edition()
         operation = "foo"
         record, is_new = CoverageRecord.add_for(edition, source, operation)
         assert True == is_new
@@ -318,18 +316,18 @@ class TestCoverageRecord:
         assert record5 == record
         assert CoverageRecord.PERSISTENT_FAILURE == record.status
 
-    def test_bulk_add(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_bulk_add(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         source = DataSource.lookup(session, DataSource.GUTENBERG)
         operation = "testing"
 
         # An untouched identifier.
-        i1 = database_transaction.identifier()
+        i1 = db.identifier()
 
         # An identifier that already has failing coverage.
-        covered = database_transaction.identifier()
-        existing = database_transaction.coverage_record(
+        covered = db.identifier()
+        existing = db.coverage_record(
             covered,
             source,
             operation=operation,
@@ -358,7 +356,7 @@ class TestCoverageRecord:
         assert "Uh oh" == existing.exception
 
         # Newly untouched identifier.
-        i2 = database_transaction.identifier()
+        i2 = db.identifier()
 
         # Force bulk add.
         resulting_records, ignored_identifiers = CoverageRecord.bulk_add(
@@ -384,23 +382,21 @@ class TestCoverageRecord:
         assert [] == resulting_records
         assert sorted([i2, covered]) == sorted(ignored_identifiers)
 
-    def test_bulk_add_with_collection(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_bulk_add_with_collection(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         source = DataSource.lookup(session, DataSource.GUTENBERG)
         operation = "testing"
 
-        c1 = database_transaction.collection()
-        c2 = database_transaction.collection()
+        c1 = db.collection()
+        c2 = db.collection()
 
         # An untouched identifier.
-        i1 = database_transaction.identifier()
+        i1 = db.identifier()
 
         # An identifier with coverage for a different collection.
-        covered = database_transaction.identifier()
-        existing = database_transaction.coverage_record(
+        covered = db.identifier()
+        existing = db.coverage_record(
             covered,
             source,
             operation=operation,
@@ -452,22 +448,22 @@ class TestCoverageRecord:
 
 
 class TestWorkCoverageRecord:
-    def test_lookup(self, database_transaction: DatabaseTransactionFixture):
-        work = database_transaction.work()
+    def test_lookup(self, db: DatabaseTransactionFixture):
+        work = db.work()
         operation = "foo"
 
         lookup = WorkCoverageRecord.lookup(work, operation)
         assert None == lookup
 
-        record = database_transaction.work_coverage_record(work, operation)
+        record = db.work_coverage_record(work, operation)
 
         lookup = WorkCoverageRecord.lookup(work, operation)
         assert lookup == record
 
         assert None == WorkCoverageRecord.lookup(work, "another operation")
 
-    def test_add_for(self, database_transaction: DatabaseTransactionFixture):
-        work = database_transaction.work()
+    def test_add_for(self, db: DatabaseTransactionFixture):
+        work = db.work()
         operation = "foo"
         record, is_new = WorkCoverageRecord.add_for(work, operation)
         assert True == is_new
@@ -499,8 +495,8 @@ class TestWorkCoverageRecord:
         assert record5 == record
         assert WorkCoverageRecord.PERSISTENT_FAILURE == record.status
 
-    def test_bulk_add(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_bulk_add(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         operation = "relevant"
         irrelevant_operation = "irrelevant"
@@ -508,14 +504,14 @@ class TestWorkCoverageRecord:
         # This Work will get a new WorkCoverageRecord for the relevant
         # operation, even though it already has a WorkCoverageRecord
         # for an irrelevant operation.
-        not_already_covered = database_transaction.work()
+        not_already_covered = db.work()
         irrelevant_record, ignore = WorkCoverageRecord.add_for(
             not_already_covered, irrelevant_operation, status=WorkCoverageRecord.SUCCESS
         )
 
         # This Work will have its existing, relevant CoverageRecord
         # updated.
-        already_covered = database_transaction.work()
+        already_covered = db.work()
         previously_failed, ignore = WorkCoverageRecord.add_for(
             already_covered,
             operation,
@@ -525,14 +521,14 @@ class TestWorkCoverageRecord:
 
         # This work will not have a record created for it, because
         # we're not passing it in to the method.
-        not_affected = database_transaction.work()
+        not_affected = db.work()
         WorkCoverageRecord.add_for(
             not_affected, irrelevant_operation, status=WorkCoverageRecord.SUCCESS
         )
 
         # This work will not have its existing record updated, because
         # we're not passing it in to the method.
-        not_affected_2 = database_transaction.work()
+        not_affected_2 = db.work()
         not_modified, ignore = WorkCoverageRecord.add_for(
             not_affected_2, operation, status=WorkCoverageRecord.SUCCESS
         )
@@ -602,9 +598,9 @@ class ExampleEquivalencyCoverageRecordFixture:
 
 @pytest.fixture()
 def example_equivalency_coverage_record_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db,
 ) -> ExampleEquivalencyCoverageRecordFixture:
-    return ExampleEquivalencyCoverageRecordFixture(database_transaction)
+    return ExampleEquivalencyCoverageRecordFixture(db)
 
 
 class TestEquivalencyCoverageRecord:

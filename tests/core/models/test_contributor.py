@@ -18,8 +18,8 @@ class TestContributor:
                 continue
             assert value in Contributor.MARC_ROLE_CODES
 
-    def test_lookup_by_viaf(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_lookup_by_viaf(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Two contributors named Bob.
         bob1, new = Contributor.lookup(session, sort_name="Bob", viaf="foo")
@@ -29,8 +29,8 @@ class TestContributor:
 
         assert (bob1, False) == Contributor.lookup(session, viaf="foo")
 
-    def test_lookup_by_lc(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_lookup_by_lc(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Two contributors named Bob.
         bob1, new = Contributor.lookup(session, sort_name="Bob", lc="foo")
@@ -40,16 +40,14 @@ class TestContributor:
 
         assert (bob1, False) == Contributor.lookup(session, lc="foo")
 
-    def test_lookup_by_viaf_interchangeable(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
+    def test_lookup_by_viaf_interchangeable(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Two contributors with the same lc. This shouldn't happen, but
         # the reason it shouldn't happen is these two people are the same
         # person, so lookup() should just pick one and go with it.
-        bob1, new = database_transaction.contributor(sort_name="Bob", lc="foo")
-        bob2, new = database_transaction.contributor()
+        bob1, new = db.contributor(sort_name="Bob", lc="foo")
+        bob2, new = db.contributor()
         bob2.sort_name = "Bob"
         bob2.lc = "foo"
         session.commit()
@@ -58,8 +56,8 @@ class TestContributor:
         assert False == new
         assert some_bob in (bob1, bob2)
 
-    def test_lookup_by_name(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_lookup_by_name(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Two contributors named Bob.
         bob1, new = Contributor.lookup(session, sort_name="Bob", lc="foo")
@@ -70,8 +68,8 @@ class TestContributor:
         assert False == new
         assert ["Bob", "Bob"] == [x.sort_name for x in bobs]
 
-    def test_create_by_lookup(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_create_by_lookup(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         [bob1], new = Contributor.lookup(session, sort_name="Bob")
         assert "Bob" == bob1.sort_name
@@ -81,8 +79,8 @@ class TestContributor:
         assert bob1 == bob2
         assert False == new
 
-    def test_merge(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_merge(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Here's Robert.
         [robert], ignore = Contributor.lookup(session, sort_name="Robert")
@@ -151,7 +149,7 @@ class TestContributor:
         assert f == out_family
         assert d == out_display
 
-    def test_default_names(self, database_transaction: DatabaseTransactionFixture):
+    def test_default_names(self, db: DatabaseTransactionFixture):
 
         # Pass in a default display name and it will always be used.
         self._names(
@@ -195,22 +193,22 @@ class TestContributor:
         self._names("Twain, Mark", "Twain", "Mark Twain")
         self._names("Geering, R. G.", "Geering", "R. G. Geering")
 
-    def test_sort_name(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_sort_name(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         bob, new = get_one_or_create(session, Contributor, sort_name=None)
         assert None == bob.sort_name
 
-        bob, ignore = database_transaction.contributor(sort_name="Bob Bitshifter")
+        bob, ignore = db.contributor(sort_name="Bob Bitshifter")
         bob.sort_name = None
         assert None == bob.sort_name
 
-        bob, ignore = database_transaction.contributor(sort_name="Bob Bitshifter")
+        bob, ignore = db.contributor(sort_name="Bob Bitshifter")
         assert "Bitshifter, Bob" == bob.sort_name
 
-        bob, ignore = database_transaction.contributor(sort_name="Bitshifter, Bob")
+        bob, ignore = db.contributor(sort_name="Bitshifter, Bob")
         assert "Bitshifter, Bob" == bob.sort_name
 
         # test that human name parser doesn't die badly on foreign names
-        bob, ignore = database_transaction.contributor(sort_name="Боб  Битшифтер")
+        bob, ignore = db.contributor(sort_name="Боб  Битшифтер")
         assert "Битшифтер, Боб" == bob.sort_name

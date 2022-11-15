@@ -3,7 +3,6 @@ from unittest.mock import MagicMock
 
 from core.model.datasource import DataSource
 from core.util.cache import CachedData, _signature, memoize
-from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestMemoize:
@@ -35,8 +34,8 @@ class TestMemoize:
 
 
 class TestCacheData:
-    def test_data_sources(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_data_sources(self, db):
+        session = db.session()
 
         def to_ids(objects):
             return [o.id for o in objects]

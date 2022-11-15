@@ -308,15 +308,13 @@ class TestWorkClassifierFixture:
 
 @pytest.fixture()
 def work_classifier_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db,
 ) -> TestWorkClassifierFixture:
     fix = TestWorkClassifierFixture()
-    fix.transaction = database_transaction
-    fix.work = database_transaction.work(with_license_pool=True)
+    fix.transaction = db
+    fix.work = db.work(with_license_pool=True)
     fix.identifier = fix.work.presentation_edition.primary_identifier
-    fix.classifier = WorkClassifier(
-        fix.work, test_session=database_transaction.session()
-    )
+    fix.classifier = WorkClassifier(fix.work, test_session=db.session())
     return fix
 
 

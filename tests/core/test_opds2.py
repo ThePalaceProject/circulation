@@ -23,12 +23,12 @@ class TestOPDS2FeedFixture:
 
 @pytest.fixture
 def opds2_feed_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db: DatabaseTransactionFixture,
 ) -> TestOPDS2FeedFixture:
     data = TestOPDS2FeedFixture()
-    data.transaction = database_transaction
+    data.transaction = db
     data.search_engine = MockExternalSearchIndex()
-    data.fiction = database_transaction.lane("Fiction")
+    data.fiction = db.lane("Fiction")
     data.fiction.fiction = True
     data.fiction.audiences = [Classifier.AUDIENCE_ADULT]
     return data
@@ -121,19 +121,19 @@ class TestOPDS2AnnotatorFixture:
 
 @pytest.fixture
 def opds2_annotator_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db: DatabaseTransactionFixture,
 ) -> TestOPDS2AnnotatorFixture:
     data = TestOPDS2AnnotatorFixture()
-    data.transaction = database_transaction
+    data.transaction = db
     data.search_engine = MockExternalSearchIndex()
-    data.fiction = database_transaction.lane("Fiction")
+    data.fiction = db.lane("Fiction")
     data.fiction.fiction = True
     data.fiction.audiences = [Classifier.AUDIENCE_ADULT]
     data.annotator = OPDS2Annotator(
         "http://example.org/feed",
-        Facets.default(database_transaction.default_library()),
+        Facets.default(db.default_library()),
         Pagination(),
-        database_transaction.default_library(),
+        db.default_library(),
     )
     return data
 

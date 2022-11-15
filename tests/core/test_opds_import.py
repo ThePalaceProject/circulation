@@ -95,17 +95,17 @@ class MetadataWranglerOPDSLookupFixture:
 
 @pytest.fixture()
 def wrangler_opds_lookup_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db: DatabaseTransactionFixture,
 ) -> MetadataWranglerOPDSLookupFixture:
     data = MetadataWranglerOPDSLookupFixture()
-    data.transaction = database_transaction
-    data.integration = database_transaction.external_integration(
+    data.transaction = db
+    data.integration = db.external_integration(
         ExternalIntegration.METADATA_WRANGLER,
         goal=ExternalIntegration.METADATA_GOAL,
         password="secret",
         url="http://metadata.in",
     )
-    data.collection = database_transaction.collection(
+    data.collection = db.collection(
         protocol=ExternalIntegration.OVERDRIVE, external_account_id="library"
     )
     return data
@@ -489,11 +489,11 @@ class OPDSImporterFixture:
 
 @pytest.fixture()
 def opds_importer_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db: DatabaseTransactionFixture,
     opds_files_fixture: OPDSFilesFixture,
 ) -> OPDSImporterFixture:
     data = OPDSImporterFixture()
-    data.transaction = database_transaction
+    data.transaction = db
     data.content_server_feed = opds_files_fixture.sample_data("content_server.opds")
     data.content_server_mini_feed = opds_files_fixture.sample_text(
         "content_server_mini.opds"
@@ -503,13 +503,13 @@ def opds_importer_fixture(
     data.feed_with_id_and_dcterms_identifier = opds_files_fixture.sample_data(
         "feed_with_id_and_dcterms_identifier.opds"
     )
-    database_transaction.default_collection().external_integration.setting(
+    db.default_collection().external_integration.setting(
         "data_source"
     ).value = DataSource.OA_CONTENT_SERVER
 
     # Set an ExternalIntegration for the metadata_client used
     # in the OPDSImporter.
-    data.service = database_transaction.external_integration(
+    data.service = db.external_integration(
         ExternalIntegration.METADATA_WRANGLER,
         goal=ExternalIntegration.METADATA_GOAL,
         url="http://localhost",
@@ -1252,10 +1252,10 @@ class TestOPDSImporter:
         assert "Utter failure!" in failure.exception
 
     def test_import_exception_if_unable_to_parse_feed(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
         feed = "I am not a feed."
-        importer = OPDSImporter(database_transaction.session(), collection=None)
+        importer = OPDSImporter(db.session(), collection=None)
 
         pytest.raises(etree.XMLSyntaxError, importer.import_from_feed, feed)
 
@@ -1813,12 +1813,12 @@ class TestOPDSImporter:
         assert None == importer.identifier_mapping
 
     def test_update_work_for_edition_having_no_work(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         # We have an Edition and a LicensePool but no Work.
-        edition, lp = transaction.edition(with_license_pool=True)
+        edition, lp = db.edition(with_license_pool=True)
         assert None == lp.work
 
         importer = OPDSImporter(session, None)
@@ -1845,13 +1845,13 @@ class TestOPDSImporter:
         importer.update_work_for_edition(edition)
 
     def test_update_work_for_edition_having_incomplete_work(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         # We have a work, but it's not presentation-ready because
         # the title is missing.
-        work = transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         [pool] = work.license_pools
         edition = work.presentation_edition
         edition.title = None
@@ -1859,7 +1859,7 @@ class TestOPDSImporter:
 
         # Fortunately, new data has come in that includes a title.
         i = edition.primary_identifier
-        new_edition = transaction.edition(
+        new_edition = db.edition(
             data_source_name=DataSource.METADATA_WRANGLER,
             identifier_type=i.type,
             identifier_id=i.identifier,
@@ -1876,12 +1876,12 @@ class TestOPDSImporter:
         assert True == work.presentation_ready
 
     def test_update_work_for_edition_having_presentation_ready_work(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         # We have a presentation-ready work.
-        work = transaction.work(with_license_pool=True, title="The old title")
+        work = db.work(with_license_pool=True, title="The old title")
         edition = work.presentation_edition
         [pool] = work.license_pools
 
@@ -1891,7 +1891,7 @@ class TestOPDSImporter:
 
         # But we're about to find out a new title for the book.
         i = edition.primary_identifier
-        new_edition = transaction.edition(
+        new_edition = db.edition(
             data_source_name=DataSource.LIBRARY_STAFF,
             identifier_type=i.type,
             identifier_id=i.identifier,
@@ -1909,15 +1909,15 @@ class TestOPDSImporter:
         assert True == work.presentation_ready
 
     def test_update_work_for_edition_having_multiple_license_pools(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         # There are two collections with a LicensePool associated with
         # this Edition.
-        edition, lp = transaction.edition(with_license_pool=True)
-        collection2 = transaction.collection()
-        lp2 = transaction.licensepool(edition=edition, collection=collection2)
+        edition, lp = db.edition(with_license_pool=True)
+        collection2 = db.collection()
+        lp2 = db.licensepool(edition=edition, collection=collection2)
         importer = OPDSImporter(session, None)
 
         # Calling update_work_for_edition creates a Work and associates
@@ -1931,10 +1931,8 @@ class TestOPDSImporter:
         assert lp.work == work
         assert lp2.work == work
 
-    def test_assert_importable_content(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_assert_importable_content(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         class Mock(OPDSImporter):
             """An importer that may or may not be able to find
@@ -2042,8 +2040,8 @@ class TestOPDSImporter:
         assert ("bad", "text/html") == try1
         assert ("good", "application/json") == try2
 
-    def test__open_access_links(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test__open_access_links(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         """Test our ability to find open-access links in Metadata objects."""
         m = OPDSImporter._open_access_links
@@ -2057,15 +2055,15 @@ class TestOPDSImporter:
 
         # This CirculationData has no open-access links, so it will be
         # ignored.
-        circulation = CirculationData(DataSource.GUTENBERG, transaction.identifier())
+        circulation = CirculationData(DataSource.GUTENBERG, db.identifier())
         no_open_access_links = Metadata(DataSource.GUTENBERG, circulation=circulation)
 
         # This has three links, but only the open-access links
         # will be returned.
-        circulation = CirculationData(DataSource.GUTENBERG, transaction.identifier())
+        circulation = CirculationData(DataSource.GUTENBERG, db.identifier())
         oa = Hyperlink.OPEN_ACCESS_DOWNLOAD
         for rel in [oa, Hyperlink.IMAGE, oa]:
-            circulation.links.append(LinkData(href=transaction.fresh_url(), rel=rel))
+            circulation.links.append(LinkData(href=db.fresh_url(), rel=rel))
         two_open_access_links = Metadata(DataSource.GUTENBERG, circulation=circulation)
 
         oa_only = [x for x in circulation.links if x.rel == oa]
@@ -2073,10 +2071,8 @@ class TestOPDSImporter:
             m([no_circulation, two_open_access_links, no_open_access_links])
         )
 
-    def test__is_open_access_link(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test__is_open_access_link(self, db: DatabaseTransactionFixture):
+        session = db.session()
         http = DummyHTTPClient()
 
         # We only check that the response entity-body isn't tiny. 11
@@ -2088,7 +2084,7 @@ class TestOPDSImporter:
         http.queue_response(200, content=enough_content)
         monitor = OPDSImporter(session, None, http_get=http.do_get)
 
-        url = transaction.fresh_url()
+        url = db.fresh_url()
         type = "text/html"
         assert "Found a book-like thing at %s" % url == monitor._is_open_access_link(
             url, type
@@ -2772,8 +2768,8 @@ class TestMirroring:
 
 
 class TestOPDSImportMonitor:
-    def test_constructor(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_constructor(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         with pytest.raises(ValueError) as excinfo:
             OPDSImportMonitor(session, None, OPDSImporter)
@@ -2782,24 +2778,22 @@ class TestOPDSImportMonitor:
             in str(excinfo.value)
         )
 
-        transaction.default_collection().external_integration.protocol = (
+        db.default_collection().external_integration.protocol = (
             ExternalIntegration.OVERDRIVE
         )
         with pytest.raises(ValueError) as excinfo:
-            OPDSImportMonitor(session, transaction.default_collection(), OPDSImporter)
+            OPDSImportMonitor(session, db.default_collection(), OPDSImporter)
         assert (
             "Collection Default Collection is configured for protocol Overdrive, not OPDS Import."
             in str(excinfo.value)
         )
 
-        transaction.default_collection().external_integration.protocol = (
+        db.default_collection().external_integration.protocol = (
             ExternalIntegration.OPDS_IMPORT
         )
-        transaction.default_collection().external_integration.setting(
-            "data_source"
-        ).value = None
+        db.default_collection().external_integration.setting("data_source").value = None
         with pytest.raises(ValueError) as excinfo:
-            OPDSImportMonitor(session, transaction.default_collection(), OPDSImporter)
+            OPDSImportMonitor(session, db.default_collection(), OPDSImporter)
         assert "Collection Default Collection has no associated data source." in str(
             excinfo.value
         )

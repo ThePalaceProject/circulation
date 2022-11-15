@@ -29,9 +29,9 @@ class ConfigurationTestFixture:
 
 @pytest.fixture()
 def configuration_test_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db: DatabaseTransactionFixture,
 ) -> Iterable[ConfigurationTestFixture]:
-    fix = ConfigurationTestFixture(database_transaction)
+    fix = ConfigurationTestFixture(db)
     yield fix
     fix.close()
 

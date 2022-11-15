@@ -34,10 +34,10 @@ class OverdriveFixture:
 
 @pytest.fixture()
 def overdrive_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db,
 ) -> OverdriveFixture:
     """A basic fixture for Overdrive tests."""
-    return OverdriveFixture.create(database_transaction)
+    return OverdriveFixture.create(db)
 
 
 class OverdriveWithAPIFixture:
@@ -65,7 +65,7 @@ class OverdriveWithAPIFixture:
 
 @pytest.fixture()
 def overdrive_with_api_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db,
 ) -> OverdriveWithAPIFixture:
     """A fixture for Overdrive tests that includes a mocked API."""
-    return OverdriveWithAPIFixture.create(database_transaction)
+    return OverdriveWithAPIFixture.create(db)

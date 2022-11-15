@@ -112,8 +112,8 @@ class TestScript:
 
         pytest.raises(ValueError, Script.parse_time, "201601-01")
 
-    def test_script_name(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_script_name(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         class Sample(Script):
             pass
@@ -139,8 +139,8 @@ class TestTimestampScript:
         """
         return get_one(session, Timestamp, service=script.script_name)
 
-    def test_update_timestamp(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_update_timestamp(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Test the Script subclass that sets a timestamp after a
         # script is run.
@@ -161,10 +161,8 @@ class TestTimestampScript:
         assert timestamp.start < timestamp.finish
         assert None == timestamp.collection
 
-    def test_update_timestamp_with_collection(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_update_timestamp_with_collection(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # A script can indicate that it is operating on a specific
         # collection.
@@ -173,15 +171,13 @@ class TestTimestampScript:
                 pass
 
         script = MyCollection(session)
-        script.timestamp_collection = transaction.default_collection()
+        script.timestamp_collection = db.default_collection()
         script.run()
         timestamp = self._ts(session, script)
-        assert transaction.default_collection() == timestamp.collection
+        assert db.default_collection() == timestamp.collection
 
-    def test_update_timestamp_on_failure(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_update_timestamp_on_failure(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # A TimestampScript that fails to complete still has its
         # Timestamp set -- the timestamp just records the time that
@@ -209,10 +205,8 @@ class TestTimestampScript:
         # Timestamp object.
         assert "Exception: i'm broken" in timestamp.exception
 
-    def test_normal_script_has_no_timestamp(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_normal_script_has_no_timestamp(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Running a normal script does _not_ set a Timestamp.
         class Silent(Script):
@@ -225,15 +219,13 @@ class TestTimestampScript:
 
 
 class TestCheckContributorNamesInDB:
-    def test_process_contribution_local(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_process_contribution_local(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         stdin = MockStdin()
         cmd_args = []
 
-        edition_alice, pool_alice = transaction.edition(
+        edition_alice, pool_alice = db.edition(
             data_source_name=DataSource.GUTENBERG,
             identifier_type=Identifier.GUTENBERG_ID,
             identifier_id="1",
@@ -241,7 +233,7 @@ class TestCheckContributorNamesInDB:
             title="Alice Writes Books",
         )
 
-        alice, new = transaction.contributor(sort_name="Alice Alrighty")
+        alice, new = db.contributor(sort_name="Alice Alrighty")
         alice._sort_name = "Alice Alrighty"
         alice.display_name = "Alice Alrighty"
 
@@ -253,7 +245,7 @@ class TestCheckContributorNamesInDB:
         assert "Alice Alrighty" == alice.display_name
         assert "Alice Rocks" == edition_alice.sort_author
 
-        edition_bob, pool_bob = transaction.edition(
+        edition_bob, pool_bob = db.edition(
             data_source_name=DataSource.GUTENBERG,
             identifier_type=Identifier.GUTENBERG_ID,
             identifier_id="2",
@@ -261,7 +253,7 @@ class TestCheckContributorNamesInDB:
             title="Bob Writes Books",
         )
 
-        bob, new = transaction.contributor(sort_name="Bob")
+        bob, new = db.contributor(sort_name="Bob")
         bob.display_name = "Bob Bitshifter"
 
         edition_bob.add_contributor(bob, [Contributor.PRIMARY_AUTHOR_ROLE])
@@ -288,13 +280,11 @@ class TestCheckContributorNamesInDB:
 
 
 class TestIdentifierInputScript:
-    def test_parse_list_as_identifiers(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_parse_list_as_identifiers(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        i1 = transaction.identifier()
-        i2 = transaction.identifier()
+        i1 = db.identifier()
+        i2 = db.identifier()
         args = [i1.identifier, "no-such-identifier", i2.identifier]
         identifiers = IdentifierInputScript.parse_identifier_list(
             session, i1.type, None, args
@@ -306,9 +296,9 @@ class TestIdentifierInputScript:
         )
 
     def test_parse_list_as_identifiers_with_autocreate(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         type = Identifier.OVERDRIVE_ID
         args = ["brand-new-identifier"]
@@ -319,13 +309,13 @@ class TestIdentifierInputScript:
         assert "brand-new-identifier" == i.identifier
 
     def test_parse_list_as_identifiers_with_data_source(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
-        lp1 = transaction.licensepool(None, data_source_name=DataSource.UNGLUE_IT)
-        lp2 = transaction.licensepool(None, data_source_name=DataSource.FEEDBOOKS)
-        lp3 = transaction.licensepool(None, data_source_name=DataSource.FEEDBOOKS)
+        lp1 = db.licensepool(None, data_source_name=DataSource.UNGLUE_IT)
+        lp2 = db.licensepool(None, data_source_name=DataSource.FEEDBOOKS)
+        lp3 = db.licensepool(None, data_source_name=DataSource.FEEDBOOKS)
 
         i1, i2, i3 = (lp.identifier for lp in [lp1, lp2, lp3])
         i1.type = i2.type = Identifier.URI
@@ -338,12 +328,12 @@ class TestIdentifierInputScript:
         assert [i2] == identifiers
 
     def test_parse_list_as_identifiers_by_database_id(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
-        id1 = transaction.identifier()
-        id2 = transaction.identifier()
+        id1 = db.identifier()
+        id2 = db.identifier()
 
         # Make a list containing two Identifier database IDs,
         # as well as two strings which are not existing Identifier database
@@ -355,11 +345,11 @@ class TestIdentifierInputScript:
         )
         assert [id1, id2] == identifiers
 
-    def test_parse_command_line(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_parse_command_line(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        i1 = transaction.identifier()
-        i2 = transaction.identifier()
+        i1 = db.identifier()
+        i2 = db.identifier()
         # We pass in one identifier on the command line...
         cmd_args = ["--identifier-type", i1.type, i1.identifier]
         # ...and another one into standard input.
@@ -368,10 +358,8 @@ class TestIdentifierInputScript:
         assert [i1, i2] == parsed.identifiers
         assert i1.type == parsed.identifier_type
 
-    def test_parse_command_line_no_identifiers(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_parse_command_line_no_identifiers(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         cmd_args = [
             "--identifier-type",
@@ -440,14 +428,12 @@ class TestCollectionMonitorWithDifferentRunners:
             ),
         ],
     )
-    def test_run_collection_monitor_with_no_args(
-        self, database_transaction: DatabaseTransactionFixture, name, script_runner
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_run_collection_monitor_with_no_args(self, db, name, script_runner):
+        session = db.session()
 
         # Run CollectionMonitor via RunMonitor for all applicable collections.
-        c1 = transaction.collection()
-        c2 = transaction.collection()
+        c1 = db.collection()
+        c2 = db.collection()
         script = script_runner(
             OPDSCollectionMonitor, session, cmd_args=[], test_argument="test value"
         )
@@ -468,15 +454,13 @@ class TestCollectionMonitorWithDifferentRunners:
             ),
         ],
     )
-    def test_run_collection_monitor_with_collection_args(
-        self, database_transaction: DatabaseTransactionFixture, name, script_runner
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_run_collection_monitor_with_collection_args(self, db, name, script_runner):
+        session = db.session()
 
         # Run CollectionMonitor via RunMonitor for only specified collections.
-        c1 = transaction.collection(name="Collection 1")
-        c2 = transaction.collection(name="Collection 2")
-        c3 = transaction.collection(name="Collection 3")
+        c1 = db.collection(name="Collection 1")
+        c2 = db.collection(name="Collection 2")
+        c3 = db.collection(name="Collection 3")
 
         all_collections = [c1, c2, c3]
         monitored_collections = [c1, c3]
@@ -500,11 +484,11 @@ class TestCollectionMonitorWithDifferentRunners:
 
 
 class TestRunMultipleMonitorsScript:
-    def test_do_run(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_do_run(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         m1 = SuccessMonitor(session)
-        m2 = DoomedCollectionMonitor(session, transaction.default_collection())
+        m2 = DoomedCollectionMonitor(session, db.default_collection())
         m3 = SuccessMonitor(session)
 
         class MockScript(RunMultipleMonitorsScript):
@@ -535,16 +519,16 @@ class TestRunMultipleMonitorsScript:
 
 
 class TestRunCollectionMonitorScript:
-    def test_monitors(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_monitors(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Here we have three OPDS import Collections...
-        o1 = transaction.collection()
-        o2 = transaction.collection()
-        o3 = transaction.collection()
+        o1 = db.collection()
+        o2 = db.collection()
+        o3 = db.collection()
 
         # ...and a Bibliotheca collection.
-        b1 = transaction.collection(protocol=ExternalIntegration.BIBLIOTHECA)
+        b1 = db.collection(protocol=ExternalIntegration.BIBLIOTHECA)
 
         script = RunCollectionMonitorScript(OPDSCollectionMonitor, session, cmd_args=[])
 
@@ -559,11 +543,11 @@ class TestRunCollectionMonitorScript:
 
 
 class TestRunReaperMonitorsScript:
-    def test_monitors(self, database_transaction: DatabaseTransactionFixture):
+    def test_monitors(self, db: DatabaseTransactionFixture):
         """This script instantiates a Monitor for every class in
         ReaperMonitor.REGISTRY.
         """
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         old_registry = ReaperMonitor.REGISTRY
         ReaperMonitor.REGISTRY = [SuccessMonitor]
@@ -574,23 +558,23 @@ class TestRunReaperMonitorsScript:
 
 
 class TestPatronInputScript:
-    def test_parse_patron_list(self, database_transaction: DatabaseTransactionFixture):
+    def test_parse_patron_list(self, db: DatabaseTransactionFixture):
         """Test that patrons can be identified with any unique identifier."""
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
-        l1 = transaction.library()
-        l2 = transaction.library()
-        p1 = transaction.patron()
-        p1.authorization_identifier = transaction.fresh_str()
+        l1 = db.library()
+        l2 = db.library()
+        p1 = db.patron()
+        p1.authorization_identifier = db.fresh_str()
         p1.library_id = l1.id
-        p2 = transaction.patron()
-        p2.username = transaction.fresh_str()
+        p2 = db.patron()
+        p2.username = db.fresh_str()
         p2.library_id = l1.id
-        p3 = transaction.patron()
-        p3.external_identifier = transaction.fresh_str()
+        p3 = db.patron()
+        p3.external_identifier = db.fresh_str()
         p3.library_id = l1.id
-        p4 = transaction.patron()
-        p4.external_identifier = transaction.fresh_str()
+        p4 = db.patron()
+        p4.external_identifier = db.fresh_str()
         p4.library_id = l2.id
         args = [
             p1.authorization_identifier,
@@ -609,14 +593,14 @@ class TestPatronInputScript:
             session, l2, [p1.external_identifier, p4.external_identifier]
         )
 
-    def test_parse_command_line(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_parse_command_line(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        l1 = transaction.library()
-        p1 = transaction.patron()
-        p2 = transaction.patron()
-        p1.authorization_identifier = transaction.fresh_str()
-        p2.authorization_identifier = transaction.fresh_str()
+        l1 = db.library()
+        p1 = db.patron()
+        p2 = db.patron()
+        p1.authorization_identifier = db.fresh_str()
+        p2.authorization_identifier = db.fresh_str()
         p1.library_id = l1.id
         p2.library_id = l1.id
         # We pass in one patron identifier on the command line...
@@ -626,16 +610,14 @@ class TestPatronInputScript:
         parsed = PatronInputScript.parse_command_line(session, cmd_args, stdin)
         assert [p1, p2] == parsed.patrons
 
-    def test_patron_different_library(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_patron_different_library(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        l1 = transaction.library()
-        l2 = transaction.library()
-        p1 = transaction.patron()
-        p2 = transaction.patron()
-        p1.authorization_identifier = transaction.fresh_str()
+        l1 = db.library()
+        l2 = db.library()
+        p1 = db.patron()
+        p2 = db.patron()
+        p1.authorization_identifier = db.fresh_str()
         p2.authorization_identifier = p1.authorization_identifier
         p1.library_id = l1.id
         p2.library_id = l2.id
@@ -646,29 +628,29 @@ class TestPatronInputScript:
         parsed = PatronInputScript.parse_command_line(session, cmd_args, None)
         assert [p2] == parsed.patrons
 
-    def test_do_run(self, database_transaction: DatabaseTransactionFixture):
+    def test_do_run(self, db: DatabaseTransactionFixture):
         """Test that PatronInputScript.do_run() calls process_patron()
         for every patron designated by the command-line arguments.
         """
 
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         class MockPatronInputScript(PatronInputScript):
             def process_patron(self, patron):
                 patron.processed = True
 
-        l1 = transaction.library()
-        p1 = transaction.patron()
-        p2 = transaction.patron()
-        p3 = transaction.patron()
+        l1 = db.library()
+        p1 = db.patron()
+        p2 = db.patron()
+        p3 = db.patron()
         p1.library_id = l1.id
         p2.library_id = l1.id
         p3.library_id = l1.id
         p1.processed = False
         p2.processed = False
         p3.processed = False
-        p1.authorization_identifier = transaction.fresh_str()
-        p2.authorization_identifier = transaction.fresh_str()
+        p1.authorization_identifier = db.fresh_str()
+        p2.authorization_identifier = db.fresh_str()
         cmd_args = [l1.short_name, p1.authorization_identifier]
         stdin = MockStdin(p2.authorization_identifier)
         script = MockPatronInputScript(session)
@@ -679,22 +661,22 @@ class TestPatronInputScript:
 
 
 class TestLibraryInputScript:
-    def test_parse_library_list(self, database_transaction: DatabaseTransactionFixture):
+    def test_parse_library_list(self, db: DatabaseTransactionFixture):
         """Test that libraries can be identified with their full name or short name."""
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
-        l1 = transaction.library()
-        l2 = transaction.library()
+        l1 = db.library()
+        l2 = db.library()
         args = [l1.name, "no-such-library", "", l2.short_name]
         libraries = LibraryInputScript.parse_library_list(session, args)
         assert [l1, l2] == libraries
 
         assert [] == LibraryInputScript.parse_library_list(session, [])
 
-    def test_parse_command_line(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_parse_command_line(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        l1 = transaction.library()
+        l1 = db.library()
         # We pass in one library identifier on the command line...
         cmd_args = [l1.name]
         parsed = LibraryInputScript.parse_command_line(session, cmd_args)
@@ -702,28 +684,26 @@ class TestLibraryInputScript:
         # And here it is.
         assert [l1] == parsed.libraries
 
-    def test_parse_command_line_no_identifiers(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_parse_command_line_no_identifiers(self, db: DatabaseTransactionFixture):
         """If you don't specify any libraries on the command
         line, we will process all libraries in the system.
         """
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
         parsed = LibraryInputScript.parse_command_line(session, [])
         assert session.query(Library).all() == parsed.libraries
 
-    def test_do_run(self, database_transaction: DatabaseTransactionFixture):
+    def test_do_run(self, db: DatabaseTransactionFixture):
         """Test that LibraryInputScript.do_run() calls process_library()
         for every library designated by the command-line arguments.
         """
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         class MockLibraryInputScript(LibraryInputScript):
             def process_library(self, library):
                 library.processed = True
 
-        l1 = transaction.library()
-        l2 = transaction.library()
+        l1 = db.library()
+        l2 = db.library()
         l2.processed = False
         cmd_args = [l1.name]
         script = MockLibraryInputScript(session)
@@ -733,8 +713,8 @@ class TestLibraryInputScript:
 
 
 class TestLaneSweeperScript:
-    def test_process_library(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_process_library(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         class Mock(LaneSweeperScript):
             def __init__(self, _db):
@@ -749,9 +729,9 @@ class TestLaneSweeperScript:
             def process_lane(self, lane):
                 self.processed.append(lane)
 
-        good = transaction.lane(display_name="process me")
-        bad = transaction.lane(display_name="don't process me")
-        good_child = transaction.lane(display_name="process me", parent=bad)
+        good = db.lane(display_name="process me")
+        bad = db.lane(display_name="don't process me")
+        good_child = db.lane(display_name="process me", parent=bad)
 
         script = Mock(session)
         script.do_run(cmd_args=[])
@@ -759,8 +739,8 @@ class TestLaneSweeperScript:
         # The first item considered for processing was an ad hoc
         # WorkList representing the library's entire collection.
         worklist = script.considered.pop(0)
-        assert transaction.default_library() == worklist.get_library(session)
-        assert transaction.default_library().name == worklist.display_name
+        assert db.default_library() == worklist.get_library(session)
+        assert db.default_library().name == worklist.display_name
         assert {good, bad} == set(worklist.children)
 
         # After that, every lane was considered for processing, with
@@ -773,10 +753,10 @@ class TestLaneSweeperScript:
 
 
 class TestRunCoverageProviderScript:
-    def test_parse_command_line(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_parse_command_line(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        identifier = transaction.identifier()
+        identifier = db.identifier()
         cmd_args = [
             "--cutoff-time",
             "2016-05-01",
@@ -793,8 +773,8 @@ class TestRunCoverageProviderScript:
 
 
 class TestRunThreadedCollectionCoverageProviderScript:
-    def test_run(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_run(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         provider = AlwaysSuccessfulCollectionCoverageProvider
         script = RunThreadedCollectionCoverageProviderScript(
@@ -804,16 +784,16 @@ class TestRunThreadedCollectionCoverageProviderScript:
         # If there are no collections for the provider, run does nothing.
         # Pass a mock pool that will raise an error if it's used.
         pool = object()
-        collection = transaction.collection(protocol=ExternalIntegration.ENKI)
+        collection = db.collection(protocol=ExternalIntegration.ENKI)
 
         # Run exits without a problem because the pool is never touched.
         script.run(pool=pool)
 
         # Create some identifiers that need coverage.
-        collection = transaction.collection()
-        ed1, lp1 = transaction.edition(collection=collection, with_license_pool=True)
-        ed2, lp2 = transaction.edition(collection=collection, with_license_pool=True)
-        ed3 = transaction.edition()
+        collection = db.collection()
+        ed1, lp1 = db.edition(collection=collection, with_license_pool=True)
+        ed2, lp2 = db.edition(collection=collection, with_license_pool=True)
+        ed3 = db.edition()
 
         [id1, id2, id3] = [e.primary_identifier for e in (ed1, ed2, ed3)]
 
@@ -862,8 +842,8 @@ class TestRunThreadedCollectionCoverageProviderScript:
 
 
 class TestRunWorkCoverageProviderScript:
-    def test_constructor(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_constructor(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         script = RunWorkCoverageProviderScript(
             AlwaysSuccessfulWorkCoverageProvider, _db=session, batch_size=123
@@ -874,33 +854,33 @@ class TestRunWorkCoverageProviderScript:
 
 
 class TestWorkProcessingScript:
-    def test_make_query(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_make_query(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Create two Gutenberg works and one Overdrive work
-        g1 = transaction.work(with_license_pool=True, with_open_access_download=True)
-        g2 = transaction.work(with_license_pool=True, with_open_access_download=True)
+        g1 = db.work(with_license_pool=True, with_open_access_download=True)
+        g2 = db.work(with_license_pool=True, with_open_access_download=True)
 
-        overdrive_edition = transaction.edition(
+        overdrive_edition = db.edition(
             data_source_name=DataSource.OVERDRIVE,
             identifier_type=Identifier.OVERDRIVE_ID,
             with_license_pool=True,
         )[0]
-        overdrive_work = transaction.work(presentation_edition=overdrive_edition)
+        overdrive_work = db.work(presentation_edition=overdrive_edition)
 
-        ugi_edition = transaction.edition(
+        ugi_edition = db.edition(
             data_source_name=DataSource.UNGLUE_IT,
             identifier_type=Identifier.URI,
             with_license_pool=True,
         )[0]
-        unglue_it = transaction.work(presentation_edition=ugi_edition)
+        unglue_it = db.work(presentation_edition=ugi_edition)
 
-        se_edition = transaction.edition(
+        se_edition = db.edition(
             data_source_name=DataSource.STANDARD_EBOOKS,
             identifier_type=Identifier.URI,
             with_license_pool=True,
         )[0]
-        standard_ebooks = transaction.work(presentation_edition=se_edition)
+        standard_ebooks = db.work(presentation_edition=se_edition)
 
         everything = WorkProcessingScript.make_query(session, None, None, None)
         assert {g1, g2, overdrive_work, unglue_it, standard_ebooks} == set(
@@ -927,8 +907,8 @@ class TestTimestampInfo:
 
     TimestampInfo = DatabaseMigrationScript.TimestampInfo
 
-    def test_find(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_find(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         class Empty:
             _db: Session
@@ -960,8 +940,8 @@ class TestTimestampInfo:
         assert timestamp.finish == result.finish
         assert 1 == result.counter
 
-    def test_update(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_update(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Create a Timestamp to be updated.
         past = strptime_utc("19980101", "%Y%m%d")
@@ -1092,13 +1072,13 @@ class DatabaseMigrationScriptFixture:
     """A fixture used for database migration scripts. Ensures the use of custom migration directories,
     and cleans up the database afterwards."""
 
-    transaction: DatabaseTransactionFixture
+    db: DatabaseTransactionFixture
     script: DatabaseMigrationScript
     migration_dirs: list[str]
     migrations: tuple[list[str], list[str]]
 
     def close(self):
-        self.transaction.session().query(Timestamp).filter(
+        self.db.session().query(Timestamp).filter(
             Timestamp.service.like("%Database Migration%")
         ).delete(synchronize_session=False)
 
@@ -1107,20 +1087,20 @@ class DatabaseMigrationInitializationScriptFixture:
     """A fixture used for database migration scripts. Ensures the use of custom migration directories,
     and cleans up the database afterwards."""
 
-    transaction: DatabaseTransactionFixture
+    db: DatabaseTransactionFixture
     script: DatabaseMigrationScript
     migration_dirs: list[str]
     migrations: tuple[list[str], list[str]]
 
     def close(self):
-        self.transaction.session().query(Timestamp).filter(
+        self.db.session().query(Timestamp).filter(
             Timestamp.service.like("%Database Migration%")
         ).delete(synchronize_session=False)
 
 
 @pytest.fixture()
 def database_migration_script_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db: DatabaseTransactionFixture,
     monkeypatch,
     migrations: tuple[list[str], list[str]],
     migration_dirs: list[str],
@@ -1133,15 +1113,15 @@ def database_migration_script_fixture(
     fixture = DatabaseMigrationScriptFixture()
     fixture.migration_dirs = migration_dirs
     fixture.migrations = migrations
-    fixture.script = DatabaseMigrationScript(database_transaction.session())
-    fixture.transaction = database_transaction
+    fixture.script = DatabaseMigrationScript(db.session())
+    fixture.db = db
     yield fixture
     fixture.close()
 
 
 @pytest.fixture()
 def database_migration_initialization_script_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db: DatabaseTransactionFixture,
     monkeypatch,
     migrations: tuple[list[str], list[str]],
     migration_dirs: list[str],
@@ -1154,10 +1134,8 @@ def database_migration_initialization_script_fixture(
     fixture = DatabaseMigrationInitializationScriptFixture()
     fixture.migration_dirs = migration_dirs
     fixture.migrations = migrations
-    fixture.script = DatabaseMigrationInitializationScript(
-        database_transaction.session()
-    )
-    fixture.transaction = database_transaction
+    fixture.script = DatabaseMigrationInitializationScript(db.session())
+    fixture.db = db
     yield fixture
     fixture.close()
 
@@ -1168,7 +1146,7 @@ class TestDatabaseMigrationScript:
         self, database_migration_script_fixture: DatabaseMigrationScriptFixture
     ):
         fixture = database_migration_script_fixture
-        session = fixture.transaction.session()
+        session = fixture.db.session()
         script = fixture.script
 
         stamp = strptime_utc("20260810", "%Y%m%d")
@@ -1205,8 +1183,8 @@ class TestDatabaseMigrationScript:
         """
         script = database_migration_script_fixture.script
         transaction, session = (
-            database_migration_script_fixture.transaction,
-            database_migration_script_fixture.transaction.session(),
+            database_migration_script_fixture.db,
+            database_migration_script_fixture.db.session(),
         )
 
         # If there aren't any Database Migrations in the database, no
@@ -1431,7 +1409,7 @@ class TestDatabaseMigrationScript:
         fixture = database_migration_script_fixture
         script = fixture.script
         migration_dirs = fixture.migration_dirs
-        transaction, session = fixture.transaction, fixture.transaction.session()
+        transaction, session = fixture.db, fixture.db.session()
         timestamp, python_timestamp, timestamp_info = timestamp
 
         migration = "20271202-future-migration-funtime.sql"
@@ -1521,7 +1499,7 @@ class TestDatabaseMigrationScript:
     ):
         fixture = database_migration_script_fixture
         script = fixture.script
-        transaction, session = fixture.transaction, fixture.transaction.session()
+        transaction, session = fixture.db, fixture.db.session()
 
         script.run(
             test_db=session, test=True, cmd_args=["--last-run-date", "2010-01-01"]
@@ -1567,7 +1545,7 @@ class TestDatabaseMigrationScript:
     ):
         fixture = database_migration_script_fixture
         script = fixture.script
-        transaction, session = fixture.transaction, fixture.transaction.session()
+        transaction, session = fixture.db, fixture.db.session()
 
         script.run(
             test_db=session,
@@ -1642,7 +1620,7 @@ class TestDatabaseMigrationInitializationScript:
     ):
         fixture = database_migration_initialization_script_fixture
         script = fixture.script
-        transaction, session = fixture.transaction, fixture.transaction.session()
+        db, session = fixture.db, fixture.db.session()
 
         assert None == Timestamp.value(
             session, script.name, Timestamp.SCRIPT_TYPE, collection=None
@@ -1658,7 +1636,7 @@ class TestDatabaseMigrationInitializationScript:
     ):
         fixture = database_migration_initialization_script_fixture
         script = fixture.script
-        transaction, session = fixture.transaction, fixture.transaction.session()
+        db, session = fixture.db, fixture.db.session()
 
         [core_migration_dir, server_migration_dir] = fixture.migration_dirs
         assert None == Timestamp.value(
@@ -1681,7 +1659,7 @@ class TestDatabaseMigrationInitializationScript:
     ):
         fixture = database_migration_initialization_script_fixture
         script, migration_dirs = fixture.script, fixture.migration_dirs
-        transaction, session = fixture.transaction, fixture.transaction.session()
+        db, session = fixture.db, fixture.db.session()
 
         [core_migration_dir, server_migration_dir] = migration_dirs
         assert None == Timestamp.value(
@@ -1697,10 +1675,8 @@ class TestDatabaseMigrationInitializationScript:
         self.assert_matches_timestamp(script.overall_timestamp, "20350101")
         self.assert_matches_timestamp(script.python_timestamp, "20350101")
 
-    def test_error_raised_when_timestamp_exists(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_error_raised_when_timestamp_exists(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         script = DatabaseMigrationInitializationScript(session)
         Timestamp.stamp(session, script.name, Timestamp.SCRIPT_TYPE, None)
@@ -1712,7 +1688,7 @@ class TestDatabaseMigrationInitializationScript:
     ):
         fixture = database_migration_initialization_script_fixture
         script, migration_dirs = fixture.script, fixture.migration_dirs
-        transaction, session = fixture.transaction, fixture.transaction.session()
+        db, session = fixture.db, fixture.db.session()
 
         past = script.parse_time("19951127")
         Timestamp.stamp(session, script.name, Timestamp.SCRIPT_TYPE, None, finish=past)
@@ -1761,10 +1737,10 @@ class TestDatabaseMigrationInitializationScript:
 
 
 class TestAddClassificationScript:
-    def test_end_to_end(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_end_to_end(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        work = transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         identifier = work.license_pools[0].identifier
         stdin = MockStdin(identifier.identifier)
         assert Classifier.AUDIENCE_ADULT == work.audience
@@ -1794,10 +1770,10 @@ class TestAddClassificationScript:
         # children's book.
         assert Classifier.AUDIENCE_CHILDREN == work.audience
 
-    def test_autocreate(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_autocreate(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        work = transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         identifier = work.license_pools[0].identifier
         stdin = MockStdin(identifier.identifier)
         assert Classifier.AUDIENCE_ADULT == work.audience
@@ -1831,17 +1807,15 @@ class TestAddClassificationScript:
 
 
 class TestShowLibrariesScript:
-    def test_with_no_libraries(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_with_no_libraries(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         output = StringIO()
         ShowLibrariesScript().do_run(session, output=output)
         assert "No libraries found.\n" == output.getvalue()
 
-    def test_with_multiple_libraries(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_with_multiple_libraries(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         l1, ignore = create(
             session,
@@ -1886,8 +1860,8 @@ class TestShowLibrariesScript:
 
 
 class TestConfigureSiteScript:
-    def test_unknown_setting(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_unknown_setting(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         script = ConfigureSiteScript()
         with pytest.raises(ValueError) as excinfo:
@@ -1910,8 +1884,8 @@ class TestConfigureSiteScript:
 
         assert "value1" == ConfigurationSetting.sitewide(session, "setting1").value
 
-    def test_settings(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_settings(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         class TestConfig:
             SITEWIDE_SETTINGS = [
@@ -1951,8 +1925,8 @@ class TestConfigureSiteScript:
 
 
 class TestConfigureLibraryScript:
-    def test_bad_arguments(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_bad_arguments(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         script = ConfigureLibraryScript()
         library, ignore = create(
@@ -1971,8 +1945,8 @@ class TestConfigureLibraryScript:
             script.do_run(session, ["--short-name=foo"])
         assert "Could not locate library 'foo'" in str(excinfo.value)
 
-    def test_create_library(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_create_library(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # There is no library.
         assert [] == session.query(Library).all()
@@ -1999,10 +1973,8 @@ class TestConfigureLibraryScript:
         )
         assert expect_output == output.getvalue()
 
-    def test_reconfigure_library(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_reconfigure_library(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # The library exists.
         library, ignore = create(
@@ -2035,25 +2007,19 @@ class TestConfigureLibraryScript:
 
 
 class TestShowCollectionsScript:
-    def test_with_no_collections(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_with_no_collections(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         output = StringIO()
         ShowCollectionsScript().do_run(session, output=output)
         assert "No collections found.\n" == output.getvalue()
 
-    def test_with_multiple_collections(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_with_multiple_collections(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        c1 = transaction.collection(
-            name="Collection 1", protocol=ExternalIntegration.OVERDRIVE
-        )
+        c1 = db.collection(name="Collection 1", protocol=ExternalIntegration.OVERDRIVE)
         c1.collection_password = "a"
-        c2 = transaction.collection(
+        c2 = db.collection(
             name="Collection 2", protocol=ExternalIntegration.BIBLIOTHECA
         )
         c2.collection_password = "b"
@@ -2085,8 +2051,8 @@ class TestShowCollectionsScript:
 
 
 class TestConfigureCollectionScript:
-    def test_bad_arguments(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_bad_arguments(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         script = ConfigureCollectionScript()
         library, ignore = create(
@@ -2129,8 +2095,8 @@ class TestConfigureCollectionScript:
             excinfo.value
         )
 
-    def test_success(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_success(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         script = ConfigureCollectionScript()
         l1, ignore = create(
@@ -2197,13 +2163,11 @@ class TestConfigureCollectionScript:
         )
         assert expect == output.getvalue()
 
-    def test_reconfigure_collection(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_reconfigure_collection(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # The collection exists.
-        collection = transaction.collection(
+        collection = db.collection(
             name="Collection 1", protocol=ExternalIntegration.OVERDRIVE
         )
         script = ConfigureCollectionScript()
@@ -2232,25 +2196,21 @@ class TestConfigureCollectionScript:
 
 
 class TestShowIntegrationsScript:
-    def test_with_no_integrations(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_with_no_integrations(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         output = StringIO()
         ShowIntegrationsScript().do_run(session, output=output)
         assert "No integrations found.\n" == output.getvalue()
 
-    def test_with_multiple_integrations(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_with_multiple_integrations(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        i1 = transaction.external_integration(
+        i1 = db.external_integration(
             name="Integration 1", goal="Goal", protocol=ExternalIntegration.OVERDRIVE
         )
         i1.password = "a"
-        i2 = transaction.external_integration(
+        i2 = db.external_integration(
             name="Integration 2", goal="Goal", protocol=ExternalIntegration.BIBLIOTHECA
         )
         i2.password = "b"
@@ -2282,8 +2242,8 @@ class TestShowIntegrationsScript:
 
 
 class TestConfigureIntegrationScript:
-    def test_load_integration(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_load_integration(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         m = ConfigureIntegrationScript._integration
 
@@ -2305,7 +2265,7 @@ class TestConfigureIntegrationScript:
             in str(excinfo.value)
         )
 
-        integration = transaction.external_integration(protocol="Protocol", goal="Goal")
+        integration = db.external_integration(protocol="Protocol", goal="Goal")
         integration.name = "An integration"
         assert integration == m(session, integration.id, None, None, None)
 
@@ -2320,8 +2280,8 @@ class TestConfigureIntegrationScript:
         assert "Goal2" == integration2.goal
         assert "I exist now" == integration2.name
 
-    def test_add_settings(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_add_settings(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         script = ConfigureIntegrationScript()
         output = StringIO()
@@ -2348,20 +2308,18 @@ class TestConfigureIntegrationScript:
 
 
 class TestShowLanesScript:
-    def test_with_no_lanes(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_with_no_lanes(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         output = StringIO()
         ShowLanesScript().do_run(session, output=output)
         assert "No lanes found.\n" == output.getvalue()
 
-    def test_with_multiple_lanes(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_with_multiple_lanes(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        l1 = transaction.lane()
-        l2 = transaction.lane()
+        l1 = db.lane()
+        l2 = db.lane()
 
         # The output of this script is the result of running explain()
         # on both lanes.
@@ -2379,8 +2337,8 @@ class TestShowLanesScript:
 
 
 class TestConfigureLaneScript:
-    def test_bad_arguments(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_bad_arguments(self, db: DatabaseTransactionFixture):
+        session = db.session()
         script = ConfigureLaneScript()
 
         # No lane id but no library short name for creating it either.
@@ -2395,18 +2353,18 @@ class TestConfigureLaneScript:
             script.do_run(session, ["--library-short-name=nosuchlibrary"])
         assert 'No such library: "nosuchlibrary".' in str(excinfo.value)
 
-    def test_create_lane(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_create_lane(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         script = ConfigureLaneScript()
-        parent = transaction.lane()
+        parent = db.lane()
 
         # Create a lane and set its attributes.
         output = StringIO()
         script.do_run(
             session,
             [
-                "--library-short-name=%s" % transaction.default_library().short_name,
+                "--library-short-name=%s" % db.default_library().short_name,
                 "--parent-id=%s" % parent.id,
                 "--priority=3",
                 "--display-name=NewLane",
@@ -2416,7 +2374,7 @@ class TestConfigureLaneScript:
 
         # The lane was created and configured properly.
         lane = get_one(session, Lane, display_name="NewLane")
-        assert transaction.default_library() == lane.library
+        assert db.default_library() == lane.library
         assert parent == lane.parent
         assert 3 == lane.priority
 
@@ -2424,14 +2382,14 @@ class TestConfigureLaneScript:
         expect = "Lane settings stored.\n" + "\n".join(lane.explain()) + "\n"
         assert expect == output.getvalue()
 
-    def test_reconfigure_lane(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_reconfigure_lane(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # The lane exists.
-        lane = transaction.lane(display_name="Name")
+        lane = db.lane(display_name="Name")
         lane.priority = 3
 
-        parent = transaction.lane()
+        parent = db.lane()
 
         script = ConfigureLaneScript()
         output = StringIO()
@@ -2457,8 +2415,8 @@ class TestConfigureLaneScript:
 class TestCollectionInputScript:
     """Test the ability to name collections on the command line."""
 
-    def test_parse_command_line(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_parse_command_line(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         def collections(cmd_args):
             parsed = CollectionInputScript.parse_command_line(session, cmd_args)
@@ -2474,8 +2432,8 @@ class TestCollectionInputScript:
 
         # Collections are presented in the order they were encountered
         # on the command line.
-        c2 = transaction.collection()
-        expect = [c2, transaction.default_collection()]
+        c2 = db.collection()
+        expect = [c2, db.default_collection()]
         args = ["--collection=" + c.name for c in expect]
         actual = collections(args)
         assert expect == actual
@@ -2484,8 +2442,8 @@ class TestCollectionInputScript:
 class TestCollectionArgumentsScript:
     """Test the ability to take collection arguments on the command line."""
 
-    def test_parse_command_line(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_parse_command_line(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         def collections(cmd_args):
             parsed = CollectionArgumentsScript.parse_command_line(session, cmd_args)
@@ -2501,8 +2459,8 @@ class TestCollectionArgumentsScript:
 
         # Collections are presented in the order they were encountered
         # on the command line.
-        c2 = transaction.collection()
-        expect = [c2, transaction.default_collection()]
+        c2 = db.collection()
+        expect = [c2, db.default_collection()]
         args = [c.name for c in expect]
         actual = collections(args)
         assert expect == actual
@@ -2543,10 +2501,10 @@ class MockOPDSImportScript(OPDSImportScript):
 
 
 class TestOPDSImportScript:
-    def test_do_run(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_do_run(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        transaction.default_collection().external_integration.setting(
+        db.default_collection().external_integration.setting(
             Collection.DATA_SOURCE_NAME_SETTING
         ).value = DataSource.OA_CONTENT_SERVER
 
@@ -2556,15 +2514,15 @@ class TestOPDSImportScript:
         # Since we provided no collection, a MockOPDSImportMonitor
         # was instantiated for each OPDS Import collection in the database.
         monitor = MockOPDSImportMonitor.INSTANCES.pop()
-        assert transaction.default_collection() == monitor.collection
+        assert db.default_collection() == monitor.collection
 
-        args = ["--collection=%s" % transaction.default_collection().name]
+        args = ["--collection=%s" % db.default_collection().name]
         script.do_run(args)
 
         # If we provide the collection name, a MockOPDSImportMonitor is
         # also instantiated.
         monitor = MockOPDSImportMonitor.INSTANCES.pop()
-        assert transaction.default_collection() == monitor.collection
+        assert db.default_collection() == monitor.collection
         assert True == monitor.was_run
 
         # Our replacement OPDS importer class was passed in to the
@@ -2578,7 +2536,7 @@ class TestOPDSImportScript:
         args.append("--force")
         script.do_run(args)
         monitor = MockOPDSImportMonitor.INSTANCES.pop()
-        assert transaction.default_collection() == monitor.collection
+        assert db.default_collection() == monitor.collection
         assert True == monitor.kwargs["force_reimport"]
 
 
@@ -2605,10 +2563,8 @@ class MockWhereAreMyBooks(WhereAreMyBooksScript):
 
 
 class TestWhereAreMyBooksScript:
-    def test_no_search_integration(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_no_search_integration(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # We can't even get started without a working search integration.
 
@@ -2626,8 +2582,8 @@ class TestWhereAreMyBooksScript:
             == output.getvalue()
         )
 
-    def test_overall_structure(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_overall_structure(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Verify that run() calls the methods we expect.
 
@@ -2661,11 +2617,11 @@ class TestWhereAreMyBooksScript:
         assert True == script.delete_cached_feeds_called
 
         # Make some libraries and some collections, and try again.
-        library1 = transaction.default_library()
-        library2 = transaction.library()
+        library1 = db.default_library()
+        library2 = db.library()
 
-        collection1 = transaction.default_collection()
-        collection2 = transaction.collection()
+        collection1 = db.default_collection()
+        collection2 = db.collection()
 
         script = Mock(session)
         script.run()
@@ -2691,13 +2647,13 @@ class TestWhereAreMyBooksScript:
         script.run(cmd_args=["--collection=%s" % collection2.name])
         assert [collection2] == script.explained_collections
 
-    def test_check_library(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_check_library(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Give the default library a collection and a lane.
-        library = transaction.default_library()
-        collection = transaction.default_collection()
-        lane = transaction.lane(library=library)
+        library = db.default_library()
+        collection = db.default_collection()
+        lane = db.lane(library=library)
 
         script = MockWhereAreMyBooks(session)
         script.check_library(library)
@@ -2708,7 +2664,7 @@ class TestWhereAreMyBooksScript:
         assert (" Associated with %s lanes.", [1]) == has_lanes
 
         # This library has no collections and no lanes.
-        library2 = transaction.library()
+        library2 = db.library()
         script.output = []
         script.check_library(library2)
         checking, no_collection, no_lanes = script.output
@@ -2716,10 +2672,8 @@ class TestWhereAreMyBooksScript:
         assert " This library has no collections -- that's a problem." == no_collection
         assert " This library has no lanes -- that's a problem." == no_lanes
 
-    def test_delete_cached_feeds(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_delete_cached_feeds(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         groups = CachedFeed(type=CachedFeed.GROUPS_TYPE, pagination="")
         session.add(groups)
@@ -2749,7 +2703,7 @@ class TestWhereAreMyBooksScript:
 
     @staticmethod
     def check_explanation(
-        database_transaction: DatabaseTransactionFixture,
+        db: DatabaseTransactionFixture,
         presentation_ready=1,
         not_presentation_ready=0,
         no_delivery_mechanisms=0,
@@ -2759,15 +2713,15 @@ class TestWhereAreMyBooksScript:
         **kwargs,
     ):
         """Runs explain_collection() and verifies expected output."""
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
         script = MockWhereAreMyBooks(session, **kwargs)
-        script.explain_collection(transaction.default_collection())
+        script.explain_collection(db.default_collection())
         out = script.output
 
         # This always happens.
         assert (
             'Examining collection "%s"',
-            [transaction.default_collection().name],
+            [db.default_collection().name],
         ) == out.pop(0)
         assert (" %d presentation-ready works.", [presentation_ready]) == out.pop(0)
         assert (
@@ -2801,72 +2755,64 @@ class TestWhereAreMyBooksScript:
             [in_search_index, presentation_ready],
         ) == out.pop(0)
 
-    def test_no_presentation_ready_works(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_no_presentation_ready_works(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # This work is not presentation-ready.
-        work = transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         work.presentation_ready = False
         script = MockWhereAreMyBooks(session)
         self.check_explanation(
             presentation_ready=0,
             not_presentation_ready=1,
-            database_transaction=database_transaction,
+            db=db,
         )
 
-    def test_no_delivery_mechanisms(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_no_delivery_mechanisms(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # This work has a license pool, but no delivery mechanisms.
-        work = transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         for lpdm in work.license_pools[0].delivery_mechanisms:
             session.delete(lpdm)
-        self.check_explanation(
-            no_delivery_mechanisms=1, database_transaction=database_transaction
-        )
+        self.check_explanation(no_delivery_mechanisms=1, db=db)
 
-    def test_suppressed_pool(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_suppressed_pool(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # This work has a license pool, but it's suppressed.
-        work = transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         work.license_pools[0].suppressed = True
-        self.check_explanation(suppressed=1, database_transaction=database_transaction)
+        self.check_explanation(suppressed=1, db=db)
 
-    def test_no_licenses(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_no_licenses(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # This work has a license pool, but no licenses owned.
-        work = transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         work.license_pools[0].licenses_owned = 0
-        self.check_explanation(not_owned=1, database_transaction=database_transaction)
+        self.check_explanation(not_owned=1, db=db)
 
-    def test_search_engine(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_search_engine(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         output = StringIO()
         search = MockExternalSearchIndex()
-        work = transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         work.presentation_ready = True
         search.bulk_update([work])
 
         # This MockExternalSearchIndex will always claim there is one
         # result.
-        self.check_explanation(
-            search=search, in_search_index=1, database_transaction=database_transaction
-        )
+        self.check_explanation(search=search, in_search_index=1, db=db)
 
 
 class TestExplain:
-    def test_explain(self, database_transaction: DatabaseTransactionFixture):
+    def test_explain(self, db: DatabaseTransactionFixture):
         """Make sure the Explain script runs without crashing."""
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
-        work = transaction.work(with_license_pool=True, genre="Science Fiction")
+        work = db.work(with_license_pool=True, genre="Science Fiction")
         [pool] = work.license_pools
         edition = work.presentation_edition
         identifier = pool.identifier
@@ -2904,11 +2850,11 @@ class TestExplain:
 
 
 class TestReclassifyWorksForUncheckedSubjectsScript:
-    def test_constructor(self, database_transaction: DatabaseTransactionFixture):
+    def test_constructor(self, db: DatabaseTransactionFixture):
         """Make sure that we're only going to classify works
         with unchecked subjects.
         """
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
         script = ReclassifyWorksForUncheckedSubjectsScript(session)
         assert (
             WorkClassificationScript.policy
@@ -2922,15 +2868,15 @@ class TestReclassifyWorksForUncheckedSubjectsScript:
             assert join.columns.id in ordered_by
         assert Work.id in ordered_by
 
-    def test_paginate(self, database_transaction: DatabaseTransactionFixture):
+    def test_paginate(self, db: DatabaseTransactionFixture):
         """Pagination is changed to be row-wise comparison
         Ensure we are paginating correctly within the same Subject page"""
-        transaction, session = database_transaction, database_transaction.session()
-        subject = transaction.subject(Subject.AXIS_360_AUDIENCE, "Any")
+        session = db.session()
+        subject = db.subject(Subject.AXIS_360_AUDIENCE, "Any")
         works = []
         for i in range(20):
-            work: Work = transaction.work(with_license_pool=True)
-            transaction.classification(
+            work: Work = db.work(with_license_pool=True)
+            db.classification(
                 work.presentation_edition.primary_identifier,
                 subject,
                 work.license_pools[0].data_source,
@@ -2944,9 +2890,9 @@ class TestReclassifyWorksForUncheckedSubjectsScript:
             assert work == works[ix]
         assert ix == 19
 
-        other_subject = transaction.subject(Subject.BISAC, "Any")
+        other_subject = db.subject(Subject.BISAC, "Any")
         last_work = works[-1]
-        transaction.classification(
+        db.classification(
             last_work.presentation_edition.primary_identifier,
             other_subject,
             last_work.license_pools[0].data_source,
@@ -2957,9 +2903,9 @@ class TestReclassifyWorksForUncheckedSubjectsScript:
         assert len(next_works) == 20
 
         # A checked subjects work is not included
-        not_work = transaction.work(with_license_pool=True)
-        another_subject = transaction.subject(Subject.DDC, "Any")
-        transaction.classification(
+        not_work = db.work(with_license_pool=True)
+        another_subject = db.subject(Subject.DDC, "Any")
+        db.classification(
             not_work.presentation_edition.primary_identifier,
             another_subject,
             not_work.license_pools[0].data_source,
@@ -2970,16 +2916,16 @@ class TestReclassifyWorksForUncheckedSubjectsScript:
         assert len(next_works) == 20
         assert not_work not in next_works
 
-    def test_subject_checked(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_subject_checked(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        subject = transaction.subject(Subject.AXIS_360_AUDIENCE, "Any")
+        subject = db.subject(Subject.AXIS_360_AUDIENCE, "Any")
         assert subject.checked == False
 
         works = []
         for i in range(10):
-            work: Work = transaction.work(with_license_pool=True)
-            transaction.classification(
+            work: Work = db.work(with_license_pool=True)
+            db.classification(
                 work.presentation_edition.primary_identifier,
                 subject,
                 work.license_pools[0].data_source,
@@ -2993,15 +2939,15 @@ class TestReclassifyWorksForUncheckedSubjectsScript:
 
 
 class TestListCollectionMetadataIdentifiersScript:
-    def test_do_run(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_do_run(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         output = StringIO()
         script = ListCollectionMetadataIdentifiersScript(_db=session, output=output)
 
         # Create two collections.
-        c1 = transaction.collection(external_account_id=transaction.fresh_url())
-        c2 = transaction.collection(
+        c1 = db.collection(external_account_id=db.fresh_url())
+        c2 = db.collection(
             name="Local Over",
             protocol=ExternalIntegration.OVERDRIVE,
             external_account_id="banana",
@@ -3029,10 +2975,10 @@ class TestListCollectionMetadataIdentifiersScript:
 
 
 class TestMirrorResourcesScript:
-    def test_do_run(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_do_run(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        has_uploader = transaction.collection()
+        has_uploader = db.collection()
         mock_uploader = object()
 
         class Mock(MirrorResourcesScript):
@@ -3062,7 +3008,7 @@ class TestMirrorResourcesScript:
         # If a Collection is named on the command line,
         # process_collection is called on that Collection _if_ it has
         # an uploader.
-        args = ["--collection=%s" % transaction.default_collection().name]
+        args = ["--collection=%s" % db.default_collection().name]
         script.do_run(cmd_args=args)
         assert [] == script.processed
 
@@ -3109,7 +3055,7 @@ class TestMirrorResourcesScript:
     )
     def test_collections(
         self,
-        database_transaction: DatabaseTransactionFixture,
+        db,
         name,
         collection_type,
         book_mirror_type,
@@ -3117,7 +3063,7 @@ class TestMirrorResourcesScript:
         uploader_class,
         settings,
     ):
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         class Mock(MirrorResourcesScript):
 
@@ -3132,16 +3078,14 @@ class TestMirrorResourcesScript:
 
         # The default collection does not have an uploader.
         # This new collection does.
-        has_uploader = transaction.collection()
-        mirror = transaction.external_integration(
-            protocol, ExternalIntegration.STORAGE_GOAL
-        )
+        has_uploader = db.collection()
+        mirror = db.external_integration(protocol, ExternalIntegration.STORAGE_GOAL)
 
         if settings:
             for key, value in settings.items():
                 mirror.setting(key).value = value
 
-        integration_link = transaction.external_integration_link(
+        integration_link = db.external_integration_link(
             integration=has_uploader._external_integration,
             other_integration=mirror,
             purpose=ExternalIntegrationLink.COVERS,
@@ -3153,9 +3097,9 @@ class TestMirrorResourcesScript:
         # and yield the result.
         result = script.collections_with_uploader(
             [
-                transaction.default_collection(),
+                db.default_collection(),
                 has_uploader,
-                transaction.default_collection(),
+                db.default_collection(),
             ],
             collection_type,
         )
@@ -3172,11 +3116,11 @@ class TestMirrorResourcesScript:
         )
 
         # Add another storage for books.
-        another_mirror = transaction.external_integration(
+        another_mirror = db.external_integration(
             protocol, ExternalIntegration.STORAGE_GOAL
         )
 
-        integration_link = transaction.external_integration_link(
+        integration_link = db.external_integration_link(
             integration=has_uploader._external_integration,
             other_integration=another_mirror,
             purpose=book_mirror_type,
@@ -3184,9 +3128,9 @@ class TestMirrorResourcesScript:
 
         result = script.collections_with_uploader(
             [
-                transaction.default_collection(),
+                db.default_collection(),
                 has_uploader,
-                transaction.default_collection(),
+                db.default_collection(),
             ],
             collection_type,
         )
@@ -3211,8 +3155,8 @@ class TestMirrorResourcesScript:
         assert True == p.even_if_not_apparently_updated
         assert False == p.rights
 
-    def test_process_collection(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_process_collection(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         class MockScript(MirrorResourcesScript):
             process_item_called_with = []
@@ -3225,29 +3169,27 @@ class TestMirrorResourcesScript:
         link2 = object()
 
         def unmirrored(collection):
-            assert collection == transaction.default_collection()
+            assert collection == db.default_collection()
             yield link1
             yield link2
 
         script = MockScript(session)
         policy = object()
-        script.process_collection(transaction.default_collection(), policy, unmirrored)
+        script.process_collection(db.default_collection(), policy, unmirrored)
 
         # Process_collection called unmirrored() and then called process_item
         # on every item yielded by unmirrored()
         call1, call2 = script.process_item_called_with
-        assert (transaction.default_collection(), link1, policy) == call1
-        assert (transaction.default_collection(), link2, policy) == call2
+        assert (db.default_collection(), link1, policy) == call1
+        assert (db.default_collection(), link2, policy) == call2
 
-    def test_derive_rights_status(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_derive_rights_status(self, db: DatabaseTransactionFixture):
         """Test our ability to determine the rights status of a Resource,
         in the absence of immediate information from the server.
         """
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
         m = MirrorResourcesScript.derive_rights_status
-        work = transaction.work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
         [pool] = work.license_pools
         [lpdm] = pool.delivery_mechanisms
         resource = lpdm.resource
@@ -3269,7 +3211,7 @@ class TestMirrorResourcesScript:
         # LicensePool has only one rights URI among all of its
         # LicensePoolDeliveryMechanisms, then we can assume all Resources
         # for that LicensePool use that same set of rights.
-        w2 = transaction.work(with_license_pool=True)
+        w2 = db.work(with_license_pool=True)
         [pool2] = w2.license_pools
         assert pool2.delivery_mechanisms[0].rights_status.uri == m(pool2, None)
 
@@ -3284,9 +3226,9 @@ class TestMirrorResourcesScript:
         pool2.delivery_mechanisms = []
         assert None == m(pool2, None)
 
-    def test_process_item(self, database_transaction: DatabaseTransactionFixture):
+    def test_process_item(self, db: DatabaseTransactionFixture):
         """Test the code that actually sets up the mirror operation."""
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         # Every time process_item() is called, it's either going to ask
         # this thing to mirror the item, or it's going to decide not to.
@@ -3329,24 +3271,24 @@ class TestMirrorResourcesScript:
         # Collection, no upload happens. (This shouldn't happen
         # because Hyperlink.unmirrored only finds Hyperlinks
         # associated with Identifiers licensed through a Collection.)
-        identifier = transaction.identifier()
+        identifier = db.identifier()
         policy = object()
         download_link = MockLink(
-            Hyperlink.OPEN_ACCESS_DOWNLOAD, transaction.fresh_url(), identifier
+            Hyperlink.OPEN_ACCESS_DOWNLOAD, db.fresh_url(), identifier
         )
-        transaction.default_collection().data_source = DataSource.GUTENBERG
-        m(transaction.default_collection(), download_link, policy)
+        db.default_collection().data_source = DataSource.GUTENBERG
+        m(db.default_collection(), download_link, policy)
         assert [] == mirror.mirrored
 
         # This HyperLink does match a LicensePool, but it's not
         # in the collection we're mirroring, so mirroring it might not be
         # appropriate.
-        work = transaction.work(
-            with_open_access_download=True, collection=transaction.default_collection()
+        work = db.work(
+            with_open_access_download=True, collection=db.default_collection()
         )
         pool = work.license_pools[0]
         download_link.identifier = pool.identifier
-        wrong_collection = transaction.collection()
+        wrong_collection = db.collection()
         wrong_collection.data_source = DataSource.GUTENBERG
         m(wrong_collection, download_link, policy)
         assert [] == mirror.mirrored
@@ -3354,13 +3296,13 @@ class TestMirrorResourcesScript:
         # For "open-access" downloads of actual books, if we can't
         # determine the actual rights status of the book, then we
         # don't do anything.
-        m(transaction.default_collection(), download_link, policy)
+        m(db.default_collection(), download_link, policy)
         assert [] == mirror.mirrored
         assert (pool, download_link.resource) == script.derive_rights_status_called_with
 
         # If we _can_ determine the rights status, a mirror attempt is made.
         script.RIGHTS_STATUS = object()
-        m(transaction.default_collection(), download_link, policy)
+        m(db.default_collection(), download_link, policy)
         attempt = mirror.mirrored.pop()
         assert policy == attempt["policy"]
         assert pool.data_source == attempt["data_source"]
@@ -3375,16 +3317,16 @@ class TestMirrorResourcesScript:
         # status" doesn't matter.
         script.RIGHTS_STATUS = None
         thumb_link = MockLink(
-            Hyperlink.THUMBNAIL_IMAGE, transaction.fresh_url(), pool.identifier
+            Hyperlink.THUMBNAIL_IMAGE, db.fresh_url(), pool.identifier
         )
-        m(transaction.default_collection(), thumb_link, policy)
+        m(db.default_collection(), thumb_link, policy)
         attempt = mirror.mirrored.pop()
         assert thumb_link.resource.url == attempt["link"].href
 
 
 class TestRebuildSearchIndexScript:
-    def test_do_run(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_do_run(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         class MockSearchIndex:
             def setup_index(self):
@@ -3396,8 +3338,8 @@ class TestRebuildSearchIndexScript:
                 return works, []
 
         index = MockSearchIndex()
-        work = transaction.work(with_license_pool=True)
-        work2 = transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
+        work2 = db.work(with_license_pool=True)
         wcr = WorkCoverageRecord
         decoys = [wcr.QUALITY_OPERATION, wcr.GENERATE_MARC_OPERATION]
 
@@ -3439,11 +3381,11 @@ class TestSearchIndexCoverageRemover:
 
     SERVICE_NAME = "Search Index Coverage Remover"
 
-    def test_do_run(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_do_run(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        work = transaction.work()
-        work2 = transaction.work()
+        work = db.work()
+        work2 = db.work()
         wcr = WorkCoverageRecord
         decoys = [wcr.QUALITY_OPERATION, wcr.GENERATE_MARC_OPERATION]
 
@@ -3468,22 +3410,20 @@ class TestSearchIndexCoverageRemover:
 class TestUpdateLaneSizeScript:
     def test_do_run(
         self,
-        database_transaction: DatabaseTransactionFixture,
+        db,
         external_search_patch_fixture: ExternalSearchPatchFixture,
     ):
-        transaction, session = database_transaction, database_transaction.session()
-        lane = transaction.lane()
+        session = db.session()
+        lane = db.lane()
         lane.size = 100
         UpdateLaneSizeScript(session).do_run(cmd_args=[])
         assert 0 == lane.size
 
-    def test_should_process_lane(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_should_process_lane(self, db: DatabaseTransactionFixture):
         """Only Lane objects can have their size updated."""
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
-        lane = transaction.lane()
+        lane = db.lane()
         script = UpdateLaneSizeScript(session)
         assert True == script.should_process_lane(lane)
 
@@ -3492,11 +3432,11 @@ class TestUpdateLaneSizeScript:
 
 
 class TestUpdateCustomListSizeScript:
-    def test_do_run(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_do_run(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        customlist, ignore = transaction.customlist(num_entries=1)
-        customlist.library = transaction.default_library()
+        customlist, ignore = db.customlist(num_entries=1)
+        customlist.library = db.default_library()
         customlist.size = 100
         UpdateCustomListSizeScript(session).do_run(cmd_args=[])
         assert 1 == customlist.size
@@ -3512,22 +3452,20 @@ class TestCustomListUpdateEntriesScript:
     def _populate_works(
         data: EndToEndSearchFixture[TestCustomListUpdateEntriesScriptData],
     ) -> TestCustomListUpdateEntriesScriptData:
-        transaction = data.external_search.transaction
+        db = data.external_search.db
 
         result = TestCustomListUpdateEntriesScriptData()
         result.populated_books = [
-            transaction.work(with_license_pool=True, title="Populated Book")
-            for _ in range(5)
+            db.work(with_license_pool=True, title="Populated Book") for _ in range(5)
         ]
         result.unpopular_books = [
-            transaction.work(with_license_pool=True, title="Unpopular Book")
-            for _ in range(3)
+            db.work(with_license_pool=True, title="Unpopular Book") for _ in range(3)
         ]
         # This is for back population only
         result.populated_books[0].license_pools[
             0
         ].availability_time = datetime.datetime(1900, 1, 1)
-        transaction.session().commit()
+        db.session().commit()
         return result
 
     def test_process_custom_list(
@@ -3537,15 +3475,15 @@ class TestCustomListUpdateEntriesScript:
         ],
     ):
         data = end_to_end_search_fixture
-        transaction, session = (
-            data.external_search.transaction,
-            data.external_search.transaction.session(),
+        db, session = (
+            data.external_search.db,
+            data.external_search.db.session(),
         )
         end_to_end_search_fixture.populate(self._populate_works)
 
         last_updated = datetime.datetime.now() - datetime.timedelta(hours=1)
-        custom_list, _ = transaction.customlist()
-        custom_list.library = transaction.default_library()
+        custom_list, _ = db.customlist()
+        custom_list.library = db.default_library()
         custom_list.auto_update_enabled = True
         custom_list.auto_update_query = json.dumps(
             dict(query=dict(key="title", value="Populated Book"))
@@ -3553,8 +3491,8 @@ class TestCustomListUpdateEntriesScript:
         custom_list.auto_update_last_update = last_updated
         custom_list.auto_update_status = CustomList.UPDATED
 
-        custom_list1, _ = transaction.customlist()
-        custom_list1.library = transaction.default_library()
+        custom_list1, _ = db.customlist()
+        custom_list1.library = db.default_library()
         custom_list1.auto_update_enabled = True
         custom_list1.auto_update_query = json.dumps(
             dict(query=dict(key="title", value="Unpopular Book"))
@@ -3565,7 +3503,7 @@ class TestCustomListUpdateEntriesScript:
         # Do the process
         script = CustomListUpdateEntriesScript(session)
         mock_parse = MagicMock()
-        mock_parse.return_value.libraries = [transaction.default_library()]
+        mock_parse.return_value.libraries = [db.default_library()]
         script.parse_command_line = mock_parse
 
         with freeze_time("2022-01-01") as frozen_time:
@@ -3593,15 +3531,15 @@ class TestCustomListUpdateEntriesScript:
     ):
         with patch("core.query.customlist.ExternalSearchIndex") as mock_index:
             fixture = end_to_end_search_fixture
-            transaction, session = (
-                fixture.external_search.transaction,
-                fixture.external_search.transaction.session(),
+            db, session = (
+                fixture.external_search.db,
+                fixture.external_search.db.session(),
             )
             end_to_end_search_fixture.populate(self._populate_works)
 
             last_updated = datetime.datetime.now() - datetime.timedelta(hours=1)
-            custom_list, _ = transaction.customlist()
-            custom_list.library = transaction.default_library()
+            custom_list, _ = db.customlist()
+            custom_list.library = db.default_library()
             custom_list.auto_update_enabled = True
             custom_list.auto_update_query = json.dumps(
                 dict(query=dict(key="title", value="Populated Book"))
@@ -3631,15 +3569,15 @@ class TestCustomListUpdateEntriesScript:
         frozen_time=None,
     ):
         fixture = end_to_end_search_fixture
-        transaction, session = (
-            fixture.external_search.transaction,
-            fixture.external_search.transaction.session(),
+        db, session = (
+            fixture.external_search.db,
+            fixture.external_search.db.session(),
         )
         end_to_end_search_fixture.populate(self._populate_works)
 
         # No previous timestamp
-        custom_list, _ = transaction.customlist()
-        custom_list.library = transaction.default_library()
+        custom_list, _ = db.customlist()
+        custom_list.library = db.default_library()
         custom_list.auto_update_enabled = True
         custom_list.auto_update_query = json.dumps(
             dict(query=dict(key="title", value="Populated Book"))
@@ -3656,14 +3594,14 @@ class TestCustomListUpdateEntriesScript:
     ):
         with patch("core.scripts.CustomListQueries") as mock_queries:
             data = end_to_end_search_fixture
-            transaction, session = (
-                data.external_search.transaction,
-                data.external_search.transaction.session(),
+            db, session = (
+                data.external_search.db,
+                data.external_search.db.session(),
             )
             end_to_end_search_fixture.populate(self._populate_works)
 
-            custom_list, _ = transaction.customlist()
-            custom_list.library = transaction.default_library()
+            custom_list, _ = db.customlist()
+            custom_list.library = db.default_library()
             custom_list.auto_update_enabled = True
             custom_list.auto_update_query = json.dumps(
                 dict(query=dict(key="title", value="Populated Book"))
@@ -3684,14 +3622,14 @@ class TestCustomListUpdateEntriesScript:
     ):
         """The repopulate deletes all entries and runs the query again"""
         data = end_to_end_search_fixture
-        transaction, session = (
-            data.external_search.transaction,
-            data.external_search.transaction.session(),
+        db, session = (
+            data.external_search.db,
+            data.external_search.db.session(),
         )
         end_to_end_search_fixture.populate(self._populate_works)
 
-        custom_list, _ = transaction.customlist()
-        custom_list.library = transaction.default_library()
+        custom_list, _ = db.customlist()
+        custom_list.library = db.default_library()
         custom_list.auto_update_enabled = True
         custom_list.auto_update_query = json.dumps(
             dict(query=dict(key="title", value="Populated Book"))

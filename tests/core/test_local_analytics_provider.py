@@ -7,8 +7,8 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestInitializeLocalAnalyticsProvider:
-    def test_initialize(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_initialize(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         local_analytics = get_one(
             session,
@@ -62,9 +62,9 @@ class LocalAnalyticsProviderFixture:
 
 @pytest.fixture()
 def local_analytics_provider_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db,
 ) -> LocalAnalyticsProviderFixture:
-    return LocalAnalyticsProviderFixture(database_transaction)
+    return LocalAnalyticsProviderFixture(db)
 
 
 class TestLocalAnalyticsProvider:

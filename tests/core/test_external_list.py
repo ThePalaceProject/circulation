@@ -25,11 +25,11 @@ class CustomListFromCSVFixture:
 
 @pytest.fixture()
 def customlist_from_csv_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db: DatabaseTransactionFixture,
 ) -> CustomListFromCSVFixture:
-    session = database_transaction.session()
+    session = db.session()
     data = CustomListFromCSVFixture()
-    data.transaction = database_transaction
+    data.transaction = db
     data.data_source = DataSource.lookup(session, DataSource.LIBRARY_STAFF)
     data.metadata = DummyMetadataClient()
     data.metadata.lookups["Octavia Butler"] = "Butler, Octavia"
@@ -40,7 +40,7 @@ def customlist_from_csv_fixture(
         display_author_field="author",
         identifier_fields={Identifier.ISBN: "isbn"},
     )
-    data.custom_list, ignore = database_transaction.customlist(
+    data.custom_list, ignore = db.customlist(
         data_source_name=data.data_source.name, num_entries=0
     )
     data.now = utc_now()
@@ -263,18 +263,18 @@ class BooksInSeries(MembershipManager):
 
 
 class TestMembershipManager:
-    def test_update(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_update(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Create two books that are part of series, and one book that
         # is not.
-        series1 = data.edition()
+        series1 = db.edition()
         series1.series = "Series 1"
 
-        series2 = data.edition()
+        series2 = db.edition()
         series2.series = "Series Two"
 
-        no_series = data.edition()
+        no_series = db.edition()
         assert None == no_series.series
 
         update_time = datetime_utc(2015, 1, 1)
@@ -283,7 +283,7 @@ class TestMembershipManager:
         # _customlist calls _work
         #    which calls _edition, which makes an edition and a pool (through _licensepool)
         #    then makes work through get_one_or_create
-        custom_list, ignore = data.customlist()
+        custom_list, ignore = db.customlist()
         manager = BooksInSeries(custom_list)
         manager.update(update_time)
 
@@ -317,19 +317,17 @@ class TestMembershipManager:
         assert new_update_time == new_entry.most_recent_appearance
 
     def test_classification_based_membership_manager(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        data, session = database_transaction, database_transaction.session()
-
-        e1 = data.edition()
-        e2 = data.edition()
-        e3 = data.edition()
+        e1 = db.edition()
+        e2 = db.edition()
+        e3 = db.edition()
         source = e1.data_source
         e1.primary_identifier.classify(source, Subject.TAG, "GOOD FOOD")
         e2.primary_identifier.classify(source, Subject.TAG, "barflies")
         e3.primary_identifier.classify(source, Subject.TAG, "irrelevant")
 
-        custom_list, ignore = data.customlist()
+        custom_list, ignore = db.customlist()
         fragments = ["foo", "bar"]
         manager = ClassificationBasedMembershipManager(custom_list, fragments)
         members = list(manager.new_membership)

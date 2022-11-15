@@ -30,6 +30,6 @@ class SampleCoversFixture:
 
 @pytest.fixture()
 def sample_covers_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db,
 ) -> SampleCoversFixture:
-    return SampleCoversFixture(database_transaction)
+    return SampleCoversFixture(db)

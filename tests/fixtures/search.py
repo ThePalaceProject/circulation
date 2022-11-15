@@ -35,14 +35,14 @@ class ExternalSearchFixture:
     indexes: List[Any]
     integration: ExternalIntegration
     search: Optional[SearchClientForTesting]
-    transaction: DatabaseTransactionFixture
+    db: DatabaseTransactionFixture
 
     @classmethod
-    def create(cls, data: DatabaseTransactionFixture) -> "ExternalSearchFixture":
+    def create(cls, db: DatabaseTransactionFixture) -> "ExternalSearchFixture":
         fixture = ExternalSearchFixture()
-        fixture.transaction = data
+        fixture.db = db
         fixture.indexes = []
-        fixture.integration = data.external_integration(
+        fixture.integration = db.external_integration(
             ExternalIntegration.ELASTICSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
             url=ExternalSearchFixture.SIMPLIFIED_TEST_ELASTICSEARCH,
@@ -53,7 +53,7 @@ class ExternalSearchFixture:
         )
 
         try:
-            fixture.search = SearchClientForTesting(data.session())
+            fixture.search = SearchClientForTesting(db.session())
         except Exception as e:
             fixture.search = None
             logging.error(
@@ -79,10 +79,10 @@ class ExternalSearchFixture:
 
     def default_work(self, *args, **kwargs):
         """Convenience method to create a work with a license pool in the default collection."""
-        work = self.transaction.work(
+        work = self.db.work(
             *args,
             with_license_pool=True,
-            collection=self.transaction.default_collection(),
+            collection=self.db.default_collection(),
             **kwargs
         )
         work.set_presentation_ready()
@@ -91,11 +91,11 @@ class ExternalSearchFixture:
 
 @pytest.fixture(scope="function")
 def external_search_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db,
 ) -> Iterable[ExternalSearchFixture]:
     """Ask for an external search system."""
     """Note: You probably want EndToEndSearchFixture instead."""
-    data = ExternalSearchFixture.create(database_transaction)
+    data = ExternalSearchFixture.create(db)
     yield data
     data.close()
 
@@ -128,7 +128,7 @@ class EndToEndSearchFixture(Generic[T]):
 
         # Add all the works created in the setup to the search index.
         SearchIndexCoverageProvider(
-            self.external_search.transaction.session(),
+            self.external_search.db.session(),
             search_index_client=self.external_search.search,
         ).run_once_and_update_timestamp()
 
@@ -223,7 +223,7 @@ class EndToEndSearchFixture(Generic[T]):
         query_string, filter, pagination = query_args
         results = [x.work_id for x in hits]
         actual = (
-            self.external_search.transaction.session()
+            self.external_search.db.session()
             .query(Work)
             .filter(Work.id.in_(results))
             .all()
@@ -255,10 +255,10 @@ class EndToEndSearchFixture(Generic[T]):
 
 @pytest.fixture(scope="function")
 def end_to_end_search_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db,
 ) -> Iterable[EndToEndSearchFixture]:
     """Ask for an external search system that can be populated with data for end-to-end tests."""
-    data = EndToEndSearchFixture.create(database_transaction)
+    data = EndToEndSearchFixture.create(db)
     yield data
     data.close()
 

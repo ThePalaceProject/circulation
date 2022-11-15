@@ -93,9 +93,9 @@ class S3UploaderFixture:
 
 @pytest.fixture
 def s3_uploader_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db,
 ) -> S3UploaderFixture:
-    return S3UploaderFixture(database_transaction)
+    return S3UploaderFixture(db)
 
 
 class S3UploaderIntegrationFixture(S3UploaderFixture):
@@ -190,8 +190,8 @@ class S3UploaderIntegrationFixture(S3UploaderFixture):
 
 @pytest.fixture
 def s3_uploader_integration_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db,
 ) -> Iterable[S3UploaderIntegrationFixture]:
-    fixture = S3UploaderIntegrationFixture(database_transaction)
+    fixture = S3UploaderIntegrationFixture(db)
     yield fixture
     fixture.close()

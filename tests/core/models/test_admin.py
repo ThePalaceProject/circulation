@@ -15,10 +15,10 @@ class AdminFixture:
 
 
 @pytest.fixture()
-def admin_fixture(database_transaction: DatabaseTransactionFixture) -> AdminFixture:
-    a, ignore = create(database_transaction.session(), Admin, email="admin@nypl.org")
+def admin_fixture(db) -> AdminFixture:
+    a, ignore = create(db.session(), Admin, email="admin@nypl.org")
     a.password = "password"
-    return AdminFixture(a, database_transaction)
+    return AdminFixture(a, db)
 
 
 class TestAdmin:

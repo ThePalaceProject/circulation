@@ -104,15 +104,15 @@ class TestMetadataImporter:
         ]
 
     def test_classifications_from_another_source_not_updated(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        data, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         # Set up an edition whose primary identifier has two
         # classifications.
         source1 = DataSource.lookup(session, DataSource.AXIS_360)
         source2 = DataSource.lookup(session, DataSource.METADATA_WRANGLER)
-        edition = data.edition()
+        edition = db.edition()
         identifier = edition.primary_identifier
         c1 = identifier.classify(source1, Subject.TAG, "i will persist")
         c2 = identifier.classify(source2, Subject.TAG, "i will perish")
@@ -130,16 +130,16 @@ class TestMetadataImporter:
         )
 
     def test_classifications_with_missing_subject_name_and_ident(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        data, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         # A subject with no name or identifier should result in an
         # error message and no new classification.
         subjects = [SubjectData(type=Subject.TAG, name=None, identifier=None)]
 
         source1 = DataSource.lookup(session, DataSource.AXIS_360)
-        edition = data.edition()
+        edition = db.edition()
         identifier = edition.primary_identifier
         metadata = Metadata(subjects=subjects, data_source=source1)
         replace = ReplacementPolicy(subjects=True)
@@ -152,10 +152,8 @@ class TestMetadataImporter:
             )
         assert len(identifier.classifications) == 0
 
-    def test_links(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
-
-        edition = data.edition()
+    def test_links(self, db: DatabaseTransactionFixture):
+        edition = db.edition()
         l1 = LinkData(rel=Hyperlink.IMAGE, href="http://example.com/")
         l2 = LinkData(rel=Hyperlink.DESCRIPTION, content="foo")
         metadata = Metadata(links=[l1, l2], data_source=edition.data_source)
@@ -169,12 +167,10 @@ class TestMetadataImporter:
         assert Hyperlink.DESCRIPTION == description.rel
         assert b"foo" == description.resource.representation.content
 
-    def test_image_with_original_and_rights(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_image_with_original_and_rights(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        edition = data.edition()
+        edition = db.edition()
         data_source = DataSource.lookup(session, DataSource.LIBRARY_STAFF)
         original = LinkData(
             rel=Hyperlink.IMAGE,
@@ -215,12 +211,8 @@ class TestMetadataImporter:
         assert "This image is from 1922" == transformation.original.rights_explanation
         assert "top" == transformation.settings.get("position")
 
-    def test_image_and_thumbnail(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
-
-        edition = data.edition()
+    def test_image_and_thumbnail(self, db: DatabaseTransactionFixture):
+        edition = db.edition()
         l2 = LinkData(
             rel=Hyperlink.THUMBNAIL_IMAGE,
             href="http://thumbnail.com/",
@@ -246,12 +238,8 @@ class TestMetadataImporter:
             thumbnail.resource.representation
         ] == image.resource.representation.thumbnails
 
-    def test_thumbnail_isnt_a_thumbnail(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
-
-        edition = data.edition()
+    def test_thumbnail_isnt_a_thumbnail(self, db: DatabaseTransactionFixture):
+        edition = db.edition()
         not_a_thumbnail = LinkData(
             rel=Hyperlink.DESCRIPTION,
             content="A great book",
@@ -287,12 +275,8 @@ class TestMetadataImporter:
         assert [] == image.resource.representation.thumbnails
         assert None == description.resource.representation.thumbnail_of
 
-    def test_image_and_thumbnail_are_the_same(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
-
-        edition = data.edition()
+    def test_image_and_thumbnail_are_the_same(self, db: DatabaseTransactionFixture):
+        edition = db.edition()
         url = "http://tinyimage.com/image.jpg"
         l2 = LinkData(
             rel=Hyperlink.THUMBNAIL_IMAGE,
@@ -323,11 +307,9 @@ class TestMetadataImporter:
         assert url == edition.cover_thumbnail_url
 
     def test_image_becomes_representation_but_thumbnail_does_not(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        data, session = database_transaction, database_transaction.session()
-
-        edition = data.edition()
+        edition = db.edition()
 
         # The thumbnail link has no media type, and none can be
         # derived from the URL.
@@ -367,11 +349,9 @@ class TestMetadataImporter:
 
     def test_image_scale_and_mirror(
         self,
-        database_transaction: DatabaseTransactionFixture,
+        db,
         sample_covers_fixture: SampleCoversFixture,
     ):
-        data, session = database_transaction, database_transaction.session()
-
         # Make sure that open access material links are translated to our S3 buckets, and that
         # commercial material links are left as is.
         # Note: mirroring links is now also CirculationData's job.  So the unit tests
@@ -380,7 +360,7 @@ class TestMetadataImporter:
         # correctly calls on CirculationData, too.  This is a risk.
 
         mirrors = dict(covers_mirror=MockS3Uploader(), books_mirror=None)
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
         content = open(
             sample_covers_fixture.sample_cover_path("test-book-cover.png"), "rb"
         ).read()
@@ -390,9 +370,6 @@ class TestMetadataImporter:
             media_type=Representation.JPEG_MEDIA_TYPE,
             content=content,
         )
-        thumbnail_content = open(
-            sample_covers_fixture.sample_cover_path("tiny-image-cover.png"), "rb"
-        ).read()
         l2 = LinkData(
             rel=Hyperlink.THUMBNAIL_IMAGE,
             href="http://example.com/thumb.jpg",
@@ -444,15 +421,13 @@ class TestMetadataImporter:
 
     def test_mirror_thumbnail_only(
         self,
-        database_transaction: DatabaseTransactionFixture,
+        db,
         sample_covers_fixture: SampleCoversFixture,
     ):
-        data, session = database_transaction, database_transaction.session()
-
         # Make sure a thumbnail image is mirrored when there's no cover image.
         mirrors = dict(covers_mirror=MockS3Uploader())
         mirror_type = ExternalIntegrationLink.COVERS
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
         thumbnail_content = open(
             sample_covers_fixture.sample_cover_path("tiny-image-cover.png"), "rb"
         ).read()
@@ -477,11 +452,11 @@ class TestMetadataImporter:
         assert thumbnail.mirror_url.endswith("thumb.png")
 
     def test_mirror_open_access_link_fetch_failure(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        data, session = database_transaction, database_transaction.session()
+        session = db.session()
 
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
 
         data_source = DataSource.lookup(session, DataSource.GUTENBERG)
         m = Metadata(data_source=data_source)
@@ -526,8 +501,8 @@ class TestMetadataImporter:
         # if fetch failed on getting an Hyperlink.OPEN_ACCESS_DOWNLOAD-type epub.
         assert None == pool.license_exception
 
-    def test_mirror_404_error(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_mirror_404_error(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         mirrors = dict(covers_mirror=MockS3Uploader(), books_mirror=None)
         mirror_type = ExternalIntegrationLink.COVERS
@@ -535,7 +510,7 @@ class TestMetadataImporter:
         h.queue_response(404)
         policy = ReplacementPolicy(mirrors=mirrors, http_get=h.do_get)
 
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
 
         data_source = DataSource.lookup(session, DataSource.GUTENBERG)
 
@@ -564,12 +539,12 @@ class TestMetadataImporter:
 
     def test_mirror_open_access_link_mirror_failure(
         self,
-        database_transaction: DatabaseTransactionFixture,
+        db,
         sample_covers_fixture: SampleCoversFixture,
     ):
-        data, session = database_transaction, database_transaction.session()
+        session = db.session()
 
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
 
         data_source = DataSource.lookup(session, DataSource.GUTENBERG)
         m = Metadata(data_source=data_source)
@@ -629,12 +604,12 @@ class TestMetadataImporter:
 
     def test_mirror_link_bad_media_type(
         self,
-        database_transaction: DatabaseTransactionFixture,
+        db,
         sample_covers_fixture: SampleCoversFixture,
     ):
-        data, session = database_transaction, database_transaction.session()
+        session = db.session()
 
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
 
         data_source = DataSource.lookup(session, DataSource.GUTENBERG)
         m = Metadata(data_source=data_source)
@@ -735,10 +710,8 @@ class TestMetadataImporter:
         assert link.href == representation.url
         assert None == representation.mirror_url
 
-    def test_non_open_access_book_not_mirrored(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_non_open_access_book_not_mirrored(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         data_source = DataSource.lookup(session, DataSource.GUTENBERG)
         m = Metadata(data_source=data_source)
@@ -758,7 +731,7 @@ class TestMetadataImporter:
             rights_uri=RightsStatus.IN_COPYRIGHT,
         )
 
-        identifier = data.identifier()
+        identifier = db.identifier()
         link_obj, is_new = identifier.add_link(
             rel=link.rel,
             href=link.href,
@@ -778,12 +751,10 @@ class TestMetadataImporter:
         # Nothing was uploaded.
         assert [] == mirrors[mirror_type].uploaded
 
-    def test_mirror_with_content_modifier(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_mirror_with_content_modifier(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
 
         data_source = DataSource.lookup(session, DataSource.GUTENBERG)
         m = Metadata(data_source=data_source)
@@ -838,12 +809,10 @@ class TestMetadataImporter:
         assert [representation] == mirrors[mirror_type].uploaded
         assert ["Replaced Content"] == mirrors[mirror_type].content
 
-    def test_mirror_protected_access_book(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_mirror_protected_access_book(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
 
         data_source = DataSource.lookup(session, DataSource.GUTENBERG)
         m = Metadata(data_source=data_source)
@@ -898,10 +867,8 @@ class TestMetadataImporter:
         assert [representation] == mirrors[mirror_type].uploaded
         assert ["Replaced Content"] == mirrors[mirror_type].content
 
-    def test_measurements(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
-
-        edition = data.edition()
+    def test_measurements(self, db: DatabaseTransactionFixture):
+        edition = db.edition()
         measurement = MeasurementData(
             quantity_measured=Measurement.POPULARITY, value=100
         )
@@ -911,10 +878,8 @@ class TestMetadataImporter:
         assert Measurement.POPULARITY == m.quantity_measured
         assert 100 == m.value
 
-    def test_coverage_record(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
-
-        edition, pool = data.edition(with_license_pool=True)
+    def test_coverage_record(self, db: DatabaseTransactionFixture):
+        edition, pool = db.edition(with_license_pool=True)
         data_source = edition.data_source
 
         # No preexisting coverage record
@@ -953,13 +918,12 @@ class TestMetadataImporter:
 
 
 class TestContributorData:
-    def test_from_contribution(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_from_contribution(self, db: DatabaseTransactionFixture):
         # Makes sure ContributorData.from_contribution copies all the fields over.
 
         # make author with that name, add author to list and pass to edition
         contributors = ["PrimaryAuthor"]
-        edition, pool = data.edition(with_license_pool=True, authors=contributors)
+        edition, pool = db.edition(with_license_pool=True, authors=contributors)
 
         contribution = edition.contributions[0]
         contributor = contribution.contributor
@@ -982,8 +946,8 @@ class TestContributorData:
         assert contributor_data.wikipedia_name == contributor.wikipedia_name
         assert contributor_data.biography == contributor.biography
 
-    def test_lookup(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_lookup(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Test the method that uses the database to gather as much
         # self-consistent information as possible about a person.
@@ -991,13 +955,13 @@ class TestContributorData:
             return ContributorData.lookup(session, *args, **kwargs)
 
         # We know very little about this person.
-        l1, ignore = data.contributor(
+        l1, ignore = db.contributor(
             display_name="Ann Leckie",
             sort_name="Leckie, Ann",
         )
 
         # We know a lot about this person.
-        pkd, ignore = data.contributor(
+        pkd, ignore = db.contributor(
             sort_name="Dick, Phillip K.",
             display_name="Phillip K. Dick",
             viaf="27063583",
@@ -1006,7 +970,7 @@ class TestContributorData:
 
         def _match(expect, actual):
             # Verify that two ContributorData objects have the
-            # same data.
+            # same db.
             #
             # If a value is None in one ContributorData, it must be None
             # in the other.
@@ -1050,7 +1014,7 @@ class TestContributorData:
 
         # An exact duplicate of an existing Contributor changes
         # nothing.
-        duplicate, ignore = data.contributor(
+        duplicate, ignore = db.contributor(
             display_name="Ann Leckie",
             sort_name="Leckie, Ann",
         )
@@ -1060,7 +1024,7 @@ class TestContributorData:
         # records are consolidated, creating a synthetic
         # ContributorData that doesn't correspond to any one
         # Contributor.
-        with_viaf, ignore = data.contributor(
+        with_viaf, ignore = db.contributor(
             display_name="Ann Leckie",
             viaf="73520345",
         )
@@ -1073,7 +1037,7 @@ class TestContributorData:
         _match(expect, m(display_name="Ann Leckie"))
 
         # Again, this works even if some of the incoming arguments
-        # turn out not to be supported by the database data.
+        # turn out not to be supported by the database db.
         _match(
             expect, m(display_name="Ann Leckie", sort_name="Ann Leckie", viaf="abcd")
         )
@@ -1081,7 +1045,7 @@ class TestContributorData:
         # If there's a duplicate that provides conflicting information,
         # the corresponding field is left blank -- we don't know which
         # value is correct.
-        with_incorrect_viaf, ignore = data.contributor(
+        with_incorrect_viaf, ignore = db.contributor(
             display_name="Ann Leckie",
             viaf="abcd",
         )
@@ -1098,12 +1062,10 @@ class TestContributorData:
         expect.viaf = "73520345"
         _match(expect, m(display_name="Ann Leckie", viaf="73520345"))
 
-    def test_apply(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
-
+    def test_apply(self, db: DatabaseTransactionFixture):
         # Makes sure ContributorData.apply copies all the fields over when there's changes to be made.
 
-        contributor_old, made_new = data.contributor(
+        contributor_old, made_new = db.contributor(
             sort_name="Doe, John", viaf="viaf12345"
         )
 
@@ -1141,13 +1103,13 @@ class TestContributorData:
         assert changed == False
 
     def test_display_name_to_sort_name_from_existing_contributor(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        data, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         # If there's an existing contributor with a matching display name,
         # we'll use their sort name.
-        existing_contributor, ignore = data.contributor(
+        existing_contributor, ignore = db.contributor(
             sort_name="Sort, Name", display_name="John Doe"
         )
         assert (
@@ -1165,12 +1127,12 @@ class TestContributorData:
             )
         )
 
-    def test_find_sort_name(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_find_sort_name(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         metadata_client = DummyMetadataClient()
         metadata_client.lookups["Metadata Client Author"] = "Author, M. C."
-        existing_contributor, ignore = data.contributor(
+        existing_contributor, ignore = db.contributor(
             sort_name="Author, E.", display_name="Existing Author"
         )
         contributor_data = ContributorData()
@@ -1212,9 +1174,9 @@ class TestContributorData:
         assert "Author, New" == contributor_data.sort_name
 
     def test_find_sort_name_survives_metadata_client_exception(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        data, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         class Mock(ContributorData):
             # Simulate an integration error from the metadata wrangler side.
@@ -1302,12 +1264,12 @@ class TestMetadata:
         m = Metadata(data_source=DataSource.OCLC)
         assert None == m.medium
 
-    def test_from_edition(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_from_edition(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Makes sure Metadata.from_edition copies all the fields over.
 
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
         edition.series = "Harry Otter and the Mollusk of Infamy"
         edition.series_position = "14"
         edition.primary_identifier.add_link(
@@ -1340,20 +1302,19 @@ class TestMetadata:
         metadata = Metadata.from_edition(edition)
         assert edition.series_position == metadata.series_position
 
-    def test_update(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_update(self, db: DatabaseTransactionFixture):
 
         # Tests that Metadata.update correctly prefers new fields to old, unless
         # new fields aren't defined.
 
-        edition_old, pool = data.edition(with_license_pool=True)
+        edition_old, pool = db.edition(with_license_pool=True)
         edition_old.publisher = "test_old_publisher"
         edition_old.subtitle = "old_subtitile"
         edition_old.series = "old_series"
         edition_old.series_position = 5
         metadata_old = Metadata.from_edition(edition_old)
 
-        edition_new, pool = data.edition(with_license_pool=True)
+        edition_new, pool = db.edition(with_license_pool=True)
         # set more fields on metadatas
         edition_new.publisher = None
         edition_new.subtitle = "new_updated_subtitile"
@@ -1368,10 +1329,10 @@ class TestMetadata:
         assert metadata_old.series == edition_new.series
         assert metadata_old.series_position == edition_new.series_position
 
-    def test_apply(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_apply(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        edition_old, pool = data.edition(with_license_pool=True)
+        edition_old, pool = db.edition(with_license_pool=True)
 
         metadata = Metadata(
             data_source=DataSource.OVERDRIVE,
@@ -1416,12 +1377,12 @@ class TestMetadata:
         assert 0 == session.query(Work).count()
 
     def test_apply_wipes_presentation_calculation_records(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        data, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         # We have a work.
-        work = data.work(title="The Wrong Title", with_license_pool=True)
+        work = db.work(title="The Wrong Title", with_license_pool=True)
 
         # We learn some more information about the work's identifier.
         metadata = Metadata(
@@ -1473,7 +1434,6 @@ class TestMetadata:
 
         # The work is now slated to have its presentation completely
         # recalculated.
-        record = assert_registered(full=True)
 
         # We then find a new description for the work.
         metadata.subjects = None
@@ -1491,13 +1451,10 @@ class TestMetadata:
         # We need to choose a new presentation edition.
         assert_registered(full=False)
 
-    def test_apply_identifier_equivalency(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_apply_identifier_equivalency(self, db: DatabaseTransactionFixture):
 
         # Set up an Edition.
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
 
         # Create two IdentifierData objects -- one corresponding to the
         # Edition's existing Identifier, and one new one.
@@ -1546,10 +1503,9 @@ class TestMetadata:
         assert equivalency.output.type == "abc"
         assert equivalency.output.identifier == "def"
 
-    def test_apply_no_value(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_apply_no_value(self, db: DatabaseTransactionFixture):
 
-        edition_old, pool = data.edition(with_license_pool=True)
+        edition_old, pool = db.edition(with_license_pool=True)
 
         metadata = Metadata(
             data_source=DataSource.PRESENTATION_EDITION,
@@ -1573,14 +1529,12 @@ class TestMetadata:
         assert edition_new.published == edition_old.published
         assert edition_new.issued == edition_old.issued
 
-    def test_apply_creates_coverage_records(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_apply_creates_coverage_records(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
 
-        metadata = Metadata(data_source=DataSource.OVERDRIVE, title=data.fresh_str())
+        metadata = Metadata(data_source=DataSource.OVERDRIVE, title=db.fresh_str())
 
         edition, changed = metadata.apply(edition, pool.collection)
 
@@ -1605,7 +1559,7 @@ class TestMetadata:
         assert 0 == records.count()
 
         # Apply metadata from a different source.
-        metadata = Metadata(data_source=DataSource.GUTENBERG, title=data.fresh_str())
+        metadata = Metadata(data_source=DataSource.GUTENBERG, title=db.fresh_str())
 
         edition, changed = metadata.apply(edition, pool.collection)
 
@@ -1630,16 +1584,14 @@ class TestMetadata:
         assert 1 == records.count()
         assert CoverageRecord.TRANSIENT_FAILURE == records.all()[0].status
 
-    def test_update_contributions(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_update_contributions(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        edition = data.edition()
+        edition = db.edition()
 
         # A test edition is created with a test contributor. This
         # particular contributor is about to be destroyed and replaced by
-        # new data.
+        # new db.
         [old_contributor] = edition.contributors
 
         contributor = ContributorData(
@@ -1667,13 +1619,11 @@ class TestMetadata:
         assert "123" == contributor.lc
         assert "Robert_Jordan" == contributor.wikipedia_name
 
-    def test_filter_recommendations(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_filter_recommendations(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         metadata = Metadata(DataSource.OVERDRIVE)
-        known_identifier = data.identifier()
+        known_identifier = db.identifier()
         unknown_identifier = IdentifierData(Identifier.ISBN, "hey there")
 
         # Unknown identifiers are filtered out of the recommendations.
@@ -1774,10 +1724,8 @@ class TestMetadata:
 
 
 class TestCirculationData:
-    def test_apply_propagates_analytics(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_apply_propagates_analytics(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Verify that an Analytics object is always passed into
         # license_pool() and update_availability(), even if none is
@@ -1786,8 +1734,8 @@ class TestCirculationData:
         # NOTE: this test was written to verify a bug fix; it's not a
         # comprehensive test of CirculationData.apply().
         source = DataSource.lookup(session, DataSource.GUTENBERG)
-        identifier = data.identifier()
-        collection = data.default_collection()
+        identifier = db.identifier()
+        collection = db.default_collection()
 
         class MockLicensePool:
             # A LicensePool-like object that tracks how its
@@ -1905,21 +1853,19 @@ class TestTimestampData:
         d.exception = "oops"
         assert True == d.is_complete
 
-    def test_finalize_minimal(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
-
+    def test_finalize_minimal(self, db: DatabaseTransactionFixture):
         # Calling finalize() with only the minimal arguments sets the
         # timestamp values to sensible defaults and leaves everything
         # else alone.
 
         # This TimestampData starts out with everything set to None.
         d = TimestampData()
-        d.finalize("service", "service_type", data.default_collection())
+        d.finalize("service", "service_type", db.default_collection())
 
         # finalize() requires values for these arguments, and sets them.
         assert "service" == d.service
         assert "service_type" == d.service_type
-        assert data.default_collection().id == d.collection_id
+        assert db.default_collection().id == d.collection_id
 
         # The timestamp values are set to sensible defaults.
         assert d.start == d.finish
@@ -1929,15 +1875,14 @@ class TestTimestampData:
         for i in d.achievements, d.counter, d.exception:
             assert i == None
 
-    def test_finalize_full(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_finalize_full(self, db: DatabaseTransactionFixture):
 
         # You can call finalize() with a complete set of arguments.
         d = TimestampData()
         d.finalize(
             "service",
             "service_type",
-            data.default_collection(),
+            db.default_collection(),
             start="start",
             finish="finish",
             counter="counter",
@@ -1951,7 +1896,7 @@ class TestTimestampData:
         # If the TimestampData fields are already set to values other
         # than CLEAR_VALUE, the required fields will be overwritten but
         # the optional fields will be left alone.
-        new_collection = data.collection()
+        new_collection = db.collection()
         d.finalize(
             "service2",
             "service_type2",
@@ -1972,15 +1917,15 @@ class TestTimestampData:
         assert "counter" == d.counter
         assert "exception" == d.exception
 
-    def test_collection(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_collection(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         d = TimestampData()
-        d.finalize("service", "service_type", data.default_collection())
-        assert data.default_collection() == d.collection(session)
+        d.finalize("service", "service_type", db.default_collection())
+        assert db.default_collection() == d.collection(session)
 
-    def test_apply(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_apply(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # You can't apply a TimestampData that hasn't been finalized.
         d = TimestampData()
@@ -1992,7 +1937,7 @@ class TestTimestampData:
 
         # Set the basic timestamp information. Optional fields will stay
         # at None.
-        collection = data.default_collection()
+        collection = db.default_collection()
         d.finalize("service", Timestamp.SCRIPT_TYPE, collection)
         d.apply(session)
         now = utc_now()
@@ -2032,24 +1977,24 @@ class TestTimestampData:
 
 
 class TestAssociateWithIdentifiersBasedOnPermanentWorkID:
-    def test_success(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_success(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         pwid = "pwid1"
 
         # Here's a print book.
-        book = data.edition()
+        book = db.edition()
         book.medium = Edition.BOOK_MEDIUM
         book.permanent_work_id = pwid
 
         # Here's an audio book with the same PWID.
-        audio = data.edition()
+        audio = db.edition()
         audio.medium = Edition.AUDIO_MEDIUM
         audio.permanent_work_id = pwid
 
         # Here's an Metadata object for a second print book with the
         # same PWID.
-        identifier = data.identifier()
+        identifier = db.identifier()
         identifierdata = IdentifierData(
             type=identifier.type, identifier=identifier.identifier
         )

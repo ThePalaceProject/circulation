@@ -15,15 +15,15 @@ class TestCDN:
             config[Configuration.CDNS_LOADED_FROM_DATABASE] = True
             assert expect == cdnify(url)
 
-    def test_no_cdns(self, database_transaction: DatabaseTransactionFixture):
+    def test_no_cdns(self, db: DatabaseTransactionFixture):
         url = "http://foo/"
         self.unchanged(url, {})
 
-    def test_non_matching_cdn(self, database_transaction: DatabaseTransactionFixture):
+    def test_non_matching_cdn(self, db: DatabaseTransactionFixture):
         url = "http://foo.com/bar"
         self.unchanged(url, {"bar.com": "cdn.com"})
 
-    def test_matching_cdn(self, database_transaction: DatabaseTransactionFixture):
+    def test_matching_cdn(self, db: DatabaseTransactionFixture):
         url = "http://foo.com/bar#baz"
         self.ceq(
             "https://cdn.org/bar#baz",
@@ -31,7 +31,7 @@ class TestCDN:
             {"foo.com": "https://cdn.org", "bar.com": "http://cdn2.net/"},
         )
 
-    def test_relative_url(self, database_transaction: DatabaseTransactionFixture):
+    def test_relative_url(self, db: DatabaseTransactionFixture):
         # By default, relative URLs are untouched.
         url = "/groups/"
         self.unchanged(url, {"bar.com": "cdn.com"})

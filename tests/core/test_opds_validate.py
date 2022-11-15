@@ -16,16 +16,16 @@ from tests.fixtures.opds_files import OPDSFilesFixture
 class TestOPDS2Validation(OPDS2Test):
     def test_opds2_schema(
         self,
-        database_transaction: DatabaseTransactionFixture,
+        db: DatabaseTransactionFixture,
         opds_files_fixture: OPDSFilesFixture,
     ):
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
-        transaction.default_collection().protocol = ExternalIntegration.OPDS2_IMPORT
-        transaction.default_collection().data_source = DataSource.FEEDBOOKS
+        db.default_collection().protocol = ExternalIntegration.OPDS2_IMPORT
+        db.default_collection().data_source = DataSource.FEEDBOOKS
         validator = OPDS2SchemaValidation(
             session,
-            collection=transaction.default_collection(),
+            collection=db.default_collection(),
             import_class=OPDS2Importer,
             parser=RWPMManifestParser(OPDS2FeedParserFactory()),
         )
@@ -37,16 +37,16 @@ class TestOPDS2Validation(OPDS2Test):
 class TestODL2Validation(OPDS2Test):
     def test_odl2_schema(
         self,
-        database_transaction: DatabaseTransactionFixture,
+        db: DatabaseTransactionFixture,
         opds_files_fixture: OPDSFilesFixture,
     ):
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
-        transaction.default_collection().protocol = ExternalIntegration.ODL2
-        transaction.default_collection().data_source = DataSource.FEEDBOOKS
+        db.default_collection().protocol = ExternalIntegration.ODL2
+        db.default_collection().data_source = DataSource.FEEDBOOKS
         validator = ODL2SchemaValidation(
             session,
-            collection=transaction.default_collection(),
+            collection=db.default_collection(),
             import_class=ODL2Importer,
             parser=RWPMManifestParser(ODLFeedParserFactory()),
         )

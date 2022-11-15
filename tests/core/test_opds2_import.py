@@ -91,13 +91,13 @@ class TestOPDS2ImporterFixture:
 
 @pytest.fixture
 def opds2_importer_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db: DatabaseTransactionFixture,
 ) -> TestOPDS2ImporterFixture:
-    session = database_transaction.session()
+    session = db.session()
 
     data = TestOPDS2ImporterFixture()
-    data.transaction = database_transaction
-    data.collection = database_transaction.default_collection()
+    data.transaction = db
+    data.collection = db.default_collection()
     data.data_source = DataSource.lookup(
         session, "OPDS 2.0 Data Source", autocreate=True
     )

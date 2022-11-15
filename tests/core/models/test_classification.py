@@ -9,11 +9,11 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestSubject:
-    def test_lookup_errors(self, database_transaction: DatabaseTransactionFixture):
+    def test_lookup_errors(self, db: DatabaseTransactionFixture):
         """Subject.lookup will complain if you don't give it
         enough information to find a Subject.
         """
-        session = database_transaction.session()
+        session = db.session()
         with pytest.raises(ValueError) as excinfo:
             Subject.lookup(session, None, "identifier", "name")
         assert "Cannot look up Subject with no type." in str(excinfo.value)
@@ -24,46 +24,44 @@ class TestSubject:
             in str(excinfo.value)
         )
 
-    def test_lookup_autocreate(self, database_transaction: DatabaseTransactionFixture):
+    def test_lookup_autocreate(self, db: DatabaseTransactionFixture):
         # By default, Subject.lookup creates a Subject that doesn't exist.
-        identifier = database_transaction.fresh_str()
-        name = database_transaction.fresh_str()
-        session = database_transaction.session()
+        identifier = db.fresh_str()
+        name = db.fresh_str()
+        session = db.session()
         subject, was_new = Subject.lookup(session, Subject.TAG, identifier, name)
         assert True == was_new
         assert identifier == subject.identifier
         assert name == subject.name
 
         # But you can tell it not to autocreate.
-        identifier2 = database_transaction.fresh_str()
+        identifier2 = db.fresh_str()
         subject, was_new = Subject.lookup(
             session, Subject.TAG, identifier2, None, autocreate=False
         )
         assert False == was_new
         assert None == subject
 
-    def test_lookup_by_name(self, database_transaction: DatabaseTransactionFixture):
+    def test_lookup_by_name(self, db: DatabaseTransactionFixture):
         """We can look up a subject by its name, without providing an
         identifier."""
-        s1 = database_transaction.subject(Subject.TAG, "i1")
+        s1 = db.subject(Subject.TAG, "i1")
         s1.name = "A tag"
-        session = database_transaction.session()
+        session = db.session()
         assert (s1, False) == Subject.lookup(session, Subject.TAG, None, "A tag")
 
         # If we somehow get into a state where there are two Subjects
         # with the same name, Subject.lookup treats them as interchangeable.
-        s2 = database_transaction.subject(Subject.TAG, "i2")
+        s2 = db.subject(Subject.TAG, "i2")
         s2.name = "A tag"
 
         subject, is_new = Subject.lookup(session, Subject.TAG, None, "A tag")
         assert subject in [s1, s2]
         assert False == is_new
 
-    def test_assign_to_genre_can_remove_genre(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_assign_to_genre_can_remove_genre(self, db: DatabaseTransactionFixture):
         # Here's a Subject that identifies children's books.
-        session = database_transaction.session()
+        session = db.session()
         subject, was_new = Subject.lookup(
             session, Subject.TAG, "Children's books", None
         )
@@ -84,16 +82,16 @@ class TestSubject:
 
 
 class TestGenre:
-    def test_name_is_unique(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_name_is_unique(self, db: DatabaseTransactionFixture):
+        session = db.session()
         g1, ignore = Genre.lookup(session, "A Genre", autocreate=True)
         g2, ignore = Genre.lookup(session, "A Genre", autocreate=True)
         assert g1 == g2
 
         pytest.raises(IntegrityError, create, session, Genre, name="A Genre")
 
-    def test_default_fiction(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_default_fiction(self, db: DatabaseTransactionFixture):
+        session = db.session()
         sf, ignore = Genre.lookup(session, "Science Fiction")
         nonfiction, ignore = Genre.lookup(session, "History")
         assert True == sf.default_fiction

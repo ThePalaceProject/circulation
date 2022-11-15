@@ -16,20 +16,20 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestDatabaseInterface:
-    def test_get_one(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_get_one(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # When a matching object isn't found, None is returned.
         result = get_one(session, Edition)
         assert None == result
 
         # When a single item is found, it is returned.
-        edition = database_transaction.edition()
+        edition = db.edition()
         result = get_one(session, Edition)
         assert edition == result
 
         # When multiple items are found, an error is raised.
-        other_edition = database_transaction.edition()
+        other_edition = db.edition()
         pytest.raises(MultipleResultsFound, get_one, session, Edition)
 
         # Unless they're interchangeable.
@@ -49,9 +49,9 @@ class TestDatabaseInterface:
         assert None == result
 
     def test_initialize_data_does_not_reset_timestamp(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        session = database_transaction.session()
+        session = db.session()
 
         # initialize_data() has already been called, so the database is
         # initialized and the 'site configuration changed' Timestamp has

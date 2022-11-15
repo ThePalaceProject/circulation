@@ -33,13 +33,13 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 class TestCirculationData:
     def test_circulationdata_may_require_collection(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
         """Depending on the information provided in a CirculationData
         object, it might or might not be possible to call apply()
         without providing a Collection.
         """
-        data, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         identifier = IdentifierData(Identifier.OVERDRIVE_ID, "1")
         format = FormatData(
@@ -131,14 +131,12 @@ class TestCirculationData:
 
         assert [link1] == filtered_links
 
-    def test_explicit_formatdata(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_explicit_formatdata(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Creating an edition with an open-access download will
         # automatically create a delivery mechanism.
-        edition, pool = data.edition(with_open_access_download=True)
+        edition, pool = db.edition(with_open_access_download=True)
 
         # Let's also add a DRM format.
         drm_format = FormatData(
@@ -171,11 +169,11 @@ class TestCirculationData:
         assert Representation.PDF_MEDIA_TYPE == pdf.delivery_mechanism.content_type
 
     def test_apply_removes_old_formats_based_on_replacement_policy(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        data, session = database_transaction, database_transaction.session()
+        session = db.session()
 
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
 
         # Start with one delivery mechanism for this pool.
         for lpdm in pool.delivery_mechanisms:
@@ -189,7 +187,7 @@ class TestCirculationData:
         )
 
         # And it has been loaned.
-        patron = data.patron()
+        patron = db.patron()
         loan, ignore = pool.loan_to(patron, fulfillment=old_lpdm)
         assert old_lpdm == loan.fulfillment
 
@@ -227,15 +225,13 @@ class TestCirculationData:
         )
         assert None == loan.fulfillment
 
-    def test_apply_adds_new_licenses(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_apply_adds_new_licenses(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
 
         # Start with one license for this pool.
-        old_license = data.license(
+        old_license = db.license(
             pool,
             expires=None,
             checkouts_left=2,
@@ -243,7 +239,7 @@ class TestCirculationData:
         )
 
         # And it has been loaned.
-        patron = data.patron()
+        patron = db.patron()
         loan, ignore = old_license.loan_to(patron)
         assert old_license == loan.license
 
@@ -276,15 +272,13 @@ class TestCirculationData:
         }
         assert old_license == loan.license
 
-    def test_apply_updates_existing_licenses(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_apply_updates_existing_licenses(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
 
         # Start with one license for this pool.
-        old_license = data.license(
+        old_license = db.license(
             pool,
             expires=None,
             checkouts_left=2,
@@ -316,11 +310,11 @@ class TestCirculationData:
         assert old_license.status == LicenseStatus.unavailable
 
     def test_apply_with_licenses_overrides_availability(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        data, session = database_transaction, database_transaction.session()
+        session = db.session()
 
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
 
         license_data = LicenseData(
             identifier="8c5fdbfe-c26e-11e8-8706-5254009434c4",
@@ -353,11 +347,11 @@ class TestCirculationData:
         assert pool.patrons_in_hold_queue == 0
 
     def test_apply_without_licenses_sets_availability(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        data, session = database_transaction, database_transaction.session()
+        session = db.session()
 
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
 
         # If we give CirculationData availability information without
         # also giving it licenses it uses the availability information
@@ -380,13 +374,13 @@ class TestCirculationData:
         assert pool.patrons_in_hold_queue == 999
 
     def test_apply_creates_work_and_presentation_edition_if_needed(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        data, session = database_transaction, database_transaction.session()
+        session = db.session()
 
-        edition = data.edition()
+        edition = db.edition()
         # This pool doesn't have a presentation edition or a work yet.
-        pool = data.licensepool(edition)
+        pool = db.licensepool(edition)
 
         # We have new circulation data for this pool.
         circulation_data = CirculationData(
@@ -405,20 +399,20 @@ class TestCirculationData:
 
         # If we have another new pool for the same book in another
         # collection, it will share the work.
-        collection = data.collection()
-        pool2 = data.licensepool(edition, collection=collection)
+        collection = db.collection()
+        pool2 = db.licensepool(edition, collection=collection)
         circulation_data.apply(session, pool2.collection, replacement_policy)
         assert edition == pool2.presentation_edition
         assert pool.work == pool2.work
 
     def test_license_pool_sets_default_license_values(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
         """We have no information about how many copies of the book we've
         actually licensed, but a LicensePool can be created anyway,
         so we can store format information.
         """
-        data, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         identifier = IdentifierData(Identifier.OVERDRIVE_ID, "1")
         drm_format = FormatData(
@@ -430,7 +424,7 @@ class TestCirculationData:
             primary_identifier=identifier,
             formats=[drm_format],
         )
-        collection = data.default_collection()
+        collection = db.default_collection()
         pool, is_new = circulation.license_pool(session, collection)
         assert True == is_new
         assert collection == pool.collection
@@ -442,16 +436,14 @@ class TestCirculationData:
         assert 0 == pool.licenses_reserved
         assert 0 == pool.patrons_in_hold_queue
 
-    def test_implicit_format_for_open_access_link(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_implicit_format_for_open_access_link(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # A format is a delivery mechanism.  We handle delivery on open access
         # pools from our mirrored content in S3.
         # Tests that when a link is open access, a pool can be delivered.
 
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
 
         # This is the delivery mechanism created by default when you
         # create a book with _edition().
@@ -462,7 +454,7 @@ class TestCirculationData:
         link = LinkData(
             rel=Hyperlink.OPEN_ACCESS_DOWNLOAD,
             media_type=Representation.PDF_MEDIA_TYPE,
-            href=data.fresh_url(),
+            href=db.fresh_url(),
         )
         circulation_data = CirculationData(
             data_source=DataSource.GUTENBERG,
@@ -496,9 +488,9 @@ class TestCirculationData:
         assert 0 == len(pool.delivery_mechanisms)
 
     def test_rights_status_default_rights_passed_in(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        data, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         identifier = IdentifierData(
             Identifier.GUTENBERG_ID,
@@ -507,7 +499,7 @@ class TestCirculationData:
         link = LinkData(
             rel=Hyperlink.DRM_ENCRYPTED_DOWNLOAD,
             media_type=Representation.EPUB_MEDIA_TYPE,
-            href=data.fresh_url(),
+            href=db.fresh_url(),
         )
 
         circulation_data = CirculationData(
@@ -521,7 +513,7 @@ class TestCirculationData:
             formats=True,
         )
 
-        pool, ignore = circulation_data.license_pool(session, data.default_collection())
+        pool, ignore = circulation_data.license_pool(session, db.default_collection())
         circulation_data.apply(session, pool.collection, replace)
         assert True == pool.open_access
         assert 1 == len(pool.delivery_mechanisms)
@@ -529,9 +521,9 @@ class TestCirculationData:
         assert RightsStatus.CC_BY == pool.delivery_mechanisms[0].rights_status.uri
 
     def test_rights_status_default_rights_from_data_source(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        data, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         identifier = IdentifierData(
             Identifier.GUTENBERG_ID,
@@ -540,7 +532,7 @@ class TestCirculationData:
         link = LinkData(
             rel=Hyperlink.DRM_ENCRYPTED_DOWNLOAD,
             media_type=Representation.EPUB_MEDIA_TYPE,
-            href=data.fresh_url(),
+            href=db.fresh_url(),
         )
 
         circulation_data = CirculationData(
@@ -554,7 +546,7 @@ class TestCirculationData:
         )
 
         # This pool starts off as not being open-access.
-        pool, ignore = circulation_data.license_pool(session, data.default_collection())
+        pool, ignore = circulation_data.license_pool(session, db.default_collection())
         assert False == pool.open_access
 
         circulation_data.apply(session, pool.collection, replace)
@@ -570,9 +562,9 @@ class TestCirculationData:
         )
 
     def test_rights_status_open_access_link_no_rights_uses_data_source_default(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db
     ):
-        data, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         identifier = IdentifierData(
             Identifier.GUTENBERG_ID,
@@ -584,7 +576,7 @@ class TestCirculationData:
         link = LinkData(
             rel=Hyperlink.OPEN_ACCESS_DOWNLOAD,
             media_type=Representation.EPUB_MEDIA_TYPE,
-            href=data.fresh_url(),
+            href=db.fresh_url(),
         )
         circulation_data = CirculationData(
             data_source=DataSource.GUTENBERG,
@@ -595,7 +587,7 @@ class TestCirculationData:
             formats=True,
         )
 
-        pool, ignore = circulation_data.license_pool(session, data.default_collection())
+        pool, ignore = circulation_data.license_pool(session, db.default_collection())
         pool.open_access = False
 
         # Applying this CirculationData to a LicensePool makes it
@@ -622,7 +614,7 @@ class TestCirculationData:
         link = LinkData(
             rel=Hyperlink.OPEN_ACCESS_DOWNLOAD,
             media_type=Representation.EPUB_MEDIA_TYPE,
-            href=data.fresh_url(),
+            href=db.fresh_url(),
         )
 
         circulation_data = CirculationData(
@@ -631,7 +623,7 @@ class TestCirculationData:
             links=[link],
         )
 
-        pool, ignore = circulation_data.license_pool(session, data.default_collection())
+        pool, ignore = circulation_data.license_pool(session, db.default_collection())
         pool.open_access = False
         circulation_data.apply(session, pool.collection, replace_formats)
         assert (
@@ -641,9 +633,9 @@ class TestCirculationData:
         assert False == pool.open_access
 
     def test_rights_status_open_access_link_with_rights(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        data, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         identifier = IdentifierData(
             Identifier.OVERDRIVE_ID,
@@ -652,7 +644,7 @@ class TestCirculationData:
         link = LinkData(
             rel=Hyperlink.OPEN_ACCESS_DOWNLOAD,
             media_type=Representation.EPUB_MEDIA_TYPE,
-            href=data.fresh_url(),
+            href=db.fresh_url(),
             rights_uri=RightsStatus.CC_BY_ND,
         )
 
@@ -665,16 +657,16 @@ class TestCirculationData:
             formats=True,
         )
 
-        pool, ignore = circulation_data.license_pool(session, data.default_collection())
+        pool, ignore = circulation_data.license_pool(session, db.default_collection())
         circulation_data.apply(session, pool.collection, replace)
         assert True == pool.open_access
         assert 1 == len(pool.delivery_mechanisms)
         assert RightsStatus.CC_BY_ND == pool.delivery_mechanisms[0].rights_status.uri
 
     def test_rights_status_commercial_link_with_rights(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        data, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         identifier = IdentifierData(
             Identifier.OVERDRIVE_ID,
@@ -683,7 +675,7 @@ class TestCirculationData:
         link = LinkData(
             rel=Hyperlink.DRM_ENCRYPTED_DOWNLOAD,
             media_type=Representation.EPUB_MEDIA_TYPE,
-            href=data.fresh_url(),
+            href=db.fresh_url(),
             rights_uri=RightsStatus.IN_COPYRIGHT,
         )
         format = FormatData(
@@ -704,7 +696,7 @@ class TestCirculationData:
             formats=True,
         )
 
-        pool, ignore = circulation_data.license_pool(session, data.default_collection())
+        pool, ignore = circulation_data.license_pool(session, db.default_collection())
         circulation_data.apply(session, pool.collection, replace)
         assert False == pool.open_access
         assert 1 == len(pool.delivery_mechanisms)
@@ -713,23 +705,23 @@ class TestCirculationData:
         )
 
     def test_format_change_may_change_open_access_status(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        data, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         # In this test, whenever we call CirculationData.apply(), we
         # want to destroy the old list of formats and recreate it.
         replace_formats = ReplacementPolicy(formats=True)
 
         # Here's a seemingly ordinary non-open-access LicensePool.
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
         assert False == pool.open_access
 
         # One day, we learn that it has an open-access delivery mechanism.
         link = LinkData(
             rel=Hyperlink.OPEN_ACCESS_DOWNLOAD,
             media_type=Representation.EPUB_MEDIA_TYPE,
-            href=data.fresh_url(),
+            href=db.fresh_url(),
             rights_uri=RightsStatus.CC_BY_ND,
         )
 
@@ -762,10 +754,8 @@ class TestCirculationData:
 
 
 class TestMetaToModelUtility:
-    def test_open_access_content_mirrored(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_open_access_content_mirrored(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Make sure that open access material links are translated to our S3 buckets, and that
         # commercial material links are left as is.
@@ -775,7 +765,7 @@ class TestMetaToModelUtility:
         mirrors = dict(books_mirror=MockS3Uploader(), covers_mirror=None)
         mirror_type = ExternalIntegrationLink.OPEN_ACCESS_BOOKS
         # Here's a book.
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
 
         # Here's a link to the content of the book, which will be mirrored.
         link_mirrored = LinkData(
@@ -844,14 +834,14 @@ class TestMetaToModelUtility:
         assert None == unmirrored_representation.mirror_url
 
     def test_mirror_open_access_link_fetch_failure(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        data, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         mirrors = dict(books_mirror=MockS3Uploader())
         h = DummyHTTPClient()
 
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
 
         data_source = DataSource.lookup(session, DataSource.GUTENBERG)
         policy = ReplacementPolicy(mirrors=mirrors, http_get=h.do_get)
@@ -863,7 +853,7 @@ class TestMetaToModelUtility:
         link = LinkData(
             rel=Hyperlink.OPEN_ACCESS_DOWNLOAD,
             media_type=Representation.EPUB_MEDIA_TYPE,
-            href=data.fresh_url(),
+            href=db.fresh_url(),
         )
 
         link_obj, ignore = edition.primary_identifier.add_link(
@@ -893,14 +883,14 @@ class TestMetaToModelUtility:
         assert representation.fetch_exception in pool.license_exception
 
     def test_mirror_open_access_link_mirror_failure(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        data, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         mirrors = dict(books_mirror=MockS3Uploader(fail=True), covers_mirror=None)
         h = DummyHTTPClient()
 
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
 
         data_source = DataSource.lookup(session, DataSource.GUTENBERG)
         policy = ReplacementPolicy(mirrors=mirrors, http_get=h.do_get)
@@ -913,7 +903,7 @@ class TestMetaToModelUtility:
         link = LinkData(
             rel=Hyperlink.OPEN_ACCESS_DOWNLOAD,
             media_type=Representation.EPUB_MEDIA_TYPE,
-            href=data.fresh_url(),
+            href=db.fresh_url(),
         )
 
         link_obj, ignore = edition.primary_identifier.add_link(
@@ -950,10 +940,8 @@ class TestMetaToModelUtility:
         assert True == pool.suppressed
         assert representation.mirror_exception in pool.license_exception
 
-    def test_has_open_access_link(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_has_open_access_link(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         identifier = IdentifierData(Identifier.GUTENBERG_ID, "1")
 
@@ -967,7 +955,7 @@ class TestMetaToModelUtility:
 
         linkdata = LinkData(
             rel=Hyperlink.OPEN_ACCESS_DOWNLOAD,
-            href=data.fresh_url(),
+            href=db.fresh_url(),
         )
         circulationdata.links = [linkdata]
 
@@ -982,13 +970,11 @@ class TestMetaToModelUtility:
         linkdata.rights_uri = RightsStatus.GENERIC_OPEN_ACCESS
         assert True == circulationdata.has_open_access_link
 
-    def test_availability_needs_update(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_availability_needs_update(self, db: DatabaseTransactionFixture):
         """Test the logic that controls whether a LicensePool's availability
         information should actually be updated.
         """
-        data, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         identifier = IdentifierData(Identifier.GUTENBERG_ID, "1")
         now = utc_now()
@@ -1000,7 +986,7 @@ class TestMetaToModelUtility:
             DataSource.GUTENBERG, identifier, last_checked=yesterday
         )
 
-        edition, pool = data.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
 
         # A pool that has never been checked always needs to be updated.
         pool.last_checked = None

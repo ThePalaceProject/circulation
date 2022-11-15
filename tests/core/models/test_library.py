@@ -6,10 +6,8 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestLibrary:
-    def test_library_registry_short_name(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        library = database_transaction.default_library()
+    def test_library_registry_short_name(self, db: DatabaseTransactionFixture):
+        library = db.default_library()
 
         # Short name is always uppercased.
         library.library_registry_short_name = "foo"
@@ -25,9 +23,9 @@ class TestLibrary:
         # recommended, but it's not an error.
         library.library_registry_short_name = None
 
-    def test_lookup(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
-        library = database_transaction.default_library()
+    def test_lookup(self, db: DatabaseTransactionFixture):
+        session = db.session()
+        library = db.default_library()
         name = library.short_name
         assert name == library.cache_key()
 
@@ -41,14 +39,14 @@ class TestLibrary:
         # Cache is populated.
         assert library == cache.key[name]
 
-    def test_default(self, database_transaction: DatabaseTransactionFixture):
+    def test_default(self, db: DatabaseTransactionFixture):
         # We start off with no libraries.
-        session = database_transaction.session()
+        session = db.session()
         assert None == Library.default(session)
 
         # Let's make a couple libraries.
-        l1 = database_transaction.default_library()
-        l2 = database_transaction.library()
+        l1 = db.default_library()
+        l2 = db.library()
 
         # None of them are the default according to the database.
         assert False == l1.is_default
@@ -79,13 +77,13 @@ class TestLibrary:
             in str(excinfo.value)
         )
 
-    def test_has_root_lanes(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
+    def test_has_root_lanes(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # A library has root lanes if any of its lanes are the root for any
         # patron type(s).
-        library = database_transaction.default_library()
-        lane = database_transaction.lane()
+        library = db.default_library()
+        lane = db.lane()
         assert False == library.has_root_lanes
 
         # If a library goes back and forth between 'has root lanes'
@@ -104,34 +102,28 @@ class TestLibrary:
         session.flush()
         assert False == library.has_root_lanes
 
-    def test_all_collections(self, database_transaction: DatabaseTransactionFixture):
-        library = database_transaction.default_library()
+    def test_all_collections(self, db: DatabaseTransactionFixture):
+        library = db.default_library()
 
-        parent = database_transaction.collection()
-        database_transaction.default_collection().parent_id = parent.id
+        parent = db.collection()
+        db.default_collection().parent_id = parent.id
 
-        assert [database_transaction.default_collection()] == library.collections
-        assert {database_transaction.default_collection(), parent} == set(
-            library.all_collections
-        )
+        assert [db.default_collection()] == library.collections
+        assert {db.default_collection(), parent} == set(library.all_collections)
 
-    def test_estimated_holdings_by_language(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        library = database_transaction.default_library()
+    def test_estimated_holdings_by_language(self, db: DatabaseTransactionFixture):
+        library = db.default_library()
 
         # Here's an open-access English book.
-        english = database_transaction.work(
-            language="eng", with_open_access_download=True
-        )
+        english = db.work(language="eng", with_open_access_download=True)
 
         # Here's a non-open-access Tagalog book with a delivery mechanism.
-        tagalog = database_transaction.work(language="tgl", with_license_pool=True)
+        tagalog = db.work(language="tgl", with_license_pool=True)
         [pool] = tagalog.license_pools
-        database_transaction.add_generic_delivery_mechanism(pool)
+        db.add_generic_delivery_mechanism(pool)
 
         # Here's an open-access book that improperly has no language set.
-        no_language = database_transaction.work(with_open_access_download=True)
+        no_language = db.work(with_open_access_download=True)
         no_language.presentation_edition.language = None
 
         # estimated_holdings_by_language counts the English and the
@@ -145,23 +137,23 @@ class TestLibrary:
 
         # If we remove the default collection from the default library,
         # it loses all its works.
-        database_transaction.default_library().collections = []
+        db.default_library().collections = []
         estimate = library.estimated_holdings_by_language(include_open_access=False)
         assert dict() == estimate
 
-    def test_explain(self, database_transaction: DatabaseTransactionFixture):
+    def test_explain(self, db: DatabaseTransactionFixture):
         """Test that Library.explain gives all relevant information
         about a Library.
         """
-        session = database_transaction.session()
-        library = database_transaction.default_library()
+        session = db.session()
+        library = db.default_library()
         library.uuid = "uuid"
         library.name = "The Library"
         library.short_name = "Short"
         library.library_registry_short_name = "SHORT"
         library.library_registry_shared_secret = "secret"
 
-        integration = database_transaction.external_integration("protocol", "goal")
+        integration = db.external_integration("protocol", "goal")
         integration.url = "http://url/"
         integration.username = "someuser"
         integration.password = "somepass"
@@ -172,7 +164,7 @@ class TestLibrary:
             session, "library-specific", library, integration
         ).value = "value for library1"
 
-        library2 = database_transaction.library()
+        library2 = db.library()
         ConfigurationSetting.for_library_and_externalintegration(
             session, "library-specific", library2, integration
         ).value = "value for library2"

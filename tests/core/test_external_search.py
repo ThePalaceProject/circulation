@@ -72,7 +72,7 @@ RESEARCH = Term(audience=Classifier.AUDIENCE_RESEARCH.lower())
 
 class TestExternalSearch:
     def test_load(self, external_search_fixture: ExternalSearchFixture):
-        session = external_search_fixture.transaction.session()
+        session = external_search_fixture.db.session()
 
         # Normally, load() returns a brand new ExternalSearchIndex
         # object.
@@ -86,7 +86,7 @@ class TestExternalSearch:
             assert mock == ExternalSearchIndex.load(session, in_testing=True)
 
     def test_constructor(self, external_search_fixture: ExternalSearchFixture):
-        session = external_search_fixture.transaction.session()
+        session = external_search_fixture.db.session()
 
         # The configuration of the search ExternalIntegration becomes the
         # configuration of the ExternalSearchIndex.
@@ -107,7 +107,7 @@ class TestExternalSearch:
     def test_elasticsearch_error_in_constructor_becomes_cannotloadconfiguration(
         self, external_search_fixture: ExternalSearchFixture
     ):
-        session = external_search_fixture.transaction.session()
+        session = external_search_fixture.db.session()
 
         """If we're unable to establish a connection to the Elasticsearch
         server, CannotLoadConfiguration (which the circulation manager can
@@ -129,7 +129,7 @@ class TestExternalSearch:
         assert "very bad" in str(excinfo.value)
 
     def test_works_index_name(self, external_search_fixture: ExternalSearchFixture):
-        session = external_search_fixture.transaction.session()
+        session = external_search_fixture.db.session()
 
         """The name of the search index is the prefix (defined in
         ExternalSearchTest.setup) plus a version number associated
@@ -167,7 +167,7 @@ class TestExternalSearch:
     def test_set_works_index_and_alias(
         self, external_search_fixture: ExternalSearchFixture
     ):
-        session = external_search_fixture.transaction.session()
+        session = external_search_fixture.db.session()
         search = external_search_fixture.search
 
         # If the index or alias don't exist, set_works_index_and_alias
@@ -189,7 +189,7 @@ class TestExternalSearch:
         assert expected_alias == search.works_alias
 
     def test_setup_current_alias(self, external_search_fixture: ExternalSearchFixture):
-        session = external_search_fixture.transaction.session()
+        session = external_search_fixture.db.session()
         search = external_search_fixture.search
 
         # The index was generated from the string in configuration.
@@ -218,7 +218,7 @@ class TestExternalSearch:
     def test_transfer_current_alias(
         self, external_search_fixture: ExternalSearchFixture
     ):
-        session = external_search_fixture.transaction.session()
+        session = external_search_fixture.db.session()
         search = external_search_fixture.search
 
         # An error is raised if you try to set the alias to point to
@@ -315,7 +315,7 @@ class TestExternalSearch:
         assert pagination.size == default.size
 
     def test__run_self_tests(self, external_search_fixture: ExternalSearchFixture):
-        transaction = external_search_fixture.transaction
+        transaction = external_search_fixture.db
         session = transaction.session()
         index = MockExternalSearchIndex()
 
@@ -513,7 +513,7 @@ class TestExternalSearchWithWorks:
     def _populate_works(
         data: EndToEndSearchFixture[TestExternalSearchWithWorksData],
     ) -> TestExternalSearchWithWorksData:
-        transaction = data.external_search.transaction
+        transaction = data.external_search.db
         _work: Callable = data.external_search.default_work
 
         result = TestExternalSearchWithWorksData()
@@ -705,7 +705,7 @@ class TestExternalSearchWithWorks:
         ],
     ):
         data = end_to_end_search_fixture
-        transaction = data.external_search.transaction
+        transaction = data.external_search.db
         session = transaction.session()
 
         data.populate(self._populate_works)
@@ -1351,7 +1351,7 @@ class TestFacetFilters:
         self, end_to_end_search_fixture: EndToEndSearchFixture[TestFacetFiltersData]
     ):
         data = end_to_end_search_fixture
-        transaction = data.external_search.transaction
+        transaction = data.external_search.db
         session = transaction.session()
 
         data.populate(self._populate_works)
@@ -1443,7 +1443,7 @@ class TestSearchOrder:
     def _populate_works(
         data: EndToEndSearchFixture[TestSearchOrderData],
     ) -> TestSearchOrderData:
-        transaction = data.external_search.transaction
+        transaction = data.external_search.db
         _work: Callable = data.external_search.default_work
 
         result = TestSearchOrderData()
@@ -1625,7 +1625,7 @@ class TestSearchOrder:
         self, end_to_end_search_fixture: EndToEndSearchFixture[TestSearchOrderData]
     ):
         data = end_to_end_search_fixture
-        transaction = data.external_search.transaction
+        transaction = data.external_search.db
         data.populate(self._populate_works)
 
         def assert_order(sort_field, order, **filter_kwargs):
@@ -1844,8 +1844,8 @@ class TestAuthorFilter:
         data: EndToEndSearchFixture[TestAuthorFilterData],
     ) -> TestAuthorFilterData:
         transaction, session = (
-            data.external_search.transaction,
-            data.external_search.transaction.session(),
+            data.external_search.db,
+            data.external_search.db.session(),
         )
         _work = data.external_search.default_work
 
@@ -2139,8 +2139,8 @@ class TestFeaturedFacets:
         data: EndToEndSearchFixture[TestFeaturedFacetsData],
     ) -> TestFeaturedFacetsData:
         transaction, session = (
-            data.external_search.transaction,
-            data.external_search.transaction.session(),
+            data.external_search.db,
+            data.external_search.db.session(),
         )
         _work = data.external_search.default_work
 
@@ -2249,8 +2249,8 @@ class TestFeaturedFacets:
     ):
         data = end_to_end_search_fixture
         transaction, session = (
-            data.external_search.transaction,
-            data.external_search.transaction.session(),
+            data.external_search.db,
+            data.external_search.db.session(),
         )
         data.populate(self._populate_works)
 
@@ -2483,7 +2483,7 @@ class TestQuery:
         assert None == query.contains_stopwords
         assert 0 == query.fuzzy_coefficient
 
-    def test_build(self, database_transaction: DatabaseTransactionFixture):
+    def test_build(self, db):
         # Verify that the build() method combines the 'query' part of
         # a Query and the 'filter' part to create a single
         # Elasticsearch Search object, complete with (if necessary)
@@ -2690,9 +2690,7 @@ class TestQuery:
         MockFilter.universal_nested_filter = None
 
         # Now let's try a combination of regular filters and nested filters.
-        filter = Filter(
-            fiction=True, collections=[database_transaction.default_collection()]
-        )
+        filter = Filter(fiction=True, collections=[db.default_collection()])
         qu = MockQuery("query string", filter=filter)
         built = qu.build(search)
         underlying_query = built._query
@@ -2722,7 +2720,7 @@ class TestQuery:
             """Build a Query object from a set of facets, then call
             build() on it.
             """
-            facets = Facets(database_transaction.default_library(), *args, **kwargs)
+            facets = Facets(db.default_library(), *args, **kwargs)
             filter = Filter(facets=facets)
             qu = MockQuery("query string", filter=filter)
             built = qu.build(search)
@@ -2741,7 +2739,7 @@ class TestQuery:
         quality_range = Filter._match_range(
             "quality",
             "gte",
-            database_transaction.default_library().minimum_featured_quality,
+            db.default_library().minimum_featured_quality,
         )
         assert Q("bool", must=[quality_range], must_not=[RESEARCH]) == quality_filter
 
@@ -2835,15 +2833,13 @@ class TestQuery:
         Filter.universal_base_filter = original_base
         Filter.universal_nested_filters = original_nested
 
-    def test_build_match_nothing(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_build_match_nothing(self, db):
         # No matter what the Filter looks like, if its .match_nothing
         # is set, it gets built into a simple filter that matches
         # nothing, with no nested subfilters.
         filter = Filter(
             fiction=True,
-            collections=[database_transaction.default_collection()],
+            collections=[db.default_collection()],
             match_nothing=True,
         )
         main, nested = filter.build()
@@ -3530,9 +3526,9 @@ class FilterFixture:
 
 
 @pytest.fixture()
-def filter_fixture(database_transaction: DatabaseTransactionFixture) -> FilterFixture:
+def filter_fixture(db) -> FilterFixture:
     """A fixture preconfigured with data for testing filters."""
-    return FilterFixture.create(database_transaction)
+    return FilterFixture.create(db)
 
 
 class TestFilter:
@@ -4513,7 +4509,7 @@ class TestFilter:
         assert ["foo"] == m("foo")
         assert ["youngadult", "adult"] == m(["Young Adult", "Adult"])
 
-    def test__filter_ids(self, database_transaction: DatabaseTransactionFixture):
+    def test__filter_ids(self, db):
         # Test the _filter_ids helper method, which converts database
         # objects to their IDs.
         m = Filter._filter_ids
@@ -4521,14 +4517,14 @@ class TestFilter:
         assert [] == m([])
         assert [1, 2, 3] == m([1, 2, 3])
 
-        library = database_transaction.default_library()
+        library = db.default_library()
         assert [library.id] == m([library])
 
-    def test__scrub_identifiers(self, database_transaction: DatabaseTransactionFixture):
+    def test__scrub_identifiers(self, db):
         # Test the _scrub_identifiers helper method, which converts
         # Identifier objects to IdentifierData.
-        i1 = database_transaction.identifier()
-        i2 = database_transaction.identifier()
+        i1 = db.identifier()
+        i2 = db.identifier()
         si1, si2 = Filter._scrub_identifiers([i1, i2])
         for before, after in ((i1, si1), (i2, si2)):
             assert isinstance(si1, IdentifierData)
@@ -4821,14 +4817,12 @@ class TestSortKeyPagination:
 
 
 class TestBulkUpdate:
-    def test_works_not_presentation_ready_kept_in_index(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        w1 = database_transaction.work()
+    def test_works_not_presentation_ready_kept_in_index(self, db):
+        w1 = db.work()
         w1.set_presentation_ready()
-        w2 = database_transaction.work()
+        w2 = db.work()
         w2.set_presentation_ready()
-        w3 = database_transaction.work()
+        w3 = db.work()
         index = MockExternalSearchIndex()
         successes, failures = index.bulk_update([w1, w2, w3])
 
@@ -4857,7 +4851,7 @@ class TestSearchErrors:
     ):
         search, transaction = (
             external_search_fixture,
-            external_search_fixture.transaction,
+            external_search_fixture.db,
         )
 
         attempts = []
@@ -4897,7 +4891,7 @@ class TestSearchErrors:
     ):
         search, transaction = (
             external_search_fixture,
-            external_search_fixture.transaction,
+            external_search_fixture.db,
         )
 
         successful_work = transaction.work()
@@ -4930,8 +4924,8 @@ class TestWorkSearchResult:
     # model Work and an ElasticSearch Hit into something that looks
     # like a Work.
 
-    def test_constructor(self, database_transaction: DatabaseTransactionFixture):
-        work = database_transaction.work()
+    def test_constructor(self, db):
+        work = db.work()
         hit = object()
         result = WorkSearchResult(work, hit)
 
@@ -4946,18 +4940,16 @@ class TestWorkSearchResult:
 
 
 class TestSearchIndexCoverageProvider:
-    def test_operation(self, database_transaction: DatabaseTransactionFixture):
+    def test_operation(self, db):
         index = MockExternalSearchIndex()
-        provider = SearchIndexCoverageProvider(
-            database_transaction.session(), search_index_client=index
-        )
+        provider = SearchIndexCoverageProvider(db.session(), search_index_client=index)
         assert WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION == provider.operation
 
-    def test_to_search_document(self, database_transaction: DatabaseTransactionFixture):
+    def test_to_search_document(self, db):
         """Compare the new and old to_search_document functions
         TODO: classifications
         """
-        transaction, session = database_transaction, database_transaction.session()
+        transaction, session = db, db.session()
         customlist, editions = transaction.customlist()
         works = [
             transaction.work(
@@ -5023,15 +5015,10 @@ class TestSearchIndexCoverageProvider:
             for key in result_item.keys():
                 assert result_item[key] == inapp_item[key]
 
-    def test_to_search_documents_performance(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        works = [
-            database_transaction.work(with_license_pool=True, genre="history")
-            for i in range(20)
-        ]
+    def test_to_search_documents_performance(self, db):
+        works = [db.work(with_license_pool=True, genre="history") for i in range(20)]
 
-        connection = database_transaction.database().connection()
+        connection = db.database().connection()
         with DBStatementCounter(connection) as old_counter:
             with PerfTimer() as t1:
                 result = Work.to_search_documents(works)
@@ -5046,10 +5033,8 @@ class TestSearchIndexCoverageProvider:
         # 4 queries per batch only
         assert new_counter.get_count() <= 4
 
-    def test_to_search_documents_with_missing_data(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction = database_transaction
+    def test_to_search_documents_with_missing_data(self, db):
+        transaction = db
 
         # Missing edition relationship
         work: Work = transaction.work(with_license_pool=True)
@@ -5065,8 +5050,8 @@ class TestSearchIndexCoverageProvider:
         assert result["title"] == None
         assert result["target_age"]["lower"] == None
 
-    def test_success(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_success(self, db):
+        transaction, session = db, db.session()
 
         work = transaction.work()
         work.set_presentation_ready()
@@ -5080,8 +5065,8 @@ class TestSearchIndexCoverageProvider:
         # The work was added to the search index.
         assert 1 == len(index.docs)
 
-    def test_failure(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_failure(self, db):
+        transaction, session = db, db.session()
 
         class DoomedExternalSearchIndex(MockExternalSearchIndex):
             """All documents sent to this index will fail."""
@@ -5265,9 +5250,9 @@ class TestJSONQuery:
             }
         }
 
-    def test_value_transforms(self, database_transaction: DatabaseTransactionFixture):
+    def test_value_transforms(self, db):
         gutenberg = (
-            database_transaction.session()
+            db.session()
             .query(DataSource)
             .filter(DataSource.name == DataSource.GUTENBERG)
             .first()
@@ -5324,8 +5309,8 @@ class TestExternalSearchJSONQuery:
         data: EndToEndSearchFixture[TestExternalSearchJSONQueryData],
     ) -> TestExternalSearchJSONQueryData:
         transaction, session = (
-            data.external_search.transaction,
-            data.external_search.transaction.session(),
+            data.external_search.db,
+            data.external_search.db.session(),
         )
         _work: Callable = data.external_search.default_work
 

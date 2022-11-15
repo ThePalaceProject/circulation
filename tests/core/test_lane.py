@@ -56,7 +56,6 @@ from core.problem_details import INVALID_INPUT
 from core.testing import LogCaptureHandler
 from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import OPDSFeed
-from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchPatchFixture
 
 
@@ -357,8 +356,8 @@ class TestFacets:
         for key, value in list(default.items()):
             library.default_facet_setting(key).value = value
 
-    def test_max_cache_age(self, database_transaction: DatabaseTransactionFixture):
-        data = database_transaction
+    def test_max_cache_age(self, db):
+        data = db
 
         # A default Facets object has no opinion on what max_cache_age
         # should be.
@@ -370,8 +369,8 @@ class TestFacets:
         )
         assert None == facets.max_cache_age
 
-    def test_facet_groups(self, database_transaction: DatabaseTransactionFixture):
-        data = database_transaction
+    def test_facet_groups(self, db):
+        data = db
 
         facets = Facets(
             data.default_library(),
@@ -417,8 +416,8 @@ class TestFacets:
         expect = [["order", "title", True], ["order", "work_id", False]]
         assert expect == sorted(list(x[:2]) + [x[-1]] for x in all_groups)
 
-    def test_default(self, database_transaction: DatabaseTransactionFixture):
-        data = database_transaction
+    def test_default(self, db):
+        data = db
         # Calling Facets.default() is like calling the constructor with
         # no arguments except the library.
         class Mock(Facets):
@@ -474,10 +473,8 @@ class TestFacets:
         available = MockFacets.available_facets(config, "some facet group")
         assert ["facet1", "facet2"] == available
 
-    def test_default_availability(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data = database_transaction
+    def test_default_availability(self, db):
+        data = db
 
         # Normally, the availability will be the library's default availability
         # facet.
@@ -514,10 +511,8 @@ class TestFacets:
         facets = Facets(library, None, None, None)
         assert Facets.AVAILABLE_ALL == facets.availability
 
-    def test_facets_can_be_enabled_at_initialization(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data = database_transaction
+    def test_facets_can_be_enabled_at_initialization(self, db):
+        data = db
 
         enabled_facets = {
             Facets.ORDER_FACET_GROUP_NAME: [
@@ -564,11 +559,11 @@ class TestFacets:
         expect = [["order", "author", False], ["order", "title", True]]
         assert expect == sorted(list(x[:2]) + [x[-1]] for x in all_groups)
 
-    def test_items(self, database_transaction: DatabaseTransactionFixture):
+    def test_items(self, db):
         """Verify that Facets.items() returns all information necessary
         to recreate the Facets object.
         """
-        data = database_transaction
+        data = db
         facets = Facets(
             data.default_library(),
             Facets.COLLECTION_FULL,
@@ -583,10 +578,8 @@ class TestFacets:
             ("order", Facets.ORDER_TITLE),
         ] == sorted(facets.items())
 
-    def test_default_order_ascending(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data = database_transaction
+    def test_default_order_ascending(self, db):
+        data = db
 
         # Name-based facets are ordered ascending by default (A-Z).
         for order in (Facets.ORDER_TITLE, Facets.ORDER_AUTHOR):
@@ -612,11 +605,11 @@ class TestFacets:
             )
             assert False == f.order_ascending
 
-    def test_navigate(self, database_transaction: DatabaseTransactionFixture):
+    def test_navigate(self, db):
         """Test the ability of navigate() to move between slight
         variations of a FeaturedFacets object.
         """
-        data = database_transaction
+        data = db
         F = Facets
 
         ebooks = EbooksEntryPoint
@@ -653,8 +646,8 @@ class TestFacets:
         assert F.ORDER_TITLE == different_entrypoint.order
         assert audiobooks == different_entrypoint.entrypoint
 
-    def test_from_request(self, database_transaction: DatabaseTransactionFixture):
-        data = database_transaction
+    def test_from_request(self, db):
+        data = db
         library = data.default_library()
 
         library.setting(EntryPoint.ENABLED_SETTING).value = json.dumps(
@@ -726,10 +719,8 @@ class TestFacets:
             == invalid_collection.detail
         )
 
-    def test_from_request_gets_available_facets_through_hook_methods(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data = database_transaction
+    def test_from_request_gets_available_facets_through_hook_methods(self, db):
+        data = db
         # Available and default facets are determined by calling the
         # available_facets() and default_facets() methods. This gives
         # subclasses a chance to add extra facets or change defaults.
@@ -783,10 +774,8 @@ class TestFacets:
         assert Facets.AVAILABLE_OPEN_ACCESS == result.availability
         assert Facets.COLLECTION_FULL == result.collection
 
-    def test_modify_search_filter(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data = database_transaction
+    def test_modify_search_filter(self, db):
+        data = db
 
         # Test superclass behavior -- filter is modified by entrypoint.
         facets = Facets(
@@ -832,10 +821,8 @@ class TestFacets:
         facets.modify_search_filter(filter)
         assert None == filter.order
 
-    def test_modify_database_query(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_modify_database_query(self, db):
+        data, session = db, db.session()
 
         # Make sure that modify_database_query handles the various
         # reasons why a book might or might not be 'available'.
@@ -921,10 +908,8 @@ class TestDefaultSortOrderFacets:
                 config, group_name
             )
 
-    def test_sort_order_rearrangement(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data = database_transaction
+    def test_sort_order_rearrangement(self, db):
+        data = db
         config = data.default_library()
 
         # Test the case where a DefaultSortOrderFacets does nothing but
@@ -950,8 +935,8 @@ class TestDefaultSortOrderFacets:
         assert Facets.ORDER_TITLE == title_first_orders[0]
         assert default_orders[0] != Facets.ORDER_TITLE
 
-    def test_new_sort_order(self, database_transaction: DatabaseTransactionFixture):
-        data = database_transaction
+    def test_new_sort_order(self, db):
+        data = db
         config = data.default_library()
 
         # Test the case where DefaultSortOrderFacets adds a sort order
@@ -978,8 +963,8 @@ class TestDefaultSortOrderFacets:
 
 
 class TestDatabaseBackedFacets:
-    def test_available_facets(self, database_transaction: DatabaseTransactionFixture):
-        data = database_transaction
+    def test_available_facets(self, db):
+        data = db
         # The only available sort orders are the ones that map
         # directly onto a database field.
 
@@ -1009,8 +994,8 @@ class TestDatabaseBackedFacets:
                 data.default_library(), group
             ) == f2.available_facets(data.default_library(), group)
 
-    def test_default_facets(self, database_transaction: DatabaseTransactionFixture):
-        data = database_transaction
+    def test_default_facets(self, db):
+        data = db
         # If the configured default sort order is not available,
         # DatabaseBackedFacets chooses the first enabled sort order.
         f1 = Facets
@@ -1057,8 +1042,8 @@ class TestDatabaseBackedFacets:
         config.enabled = [FacetConstants.ORDER_ADDED_TO_COLLECTION]
         assert f2.ORDER_WORK_ID == f2.default_facet(config, f2.ORDER_FACET_GROUP_NAME)
 
-    def test_order_by(self, database_transaction: DatabaseTransactionFixture):
-        data = database_transaction
+    def test_order_by(self, db):
+        data = db
         E = Edition
         W = Work
 
@@ -1103,10 +1088,8 @@ class TestDatabaseBackedFacets:
         actual = order(Facets.ORDER_ADDED_TO_COLLECTION, True)
         compare(expect, actual)
 
-    def test_modify_database_query(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_modify_database_query(self, db):
+        data, session = db, db.session()
         # Set up works that are matched by different types of collections.
 
         # A high-quality open-access work.
@@ -1233,8 +1216,8 @@ class TestFeaturedFacets:
         # filed as a grouped feed.
         assert CachedFeed.GROUPS_TYPE == FeaturedFacets.CACHED_FEED_TYPE
 
-    def test_default(self, database_transaction: DatabaseTransactionFixture):
-        data = database_transaction
+    def test_default(self, db):
+        data = db
         # Check how FeaturedFacets gets its minimum_featured_quality value.
 
         library1 = data.default_library()
@@ -1326,8 +1309,8 @@ class TestSearchFacets:
         assert order == with_order.order
         assert SearchFacets.DEFAULT_MIN_SCORE == with_order.min_score
 
-    def test_from_request(self, database_transaction: DatabaseTransactionFixture):
-        data = database_transaction
+    def test_from_request(self, db):
+        data = db
         # An HTTP client can customize which SearchFacets object
         # is created by sending different HTTP requests.
 
@@ -1408,10 +1391,8 @@ class TestSearchFacets:
         assert None == facets.media
         assert None == facets.languages
 
-    def test_from_request_from_admin_search(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data = database_transaction
+    def test_from_request_from_admin_search(self, db):
+        data = db
         # If the SearchFacets object is being created by a search run from the admin interface,
         # there might be order and language arguments which should be used to filter search results.
 
@@ -1652,11 +1633,9 @@ class TestPagination:
         assert Pagination.MAX_SIZE == pagination.size
         assert 0 == pagination.offset
 
-    def test_has_next_page_total_size(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_has_next_page_total_size(self, db):
         """Test the ability of Pagination.total_size to control whether there is a next page."""
-        data = database_transaction
+        data = db
         session = data.session()
 
         query = session.query(Work)
@@ -1694,11 +1673,9 @@ class TestPagination:
         assert False == pagination.has_next_page
         assert None == pagination.next_page
 
-    def test_has_next_page_this_page_size(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_has_next_page_this_page_size(self, db):
         """Test the ability of Pagination.this_page_size to control whether there is a next page."""
-        data = database_transaction
+        data = db
         session = data.session()
 
         query = session.query(Work)
@@ -1783,8 +1760,8 @@ class MockWorks(WorkList):
 
 
 class TestWorkList:
-    def test_initialize(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_initialize(self, db):
+        data, session = db, db.session()
         wl = WorkList()
         child = WorkList()
         child.initialize(data.default_library())
@@ -1829,10 +1806,8 @@ class TestWorkList:
         # Works in this list.
         assert None == worklist.collection_ids
 
-    def test_initialize_with_customlists(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_initialize_with_customlists(self, db):
+        data, session = db, db.session()
 
         gutenberg = DataSource.lookup(session, DataSource.GUTENBERG)
 
@@ -1861,10 +1836,8 @@ class TestWorkList:
         assert [customlist1.id, customlist2.id] == worklist.customlist_ids
         assert gutenberg.id == worklist.list_datasource_id
 
-    def test_initialize_without_library(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_initialize_without_library(self, db):
+        data, session = db, db.session()
 
         wl = WorkList()
         sf, ignore = Genre.lookup(session, "Science Fiction")
@@ -1881,10 +1854,8 @@ class TestWorkList:
         # in on the constructor.
         assert set(wl.genre_ids) == {x.id for x in [sf, romance]}
 
-    def test_initialize_uses_append_child_hook_method(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_initialize_uses_append_child_hook_method(self, db):
+        data, session = db, db.session()
 
         # When a WorkList is initialized with children, the children
         # are passed individually through the append_child() hook
@@ -1905,11 +1876,9 @@ class TestWorkList:
         # default append_child() implementation does.
         assert [child] == parent.children
 
-    def test_top_level_for_library(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_top_level_for_library(self, db):
         """Test the ability to generate a top-level WorkList."""
-        data, session = database_transaction, database_transaction.session()
+        data, session = db, db.session()
 
         # These two top-level lanes should be children of the WorkList.
         lane1 = data.lane(display_name="Top-level Lane 1")
@@ -1950,8 +1919,8 @@ class TestWorkList:
         assert [] == wl.children
         assert Edition.FULFILLABLE_MEDIA == wl.media
 
-    def test_audience_key(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_audience_key(self, db):
+        data, session = db, db.session()
 
         wl = WorkList()
         wl.initialize(library=data.default_library())
@@ -1986,9 +1955,9 @@ class TestWorkList:
         wl = WorkList()
         assert [wl] == wl.hierarchy
 
-    def test_visible_children(self, database_transaction: DatabaseTransactionFixture):
+    def test_visible_children(self, db):
         """Invisible children don't show up in WorkList.visible_children."""
-        data, session = database_transaction, database_transaction.session()
+        data, session = db, db.session()
 
         wl = WorkList()
         visible = data.lane()
@@ -1999,11 +1968,9 @@ class TestWorkList:
         wl.initialize(data.default_library(), children=[visible, invisible, child_wl])
         assert {child_wl, visible} == set(wl.visible_children)
 
-    def test_visible_children_sorted(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
+    def test_visible_children_sorted(self, db):
         """Visible children are sorted by priority and then by display name."""
-        data, session = database_transaction, database_transaction.session()
+        data, session = db, db.session()
 
         wl = WorkList()
 
@@ -2026,10 +1993,8 @@ class TestWorkList:
         wl_child.priority = 0
         assert [wl_child, lane_child] == wl.visible_children
 
-    def test_is_self_or_descendant(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_is_self_or_descendant(self, db):
+        data, session = db, db.session()
         # Test the code that checks whether one WorkList is 'beneath'
         # another.
 
@@ -2076,8 +2041,8 @@ class TestWorkList:
         assert False == parent.is_self_or_descendant(child)
         assert False == grandparent.is_self_or_descendant(parent)
 
-    def test_accessible_to(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_accessible_to(self, db):
+        data, session = db, db.session()
         # Test the circumstances under which a Patron may or may not access a
         # WorkList.
 
@@ -2147,8 +2112,8 @@ class TestWorkList:
             ]
         )
 
-    def test_uses_customlists(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_uses_customlists(self, db):
+        data, session = db, db.session()
         """A WorkList is said to use CustomLists if either ._customlist_ids
         or .list_datasource_id is set.
         """
@@ -2170,8 +2135,8 @@ class TestWorkList:
         wl = WorkList()
         assert OPDSFeed.DEFAULT_MAX_AGE == wl.max_cache_age(object())
 
-    def test_filter(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_filter(self, db):
+        data, session = db, db.session()
         # Verify that filter() calls modify_search_filter_hook()
         # and can handle either a new Filter being returned or a Filter
         # modified in place.
@@ -2201,10 +2166,10 @@ class TestWorkList:
 
     def test_groups(
         self,
-        database_transaction: DatabaseTransactionFixture,
+        db,
         external_search_patch_fixture: ExternalSearchPatchFixture,
     ):
-        data, session = database_transaction, database_transaction.session()
+        data, session = db, db.session()
 
         w1 = MockWork(1)
         w2 = MockWork(2)
@@ -2239,10 +2204,8 @@ class TestWorkList:
         assert (w2, child2) == wwl2
         assert (w1, child2) == wwl3
 
-    def test_groups_propagates_facets(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_groups_propagates_facets(self, db):
+        data, session = db, db.session()
 
         # Verify that the Facets object passed into groups() is
         # propagated to the methods called by groups().
@@ -2311,8 +2274,8 @@ class TestWorkList:
         # _groups_for_lanes was not called.
         assert None == mock._groups_for_lanes_called_with
 
-    def test_works(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_works(self, db):
+        data, session = db, db.session()
 
         # Test the method that uses the search index to fetch a list of
         # results appropriate for a given WorkList.
@@ -2373,8 +2336,8 @@ class TestWorkList:
         # the return value of works(), the method we're testing.
         assert wl.fake_work_list == result
 
-    def test_works_for_hits(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_works_for_hits(self, db):
+        data, session = db, db.session()
 
         # Verify that WorkList.works_for_hits() just calls
         # works_for_resultsets().
@@ -2395,10 +2358,8 @@ class TestWorkList:
         # return value of works_for_hits().
         assert ["some", "results"] == results
 
-    def test_works_for_resultsets(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_works_for_resultsets(self, db):
+        data, session = db, db.session()
 
         # Verify that WorkList.works_for_resultsets turns lists of
         # (mocked) Hit objects into lists of Work or WorkSearchResult
@@ -2471,8 +2432,8 @@ class TestWorkList:
         wl = WorkList()
         assert wl == wl.search_target
 
-    def test_search(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_search(self, db):
+        data, session = db, db.session()
 
         # Test the successful execution of WorkList.search()
 
@@ -2543,8 +2504,8 @@ class TestWorkList:
         ] == filter.audiences
         assert ["chi"] == filter.languages
 
-    def test_search_failures(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_search_failures(self, db):
+        data, session = db, db.session()
 
         # Test reasons why WorkList.search() might not work.
         wl = WorkList()
@@ -2569,10 +2530,8 @@ class TestWorkList:
 
         assert [] == wl.search(session, query, RaisesException())
 
-    def test_worklist_for_resultset_no_holds_allowed(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_worklist_for_resultset_no_holds_allowed(self, db):
+        data, session = db, db.session()
 
         wl = WorkList()
         wl.initialize(data.default_library())
@@ -2653,10 +2612,8 @@ class TestWorkList:
 
 
 class TestDatabaseBackedWorkList:
-    def test_works_from_database(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_works_from_database(self, db):
+        data, session = db, db.session()
 
         # Verify that the works_from_database() method calls the
         # methods we expect, in the right order.
@@ -2851,10 +2808,8 @@ class TestDatabaseBackedWorkList:
         # triggered.
         assert "some other field" == result._distinct
 
-    def test_works_from_database_end_to_end(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_works_from_database_end_to_end(self, db):
+        data, session = db, db.session()
 
         # Verify that works_from_database() correctly locates works
         # that match the criteria specified by the
@@ -2955,8 +2910,8 @@ class TestDatabaseBackedWorkList:
         facets.availability = Facets.AVAILABLE_OPEN_ACCESS
         assert 0 == wl.works_from_database(session, facets).count()
 
-    def test_base_query(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_base_query(self, db):
+        data, session = db, db.session()
 
         # Verify that base_query makes the query we expect and then
         # calls some optimization methods (not tested).
@@ -2982,10 +2937,8 @@ class TestDatabaseBackedWorkList:
         assert "_modify_loading" == m
         assert "_defer_unused_fields" == d
 
-    def test_bibliographic_filter_clauses(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_bibliographic_filter_clauses(self, db):
+        data, session = db, db.session()
 
         called = dict()
 
@@ -3107,10 +3060,8 @@ class TestDatabaseBackedWorkList:
         assert str(fiction) == str(Work.fiction == True)
         assert str(datasource) == str(LicensePool.data_source_id == overdrive.id)
 
-    def test_bibliographic_filter_clauses_end_to_end(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_bibliographic_filter_clauses_end_to_end(self, db):
+        data, session = db, db.session()
 
         # Verify that bibliographic_filter_clauses generates
         # SQLAlchemy clauses that give the expected results when
@@ -3250,10 +3201,8 @@ class TestDatabaseBackedWorkList:
         english_sf.genres.append(short_stories)
         worklist_has_books([english_sf], sf_shorts)
 
-    def test_age_range_filter_clauses_end_to_end(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_age_range_filter_clauses_end_to_end(self, db):
+        data, session = db, db.session()
 
         # Standalone test of age_range_filter_clauses().
         def worklist_has_books(expect, **wl_args):
@@ -3300,10 +3249,8 @@ class TestDatabaseBackedWorkList:
         # shows up despite having no target age at all.
         worklist_has_books([adult], target_age=(16, 18))
 
-    def test_audience_filter_clauses(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_audience_filter_clauses(self, db):
+        data, session = db, db.session()
 
         # Verify that audience_filter_clauses restricts a query to
         # reflect a DatabaseBackedWorkList's audience filter.
@@ -3341,10 +3288,8 @@ class TestDatabaseBackedWorkList:
         # If no particular audiences are specified, no books are filtered.
         assert {adult, children} == set(for_audiences())
 
-    def test_customlist_filter_clauses(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_customlist_filter_clauses(self, db):
+        data, session = db, db.session()
 
         # Standalone test of customlist_filter_clauses
 
@@ -3476,10 +3421,8 @@ class TestDatabaseBackedWorkList:
             assert [] == _run(both_lists_qu, both_lists_clauses)
             l.add_entry(work)
 
-    def test_works_from_database_with_superceded_pool(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_works_from_database_with_superceded_pool(self, db):
+        data, session = db, db.session()
 
         work = data.work(with_license_pool=True)
         work.license_pools[0].superceded = True
@@ -3495,8 +3438,8 @@ class TestDatabaseBackedWorkList:
 class TestHierarchyWorkList:
     """Test HierarchyWorkList in terms of its two subclasses, Lane and TopLevelWorkList."""
 
-    def test_accessible_to(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_accessible_to(self, db):
+        data, session = db, db.session()
 
         # In addition to the general tests imposed by WorkList, a Lane
         # is only accessible to a patron if it is a descendant of
@@ -3542,17 +3485,17 @@ class TestHierarchyWorkList:
 
 
 class TestLane:
-    def test_get_library(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_get_library(self, db):
+        data, session = db, db.session()
 
         lane = data.lane()
         assert data.default_library() == lane.get_library(session)
 
-    def test_list_datasource(self, database_transaction: DatabaseTransactionFixture):
+    def test_list_datasource(self, db):
         """Test setting and retrieving the DataSource object and
         the underlying ID.
         """
-        data, session = database_transaction, database_transaction.session()
+        data, session = db, db.session()
         lane = data.lane()
 
         # This lane is based on a specific CustomList.
@@ -3573,17 +3516,17 @@ class TestLane:
         # The lane is now based on two CustomLists instead of one.
         assert {customlist1.id, customlist2.id} == set(lane.customlist_ids)
 
-    def test_set_audiences(self, database_transaction: DatabaseTransactionFixture):
+    def test_set_audiences(self, db):
         """Setting Lane.audiences to a single value will
         auto-convert it into a list containing one value.
         """
-        data, session = database_transaction, database_transaction.session()
+        data, session = db, db.session()
         lane = data.lane()
         lane.audiences = Classifier.AUDIENCE_ADULT
         assert [Classifier.AUDIENCE_ADULT] == lane.audiences
 
-    def test_update_size(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_update_size(self, db):
+        data, session = db, db.session()
 
         class Mock:
             # Mock the ExternalSearchIndex.count_works() method to
@@ -3626,8 +3569,8 @@ class TestLane:
         } == fiction.size_by_entrypoint
         assert 102 == fiction.size
 
-    def test_visibility(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_visibility(self, db):
+        data, session = db, db.session()
 
         parent = data.lane()
         visible_child = data.lane(parent=parent)
@@ -3645,8 +3588,8 @@ class TestLane:
         assert True == grandchild._visible
         assert False == grandchild.visible
 
-    def test_parentage(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_parentage(self, db):
+        data, session = db, db.session()
 
         worklist = WorkList()
         worklist.display_name = "A WorkList"
@@ -3688,10 +3631,8 @@ class TestLane:
             list(lane.parentage)
         assert "Lane parentage loop detected" in str(excinfo.value)
 
-    def test_is_self_or_descendant(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_is_self_or_descendant(self, db):
+        data, session = db, db.session()
         # Test the code that checks whether one Lane is 'beneath'
         # a WorkList.
 
@@ -3717,35 +3658,31 @@ class TestLane:
         assert False == child.is_self_or_descendant(top_level)
         assert False == parent.is_self_or_descendant(top_level)
 
-    def test_depth(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_depth(self, db):
+        data, session = db, db.session()
         child = data.lane("sublane")
         parent = data.lane("parent")
         parent.sublanes.append(child)
         assert 0 == parent.depth
         assert 1 == child.depth
 
-    def test_url_name(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_url_name(self, db):
+        data, session = db, db.session()
         lane = data.lane("Fantasy / Science Fiction")
         assert lane.id == lane.url_name
 
-    def test_display_name_for_all(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_display_name_for_all(self, db):
+        data, session = db, db.session()
         lane = data.lane("Fantasy / Science Fiction")
         assert "All Fantasy / Science Fiction" == lane.display_name_for_all
 
-    def test_entrypoints(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_entrypoints(self, db):
+        data, session = db, db.session()
         """Currently a Lane can never have entrypoints."""
         assert [] == data.lane().entrypoints
 
-    def test_affected_by_customlist(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_affected_by_customlist(self, db):
+        data, session = db, db.session()
 
         # Two lists.
         l1, ignore = data.customlist(
@@ -3777,8 +3714,8 @@ class TestLane:
         assert [lane2] == Lane.affected_by_customlist(l1).all()
         assert 0 == Lane.affected_by_customlist(l2).count()
 
-    def test_inherited_value(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_inherited_value(self, db):
+        data, session = db, db.session()
         # Test WorkList.inherited_value.
         #
         # It's easier to test this in Lane because WorkLists can't have
@@ -3811,8 +3748,8 @@ class TestLane:
         nonfiction_sublane.inherit_parent_restrictions = True
         assert False == nonfiction_sublane.inherited_value("fiction")
 
-    def test_inherited_values(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_inherited_values(self, db):
+        data, session = db, db.session()
         # Test WorkList.inherited_values.
         #
         # It's easier to test this in Lane because WorkLists can't have
@@ -3846,10 +3783,8 @@ class TestLane:
             staff_picks_lane.inherited_values("customlists")
         )
 
-    def test_setting_target_age_locks_audiences(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_setting_target_age_locks_audiences(self, db):
+        data, session = db, db.session()
         lane = data.lane()
         lane.target_age = (16, 18)
         assert sorted(
@@ -3880,17 +3815,15 @@ class TestLane:
         # But now you can modify .audiences.
         lane.audiences = [Classifier.AUDIENCE_CHILDREN]
 
-    def test_target_age_treats_all_adults_equally(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_target_age_treats_all_adults_equally(self, db):
+        data, session = db, db.session()
         """We don't distinguish between different age groups for adults."""
         lane = data.lane()
         lane.target_age = (35, 40)
         assert tuple_to_numericrange((18, 18)) == lane.target_age
 
-    def test_uses_customlists(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_uses_customlists(self, db):
+        data, session = db, db.session()
         lane = data.lane()
         assert False == lane.uses_customlists
 
@@ -3914,8 +3847,8 @@ class TestLane:
         child.inherit_parent_restrictions = True
         assert True == child.uses_customlists
 
-    def test_genre_ids(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_genre_ids(self, db):
+        data, session = db, db.session()
         # By default, when you add a genre to a lane, you are saying
         # that Works classified under it and all its subgenres should
         # show up in the lane.
@@ -3969,8 +3902,8 @@ class TestLane:
         assert len(no_inclusive_genres.genre_ids) > 10
         assert science_fiction.id not in no_inclusive_genres.genre_ids
 
-    def test_customlist_ids(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_customlist_ids(self, db):
+        data, session = db, db.session()
         # WorkLists always return None for customlist_ids.
         wl = WorkList()
         wl.initialize(data.default_library())
@@ -4001,8 +3934,8 @@ class TestLane:
         has_no_lists.list_datasource = DataSource.lookup(session, DataSource.OVERDRIVE)
         assert [] == has_no_lists.customlist_ids
 
-    def test_search_target(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_search_target(self, db):
+        data, session = db, db.session()
 
         # A Lane that is the root for a patron type can be
         # searched.
@@ -4097,8 +4030,8 @@ class TestLane:
         ] == target.audiences
         assert [Edition.BOOK_MEDIUM] == target.media
 
-    def test_search(self, database_transaction: DatabaseTransactionFixture):
-        data, session = database_transaction, database_transaction.session()
+    def test_search(self, db):
+        data, session = db, db.session()
         # Searching a Lane calls search() on its search_target.
         #
         # TODO: This test could be trimmed down quite a bit with
@@ -4130,10 +4063,8 @@ class TestLane:
         )
         assert results == target_results
 
-    def test_search_propagates_facets(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_search_propagates_facets(self, db):
+        data, session = db, db.session()
         """Lane.search propagates facets when calling search() on
         its search target.
         """
@@ -4164,8 +4095,8 @@ class TestLane:
         Lane.search_target = old_lane_search_target
         WorkList.search = old_wl_search
 
-    def test_explain(self, database_transaction: DatabaseTransactionFixture):
-        tr, session = database_transaction, database_transaction.session()
+    def test_explain(self, db):
+        tr, session = db, db.session()
         parent = tr.lane(display_name="Parent")
         parent.priority = 1
         child = tr.lane(parent=parent, display_name="Child")
@@ -4187,10 +4118,8 @@ class TestLane:
             "Display name: Child",
         ] == data
 
-    def test_groups_propagates_facets(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        data, session = database_transaction, database_transaction.session()
+    def test_groups_propagates_facets(self, db):
+        data, session = db, db.session()
         # Lane.groups propagates a received Facets object into
         # _groups_for_lanes.
         def mock(self, _db, relevant_lanes, queryable_lanes, facets, *args, **kwargs):
@@ -4234,8 +4163,8 @@ class TestWorkListGroupsEndToEnd:
     ) -> TestWorkListGroupsEndToEndData:
         fixture = end_to_end_search_fixture
         data, session = (
-            fixture.external_search.transaction,
-            fixture.external_search.transaction.session(),
+            fixture.external_search.db,
+            fixture.external_search.db.session(),
         )
 
         def _w(**kwargs):
@@ -4298,8 +4227,8 @@ class TestWorkListGroupsEndToEnd:
     ):
         fixture = end_to_end_search_fixture
         data, session = (
-            fixture.external_search.transaction,
-            fixture.external_search.transaction.session(),
+            fixture.external_search.db,
+            fixture.external_search.db.session(),
         )
         if not fixture.external_search.search:
             return
@@ -4591,11 +4520,11 @@ def random_seed_fixture() -> RandomSeedFixture:
 class TestWorkListGroups:
     def test_groups_for_lanes_adapts_facets(
         self,
-        database_transaction: DatabaseTransactionFixture,
+        db,
         random_seed_fixture: RandomSeedFixture,
         external_search_patch_fixture: ExternalSearchPatchFixture,
     ):
-        data, session = database_transaction, database_transaction.session()
+        data, session = db, db.session()
         # Verify that _groups_for_lanes gives each of a WorkList's
         # non-queryable children the opportunity to adapt the incoming
         # FeaturedFacets objects to its own needs.
@@ -4684,10 +4613,10 @@ class TestWorkListGroups:
 
     def test_featured_works_with_lanes(
         self,
-        database_transaction: DatabaseTransactionFixture,
+        db,
         random_seed_fixture: RandomSeedFixture,
     ):
-        data, session = database_transaction, database_transaction.session()
+        data, session = db, db.session()
         # _featured_works_with_lanes builds a list of queries and
         # passes the list into search_engine.works_query_multi(). It
         # passes the search results into works_for_resultsets() to
@@ -4830,10 +4759,10 @@ class TestWorkListGroups:
 
     def test__size_for_facets(
         self,
-        database_transaction: DatabaseTransactionFixture,
+        db,
         random_seed_fixture: RandomSeedFixture,
     ):
-        data, session = database_transaction, database_transaction.session()
+        data, session = db, db.session()
 
         lane = data.lane()
         m = lane._size_for_facets

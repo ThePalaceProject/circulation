@@ -14,9 +14,9 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 @pytest.fixture()
 def equivalency_coverage_record_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db: DatabaseTransactionFixture,
 ) -> ExampleEquivalencyCoverageRecordFixture:
-    return ExampleEquivalencyCoverageRecordFixture(database_transaction)
+    return ExampleEquivalencyCoverageRecordFixture(db)
 
 
 class EquivalentCoverageFixture:

@@ -11,13 +11,7 @@ from lxml import etree
 from psycopg2.extras import NumericRange
 from sqlalchemy.orm import Session
 
-from core.classifier import (
-    Classifier,
-    Contemporary_Romance,
-    Epic_Fantasy,
-    Fantasy,
-    History,
-)
+from core.classifier import Classifier, Contemporary_Romance, Epic_Fantasy, Fantasy
 from core.config import Configuration, temp_config
 from core.entrypoint import (
     AudiobooksEntryPoint,
@@ -66,11 +60,9 @@ from tests.fixtures.search import ExternalSearchPatchFixture
 
 
 class TestBaseAnnotator:
-    def test_authors(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
-
+    def test_authors(self, db: DatabaseTransactionFixture):
         # Create an Edition with an author and a narrator.
-        edition = transaction.edition(authors=[])
+        edition = db.edition(authors=[])
         edition.add_contributor("Steven King", Contributor.PRIMARY_AUTHOR_ROLE)
         edition.add_contributor("Jonathan Frakes", Contributor.NARRATOR_ROLE)
         author, contributor = sorted(
@@ -97,12 +89,8 @@ class TestBaseAnnotator:
             == contributor.attrib[role_attrib]
         )
 
-    def test_annotate_work_entry_adds_tags(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
-
-        work = transaction.work(with_license_pool=True, with_open_access_download=True)
+    def test_annotate_work_entry_adds_tags(self, db: DatabaseTransactionFixture):
+        work = db.work(with_license_pool=True, with_open_access_download=True)
         work.last_update_time = datetime_utc(2018, 2, 5, 7, 39, 49, 580651)
         [pool] = work.license_pools
         pool.availability_time = datetime_utc(2015, 1, 1)
@@ -148,29 +136,29 @@ class TestBaseAnnotator:
 
 
 class TestAnnotatorsFixture:
-    transaction: DatabaseTransactionFixture
+    db: DatabaseTransactionFixture
     session: Session
 
 
 @pytest.fixture
 def annotators_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db,
 ) -> TestAnnotatorsFixture:
     fix = TestAnnotatorsFixture()
-    fix.transaction = database_transaction
-    fix.session = database_transaction.session()
+    fix.db = db
+    fix.session = db.session()
     return fix
 
 
 class TestAnnotators:
     def test_all_subjects(self, annotators_fixture: TestAnnotatorsFixture):
-        data, transaction, session = (
+        data, db, session = (
             annotators_fixture,
-            annotators_fixture.transaction,
+            annotators_fixture.db,
             annotators_fixture.session,
         )
 
-        data.work = transaction.work(genre="Fiction", with_open_access_download=True)
+        data.work = db.work(genre="Fiction", with_open_access_download=True)
         edition = data.work.presentation_edition
         identifier = edition.primary_identifier
         source1 = DataSource.lookup(session, DataSource.GUTENBERG)
@@ -239,13 +227,13 @@ class TestAnnotators:
         ] == category_tags[genre_uri]
 
     def test_appeals(self, annotators_fixture: TestAnnotatorsFixture):
-        data, transaction, session = (
+        data, db, session = (
             annotators_fixture,
-            annotators_fixture.transaction,
+            annotators_fixture.db,
             annotators_fixture.session,
         )
 
-        work = transaction.work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
         work.appeal_language = 0.1
         work.appeal_character = 0.2
         work.appeal_story = 0.3
@@ -267,13 +255,13 @@ class TestAnnotators:
         assert set(expect) == set(actual)
 
     def test_detailed_author(self, annotators_fixture: TestAnnotatorsFixture):
-        data, transaction, session = (
+        data, db, session = (
             annotators_fixture,
-            annotators_fixture.transaction,
+            annotators_fixture.db,
             annotators_fixture.session,
         )
 
-        c, ignore = transaction.contributor("Familyname, Givenname")
+        c, ignore = db.contributor("Familyname, Givenname")
         c.display_name = "Givenname Familyname"
         c.family_name = "Familyname"
         c.wikipedia_name = "Givenname Familyname (Author)"
@@ -291,7 +279,7 @@ class TestAnnotators:
         assert "<schema:sameas>http://viaf.org/viaf/100</" in tag_string
         assert "<schema:sameas>http://id.loc.gov/authorities/names/n100</"
 
-        work = transaction.work(authors=[], with_license_pool=True)
+        work = db.work(authors=[], with_license_pool=True)
         work.presentation_edition.add_contributor(c, Contributor.PRIMARY_AUTHOR_ROLE)
 
         [same_tag] = VerboseAnnotator.authors(work, work.presentation_edition)
@@ -300,15 +288,15 @@ class TestAnnotators:
     def test_duplicate_author_names_are_ignored(
         self, annotators_fixture: TestAnnotatorsFixture
     ):
-        data, transaction, session = (
+        data, db, session = (
             annotators_fixture,
-            annotators_fixture.transaction,
+            annotators_fixture.db,
             annotators_fixture.session,
         )
 
         # Ignores duplicate author names
-        work = transaction.work(with_license_pool=True)
-        duplicate = transaction.contributor()[0]
+        work = db.work(with_license_pool=True)
+        duplicate = db.contributor()[0]
         duplicate.sort_name = work.author
 
         edition = work.presentation_edition
@@ -319,19 +307,19 @@ class TestAnnotators:
     def test_all_annotators_mention_every_relevant_author(
         self, annotators_fixture: TestAnnotatorsFixture
     ):
-        data, transaction, session = (
+        data, db, session = (
             annotators_fixture,
-            annotators_fixture.transaction,
+            annotators_fixture.db,
             annotators_fixture.session,
         )
 
-        work = transaction.work(authors=[], with_license_pool=True)
+        work = db.work(authors=[], with_license_pool=True)
         edition = work.presentation_edition
 
-        primary_author, ignore = transaction.contributor()
-        author, ignore = transaction.contributor()
-        illustrator, ignore = transaction.contributor()
-        barrel_washer, ignore = transaction.contributor()
+        primary_author, ignore = db.contributor()
+        author, ignore = db.contributor()
+        illustrator, ignore = db.contributor()
+        barrel_washer, ignore = db.contributor()
 
         edition.add_contributor(primary_author, Contributor.PRIMARY_AUTHOR_ROLE)
         edition.add_contributor(author, Contributor.AUTHOR_ROLE)
@@ -357,25 +345,24 @@ class TestAnnotators:
             ]
 
     def test_ratings(self, annotators_fixture: TestAnnotatorsFixture):
-        data, transaction, session = (
+        data, db, session = (
             annotators_fixture,
-            annotators_fixture.transaction,
+            annotators_fixture.db,
             annotators_fixture.session,
         )
 
-        work = transaction.work(with_license_pool=True, with_open_access_download=True)
+        work = db.work(with_license_pool=True, with_open_access_download=True)
         work.quality = 1.0 / 3
         work.popularity = 0.25
         work.rating = 0.6
         work.calculate_opds_entries(verbose=True)
         feed = AcquisitionFeed(
             session,
-            transaction.fresh_str(),
-            transaction.fresh_url(),
+            db.fresh_str(),
+            db.fresh_url(),
             [work],
             VerboseAnnotator,
         )
-        url = transaction.fresh_url()
         tag = feed.create_entry(work, None)
 
         nsmap = dict(schema="http://schema.org/")
@@ -394,21 +381,21 @@ class TestAnnotators:
         assert set(expected) == set(ratings)
 
     def test_subtitle(self, annotators_fixture: TestAnnotatorsFixture):
-        data, transaction, session = (
+        data, db, session = (
             annotators_fixture,
-            annotators_fixture.transaction,
+            annotators_fixture.db,
             annotators_fixture.session,
         )
 
-        work = transaction.work(with_license_pool=True, with_open_access_download=True)
+        work = db.work(with_license_pool=True, with_open_access_download=True)
         work.presentation_edition.subtitle = "Return of the Jedi"
         work.calculate_opds_entries()
 
         raw_feed = str(
             AcquisitionFeed(
                 session,
-                transaction.fresh_str(),
-                transaction.fresh_url(),
+                db.fresh_str(),
+                db.fresh_url(),
                 [work],
                 Annotator,
             )
@@ -426,8 +413,8 @@ class TestAnnotators:
         raw_feed = str(
             AcquisitionFeed(
                 session,
-                transaction.fresh_str(),
-                transaction.fresh_url(),
+                db.fresh_str(),
+                db.fresh_url(),
                 [work],
                 Annotator,
             )
@@ -439,13 +426,13 @@ class TestAnnotators:
         assert "schema_alternativeheadline" not in list(entry.items())
 
     def test_series(self, annotators_fixture: TestAnnotatorsFixture):
-        data, transaction, session = (
+        data, db, session = (
             annotators_fixture,
-            annotators_fixture.transaction,
+            annotators_fixture.db,
             annotators_fixture.session,
         )
 
-        work = transaction.work(with_license_pool=True, with_open_access_download=True)
+        work = db.work(with_license_pool=True, with_open_access_download=True)
         work.presentation_edition.series = "Harry Otter and the Lifetime of Despair"
         work.presentation_edition.series_position = 4
         work.calculate_opds_entries()
@@ -453,8 +440,8 @@ class TestAnnotators:
         raw_feed = str(
             AcquisitionFeed(
                 session,
-                transaction.fresh_str(),
-                transaction.fresh_url(),
+                db.fresh_str(),
+                db.fresh_url(),
                 [work],
                 Annotator,
             )
@@ -477,8 +464,8 @@ class TestAnnotators:
         raw_feed = str(
             AcquisitionFeed(
                 session,
-                transaction.fresh_str(),
-                transaction.fresh_url(),
+                db.fresh_str(),
+                db.fresh_url(),
                 [work],
                 Annotator,
             )
@@ -500,8 +487,8 @@ class TestAnnotators:
         raw_feed = str(
             AcquisitionFeed(
                 session,
-                transaction.fresh_str(),
-                transaction.fresh_url(),
+                db.fresh_str(),
+                db.fresh_url(),
                 [work],
                 Annotator,
             )
@@ -513,13 +500,13 @@ class TestAnnotators:
         assert "schema_series" not in list(entry.items())
 
     def test_samples(self, annotators_fixture: TestAnnotatorsFixture):
-        data, transaction, session = (
+        data, db, session = (
             annotators_fixture,
-            annotators_fixture.transaction,
+            annotators_fixture.db,
             annotators_fixture.session,
         )
 
-        work = transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         edition = work.presentation_edition
 
         resource = Resource(url="sampleurl")
@@ -535,7 +522,7 @@ class TestAnnotators:
         session.add(sample_link)
         session.commit()
 
-        with DBStatementCounter(transaction.database().connection()) as counter:
+        with DBStatementCounter(db.database().connection()) as counter:
             links = Annotator.samples(edition)
             count = counter.count
 
@@ -547,7 +534,7 @@ class TestAnnotators:
 
 
 class TestOPDSFixture:
-    transaction: DatabaseTransactionFixture
+    db: DatabaseTransactionFixture
     fiction: Lane
     fantasy: Lane
     romance: Lane
@@ -556,29 +543,27 @@ class TestOPDSFixture:
 
 
 @pytest.fixture
-def opds_fixture(database_transaction: DatabaseTransactionFixture) -> TestOPDSFixture:
+def opds_fixture(db: DatabaseTransactionFixture) -> TestOPDSFixture:
     data = TestOPDSFixture()
-    data.transaction = database_transaction
-    data.fiction = database_transaction.lane("Fiction")
+    data.db = db
+    data.fiction = db.lane("Fiction")
     data.fiction.fiction = True
     data.fiction.audiences = [Classifier.AUDIENCE_ADULT]
 
-    data.fantasy = database_transaction.lane(
-        "Fantasy", parent=data.fiction, genres="Fantasy"
-    )
-    data.history = database_transaction.lane("History", genres="History")
-    data.ya = database_transaction.lane("Young Adult")
+    data.fantasy = db.lane("Fantasy", parent=data.fiction, genres="Fantasy")
+    data.history = db.lane("History", genres="History")
+    data.ya = db.lane("Young Adult")
     data.ya.history = None
     data.ya.audiences = [Classifier.AUDIENCE_YOUNG_ADULT]
-    data.romance = database_transaction.lane("Romance", genres="Romance")
+    data.romance = db.lane("Romance", genres="Romance")
     data.romance.fiction = True
-    data.contemporary_romance = database_transaction.lane(
+    data.contemporary_romance = db.lane(
         "Contemporary Romance", parent=data.romance, genres="Contemporary Romance"
     )
 
     data.conf = WorkList()
     data.conf.initialize(
-        database_transaction.default_library(),
+        db.default_library(),
         children=[data.fiction, data.fantasy, data.history, data.ya, data.romance],
     )
     return data
@@ -609,15 +594,15 @@ class TestOPDS:
         )
 
     def test_acquisition_link(self, opds_fixture: TestOPDSFixture):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
         m = AcquisitionFeed.acquisition_link
         rel = AcquisitionFeed.BORROW_REL
-        href = transaction.fresh_url()
+        href = db.fresh_url()
 
         # A doubly-indirect acquisition link.
         a = m(rel, href, ["text/html", "text/plain", "application/pdf"])
@@ -652,13 +637,13 @@ class TestOPDS:
         )
 
     def test_group_uri(self, opds_fixture: TestOPDSFixture):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
-        work = transaction.work(with_open_access_download=True, authors="Alice")
+        work = db.work(with_open_access_download=True, authors="Alice")
         [lp] = work.license_pools
 
         annotator = MockAnnotatorWithGroup()
@@ -674,13 +659,13 @@ class TestOPDS:
         assert expect_title == group_link["title"]
 
     def test_acquisition_feed(self, opds_fixture: TestOPDSFixture):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
-        work = transaction.work(with_open_access_download=True, authors="Alice")
+        work = db.work(with_open_access_download=True, authors="Alice")
         feed = AcquisitionFeed(session, "test", "http://the-url.com/", [work])
         u = str(feed)
         assert '<entry schema:additionalType="http://schema.org/EBook">' in u
@@ -691,13 +676,13 @@ class TestOPDS:
     def test_acquisition_feed_includes_license_source(
         self, opds_fixture: TestOPDSFixture
     ):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
-        work = transaction.work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
         feed = AcquisitionFeed(session, "test", "http://the-url.com/", [work])
         gutenberg = DataSource.lookup(session, DataSource.GUTENBERG)
 
@@ -721,13 +706,13 @@ class TestOPDS:
     def test_acquisition_feed_includes_author_tag_even_when_no_author(
         self, opds_fixture: TestOPDSFixture
     ):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
-        work = transaction.work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
         feed = AcquisitionFeed(session, "test", "http://the-url.com/", [work])
         u = str(feed)
         assert "<author>" in u
@@ -735,13 +720,13 @@ class TestOPDS:
     def test_acquisition_feed_includes_permanent_work_id(
         self, opds_fixture: TestOPDSFixture
     ):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
-        work = transaction.work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
         feed = AcquisitionFeed(session, "test", "http://the-url.com/", [work])
         u = str(feed)
         parsed = feedparser.parse(u)
@@ -753,15 +738,14 @@ class TestOPDS:
         opds_fixture: TestOPDSFixture,
         external_search_patch_fixture: ExternalSearchPatchFixture,
     ):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
-        work = transaction.work(with_open_access_download=True)
-        lane = transaction.lane()
-        facets = Facets.default(transaction.default_library())
+        lane = db.lane()
+        facets = Facets.default(db.default_library())
 
         cached_feed = AcquisitionFeed.page(
             session, "title", "http://the-url.com/", lane, MockAnnotator, facets=facets
@@ -775,12 +759,7 @@ class TestOPDS:
         assert "http://the-url.com/" == self_link["href"]
         facet_links = self._links(by_title, AcquisitionFeed.FACET_REL)
 
-        library = transaction.default_library()
-        order_facets = library.enabled_facets(Facets.ORDER_FACET_GROUP_NAME)
-        availability_facets = library.enabled_facets(
-            Facets.AVAILABILITY_FACET_GROUP_NAME
-        )
-        collection_facets = library.enabled_facets(Facets.COLLECTION_FACET_GROUP_NAME)
+        library = db.default_library()
 
         def link_for_facets(facets):
             return [x for x in facet_links if facets.query_string in x["href"]]
@@ -808,42 +787,41 @@ class TestOPDS:
     def test_acquisition_feed_includes_available_and_issued_tag(
         self, opds_fixture: TestOPDSFixture
     ):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
         today = datetime.date.today()
         today_s = today.strftime("%Y-%m-%d")
         the_past = today - datetime.timedelta(days=2)
         the_past_s = the_past.strftime("%Y-%m-%d")
-        the_past_time = the_past.strftime(AtomFeed.TIME_FORMAT_NAIVE)
         the_distant_past = today - datetime.timedelta(days=100)
         the_distant_past_s = the_distant_past.strftime(AtomFeed.TIME_FORMAT_NAIVE)
         the_future = today + datetime.timedelta(days=2)
 
         # This work has both issued and published. issued will be used
         # for the dc:issued tag.
-        work1 = transaction.work(with_open_access_download=True)
+        work1 = db.work(with_open_access_download=True)
         work1.presentation_edition.issued = today
         work1.presentation_edition.published = the_past
         work1.license_pools[0].availability_time = the_distant_past
 
         # This work only has published. published will be used for the
         # dc:issued tag.
-        work2 = transaction.work(with_open_access_download=True)
+        work2 = db.work(with_open_access_download=True)
         work2.presentation_edition.published = the_past
         work2.license_pools[0].availability_time = the_distant_past
 
         # This work has neither published nor issued. There will be no
         # dc:issued tag.
-        work3 = transaction.work(with_open_access_download=True)
+        work3 = db.work(with_open_access_download=True)
         work3.license_pools[0].availability_time = None
 
         # This work is issued in the future. Since this makes no
         # sense, there will be no dc:issued tag.
-        work4 = transaction.work(with_open_access_download=True)
+        work4 = db.work(with_open_access_download=True)
         work4.presentation_edition.issued = the_future
         work4.presentation_edition.published = the_future
         work4.license_pools[0].availability_time = None
@@ -891,16 +869,16 @@ class TestOPDS:
     def test_acquisition_feed_includes_sample_links(
         self, opds_fixture: TestOPDSFixture
     ):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
-        work = transaction.work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
         edition = work.presentation_edition
 
-        representation, _ = transaction.representation(
+        representation, _ = db.representation(
             "sampleurl", media_type="application/epub+zip"
         )
         resource = Resource(url="sampleurl", representation_id=representation.id)
@@ -911,7 +889,7 @@ class TestOPDS:
         )
         link.resource = resource
 
-        work1 = transaction.work(with_open_access_download=True)
+        work1 = db.work(with_open_access_download=True)
         edition1 = work1.presentation_edition
 
         link1 = Hyperlink(
@@ -923,7 +901,7 @@ class TestOPDS:
         link1.resource = resource1
 
         # unrelated work/link should not show up
-        work2 = transaction.work(with_open_access_download=True)
+        work2 = db.work(with_open_access_download=True)
         edition2 = work2.presentation_edition
 
         link2 = Hyperlink(
@@ -958,16 +936,16 @@ class TestOPDS:
     def test_acquisition_feed_includes_publisher_and_imprint_tag(
         self, opds_fixture: TestOPDSFixture
     ):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
-        work = transaction.work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
         work.presentation_edition.publisher = "The Publisher"
         work.presentation_edition.imprint = "The Imprint"
-        work2 = transaction.work(with_open_access_download=True)
+        work2 = db.work(with_open_access_download=True)
         work2.presentation_edition.publisher = None
 
         session.commit()
@@ -985,20 +963,20 @@ class TestOPDS:
     def test_acquisition_feed_includes_audience_as_category(
         self, opds_fixture: TestOPDSFixture
     ):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
-        work = transaction.work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
         work.audience = "Young Adult"
-        work2 = transaction.work(with_open_access_download=True)
+        work2 = db.work(with_open_access_download=True)
         work2.audience = "Children"
         work2.target_age = NumericRange(7, 9, "[]")
-        work3 = transaction.work(with_open_access_download=True)
+        work3 = db.work(with_open_access_download=True)
         work3.audience = None
-        work4 = transaction.work(with_open_access_download=True)
+        work4 = db.work(with_open_access_download=True)
         work4.audience = "Adult"
         work4.target_age = NumericRange(18)
 
@@ -1046,19 +1024,19 @@ class TestOPDS:
     def test_acquisition_feed_includes_category_tags_for_appeals(
         self, opds_fixture: TestOPDSFixture
     ):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
-        work = transaction.work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
         work.appeal_language = 0.1
         work.appeal_character = 0.2
         work.appeal_story = 0.3
         work.appeal_setting = 0.4
 
-        work2 = transaction.work(with_open_access_download=True)
+        work2 = db.work(with_open_access_download=True)
 
         for w in work, work2:
             w.calculate_opds_entries(verbose=False)
@@ -1089,16 +1067,16 @@ class TestOPDS:
     def test_acquisition_feed_includes_category_tags_for_fiction_status(
         self, opds_fixture: TestOPDSFixture
     ):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
-        work = transaction.work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
         work.fiction = False
 
-        work2 = transaction.work(with_open_access_download=True)
+        work2 = db.work(with_open_access_download=True)
         work2.fiction = True
 
         for w in work, work2:
@@ -1122,13 +1100,13 @@ class TestOPDS:
     def test_acquisition_feed_includes_category_tags_for_genres(
         self, opds_fixture: TestOPDSFixture
     ):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
-        work = transaction.work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
         g1, ignore = Genre.lookup(session, "Science Fiction")
         g2, ignore = Genre.lookup(session, "Romance")
         work.genres = [g1, g2]
@@ -1152,19 +1130,17 @@ class TestOPDS:
     def test_acquisition_feed_omits_works_with_no_active_license_pool(
         self, opds_fixture: TestOPDSFixture
     ):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
-        work = transaction.work(title="open access", with_open_access_download=True)
-        no_license_pool = transaction.work(
-            title="no license pool", with_license_pool=False
-        )
-        no_download = transaction.work(title="no download", with_license_pool=True)
+        work = db.work(title="open access", with_open_access_download=True)
+        no_license_pool = db.work(title="no license pool", with_license_pool=False)
+        no_download = db.work(title="no download", with_license_pool=True)
         no_download.license_pools[0].open_access = True
-        not_open_access = transaction.work("not open access", with_license_pool=True)
+        not_open_access = db.work("not open access", with_license_pool=True)
         not_open_access.license_pools[0].open_access = False
         session.commit()
 
@@ -1188,13 +1164,13 @@ class TestOPDS:
         )
 
     def test_acquisition_feed_includes_image_links(self, opds_fixture: TestOPDSFixture):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
-        work = transaction.work(genre=Fantasy, with_open_access_download=True)
+        work = db.work(genre=Fantasy, with_open_access_download=True)
         work.presentation_edition.cover_thumbnail_url = "http://thumbnail/b"
         work.presentation_edition.cover_full_url = "http://full/a"
         work.calculate_opds_entries(verbose=False)
@@ -1208,13 +1184,13 @@ class TestOPDS:
     def test_acquisition_feed_image_links_respect_cdn(
         self, opds_fixture: TestOPDSFixture
     ):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
-        work = transaction.work(genre=Fantasy, with_open_access_download=True)
+        work = db.work(genre=Fantasy, with_open_access_download=True)
         work.presentation_edition.cover_thumbnail_url = "http://thumbnail.com/b"
         work.presentation_edition.cover_full_url = "http://full.com/a"
 
@@ -1234,10 +1210,10 @@ class TestOPDS:
         assert ["http://bar/a", "http://foo/b"] == links
 
     def test_messages(self, opds_fixture: TestOPDSFixture):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
         """Test the ability to include OPDSMessage objects for a given URN in
@@ -1257,10 +1233,10 @@ class TestOPDS:
             assert str(m.message) in feed
 
     def test_precomposed_entries(self, opds_fixture: TestOPDSFixture):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
         # Test the ability to include precomposed OPDS entries
@@ -1279,33 +1255,29 @@ class TestOPDS:
         assert "<entry>foo</entry>" in feed
 
     def test_page_feed(self, opds_fixture: TestOPDSFixture):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
         # Test the ability to create a paginated feed of works for a given
         # lane.
         lane = data.contemporary_romance
-        work1 = transaction.work(
-            genre=Contemporary_Romance, with_open_access_download=True
-        )
-        work2 = transaction.work(
-            genre=Contemporary_Romance, with_open_access_download=True
-        )
+        work1 = db.work(genre=Contemporary_Romance, with_open_access_download=True)
+        work2 = db.work(genre=Contemporary_Romance, with_open_access_download=True)
 
         search_engine = MockExternalSearchIndex()
         search_engine.bulk_update([work1, work2])
 
-        facets = Facets.default(transaction.default_library())
+        facets = Facets.default(db.default_library())
         pagination = Pagination(size=1)
 
         def make_page(pagination):
             return AcquisitionFeed.page(
                 session,
                 "test",
-                transaction.fresh_url(),
+                db.fresh_url(),
                 lane,
                 MockAnnotator,
                 pagination=pagination,
@@ -1357,33 +1329,29 @@ class TestOPDS:
             assert MockAnnotator.lane_url(lane) == links[i + 1].get("href")
 
     def test_page_feed_for_worklist(self, opds_fixture: TestOPDSFixture):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
         # Test the ability to create a paginated feed of works for a
         # WorkList instead of a Lane.
         lane = data.conf
-        work1 = transaction.work(
-            genre=Contemporary_Romance, with_open_access_download=True
-        )
-        work2 = transaction.work(
-            genre=Contemporary_Romance, with_open_access_download=True
-        )
+        work1 = db.work(genre=Contemporary_Romance, with_open_access_download=True)
+        work2 = db.work(genre=Contemporary_Romance, with_open_access_download=True)
 
         search_engine = MockExternalSearchIndex()
         search_engine.bulk_update([work1, work2])
 
-        facets = Facets.default(transaction.default_library())
+        facets = Facets.default(db.default_library())
         pagination = Pagination(size=1)
 
         def make_page(pagination):
             return AcquisitionFeed.page(
                 session,
                 "test",
-                transaction.fresh_url(),
+                db.fresh_url(),
                 lane,
                 MockAnnotator,
                 pagination=pagination,
@@ -1424,10 +1392,10 @@ class TestOPDS:
         assert None == breadcrumbs
 
     def test_from_query(self, opds_fixture: TestOPDSFixture):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
         """Test creating a feed for a custom list from a query."""
 
@@ -1436,12 +1404,12 @@ class TestOPDS:
         list, ignore = create(
             session,
             CustomList,
-            name=transaction.fresh_str(),
-            library=transaction.default_library(),
+            name=db.fresh_str(),
+            library=db.default_library(),
             data_source=staff_data_source,
         )
-        work = transaction.work(with_license_pool=True)
-        work2 = transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
+        work2 = db.work(with_license_pool=True)
         list.add_entry(work)
         list.add_entry(work2)
 
@@ -1455,7 +1423,7 @@ class TestOPDS:
         pagination = Pagination(size=1)
         worklist = WorkList()
         worklist.initialize(
-            transaction.default_library(), customlists=[list], display_name=display_name
+            db.default_library(), customlists=[list], display_name=display_name
         )
 
         def url_for_custom_list(library, list):
@@ -1467,7 +1435,7 @@ class TestOPDS:
 
             return url_fn
 
-        url_fn = url_for_custom_list(transaction.default_library(), list)
+        url_fn = url_for_custom_list(db.default_library(), list)
 
         def from_query(pagination):
             return AcquisitionFeed.from_query(
@@ -1506,10 +1474,10 @@ class TestOPDS:
         assert [] == self._links(parsed, "next")
 
     def test_groups_feed(self, opds_fixture: TestOPDSFixture):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
         # Test the ability to create a grouped feed of recommended works for
@@ -1523,16 +1491,16 @@ class TestOPDS:
         # So it's sufficient to create a single work, and the details
         # of the work don't matter. It just needs to have a LicensePool
         # so it'll show up in the OPDS feed.
-        work = transaction.work(title="An epic tome", with_open_access_download=True)
+        work = db.work(title="An epic tome", with_open_access_download=True)
         search_engine = MockExternalSearchIndex()
         search_engine.bulk_update([work])
 
         # The lane setup does matter a lot -- that's what controls
         # how many times the search functionality is invoked.
-        epic_fantasy = transaction.lane(
+        epic_fantasy = db.lane(
             "Epic Fantasy", parent=data.fantasy, genres=["Epic Fantasy"]
         )
-        urban_fantasy = transaction.lane(
+        urban_fantasy = db.lane(
             "Urban Fantasy", parent=data.fantasy, genres=["Urban Fantasy"]
         )
 
@@ -1541,7 +1509,7 @@ class TestOPDS:
         cached_groups = AcquisitionFeed.groups(
             session,
             "test",
-            transaction.fresh_url(),
+            db.fresh_url(),
             data.fantasy,
             annotator,
             max_age=0,
@@ -1599,17 +1567,16 @@ class TestOPDS:
             assert annotator.lane_url(lane) == links[i + 1].get("href")
 
     def test_empty_groups_feed(self, opds_fixture: TestOPDSFixture):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
         # Test the case where a grouped feed turns up nothing.
 
         # A Lane, and a Work not in the Lane.
-        test_lane = transaction.lane("Test Lane", genres=["Mystery"])
-        work1 = transaction.work(genre=History, with_open_access_download=True)
+        test_lane = db.lane("Test Lane", genres=["Mystery"])
 
         # Mock search index and Annotator.
         search_engine = MockExternalSearchIndex()
@@ -1624,7 +1591,7 @@ class TestOPDS:
         feed = AcquisitionFeed.groups(
             session,
             "test",
-            transaction.fresh_url(),
+            db.fresh_url(),
             test_lane,
             annotator,
             max_age=0,
@@ -1644,17 +1611,17 @@ class TestOPDS:
         assert True == annotator.called
 
     def test_search_feed(self, opds_fixture: TestOPDSFixture):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
         # Test the ability to create a paginated feed of works for a given
         # search query.
         fantasy_lane = data.fantasy
-        work1 = transaction.work(genre=Epic_Fantasy, with_open_access_download=True)
-        work2 = transaction.work(genre=Epic_Fantasy, with_open_access_download=True)
+        work1 = db.work(genre=Epic_Fantasy, with_open_access_download=True)
+        work2 = db.work(genre=Epic_Fantasy, with_open_access_download=True)
 
         pagination = Pagination(size=1)
         search_client = MockExternalSearchIndex()
@@ -1667,7 +1634,7 @@ class TestOPDS:
             return AcquisitionFeed.search(
                 session,
                 "test",
-                transaction.fresh_url(),
+                db.fresh_url(),
                 fantasy_lane,
                 search_client,
                 "fantasy",
@@ -1726,19 +1693,18 @@ class TestOPDS:
         # The feed has no breadcrumb links, since we're not
         # searching the lane -- just using some aspects of the lane
         # to guide the search.
-        parentage = list(fantasy_lane.parentage)
         root = ET.fromstring(feed)
         breadcrumbs = root.find("{%s}breadcrumbs" % AtomFeed.SIMPLIFIED_NS)
         assert None == breadcrumbs
 
     def test_cache(self, opds_fixture: TestOPDSFixture):
-        data, transaction, session = (
+        data, db, session = (
             opds_fixture,
-            opds_fixture.transaction,
-            opds_fixture.transaction.session(),
+            opds_fixture.db,
+            opds_fixture.db.session(),
         )
 
-        work1 = transaction.work(
+        work1 = db.work(
             title="The Original Title",
             genre=Epic_Fantasy,
             with_open_access_download=True,
@@ -1752,7 +1718,7 @@ class TestOPDS:
             return AcquisitionFeed.page(
                 session,
                 "test",
-                transaction.fresh_url(),
+                db.fresh_url(),
                 fantasy_lane,
                 MockAnnotator,
                 pagination=Pagination.default(),
@@ -1764,7 +1730,7 @@ class TestOPDS:
         cached = get_one(session, CachedFeed, lane=fantasy_lane)
         old_timestamp = cached.timestamp
 
-        work2 = transaction.work(
+        work2 = db.work(
             title="A Brand New Title",
             genre=Epic_Fantasy,
             with_open_access_download=True,
@@ -1788,15 +1754,15 @@ class TestOPDS:
 class TestAcquisitionFeed:
     def test_page(
         self,
-        database_transaction: DatabaseTransactionFixture,
+        db,
         external_search_patch_fixture: ExternalSearchPatchFixture,
     ):
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         # Verify that AcquisitionFeed.page() returns an appropriate OPDSFeedResponse
 
         wl = WorkList()
-        wl.initialize(transaction.default_library())
+        wl.initialize(db.default_library())
         private = object()
         response = AcquisitionFeed.page(
             session,
@@ -1816,8 +1782,8 @@ class TestAcquisitionFeed:
 
         assert "<title>feed title</title>" in str(response)
 
-    def test_as_response(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_as_response(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Verify the ability to convert an AcquisitionFeed object to an
         # OPDSFeedResponse containing the feed.
@@ -1837,8 +1803,8 @@ class TestAcquisitionFeed:
         assert 101 == response.max_age
         assert False == response.private
 
-    def test_as_error_response(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_as_error_response(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Verify the ability to convert an AcquisitionFeed object to an
         # OPDSFeedResponse that is to be treated as an error message.
@@ -1865,9 +1831,6 @@ class TestAcquisitionFeed:
         """Verify that add_entrypoint_links calls _entrypoint_link
         on every EntryPoint passed in.
         """
-        m = AcquisitionFeed.add_entrypoint_links
-
-        old_entrypoint_link = AcquisitionFeed._entrypoint_link
 
         class Mock:
             attrs = dict(href="the response")
@@ -1980,29 +1943,23 @@ class TestAcquisitionFeed:
         # This means the 'activeFacet' attribute is not present.
         assert "{http://opds-spec.org/2010/catalog}activeFacet" not in l
 
-    def test_license_tags_no_loan_or_hold(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_license_tags_no_loan_or_hold(self, db: DatabaseTransactionFixture):
 
-        edition, pool = transaction.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
         availability, holds, copies = AcquisitionFeed.license_tags(pool, None, None)
         assert dict(status="available") == availability.attrib
         assert dict(total="0") == holds.attrib
         assert dict(total="1", available="1") == copies.attrib
 
-    def test_license_tags_hold_position(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_license_tags_hold_position(self, db: DatabaseTransactionFixture):
 
         # When a book is placed on hold, it typically takes a while
         # for the LicensePool to be updated with the new number of
         # holds. This test verifies the normal and exceptional
         # behavior used to generate the opds:holds tag in different
         # scenarios.
-        edition, pool = transaction.edition(with_license_pool=True)
-        patron = transaction.patron()
+        edition, pool = db.edition(with_license_pool=True)
+        patron = db.patron()
 
         # If the patron's hold position is less than the total number
         # of holds+reserves, that total is used as opds:total.
@@ -2049,12 +2006,11 @@ class TestAcquisitionFeed:
         assert "1" == holds.attrib["total"]
 
     def test_license_tags_show_unlimited_access_books(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        transaction, session = database_transaction, database_transaction.session()
 
         # Arrange
-        edition, pool = transaction.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
         pool.open_access = False
         pool.self_hosted = False
         pool.unlimited_access = True
@@ -2072,13 +2028,10 @@ class TestAcquisitionFeed:
         assert ("holds" in tag.attrib) == False
         assert ("copies" in tag.attrib) == False
 
-    def test_license_tags_show_self_hosted_books(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_license_tags_show_self_hosted_books(self, db: DatabaseTransactionFixture):
 
         # Arrange
-        edition, pool = transaction.edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
         pool.self_hosted = True
         pool.open_access = False
         pool.licenses_available = 0
@@ -2092,13 +2045,13 @@ class TestAcquisitionFeed:
         assert "status" in tags[0].attrib
         assert "available" == tags[0].attrib["status"]
 
-    def test_single_entry(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_single_entry(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # Here's a Work with two LicensePools.
-        work = transaction.work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
         original_pool = work.license_pools[0]
-        edition, new_pool = transaction.edition(
+        edition, new_pool = db.edition(
             with_license_pool=True, with_open_access_download=True
         )
         work.license_pools.append(new_pool)
@@ -2136,15 +2089,13 @@ class TestAcquisitionFeed:
         expected = str(work.presentation_edition.issued.date())
         assert expected in str(entry)
 
-    def test_single_entry_is_opds_message(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_single_entry_is_opds_message(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # When single_entry has to deal with an 'OPDS entry' that
         # turns out to be an error message, caching rules are
         # overridden to treat the 'entry' as a private error message.
-        work = transaction.work()
+        work = db.work()
 
         # We plan on caching the OPDS entry as a public, long-lived
         # document.
@@ -2171,16 +2122,15 @@ class TestAcquisitionFeed:
         assert 0 == response.max_age
 
     def test_entry_cache_adds_missing_drm_namespace(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
-        work = transaction.work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
 
         # This work's OPDS entry was created with a namespace map
         # that did not include the drm: namespace.
         work.simple_opds_entry = "<entry><foo>bar</foo></entry>"
-        pool = work.license_pools[0]
 
         # But now the annotator is set up to insert a tag with that
         # namespace.
@@ -2200,29 +2150,25 @@ class TestAcquisitionFeed:
             == str(entry)
         )
 
-    def test_error_when_work_has_no_identifier(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_error_when_work_has_no_identifier(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         # We cannot create an OPDS entry for a Work that cannot be associated
         # with an Identifier.
-        work = transaction.work(title="Hello, World!", with_license_pool=True)
+        work = db.work(title="Hello, World!", with_license_pool=True)
         work.license_pools[0].identifier = None
         work.presentation_edition.primary_identifier = None
         entry = AcquisitionFeed.single_entry(session, work, MockAnnotator)
         assert entry == None
 
-    def test_error_when_work_has_no_licensepool(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_error_when_work_has_no_licensepool(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        work = transaction.work()
+        work = db.work()
         feed = AcquisitionFeed(
             session,
-            transaction.fresh_str(),
-            transaction.fresh_url(),
+            db.fresh_str(),
+            db.fresh_url(),
             [],
             annotator=Annotator,
         )
@@ -2235,34 +2181,34 @@ class TestAcquisitionFeed:
         assert expect == entry
 
     def test_error_when_work_has_no_presentation_edition(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         """We cannot create an OPDS entry (or even an error message) for a
         Work that is disconnected from any Identifiers.
         """
-        work = transaction.work(title="Hello, World!", with_license_pool=True)
+        work = db.work(title="Hello, World!", with_license_pool=True)
         work.license_pools[0].presentation_edition = None
         work.presentation_edition = None
         feed = AcquisitionFeed(
             session,
-            transaction.fresh_str(),
-            transaction.fresh_url(),
+            db.fresh_str(),
+            db.fresh_url(),
             [],
             annotator=Annotator,
         )
         entry = feed.create_entry(work)
         assert None == entry
 
-    def test_cache_usage(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_cache_usage(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        work = transaction.work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
         feed = AcquisitionFeed(
             session,
-            transaction.fresh_str(),
-            transaction.fresh_url(),
+            db.fresh_str(),
+            db.fresh_url(),
             [],
             annotator=Annotator,
         )
@@ -2308,9 +2254,9 @@ class TestAcquisitionFeed:
         assert entry_string == etree.tounicode(full_entry)
 
     def test_exception_during_entry_creation_is_not_reraised(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         # This feed will raise an exception whenever it's asked
         # to create an entry.
@@ -2320,22 +2266,22 @@ class TestAcquisitionFeed:
 
         feed = DoomedFeed(
             session,
-            transaction.fresh_str(),
-            transaction.fresh_url(),
+            db.fresh_str(),
+            db.fresh_url(),
             [],
             annotator=Annotator,
         )
-        work = transaction.work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
 
         # But calling create_entry() doesn't raise an exception, it
         # just returns None.
         entry = feed.create_entry(work)
         assert entry == None
 
-    def test_unfilfullable_work(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_unfilfullable_work(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        work = transaction.work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
         [pool] = work.license_pools
         response = AcquisitionFeed.single_entry(
             session,
@@ -2353,8 +2299,8 @@ class TestAcquisitionFeed:
         assert 200 == response.status_code
         assert str(expect) == str(response)
 
-    def test_format_types(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_format_types(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         m = AcquisitionFeed.format_types
 
@@ -2400,8 +2346,8 @@ class TestAcquisitionFeed:
             findaway_manifest
         )
 
-    def test_add_breadcrumbs(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_add_breadcrumbs(self, db: DatabaseTransactionFixture):
+        session = db.session()
         _db = session
 
         def getElementChildren(feed):
@@ -2414,12 +2360,10 @@ class TestAcquisitionFeed:
                 super().__init__(_db, "", "", [], annotator=MockAnnotator())
                 self.feed = []
 
-        lane = transaction.lane(display_name="lane")
-        sublane = transaction.lane(parent=lane, display_name="sublane")
-        subsublane = transaction.lane(parent=sublane, display_name="subsublane")
-        subsubsublane = transaction.lane(
-            parent=subsublane, display_name="subsubsublane"
-        )
+        lane = db.lane(display_name="lane")
+        sublane = db.lane(parent=lane, display_name="sublane")
+        subsublane = db.lane(parent=sublane, display_name="subsublane")
+        subsubsublane = db.lane(parent=subsublane, display_name="subsubsublane")
 
         top_level = object()
         ep = AudiobooksEntryPoint
@@ -2435,9 +2379,6 @@ class TestAcquisitionFeed:
             # written as calls to this function.
             feed = MockFeed()
             annotator = MockAnnotator()
-
-            entrypoint = add_breadcrumbs_kwargs.get("entrypoint", None)
-            include_lane = add_breadcrumbs_kwargs.get("include_lane", False)
 
             feed.add_breadcrumbs(lane, **add_breadcrumbs_kwargs)
 
@@ -2471,7 +2412,6 @@ class TestAcquisitionFeed:
             # trickier, mainly because the URLs change once an
             # entrypoint is selected.
             previous_breadcrumb_url = None
-            actual_urls = []
 
             for i, crumb in enumerate(crumbs):
                 expect = expect_breadcrumbs_for[i]
@@ -2583,10 +2523,8 @@ class TestAcquisitionFeed:
             include_lane=True,
         )
 
-    def test_add_breadcrumb_links(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_add_breadcrumb_links(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         class MockFeed(AcquisitionFeed):
             add_link_calls = []
@@ -2605,8 +2543,8 @@ class TestAcquisitionFeed:
         annotator = MockAnnotator
         feed = MockFeed(session, "title", "url", [], annotator=annotator)
 
-        lane = transaction.lane()
-        sublane = transaction.lane(parent=lane)
+        lane = db.lane()
+        sublane = db.lane(parent=lane)
         ep = AudiobooksEntryPoint
         feed.add_breadcrumb_links(sublane, ep)
 
@@ -2625,10 +2563,8 @@ class TestAcquisitionFeed:
         # The EntryPoint was passed into show_current_entrypoint.
         assert ep == feed.current_entrypoint
 
-    def test_show_current_entrypoint(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_show_current_entrypoint(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         """Calling AcquisitionFeed.show_current_entrypoint annotates
         the top-level <feed> tag with information about the currently
@@ -2744,14 +2680,14 @@ class TestLookupAcquisitionFeed:
         return feed, entry
 
     def test_create_entry_uses_specified_identifier(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         # Here's a Work with two LicensePools.
-        work = transaction.work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
         original_pool = work.license_pools[0]
-        edition, new_pool = transaction.edition(
+        edition, new_pool = db.edition(
             with_license_pool=True, with_open_access_download=True
         )
         work.license_pools.append(new_pool)
@@ -2775,19 +2711,17 @@ class TestLookupAcquisitionFeed:
         assert original_pool.presentation_edition.title in e2
         assert original_pool.identifier.urn not in e2
 
-    def test_error_on_mismatched_identifier(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_error_on_mismatched_identifier(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         """We get an error if we try to make it look like an Identifier lookup
         retrieved a Work that's not actually associated with that Identifier.
         """
-        work = transaction.work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
 
         # Here's an identifier not associated with any LicensePool or
         # Work.
-        identifier = transaction.identifier()
+        identifier = db.identifier()
 
         # It doesn't make sense to make an OPDS feed out of that
         # Identifier and a totally random Work.
@@ -2797,24 +2731,21 @@ class TestLookupAcquisitionFeed:
 
         # Even if the Identifier does have a Work, if the Works don't
         # match, we get the same error.
-        edition, lp = transaction.edition(with_license_pool=True)
-        work2 = lp.calculate_work()
+        edition, lp = db.edition(with_license_pool=True)
         feed, entry = self._entry(session, lp.identifier, work)
         assert entry == OPDSMessage(
             lp.identifier.urn, 500, expect_error % lp.identifier.urn
         )
 
-    def test_error_when_work_has_no_licensepool(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_error_when_work_has_no_licensepool(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
         """Under most circumstances, a Work must have at least one
         LicensePool for a lookup to succeed.
         """
 
         # Here's a work with no LicensePools.
-        work = transaction.work(title="Hello, World!", with_license_pool=False)
+        work = db.work(title="Hello, World!", with_license_pool=False)
         identifier = work.presentation_edition.primary_identifier
         feed, entry = self._entry(session, identifier, work)
         # By default, a work is treated as 'not in the collection' if
@@ -2823,10 +2754,10 @@ class TestLookupAcquisitionFeed:
         assert 404 == entry.status_code
         assert "Identifier not found in collection" == entry.message
 
-    def test_unfilfullable_work(self, database_transaction: DatabaseTransactionFixture):
-        transaction, session = database_transaction, database_transaction.session()
+    def test_unfilfullable_work(self, db: DatabaseTransactionFixture):
+        session = db.session()
 
-        work = transaction.work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
         [pool] = work.license_pools
         feed, entry = self._entry(
             session, pool.identifier, work, MockUnfulfillableAnnotator
@@ -2839,9 +2770,9 @@ class TestLookupAcquisitionFeed:
         assert expect == entry
 
     def test_create_entry_uses_cache_for_all_licensepools_for_work(
-        self, database_transaction: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture
     ):
-        transaction, session = database_transaction, database_transaction.session()
+        session = db.session()
 
         """A Work's cached OPDS entries can be reused by all LicensePools for
         that Work, even LicensePools associated with different
@@ -2862,14 +2793,13 @@ class TestLookupAcquisitionFeed:
         feed = self._feed(session, annotator=InstrumentableActiveLicensePool())
 
         # Here are two completely different LicensePools for the same work.
-        work = transaction.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         work.verbose_opds_entry = "<entry>Cached</entry>"
         [pool1] = work.license_pools
-        identifier1 = pool1.identifier
 
-        collection2 = transaction.collection()
-        edition2 = transaction.edition()
-        pool2 = transaction.licensepool(edition=edition2, collection=collection2)
+        collection2 = db.collection()
+        edition2 = db.edition()
+        pool2 = db.licensepool(edition=edition2, collection=collection2)
         identifier2 = pool2.identifier
         work.license_pools.append(pool2)
 
@@ -2894,7 +2824,7 @@ class TestLookupAcquisitionFeed:
 
 
 class TestEntrypointLinkInsertionFixture:
-    transaction: DatabaseTransactionFixture
+    db: DatabaseTransactionFixture
     mock: Any
     no_eps: WorkList
     entrypoints: List[MediumEntryPoint]
@@ -2905,10 +2835,10 @@ class TestEntrypointLinkInsertionFixture:
 
 @pytest.fixture()
 def entrypoint_link_insertion_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db,
 ) -> TestEntrypointLinkInsertionFixture:
     data = TestEntrypointLinkInsertionFixture()
-    data.transaction = database_transaction
+    data.db = db
 
     # Mock for AcquisitionFeed.add_entrypoint_links
     class Mock:
@@ -2919,9 +2849,7 @@ def entrypoint_link_insertion_fixture(
 
     # A WorkList with no EntryPoints -- should not call the mock method.
     data.no_eps = WorkList()
-    data.no_eps.initialize(
-        library=database_transaction.default_library(), display_name="no_eps"
-    )
+    data.no_eps.initialize(library=db.default_library(), display_name="no_eps")
 
     # A WorkList with two EntryPoints -- may call the mock method
     # depending on circumstances.
@@ -2929,9 +2857,9 @@ def entrypoint_link_insertion_fixture(
     data.wl = WorkList()
     # The WorkList must have at least one child, or we won't generate
     # a real groups feed for it.
-    data.lane = database_transaction.lane()
+    data.lane = db.lane()
     data.wl.initialize(
-        library=database_transaction.default_library(),
+        library=db.default_library(),
         display_name="wl",
         entrypoints=data.entrypoints,
         children=[data.lane],
@@ -2965,10 +2893,10 @@ class TestEntrypointLinkInsertion:
         entrypoint_link_insertion_fixture: TestEntrypointLinkInsertionFixture,
         external_search_patch_fixture: ExternalSearchPatchFixture,
     ):
-        data, transaction, session = (
+        data, db, session = (
             entrypoint_link_insertion_fixture,
-            entrypoint_link_insertion_fixture.transaction,
-            entrypoint_link_insertion_fixture.transaction.session(),
+            entrypoint_link_insertion_fixture.db,
+            entrypoint_link_insertion_fixture.db.session(),
         )
 
         # When AcquisitionFeed.groups() generates a grouped
@@ -2997,7 +2925,7 @@ class TestEntrypointLinkInsertion:
         # A WorkList with entry points does cause the mock method
         # to be called.
         facets = FeaturedFacets(
-            minimum_featured_quality=transaction.default_library().minimum_featured_quality,
+            minimum_featured_quality=db.default_library().minimum_featured_quality,
             entrypoint=EbooksEntryPoint,
         )
         feed, make_link, entrypoints, selected = run(data.wl, facets)
@@ -3014,10 +2942,10 @@ class TestEntrypointLinkInsertion:
     def test_page(
         self, entrypoint_link_insertion_fixture: TestEntrypointLinkInsertionFixture
     ):
-        data, transaction, session = (
+        data, db, session = (
             entrypoint_link_insertion_fixture,
-            entrypoint_link_insertion_fixture.transaction,
-            entrypoint_link_insertion_fixture.transaction.session(),
+            entrypoint_link_insertion_fixture.db,
+            entrypoint_link_insertion_fixture.db.session(),
         )
 
         # When AcquisitionFeed.page() generates the first page of a paginated
@@ -3049,7 +2977,7 @@ class TestEntrypointLinkInsertion:
         assert None == run(data.no_eps)
 
         # Let's give the WorkList two possible entry points, and choose one.
-        facets = Facets.default(transaction.default_library()).navigate(
+        facets = Facets.default(db.default_library()).navigate(
             entrypoint=EbooksEntryPoint
         )
         feed, make_link, entrypoints, selected = run(data.wl, facets)
@@ -3076,10 +3004,10 @@ class TestEntrypointLinkInsertion:
     def test_search(
         self, entrypoint_link_insertion_fixture: TestEntrypointLinkInsertionFixture
     ):
-        data, transaction, session = (
+        data, db, session = (
             entrypoint_link_insertion_fixture,
-            entrypoint_link_insertion_fixture.transaction,
-            entrypoint_link_insertion_fixture.transaction.session(),
+            entrypoint_link_insertion_fixture.db,
+            entrypoint_link_insertion_fixture.db.session(),
         )
 
         # When AcquisitionFeed.search() generates the first page of
@@ -3155,7 +3083,7 @@ class TestNavigationFacets:
 
 
 class TestNavigationFeedFixture:
-    transaction: DatabaseTransactionFixture
+    db: DatabaseTransactionFixture
     fiction: Lane
     fantasy: Lane
     romance: Lane
@@ -3164,16 +3092,14 @@ class TestNavigationFeedFixture:
 
 @pytest.fixture()
 def navigation_feed_fixture(
-    database_transaction: DatabaseTransactionFixture,
+    db,
 ) -> TestNavigationFeedFixture:
     data = TestNavigationFeedFixture()
-    data.transaction = database_transaction
-    data.fiction = database_transaction.lane("Fiction")
-    data.fantasy = database_transaction.lane("Fantasy", parent=data.fiction)
-    data.romance = database_transaction.lane("Romance", parent=data.fiction)
-    data.contemporary_romance = database_transaction.lane(
-        "Contemporary Romance", parent=data.romance
-    )
+    data.db = db
+    data.fiction = db.lane("Fiction")
+    data.fantasy = db.lane("Fantasy", parent=data.fiction)
+    data.romance = db.lane("Romance", parent=data.fiction)
+    data.contemporary_romance = db.lane("Contemporary Romance", parent=data.romance)
     return data
 
 
@@ -3192,10 +3118,10 @@ class TestNavigationFeed:
     def test_navigation_with_sublanes(
         self, navigation_feed_fixture: TestNavigationFeedFixture
     ):
-        data, transaction, session = (
+        data, db, session = (
             navigation_feed_fixture,
-            navigation_feed_fixture.transaction,
-            navigation_feed_fixture.transaction.session(),
+            navigation_feed_fixture.db,
+            navigation_feed_fixture.db.session(),
         )
 
         private = object()
@@ -3250,10 +3176,10 @@ class TestNavigationFeed:
     def test_navigation_without_sublanes(
         self, navigation_feed_fixture: TestNavigationFeedFixture
     ):
-        data, transaction, session = (
+        data, db, session = (
             navigation_feed_fixture,
-            navigation_feed_fixture.transaction,
-            navigation_feed_fixture.transaction.session(),
+            navigation_feed_fixture.db,
+            navigation_feed_fixture.db.session(),
         )
 
         feed = NavigationFeed.navigation(
