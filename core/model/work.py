@@ -158,7 +158,7 @@ class Work(Base):
     target_age = Column(INT4RANGE, index=True)
     fiction = Column(Boolean, index=True)
 
-    summary_id = Column(
+    summary_id: Column[int | None] = Column(
         Integer,
         ForeignKey("resources.id", use_alter=True, name="fk_works_summary_id"),
         index=True,

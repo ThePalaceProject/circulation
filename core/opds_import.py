@@ -947,7 +947,6 @@ class OPDSImporter:
         # background, and that's good enough.
         return pool, work
 
-    @classmethod
     def extract_next_links(self, feed):
         if isinstance(feed, (bytes, str)):
             parsed = feedparser.parse(feed)
