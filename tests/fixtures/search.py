@@ -1,11 +1,11 @@
 import logging
 import os
-import time
 from typing import Any, Callable, Generic, Iterable, List, Optional, Type, TypeVar
 from unittest import mock
 from unittest.mock import patch
 
 import pytest
+import requests
 
 from core import external_search
 from core.external_search import (
@@ -88,10 +88,21 @@ class ExternalSearchFixture:
         work.set_presentation_ready()
         return work
 
+    @staticmethod
+    def refresh_and_wait():
+        target = ExternalSearchFixture.SIMPLIFIED_TEST_ELASTICSEARCH + "/_refresh"
+        logging.info("sending request to " + target)
+        response = requests.get(target)
+        if response.status_code >= 400:
+            raise RuntimeError(
+                "Attempting to refresh Elasticsearch index resulted in status "
+                + str(response.status_code)
+            )
+
 
 @pytest.fixture(scope="function")
 def external_search_fixture(
-    db,
+    db: DatabaseTransactionFixture,
 ) -> Iterable[ExternalSearchFixture]:
     """Ask for an external search system."""
     """Note: You probably want EndToEndSearchFixture instead."""
@@ -131,9 +142,7 @@ class EndToEndSearchFixture(Generic[T]):
             self.external_search.db.session(),
             search_index_client=self.external_search.search,
         ).run_once_and_update_timestamp()
-
-        # Sleep to give the index time to catch up.
-        time.sleep(2)
+        self.external_search.refresh_and_wait()
 
     @staticmethod
     def assert_works(description, expect, actual, should_be_ordered=True):
@@ -255,7 +264,7 @@ class EndToEndSearchFixture(Generic[T]):
 
 @pytest.fixture(scope="function")
 def end_to_end_search_fixture(
-    db,
+    db: DatabaseTransactionFixture,
 ) -> Iterable[EndToEndSearchFixture]:
     """Ask for an external search system that can be populated with data for end-to-end tests."""
     data = EndToEndSearchFixture.create(db)
