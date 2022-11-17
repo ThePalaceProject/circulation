@@ -1137,6 +1137,16 @@ class ConfigurationMetadata:
 
         if setting_value is None:
             setting_value = self.default
+        elif self.type == ConfigurationAttributeType.NUMBER:
+            try:
+                setting_value = float(setting_value)
+            except ValueError:
+                if setting_value != "":
+                    # A non-empty value is a "bad" value, and should raise an exception
+                    raise CannotLoadConfiguration(
+                        f"Could not covert {self.label}'s value '{setting_value}'."
+                    )
+                setting_value = self.default
         else:
             # LIST and MENU configuration settings are stored as JSON-serialized lists in the database.
             # We need to deserialize them to get actual values.
