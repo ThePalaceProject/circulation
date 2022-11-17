@@ -855,6 +855,14 @@ SETTING4_OPTIONS = None
 SETTING4_DEFAULT = None
 SETTING4_CATEGORY = "Settings"
 
+SETTING5_KEY = "setting5"
+SETTING5_LABEL = "Setting 5's label"
+SETTING5_DESCRIPTION = "Setting 5's description"
+SETTING5_TYPE = ConfigurationAttributeType.NUMBER
+SETTING5_REQUIRED = False
+SETTING5_DEFAULT = 12345
+SETTING5_CATEGORY = "Settings"
+
 
 class MockConfiguration(ConfigurationGrouping):
     setting1 = ConfigurationMetadata(
@@ -898,6 +906,16 @@ class MockConfiguration(ConfigurationGrouping):
         default=SETTING4_DEFAULT,
         options=SETTING4_OPTIONS,
         category=SETTING4_CATEGORY,
+    )
+
+    setting5 = ConfigurationMetadata(
+        key=SETTING5_KEY,
+        label=SETTING5_LABEL,
+        description=SETTING5_DESCRIPTION,
+        type=SETTING5_TYPE,
+        required=SETTING5_REQUIRED,
+        default=SETTING5_DEFAULT,
+        category=SETTING5_CATEGORY,
     )
 
 
@@ -1047,10 +1065,12 @@ class TestConfigurationGrouping:
         configuration = MockConfiguration(configuration_storage, db)
 
         # Act
-        setting_value = configuration.setting1
+        setting1_value = configuration.setting1
+        setting5_value = configuration.setting5
 
         # Assert
-        assert SETTING1_DEFAULT == setting_value
+        assert SETTING1_DEFAULT == setting1_value
+        assert SETTING5_DEFAULT == setting5_value
 
     @parameterized.expand(
         [("setting1", "setting1", 12345), ("setting2", "setting2", "12345")]
@@ -1075,7 +1095,7 @@ class TestConfigurationGrouping:
         settings = MockConfiguration.to_settings()
 
         # Assert
-        assert len(settings) == 4
+        assert len(settings) == 5
 
         assert settings[0][ConfigurationAttribute.KEY.value] == SETTING1_KEY
         assert settings[0][ConfigurationAttribute.LABEL.value] == SETTING1_LABEL
@@ -1160,6 +1180,28 @@ class TestConfigurationGrouping:
         assert settings[1][ConfigurationAttribute.CATEGORY.value] == SETTING1_CATEGORY
 
 
+class TestNumberConfigurationMetadata:
+    def test_number_type_getter(self, db: DatabaseTransactionFixture):
+        # Arrange
+        external_integration = db.external_integration("test")
+        external_integration_association = create_autospec(spec=HasExternalIntegration)
+        external_integration_association.external_integration = MagicMock(
+            return_value=external_integration
+        )
+        configuration_storage = ConfigurationStorage(external_integration_association)
+        configuration = MockConfiguration(configuration_storage, db.session())
+
+        configuration.setting5 = "abc"
+        with pytest.raises(CannotLoadConfiguration):
+            configuration.setting5
+
+        configuration.setting5 = "123"
+        assert configuration.setting5 == 123.0
+
+        configuration.setting5 = ""
+        assert configuration.setting5 == SETTING5_DEFAULT
+
+
 class TestBooleanConfigurationMetadata:
     @pytest.mark.parametrize(
         "provided,expected",
@@ -1173,7 +1215,7 @@ class TestBooleanConfigurationMetadata:
         ],
     )
     def test_configuration_metadata_correctly_cast_bool_values(
-        self, db, provided, expected
+        self, db: DatabaseTransactionFixture, provided, expected
     ):
         """Ensure that ConfigurationMetadata.to_bool correctly translates different values into boolean (True/False)."""
         # Arrange

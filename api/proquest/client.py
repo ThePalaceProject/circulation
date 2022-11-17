@@ -561,7 +561,7 @@ class ProQuestAPIClient:
             while True:
                 try:
                     feed = self._download_feed_page(
-                        configuration, page, configuration.page_size
+                        configuration, page, int(configuration.page_size)
                     )
 
                     if self._is_feed_page_empty_or_incorrect(feed):
