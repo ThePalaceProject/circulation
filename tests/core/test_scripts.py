@@ -3450,7 +3450,7 @@ class TestCustomListUpdateEntriesScriptData:
 class TestCustomListUpdateEntriesScript:
     @staticmethod
     def _populate_works(
-        data: EndToEndSearchFixture[TestCustomListUpdateEntriesScriptData],
+        data: EndToEndSearchFixture,
     ) -> TestCustomListUpdateEntriesScriptData:
         db = data.external_search.db
 
@@ -3470,16 +3470,15 @@ class TestCustomListUpdateEntriesScript:
 
     def test_process_custom_list(
         self,
-        end_to_end_search_fixture: EndToEndSearchFixture[
-            TestCustomListUpdateEntriesScriptData
-        ],
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
-        data = end_to_end_search_fixture
+        fixture = end_to_end_search_fixture
         db, session = (
-            data.external_search.db,
-            data.external_search.db.session(),
+            fixture.external_search.db,
+            fixture.external_search.db.session(),
         )
-        end_to_end_search_fixture.populate(self._populate_works)
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
 
         last_updated = datetime.datetime.now() - datetime.timedelta(hours=1)
         custom_list, _ = db.customlist()
@@ -3512,30 +3511,26 @@ class TestCustomListUpdateEntriesScript:
         session.refresh(custom_list)
         session.refresh(custom_list1)
         assert (
-            len(custom_list.entries) == 1 + len(data.test_data.populated_books) - 1
+            len(custom_list.entries) == 1 + len(data.populated_books) - 1
         )  # default + new - one past availability time
-        assert custom_list.size == 1 + len(data.test_data.populated_books) - 1
+        assert custom_list.size == 1 + len(data.populated_books) - 1
         assert len(custom_list1.entries) == 1 + len(
-            data.test_data.unpopular_books
+            data.unpopular_books
         )  # default + new
-        assert custom_list1.size == 1 + len(data.test_data.unpopular_books)
+        assert custom_list1.size == 1 + len(data.unpopular_books)
         # last updated time has updated correctly
         assert custom_list.auto_update_last_update == frozen_time.time_to_freeze
         assert custom_list1.auto_update_last_update == frozen_time.time_to_freeze
 
-    def test_search_facets(
-        self,
-        end_to_end_search_fixture: EndToEndSearchFixture[
-            TestCustomListUpdateEntriesScriptData
-        ],
-    ):
+    def test_search_facets(self, end_to_end_search_fixture: EndToEndSearchFixture):
         with patch("core.query.customlist.ExternalSearchIndex") as mock_index:
             fixture = end_to_end_search_fixture
             db, session = (
                 fixture.external_search.db,
                 fixture.external_search.db.session(),
             )
-            end_to_end_search_fixture.populate(self._populate_works)
+            data = self._populate_works(fixture)
+            fixture.populate_search_index()
 
             last_updated = datetime.datetime.now() - datetime.timedelta(hours=1)
             custom_list, _ = db.customlist()
@@ -3563,9 +3558,7 @@ class TestCustomListUpdateEntriesScript:
     @freeze_time("2022-01-01", as_kwarg="frozen_time")
     def test_no_last_update(
         self,
-        end_to_end_search_fixture: EndToEndSearchFixture[
-            TestCustomListUpdateEntriesScriptData
-        ],
+        end_to_end_search_fixture: EndToEndSearchFixture,
         frozen_time=None,
     ):
         fixture = end_to_end_search_fixture
@@ -3573,7 +3566,8 @@ class TestCustomListUpdateEntriesScript:
             fixture.external_search.db,
             fixture.external_search.db.session(),
         )
-        end_to_end_search_fixture.populate(self._populate_works)
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
 
         # No previous timestamp
         custom_list, _ = db.customlist()
@@ -3588,17 +3582,16 @@ class TestCustomListUpdateEntriesScript:
 
     def test_init_backpopulates(
         self,
-        end_to_end_search_fixture: EndToEndSearchFixture[
-            TestCustomListUpdateEntriesScriptData
-        ],
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         with patch("core.scripts.CustomListQueries") as mock_queries:
-            data = end_to_end_search_fixture
+            fixture = end_to_end_search_fixture
             db, session = (
-                data.external_search.db,
-                data.external_search.db.session(),
+                fixture.external_search.db,
+                fixture.external_search.db.session(),
             )
-            end_to_end_search_fixture.populate(self._populate_works)
+            data = self._populate_works(fixture)
+            fixture.populate_search_index()
 
             custom_list, _ = db.customlist()
             custom_list.library = db.default_library()
@@ -3616,17 +3609,16 @@ class TestCustomListUpdateEntriesScript:
 
     def test_repopulate_state(
         self,
-        end_to_end_search_fixture: EndToEndSearchFixture[
-            TestCustomListUpdateEntriesScriptData
-        ],
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         """The repopulate deletes all entries and runs the query again"""
-        data = end_to_end_search_fixture
+        fixture = end_to_end_search_fixture
         db, session = (
-            data.external_search.db,
-            data.external_search.db.session(),
+            fixture.external_search.db,
+            fixture.external_search.db.session(),
         )
-        end_to_end_search_fixture.populate(self._populate_works)
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
 
         custom_list, _ = db.customlist()
         custom_list.library = db.default_library()
@@ -3637,7 +3629,7 @@ class TestCustomListUpdateEntriesScript:
         custom_list.auto_update_status = CustomList.REPOPULATE
 
         # Previously the list would have had Unpopular books
-        for w in data.test_data.unpopular_books:
+        for w in data.unpopular_books:
             custom_list.add_entry(w)
         prev_entry = custom_list.entries[0]
 
@@ -3649,13 +3641,13 @@ class TestCustomListUpdateEntriesScript:
 
         # Now the entries are only the Popular books
         assert {e.work_id for e in custom_list.entries} == {
-            w.id for w in data.test_data.populated_books
+            w.id for w in data.populated_books
         }
         # The previous entries should have been deleted, not just un-related
         with pytest.raises(InvalidRequestError):
             session.refresh(prev_entry)
         assert custom_list.auto_update_status == CustomList.UPDATED
-        assert custom_list.size == len(data.test_data.populated_books)
+        assert custom_list.size == len(data.populated_books)
 
 
 class TestWorkConsolidationScript:

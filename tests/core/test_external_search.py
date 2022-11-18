@@ -511,10 +511,10 @@ class TestExternalSearchWithWorks:
 
     @staticmethod
     def _populate_works(
-        data: EndToEndSearchFixture[TestExternalSearchWithWorksData],
+        fixture: EndToEndSearchFixture,
     ) -> TestExternalSearchWithWorksData:
-        transaction = data.external_search.db
-        _work: Callable = data.external_search.default_work
+        transaction = fixture.external_search.db
+        _work: Callable = fixture.external_search.default_work
 
         result = TestExternalSearchWithWorksData()
         result.moby_dick = _work(
@@ -700,15 +700,14 @@ class TestExternalSearchWithWorks:
 
     def test_query_works(
         self,
-        end_to_end_search_fixture: EndToEndSearchFixture[
-            TestExternalSearchWithWorksData
-        ],
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
-        data = end_to_end_search_fixture
-        transaction = data.external_search.db
+        fixture = end_to_end_search_fixture
+        transaction = fixture.external_search.db
         session = transaction.session()
 
-        data.populate(self._populate_works)
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
 
         # An end-to-end test of the search functionality.
         #
@@ -721,29 +720,27 @@ class TestExternalSearchWithWorks:
         # document query doesn't contain over-zealous joins. This test
         # class is the main place where we make a large number of
         # works and generate search documents for them.
-        assert 1 == len(data.test_data.moby_dick.to_search_document()["licensepools"])
+        assert 1 == len(data.moby_dick.to_search_document()["licensepools"])
         assert (
             "Audio"
-            == data.test_data.pride_audio.to_search_document()["licensepools"][0][
-                "medium"
-            ]
+            == data.pride_audio.to_search_document()["licensepools"][0]["medium"]
         )
 
         # Set up convenient aliases for methods we'll be calling a
         # lot.
-        query = data.external_search.search.query_works
-        expect = data.expect_results
+        query = fixture.external_search.search.query_works
+        expect = fixture.expect_results
 
         # First, test pagination.
         first_item = Pagination(size=1, offset=0)
-        expect(data.test_data.moby_dick, "moby dick", None, first_item)
+        expect(data.moby_dick, "moby dick", None, first_item)
 
         second_item = first_item.next_page
-        expect(data.test_data.moby_duck, "moby dick", None, second_item)
+        expect(data.moby_duck, "moby dick", None, second_item)
 
         two_per_page = Pagination(size=2, offset=0)
         expect(
-            [data.test_data.moby_dick, data.test_data.moby_duck],
+            [data.moby_dick, data.moby_duck],
             "moby dick",
             None,
             two_per_page,
@@ -755,50 +752,48 @@ class TestExternalSearchWithWorks:
         assert 2 == len(query("moby"))
 
         # Search in author name
-        expect(data.test_data.moby_dick, "melville")
+        expect(data.moby_dick, "melville")
 
         # Search in subtitle
-        expect(data.test_data.moby_dick, "whale")
+        expect(data.moby_dick, "whale")
 
         # Search in series.
-        expect(data.test_data.moby_dick, "classics")
+        expect(data.moby_dick, "classics")
 
         # Search in summary.
-        expect(data.test_data.moby_dick, "ishmael")
+        expect(data.moby_dick, "ishmael")
 
         # Search in publisher name.
-        expect(data.test_data.moby_dick, "gutenberg")
+        expect(data.moby_dick, "gutenberg")
 
         # Title > subtitle > word found in summary > publisher
         order = [
-            data.test_data.title_match,
-            data.test_data.subtitle_match,
-            data.test_data.summary_match,
-            data.test_data.publisher_match,
+            data.title_match,
+            data.subtitle_match,
+            data.summary_match,
+            data.publisher_match,
         ]
         expect(order, "match")
 
         # A search for a partial title match + a partial author match
         # considers only books that match both fields.
-        expect([data.test_data.moby_dick], "moby melville")
+        expect([data.moby_dick], "moby melville")
 
         # Match a quoted phrase
         # 'Moby-Dick' is the first result because it's an exact title
         # match. 'Moby Duck' is the second result because it's a fuzzy
         # match,
-        expect([data.test_data.moby_dick, data.test_data.moby_duck], '"moby dick"')
+        expect([data.moby_dick, data.moby_duck], '"moby dick"')
 
         # Match a stemmed word: 'running' is stemmed to 'run', and
         # so is 'runs'.
-        expect(data.test_data.dodger, "runs")
+        expect(data.dodger, "runs")
 
         # Match a misspelled phrase: 'movy' -> 'moby'.
-        expect(
-            [data.test_data.moby_dick, data.test_data.moby_duck], "movy", ordered=False
-        )
+        expect([data.moby_dick, data.moby_duck], "movy", ordered=False)
 
         # Match a misspelled author: 'mleville' -> 'melville'
-        expect(data.test_data.moby_dick, "mleville")
+        expect(data.moby_dick, "mleville")
 
         # TODO: This is clearly trying to match "Moby Dick", but it
         # matches nothing. This is because at least two of the strings
@@ -810,35 +805,35 @@ class TestExternalSearchWithWorks:
         # Here, "dic" is close enough to "dick" that the fuzzy match
         # kicks in. With both "moby" and "dic" matching, it's okay
         # that "k" was a dud.
-        expect([data.test_data.moby_dick], "moby dic k")
+        expect([data.moby_dick], "moby dic k")
 
         # A query without an apostrophe matches a word that contains
         # one.  (this is a feature of the stemmer.)
-        expect(data.test_data.tess, "durbervilles")
-        expect(data.test_data.tiffany, "tiffanys")
+        expect(data.tess, "durbervilles")
+        expect(data.tiffany, "tiffanys")
 
         # A query with an 'e' matches a word that contains an
         # e-with-acute. (this is managed by the 'asciifolding' filter in
         # the analyzers)
-        expect(data.test_data.les_mis, "les miserables")
+        expect(data.les_mis, "les miserables")
 
         # Find results based on fiction status.
         #
         # Here, Moby-Dick (fiction) is privileged over Moby Duck
         # (nonfiction)
-        expect([data.test_data.moby_dick], "fiction moby")
+        expect([data.moby_dick], "fiction moby")
 
         # Here, Moby Duck is privileged over Moby-Dick.
-        expect([data.test_data.moby_duck], "nonfiction moby")
+        expect([data.moby_duck], "nonfiction moby")
 
         # Find results based on series.
         classics = Filter(series="Classics")
-        expect(data.test_data.moby_dick, "moby", classics)
+        expect(data.moby_dick, "moby", classics)
 
         # This finds books that belong to _some_ series.
         some_series = Filter(series=True)
         expect(
-            [data.test_data.moby_dick, data.test_data.ya_romance],
+            [data.moby_dick, data.ya_romance],
             "",
             some_series,
             ordered=False,
@@ -849,13 +844,13 @@ class TestExternalSearchWithWorks:
         # If the entire search query is converted into a filter, every
         # book matching that filter is boosted above books that match
         # the search string as a query.
-        expect([data.test_data.ya_romance, data.test_data.modern_romance], "romance")
+        expect([data.ya_romance, data.modern_romance], "romance")
 
         # Find results based on audience.
-        expect(data.test_data.children_work, "children's")
+        expect(data.children_work, "children's")
 
         expect(
-            [data.test_data.ya_work, data.test_data.ya_romance],
+            [data.ya_work, data.ya_romance],
             "young adult",
             ordered=False,
         )
@@ -865,14 +860,14 @@ class TestExternalSearchWithWorks:
             # ages 9-10 is a better result because a book targeted
             # toward a narrow range is a better match than a book
             # targeted toward a wide range.
-            expect([data.test_data.age_9_10, data.test_data.age_2_10], q)
+            expect([data.age_9_10, data.age_2_10], q)
 
         # TODO: The target age query only scores how big the overlap
         # is, it doesn't look at how large the non-overlapping part of
         # the range is. So the 2-10 book can show up before the 9-10
         # book. This could be improved.
         expect(
-            [data.test_data.age_9_10, data.test_data.age_2_10],
+            [data.age_9_10, data.age_2_10],
             "age 10-12",
             ordered=False,
         )
@@ -880,7 +875,7 @@ class TestExternalSearchWithWorks:
         # Books whose target age are closer to the requested range
         # are ranked higher.
         expect(
-            [data.test_data.age_4_5, data.test_data.age_5_6, data.test_data.age_2_10],
+            [data.age_4_5, data.age_5_6, data.age_2_10],
             "age 3-5",
         )
 
@@ -888,18 +883,18 @@ class TestExternalSearchWithWorks:
 
         # The book with 'Romance' in the title does not show up because
         # it's not a YA book.
-        expect([data.test_data.ya_romance], "young adult romance")
+        expect([data.ya_romance], "young adult romance")
 
         # Search by a combination of target age and fiction
         #
         # Two books match the age range, but the one with a
         # tighter age range comes first.
-        expect([data.test_data.age_4_5, data.test_data.age_2_10], "age 5 fiction")
+        expect([data.age_4_5, data.age_2_10], "age 5 fiction")
 
         # Search by a combination of genre and title
 
         # Two books match 'lincoln', but only the biography is returned
-        expect([data.test_data.lincoln], "lincoln biography")
+        expect([data.lincoln], "lincoln biography")
 
         # Search by age + genre + summary
         results = query("age 8 president biography")
@@ -907,7 +902,7 @@ class TestExternalSearchWithWorks:
         # There are a number of results, but the top one is a presidential
         # biography for 8-year-olds.
         assert 5 == len(results)
-        assert data.test_data.obama.id == results[0].work_id
+        assert data.obama.id == results[0].work_id
 
         # Now we'll test filters.
 
@@ -916,18 +911,18 @@ class TestExternalSearchWithWorks:
         # consideration.
         book_filter = Filter(media=Edition.BOOK_MEDIUM)
         audio_filter = Filter(media=Edition.AUDIO_MEDIUM)
-        expect(data.test_data.pride, "pride and prejudice", book_filter)
-        expect(data.test_data.pride_audio, "pride and prejudice", audio_filter)
+        expect(data.pride, "pride and prejudice", book_filter)
+        expect(data.pride_audio, "pride and prejudice", audio_filter)
 
         # Filters on languages
         english = Filter(languages="eng")
         spanish = Filter(languages="spa")
         both = Filter(languages=["eng", "spa"])
 
-        expect(data.test_data.sherlock, "sherlock", english)
-        expect(data.test_data.sherlock_spanish, "sherlock", spanish)
+        expect(data.sherlock, "sherlock", english)
+        expect(data.sherlock_spanish, "sherlock", spanish)
         expect(
-            [data.test_data.sherlock, data.test_data.sherlock_spanish],
+            [data.sherlock, data.sherlock_spanish],
             "sherlock",
             both,
             ordered=False,
@@ -938,13 +933,13 @@ class TestExternalSearchWithWorks:
         nonfiction = Filter(fiction=False)
         both = Filter()
 
-        expect(data.test_data.moby_dick, "moby dick", fiction)
-        expect(data.test_data.moby_duck, "moby dick", nonfiction)
-        expect([data.test_data.moby_dick, data.test_data.moby_duck], "moby dick", both)
+        expect(data.moby_dick, "moby dick", fiction)
+        expect(data.moby_duck, "moby dick", nonfiction)
+        expect([data.moby_dick, data.moby_duck], "moby dick", both)
 
         # Filters on series
         classics = Filter(series="classics")
-        expect(data.test_data.moby_dick, "moby", classics)
+        expect(data.moby_dick, "moby", classics)
 
         # Filters on audience
         adult = Filter(audiences=Classifier.AUDIENCE_ADULT)
@@ -958,29 +953,27 @@ class TestExternalSearchWithWorks:
         def expect_alice(expect_works, filter):
             return expect(expect_works, "alice", filter, ordered=False)
 
-        expect_alice([data.test_data.adult_work, data.test_data.all_ages_work], adult)
-        expect_alice([data.test_data.ya_work, data.test_data.all_ages_work], ya)
-        expect_alice(
-            [data.test_data.children_work, data.test_data.all_ages_work], children
-        )
+        expect_alice([data.adult_work, data.all_ages_work], adult)
+        expect_alice([data.ya_work, data.all_ages_work], ya)
+        expect_alice([data.children_work, data.all_ages_work], children)
         expect_alice(
             [
-                data.test_data.children_work,
-                data.test_data.ya_work,
-                data.test_data.all_ages_work,
+                data.children_work,
+                data.ya_work,
+                data.all_ages_work,
             ],
             ya_and_children,
         )
 
         # The 'all ages' work appears except when the audience would make
         # that inappropriate...
-        expect_alice([data.test_data.research_work], research)
+        expect_alice([data.research_work], research)
         expect_alice([], Filter(audiences=Classifier.AUDIENCE_ADULTS_ONLY))
 
         # ...or when the target age does not include children expected
         # to have the necessary reading fluency.
         expect_alice(
-            [data.test_data.children_work],
+            [data.children_work],
             Filter(audiences=Classifier.AUDIENCE_CHILDREN, target_age=(2, 3)),
         )
 
@@ -989,10 +982,10 @@ class TestExternalSearchWithWorks:
         default_filter = Filter()
         expect_alice(
             [
-                data.test_data.children_work,
-                data.test_data.ya_work,
-                data.test_data.adult_work,
-                data.test_data.all_ages_work,
+                data.children_work,
+                data.ya_work,
+                data.adult_work,
+                data.all_ages_work,
             ],
             default_filter,
         )
@@ -1007,7 +1000,7 @@ class TestExternalSearchWithWorks:
         # disappear. no_age is always present since it has no age
         # restrictions.
         expect(
-            [data.test_data.no_age, data.test_data.obama, data.test_data.dodger],
+            [data.no_age, data.obama, data.dodger],
             "president",
             age_8,
             ordered=False,
@@ -1015,10 +1008,10 @@ class TestExternalSearchWithWorks:
 
         expect(
             [
-                data.test_data.no_age,
-                data.test_data.age_4_5,
-                data.test_data.obama,
-                data.test_data.dodger,
+                data.no_age,
+                data.age_4_5,
+                data.obama,
+                data.dodger,
             ],
             "president",
             age_5_8,
@@ -1027,11 +1020,11 @@ class TestExternalSearchWithWorks:
 
         expect(
             [
-                data.test_data.no_age,
-                data.test_data.age_4_5,
-                data.test_data.obama,
-                data.test_data.dodger,
-                data.test_data.age_9_10,
+                data.no_age,
+                data.age_4_5,
+                data.obama,
+                data.dodger,
+                data.age_9_10,
             ],
             "president",
             age_5_10,
@@ -1040,10 +1033,10 @@ class TestExternalSearchWithWorks:
 
         expect(
             [
-                data.test_data.no_age,
-                data.test_data.obama,
-                data.test_data.dodger,
-                data.test_data.age_9_10,
+                data.no_age,
+                data.obama,
+                data.dodger,
+                data.age_9_10,
             ],
             "president",
             age_8_10,
@@ -1054,7 +1047,7 @@ class TestExternalSearchWithWorks:
         gutenberg = DataSource.lookup(session, DataSource.GUTENBERG)
         gutenberg_only = Filter(license_datasource=gutenberg)
         expect(
-            [data.test_data.moby_dick, data.test_data.moby_duck],
+            [data.moby_dick, data.moby_duck],
             "moby",
             gutenberg_only,
             ordered=False,
@@ -1070,10 +1063,8 @@ class TestExternalSearchWithWorks:
         # filtered out because its last update time is before the
         # `updated_after`. "Moby Duck" shows up because its last update
         # time is right on the edge.
-        after_moby_duck = Filter(
-            updated_after=data.test_data.moby_duck.last_update_time
-        )
-        expect([data.test_data.moby_duck], "moby dick", after_moby_duck)
+        after_moby_duck = Filter(updated_after=data.moby_duck.last_update_time)
+        expect([data.moby_duck], "moby dick", after_moby_duck)
 
         # Filters on genre
 
@@ -1083,10 +1074,10 @@ class TestExternalSearchWithWorks:
         fantasy_filter = Filter(genre_restriction_sets=[[fantasy]])
         both = Filter(genre_restriction_sets=[[fantasy, biography]])
 
-        expect(data.test_data.lincoln, "lincoln", biography_filter)
-        expect(data.test_data.lincoln_vampire, "lincoln", fantasy_filter)
+        expect(data.lincoln, "lincoln", biography_filter)
+        expect(data.lincoln_vampire, "lincoln", fantasy_filter)
         expect(
-            [data.test_data.lincoln, data.test_data.lincoln_vampire],
+            [data.lincoln, data.lincoln_vampire],
             "lincoln",
             both,
             ordered=False,
@@ -1096,10 +1087,8 @@ class TestExternalSearchWithWorks:
 
         # This ignores 'Abraham Lincoln, Vampire Hunter' because that
         # book isn't on the self.presidential list.
-        on_presidential_list = Filter(
-            customlist_restriction_sets=[[data.test_data.presidential]]
-        )
-        expect(data.test_data.lincoln, "lincoln", on_presidential_list)
+        on_presidential_list = Filter(customlist_restriction_sets=[[data.presidential]])
+        expect(data.lincoln, "lincoln", on_presidential_list)
 
         # This filters everything, since the query is restricted to
         # an empty set of lists.
@@ -1112,24 +1101,24 @@ class TestExternalSearchWithWorks:
         expect([], "a tiny book", default_collection_only)
 
         # It is in the tiny_collection.
-        other_collection_only = Filter(collections=data.test_data.tiny_collection)
-        expect(data.test_data.tiny_book, "a tiny book", other_collection_only)
+        other_collection_only = Filter(collections=data.tiny_collection)
+        expect(data.tiny_book, "a tiny book", other_collection_only)
 
         # If a book is present in two different collections which are
         # being searched, it only shows up in search results once.
         f = Filter(
             collections=[
                 transaction.default_collection(),
-                data.test_data.tiny_collection,
+                data.tiny_collection,
             ],
             languages="eng",
         )
-        expect(data.test_data.sherlock, "sherlock holmes", f)
+        expect(data.sherlock, "sherlock holmes", f)
 
         # Filter on identifier -- one or many.
         for results in [
-            [data.test_data.lincoln],
-            [data.test_data.sherlock, data.test_data.pride_audio],
+            [data.lincoln],
+            [data.sherlock, data.pride_audio],
         ]:
             identifiers = [w.license_pools[0].identifier for w in results]
             f = Filter(identifiers=identifiers)
@@ -1146,10 +1135,10 @@ class TestExternalSearchWithWorks:
         # excluded, so it won't show up in search results.
         f = Filter(
             excluded_audiobook_data_sources=[
-                data.test_data.pride_audio.license_pools[0].data_source
+                data.pride_audio.license_pools[0].data_source
             ]
         )
-        expect([data.test_data.pride], "pride and prejudice", f)
+        expect([data.pride], "pride and prejudice", f)
 
         # Here, a different data source is excluded, and it shows up.
         f = Filter(
@@ -1158,7 +1147,7 @@ class TestExternalSearchWithWorks:
             ]
         )
         expect(
-            [data.test_data.pride, data.test_data.pride_audio],
+            [data.pride, data.pride_audio],
             "pride and prejudice",
             f,
             ordered=False,
@@ -1167,7 +1156,7 @@ class TestExternalSearchWithWorks:
         # "Moby Duck" is not currently available, so it won't show up in
         # search results if allow_holds is False.
         f = Filter(allow_holds=False)
-        expect([data.test_data.moby_dick], "moby duck", f)
+        expect([data.moby_dick], "moby duck", f)
 
         # Finally, let's do some end-to-end tests of
         # WorkList.works()
@@ -1186,7 +1175,7 @@ class TestExternalSearchWithWorks:
             while pagination:
                 pages.append(
                     worklist.works(
-                        session, facets, pagination, data.external_search.search
+                        session, facets, pagination, fixture.external_search.search
                     )
                 )
                 pagination = pagination.next_page
@@ -1201,21 +1190,21 @@ class TestExternalSearchWithWorks:
         # Test a WorkList based on a custom list.
         presidential = WorkList()
         presidential.initialize(
-            transaction.default_library(), customlists=[data.test_data.presidential]
+            transaction.default_library(), customlists=[data.presidential]
         )
         p1, p2 = pages(presidential)
-        assert [data.test_data.lincoln, data.test_data.obama] == p1
-        assert [data.test_data.washington] == p2
+        assert [data.lincoln, data.obama] == p1
+        assert [data.washington] == p2
 
         # Test a WorkList based on a language.
         spanish = WorkList()
         spanish.initialize(transaction.default_library(), languages=["spa"])
-        assert [[data.test_data.sherlock_spanish]] == pages(spanish)
+        assert [[data.sherlock_spanish]] == pages(spanish)
 
         # Test a WorkList based on a genre.
         biography_wl = WorkList()
         biography_wl.initialize(transaction.default_library(), genres=[biography])
-        assert [[data.test_data.lincoln, data.test_data.obama]] == pages(biography_wl)
+        assert [[data.lincoln, data.obama]] == pages(biography_wl)
 
         # Search results may be sorted by some field other than search
         # quality.
@@ -1241,8 +1230,8 @@ class TestExternalSearchWithWorks:
         # real collection the default filter level works well, but it
         # makes it difficult to test the feature in this limited test
         # collection.
-        expect([data.test_data.moby_dick], "moby dick", by_author)
-        expect([data.test_data.ya_romance], "romance", by_author)
+        expect([data.moby_dick], "moby dick", by_author)
+        expect([data.ya_romance], "romance", by_author)
         expect([], "moby", by_author)
         expect([], "president", by_author)
 
@@ -1250,15 +1239,15 @@ class TestExternalSearchWithWorks:
         by_title.min_score = 50
         by_author.min_score = 50
 
-        expect([data.test_data.moby_dick, data.test_data.moby_duck], "moby", by_title)
-        expect([data.test_data.moby_duck, data.test_data.moby_dick], "moby", by_author)
+        expect([data.moby_dick, data.moby_duck], "moby", by_title)
+        expect([data.moby_duck, data.moby_dick], "moby", by_author)
         expect(
-            [data.test_data.ya_romance, data.test_data.modern_romance],
+            [data.ya_romance, data.modern_romance],
             "romance",
             by_title,
         )
         expect(
-            [data.test_data.modern_romance, data.test_data.ya_romance],
+            [data.modern_romance, data.ya_romance],
             "romance",
             by_author,
         )
@@ -1268,11 +1257,11 @@ class TestExternalSearchWithWorks:
         by_title.min_score = 10
         by_author.min_score = 10
         results = [
-            data.test_data.no_age,
-            data.test_data.age_4_5,
-            data.test_data.dodger,
-            data.test_data.age_9_10,
-            data.test_data.obama,
+            data.no_age,
+            data.age_4_5,
+            data.dodger,
+            data.age_9_10,
+            data.obama,
         ]
         expect(results, "president", by_title)
 
@@ -1285,14 +1274,14 @@ class TestExternalSearchWithWorks:
         # simultaneously.
 
         # Different query strings.
-        data.expect_results_multi(
-            [[data.test_data.moby_dick], [data.test_data.moby_duck]],
+        fixture.expect_results_multi(
+            [[data.moby_dick], [data.moby_duck]],
             [("moby dick", None, first_item), ("moby duck", None, first_item)],
         )
 
         # Same query string, different pagination settings.
-        data.expect_results_multi(
-            [[data.test_data.moby_dick], [data.test_data.moby_duck]],
+        fixture.expect_results_multi(
+            [[data.moby_dick], [data.moby_duck]],
             [("moby dick", None, first_item), ("moby dick", None, second_item)],
         )
 
@@ -1302,8 +1291,8 @@ class TestExternalSearchWithWorks:
         # even run.  Here the query must be run, even though one
         # branch will return no results.
         match_nothing = Filter(match_nothing=True)
-        data.expect_results_multi(
-            [[data.test_data.moby_duck], []],
+        fixture.expect_results_multi(
+            [[data.moby_duck], []],
             [
                 ("moby dick", Filter(fiction=False), first_item),
                 (None, match_nothing, first_item),
@@ -1321,7 +1310,7 @@ class TestFacetFiltersData:
 class TestFacetFilters:
     @staticmethod
     def _populate_works(
-        data: EndToEndSearchFixture[TestFacetFiltersData],
+        data: EndToEndSearchFixture,
     ) -> TestFacetFiltersData:
         _work: Callable = data.external_search.default_work
 
@@ -1347,18 +1336,17 @@ class TestFacetFilters:
         result.becoming.quality = 0.9
         return result
 
-    def test_facet_filtering(
-        self, end_to_end_search_fixture: EndToEndSearchFixture[TestFacetFiltersData]
-    ):
-        data = end_to_end_search_fixture
-        transaction = data.external_search.db
+    def test_facet_filtering(self, end_to_end_search_fixture: EndToEndSearchFixture):
+        fixture = end_to_end_search_fixture
+        transaction = fixture.external_search.db
         session = transaction.session()
 
-        data.populate(self._populate_works)
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
 
         # Add all the works created in the setup to the search index.
         SearchIndexCoverageProvider(
-            session, search_index_client=data.external_search.search
+            session, search_index_client=fixture.external_search.search
         ).run_once_and_update_timestamp()
 
         # Sleep to give the index time to catch up.
@@ -1371,17 +1359,17 @@ class TestFacetFilters:
                 collection,
                 order=Facets.ORDER_TITLE,
             )
-            data.expect_results(works, None, Filter(facets=facets), ordered=False)
+            fixture.expect_results(works, None, Filter(facets=facets), ordered=False)
 
         # Get all the books in alphabetical order by title.
         expect(
             Facets.COLLECTION_FULL,
             Facets.AVAILABLE_ALL,
             [
-                data.test_data.becoming,
-                data.test_data.horse,
-                data.test_data.moby,
-                data.test_data.duck,
+                data.becoming,
+                data.horse,
+                data.moby,
+                data.duck,
             ],
         )
 
@@ -1389,26 +1377,24 @@ class TestFacetFilters:
         expect(
             Facets.COLLECTION_FULL,
             Facets.AVAILABLE_NOW,
-            [data.test_data.horse, data.test_data.moby, data.test_data.duck],
+            [data.horse, data.moby, data.duck],
         )
 
         # Show only works that can *not* be borrowed right now.
-        expect(
-            Facets.COLLECTION_FULL, Facets.AVAILABLE_NOT_NOW, [data.test_data.becoming]
-        )
+        expect(Facets.COLLECTION_FULL, Facets.AVAILABLE_NOT_NOW, [data.becoming])
 
         # Show only open-access works.
         expect(
             Facets.COLLECTION_FULL,
             Facets.AVAILABLE_OPEN_ACCESS,
-            [data.test_data.horse, data.test_data.moby],
+            [data.horse, data.moby],
         )
 
         # Show only featured-quality works.
         expect(
             Facets.COLLECTION_FEATURED,
             Facets.AVAILABLE_ALL,
-            [data.test_data.becoming, data.test_data.moby],
+            [data.becoming, data.moby],
         )
 
 
@@ -1441,10 +1427,10 @@ class TestSearchOrderData:
 class TestSearchOrder:
     @staticmethod
     def _populate_works(
-        data: EndToEndSearchFixture[TestSearchOrderData],
+        fixture: EndToEndSearchFixture,
     ) -> TestSearchOrderData:
-        transaction = data.external_search.db
-        _work: Callable = data.external_search.default_work
+        transaction = fixture.external_search.db
+        _work: Callable = fixture.external_search.default_work
 
         result = TestSearchOrderData()
         # We're going to create three works:
@@ -1621,12 +1607,11 @@ class TestSearchOrder:
         result.d.last_update_time = datetime_utc(2091, 1, 1)
         return result
 
-    def test_ordering(
-        self, end_to_end_search_fixture: EndToEndSearchFixture[TestSearchOrderData]
-    ):
-        data = end_to_end_search_fixture
-        transaction = data.external_search.db
-        data.populate(self._populate_works)
+    def test_ordering(self, end_to_end_search_fixture: EndToEndSearchFixture):
+        fixture = end_to_end_search_fixture
+        transaction = fixture.external_search.db
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
 
         def assert_order(sort_field, order, **filter_kwargs):
             """Verify that when the books created during test setup are ordered by
@@ -1642,7 +1627,7 @@ class TestSearchOrder:
             :param filter_kwargs: Extra keyword arguments to be passed
                into the `Filter` constructor.
             """
-            expect = data.expect_results
+            expect = fixture.expect_results
             facets = Facets(
                 transaction.default_library(),
                 Facets.COLLECTION_FULL,
@@ -1692,9 +1677,9 @@ class TestSearchOrder:
         assert_order(
             Facets.ORDER_TITLE,
             [
-                data.test_data.untitled,
-                data.test_data.moby_dick,
-                data.test_data.moby_duck,
+                data.untitled,
+                data.moby_dick,
+                data.moby_duck,
             ],
             collections=[transaction.default_collection()],
         )
@@ -1704,9 +1689,9 @@ class TestSearchOrder:
         assert_order(
             Facets.ORDER_AUTHOR,
             [
-                data.test_data.moby_duck,
-                data.test_data.moby_dick,
-                data.test_data.untitled,
+                data.moby_duck,
+                data.moby_dick,
+                data.untitled,
             ],
             collections=[transaction.default_collection()],
         )
@@ -1717,9 +1702,9 @@ class TestSearchOrder:
         assert_order(
             Facets.ORDER_SERIES_POSITION,
             [
-                data.test_data.moby_duck,
-                data.test_data.untitled,
-                data.test_data.moby_dick,
+                data.moby_duck,
+                data.untitled,
+                data.moby_dick,
             ],
             collections=[transaction.default_collection()],
         )
@@ -1728,9 +1713,9 @@ class TestSearchOrder:
         assert_order(
             Facets.ORDER_WORK_ID,
             [
-                data.test_data.moby_dick,
-                data.test_data.moby_duck,
-                data.test_data.untitled,
+                data.moby_dick,
+                data.moby_duck,
+                data.untitled,
             ],
             collections=[transaction.default_collection()],
         )
@@ -1743,14 +1728,14 @@ class TestSearchOrder:
         # results.
         assert_order(
             Facets.ORDER_ADDED_TO_COLLECTION,
-            [data.test_data.a, data.test_data.c, data.test_data.b],
-            collections=[data.test_data.collection1],
+            [data.a, data.c, data.b],
+            collections=[data.collection1],
         )
 
         assert_order(
             Facets.ORDER_ADDED_TO_COLLECTION,
-            [data.test_data.b, data.test_data.a, data.test_data.c],
-            collections=[data.test_data.collection2],
+            [data.b, data.a, data.c],
+            collections=[data.collection2],
         )
 
         # If a work shows up with multiple availability times through
@@ -1760,8 +1745,8 @@ class TestSearchOrder:
         # here.
         assert_order(
             Facets.ORDER_ADDED_TO_COLLECTION,
-            [data.test_data.a, data.test_data.c, data.test_data.b],
-            collections=[data.test_data.collection1, data.test_data.collection2],
+            [data.a, data.c, data.b],
+            collections=[data.collection1, data.collection2],
         )
 
         # Finally, here are the tests of ORDER_LAST_UPDATE, as described
@@ -1769,53 +1754,53 @@ class TestSearchOrder:
         assert_order(
             Facets.ORDER_LAST_UPDATE,
             [
-                data.test_data.a,
-                data.test_data.b,
-                data.test_data.c,
-                data.test_data.e,
-                data.test_data.d,
+                data.a,
+                data.b,
+                data.c,
+                data.e,
+                data.d,
             ],
         )
 
         assert_order(
             Facets.ORDER_LAST_UPDATE,
-            [data.test_data.a, data.test_data.c, data.test_data.b],
-            collections=[data.test_data.collection1],
+            [data.a, data.c, data.b],
+            collections=[data.collection1],
         )
 
         assert_order(
             Facets.ORDER_LAST_UPDATE,
-            [data.test_data.b, data.test_data.a, data.test_data.c],
-            collections=[data.test_data.collection1, data.test_data.collection2],
+            [data.b, data.a, data.c],
+            collections=[data.collection1, data.collection2],
         )
 
         assert_order(
             Facets.ORDER_LAST_UPDATE,
-            [data.test_data.b, data.test_data.c, data.test_data.a],
-            customlist_restriction_sets=[[data.test_data.list1]],
+            [data.b, data.c, data.a],
+            customlist_restriction_sets=[[data.list1]],
         )
 
         assert_order(
             Facets.ORDER_LAST_UPDATE,
-            [data.test_data.c, data.test_data.a, data.test_data.b],
-            collections=[data.test_data.collection1],
-            customlist_restriction_sets=[[data.test_data.list2]],
+            [data.c, data.a, data.b],
+            collections=[data.collection1],
+            customlist_restriction_sets=[[data.list2]],
         )
 
         assert_order(
             Facets.ORDER_LAST_UPDATE,
-            [data.test_data.c, data.test_data.a],
+            [data.c, data.a],
             customlist_restriction_sets=[
-                [data.test_data.list1],
-                [data.test_data.list3],
+                [data.list1],
+                [data.list3],
             ],
         )
 
         assert_order(
             Facets.ORDER_LAST_UPDATE,
-            [data.test_data.e, data.test_data.d],
-            collections=[data.test_data.collection3],
-            customlist_restriction_sets=[[data.test_data.extra_list]],
+            [data.e, data.d],
+            collections=[data.collection3],
+            customlist_restriction_sets=[[data.extra_list]],
         )
 
 
@@ -1841,7 +1826,7 @@ class TestAuthorFilter:
 
     @staticmethod
     def _populate_works(
-        data: EndToEndSearchFixture[TestAuthorFilterData],
+        data: EndToEndSearchFixture,
     ) -> TestAuthorFilterData:
         transaction, session = (
             data.external_search.db,
@@ -1921,19 +1906,18 @@ class TestAuthorFilter:
         )
         return result
 
-    def test_author_match(
-        self, end_to_end_search_fixture: EndToEndSearchFixture[TestAuthorFilterData]
-    ):
-        data = end_to_end_search_fixture
-        data.populate(self._populate_works)
+    def test_author_match(self, end_to_end_search_fixture: EndToEndSearchFixture):
+        fixture = end_to_end_search_fixture
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
 
         # By providing a Contributor object with all the identifiers,
         # we get every work with an author-type contribution from
         # someone who can be identified with that Contributor.
-        data.expect_results(
-            data.test_data.works,
+        fixture.expect_results(
+            data.works,
             None,
-            Filter(author=data.test_data.full),
+            Filter(author=data.full),
             ordered=False,
         )
 
@@ -1947,14 +1931,12 @@ class TestAuthorFilter:
         # work -- the one associated with the Contributor whose
         # data overlaps what we're passing in.
         for filter, extra in [
-            (Filter(author=data.test_data.display_name), data.test_data.sword),
-            (Filter(author=data.test_data.sort_name), data.test_data.mercy),
-            (Filter(author=data.test_data.viaf), data.test_data.provenance),
-            (Filter(author=data.test_data.lc), data.test_data.raven),
+            (Filter(author=data.display_name), data.sword),
+            (Filter(author=data.sort_name), data.mercy),
+            (Filter(author=data.viaf), data.provenance),
+            (Filter(author=data.lc), data.raven),
         ]:
-            data.expect_results(
-                [data.test_data.justice, extra], None, filter, ordered=False
-            )
+            fixture.expect_results([data.justice, extra], None, filter, ordered=False)
 
         # ContributorData also works here.
 
@@ -1963,8 +1945,8 @@ class TestAuthorFilter:
         # the one that knows its author's VIAF number, and the one
         # that knows both.
         author = ContributorData(sort_name="Leckie, Ann", viaf="73520345")
-        data.expect_results(
-            [data.test_data.justice, data.test_data.mercy, data.test_data.provenance],
+        fixture.expect_results(
+            [data.justice, data.mercy, data.provenance],
             None,
             Filter(author=author),
             ordered=False,
@@ -1975,8 +1957,8 @@ class TestAuthorFilter:
         # accented characters.
         for variant in ("ann leckie", "Àñn Léckiê"):
             author = ContributorData(display_name=variant)
-            data.expect_results(
-                [data.test_data.justice, data.test_data.sword],
+            fixture.expect_results(
+                [data.justice, data.sword],
                 None,
                 Filter(author=author),
                 ordered=False,
@@ -1984,13 +1966,13 @@ class TestAuthorFilter:
 
         # It cannot accommodate misspellings, no matter how minor.
         author = ContributorData(display_name="Anne Leckie")
-        data.expect_results([], None, Filter(author=author))
+        fixture.expect_results([], None, Filter(author=author))
 
         # If the information in the ContributorData is inconsistent,
         # the results may also be inconsistent.
         author = ContributorData(sort_name="Dick, Phillip K.", lc="n2013008575")
-        data.expect_results(
-            [data.test_data.justice, data.test_data.raven, data.test_data.ubik],
+        fixture.expect_results(
+            [data.justice, data.raven, data.ubik],
             None,
             Filter(author=author),
             ordered=False,
@@ -2014,7 +1996,7 @@ class TestExactMatches:
 
     @staticmethod
     def _populate_works(
-        data: EndToEndSearchFixture[TestExactMatchesData],
+        data: EndToEndSearchFixture,
     ) -> TestExactMatchesData:
         _work = data.external_search.default_work
 
@@ -2058,19 +2040,18 @@ class TestExactMatches:
         )
         return result
 
-    def test_exact_matches(
-        self, end_to_end_search_fixture: EndToEndSearchFixture[TestExactMatchesData]
-    ):
-        data = end_to_end_search_fixture
-        data.populate(self._populate_works)
-        expect = data.expect_results
+    def test_exact_matches(self, end_to_end_search_fixture: EndToEndSearchFixture):
+        fixture = end_to_end_search_fixture
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
+        expect = fixture.expect_results
 
         # A full title match takes precedence over a match that's
         # split across genre and subtitle.
         expect(
             [
-                data.test_data.modern_romance,  # "modern romance" in title
-                data.test_data.ya_romance,  # "modern" in subtitle, genre "romance"
+                data.modern_romance,  # "modern romance" in title
+                data.ya_romance,  # "modern" in subtitle, genre "romance"
             ],
             "modern romance",
         )
@@ -2080,8 +2061,8 @@ class TestExactMatches:
         # all all because it can't match two words.
         expect(
             [
-                data.test_data.modern_romance,  # "Aziz Ansari" in author
-                data.test_data.parent_book,  # "Aziz" in title, "Ansari" in author
+                data.modern_romance,  # "Aziz Ansari" in author
+                data.parent_book,  # "Aziz" in title, "Ansari" in author
             ],
             "aziz ansari",
         )
@@ -2096,10 +2077,10 @@ class TestExactMatches:
         # across fields ("peter" in author, "graves" in title) is the
         # last result.
         order = [
-            data.test_data.book_by_peter_graves,
-            data.test_data.biography_of_peter_graves,
-            data.test_data.behind_the_scenes,
-            data.test_data.book_by_someone_else,
+            data.book_by_peter_graves,
+            data.biography_of_peter_graves,
+            data.behind_the_scenes,
+            data.book_by_someone_else,
         ]
         expect(order, "peter graves")
 
@@ -2114,9 +2095,9 @@ class TestExactMatches:
         #    if there are more than two search terms, only two must match.
 
         order = [
-            data.test_data.behind_the_scenes,  # all words match in title
-            data.test_data.biography_of_peter_graves,  # title + genre 'biography'
-            data.test_data.book_by_peter_graves,  # author (no 'biography')
+            data.behind_the_scenes,  # all words match in title
+            data.biography_of_peter_graves,  # title + genre 'biography'
+            data.book_by_peter_graves,  # author (no 'biography')
         ]
 
         expect(order, "peter graves biography")
@@ -2136,7 +2117,7 @@ class TestFeaturedFacets:
 
     @staticmethod
     def _populate_works(
-        data: EndToEndSearchFixture[TestFeaturedFacetsData],
+        data: EndToEndSearchFixture,
     ) -> TestFeaturedFacetsData:
         transaction, session = (
             data.external_search.db,
@@ -2169,11 +2150,10 @@ class TestFeaturedFacets:
         result.best_seller_list.add_entry(result.not_featured_on_list)
         return result
 
-    def test_scoring_functions(
-        self, end_to_end_search_fixture: EndToEndSearchFixture[TestFeaturedFacetsData]
-    ):
-        data = end_to_end_search_fixture
-        data.populate(self._populate_works)
+    def test_scoring_functions(self, end_to_end_search_fixture: EndToEndSearchFixture):
+        fixture = end_to_end_search_fixture
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
 
         # Verify that FeaturedFacets sets appropriate scoring functions
         # for ElasticSearch queries.
@@ -2244,26 +2224,25 @@ class TestFeaturedFacets:
         )
         assert 11 == featured_on_list["weight"]
 
-    def test_run(
-        self, end_to_end_search_fixture: EndToEndSearchFixture[TestFeaturedFacetsData]
-    ):
-        data = end_to_end_search_fixture
+    def test_run(self, end_to_end_search_fixture: EndToEndSearchFixture):
+        fixture = end_to_end_search_fixture
         transaction, session = (
-            data.external_search.db,
-            data.external_search.db.session(),
+            fixture.external_search.db,
+            fixture.external_search.db.session(),
         )
-        data.populate(self._populate_works)
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
 
         def works(worklist, facets):
             return worklist.works(
-                session, facets, None, data.external_search.search, debug=True
+                session, facets, None, fixture.external_search.search, debug=True
             )
 
         def assert_featured(description, worklist, facets, expect):
             # Generate a list of featured works for the given `worklist`
             # and compare that list against `expect`.
             actual = works(worklist, facets)
-            data.assert_works(description, expect, actual)
+            fixture.assert_works(description, expect, actual)
 
         worklist = WorkList()
         worklist.initialize(transaction.default_library())
@@ -2273,20 +2252,16 @@ class TestFeaturedFacets:
         # not_featured_on_list, not_featured_on_list shows up first because
         # it's available right now.
         w = works(worklist, facets)
-        assert w.index(data.test_data.not_featured_on_list) < w.index(
-            data.test_data.hq_not_available
-        )
+        assert w.index(data.not_featured_on_list) < w.index(data.hq_not_available)
 
         # not_featured_on_list shows up before featured_on_list because
         # it's higher-quality and list membership isn't relevant.
-        assert w.index(data.test_data.not_featured_on_list) < w.index(
-            data.test_data.featured_on_list
-        )
+        assert w.index(data.not_featured_on_list) < w.index(data.featured_on_list)
 
         # Create a WorkList that's restricted to best-sellers.
         best_sellers = WorkList()
         best_sellers.initialize(
-            transaction.default_library(), customlists=[data.test_data.best_seller_list]
+            transaction.default_library(), customlists=[data.best_seller_list]
         )
         # The featured work appears above the non-featured work,
         # even though it's lower quality and is not available.
@@ -2294,7 +2269,7 @@ class TestFeaturedFacets:
             "Works from WorkList based on CustomList",
             best_sellers,
             facets,
-            [data.test_data.featured_on_list, data.test_data.not_featured_on_list],
+            [data.featured_on_list, data.not_featured_on_list],
         )
 
         # By changing the minimum_featured_quality you can control
@@ -2312,12 +2287,12 @@ class TestFeaturedFacets:
         # available books will show up before all of the unavailable
         # books.
         only_availability_matters = worklist.works(
-            session, facets, None, data.external_search.search, debug=True
+            session, facets, None, fixture.external_search.search, debug=True
         )
         assert 5 == len(only_availability_matters)
         last_two = only_availability_matters[-2:]
-        assert data.test_data.hq_not_available in last_two
-        assert data.test_data.featured_on_list in last_two
+        assert data.hq_not_available in last_two
+        assert data.featured_on_list in last_two
 
         # Up to this point we've been avoiding the random element,
         # but we can introduce that now by passing in a numeric seed.
@@ -2331,11 +2306,11 @@ class TestFeaturedFacets:
             worklist,
             random_facets,
             [
-                data.test_data.hq_available_2,
-                data.test_data.hq_available,
-                data.test_data.not_featured_on_list,
-                data.test_data.hq_not_available,
-                data.test_data.featured_on_list,
+                data.hq_available_2,
+                data.hq_available,
+                data.not_featured_on_list,
+                data.hq_not_available,
+                data.featured_on_list,
             ],
         )
 
@@ -5306,7 +5281,7 @@ class TestExternalSearchJSONQuery:
 
     @staticmethod
     def _populate_works(
-        data: EndToEndSearchFixture[TestExternalSearchJSONQueryData],
+        data: EndToEndSearchFixture,
     ) -> TestExternalSearchJSONQueryData:
         transaction, session = (
             data.external_search.db,
@@ -5349,12 +5324,13 @@ class TestExternalSearchJSONQuery:
 
     @staticmethod
     def expect(
-        data: EndToEndSearchFixture[TestExternalSearchJSONQueryData],
+        fixture: EndToEndSearchFixture,
+        data: TestExternalSearchJSONQueryData,
         partial_query,
         works,
     ):
         query = dict(query=partial_query)
-        resp = data.external_search.search.query_works(query, data.test_data.filter)
+        resp = fixture.external_search.search.query_works(query, data.filter)
 
         assert len(resp.hits) == len(works)
 
@@ -5365,18 +5341,18 @@ class TestExternalSearchJSONQuery:
 
     def test_search_basic(
         self,
-        end_to_end_search_fixture: EndToEndSearchFixture[
-            TestExternalSearchJSONQueryData
-        ],
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
-        data = end_to_end_search_fixture
-        data.populate(self._populate_works)
+        fixture = end_to_end_search_fixture
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
 
-        self.expect(data, self._leaf("medium", "Audio"), [data.test_data.audio_work])
+        self.expect(fixture, data, self._leaf("medium", "Audio"), [data.audio_work])
 
-        w1: Work = data.test_data.random_works[0]
-        self.expect(data, self._leaf("title", w1.title), [w1])
+        w1: Work = data.random_works[0]
+        self.expect(fixture, data, self._leaf("title", w1.title), [w1])
         self.expect(
+            fixture,
             data,
             self._leaf(
                 "contributors.display_name",
@@ -5385,48 +5361,50 @@ class TestExternalSearchJSONQuery:
             [w1],
         )
 
-        w2: Work = data.test_data.random_works[1]
+        w2: Work = data.random_works[1]
         self.expect(
+            fixture,
             data,
             {"or": [self._leaf("title", w1.title), self._leaf("title", w2.title)]},
             [w1, w2],
         )
         self.expect(
+            fixture,
             data,
             {"and": [self._leaf("title", w1.title), self._leaf("title", w2.title)]},
             [],
         )
 
         self.expect(
+            fixture,
             data,
             {"and": [self._leaf("language", "German")]},
-            [data.test_data.random_works[2]],
+            [data.random_works[2]],
         )
 
     def test_field_transform(
         self,
-        end_to_end_search_fixture: EndToEndSearchFixture[
-            TestExternalSearchJSONQueryData
-        ],
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
-        data = end_to_end_search_fixture
-        data.populate(self._populate_works)
+        fixture = end_to_end_search_fixture
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
 
         """Fields transforms should apply and criterias should match"""
         self.expect(
-            data, self._leaf("open_access", False), [data.test_data.random_works[3]]
+            fixture, data, self._leaf("open_access", False), [data.random_works[3]]
         )
 
     def test_search_not(
         self,
-        end_to_end_search_fixture: EndToEndSearchFixture[
-            TestExternalSearchJSONQueryData
-        ],
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
-        data = end_to_end_search_fixture
-        data.populate(self._populate_works)
+        fixture = end_to_end_search_fixture
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
 
         self.expect(
+            fixture,
             data,
             {
                 "and": [
@@ -5435,28 +5413,28 @@ class TestExternalSearchJSONQuery:
                 ]
             },
             [
-                data.test_data.book_work,
-                data.test_data.random_works[2],
-                data.test_data.random_works[3],
+                data.book_work,
+                data.random_works[2],
+                data.random_works[3],
             ],
         )
 
     def test_search_with_facets_ordering(
         self,
-        end_to_end_search_fixture: EndToEndSearchFixture[
-            TestExternalSearchJSONQueryData
-        ],
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
-        data = end_to_end_search_fixture
-        data.populate(self._populate_works)
+        fixture = end_to_end_search_fixture
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
 
-        data.test_data.facets = SearchFacets(order="author", search_type="json")
-        data.test_data.filter = Filter(facets=data.test_data.facets)
-        assert data.test_data.filter.min_score == None
+        data.facets = SearchFacets(order="author", search_type="json")
+        data.filter = Filter(facets=data.facets)
+        assert data.filter.min_score == None
 
-        w = data.test_data.random_works
+        w = data.random_works
         expected = [w[1], w[2], w[0]]
         response = self.expect(
+            fixture,
             data,
             {
                 "or": [

@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Any, Callable, Generic, Iterable, List, Optional, Type, TypeVar
+from typing import Any, Iterable, List, Optional, Type
 from unittest import mock
 from unittest.mock import patch
 
@@ -111,15 +111,11 @@ def external_search_fixture(
     data.close()
 
 
-T = TypeVar("T")
-
-
-class EndToEndSearchFixture(Generic[T]):
+class EndToEndSearchFixture:
     """An external search system fixture that can be populated with data for end-to-end tests."""
 
     """Tests are expected to call the `populate()` method to populate the fixture with test-specific data."""
     external_search: ExternalSearchFixture
-    test_data: T
 
     @classmethod
     def create(cls, transaction: DatabaseTransactionFixture) -> "EndToEndSearchFixture":
@@ -127,15 +123,13 @@ class EndToEndSearchFixture(Generic[T]):
         data.external_search = ExternalSearchFixture.create(transaction)
         return data
 
-    def populate(self, callback: Callable[["EndToEndSearchFixture[T]"], T]):
+    def populate_search_index(self):
         """Populate the search index with a set of works. The given callback is passed this fixture instance."""
 
         # Create some works.
         if not self.external_search.search:
             # No search index is configured -- nothing to do.
             return
-
-        self.test_data = callback(self)
 
         # Add all the works created in the setup to the search index.
         SearchIndexCoverageProvider(
