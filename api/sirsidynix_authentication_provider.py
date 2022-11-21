@@ -23,7 +23,8 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
     """SirsiDynix Authentication API implementation.
 
     Currently is only used to authenticate patrons, there is no CRUD implemented for patron profiles.
-    It is recommended to have the environment variable `SIRSI_DYNIX_APP_ID` set.
+    It is recommended (but not mandatory) to have the environment variable `SIRSI_DYNIX_APP_ID` set, so that the API requests
+    have an identifiying App ID attached to them, which is the recommended approach as per the SirsiDynix docs.
     """
 
     NAME = "SirsiDynix Horizon Authentication"
