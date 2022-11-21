@@ -12,7 +12,7 @@ from tests.fixtures.database import DatabaseTransactionFixture
 # Create a configuration object that the tests can run against without
 # impacting the real configuration object.
 class MockConfiguration(BaseConfiguration):
-    instance = None
+    instance: dict = dict()
 
 
 class ConfigurationTestFixture:

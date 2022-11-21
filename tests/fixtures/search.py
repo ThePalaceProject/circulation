@@ -1,8 +1,7 @@
 import logging
 import os
-from typing import Any, Iterable, List, Optional, Type
+from typing import Any, Iterable, List, Optional
 from unittest import mock
-from unittest.mock import patch
 
 import pytest
 import requests
@@ -269,7 +268,7 @@ def end_to_end_search_fixture(
 class ExternalSearchPatchFixture:
     """A class that represents the fact that the external search class has been patched with a mock."""
 
-    search_mock: "patch[Type[MockExternalSearchIndex]]"
+    search_mock: Any
 
 
 @pytest.fixture(scope="function")

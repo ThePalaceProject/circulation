@@ -4,7 +4,7 @@ import shutil
 import tempfile
 import time
 import uuid
-from typing import Iterable, List, Optional, Tuple
+from typing import Generator, Iterable, List, Optional, Tuple
 
 import pytest
 import sqlalchemy
@@ -986,7 +986,7 @@ def database(application: ApplicationFixture) -> Iterable[DatabaseFixture]:
 @pytest.fixture(scope="function")
 def db(
     database: DatabaseFixture,
-) -> DatabaseTransactionFixture:
+) -> Generator[DatabaseTransactionFixture, None, None]:
     tr = DatabaseTransactionFixture.create(database)
     yield tr
     tr.close()
