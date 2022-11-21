@@ -1,9 +1,11 @@
+import importlib
 import logging
 import os
 import shutil
 import tempfile
 import time
 import uuid
+from pathlib import Path
 from typing import Generator, Iterable, List, Optional, Tuple
 
 import pytest
@@ -97,69 +99,31 @@ class DatabaseFixture:
         return engine, connection
 
     @staticmethod
-    def create() -> "DatabaseFixture":
+    def _load_core_model_classes():
+        path = Path(__file__)  # tests/fixtures/database.py
+        path = path.parent  # tests/fixtures
+        path = path.parent  # tests
+        path = path.parent  # .
+        path = os.path.join(path, "core", "model")
+
+        list_modules = os.listdir(path)
+        list_modules.remove("__init__.py")
+
+        for module_file in list_modules:
+            if module_file.split(".")[-1] == "py":
+                module_name = "core.model." + module_file.split(".")[0]
+                imported = importlib.import_module(module_name)
+                logging.info("imported " + imported.__name__)
+
+        importlib.import_module("core.lane")
+
         from core.model.customlist import customlist_sharedlibrary
 
-        # The CM uses SQLAlchemy's "declarative base" feature, which means that
-        # tables are only created if the classes containing references to them
-        # are actually loaded. The entire application database is therefore dependent on
-        # unspecified class initialization behaviour. The only safe way to guarantee
-        # that all tables are created is to refer to all of those classes before
-        # starting SQLAlchemy in order to ensure that all the classes are loaded
-        # in the interpreter.
+        customlist_sharedlibrary.name
 
-        tables = [
-            core.lane.Lane.__tablename__,
-            core.lane.LaneGenre.__tablename__,
-            core.model.Annotation.__tablename__,
-            core.model.CustomList.__tablename__,
-            core.model.CustomListEntry.__tablename__,
-            core.model.Edition.__tablename__,
-            core.model.Hold.__tablename__,
-            core.model.Loan.__tablename__,
-            core.model.Patron.__tablename__,
-            core.model.Work.__tablename__,
-            core.model.WorkGenre.__tablename__,
-            core.model.admin.Admin.__tablename__,
-            core.model.admin.AdminRole.__tablename__,
-            core.model.cachedfeed.CachedFeed.__tablename__,
-            core.model.cachedfeed.CachedMARCFile.__tablename__,
-            core.model.circulationevent.CirculationEvent.__tablename__,
-            core.model.classification.Classification.__tablename__,
-            core.model.classification.Genre.__tablename__,
-            core.model.classification.Subject.__tablename__,
-            core.model.collection.Collection.__tablename__,
-            core.model.configuration.ConfigurationSetting.__tablename__,
-            core.model.configuration.ExternalIntegration.__tablename__,
-            core.model.configuration.ExternalIntegrationLink.__tablename__,
-            core.model.contributor.Contribution.__tablename__,
-            core.model.contributor.Contributor.__tablename__,
-            core.model.coverage.CoverageRecord.__tablename__,
-            core.model.coverage.EquivalencyCoverageRecord.__tablename__,
-            core.model.coverage.Timestamp.__tablename__,
-            core.model.coverage.WorkCoverageRecord.__tablename__,
-            core.model.credential.Credential.__tablename__,
-            core.model.credential.DRMDeviceIdentifier.__tablename__,
-            core.model.credential.DelegatedPatronIdentifier.__tablename__,
-            core.model.datasource.DataSource.__tablename__,
-            core.model.devicetokens.DeviceToken.__tablename__,
-            core.model.identifier.Equivalency.__tablename__,
-            core.model.identifier.Identifier.__tablename__,
-            core.model.identifier.RecursiveEquivalencyCache.__tablename__,
-            core.model.integrationclient.IntegrationClient.__tablename__,
-            core.model.library.Library.__tablename__,
-            core.model.licensing.DeliveryMechanism.__tablename__,
-            core.model.licensing.License.__tablename__,
-            core.model.licensing.LicensePool.__tablename__,
-            core.model.licensing.LicensePoolDeliveryMechanism.__tablename__,
-            core.model.licensing.RightsStatus.__tablename__,
-            core.model.measurement.Measurement.__tablename__,
-            core.model.resource.Hyperlink.__tablename__,
-            core.model.resource.Representation.__tablename__,
-            core.model.resource.Resource.__tablename__,
-            core.model.resource.ResourceTransformation.__tablename__,
-            customlist_sharedlibrary.name,
-        ]
+    @staticmethod
+    def create() -> "DatabaseFixture":
+        DatabaseFixture._load_core_model_classes()
         engine, connection = DatabaseFixture._get_database_connection()
 
         # Avoid CannotLoadConfiguration errors related to CDN integrations.
