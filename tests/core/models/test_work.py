@@ -1164,7 +1164,12 @@ class TestWork:
         assert edition.publisher == search_doc["publisher"]
         assert edition.imprint == search_doc["imprint"]
         assert edition.permanent_work_id == search_doc["permanent_work_id"]
-        assert edition.published == datetime.date.fromtimestamp(search_doc["published"])
+        assert (
+            edition.published
+            == datetime.datetime.fromtimestamp(
+                search_doc["published"], tz=pytz.UTC
+            ).date()
+        )
         assert "Nonfiction" == search_doc["fiction"]
         assert "YoungAdult" == search_doc["audience"]
         assert work.summary_text == search_doc["summary"]
