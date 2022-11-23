@@ -19,12 +19,10 @@ class TestOPDS2Validation(OPDS2Test):
         db: DatabaseTransactionFixture,
         opds_files_fixture: OPDSFilesFixture,
     ):
-        session = db.session()
-
         db.default_collection().protocol = ExternalIntegration.OPDS2_IMPORT
         db.default_collection().data_source = DataSource.FEEDBOOKS
         validator = OPDS2SchemaValidation(
-            session,
+            db.session,
             collection=db.default_collection(),
             import_class=OPDS2Importer,
             parser=RWPMManifestParser(OPDS2FeedParserFactory()),
@@ -40,12 +38,10 @@ class TestODL2Validation(OPDS2Test):
         db: DatabaseTransactionFixture,
         opds_files_fixture: OPDSFilesFixture,
     ):
-        session = db.session()
-
         db.default_collection().protocol = ExternalIntegration.ODL2
         db.default_collection().data_source = DataSource.FEEDBOOKS
         validator = ODL2SchemaValidation(
-            session,
+            db.session,
             collection=db.default_collection(),
             import_class=ODL2Importer,
             parser=RWPMManifestParser(ODLFeedParserFactory()),

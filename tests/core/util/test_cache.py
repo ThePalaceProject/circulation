@@ -35,7 +35,7 @@ class TestMemoize:
 
 class TestCacheData:
     def test_data_sources(self, db):
-        session = db.session()
+        session = db.session
 
         def to_ids(objects):
             return [o.id for o in objects]

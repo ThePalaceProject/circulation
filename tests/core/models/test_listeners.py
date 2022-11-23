@@ -87,7 +87,7 @@ class TestSiteConfigurationHasChanged:
         # of the default data. In that case, it happened during the
         # package_setup() for this test run.
         data = example_site_configuration_changed_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
         last_update = Configuration.site_configuration_last_update(session)
 
         def ts():
@@ -170,7 +170,7 @@ class TestSiteConfigurationHasChanged:
         ConfigurationSetting, site_configuration_has_changed is called.
         """
         data = example_site_configuration_changed_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
 
         ConfigurationSetting.sitewide(session, "setting").value = "value"
         data.mock.assert_was_called()
@@ -187,7 +187,7 @@ class TestSiteConfigurationHasChanged:
         in the lane module as they do in the model module.
         """
         data = example_site_configuration_changed_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
 
         lane = data.transaction.lane()
         data.mock.assert_was_called()
@@ -205,7 +205,7 @@ class TestSiteConfigurationHasChanged:
         """
 
         data = example_site_configuration_changed_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
         # Creating a collection calls the method via an 'after_insert'
         # event on Collection.
         library = data.transaction.default_library()

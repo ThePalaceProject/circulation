@@ -7,16 +7,16 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 class AdminFixture:
     admin: Admin
-    database_fixture: DatabaseTransactionFixture
+    db: DatabaseTransactionFixture
 
-    def __init__(self, admin: Admin, database_transaction: DatabaseTransactionFixture):
+    def __init__(self, admin: Admin, db: DatabaseTransactionFixture):
         self.admin = admin
-        self.database_fixture = database_transaction
+        self.db = db
 
 
 @pytest.fixture()
-def admin_fixture(db) -> AdminFixture:
-    a, ignore = create(db.session(), Admin, email="admin@nypl.org")
+def admin_fixture(db: DatabaseTransactionFixture) -> AdminFixture:
+    a, ignore = create(db.session, Admin, email="admin@nypl.org")
     a.password = "password"
     return AdminFixture(a, db)
 
@@ -27,7 +27,7 @@ class TestAdmin:
         assert admin_fixture.admin.password_hashed.startswith("$2a$")
 
     def test_with_password(self, admin_fixture: AdminFixture):
-        session = admin_fixture.database_fixture.session()
+        session = admin_fixture.db.session
         session.delete(admin_fixture.admin)
         assert [] == Admin.with_password(session).all()
 
@@ -44,8 +44,9 @@ class TestAdmin:
         assert {admin, admin2} == set(Admin.with_password(session).all())
 
     def test_with_email_spaces(self, admin_fixture: AdminFixture):
-        session = admin_fixture.database_fixture.session()
-        admin_spaces, ignore = create(session, Admin, email="test@email.com ")
+        admin_spaces, ignore = create(
+            admin_fixture.db.session, Admin, email="test@email.com "
+        )
         assert "test@email.com" == admin_spaces.email
 
     def test_has_password(self, admin_fixture: AdminFixture):
@@ -53,7 +54,7 @@ class TestAdmin:
         assert False == admin_fixture.admin.has_password("banana")
 
     def test_authenticate(self, admin_fixture: AdminFixture):
-        session = admin_fixture.database_fixture.session()
+        session = admin_fixture.db.session
         other_admin, ignore = create(session, Admin, email="other@nypl.org")
         other_admin.password = "banana"
         assert admin_fixture.admin == Admin.authenticate(
@@ -63,9 +64,8 @@ class TestAdmin:
         assert None == Admin.authenticate(session, "example@nypl.org", "password")
 
     def test_roles(self, admin_fixture: AdminFixture):
-        database_fixture = admin_fixture.database_fixture
-        library = database_fixture.default_library()
-        other_library = database_fixture.library()
+        library = admin_fixture.db.default_library()
+        other_library = admin_fixture.db.library()
 
         # The admin has no roles yet.
         admin = admin_fixture.admin
@@ -134,14 +134,12 @@ class TestAdmin:
         assert True == admin.is_librarian(other_library)
 
     def test_can_see_collection(self, admin_fixture: AdminFixture):
-        database_fixture = admin_fixture.database_fixture
-
         # This collection is only visible to system admins since it has no libraries.
-        c1 = database_fixture.collection()
+        c1 = admin_fixture.db.collection()
 
         # This collection is visible to libraries of its library.
-        c2 = database_fixture.collection()
-        c2.libraries += [database_fixture.default_library()]
+        c2 = admin_fixture.db.collection()
+        c2.libraries += [admin_fixture.db.default_library()]
 
         # The admin has no roles yet.
         admin = admin_fixture.admin
@@ -163,15 +161,15 @@ class TestAdmin:
         assert True == admin.can_see_collection(c2)
 
         admin.remove_role(AdminRole.SITEWIDE_LIBRARIAN)
-        admin.add_role(AdminRole.LIBRARY_MANAGER, database_fixture.default_library())
+        admin.add_role(AdminRole.LIBRARY_MANAGER, admin_fixture.db.default_library())
         assert False == admin.can_see_collection(c1)
         assert True == admin.can_see_collection(c2)
 
-        admin.remove_role(AdminRole.LIBRARY_MANAGER, database_fixture.default_library())
-        admin.add_role(AdminRole.LIBRARIAN, database_fixture.default_library())
+        admin.remove_role(AdminRole.LIBRARY_MANAGER, admin_fixture.db.default_library())
+        admin.add_role(AdminRole.LIBRARIAN, admin_fixture.db.default_library())
         assert False == admin.can_see_collection(c1)
         assert True == admin.can_see_collection(c2)
 
-        admin.remove_role(AdminRole.LIBRARIAN, database_fixture.default_library())
+        admin.remove_role(AdminRole.LIBRARIAN, admin_fixture.db.default_library())
         assert False == admin.can_see_collection(c1)
         assert False == admin.can_see_collection(c2)

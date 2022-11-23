@@ -65,9 +65,7 @@ class TestCoverageFailure:
     """Test the CoverageFailure class."""
 
     def test_to_coverage_record(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
-        source = DataSource.lookup(session, DataSource.GUTENBERG)
+        source = DataSource.lookup(db.session, DataSource.GUTENBERG)
         identifier = db.identifier()
 
         transient_failure = CoverageFailure(
@@ -89,7 +87,6 @@ class TestCoverageFailure:
         assert "Bah forever!" == rec.exception
 
     def test_to_work_coverage_record(self, db: DatabaseTransactionFixture):
-        session = db.session()
         work = db.work()
 
         transient_failure = CoverageFailure(work, "Bah!", transient=True)
@@ -172,7 +169,6 @@ def circulation_data(bibliographic_data: Metadata) -> CirculationData:
 
 class TestBaseCoverageProvider:
     def test_instantiation(self, db: DatabaseTransactionFixture):
-        session = db.session()
         """Verify variable initialization."""
 
         class ValidMock(BaseCoverageProvider):
@@ -181,7 +177,7 @@ class TestBaseCoverageProvider:
             DEFAULT_BATCH_SIZE = 50
 
         now = cutoff_time = utc_now()
-        provider = ValidMock(session, cutoff_time=now)
+        provider = ValidMock(db.session, cutoff_time=now)
 
         # Class variables defined in subclasses become appropriate
         # instance variables.
@@ -191,21 +187,18 @@ class TestBaseCoverageProvider:
         assert now == provider.cutoff_time
 
         # If you pass in an invalid value for batch_size, you get the default.
-        provider = ValidMock(session, batch_size=-10)
+        provider = ValidMock(db.session, batch_size=-10)
         assert 50 == provider.batch_size
 
     def test_subclass_must_define_service_name(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         class NoServiceName(BaseCoverageProvider):
             pass
 
         with pytest.raises(ValueError) as excinfo:
-            NoServiceName(session)
+            NoServiceName(db.session)
         assert "NoServiceName must define SERVICE_NAME" in str(excinfo.value)
 
     def test_run(self, db: DatabaseTransactionFixture):
-        session = db.session()
         """Verify that run() calls run_once_and_update_timestamp()."""
 
         class MockProvider(BaseCoverageProvider):
@@ -217,7 +210,7 @@ class TestBaseCoverageProvider:
                 self.was_run = True
                 return None
 
-        provider = MockProvider(session)
+        provider = MockProvider(db.session)
         result = provider.run()
 
         # run_once_and_update_timestamp() was called.
@@ -233,8 +226,6 @@ class TestBaseCoverageProvider:
             assert (now - time).total_seconds() < 5
 
     def test_run_with_custom_result(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         start = datetime_utc(2011, 1, 1)
         finish = datetime_utc(2012, 1, 1)
         counter = -100
@@ -254,7 +245,7 @@ class TestBaseCoverageProvider:
             def run_once_and_update_timestamp(self):
                 return self.custom_timestamp_data
 
-        provider = MockProvider(session)
+        provider = MockProvider(db.session)
         result = provider.run()
 
         # The TimestampData returned by run_once_and_update_timestamp
@@ -268,7 +259,6 @@ class TestBaseCoverageProvider:
         assert counter == provider.timestamp.counter
 
     def test_run_once_and_update_timestamp(self, db: DatabaseTransactionFixture):
-        session = db.session()
         """Test that run_once_and_update_timestamp calls run_once until all
         the work is done, and then updates a Timestamp.
         """
@@ -317,13 +307,13 @@ class TestBaseCoverageProvider:
         service_name = "I do nothing"
         service_type = Timestamp.COVERAGE_PROVIDER_TYPE
         timestamp = Timestamp.value(
-            session, service_name, service_type, collection=None
+            db.session, service_name, service_type, collection=None
         )
         assert None == timestamp
 
         # Instantiate the Provider, and call
         # run_once_and_update_timestamp.
-        provider = MockProvider(session)
+        provider = MockProvider(db.session)
         final_progress = provider.run_once_and_update_timestamp()
 
         # The Timestamp's .start and .finish are now set to recent
@@ -357,7 +347,6 @@ class TestBaseCoverageProvider:
     def test_run_once_and_update_timestamp_catches_exception(
         self, db: DatabaseTransactionFixture
     ):
-        session = db.session()
         # Test that run_once_and_update_timestamp catches an exception
         # and stores a stack trace in the CoverageProvider's Timestamp.
         class MockProvider(BaseCoverageProvider):
@@ -366,7 +355,7 @@ class TestBaseCoverageProvider:
             def run_once(self, progress, count_as_covered=None):
                 raise Exception("Unhandled exception")
 
-        provider = MockProvider(session)
+        provider = MockProvider(db.session)
         provider.run_once_and_update_timestamp()
 
         timestamp = provider.timestamp
@@ -380,7 +369,6 @@ class TestBaseCoverageProvider:
     def test_run_once_and_update_timestamp_handled_exception(
         self, db: DatabaseTransactionFixture
     ):
-        session = db.session()
         # Test that run_once_and_update_timestamp handles the
         # case where the run_once() implementation sets TimestampData.exception
         # rather than raising an exception.
@@ -393,7 +381,7 @@ class TestBaseCoverageProvider:
             def run_once(self, progress, count_as_covered=None):
                 progress.exception = "oops"
 
-        provider = MockProvider(session)
+        provider = MockProvider(db.session)
         provider.run_once_and_update_timestamp()
 
         timestamp = provider.timestamp
@@ -405,12 +393,11 @@ class TestBaseCoverageProvider:
         assert "oops" == timestamp.exception
 
     def test_run_once(self, db: DatabaseTransactionFixture):
-        session = db.session()
         # Test run_once, showing how it covers items with different types of
         # CoverageRecord.
 
         # We start with no CoverageRecords.
-        assert [] == session.query(CoverageRecord).all()
+        assert [] == db.session.query(CoverageRecord).all()
 
         # Four identifiers.
         transient = db.identifier()
@@ -419,7 +406,7 @@ class TestBaseCoverageProvider:
         covered = db.identifier()
 
         # This provider will try to cover them.
-        provider = AlwaysSuccessfulCoverageProvider(session)
+        provider = AlwaysSuccessfulCoverageProvider(db.session)
         data_source = provider.data_source
 
         # We previously tried to cover one of them, but got a
@@ -508,8 +495,6 @@ class TestBaseCoverageProvider:
     def test_run_once_records_successes_and_failures(
         self, db: DatabaseTransactionFixture
     ):
-        session = db.session()
-
         class Mock(AlwaysSuccessfulCoverageProvider):
             def process_batch_and_handle_results(self, batch):
                 # Simulate 1 success, 2 transient failures,
@@ -518,7 +503,7 @@ class TestBaseCoverageProvider:
 
         # process_batch_and_handle_results won't even be called if the
         # batch is empty.
-        provider = Mock(session)
+        provider = Mock(db.session)
         progress = CoverageProviderProgress()
         progress2 = provider.run_once(progress)
         assert progress2 == progress
@@ -541,7 +526,6 @@ class TestBaseCoverageProvider:
         )
 
     def test_process_batch_and_handle_results(self, db: DatabaseTransactionFixture):
-        session = db.session()
         """Test that process_batch_and_handle_results passes the identifiers
         its given into the appropriate BaseCoverageProvider, and deals
         correctly with the successes and failures it might return.
@@ -558,7 +542,7 @@ class TestBaseCoverageProvider:
             def finalize_batch(self):
                 self.finalized = True
 
-        success_provider = MockProvider(session)
+        success_provider = MockProvider(db.session)
 
         batch = [i1, i2]
         counts, successes = success_provider.process_batch_and_handle_results(batch)
@@ -584,7 +568,7 @@ class TestBaseCoverageProvider:
         class MockProvider(TransientFailureCoverageProvider):
             OPERATION = "i fail transiently"
 
-        transient_failure_provider = MockProvider(session)
+        transient_failure_provider = MockProvider(db.session)
         counts, failures = transient_failure_provider.process_batch_and_handle_results(
             batch
         )
@@ -601,7 +585,7 @@ class TestBaseCoverageProvider:
         class MockProvider(TaskIgnoringCoverageProvider):
             OPERATION = "i ignore"
 
-        task_ignoring_provider = MockProvider(session)
+        task_ignoring_provider = MockProvider(db.session)
         counts, records = task_ignoring_provider.process_batch_and_handle_results(batch)
 
         assert (0, 2, 0) == counts
@@ -620,7 +604,7 @@ class TestBaseCoverageProvider:
         class MockProvider(NeverSuccessfulCoverageProvider):
             OPERATION = "i will always fail"
 
-        persistent_failure_provider = MockProvider(session)
+        persistent_failure_provider = MockProvider(db.session)
         counts, results = persistent_failure_provider.process_batch_and_handle_results(
             batch
         )
@@ -635,8 +619,6 @@ class TestBaseCoverageProvider:
         assert ["i will always fail"] * 2 == [x.operation for x in results]
 
     def test_process_batch(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         class Mock(BaseCoverageProvider):
             SERVICE_NAME = "Some succeed, some fail."
 
@@ -657,7 +639,7 @@ class TestBaseCoverageProvider:
         # Two Identifiers. One will succeed, one will fail.
         succeed = db.identifier(foreign_id="succeed")
         fail = db.identifier(foreign_id="fail")
-        provider = Mock(session)
+        provider = Mock(db.session)
 
         r1, r2 = provider.process_batch([succeed, fail])
 
@@ -676,13 +658,11 @@ class TestBaseCoverageProvider:
         assert [succeed] == provider.successes
 
     def test_should_update(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         """Verify that should_update gives the correct answer when we
         ask if a CoverageRecord needs to be updated.
         """
         cutoff = datetime_utc(2016, 1, 1)
-        provider = AlwaysSuccessfulCoverageProvider(session, cutoff_time=cutoff)
+        provider = AlwaysSuccessfulCoverageProvider(db.session, cutoff_time=cutoff)
         identifier = db.identifier()
 
         # If coverage is missing, we should update.
@@ -704,8 +684,6 @@ class TestBaseCoverageProvider:
 
 class TestIdentifierCoverageProvider:
     def test_input_identifier_types(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         """Test various acceptable and unacceptable values for the class
         variable INPUT_IDENTIFIER_TYPES.
         """
@@ -718,21 +696,21 @@ class TestIdentifierCoverageProvider:
         class MockProvider(Base):
             INPUT_IDENTIFIER_TYPES = None
 
-        provider = MockProvider(session)
+        provider = MockProvider(db.session)
         assert None == provider.input_identifier_types
 
         # It's okay to set a single value.
         class MockProvider(Base):
             INPUT_IDENTIFIER_TYPES = Identifier.ISBN
 
-        provider = MockProvider(session)
+        provider = MockProvider(db.session)
         assert [Identifier.ISBN] == provider.input_identifier_types
 
         # It's okay to set a list of values.
         class MockProvider(Base):
             INPUT_IDENTIFIER_TYPES = [Identifier.ISBN, Identifier.OVERDRIVE_ID]
 
-        provider = MockProvider(session)
+        provider = MockProvider(db.session)
         assert [
             Identifier.ISBN,
             Identifier.OVERDRIVE_ID,
@@ -743,19 +721,17 @@ class TestIdentifierCoverageProvider:
             pass
 
         with pytest.raises(ValueError) as excinfo:
-            MockProvider(session)
+            MockProvider(db.session)
         assert (
             "MockProvider must define INPUT_IDENTIFIER_TYPES, even if the value is None."
             in str(excinfo.value)
         )
 
     def test_can_cover(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         """Verify that can_cover gives the correct answer when
         asked if an IdentifierCoverageProvider can handle a given Identifier.
         """
-        provider = AlwaysSuccessfulCoverageProvider(session)
+        provider = AlwaysSuccessfulCoverageProvider(db.session)
         identifier = db.identifier(identifier_type=Identifier.ISBN)
         m = provider.can_cover
 
@@ -772,22 +748,20 @@ class TestIdentifierCoverageProvider:
         assert False == m(identifier)
 
     def test_replacement_policy(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         """Unless a different replacement policy is passed in, the
         default is ReplacementPolicy.from_metadata_source().
         """
-        provider = AlwaysSuccessfulCoverageProvider(session)
+        provider = AlwaysSuccessfulCoverageProvider(db.session)
         assert True == provider.replacement_policy.identifiers
         assert False == provider.replacement_policy.formats
 
-        policy = ReplacementPolicy.from_license_source(session)
-        provider = AlwaysSuccessfulCoverageProvider(session, replacement_policy=policy)
+        policy = ReplacementPolicy.from_license_source(db.session)
+        provider = AlwaysSuccessfulCoverageProvider(
+            db.session, replacement_policy=policy
+        )
         assert policy == provider.replacement_policy
 
     def test_register(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         # The identifier has no coverage.
         identifier = db.identifier()
         assert 0 == len(identifier.coverage_records)
@@ -815,10 +789,8 @@ class TestIdentifierCoverageProvider:
         assert None == new_record.exception
 
     def test_bulk_register(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         provider = AlwaysSuccessfulCoverageProvider
-        source = DataSource.lookup(session, provider.DATA_SOURCE_NAME)
+        source = DataSource.lookup(db.session, provider.DATA_SOURCE_NAME)
 
         i1 = db.identifier()
         covered = db.identifier()
@@ -839,8 +811,6 @@ class TestIdentifierCoverageProvider:
     def test_bulk_register_can_overwrite_existing_record_status(
         self, db: DatabaseTransactionFixture
     ):
-        session = db.session()
-
         provider = AlwaysSuccessfulCoverageProvider
         identifier = db.identifier()
 
@@ -848,7 +818,7 @@ class TestIdentifierCoverageProvider:
         provider.bulk_register([identifier])
         [existing] = identifier.coverage_records
         existing.status = CoverageRecord.SUCCESS
-        session.commit()
+        db.session.commit()
 
         # If registration is forced, an existing record is updated.
         records, ignored = provider.bulk_register([identifier], force=True)
@@ -856,8 +826,6 @@ class TestIdentifierCoverageProvider:
         assert CoverageRecord.REGISTERED == existing.status
 
     def test_bulk_register_with_collection(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         identifier = db.identifier()
         provider = AlwaysSuccessfulCoverageProvider
         collection = db.collection(data_source_name=DataSource.AXIS_360)
@@ -874,7 +842,7 @@ class TestIdentifierCoverageProvider:
             [record] = identifier.coverage_records
 
             # A DataSource with the given name has been created.
-            collection_source = DataSource.lookup(session, collection.name)
+            collection_source = DataSource.lookup(db.session, collection.name)
             assert collection_source
             assert provider.DATA_SOURCE_NAME != record.data_source.name
             assert collection_source == record.data_source
@@ -898,8 +866,6 @@ class TestIdentifierCoverageProvider:
             provider.COVERAGE_COUNTS_FOR_EVERY_COLLECTION = True
 
     def test_ensure_coverage(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         """Verify that ensure_coverage creates a CoverageRecord for an
         Identifier, assuming that the CoverageProvider succeeds.
         """
@@ -915,7 +881,7 @@ class TestIdentifierCoverageProvider:
 
         # There is now one CoverageRecord -- the one returned by
         # ensure_coverage().
-        [record2] = session.query(CoverageRecord).all()
+        [record2] = db.session.query(CoverageRecord).all()
         assert record2 == record
 
         # Because this provider counts coverage in one Collection as
@@ -927,7 +893,7 @@ class TestIdentifierCoverageProvider:
         # The coverage provider's timestamp was not updated, because
         # we're using ensure_coverage on a single record.
         assert None == Timestamp.value(
-            session,
+            db.session,
             provider.service_name,
             Timestamp.COVERAGE_PROVIDER_TYPE,
             collection=None,
@@ -944,30 +910,26 @@ class TestIdentifierCoverageProvider:
         assert provider.collection == record3.collection
 
     def test_ensure_coverage_works_on_edition(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         """Verify that ensure_coverage() works on an Edition by covering
         its primary identifier.
         """
         edition = db.edition()
-        provider = AlwaysSuccessfulCoverageProvider(session)
+        provider = AlwaysSuccessfulCoverageProvider(db.session)
         record = provider.ensure_coverage(edition)
         assert isinstance(record, CoverageRecord)
         assert edition.primary_identifier == record.identifier
 
     def test_ensure_coverage_respects_operation(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         # Two providers with the same output source but different operations.
         class Mock1(AlwaysSuccessfulCoverageProvider):
             OPERATION = "foo"
 
-        provider1 = Mock1(session)
+        provider1 = Mock1(db.session)
 
         class Mock2(NeverSuccessfulCoverageProvider):
             OPERATION = "bar"
 
-        provider2 = Mock2(session)
+        provider2 = Mock2(db.session)
 
         identifier = db.identifier()
         # Ensure coverage from both providers.
@@ -979,7 +941,7 @@ class TestIdentifierCoverageProvider:
         assert "bar" == coverage2.operation
 
         # There are now two CoverageRecords, one for each operation.
-        assert {coverage1, coverage2} == set(session.query(CoverageRecord))
+        assert {coverage1, coverage2} == set(db.session.query(CoverageRecord))
 
         # If we try to ensure coverage again, no work is done and we
         # get the old coverage record back.
@@ -990,10 +952,8 @@ class TestIdentifierCoverageProvider:
     def test_ensure_coverage_persistent_coverage_failure(
         self, db: DatabaseTransactionFixture
     ):
-        session = db.session()
-
         identifier = db.identifier()
-        provider = NeverSuccessfulCoverageProvider(session)
+        provider = NeverSuccessfulCoverageProvider(db.session)
         failure = provider.ensure_coverage(identifier)
 
         # A CoverageRecord has been created to memorialize the
@@ -1002,7 +962,7 @@ class TestIdentifierCoverageProvider:
         assert "What did you expect?" == failure.exception
 
         # Here it is in the database.
-        [record] = session.query(CoverageRecord).all()
+        [record] = db.session.query(CoverageRecord).all()
         assert record == failure
 
         # The coverage provider's timestamp was not updated, because
@@ -1010,7 +970,7 @@ class TestIdentifierCoverageProvider:
         # The coverage provider's timestamp was not updated, because
         # we're using ensure_coverage on a single record.
         assert None == Timestamp.value(
-            session,
+            db.session,
             provider.service_name,
             service_type=Timestamp.COVERAGE_PROVIDER_TYPE,
             collection=None,
@@ -1019,10 +979,8 @@ class TestIdentifierCoverageProvider:
     def test_ensure_coverage_transient_coverage_failure(
         self, db: DatabaseTransactionFixture
     ):
-        session = db.session()
-
         identifier = db.identifier()
-        provider = TransientFailureCoverageProvider(session)
+        provider = TransientFailureCoverageProvider(db.session)
         failure = provider.ensure_coverage(identifier)
         assert [failure] == identifier.coverage_records
         assert CoverageRecord.TRANSIENT_FAILURE == failure.status
@@ -1030,22 +988,21 @@ class TestIdentifierCoverageProvider:
 
         # Timestamp was not updated.
         assert None == Timestamp.value(
-            session,
+            db.session,
             provider.service_name,
             service_type=Timestamp.COVERAGE_PROVIDER_TYPE,
             collection=None,
         )
 
     def test_ensure_coverage_changes_status(self, db: DatabaseTransactionFixture):
-        session = db.session()
         """Verify that processing an item that has a preexisting
         CoverageRecord can change the status of that CoverageRecord.
         """
 
         identifier = db.identifier()
-        always = AlwaysSuccessfulCoverageProvider(session)
-        persistent = NeverSuccessfulCoverageProvider(session)
-        transient = TransientFailureCoverageProvider(session)
+        always = AlwaysSuccessfulCoverageProvider(db.session)
+        persistent = NeverSuccessfulCoverageProvider(db.session)
+        transient = TransientFailureCoverageProvider(db.session)
 
         # Cover the same identifier multiple times, simulating all
         # possible states of a CoverageRecord. The same CoverageRecord
@@ -1067,14 +1024,13 @@ class TestIdentifierCoverageProvider:
         assert CoverageRecord.PERSISTENT_FAILURE == c1.status
 
     def test_edition(self, db: DatabaseTransactionFixture):
-        session = db.session()
         """Verify that CoverageProvider.edition() returns an appropriate
         Edition, even when there is no associated Collection.
         """
         # This CoverageProvider fetches bibliographic information
         # from Overdrive. It is not capable of creating LicensePools
         # because it has no Collection.
-        provider = AlwaysSuccessfulCoverageProvider(session)
+        provider = AlwaysSuccessfulCoverageProvider(db.session)
         assert None == provider.collection
 
         # Here's an Identifier, with no Editions.
@@ -1097,7 +1053,6 @@ class TestIdentifierCoverageProvider:
         assert edition == edition2
 
     def test_set_metadata(self, bibliographic_data, db: DatabaseTransactionFixture):
-        session = db.session()
         """Test that set_metadata can create and populate an
         appropriate Edition.
 
@@ -1106,7 +1061,7 @@ class TestIdentifierCoverageProvider:
         """
         # Here's a provider that is not associated with any particular
         # Collection.
-        provider = AlwaysSuccessfulCoverageProvider(session)
+        provider = AlwaysSuccessfulCoverageProvider(db.session)
         assert None == provider.collection
 
         # It can't set circulation data, because it's not a
@@ -1144,10 +1099,8 @@ class TestIdentifierCoverageProvider:
     def test_items_that_need_coverage_respects_registration_reqs(
         self, db: DatabaseTransactionFixture
     ):
-        session = db.session()
-
         identifier = db.identifier()
-        provider = AlwaysSuccessfulCoverageProvider(session, registered_only=True)
+        provider = AlwaysSuccessfulCoverageProvider(db.session, registered_only=True)
 
         items = provider.items_that_need_coverage()
         assert identifier not in items
@@ -1165,14 +1118,12 @@ class TestIdentifierCoverageProvider:
     def test_items_that_need_coverage_respects_operation(
         self, db: DatabaseTransactionFixture
     ):
-        session = db.session()
-
         # Here's a provider that carries out the 'foo' operation.
         class Mock1(AlwaysSuccessfulCoverageProvider):
             OPERATION = "foo"
 
         identifier = db.identifier()
-        provider = Mock1(session)
+        provider = Mock1(db.session)
 
         # Here's a generic CoverageRecord for an identifier.
         record1 = CoverageRecord.add_for(identifier, provider.data_source)
@@ -1183,7 +1134,7 @@ class TestIdentifierCoverageProvider:
         assert [identifier] == provider.items_that_need_coverage().all()
 
         # Here's a provider that has no operation set.
-        provider = AlwaysSuccessfulCoverageProvider(session)
+        provider = AlwaysSuccessfulCoverageProvider(db.session)
         assert None == provider.OPERATION
 
         # For purposes of items_that_need_coverage, the identifier is
@@ -1191,9 +1142,7 @@ class TestIdentifierCoverageProvider:
         assert [] == provider.items_that_need_coverage().all()
 
     def test_run_on_specific_identifiers(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
-        provider = AlwaysSuccessfulCoverageProvider(session)
+        provider = AlwaysSuccessfulCoverageProvider(db.session)
         provider.workset_size = 3
         to_be_tested = [db.identifier() for i in range(6)]
         not_to_be_tested = [db.identifier() for i in range(6)]
@@ -1214,8 +1163,6 @@ class TestIdentifierCoverageProvider:
     def test_run_on_specific_identifiers_respects_cutoff_time(
         self, db: DatabaseTransactionFixture
     ):
-        session = db.session()
-
         last_run = datetime_utc(2016, 1, 1)
 
         # Once upon a time we successfully added coverage for
@@ -1223,7 +1170,7 @@ class TestIdentifierCoverageProvider:
         # ever run the coverage provider again we will get a
         # persistent failure.
         identifier = db.identifier()
-        provider = NeverSuccessfulCoverageProvider(session)
+        provider = NeverSuccessfulCoverageProvider(db.session)
         record, ignore = CoverageRecord.add_for(identifier, provider.data_source)
         record.timestamp = last_run
 
@@ -1258,18 +1205,17 @@ class TestIdentifierCoverageProvider:
         assert "What did you expect?" == record.exception
 
     def test_run_never_successful(self, db: DatabaseTransactionFixture):
-        session = db.session()
         """Verify that NeverSuccessfulCoverageProvider works the
         way we'd expect.
         """
 
         identifier = db.identifier()
-        provider = NeverSuccessfulCoverageProvider(session)
+        provider = NeverSuccessfulCoverageProvider(db.session)
 
         # We start with no CoverageRecords and no Timestamp.
-        assert [] == session.query(CoverageRecord).all()
+        assert [] == db.session.query(CoverageRecord).all()
         assert None == Timestamp.value(
-            session,
+            db.session,
             provider.service_name,
             service_type=Timestamp.COVERAGE_PROVIDER_TYPE,
             collection=None,
@@ -1278,7 +1224,7 @@ class TestIdentifierCoverageProvider:
         provider.run()
 
         # We have a CoverageRecord that signifies failure.
-        [record] = session.query(CoverageRecord).all()
+        [record] = db.session.query(CoverageRecord).all()
         assert identifier == record.identifier
         assert record.data_source == provider.data_source
         assert "What did you expect?" == record.exception
@@ -1286,7 +1232,7 @@ class TestIdentifierCoverageProvider:
         # But the coverage provider did run, and the timestamp is now set to
         # a recent value.
         value = Timestamp.value(
-            session,
+            db.session,
             provider.service_name,
             service_type=Timestamp.COVERAGE_PROVIDER_TYPE,
             collection=None,
@@ -1294,18 +1240,17 @@ class TestIdentifierCoverageProvider:
         assert (utc_now() - value).total_seconds() < 1
 
     def test_run_transient_failure(self, db: DatabaseTransactionFixture):
-        session = db.session()
         """Verify that TransientFailureCoverageProvider works the
         way we'd expect.
         """
 
-        provider = TransientFailureCoverageProvider(session)
+        provider = TransientFailureCoverageProvider(db.session)
         identifier = db.identifier()
 
         # We start with no CoverageRecords and no Timestamp.
-        assert [] == session.query(CoverageRecord).all()
+        assert [] == db.session.query(CoverageRecord).all()
         assert None == Timestamp.value(
-            session,
+            db.session,
             provider.service_name,
             service_type=Timestamp.COVERAGE_PROVIDER_TYPE,
             collection=None,
@@ -1320,7 +1265,7 @@ class TestIdentifierCoverageProvider:
 
         # The timestamp was set.
         timestamp = Timestamp.value(
-            session,
+            db.session,
             provider.service_name,
             service_type=Timestamp.COVERAGE_PROVIDER_TYPE,
             collection=None,
@@ -1328,7 +1273,6 @@ class TestIdentifierCoverageProvider:
         assert (timestamp - now).total_seconds() < 1
 
     def test_add_coverage_record_for(self, db: DatabaseTransactionFixture):
-        session = db.session()
         """Calling CollectionCoverageProvider.add_coverage_record is the same
         as calling CoverageRecord.add_for with the relevant
         information.
@@ -1373,8 +1317,6 @@ class TestIdentifierCoverageProvider:
         """TODO: We need test coverage here."""
 
     def test_failure(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         provider = AlwaysSuccessfulCollectionCoverageProvider(db.default_collection())
         identifier = db.identifier()
         failure = provider.failure(identifier, error="an error", transient=False)
@@ -1394,14 +1336,12 @@ class TestIdentifierCoverageProvider:
         assert db.default_collection() == failure.collection
 
     def test_failure_for_ignored_item(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         """Test that failure_for_ignored_item creates an appropriate
         CoverageFailure.
         """
 
         identifier = db.identifier()
-        provider = NeverSuccessfulCoverageProvider(session)
+        provider = NeverSuccessfulCoverageProvider(db.session)
         result = provider.failure_for_ignored_item(identifier)
         assert isinstance(result, CoverageFailure)
         assert True == result.transient
@@ -1412,7 +1352,6 @@ class TestIdentifierCoverageProvider:
 
 class TestCollectionCoverageProvider:
     def test_class_variables(self, db: DatabaseTransactionFixture):
-        session = db.session()
         """Verify that class variables become appropriate instance
         variables.
         """
@@ -1431,8 +1370,6 @@ class TestCollectionCoverageProvider:
     def test_collection_protocol_must_match_class_protocol(
         self, db: DatabaseTransactionFixture
     ):
-        session = db.session()
-
         collection = db.collection(protocol=ExternalIntegration.OVERDRIVE)
         with pytest.raises(ValueError) as excinfo:
             AlwaysSuccessfulCollectionCoverageProvider(collection)
@@ -1444,13 +1381,12 @@ class TestCollectionCoverageProvider:
     def test_items_that_need_coverage_ignores_collection_when_collection_is_irrelevant(
         self, db
     ):
-        session = db.session()
         # Two providers that do the same work, but one is associated
         # with a collection and the other is not.
         collection_provider = AlwaysSuccessfulCollectionCoverageProvider(
             db.default_collection()
         )
-        no_collection_provider = AlwaysSuccessfulCoverageProvider(session)
+        no_collection_provider = AlwaysSuccessfulCoverageProvider(db.session)
 
         # This distinction is irrelevant because they both consider an
         # Identifier covered when it has a CoverageRecord not
@@ -1493,8 +1429,6 @@ class TestCollectionCoverageProvider:
     def test_items_that_need_coverage_respects_collection_when_collection_is_relevant(
         self, db
     ):
-        session = db.session()
-
         # Two providers that do the same work, but are associated
         # with different collections.
         collection_1_provider = AlwaysSuccessfulCollectionCoverageProvider(
@@ -1505,7 +1439,7 @@ class TestCollectionCoverageProvider:
 
         # And one that does the same work but is not associated with
         # any collection.
-        no_collection_provider = AlwaysSuccessfulCoverageProvider(session)
+        no_collection_provider = AlwaysSuccessfulCoverageProvider(db.session)
 
         # The 'collection' distinction is relevant, because these
         # CoverageProviders consider an identifier covered only when
@@ -1560,8 +1494,6 @@ class TestCollectionCoverageProvider:
         assert ([], []) == needs()
 
     def test_replacement_policy(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         """Unless a different replacement policy is passed in, the
         replacement policy is ReplacementPolicy.from_license_source().
         """
@@ -1576,8 +1508,6 @@ class TestCollectionCoverageProvider:
         assert policy == provider.replacement_policy
 
     def test_all(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         """Verify that all() gives a sequence of CollectionCoverageProvider
         objects, one for each Collection that implements the
         appropriate protocol.
@@ -1586,7 +1516,7 @@ class TestCollectionCoverageProvider:
         opds2 = db.collection(protocol=ExternalIntegration.OPDS_IMPORT)
         overdrive = db.collection(protocol=ExternalIntegration.OVERDRIVE)
         providers = list(
-            AlwaysSuccessfulCollectionCoverageProvider.all(session, batch_size=34)
+            AlwaysSuccessfulCollectionCoverageProvider.all(db.session, batch_size=34)
         )
 
         # The providers were returned in a random order, but there's one
@@ -1602,8 +1532,6 @@ class TestCollectionCoverageProvider:
             assert 34 == provider.batch_size
 
     def test_set_circulationdata_errors(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         """Verify that errors when setting circulation data
         are turned into CoverageFailure objects.
         """
@@ -1648,8 +1576,6 @@ class TestCollectionCoverageProvider:
     def test_set_metadata_incorporates_replacement_policy(
         self, db: DatabaseTransactionFixture
     ):
-        session = db.session()
-
         # Make sure that if a ReplacementPolicy is passed in to
         # set_metadata(), the policy's settings (and those of its
         # .presentation_calculation_policy) are respected.
@@ -1745,12 +1671,10 @@ class TestCollectionCoverageProvider:
         assert True == presentation_calculation_policy.tripped
 
     def test_items_that_need_coverage(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         # Here's an Identifier that was covered on 01/01/2016.
         identifier = db.identifier()
         cutoff_time = datetime_utc(2016, 1, 1)
-        provider = AlwaysSuccessfulCoverageProvider(session)
+        provider = AlwaysSuccessfulCoverageProvider(db.session)
         record, is_new = CoverageRecord.add_for(
             identifier, provider.data_source, timestamp=cutoff_time
         )
@@ -1761,21 +1685,20 @@ class TestCollectionCoverageProvider:
 
         # If we set the CoverageProvider's cutoff_time to the time of
         # coverage, the Identifier is still treated as covered.
-        provider = AlwaysSuccessfulCoverageProvider(session, cutoff_time=cutoff_time)
+        provider = AlwaysSuccessfulCoverageProvider(db.session, cutoff_time=cutoff_time)
         assert [] == provider.items_that_need_coverage().all()
 
         # But if we set the cutoff time to immediately after the time
         # the Identifier was covered...
         one_second_after = cutoff_time + datetime.timedelta(seconds=1)
         provider = AlwaysSuccessfulCoverageProvider(
-            session, cutoff_time=one_second_after
+            db.session, cutoff_time=one_second_after
         )
 
         # The identifier is treated as lacking coverage.
         assert [identifier] == provider.items_that_need_coverage().all()
 
     def test_work(self, db: DatabaseTransactionFixture):
-        session = db.session()
         """Verify that a CollectionCoverageProvider can create a Work."""
         # Here's an Gutenberg ID.
         identifier = db.identifier(identifier_type=Identifier.GUTENBERG_ID)
@@ -1871,7 +1794,6 @@ class TestCollectionCoverageProvider:
         circulation_data,
         db,
     ):
-        session = db.session()
         """Verify that a CollectionCoverageProvider can set both
         metadata (on an Edition) and circulation data (on a LicensePool).
         """
@@ -1953,7 +1875,6 @@ class TestCollectionCoverageProvider:
         bibliographic_data.primary_identifier = old_identifier
 
     def test_autocreate_licensepool(self, db: DatabaseTransactionFixture):
-        session = db.session()
         """A CollectionCoverageProvider can locate (or, if necessary, create)
         a LicensePool for an identifier.
         """
@@ -1993,7 +1914,6 @@ class TestCollectionCoverageProvider:
         assert new_pool.collection == provider.collection
 
     def test_set_presentation_ready(self, db: DatabaseTransactionFixture):
-        session = db.session()
         """Test that a CollectionCoverageProvider can set a Work
         as presentation-ready.
         """
@@ -2020,8 +1940,6 @@ class TestCollectionCoverageProvider:
 
 class TestCatalogCoverageProvider:
     def test_items_that_need_coverage(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         c1 = db.collection()
         c2 = db.collection()
 
@@ -2114,21 +2032,19 @@ class TestBibliographicCoverageProvider:
 
 class TestWorkCoverageProvider:
     def test_success(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         class MockProvider(AlwaysSuccessfulWorkCoverageProvider):
             OPERATION = "the_operation"
 
-        qu = session.query(WorkCoverageRecord).filter(
+        qu = db.session.query(WorkCoverageRecord).filter(
             WorkCoverageRecord.operation == MockProvider.OPERATION
         )
-        provider = MockProvider(session)
+        provider = MockProvider(db.session)
         work = db.work()
 
         # We start with no relevant WorkCoverageRecord and no Timestamp.
         assert [] == qu.all()
         assert None == Timestamp.value(
-            session,
+            db.session,
             provider.service_name,
             service_type=Timestamp.COVERAGE_PROVIDER_TYPE,
             collection=None,
@@ -2144,7 +2060,7 @@ class TestWorkCoverageProvider:
 
         # The timestamp is now set.
         timestamp = Timestamp.value(
-            session,
+            db.session,
             provider.service_name,
             service_type=Timestamp.COVERAGE_PROVIDER_TYPE,
             collection=None,
@@ -2152,16 +2068,14 @@ class TestWorkCoverageProvider:
         assert (timestamp - now).total_seconds() < 1
 
     def test_transient_failure(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         class MockProvider(TransientFailureWorkCoverageProvider):
             OPERATION = "the_operation"
 
-        provider = MockProvider(session)
+        provider = MockProvider(db.session)
         work = db.work()
 
         # We start with no relevant WorkCoverageRecords.
-        qu = session.query(WorkCoverageRecord).filter(
+        qu = db.session.query(WorkCoverageRecord).filter(
             WorkCoverageRecord.operation == provider.operation
         )
         assert [] == qu.all()
@@ -2177,7 +2091,7 @@ class TestWorkCoverageProvider:
         # The timestamp is now set to a recent value.
         service_name = "Never successful (transient, works) (the_operation)"
         value = Timestamp.value(
-            session,
+            db.session,
             service_name,
             service_type=Timestamp.COVERAGE_PROVIDER_TYPE,
             collection=None,
@@ -2185,16 +2099,14 @@ class TestWorkCoverageProvider:
         assert (utc_now() - value).total_seconds() < 2
 
     def test_persistent_failure(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         class MockProvider(NeverSuccessfulWorkCoverageProvider):
             OPERATION = "the_operation"
 
-        provider = MockProvider(session)
+        provider = MockProvider(db.session)
         work = db.work()
 
         # We start with no relevant WorkCoverageRecords.
-        qu = session.query(WorkCoverageRecord).filter(
+        qu = db.session.query(WorkCoverageRecord).filter(
             WorkCoverageRecord.operation == provider.operation
         )
         assert [] == qu.all()
@@ -2209,7 +2121,7 @@ class TestWorkCoverageProvider:
         # The timestamp is now set to a recent value.
         service_name = "Never successful (works) (the_operation)"
         value = Timestamp.value(
-            session,
+            db.session,
             service_name,
             service_type=Timestamp.COVERAGE_PROVIDER_TYPE,
             collection=None,
@@ -2217,10 +2129,8 @@ class TestWorkCoverageProvider:
         assert (utc_now() - value).total_seconds() < 2
 
     def test_items_that_need_coverage(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         # Here's a WorkCoverageProvider.
-        provider = AlwaysSuccessfulWorkCoverageProvider(session)
+        provider = AlwaysSuccessfulWorkCoverageProvider(db.session)
         work = db.work()
 
         # Here are three works,
@@ -2249,13 +2159,11 @@ class TestWorkCoverageProvider:
         assert {w2, w3} == set(provider.items_that_need_coverage([i2, i3]).all())
 
     def test_failure_for_ignored_item(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         class MockProvider(NeverSuccessfulWorkCoverageProvider):
             OPERATION = "the_operation"
 
         work = db.work()
-        provider = NeverSuccessfulWorkCoverageProvider(session)
+        provider = NeverSuccessfulWorkCoverageProvider(db.session)
         result = provider.failure_for_ignored_item(work)
         assert isinstance(result, CoverageFailure)
         assert True == result.transient
@@ -2275,12 +2183,10 @@ class TestWorkCoverageProvider:
 
 class TestPresentationReadyWorkCoverageProvider:
     def test_items_that_need_coverage(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         class Mock(PresentationReadyWorkCoverageProvider):
             SERVICE_NAME = "mock"
 
-        provider = Mock(session)
+        provider = Mock(db.session)
         work = db.work()
 
         # The work is not presentation ready and so is not ready for
@@ -2304,10 +2210,8 @@ class MockWork:
 
 class TestWorkPresentationEditionCoverageProvider:
     def test_process_item(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         work = MockWork()
-        provider = WorkPresentationEditionCoverageProvider(session)
+        provider = WorkPresentationEditionCoverageProvider(db.session)
         provider.process_item(work)
 
         policy = work.calculate_presentation_called_with
@@ -2330,10 +2234,8 @@ class TestWorkPresentationEditionCoverageProvider:
 
 class TestWorkClassificationCoverageProvider:
     def test_process_item(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         work = MockWork()
-        provider = WorkClassificationCoverageProvider(session)
+        provider = WorkClassificationCoverageProvider(db.session)
         provider.process_item(work)
 
         # This coverage provider does all the work, even the expensive
@@ -2355,9 +2257,7 @@ class TestWorkClassificationCoverageProvider:
 
 class TestOPDSEntryWorkCoverageProvider:
     def test_run(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
-        provider = OPDSEntryWorkCoverageProvider(session)
+        provider = OPDSEntryWorkCoverageProvider(db.session)
         work = db.work()
         work.simple_opds_entry = "old junk"
         work.verbose_opds_entry = "old long junk"
@@ -2377,9 +2277,7 @@ class TestOPDSEntryWorkCoverageProvider:
 
 class TestMARCRecordWorkCoverageProvider:
     def test_run(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
-        provider = MARCRecordWorkCoverageProvider(session)
+        provider = MARCRecordWorkCoverageProvider(db.session)
         work = db.work(with_license_pool=True)
         work.marc_record = "old junk"
         work.presentation_ready = False

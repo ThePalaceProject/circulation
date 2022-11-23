@@ -138,6 +138,7 @@ class DatabaseFixture:
         self._connection.close()
         self._engine.dispose()
 
+    @property
     def connection(self) -> Connection:
         return self._connection
 
@@ -194,8 +195,8 @@ class DatabaseTransactionFixture:
     @staticmethod
     def create(database: DatabaseFixture) -> "DatabaseTransactionFixture":
         # Create a new connection to the database.
-        session = Session(database.connection())
-        transaction = database.connection().begin_nested()
+        session = Session(database.connection)
+        transaction = database.connection.begin_nested()
         return DatabaseTransactionFixture(database, session, transaction)
 
     def close(self):
@@ -219,12 +220,15 @@ class DatabaseTransactionFixture:
             if key in Configuration.instance:
                 del Configuration.instance[key]
 
+    @property
     def database(self) -> DatabaseFixture:
         return self._database
 
+    @property
     def transaction(self) -> Transaction:
         return self._transaction
 
+    @property
     def session(self) -> Session:
         return self._session
 
@@ -266,7 +270,7 @@ class DatabaseTransactionFixture:
         name = name or self.fresh_str()
         short_name = short_name or self.fresh_str()
         library, ignore = get_one_or_create(
-            self.session(),
+            self.session,
             Library,
             name=name,
             short_name=short_name,
@@ -285,7 +289,7 @@ class DatabaseTransactionFixture:
         data_source_name=None,
     ) -> Collection:
         name = name or self.fresh_str()
-        collection, ignore = get_one_or_create(self.session(), Collection, name=name)
+        collection, ignore = get_one_or_create(self.session, Collection, name=name)
         collection.external_account_id = external_account_id
         integration = collection.create_external_integration(protocol)
         integration.goal = ExternalIntegration.LICENSE_GOAL
@@ -365,7 +369,7 @@ class DatabaseTransactionFixture:
         else:
             pools = presentation_edition.license_pools
         work, ignore = get_one_or_create(
-            self.session(),
+            self.session,
             Work,
             create_method_kwargs=dict(
                 audience=audience, fiction=fiction, quality=quality
@@ -374,7 +378,7 @@ class DatabaseTransactionFixture:
         )
         if genre:
             if not isinstance(genre, Genre):
-                genre, ignore = Genre.lookup(self.session(), genre, autocreate=True)
+                genre, ignore = Genre.lookup(self.session, genre, autocreate=True)
             work.genres = [genre]
         work.random = 0.5
         work.set_presentation_edition(presentation_edition)
@@ -399,7 +403,7 @@ class DatabaseTransactionFixture:
     def contributor(self, sort_name=None, name=None, **kw_args):
         name = sort_name or name or self.fresh_str()
         return get_one_or_create(
-            self.session(), Contributor, sort_name=str(name), **kw_args
+            self.session, Contributor, sort_name=str(name), **kw_args
         )
 
     def edition(
@@ -419,8 +423,8 @@ class DatabaseTransactionFixture:
         unlimited_access=False,
     ):
         id = identifier_id or self.fresh_str()
-        source = DataSource.lookup(self.session(), data_source_name)
-        wr = Edition.for_foreign_id(self.session(), source, identifier_type, id)[0]
+        source = DataSource.lookup(self.session, data_source_name)
+        wr = Edition.for_foreign_id(self.session, source, identifier_type, id)[0]
         if not title:
             title = self.fresh_str()
         wr.title = str(title)
@@ -474,13 +478,13 @@ class DatabaseTransactionFixture:
         self_hosted=False,
         unlimited_access=False,
     ):
-        source = DataSource.lookup(self.session(), data_source_name)
+        source = DataSource.lookup(self.session, data_source_name)
         if not edition:
             edition = self.edition(data_source_name)
         collection = collection or self.default_collection()
         assert collection
         pool, ignore = get_one_or_create(
-            self.session(),
+            self.session,
             LicensePool,
             create_method_kwargs=dict(open_access=open_access),
             identifier=edition.primary_identifier,
@@ -530,7 +534,7 @@ class DatabaseTransactionFixture:
 
     def representation(self, url=None, media_type=None, content=None, mirrored=False):
         url = url or "http://foo.com/" + self.fresh_str()
-        repr, is_new = get_one_or_create(self.session(), Representation, url=url)
+        repr, is_new = get_one_or_create(self.session, Representation, url=url)
         repr.media_type = media_type
         if media_type and content:
             if isinstance(content, str):
@@ -555,7 +559,7 @@ class DatabaseTransactionFixture:
         display_name = display_name or self.fresh_str()
         library = library or self.default_library()
         lane, is_new = create(
-            self.session(),
+            self.session,
             core.lane.Lane,
             library=library,
             parent=parent,
@@ -570,7 +574,7 @@ class DatabaseTransactionFixture:
                 genres = [genres]
             for genre in genres:
                 if isinstance(genre, str):
-                    genre, ignore = Genre.lookup(self.session(), genre)
+                    genre, ignore = Genre.lookup(self.session, genre)
                 lane.genres.append(genre)
         if languages:
             if not isinstance(languages, list):
@@ -580,7 +584,7 @@ class DatabaseTransactionFixture:
 
     def subject(self, type, identifier) -> Subject:
         return get_one_or_create(
-            self.session(), Subject, type=type, identifier=identifier
+            self.session, Subject, type=type, identifier=identifier
         )[0]
 
     def coverage_record(
@@ -597,7 +601,7 @@ class DatabaseTransactionFixture:
         else:
             identifier = edition.primary_identifier
         record, ignore = get_one_or_create(
-            self.session(),
+            self.session,
             CoverageRecord,
             identifier=identifier,
             data_source=coverage_source,
@@ -616,13 +620,13 @@ class DatabaseTransactionFixture:
             id_value = foreign_id
         else:
             id_value = self.fresh_str()
-        return Identifier.for_foreign_id(self.session(), identifier_type, id_value)[0]
+        return Identifier.for_foreign_id(self.session, identifier_type, id_value)[0]
 
     def integration_client(self, url=None, shared_secret=None) -> IntegrationClient:
         url = url or self.fresh_url()
         secret = shared_secret or "secret"
         return get_one_or_create(
-            self.session(),
+            self.session,
             IntegrationClient,
             shared_secret=secret,
             create_method_kwargs=dict(url=url),
@@ -636,7 +640,7 @@ class DatabaseTransactionFixture:
         library = library or self.default_library()
         assert library
         return get_one_or_create(
-            self.session(),
+            self.session,
             Patron,
             external_identifier=external_identifier,
             library=library,
@@ -658,7 +662,7 @@ class DatabaseTransactionFixture:
         checkout_url = checkout_url or self.fresh_str()
         status_url = status_url or self.fresh_str()
         license, ignore = get_one_or_create(
-            self.session(),
+            self.session,
             License,
             identifier=identifier,
             license_pool=pool,
@@ -681,7 +685,7 @@ class DatabaseTransactionFixture:
         integration = None
         if not libraries:
             integration, ignore = get_one_or_create(
-                self.session(), ExternalIntegration, protocol=protocol, goal=goal
+                self.session, ExternalIntegration, protocol=protocol, goal=goal
             )
         else:
             if not isinstance(libraries, list):
@@ -691,7 +695,7 @@ class DatabaseTransactionFixture:
             # libraries.
             for library in libraries:
                 integration = ExternalIntegration.lookup(
-                    self.session(), protocol, goal, library=libraries[0]
+                    self.session, protocol, goal, library=libraries[0]
                 )
                 if integration:
                     break
@@ -704,7 +708,7 @@ class DatabaseTransactionFixture:
                     goal=goal,
                 )
                 integration.libraries.extend(libraries)
-                self.session().add(integration)
+                self.session.add(integration)
 
         for attr, value in list(kwargs.items()):
             setattr(integration, attr, value)
@@ -730,7 +734,7 @@ class DatabaseTransactionFixture:
         library_id = library.id if library else None
 
         external_integration_link, ignore = get_one_or_create(
-            self.session(),
+            self.session,
             ExternalIntegrationLink,
             library_id=library_id,
             external_integration_id=integration.id,
@@ -744,7 +748,7 @@ class DatabaseTransactionFixture:
         self, work, operation=None, status=CoverageRecord.SUCCESS
     ) -> WorkCoverageRecord:
         record, ignore = get_one_or_create(
-            self.session(),
+            self.session,
             WorkCoverageRecord,
             work=work,
             operation=operation,
@@ -759,7 +763,7 @@ class DatabaseTransactionFixture:
         self, identifier, subject, data_source, weight=1
     ) -> Classification:
         return get_one_or_create(
-            self.session(),
+            self.session,
             Classification,
             identifier=identifier,
             subject=subject,
@@ -775,11 +779,11 @@ class DatabaseTransactionFixture:
         num_entries=1,
         entries_exist_as_works=True,
     ):
-        data_source = DataSource.lookup(self.session(), data_source_name)
+        data_source = DataSource.lookup(self.session, data_source_name)
         foreign_identifier = foreign_identifier or self.fresh_str()
         now = utc_now()
         customlist, ignore = get_one_or_create(
-            self.session(),
+            self.session,
             CustomList,
             create_method_kwargs=dict(
                 created=now,
@@ -829,9 +833,9 @@ class DatabaseTransactionFixture:
         objects that all know each other.
         """
         # make some authors
-        [bob], ignore = Contributor.lookup(self.session(), "Bitshifter, Bob")
+        [bob], ignore = Contributor.lookup(self.session, "Bitshifter, Bob")
         bob.family_name, bob.display_name = bob.default_names()
-        [alice], ignore = Contributor.lookup(self.session(), "Adder, Alice")
+        [alice], ignore = Contributor.lookup(self.session, "Adder, Alice")
         alice.family_name, alice.display_name = alice.default_names()
 
         edition_std_ebooks, pool_std_ebooks = self.edition(
@@ -888,11 +892,11 @@ class DatabaseTransactionFixture:
         )
 
     def credential(self, data_source_name=DataSource.GUTENBERG, type=None, patron=None):
-        data_source = DataSource.lookup(self.session(), data_source_name)
+        data_source = DataSource.lookup(self.session, data_source_name)
         type = type or self.fresh_str()
         patron = patron or self.patron()
         credential, is_new = Credential.persistent_token_create(
-            self.session(), data_source, type, patron
+            self.session, data_source, type, patron
         )
         return credential
 

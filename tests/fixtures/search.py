@@ -52,7 +52,7 @@ class ExternalSearchFixture:
         )
 
         try:
-            fixture.search = SearchClientForTesting(db.session())
+            fixture.search = SearchClientForTesting(db.session)
         except Exception as e:
             fixture.search = None
             logging.error(
@@ -132,7 +132,7 @@ class EndToEndSearchFixture:
 
         # Add all the works created in the setup to the search index.
         SearchIndexCoverageProvider(
-            self.external_search.db.session(),
+            self.external_search.db.session,
             search_index_client=self.external_search.search,
         ).run_once_and_update_timestamp()
         self.external_search.refresh_and_wait()
@@ -225,8 +225,7 @@ class EndToEndSearchFixture:
         query_string, filter, pagination = query_args
         results = [x.work_id for x in hits]
         actual = (
-            self.external_search.db.session()
-            .query(Work)
+            self.external_search.db.session.query(Work)
             .filter(Work.id.in_(results))
             .all()
         )

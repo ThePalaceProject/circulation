@@ -93,17 +93,15 @@ class TestOPDS2ImporterFixture:
 def opds2_importer_fixture(
     db: DatabaseTransactionFixture,
 ) -> TestOPDS2ImporterFixture:
-    session = db.session()
-
     data = TestOPDS2ImporterFixture()
     data.transaction = db
     data.collection = db.default_collection()
     data.data_source = DataSource.lookup(
-        session, "OPDS 2.0 Data Source", autocreate=True
+        db.session, "OPDS 2.0 Data Source", autocreate=True
     )
     data.collection.data_source = data.data_source
     data.importer = OPDS2Importer(
-        session, data.collection, RWPMManifestParser(OPDS2FeedParserFactory())
+        db.session, data.collection, RWPMManifestParser(OPDS2FeedParserFactory())
     )
     data.configuration_storage = ConfigurationStorage(data.importer)
     data.configuration_factory = ConfigurationFactory()
@@ -138,7 +136,7 @@ class TestOPDS2Importer(OPDS2Test):
         data, transaction, session = (
             opds2_importer_fixture,
             opds2_importer_fixture.transaction,
-            opds2_importer_fixture.transaction.session(),
+            opds2_importer_fixture.transaction.session,
         )
         content_server_feed = opds2_files_fixture.sample_text("feed.json")
 
@@ -405,7 +403,7 @@ class TestOPDS2Importer(OPDS2Test):
         data, transaction, session = (
             opds2_importer_fixture,
             opds2_importer_fixture.transaction,
-            opds2_importer_fixture.transaction.session(),
+            opds2_importer_fixture.transaction.session,
         )
 
         # Arrange
@@ -444,7 +442,7 @@ class TestOPDS2Importer(OPDS2Test):
         data, transaction, session = (
             opds2_importer_fixture,
             opds2_importer_fixture.transaction,
-            opds2_importer_fixture.transaction.session(),
+            opds2_importer_fixture.transaction.session,
         )
 
         content = opds2_files_fixture.sample_text("auth_token_feed.json")

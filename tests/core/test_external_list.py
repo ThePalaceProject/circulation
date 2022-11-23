@@ -27,10 +27,9 @@ class CustomListFromCSVFixture:
 def customlist_from_csv_fixture(
     db: DatabaseTransactionFixture,
 ) -> CustomListFromCSVFixture:
-    session = db.session()
     data = CustomListFromCSVFixture()
     data.transaction = db
-    data.data_source = DataSource.lookup(session, DataSource.LIBRARY_STAFF)
+    data.data_source = DataSource.lookup(db.session, DataSource.LIBRARY_STAFF)
     data.metadata = DummyMetadataClient()
     data.metadata.lookups["Octavia Butler"] = "Butler, Octavia"
     data.l = CustomListFromCSV(
@@ -174,7 +173,7 @@ class TestCustomListFromCSV:
         work = data.transaction.work(
             title=row[data.l.title_field], authors=["Butler, Octavia"]
         )
-        data.transaction.session().commit()
+        data.transaction.session.commit()
         metadata = data.l.row_to_metadata(row)
         list_entry = data.l.metadata_to_list_entry(
             data.custom_list, data.data_source, data.now, metadata
@@ -264,8 +263,6 @@ class BooksInSeries(MembershipManager):
 
 class TestMembershipManager:
     def test_update(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         # Create two books that are part of series, and one book that
         # is not.
         series1 = db.edition()
@@ -298,7 +295,7 @@ class TestMembershipManager:
         # have a series actually does.
         series2.series = None
         no_series.series = "Actually I do have a series."
-        session.commit()
+        db.session.commit()
 
         new_update_time = datetime_utc(2016, 1, 1)
 

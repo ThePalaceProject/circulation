@@ -23,39 +23,39 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 class TestIdentifier:
     def test_for_foreign_id(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         identifier_type = Identifier.ISBN
         isbn = "3293000061"
 
         # Getting the data automatically creates a database record.
-        identifier, was_new = Identifier.for_foreign_id(session, identifier_type, isbn)
+        identifier, was_new = Identifier.for_foreign_id(
+            db.session, identifier_type, isbn
+        )
         assert Identifier.ISBN == identifier.type
         assert isbn == identifier.identifier
         assert True == was_new
 
         # If we get it again we get the same data, but it's no longer new.
-        identifier2, was_new = Identifier.for_foreign_id(session, identifier_type, isbn)
+        identifier2, was_new = Identifier.for_foreign_id(
+            db.session, identifier_type, isbn
+        )
         assert identifier == identifier2
         assert False == was_new
 
         # If we pass in no data we get nothing back.
-        assert None == Identifier.for_foreign_id(session, None, None)
+        assert None == Identifier.for_foreign_id(db.session, None, None)
 
     def test_for_foreign_id_by_deprecated_type(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
-        threem_id, is_new = Identifier.for_foreign_id(session, "3M ID", db.fresh_str())
+        threem_id, is_new = Identifier.for_foreign_id(
+            db.session, "3M ID", db.fresh_str()
+        )
         assert Identifier.BIBLIOTHECA_ID == threem_id.type
         assert Identifier.BIBLIOTHECA_ID != "3M ID"
 
     def test_for_foreign_id_rejects_invalid_identifiers(
         self, db: DatabaseTransactionFixture
     ):
-        session = db.session()
-
         with pytest.raises(ValueError) as excinfo:
-            Identifier.for_foreign_id(session, Identifier.BIBLIOTHECA_ID, "foo/bar")
+            Identifier.for_foreign_id(db.session, Identifier.BIBLIOTHECA_ID, "foo/bar")
         assert '"foo/bar" is not a valid Bibliotheca ID.' in str(excinfo.value)
 
     def test_valid_as_foreign_identifier(self, db: DatabaseTransactionFixture):
@@ -69,31 +69,27 @@ class TestIdentifier:
         assert False == m(Identifier.BIBLIOTHECA_ID, "0015142259,0015187940")
 
     def test_for_foreign_id_without_autocreate(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         identifier_type = Identifier.ISBN
         isbn = db.fresh_str()
 
         # We don't want to auto-create a database record, so we set
         # autocreate=False
         identifier, was_new = Identifier.for_foreign_id(
-            session, identifier_type, isbn, autocreate=False
+            db.session, identifier_type, isbn, autocreate=False
         )
         assert None == identifier
         assert False == was_new
 
     def test_from_asin(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         isbn10 = "1449358063"
         isbn13 = "9781449358068"
         asin = "B0088IYM3C"
         isbn13_with_dashes = "978-144-935-8068"
 
-        i_isbn10, new1 = Identifier.from_asin(session, isbn10)
-        i_isbn13, new2 = Identifier.from_asin(session, isbn13)
-        i_asin, new3 = Identifier.from_asin(session, asin)
-        i_isbn13_2, new4 = Identifier.from_asin(session, isbn13_with_dashes)
+        i_isbn10, new1 = Identifier.from_asin(db.session, isbn10)
+        i_isbn13, new2 = Identifier.from_asin(db.session, isbn13)
+        i_asin, new3 = Identifier.from_asin(db.session, asin)
+        i_isbn13_2, new4 = Identifier.from_asin(db.session, isbn13_with_dashes)
 
         # The three ISBNs are equivalent, so they got turned into the same
         # Identifier, using the ISBN13.
@@ -109,17 +105,15 @@ class TestIdentifier:
         assert asin == i_asin.identifier
 
     def test_urn(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         # ISBN identifiers use the ISBN URN scheme.
         identifier, ignore = Identifier.for_foreign_id(
-            session, Identifier.ISBN, "9781449358068"
+            db.session, Identifier.ISBN, "9781449358068"
         )
         assert "urn:isbn:9781449358068" == identifier.urn
 
         # URI identifiers don't need a URN scheme.
         identifier, ignore = Identifier.for_foreign_id(
-            session, Identifier.URI, "http://example.com/"
+            db.session, Identifier.URI, "http://example.com/"
         )
         assert identifier.identifier == identifier.urn
 
@@ -135,8 +129,6 @@ class TestIdentifier:
         assert identifier.urn.startswith(Identifier.URN_SCHEME_PREFIX)
 
     def test_parse_urns(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         identifier = db.identifier()
         fake_urn = "what_even_is_this"
         new_urn = Identifier.URN_SCHEME_PREFIX + "Overdrive%20ID/nosuchidentifier"
@@ -144,7 +136,7 @@ class TestIdentifier:
         same_new_urn = Identifier.URN_SCHEME_PREFIX + "Overdrive%20ID/NOSUCHidentifier"
         urns = [identifier.urn, fake_urn, new_urn, same_new_urn]
 
-        results = Identifier.parse_urns(session, urns, autocreate=False)
+        results = Identifier.parse_urns(db.session, urns, autocreate=False)
         identifiers_by_urn, failures = results
 
         # By default, no new identifiers are created. All URNs for identifiers
@@ -156,7 +148,7 @@ class TestIdentifier:
         assert {identifier.urn: identifier} == identifiers_by_urn
 
         # By default, new identifiers are created, too.
-        results = Identifier.parse_urns(session, urns)
+        results = Identifier.parse_urns(db.session, urns)
         identifiers_by_urn, failures = results
 
         # Only the fake URN is returned as a failure.
@@ -171,7 +163,7 @@ class TestIdentifier:
         # And the new identifier has been created.
         new_identifier = identifiers_by_urn[new_urn]
         assert isinstance(new_identifier, Identifier)
-        assert new_identifier in session
+        assert new_identifier in db.session
         assert Identifier.OVERDRIVE_ID == new_identifier.type
         assert "nosuchidentifier" == new_identifier.identifier
 
@@ -185,13 +177,13 @@ class TestIdentifier:
         everything = []
 
         success, failure = Identifier.parse_urns(
-            session, urns, allowed_types=[Identifier.OVERDRIVE_ID]
+            db.session, urns, allowed_types=[Identifier.OVERDRIVE_ID]
         )
         assert new_urn in success
         assert isbn_urn in failure
 
         success, failure = Identifier.parse_urns(
-            session, urns, allowed_types=[Identifier.OVERDRIVE_ID, Identifier.ISBN]
+            db.session, urns, allowed_types=[Identifier.OVERDRIVE_ID, Identifier.ISBN]
         )
         assert new_urn in success
         assert isbn_urn in success
@@ -199,58 +191,58 @@ class TestIdentifier:
 
         # If the allowed_types is empty, no URNs can be looked up
         # -- this is most likely the caller's mistake.
-        success, failure = Identifier.parse_urns(session, urns, allowed_types=[])
+        success, failure = Identifier.parse_urns(db.session, urns, allowed_types=[])
         assert new_urn in failure
         assert isbn_urn in failure
 
     def test_parse_urn(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         # We can parse our custom URNs back into identifiers.
         identifier = db.identifier()
-        session.commit()
-        new_identifier, ignore = Identifier.parse_urn(session, identifier.urn)
+        db.session.commit()
+        new_identifier, ignore = Identifier.parse_urn(db.session, identifier.urn)
         assert identifier == new_identifier
 
         # We can parse urn:isbn URNs into ISBN identifiers. ISBN-10s are
         # converted to ISBN-13s.
         identifier, ignore = Identifier.for_foreign_id(
-            session, Identifier.ISBN, "9781449358068"
+            db.session, Identifier.ISBN, "9781449358068"
         )
         isbn_urn = "urn:isbn:1449358063"
-        isbn_identifier, ignore = Identifier.parse_urn(session, isbn_urn)
+        isbn_identifier, ignore = Identifier.parse_urn(db.session, isbn_urn)
         assert Identifier.ISBN == isbn_identifier.type
         assert "9781449358068" == isbn_identifier.identifier
 
         isbn_urn = "urn:isbn:9781449358068"
-        isbn_identifier2, ignore = Identifier.parse_urn(session, isbn_urn)
+        isbn_identifier2, ignore = Identifier.parse_urn(db.session, isbn_urn)
         assert isbn_identifier2 == isbn_identifier
 
         # We can parse ordinary http: or https: URLs into URI
         # identifiers.
-        http_identifier, ignore = Identifier.parse_urn(session, "http://example.com")
+        http_identifier, ignore = Identifier.parse_urn(db.session, "http://example.com")
         assert Identifier.URI == http_identifier.type
         assert "http://example.com" == http_identifier.identifier
 
-        https_identifier, ignore = Identifier.parse_urn(session, "https://example.com")
+        https_identifier, ignore = Identifier.parse_urn(
+            db.session, "https://example.com"
+        )
         assert Identifier.URI == https_identifier.type
         assert "https://example.com" == https_identifier.identifier
 
         # we can parse Gutenberg identifiers
         gut_identifier = "http://www.gutenberg.org/ebooks/9781449358068"
-        gut_identifier2, ignore = Identifier.parse_urn(session, gut_identifier)
+        gut_identifier2, ignore = Identifier.parse_urn(db.session, gut_identifier)
         assert gut_identifier2.type == Identifier.GUTENBERG_ID
         assert gut_identifier2.identifier == "9781449358068"
 
         # we can parse ProQuest identifiers
         pq_identifier = "urn:proquest.com/document-id/1543720"
-        pq_identifier2, ignore = Identifier.parse_urn(session, pq_identifier)
+        pq_identifier2, ignore = Identifier.parse_urn(db.session, pq_identifier)
         assert pq_identifier2.type == Identifier.PROQUEST_ID
         assert pq_identifier2.identifier == "1543720"
 
         # We can parse UUIDs.
         uuid_identifier, ignore = Identifier.parse_urn(
-            session, "urn:uuid:04377e87-ab69-41c8-a2a4-812d55dc0952"
+            db.session, "urn:uuid:04377e87-ab69-41c8-a2a4-812d55dc0952"
         )
         assert Identifier.URI == uuid_identifier.type
         assert (
@@ -260,19 +252,17 @@ class TestIdentifier:
 
         # A URN we can't handle raises an exception.
         ftp_urn = "ftp://example.com"
-        pytest.raises(ValueError, Identifier.parse_urn, session, ftp_urn)
+        pytest.raises(ValueError, Identifier.parse_urn, db.session, ftp_urn)
 
         # An invalid ISBN raises an exception.
-        pytest.raises(ValueError, Identifier.parse_urn, session, "urn:isbn:notanisbn")
+        pytest.raises(
+            ValueError, Identifier.parse_urn, db.session, "urn:isbn:notanisbn"
+        )
 
         # Pass in None and you get None.
-        assert None == Identifier.parse_urn(session, None)
+        assert None == Identifier.parse_urn(db.session, None)
 
-    def parse_urn_must_support_license_pools(
-        self, database_transaction: DatabaseTransactionFixture
-    ):
-        session = database_transaction.session()
-
+    def parse_urn_must_support_license_pools(self, db: DatabaseTransactionFixture):
         # We have no way of associating ISBNs with license pools.
         # If we try to parse an ISBN URN in a context that only accepts
         # URNs that can have associated license pools, we get an exception.
@@ -280,7 +270,7 @@ class TestIdentifier:
         pytest.raises(
             Identifier.UnresolvableIdentifierException,
             Identifier.parse_urn,
-            session,
+            db.session,
             isbn_urn,
             must_support_license_pools=True,
         )
@@ -288,10 +278,8 @@ class TestIdentifier:
     def test_recursively_equivalent_identifier_ids(
         self, db: DatabaseTransactionFixture
     ):
-        session = db.session()
-
         identifier = db.identifier()
-        data_source = DataSource.lookup(session, DataSource.MANUAL)
+        data_source = DataSource.lookup(db.session, DataSource.MANUAL)
 
         strong_equivalent = db.identifier()
         identifier.equivalent_to(data_source, strong_equivalent, 0.9)
@@ -315,7 +303,7 @@ class TestIdentifier:
             equivalent_identifier_levels=5, equivalent_identifier_threshold=0.1
         )
         equivs = Identifier.recursively_equivalent_identifier_ids(
-            session, [identifier.id], policy=high_levels_low_threshold
+            db.session, [identifier.id], policy=high_levels_low_threshold
         )
         assert {
             identifier.id,
@@ -331,7 +319,7 @@ class TestIdentifier:
             equivalent_identifier_levels=1, equivalent_identifier_threshold=0.1
         )
         equivs = Identifier.recursively_equivalent_identifier_ids(
-            session, [identifier.id], policy=one_level
+            db.session, [identifier.id], policy=one_level
         )
         assert {identifier.id, strong_equivalent.id, weak_equivalent.id} == set(
             equivs[identifier.id]
@@ -342,7 +330,7 @@ class TestIdentifier:
             equivalent_identifier_levels=1, equivalent_identifier_threshold=0.4
         )
         equivs = Identifier.recursively_equivalent_identifier_ids(
-            session, [identifier.id], policy=one_level_high_threshold
+            db.session, [identifier.id], policy=one_level_high_threshold
         )
         assert {identifier.id, strong_equivalent.id} == set(equivs[identifier.id])
 
@@ -359,7 +347,7 @@ class TestIdentifier:
             equivalent_identifier_levels=5, equivalent_identifier_threshold=0.5
         )
         equivs = Identifier.recursively_equivalent_identifier_ids(
-            session, [identifier.id], policy=high_levels_high_threshold
+            db.session, [identifier.id], policy=high_levels_high_threshold
         )
         assert {identifier.id, strong_equivalent.id} == set(equivs[identifier.id])
 
@@ -369,7 +357,7 @@ class TestIdentifier:
             equivalent_identifier_levels=5, equivalent_identifier_threshold=0.25
         )
         equivs = Identifier.recursively_equivalent_identifier_ids(
-            session, [identifier.id], policy=high_levels_lower_threshold
+            db.session, [identifier.id], policy=high_levels_lower_threshold
         )
         assert {
             identifier.id,
@@ -380,7 +368,7 @@ class TestIdentifier:
 
         # It also works if we start from other identifiers.
         equivs = Identifier.recursively_equivalent_identifier_ids(
-            session, [strong_equivalent.id], policy=high_levels_low_threshold
+            db.session, [strong_equivalent.id], policy=high_levels_low_threshold
         )
         assert {
             identifier.id,
@@ -392,7 +380,7 @@ class TestIdentifier:
         } == set(equivs[strong_equivalent.id])
 
         equivs = Identifier.recursively_equivalent_identifier_ids(
-            session, [level_4_equivalent.id], policy=high_levels_low_threshold
+            db.session, [level_4_equivalent.id], policy=high_levels_low_threshold
         )
         assert {
             identifier.id,
@@ -403,7 +391,7 @@ class TestIdentifier:
         } == set(equivs[level_4_equivalent.id])
 
         equivs = Identifier.recursively_equivalent_identifier_ids(
-            session, [level_4_equivalent.id], policy=high_levels_high_threshold
+            db.session, [level_4_equivalent.id], policy=high_levels_high_threshold
         )
         assert {
             level_2_equivalent.id,
@@ -425,7 +413,7 @@ class TestIdentifier:
             equivalent_identifier_levels=5, equivalent_identifier_threshold=0.89
         )
         equivs = Identifier.recursively_equivalent_identifier_ids(
-            session, [another_identifier.id], high_levels_fairly_high_threshold
+            db.session, [another_identifier.id], high_levels_fairly_high_threshold
         )
         assert {another_identifier.id, l2.id, l3.id, l4.id} == set(
             equivs[another_identifier.id]
@@ -436,7 +424,7 @@ class TestIdentifier:
             equivalent_identifier_levels=2, equivalent_identifier_threshold=0.8
         )
         equivs = Identifier.recursively_equivalent_identifier_ids(
-            session,
+            db.session,
             [identifier.id, level_3_equivalent.id],
             policy=two_levels_high_threshold,
         )
@@ -454,7 +442,7 @@ class TestIdentifier:
             equivalent_identifier_cutoff=1,
         )
         equivs = Identifier.recursively_equivalent_identifier_ids(
-            session, [identifier.id], policy=with_cutoff
+            db.session, [identifier.id], policy=with_cutoff
         )
 
         # The cutoff was set to 1, but we always go at least one level
@@ -465,7 +453,7 @@ class TestIdentifier:
         # Increase the cutoff, and we get more identifiers.
         with_cutoff.equivalent_identifier_cutoff = 5
         equivs = Identifier.recursively_equivalent_identifier_ids(
-            session, [identifier.id], policy=with_cutoff
+            db.session, [identifier.id], policy=with_cutoff
         )
         assert len(equivs[identifier.id]) > 3
 
@@ -476,7 +464,7 @@ class TestIdentifier:
             Identifier.id, policy=high_levels_low_threshold
         )
         query = query.where(Identifier.id == identifier.id)
-        results = session.execute(query)
+        results = db.session.execute(query)
         equivalent_ids = [r[0] for r in results]
         assert {
             identifier.id,
@@ -491,7 +479,7 @@ class TestIdentifier:
             Identifier.id, policy=two_levels_high_threshold
         )
         query = query.where(Identifier.id.in_([identifier.id, level_3_equivalent.id]))
-        results = session.execute(query)
+        results = db.session.execute(query)
         equivalent_ids = [r[0] for r in results]
         assert {
             identifier.id,
@@ -516,19 +504,17 @@ class TestIdentifier:
         assert None == identifier.licensed_through_collection(c3)
 
     def test_missing_coverage_from(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
-        gutenberg = DataSource.lookup(session, DataSource.GUTENBERG)
-        oclc = DataSource.lookup(session, DataSource.OCLC)
-        web = DataSource.lookup(session, DataSource.WEB)
+        gutenberg = DataSource.lookup(db.session, DataSource.GUTENBERG)
+        oclc = DataSource.lookup(db.session, DataSource.OCLC)
+        web = DataSource.lookup(db.session, DataSource.WEB)
 
         # Here are two Gutenberg records.
         g1, ignore = Edition.for_foreign_id(
-            session, gutenberg, Identifier.GUTENBERG_ID, "1"
+            db.session, gutenberg, Identifier.GUTENBERG_ID, "1"
         )
 
         g2, ignore = Edition.for_foreign_id(
-            session, gutenberg, Identifier.GUTENBERG_ID, "2"
+            db.session, gutenberg, Identifier.GUTENBERG_ID, "2"
         )
 
         # One of them has coverage from OCLC Classify
@@ -539,7 +525,7 @@ class TestIdentifier:
 
         # Here's a web record, just sitting there.
         w, ignore = Edition.for_foreign_id(
-            session, web, Identifier.URI, "http://www.foo.com/"
+            db.session, web, Identifier.URI, "http://www.foo.com/"
         )
 
         # If we run missing_coverage_from we pick up the Gutenberg
@@ -548,7 +534,7 @@ class TestIdentifier:
         # and it doesn't pick up the OCLC coverage for a specific
         # operation.
         [in_gutenberg_but_not_in_oclc] = Identifier.missing_coverage_from(
-            session, [Identifier.GUTENBERG_ID], oclc
+            db.session, [Identifier.GUTENBERG_ID], oclc
         ).all()
 
         assert g2.primary_identifier == in_gutenberg_but_not_in_oclc
@@ -558,14 +544,14 @@ class TestIdentifier:
         # that has generic OCLC coverage.
 
         [has_generic_coverage_only] = Identifier.missing_coverage_from(
-            session, [Identifier.GUTENBERG_ID], oclc, "some operation"
+            db.session, [Identifier.GUTENBERG_ID], oclc, "some operation"
         ).all()
         assert g1.primary_identifier == has_generic_coverage_only
 
         # We don't put web sites into OCLC, so this will pick up the
         # web record (but not the Gutenberg record).
         [in_web_but_not_in_oclc] = Identifier.missing_coverage_from(
-            session, [Identifier.URI], oclc
+            db.session, [Identifier.URI], oclc
         ).all()
         assert w.primary_identifier == in_web_but_not_in_oclc
 
@@ -574,16 +560,14 @@ class TestIdentifier:
         assert [g1.primary_identifier.id, g2.primary_identifier.id] == sorted(
             x.id
             for x in Identifier.missing_coverage_from(
-                session, [Identifier.GUTENBERG_ID], web
+                db.session, [Identifier.GUTENBERG_ID], web
             )
         )
 
     def test_missing_coverage_from_with_collection(
         self, db: DatabaseTransactionFixture
     ):
-        session = db.session()
-
-        gutenberg = DataSource.lookup(session, DataSource.GUTENBERG)
+        gutenberg = DataSource.lookup(db.session, DataSource.GUTENBERG)
         identifier = db.identifier()
         collection1 = db.default_collection()
         collection2 = db.collection()
@@ -593,37 +577,35 @@ class TestIdentifier:
         assert (
             []
             == Identifier.missing_coverage_from(
-                session, [identifier.type], gutenberg, collection=collection1
+                db.session, [identifier.type], gutenberg, collection=collection1
             ).all()
         )
 
         # It is missing coverage in collection 2.
         assert [identifier] == Identifier.missing_coverage_from(
-            session, [identifier.type], gutenberg, collection=collection2
+            db.session, [identifier.type], gutenberg, collection=collection2
         ).all()
 
         # If no collection is specified, we look for a CoverageRecord
         # that also has no collection specified, and the Identifier is
         # not treated as covered.
         assert [identifier] == Identifier.missing_coverage_from(
-            session, [identifier.type], gutenberg
+            db.session, [identifier.type], gutenberg
         ).all()
 
     def test_missing_coverage_from_with_cutoff_date(
         self, db: DatabaseTransactionFixture
     ):
-        session = db.session()
-
-        gutenberg = DataSource.lookup(session, DataSource.GUTENBERG)
-        oclc = DataSource.lookup(session, DataSource.OCLC)
-        web = DataSource.lookup(session, DataSource.WEB)
+        gutenberg = DataSource.lookup(db.session, DataSource.GUTENBERG)
+        oclc = DataSource.lookup(db.session, DataSource.OCLC)
+        web = DataSource.lookup(db.session, DataSource.WEB)
 
         # Here's an Edition with a coverage record from OCLC classify.
         gutenberg, ignore = Edition.for_foreign_id(
-            session, gutenberg, Identifier.GUTENBERG_ID, "1"
+            db.session, gutenberg, Identifier.GUTENBERG_ID, "1"
         )
         identifier = gutenberg.primary_identifier
-        oclc = DataSource.lookup(session, DataSource.OCLC)
+        oclc = DataSource.lookup(db.session, DataSource.OCLC)
         coverage = db.coverage_record(gutenberg, oclc)
 
         # The CoverageRecord knows when the coverage was provided.
@@ -634,24 +616,22 @@ class TestIdentifier:
         assert (
             []
             == Identifier.missing_coverage_from(
-                session, [identifier.type], oclc, count_as_missing_before=timestamp
+                db.session, [identifier.type], oclc, count_as_missing_before=timestamp
             ).all()
         )
 
         # But if we give a time one second later, the Identifier is
         # missing coverage.
         assert [identifier] == Identifier.missing_coverage_from(
-            session,
+            db.session,
             [identifier.type],
             oclc,
             count_as_missing_before=timestamp + datetime.timedelta(seconds=1),
         ).all()
 
     def test_opds_entry(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         identifier = db.identifier()
-        source = DataSource.lookup(session, DataSource.CONTENT_CAFE)
+        source = DataSource.lookup(db.session, DataSource.CONTENT_CAFE)
 
         summary = identifier.add_link(
             Hyperlink.DESCRIPTION,
@@ -790,7 +770,7 @@ class TestRecursiveEquivalencyCache:
         example_equivalency_coverage_record_fixture: ExampleEquivalencyCoverageRecordFixture,
     ):
         data = example_equivalency_coverage_record_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
 
         rec_eq = (
             session.query(RecursiveEquivalencyCache)
@@ -806,7 +786,7 @@ class TestRecursiveEquivalencyCache:
         example_equivalency_coverage_record_fixture: ExampleEquivalencyCoverageRecordFixture,
     ):
         data = example_equivalency_coverage_record_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
 
         all_recursives = session.query(RecursiveEquivalencyCache).all()
         assert len(all_recursives) == 4  # all selfs

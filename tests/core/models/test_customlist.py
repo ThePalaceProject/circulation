@@ -10,39 +10,37 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 class TestCustomList:
     def test_find(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
-        source = DataSource.lookup(session, DataSource.NYT)
+        source = DataSource.lookup(db.session, DataSource.NYT)
         # When there's no CustomList to find, nothing is returned.
-        result = CustomList.find(session, "my-list", source)
+        result = CustomList.find(db.session, "my-list", source)
         assert None == result
 
         custom_list = db.customlist(
             foreign_identifier="a-list", name="My List", num_entries=0
         )[0]
         # A CustomList can be found by its foreign_identifier.
-        result = CustomList.find(session, "a-list", source)
+        result = CustomList.find(db.session, "a-list", source)
         assert custom_list == result
 
         # Or its name.
-        result = CustomList.find(session, "My List", source.name)
+        result = CustomList.find(db.session, "My List", source.name)
         assert custom_list == result
 
         # The list can also be found by name without a data source.
-        result = CustomList.find(session, "My List")
+        result = CustomList.find(db.session, "My List")
         assert custom_list == result
 
         # By default, we only find lists with no associated Library.
         # If we look for a list from a library, there isn't one.
         result = CustomList.find(
-            session, "My List", source, library=db.default_library()
+            db.session, "My List", source, library=db.default_library()
         )
         assert None == result
 
         # If we add the Library to the list, it's returned.
         custom_list.library = db.default_library()
         result = CustomList.find(
-            session, "My List", source, library=db.default_library()
+            db.session, "My List", source, library=db.default_library()
         )
         assert custom_list == result
 
@@ -355,34 +353,32 @@ class TestCustomList:
         list, ignore = db.customlist(num_entries=4)
         # This list has an incorrect cached size.
         list.size = 44
-        list.update_size(db.session())
+        list.update_size(db.session)
         assert 4 == list.size
 
 
 class TestCustomListSharedLibrary:
     def test_cascade(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         c1, _ = db.customlist()
         l1 = db.library()
 
         c1.shared_locally_with_libraries = [l1]
-        session.commit()
+        db.session.commit()
 
         shared = (
-            session.query(customlist_sharedlibrary)
+            db.session.query(customlist_sharedlibrary)
             .filter(customlist_sharedlibrary.c.library_id == l1.id)
             .all()
         )
         assert len(shared) == 1
         assert shared[0].customlist_id == c1.id
 
-        session.delete(c1)
-        session.commit()
+        db.session.delete(c1)
+        db.session.commit()
 
         # should be deleted on cascade
         shared = (
-            session.query(customlist_sharedlibrary)
+            db.session.query(customlist_sharedlibrary)
             .filter(customlist_sharedlibrary.c.library_id == l1.id)
             .all()
         )
@@ -391,8 +387,6 @@ class TestCustomListSharedLibrary:
 
 class TestCustomListEntry:
     def test_set_work(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         # Start with a custom list with no entries
         list, ignore = db.customlist(num_entries=0)
 
@@ -400,7 +394,7 @@ class TestCustomListEntry:
         edition = db.edition()
 
         entry, ignore = get_one_or_create(
-            session,
+            db.session,
             CustomListEntry,
             list_id=list.id,
             edition_id=edition.id,
@@ -413,7 +407,7 @@ class TestCustomListEntry:
         other_edition, lp = db.edition(with_open_access_download=True)
 
         # And its identifier is equivalent to the entry's edition's identifier.
-        data_source = DataSource.lookup(session, DataSource.OCLC)
+        data_source = DataSource.lookup(db.session, DataSource.OCLC)
         lp.identifier.equivalent_to(data_source, edition.primary_identifier, 1)
 
         # If we call set_work, it does nothing, because there is no work
@@ -435,8 +429,6 @@ class TestCustomListEntry:
         assert None == edition.work
 
     def test_update(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         custom_list, [edition] = db.customlist(entries_exist_as_works=False)
         identifier = edition.primary_identifier
         [entry] = custom_list.entries
@@ -444,7 +436,7 @@ class TestCustomListEntry:
         created = entry.first_appearance
 
         # Running update without entries or forcing doesn't change the entry.
-        entry.update(session)
+        entry.update(db.session)
         assert entry_attributes == list(vars(entry).values())
 
         # Trying to update an entry with entries from a different
@@ -452,7 +444,7 @@ class TestCustomListEntry:
         other_custom_list = db.customlist()[0]
         [external_entry] = other_custom_list.entries
         pytest.raises(
-            ValueError, entry.update, session, equivalent_entries=[external_entry]
+            ValueError, entry.update, db.session, equivalent_entries=[external_entry]
         )
 
         # So is attempting to update an entry with other entries that
@@ -461,7 +453,10 @@ class TestCustomListEntry:
         external_work_edition = external_work.presentation_edition
         external_work_entry = custom_list.add_entry(external_work_edition)[0]
         pytest.raises(
-            ValueError, entry.update, session, equivalent_entries=[external_work_entry]
+            ValueError,
+            entry.update,
+            db.session,
+            equivalent_entries=[external_work_entry],
         )
 
         # Okay, but with an actual equivalent entry...
@@ -475,7 +470,7 @@ class TestCustomListEntry:
         )
 
         # ...updating changes the original entry as expected.
-        entry.update(session, equivalent_entries=[equivalent_entry])
+        entry.update(db.session, equivalent_entries=[equivalent_entry])
         # The first_appearance hasn't changed because the entry was created first.
         assert created == entry.first_appearance
         # But the most recent appearance is of the entry created last.
@@ -488,7 +483,7 @@ class TestCustomListEntry:
         # The equivalent entry has been deleted.
         assert (
             []
-            == session.query(CustomListEntry)
+            == db.session.query(CustomListEntry)
             .filter(CustomListEntry.id == equivalent_entry.id)
             .all()
         )
@@ -503,6 +498,6 @@ class TestCustomListEntry:
         identifier.equivalent_to(
             longwinded.data_source, longwinded.primary_identifier, 1
         )
-        entry.update(session, equivalent_entries=[longwinded_entry])
+        entry.update(db.session, equivalent_entries=[longwinded_entry])
         assert long_annotation == entry.annotation
         assert longwinded_entry.most_recent_appearance == entry.most_recent_appearance

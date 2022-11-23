@@ -78,7 +78,7 @@ def urn_lookup_handler_fixture(
 ) -> URNLookupHandlerFixture:
     data = URNLookupHandlerFixture()
     data.transaction = db
-    data.handler = URNLookupHandler(db.session())
+    data.handler = URNLookupHandler(db.session)
     return data
 
 
@@ -101,7 +101,7 @@ class TestURNLookupHandler:
     ):
         data, session = (
             urn_lookup_handler_fixture,
-            urn_lookup_handler_fixture.transaction.session(),
+            urn_lookup_handler_fixture.transaction.session,
         )
 
         # Verify that process_urns() calls post_lookup_hook() once
@@ -119,7 +119,7 @@ class TestURNLookupHandler:
     ):
         data, session = (
             urn_lookup_handler_fixture,
-            urn_lookup_handler_fixture.transaction.session(),
+            urn_lookup_handler_fixture.transaction.session,
         )
 
         urn = "not even a URN"
@@ -131,7 +131,7 @@ class TestURNLookupHandler:
     ):
         data, session = (
             urn_lookup_handler_fixture,
-            urn_lookup_handler_fixture.transaction.session(),
+            urn_lookup_handler_fixture.transaction.session,
         )
 
         # Give the handler a URN that, although valid, doesn't
@@ -147,7 +147,7 @@ class TestURNLookupHandler:
     ):
         data, session = (
             urn_lookup_handler_fixture,
-            urn_lookup_handler_fixture.transaction.session(),
+            urn_lookup_handler_fixture.transaction.session,
         )
 
         # Give the handler a URN that corresponds to an Identifier
@@ -165,7 +165,7 @@ class TestURNLookupHandler:
     ):
         data, session = (
             urn_lookup_handler_fixture,
-            urn_lookup_handler_fixture.transaction.session(),
+            urn_lookup_handler_fixture.transaction.session,
         )
 
         edition, pool = data.transaction.edition(with_license_pool=True)
@@ -180,7 +180,7 @@ class TestURNLookupHandler:
     ):
         data, session = (
             urn_lookup_handler_fixture,
-            urn_lookup_handler_fixture.transaction.session(),
+            urn_lookup_handler_fixture.transaction.session,
         )
 
         work = data.transaction.work(with_license_pool=True)
@@ -197,7 +197,7 @@ class TestURNLookupHandler:
     ):
         data, session = (
             urn_lookup_handler_fixture,
-            urn_lookup_handler_fixture.transaction.session(),
+            urn_lookup_handler_fixture.transaction.session,
         )
 
         work = data.transaction.work(with_license_pool=True)
@@ -227,7 +227,7 @@ def urn_lookup_controller_fixture(
 ) -> Iterable[URNLookupControllerFixture]:
     data = URNLookupControllerFixture()
     data.transaction = db
-    data.controller = URNLookupController(db.session())
+    data.controller = URNLookupController(db.session)
     data.app = Flask(URNLookupControllerFixture.__name__)
 
     # Register endpoints manually, because using decorators seems to
@@ -243,7 +243,7 @@ class TestURNLookupController:
     ):
         data, session = (
             urn_lookup_controller_fixture,
-            urn_lookup_controller_fixture.transaction.session(),
+            urn_lookup_controller_fixture.transaction.session,
         )
 
         work = data.transaction.work(with_license_pool=True)
@@ -271,7 +271,7 @@ class TestURNLookupController:
     ):
         data, session = (
             urn_lookup_controller_fixture,
-            urn_lookup_controller_fixture.transaction.session(),
+            urn_lookup_controller_fixture.transaction.session,
         )
 
         # Verify the behavior of work_lookup in the case where
@@ -288,7 +288,7 @@ class TestURNLookupController:
     def test_permalink(self, urn_lookup_controller_fixture: URNLookupControllerFixture):
         data, session = (
             urn_lookup_controller_fixture,
-            urn_lookup_controller_fixture.transaction.session(),
+            urn_lookup_controller_fixture.transaction.session,
         )
 
         work = data.transaction.work(with_license_pool=True)
@@ -465,7 +465,7 @@ class ErrorHandlerFixture:
 def error_handler_fixture(
     db,
 ) -> ErrorHandlerFixture:
-    session = db.session()
+    session = db.session
 
     class MockManager:
         """Simulate an application manager object such as
@@ -512,7 +512,7 @@ class TestErrorHandler:
         # Set the sitewide log level to DEBUG to get a stack trace
         # instead of a generic error message.
         handler = ErrorHandler(error_handler_fixture.app)
-        self.activate_debug_mode(error_handler_fixture.transaction.session())
+        self.activate_debug_mode(error_handler_fixture.transaction.session)
 
         with error_handler_fixture.app.test_request_context("/"):
             response = None
@@ -547,7 +547,7 @@ class TestErrorHandler:
         # When in debug mode, the debug_message is preserved and a
         # stack trace is appended to it.
         handler = ErrorHandler(error_handler_fixture.app)
-        self.activate_debug_mode(error_handler_fixture.transaction.session())
+        self.activate_debug_mode(error_handler_fixture.transaction.session)
         with error_handler_fixture.app.test_request_context("/"):
             try:
                 self.raise_exception(CanBeProblemDetailDocument)

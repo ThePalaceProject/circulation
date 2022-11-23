@@ -314,7 +314,7 @@ def work_classifier_fixture(
     fix.transaction = db
     fix.work = db.work(with_license_pool=True)
     fix.identifier = fix.work.presentation_edition.primary_identifier
-    fix.classifier = WorkClassifier(fix.work, test_session=db.session())
+    fix.classifier = WorkClassifier(fix.work, test_session=db.session)
     return fix
 
 
@@ -338,7 +338,7 @@ class TestWorkClassifier:
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
 
         data.work.presentation_edition.title = "Star Trek: The Book"
         expected_genre = self._genre(session, classifier.Media_Tie_in_SF)
@@ -349,7 +349,7 @@ class TestWorkClassifier:
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
 
         # Genre publisher and imprint
         data.work.presentation_edition.publisher = "Harlequin"
@@ -361,7 +361,7 @@ class TestWorkClassifier:
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
 
         # Imprint is more specific than publisher, so it takes precedence.
         data.work.presentation_edition.publisher = "Harlequin"
@@ -377,7 +377,7 @@ class TestWorkClassifier:
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
         # Genre and audience publisher
         data.work.presentation_edition.publisher = "Harlequin"
         data.work.presentation_edition.imprint = "Harlequin Teen"
@@ -424,7 +424,7 @@ class TestWorkClassifier:
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
 
         # Create some classifications that end up in
         # direct_from_license_source, but don't imply that the book is
@@ -450,7 +450,7 @@ class TestWorkClassifier:
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
         # Create some classifications that end up in
         # direct_from_license_source, one of which implies the book is
         # for adults only.
@@ -487,7 +487,7 @@ class TestWorkClassifier:
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
         # This work has a classification direct from the distributor
         # that implies the book is for children, so no conclusions are
         # drawn in the prepare_to_classify() step.
@@ -505,7 +505,7 @@ class TestWorkClassifier:
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
         # LCC files both children's and YA works under 'PZ'.
         # Here's how we deal with that.
         #
@@ -684,7 +684,7 @@ class TestWorkClassifier:
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
         # This book will be not classified as a comic book, because
         # the "comic books" classification does not come from its
         # license source.
@@ -731,7 +731,7 @@ class TestWorkClassifier:
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
         # Target age data can't override an independently determined
         # audience.
         overdrive = DataSource.lookup(session, DataSource.OVERDRIVE)
@@ -747,7 +747,7 @@ class TestWorkClassifier:
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
         # We have a weak but reliable signal that this is a book for
         # ages 5 to 7.
         overdrive = DataSource.lookup(session, DataSource.OVERDRIVE)
@@ -779,7 +779,7 @@ class TestWorkClassifier:
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
         i = data.transaction.identifier()
         source = DataSource.lookup(session, DataSource.OVERDRIVE)
         c1 = i.classify(source, Subject.AGE_RANGE, "8-9", weight=1)
@@ -804,7 +804,7 @@ class TestWorkClassifier:
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
 
         # Classify a book to imply that it's 50% science fiction and
         # 50% history. Then call .genres() twice. With fiction=True,
@@ -829,7 +829,7 @@ class TestWorkClassifier:
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
 
         # A book with Romance=100, Historical Romance=5, Romantic
         # Suspense=4 will be classified by .genres() as 100%
@@ -864,7 +864,7 @@ class TestWorkClassifier:
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
         # An Overdrive book that is classified under "Juvenile" but
         # not under any more specific category is believed to have a
         # target age range of 9-12.
@@ -880,7 +880,7 @@ class TestWorkClassifier:
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
         # An Overdrive book that is classified under "Juvenile" and
         # also under some more specific category is believed to have
         # the target age range associated with that more specific
@@ -898,7 +898,7 @@ class TestWorkClassifier:
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
 
         romance = self._genre(session, classifier.Romance)
         data.classifier.genre_weights[romance] = 100
@@ -983,7 +983,7 @@ class TestWorkClassifier:
 
     def test_classify(self, work_classifier_fixture: TestWorkClassifierFixture):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
         # At this point we've tested all the components of classify, so just
         # do an overall test to verify that classify() returns a 4-tuple
         # (genres, fiction, audience, target_age)
@@ -1030,7 +1030,7 @@ class TestWorkClassifier:
         a given data source.
         """
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
         history = self._genre(session, classifier.History)
         i = data.identifier
         source = DataSource.lookup(session, DataSource.AMAZON)
@@ -1056,7 +1056,7 @@ class TestWorkClassifier:
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
         genre1, is_new = Genre.lookup(session, "Psychology")
         genre2, is_new = Genre.lookup(session, "Cooking")
         subject1 = data.transaction.subject(type="type1", identifier="subject1")
@@ -1083,7 +1083,7 @@ class TestWorkClassifier:
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
         source = DataSource.lookup(session, DataSource.AXIS_360)
         staff_source = DataSource.lookup(session, DataSource.LIBRARY_STAFF)
         genre1, is_new = Genre.lookup(session, "Poetry")
@@ -1110,7 +1110,7 @@ class TestWorkClassifier:
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
         source = DataSource.lookup(session, DataSource.AXIS_360)
         staff_source = DataSource.lookup(session, DataSource.LIBRARY_STAFF)
         subject1 = data.transaction.subject(type="type1", identifier="Cooking")
@@ -1142,7 +1142,7 @@ class TestWorkClassifier:
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
         pool = data.transaction.licensepool(None, data_source_name=DataSource.AXIS_360)
         license_source = pool.data_source
         staff_source = DataSource.lookup(session, DataSource.LIBRARY_STAFF)
@@ -1181,7 +1181,7 @@ class TestWorkClassifier:
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
         source = DataSource.lookup(session, DataSource.AXIS_360)
         staff_source = DataSource.lookup(session, DataSource.LIBRARY_STAFF)
         subject1 = data.transaction.subject(type="type1", identifier="subject1")
@@ -1213,7 +1213,7 @@ class TestWorkClassifier:
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):
         data = work_classifier_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
         staff_source = DataSource.lookup(session, DataSource.LIBRARY_STAFF)
         subject = data.transaction.subject(type=Subject.AGE_RANGE, identifier="10-12")
         subject.target_age = NumericRange(9, 13, "()")

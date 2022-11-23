@@ -2,6 +2,7 @@ import threading
 
 from core.model import Identifier, SessionManager
 from core.util.worker_pools import DatabaseJob, DatabasePool, Pool, Queue, Worker
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestPool:
@@ -66,9 +67,8 @@ class TestPool:
 
 
 class TestDatabasePool:
-    def test_workers_are_created_with_sessions(self, db):
-        session = db.session()
-        session_factory = SessionManager.sessionmaker(session=session)
+    def test_workers_are_created_with_sessions(self, db: DatabaseTransactionFixture):
+        session_factory = SessionManager.sessionmaker(session=db.session)
         bind = session_factory.kw["bind"]
         pool = DatabasePool(2, session_factory)
         try:
@@ -147,8 +147,10 @@ class TestDatabaseJob:
             _db.add(identifier)
             raise RuntimeError
 
-    def test_manages_database_for_job_success_and_failure(self, db):
-        session = db.session()
+    def test_manages_database_for_job_success_and_failure(
+        self, db: DatabaseTransactionFixture
+    ):
+        session = db.session
         self.WorkingJob().run(session)
         try:
             self.BrokenJob().run(session)

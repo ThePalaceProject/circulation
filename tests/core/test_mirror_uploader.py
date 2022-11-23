@@ -102,13 +102,11 @@ class TestInitialization:
         uploader_class,
         settings,
     ):
-        session = db.session()
-
         storage_name = "some storage"
         # If there's no integration with goal=STORAGE or name=storage_name,
         # MirrorUploader.mirror raises an exception.
         with pytest.raises(CannotLoadConfiguration) as excinfo:
-            MirrorUploader.mirror(session, storage_name)
+            MirrorUploader.mirror(db.session, storage_name)
         assert "No storage integration with name 'some storage' is configured" in str(
             excinfo.value
         )
@@ -122,23 +120,22 @@ class TestInitialization:
             for key, value in settings.items():
                 integration.setting(key).value = value
 
-        uploader = MirrorUploader.mirror(session, integration=integration)
+        uploader = MirrorUploader.mirror(db.session, integration=integration)
 
         assert isinstance(uploader, uploader_class)
 
     def test_integration_by_name(self, db: DatabaseTransactionFixture):
-        session = db.session()
         integration = self._integration(db)
 
         # No name was passed so nothing is found
         with pytest.raises(CannotLoadConfiguration) as excinfo:
-            MirrorUploader.integration_by_name(session)
+            MirrorUploader.integration_by_name(db.session)
         assert "No storage integration with name 'None' is configured" in str(
             excinfo.value
         )
 
         # Correct name was passed
-        integration = MirrorUploader.integration_by_name(session, integration.name)
+        integration = MirrorUploader.integration_by_name(db.session, integration.name)
         assert isinstance(integration, ExternalIntegration)
 
     def test_for_collection(self, db: DatabaseTransactionFixture):
@@ -204,7 +201,7 @@ class TestInitialization:
         assert "from an integration with goal=licenses" in str(excinfo.value)
 
     def test_implementation_registry(self, db: DatabaseTransactionFixture):
-        session = db.session()
+        session = db.session
 
         # The implementation class used for a given ExternalIntegration
         # is controlled by the integration's protocol and the contents

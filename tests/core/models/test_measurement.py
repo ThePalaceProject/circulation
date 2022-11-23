@@ -13,7 +13,7 @@ class ExampleMeasurementDataFixture:
     def create(
         cls, transaction: DatabaseTransactionFixture
     ) -> "ExampleMeasurementDataFixture":
-        session = transaction.session()
+        session = transaction.session
         data = ExampleMeasurementDataFixture()
         data.transaction = transaction
         data.SOURCE_NAME = "Test Data Source"
@@ -145,7 +145,7 @@ class ExampleMeasurementDataFixture:
         # The only source we recognize for quality scores is the metadata
         # wrangler.
         source = DataSource.lookup(
-            self.transaction.session(), DataSource.METADATA_WRANGLER
+            self.transaction.session, DataSource.METADATA_WRANGLER
         )
         return self.measurement(Measurement.QUALITY, value, source, weight)
 
@@ -220,13 +220,13 @@ class TestMeasurement:
         # found in PERCENTILE_SCALES, the data can be normalized.
 
         # This book is extremely unpopular.
-        overdrive = DataSource.lookup(data.transaction.session(), DataSource.OVERDRIVE)
+        overdrive = DataSource.lookup(data.transaction.session, DataSource.OVERDRIVE)
         m = data.measurement(Measurement.POPULARITY, 0, overdrive, 10)
         assert 0 == m.normalized_value
 
         # For some other data source, we don't know whether popularity=0
         # means 'very popular' or 'very unpopular'.
-        gutenberg = DataSource.lookup(data.transaction.session(), DataSource.GUTENBERG)
+        gutenberg = DataSource.lookup(data.transaction.session, DataSource.GUTENBERG)
         m = data.measurement(Measurement.POPULARITY, 0, gutenberg, 10)
         assert None == m.normalized_value
 
@@ -262,7 +262,7 @@ class TestMeasurement:
         data = example_measurement_data_fixture
 
         obj, new = get_one_or_create(
-            data.transaction.session(), DataSource, name="Neglected source"
+            data.transaction.session, DataSource, name="Neglected source"
         )
         neglected_source = obj
         p = data.popularity(100, neglected_source)
@@ -294,7 +294,7 @@ class TestMeasurement:
         # popularity via a percentile scale modifies the
         # normalized value -- we don't care exactly how, only that
         # it's taken into account.
-        oclc = DataSource.lookup(data.transaction.session(), DataSource.OCLC)
+        oclc = DataSource.lookup(data.transaction.session, DataSource.OCLC)
         popularityish = data.measurement(Measurement.HOLDINGS, 400, oclc, 10)
         new_quality = Measurement.overall_quality(l + [popularityish])
         assert quality != new_quality
@@ -410,7 +410,7 @@ class TestMeasurement:
         # OCLC Classify, which _does_ have a mapping from number
         # of editions to a percentile range.
         wi = data.transaction.identifier()
-        oclc = DataSource.lookup(data.transaction.session(), DataSource.OCLC)
+        oclc = DataSource.lookup(data.transaction.session, DataSource.OCLC)
         wi.add_measurement(oclc, Measurement.PUBLISHED_EDITIONS, 800)
 
         # Now the quality is higher--the large OCLC PUBLISHED_EDITIONS

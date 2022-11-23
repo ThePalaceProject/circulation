@@ -121,7 +121,7 @@ class TestMetadataWranglerOPDSLookup:
         data, transaction, session = (
             wrangler_opds_lookup_fixture,
             wrangler_opds_lookup_fixture.transaction,
-            wrangler_opds_lookup_fixture.transaction.session(),
+            wrangler_opds_lookup_fixture.transaction.session,
         )
 
         lookup = MetadataWranglerOPDSLookup.from_config(session)
@@ -140,7 +140,7 @@ class TestMetadataWranglerOPDSLookup:
         data, transaction, session = (
             wrangler_opds_lookup_fixture,
             wrangler_opds_lookup_fixture.transaction,
-            wrangler_opds_lookup_fixture.transaction.session(),
+            wrangler_opds_lookup_fixture.transaction.session,
         )
 
         lookup = MetadataWranglerOPDSLookup.from_config(session)
@@ -160,7 +160,7 @@ class TestMetadataWranglerOPDSLookup:
         data, transaction, session = (
             wrangler_opds_lookup_fixture,
             wrangler_opds_lookup_fixture.transaction,
-            wrangler_opds_lookup_fixture.transaction.session(),
+            wrangler_opds_lookup_fixture.transaction.session,
         )
         lookup = MetadataWranglerOPDSLookup.from_config(session)
 
@@ -198,7 +198,7 @@ class TestMetadataWranglerOPDSLookup:
         data, transaction, session = (
             wrangler_opds_lookup_fixture,
             wrangler_opds_lookup_fixture.transaction,
-            wrangler_opds_lookup_fixture.transaction.session(),
+            wrangler_opds_lookup_fixture.transaction.session,
         )
         # A Collection-specific endpoint is returned if authentication
         # and a Collection is available.
@@ -231,7 +231,7 @@ class TestMetadataWranglerOPDSLookup:
         data, transaction, session = (
             wrangler_opds_lookup_fixture,
             wrangler_opds_lookup_fixture.transaction,
-            wrangler_opds_lookup_fixture.transaction.session(),
+            wrangler_opds_lookup_fixture.transaction.session,
         )
         # MetadataWranglerOPDSLookup.run_self_tests() finds all the
         # collections with a metadata identifier, recursively
@@ -288,7 +288,7 @@ class TestMetadataWranglerOPDSLookup:
         data, transaction, session = (
             wrangler_opds_lookup_fixture,
             wrangler_opds_lookup_fixture.transaction,
-            wrangler_opds_lookup_fixture.transaction.session(),
+            wrangler_opds_lookup_fixture.transaction.session,
         )
         # Verify that calling _run_collection_self_tests calls
         # _feed_self_test a couple of times, and yields a
@@ -356,7 +356,7 @@ class TestMetadataWranglerOPDSLookup:
         data, transaction, session = (
             wrangler_opds_lookup_fixture,
             wrangler_opds_lookup_fixture.transaction,
-            wrangler_opds_lookup_fixture.transaction.session(),
+            wrangler_opds_lookup_fixture.transaction.session,
         )
         # Test the _feed_self_test helper method. It grabs a
         # feed from the metadata wrangler, calls
@@ -418,7 +418,7 @@ class TestMetadataWranglerOPDSLookup:
         data, transaction, session = (
             wrangler_opds_lookup_fixture,
             wrangler_opds_lookup_fixture.transaction,
-            wrangler_opds_lookup_fixture.transaction.session(),
+            wrangler_opds_lookup_fixture.transaction.session,
         )
         # Test the _annotate_feed_response class helper method.
         m = MetadataWranglerOPDSLookup._annotate_feed_response
@@ -470,7 +470,7 @@ class TestMetadataWranglerOPDSLookup:
         data, transaction, session = (
             wrangler_opds_lookup_fixture,
             wrangler_opds_lookup_fixture.transaction,
-            wrangler_opds_lookup_fixture.transaction.session(),
+            wrangler_opds_lookup_fixture.transaction.session,
         )
         result = MetadataWranglerOPDSLookup.external_integration(session)
         assert result.protocol == ExternalIntegration.METADATA_WRANGLER
@@ -522,7 +522,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         # The default way of making HTTP requests is with
@@ -539,7 +539,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         name = "New data source " + transaction.fresh_str()
@@ -551,7 +551,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         importer = OPDSImporter(
@@ -568,7 +568,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         importer = OPDSImporter(
@@ -599,7 +599,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         importer = OPDSImporter(
@@ -619,7 +619,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         data_source_name = "Data source name " + transaction.fresh_str()
@@ -653,7 +653,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         data_source_name = "Data source name " + transaction.fresh_str()
@@ -705,7 +705,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         data_source_name = "Data source name " + transaction.fresh_str()
@@ -788,7 +788,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         data_source = DataSource.lookup(session, DataSource.OA_CONTENT_SERVER)
@@ -818,7 +818,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         class DoomedFeedparserOPDSImporter(OPDSImporter):
@@ -862,7 +862,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         data_source = DataSource.lookup(session, DataSource.OA_CONTENT_SERVER)
@@ -957,7 +957,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         data_source = DataSource.lookup(session, DataSource.OA_CONTENT_SERVER)
@@ -1032,7 +1032,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         axis_id = transaction.identifier(identifier_type=Identifier.AXIS_360_ID)
@@ -1091,7 +1091,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         """Test all the different ways a <simplified:message> tag might
@@ -1135,7 +1135,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         """When an OPDSImporter defines SUCCESS_STATUS_CODES, messages with
@@ -1176,7 +1176,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
         not_a_failure = transaction.identifier()
 
@@ -1204,7 +1204,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         class DoomedElementtreeOPDSImporter(OPDSImporter):
@@ -1255,7 +1255,7 @@ class TestOPDSImporter:
         self, db: DatabaseTransactionFixture
     ):
         feed = "I am not a feed."
-        importer = OPDSImporter(db.session(), collection=None)
+        importer = OPDSImporter(db.session, collection=None)
 
         pytest.raises(etree.XMLSyntaxError, importer.import_from_feed, feed)
 
@@ -1263,7 +1263,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
         feed = data.content_server_mini_feed
 
@@ -1403,7 +1403,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
         """Test that OPDS import creates Edition, LicensePool, and Work
         objects, as appropriate.
@@ -1474,7 +1474,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
         """We get a book from a previously unknown data source, with a license
         that comes from a second previously unknown data source. The
@@ -1513,7 +1513,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         feed = opds_files_fixture.sample_text("metadata_wrangler_overdrive.opds")
@@ -1551,7 +1551,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
         # Instead of importing this data as though it came from the
         # metadata wrangler, let's import it as though it came from the
@@ -1616,7 +1616,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
         feed = opds_files_fixture.sample_data("unrecognized_identifier.opds")
         imported_editions, imported_pools, imported_works, failures = OPDSImporter(
@@ -1634,7 +1634,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
         # Make sure that an exception during import generates a
         # meaningful error message.
@@ -1660,7 +1660,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
         # Make sure that an exception while updating a work for an
         # imported edition generates a meaningful error message.
@@ -1688,7 +1688,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
         # If a link turns out to be a dud, consolidate_links()
         # gets rid of it.
@@ -1747,7 +1747,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         feed = opds_files_fixture.sample_data("book_without_license.opds")
@@ -1773,7 +1773,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
         """Reverse engineers an identifier_mapping based on a list of URNs"""
 
@@ -1815,7 +1815,7 @@ class TestOPDSImporter:
     def test_update_work_for_edition_having_no_work(
         self, db: DatabaseTransactionFixture
     ):
-        session = db.session()
+        session = db.session
 
         # We have an Edition and a LicensePool but no Work.
         edition, lp = db.edition(with_license_pool=True)
@@ -1847,7 +1847,7 @@ class TestOPDSImporter:
     def test_update_work_for_edition_having_incomplete_work(
         self, db: DatabaseTransactionFixture
     ):
-        session = db.session()
+        session = db.session
 
         # We have a work, but it's not presentation-ready because
         # the title is missing.
@@ -1878,7 +1878,7 @@ class TestOPDSImporter:
     def test_update_work_for_edition_having_presentation_ready_work(
         self, db: DatabaseTransactionFixture
     ):
-        session = db.session()
+        session = db.session
 
         # We have a presentation-ready work.
         work = db.work(with_license_pool=True, title="The old title")
@@ -1911,7 +1911,7 @@ class TestOPDSImporter:
     def test_update_work_for_edition_having_multiple_license_pools(
         self, db: DatabaseTransactionFixture
     ):
-        session = db.session()
+        session = db.session
 
         # There are two collections with a LicensePool associated with
         # this Edition.
@@ -1932,7 +1932,7 @@ class TestOPDSImporter:
         assert lp2.work == work
 
     def test_assert_importable_content(self, db: DatabaseTransactionFixture):
-        session = db.session()
+        session = db.session
 
         class Mock(OPDSImporter):
             """An importer that may or may not be able to find
@@ -2041,7 +2041,7 @@ class TestOPDSImporter:
         assert ("good", "application/json") == try2
 
     def test__open_access_links(self, db: DatabaseTransactionFixture):
-        session = db.session()
+        session = db.session
 
         """Test our ability to find open-access links in Metadata objects."""
         m = OPDSImporter._open_access_links
@@ -2072,7 +2072,7 @@ class TestOPDSImporter:
         )
 
     def test__is_open_access_link(self, db: DatabaseTransactionFixture):
-        session = db.session()
+        session = db.session
         http = DummyHTTPClient()
 
         # We only check that the response entity-body isn't tiny. 11
@@ -2110,7 +2110,7 @@ class TestOPDSImporter:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         feed = data.audiobooks_opds
@@ -2148,7 +2148,7 @@ class TestOPDSImporter:
     def wayfless_circulation_api(self, opds_importer_fixture: OPDSImporterFixture):
         transaction, session = (
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         def _wayfless_circulation_api(
@@ -2443,7 +2443,7 @@ class TestMirroring:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         # The default collection is not configured to mirror the
@@ -2527,7 +2527,7 @@ class TestMirroring:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         http.queue_response(**epub10441)
@@ -2725,7 +2725,7 @@ class TestMirroring:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         # If you don't provide a Collection to the OPDSImporter, no
@@ -2769,7 +2769,7 @@ class TestMirroring:
 
 class TestOPDSImportMonitor:
     def test_constructor(self, db: DatabaseTransactionFixture):
-        session = db.session()
+        session = db.session
 
         with pytest.raises(ValueError) as excinfo:
             OPDSImportMonitor(session, None, OPDSImporter)
@@ -2802,7 +2802,7 @@ class TestOPDSImportMonitor:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         monitor = OPDSImportMonitor(
@@ -2819,7 +2819,7 @@ class TestOPDSImportMonitor:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
         """Verify the self-tests of an OPDS collection."""
 
@@ -2864,7 +2864,7 @@ class TestOPDSImportMonitor:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
         """By default, the OPDS URL and data source used by the importer
         come from the collection configuration.
@@ -2886,7 +2886,7 @@ class TestOPDSImportMonitor:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         feed = data.content_server_mini_feed
@@ -2976,7 +2976,7 @@ class TestOPDSImportMonitor:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         monitor = OPDSImportMonitor(
@@ -3043,7 +3043,7 @@ class TestOPDSImportMonitor:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
         # Check coverage records are created.
 
@@ -3120,7 +3120,7 @@ class TestOPDSImportMonitor:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         class MockOPDSImportMonitor(OPDSImportMonitor):
@@ -3167,7 +3167,7 @@ class TestOPDSImportMonitor:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         # Test the _update_headers helper method.
@@ -3214,7 +3214,7 @@ class TestOPDSImportMonitor:
         data, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
-            opds_importer_fixture.transaction.session(),
+            opds_importer_fixture.transaction.session,
         )
 
         retry_count = 15

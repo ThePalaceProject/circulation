@@ -104,13 +104,10 @@ class TestLogConfiguration:
         integration.set_setting(CloudwatchLogs.CREATE_GROUP, "FALSE")
         return integration
 
-    def test_from_configuration(self, db):
+    def test_from_configuration(self, db: DatabaseTransactionFixture):
         cls = LogConfiguration
         config = Configuration
         m = cls.from_configuration
-        data = db
-        session = db.session()
-
         # When logging is configured on initial startup, with no
         # database connection, these are the defaults.
         internal_log_level, database_log_level, [handler], errors = m(
@@ -124,7 +121,7 @@ class TestLogConfiguration:
         # The same defaults hold when there is a database connection
         # but nothing is actually configured.
         internal_log_level, database_log_level, [handler], errors = m(
-            session, testing=False
+            db.session, testing=False
         )
         assert cls.INFO == internal_log_level
         assert cls.WARN == database_log_level
@@ -134,20 +131,22 @@ class TestLogConfiguration:
         # Let's set up a integrations and change the defaults.
         self.loggly_integration(db)
         self.cloudwatch_integration(db)
-        internal = data.external_integration(
+        internal = db.external_integration(
             protocol=ExternalIntegration.INTERNAL_LOGGING,
             goal=ExternalIntegration.LOGGING_GOAL,
         )
-        ConfigurationSetting.sitewide(session, config.LOG_LEVEL).value = config.ERROR
+        ConfigurationSetting.sitewide(db.session, config.LOG_LEVEL).value = config.ERROR
         internal.setting(SysLogger.LOG_FORMAT).value = SysLogger.TEXT_LOG_FORMAT
         ConfigurationSetting.sitewide(
-            session, config.DATABASE_LOG_LEVEL
+            db.session, config.DATABASE_LOG_LEVEL
         ).value = config.DEBUG
-        ConfigurationSetting.sitewide(session, config.LOG_APP_NAME).value = "test app"
+        ConfigurationSetting.sitewide(
+            db.session, config.LOG_APP_NAME
+        ).value = "test app"
         template = "%(filename)s:%(message)s"
         internal.setting(SysLogger.LOG_MESSAGE_TEMPLATE).value = template
         internal_log_level, database_log_level, handlers, errors = m(
-            session, testing=False
+            db.session, testing=False
         )
         assert cls.ERROR == internal_log_level
         assert cls.DEBUG == database_log_level
@@ -171,7 +170,7 @@ class TestLogConfiguration:
         # and the log setup is one that's appropriate for display
         # alongside unit test output.
         internal_log_level, database_log_level, [handler], errors = m(
-            session, testing=True
+            db.session, testing=True
         )
         assert cls.INFO == internal_log_level
         assert cls.WARN == database_log_level
@@ -230,7 +229,7 @@ class TestLogConfiguration:
         assert isinstance(formatter, JSONFormatter)
         assert "some app" == formatter.app_name
 
-    def test_loggly_handler(self, db):
+    def test_loggly_handler(self, db: DatabaseTransactionFixture):
         """Turn an appropriate ExternalIntegration into a LogglyHandler."""
 
         integration = self.loggly_integration(db)
@@ -244,7 +243,7 @@ class TestLogConfiguration:
         handler = Loggly.loggly_handler(integration)
         assert Loggly.DEFAULT_LOGGLY_URL % dict(token="a_token") == handler.url
 
-    def test_cloudwatch_handler(self, db):
+    def test_cloudwatch_handler(self, db: DatabaseTransactionFixture):
         """Turn an appropriate ExternalIntegration into a CloudWatchLogHandler."""
 
         integration = self.cloudwatch_integration(db)
@@ -284,7 +283,7 @@ class TestLogConfiguration:
         pytest.raises(TypeError, m, "http://%s/%s", "token")
         pytest.raises(KeyError, m, "http://%(atoken)s/", "token")
 
-    def test_cloudwatch_initialization_exception(self, db):
+    def test_cloudwatch_initialization_exception(self, db: DatabaseTransactionFixture):
         # Make sure if an exception is thrown during initalization its caught.
 
         integration = self.cloudwatch_integration(db)
@@ -294,7 +293,7 @@ class TestLogConfiguration:
             database_log_level,
             [handler],
             [error],
-        ) = LogConfiguration.from_configuration(db.session(), testing=False)
+        ) = LogConfiguration.from_configuration(db.session, testing=False)
         assert isinstance(handler, logging.StreamHandler)
         assert (
             "Error creating logger AWS Cloudwatch Logs Unable to locate credentials"

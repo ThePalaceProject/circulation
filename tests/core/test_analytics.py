@@ -15,18 +15,16 @@ MOCK_PROTOCOL = "..mock_analytics_provider"
 class TestAnalytics:
     def test_initialize(self, db: DatabaseTransactionFixture):
         # supports multiple analytics providers, site-wide or with libraries
-        session = db.session()
-
         # Two site-wide integrations
         site_wide_integration1, ignore = create(
-            session,
+            db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol=MOCK_PROTOCOL,
         )
         site_wide_integration1.url = db.fresh_str()
         site_wide_integration2, ignore = create(
-            session,
+            db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol="..local_analytics_provider",
@@ -34,18 +32,18 @@ class TestAnalytics:
 
         # A broken integration
         missing_integration, ignore = create(
-            session,
+            db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol="missing_provider",
         )
 
         # Two library-specific integrations
-        l1, ignore = create(session, Library, short_name="L1")
-        l2, ignore = create(session, Library, short_name="L2")
+        l1, ignore = create(db.session, Library, short_name="L1")
+        l2, ignore = create(db.session, Library, short_name="L2")
 
         library_integration1, ignore = create(
-            session,
+            db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol=MOCK_PROTOCOL,
@@ -53,14 +51,14 @@ class TestAnalytics:
         library_integration1.libraries += [l1, l2]
 
         library_integration2, ignore = create(
-            session,
+            db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol=MOCK_PROTOCOL,
         )
         library_integration2.libraries += [l2]
 
-        analytics = Analytics(session)
+        analytics = Analytics(db.session)
         assert 2 == len(analytics.sitewide_providers)
         assert isinstance(analytics.sitewide_providers[0], MockAnalyticsProvider)
         assert site_wide_integration1.url == analytics.sitewide_providers[0].url
@@ -84,21 +82,21 @@ class TestAnalytics:
         assert {l1.id, l2.id} == Analytics.LIBRARY_ENABLED
 
         # Now we'll change the analytics configuration.
-        session.delete(site_wide_integration1)
-        session.delete(site_wide_integration2)
-        session.delete(library_integration1)
+        db.session.delete(site_wide_integration1)
+        db.session.delete(site_wide_integration2)
+        db.session.delete(library_integration1)
 
         # But Analytics is a singleton, so if we instantiate a new
         # Analytics object in the same app instance, it will be the
         # same as the previous one.
-        analytics2 = Analytics(session)
+        analytics2 = Analytics(db.session)
         assert analytics2 == analytics
         assert 2 == len(analytics.sitewide_providers)
         assert 1 == len(analytics.library_providers[l1.id])
         assert 2 == len(analytics.library_providers[l2.id])
 
         # If, however, we simulate a configuration refresh ...
-        analytics3 = Analytics(session, refresh=True)
+        analytics3 = Analytics(db.session, refresh=True)
         # ... we will see the updated configuration.
         assert analytics3 == analytics
         assert Analytics.GLOBAL_ENABLED is False
@@ -127,13 +125,11 @@ class TestAnalytics:
         assert True == Analytics.is_configured(library)
 
     def test_collect_event(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         # This will be a site-wide integration because it will have no
         # associated libraries when the Analytics singleton is instantiated.
         # the first time.
         sitewide_integration, ignore = create(
-            session,
+            db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol=MOCK_PROTOCOL,
@@ -142,17 +138,17 @@ class TestAnalytics:
         # This will be a per-library integration because it will have at least
         # one associated library when the Analytics singleton is instantiated.
         library_integration, ignore = create(
-            session,
+            db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol=MOCK_PROTOCOL,
         )
-        library, ignore = create(session, Library, short_name="library")
+        library, ignore = create(db.session, Library, short_name="library")
         library_integration.libraries += [library]
 
         work = db.work(title="title", with_license_pool=True)
         [lp] = work.license_pools
-        analytics = Analytics(session)
+        analytics = Analytics(db.session)
         sitewide_provider = analytics.sitewide_providers[0]
         library_provider = analytics.library_providers[library.id][0]
 

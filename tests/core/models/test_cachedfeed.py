@@ -88,7 +88,7 @@ class TestCachedFeed:
         pagination = object()
         max_age = object()
         result1 = m(
-            db.session(),
+            db.session,
             worklist,
             facets,
             pagination,
@@ -124,7 +124,7 @@ class TestCachedFeed:
         # We called _prepare_keys with all the necessary information
         # to create a named tuple.
         assert (
-            db.session(),
+            db.session,
             worklist,
             facets,
             pagination,
@@ -154,7 +154,7 @@ class TestCachedFeed:
         # refresher() will be called again.
         clear_helpers()
         result2 = m(
-            db.session(),
+            db.session,
             worklist,
             facets,
             pagination,
@@ -180,7 +180,7 @@ class TestCachedFeed:
         clear_helpers()
         Mock.SHOULD_REFRESH = False
         result3 = m(
-            db.session(),
+            db.session,
             worklist,
             facets,
             pagination,
@@ -200,7 +200,7 @@ class TestCachedFeed:
         Mock.MAX_CACHE_AGE = 0
         clear_helpers()
         m(
-            db.session(),
+            db.session,
             worklist,
             facets,
             pagination,
@@ -246,7 +246,7 @@ class TestCachedFeed:
                 return "Another thread made a feed."
 
             m(
-                db.session(),
+                db.session,
                 wl,
                 facets,
                 pagination,
@@ -261,7 +261,7 @@ class TestCachedFeed:
         # CachedFeed.fetch() _again_, which will call
         # other_thread_refresher().
         result = m(
-            db.session(),
+            db.session,
             wl,
             facets,
             pagination,
@@ -272,7 +272,7 @@ class TestCachedFeed:
 
         # We ended up with a single CachedFeed containing the
         # latest information.
-        assert [result] == db.session().query(CachedFeed).all()
+        assert [result] == db.session.query(CachedFeed).all()
         assert "Then this thread made a feed." == result.content
 
         # If two threads contend for an existing CachedFeed, the one that
@@ -290,7 +290,7 @@ class TestCachedFeed:
             return "Today's content can't compete."
 
         tomorrow_result = m(
-            db.session(),
+            db.session,
             wl,
             facets,
             pagination,
@@ -313,7 +313,7 @@ class TestCachedFeed:
             return "Today's content is fresher."
 
         now_result = m(
-            db.session(),
+            db.session,
             wl,
             facets,
             pagination,
@@ -345,7 +345,7 @@ class TestCachedFeed:
             return "Non-weird content."
 
         result2 = m(
-            db.session(),
+            db.session,
             wl,
             facets,
             pagination,
@@ -373,7 +373,7 @@ class TestCachedFeed:
             return "Non-weird content."
 
         result3 = m(
-            db.session(),
+            db.session,
             wl,
             facets,
             pagination,
@@ -409,7 +409,7 @@ class TestCachedFeed:
 
         private = object()
         r = CachedFeed.fetch(
-            db.session(),
+            db.session,
             wl,
             facets,
             pagination,
@@ -428,12 +428,12 @@ class TestCachedFeed:
         assert private == r.private
 
         # The CachedFeed was created; just not returned.
-        cf = db.session().query(CachedFeed).one()
+        cf = db.session.query(CachedFeed).one()
         assert "Here's a feed." == cf.content
 
         # Try it again as a cache hit.
         r = CachedFeed.fetch(
-            db.session(),
+            db.session,
             wl,
             facets,
             pagination,
@@ -451,7 +451,7 @@ class TestCachedFeed:
         # applies to the _database_ cache. The client is told to cache
         # the feed for the default period.
         r = CachedFeed.fetch(
-            db.session(),
+            db.session,
             wl,
             facets,
             pagination,
@@ -470,7 +470,7 @@ class TestCachedFeed:
 
         Library._has_root_lane_cache[db.default_library().id] = True
         r = CachedFeed.fetch(
-            db.session(),
+            db.session,
             wl,
             facets,
             pagination,
@@ -578,7 +578,7 @@ class TestCachedFeed:
         m = MockCachedFeed._prepare_keys
         # A WorkList of some kind is required.
         with pytest.raises(ValueError) as excinfo:
-            m(db.session(), None, MockFacets, MockPagination)
+            m(db.session, None, MockFacets, MockPagination)
         assert "Cannot prepare a CachedFeed without a WorkList." in str(excinfo.value)
 
         # Basic Lane case, no facets or pagination.
@@ -586,7 +586,7 @@ class TestCachedFeed:
 
         # The response object is a named tuple. feed_type, library and
         # lane_id are the only members set.
-        keys = m(db.session(), lane, None, None)
+        keys = m(db.session, lane, None, None)
         assert "mock type" == keys.feed_type
         assert lane.library == keys.library
         assert None == keys.work
@@ -597,7 +597,7 @@ class TestCachedFeed:
 
         # When pagination and/or facets are available, facets_key and
         # pagination_key are set appropriately.
-        keys = m(db.session(), lane, MockFacets, MockPagination)
+        keys = m(db.session, lane, MockFacets, MockPagination)
         assert "facets query string" == keys.facets_key
         assert "pagination query string" == keys.pagination_key
 
@@ -616,9 +616,9 @@ class TestCachedFeed:
             audiences=[Classifier.AUDIENCE_CHILDREN],
         )
 
-        keys = m(db.session(), worklist, None, None)
+        keys = m(db.session, worklist, None, None)
         assert "mock type" == keys.feed_type
-        assert worklist.get_library(db.session()) == keys.library
+        assert worklist.get_library(db.session) == keys.library
         assert None == keys.work
         assert None == keys.lane_id
         assert "wl-eng,spa-Children" == keys.unique_key
@@ -630,7 +630,7 @@ class TestCachedFeed:
         # that information is included as keys.work.
         work = object()
         worklist.work = work
-        keys = m(db.session(), worklist, None, None)
+        keys = m(db.session, worklist, None, None)
         assert work == keys.work
 
     def test__should_refresh(self):
@@ -676,7 +676,7 @@ class TestCachedFeed:
 
         # Fetch a cached feed from the database. It comes out updated.
         refresher = MockFeedGenerator()
-        args = (db.session(), lane, facets, pagination, refresher)
+        args = (db.session, lane, facets, pagination, refresher)
         feed = CachedFeed.fetch(*args, max_age=0, raw=True)
         assert "This is feed #1" == feed.content
 
@@ -704,7 +704,7 @@ class TestCachedFeed:
 
         # Fetch a cached feed from the database. It comes out updated.
         refresher = MockFeedGenerator()
-        args = (db.session(), lane, facets, pagination, refresher)
+        args = (db.session, lane, facets, pagination, refresher)
         feed = CachedFeed.fetch(*args, max_age=0, raw=True)
         assert "This is feed #1" == feed.content
 

@@ -78,7 +78,7 @@ class TestConfiguration:
             },
         )
 
-        data.Conf.load_cdns(data.transaction.session())
+        data.Conf.load_cdns(data.transaction.session)
 
         integrations = data.Conf.instance[data.Conf.INTEGRATIONS]
         assert {"site.com": "http://cdn/"} == integrations[ExternalIntegration.CDN]
@@ -114,6 +114,6 @@ class TestConfiguration:
         assert {} == cdns
 
         new_db, none = Mock.called_with
-        assert new_db != data.transaction.session()
+        assert new_db != data.transaction.session
         assert isinstance(new_db, Session)
         assert None == none

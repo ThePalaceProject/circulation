@@ -9,11 +9,9 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 class TestIntegrationClient:
     def test_for_url(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         now = utc_now()
         url = db.fresh_url()
-        client, is_new = IntegrationClient.for_url(session, url)
+        client, is_new = IntegrationClient.for_url(db.session, url)
 
         # A new IntegrationClient has been created.
         assert True == is_new
@@ -31,14 +29,12 @@ class TestIntegrationClient:
         assert None == client.shared_secret
 
         # Calling it again on the same URL gives the same object.
-        client2, is_new = IntegrationClient.for_url(session, url)
+        client2, is_new = IntegrationClient.for_url(db.session, url)
         assert client == client2
 
     def test_register(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         now = utc_now()
-        client, is_new = IntegrationClient.register(session, db.fresh_url())
+        client, is_new = IntegrationClient.register(db.session, db.fresh_url())
 
         # It creates a shared_secret.
         assert client.shared_secret
@@ -50,19 +46,18 @@ class TestIntegrationClient:
 
         # It raises an error if the url is already registered and the
         # submitted shared_secret is inaccurate.
-        pytest.raises(ValueError, IntegrationClient.register, session, client.url)
+        pytest.raises(ValueError, IntegrationClient.register, db.session, client.url)
         pytest.raises(
-            ValueError, IntegrationClient.register, session, client.url, "wrong"
+            ValueError, IntegrationClient.register, db.session, client.url, "wrong"
         )
 
     def test_authenticate(self, db: DatabaseTransactionFixture):
-        session = db.session()
         client = db.integration_client()
 
-        result = IntegrationClient.authenticate(session, "secret")
+        result = IntegrationClient.authenticate(db.session, "secret")
         assert client == result
 
-        result = IntegrationClient.authenticate(session, "wrong_secret")
+        result = IntegrationClient.authenticate(db.session, "wrong_secret")
         assert None == result
 
     def test_normalize_url(self):

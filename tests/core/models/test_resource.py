@@ -19,12 +19,10 @@ from tests.fixtures.sample_covers import SampleCoversFixture
 
 class TestHyperlink:
     def test_add_link(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         edition, pool = db.edition(with_license_pool=True)
         identifier = edition.primary_identifier
         data_source = pool.data_source
-        original, ignore = create(session, Resource, url="http://bar.com")
+        original, ignore = create(db.session, Resource, url="http://bar.com")
         hyperlink, is_new = pool.add_link(
             Hyperlink.DESCRIPTION,
             "http://foo.com/",
@@ -58,10 +56,8 @@ class TestHyperlink:
         assert "cover-thumbnail" == m(Hyperlink.THUMBNAIL_IMAGE)
 
     def test_unmirrored(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
-        ds = DataSource.lookup(session, DataSource.GUTENBERG)
-        overdrive = DataSource.lookup(session, DataSource.OVERDRIVE)
+        ds = DataSource.lookup(db.session, DataSource.GUTENBERG)
+        overdrive = DataSource.lookup(db.session, DataSource.OVERDRIVE)
 
         c1 = db.default_collection()
         c1.data_source = ds
@@ -349,14 +345,13 @@ class TestRepresentation:
         assert None == representation.unicode_content
 
     def test_presumed_media_type(self, db: DatabaseTransactionFixture):
-        session = db.session()
         h = DummyHTTPClient()
 
         # In the absence of a content-type header, the presumed_media_type
         # takes over.
         h.queue_response(200, None, content="content")
         representation, cached = Representation.get(
-            session,
+            db.session,
             "http://url",
             do_get=h.do_get,
             max_age=0,
@@ -368,7 +363,7 @@ class TestRepresentation:
         # presumed_media_type takes over.
         h.queue_response(200, "application/octet-stream", content="content")
         representation, cached = Representation.get(
-            session,
+            db.session,
             "http://url",
             do_get=h.do_get,
             max_age=0,
@@ -380,7 +375,7 @@ class TestRepresentation:
         # presumed_media_type.
         h.queue_response(200, "text/plain", content="content")
         representation, cached = Representation.get(
-            session,
+            db.session,
             "http://url",
             do_get=h.do_get,
             max_age=0,
@@ -389,49 +384,45 @@ class TestRepresentation:
         assert "text/plain" == representation.media_type
 
     def test_404_creates_cachable_representation(self, db: DatabaseTransactionFixture):
-        session = db.session()
         h = DummyHTTPClient()
         h.queue_response(404)
 
         url = db.fresh_url()
-        representation, cached = Representation.get(session, url, do_get=h.do_get)
+        representation, cached = Representation.get(db.session, url, do_get=h.do_get)
         assert False == cached
 
-        representation2, cached = Representation.get(session, url, do_get=h.do_get)
+        representation2, cached = Representation.get(db.session, url, do_get=h.do_get)
         assert True == cached
         assert representation == representation2
 
     def test_302_creates_cachable_representation(self, db: DatabaseTransactionFixture):
-        session = db.session()
         h = DummyHTTPClient()
         h.queue_response(302)
 
         url = db.fresh_url()
-        representation, cached = Representation.get(session, url, do_get=h.do_get)
+        representation, cached = Representation.get(db.session, url, do_get=h.do_get)
         assert False == cached
 
-        representation2, cached = Representation.get(session, url, do_get=h.do_get)
+        representation2, cached = Representation.get(db.session, url, do_get=h.do_get)
         assert True == cached
         assert representation == representation2
 
     def test_500_creates_uncachable_representation(
         self, db: DatabaseTransactionFixture
     ):
-        session = db.session()
         h = DummyHTTPClient()
         h.queue_response(500)
         url = db.fresh_url()
-        representation, cached = Representation.get(session, url, do_get=h.do_get)
+        representation, cached = Representation.get(db.session, url, do_get=h.do_get)
         assert False == cached
 
         h.queue_response(500)
-        representation, cached = Representation.get(session, url, do_get=h.do_get)
+        representation, cached = Representation.get(db.session, url, do_get=h.do_get)
         assert False == cached
 
     def test_response_reviewer_impacts_representation(
         self, db: DatabaseTransactionFixture
     ):
-        session = db.session()
         h = DummyHTTPClient()
         h.queue_response(200, media_type="text/html")
 
@@ -441,7 +432,7 @@ class TestRepresentation:
                 raise Exception("No. Just no.")
 
         representation, cached = Representation.get(
-            session,
+            db.session,
             db.fresh_url(),
             do_get=h.do_get,
             response_reviewer=reviewer,
@@ -450,15 +441,13 @@ class TestRepresentation:
         assert False == cached
 
     def test_exception_handler(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         def oops(*args, **kwargs):
             raise Exception("oops!")
 
         # By default exceptions raised during get() are
         # recorded along with the (empty) Representation objects
         representation, cached = Representation.get(
-            session,
+            db.session,
             db.fresh_url(),
             do_get=oops,
         )
@@ -470,7 +459,7 @@ class TestRepresentation:
         # being handled.
         with pytest.raises(Exception) as excinfo:
             Representation.get(
-                session,
+                db.session,
                 db.fresh_url(),
                 do_get=oops,
                 exception_handler=Representation.reraise_exception,
@@ -716,8 +705,6 @@ class TestRepresentation:
         )
 
     def test_get_with_url_normalizer(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         # Verify our ability to store a Resource under a URL other than
         # the exact URL used to make the HTTP request.
 
@@ -736,7 +723,10 @@ class TestRepresentation:
         original_url = "http://url/?sid=12345"
 
         representation, from_cache = Representation.get(
-            session, original_url, do_get=h.do_get, url_normalizer=normalizer.normalize
+            db.session,
+            original_url,
+            do_get=h.do_get,
+            url_normalizer=normalizer.normalize,
         )
 
         # The original URL was used to make the actual request.
@@ -758,7 +748,10 @@ class TestRepresentation:
         # Replace do_get with a dud object to prove that no second
         # request goes out 'over the wire'.
         representation2, from_cache = Representation.get(
-            session, original_url, do_get=object(), url_normalizer=normalizer.normalize
+            db.session,
+            original_url,
+            do_get=object(),
+            url_normalizer=normalizer.normalize,
         )
         assert True == from_cache
         assert representation2 == representation
@@ -1009,8 +1002,6 @@ class TestCoverResource:
         db,
         sample_covers_fixture: SampleCoversFixture,
     ):
-        session = db.session()
-
         # Here's a book with a thumbnail image.
         edition, pool = db.edition(with_license_pool=True)
 
@@ -1088,7 +1079,7 @@ class TestCoverResource:
         assert [resource_with_decent_cover_2] == Resource.best_covers_among(l)
 
         # But if the metadata wrangler said to use the JPEG, we use the JPEG.
-        metadata_wrangler = DataSource.lookup(session, DataSource.METADATA_WRANGLER)
+        metadata_wrangler = DataSource.lookup(db.session, DataSource.METADATA_WRANGLER)
         resource_with_decent_cover.data_source = metadata_wrangler
 
         # ...the decision becomes easy.
@@ -1167,16 +1158,14 @@ class TestCoverResource:
         db,
         sample_covers_fixture: SampleCoversFixture,
     ):
-        session = db.session()
-
         # Get some data sources ready, since a big part of image
         # quality comes from data source.
-        gutenberg = DataSource.lookup(session, DataSource.GUTENBERG)
+        gutenberg = DataSource.lookup(db.session, DataSource.GUTENBERG)
         gutenberg_cover_generator = DataSource.lookup(
-            session, DataSource.GUTENBERG_COVER_GENERATOR
+            db.session, DataSource.GUTENBERG_COVER_GENERATOR
         )
-        overdrive = DataSource.lookup(session, DataSource.OVERDRIVE)
-        metadata_wrangler = DataSource.lookup(session, DataSource.METADATA_WRANGLER)
+        overdrive = DataSource.lookup(db.session, DataSource.OVERDRIVE)
+        metadata_wrangler = DataSource.lookup(db.session, DataSource.METADATA_WRANGLER)
 
         # Here's a book with a thumbnail image.
         edition, pool = db.edition(with_license_pool=True)

@@ -438,7 +438,7 @@ class TestS3Uploader:
         region,
     ):
         # Arrange
-        session = s3_uploader_fixture.transaction.session()
+        session = s3_uploader_fixture.transaction.session
         uploader = s3_uploader_fixture.create_s3_uploader(region=region)
         data_source = DataSource.lookup(session, data_source_name)
 
@@ -653,7 +653,7 @@ class TestS3Uploader:
             parameters["title"] = title
 
         if data_source_name:
-            data_source = DataSource.lookup(transaction.session(), DataSource.UNGLUE_IT)
+            data_source = DataSource.lookup(transaction.session, DataSource.UNGLUE_IT)
             parameters["data_source"] = data_source
 
         # Act
@@ -732,7 +732,7 @@ class TestS3Uploader:
         #     m(unglueit, identifier, "filename", scaled_size=601))
 
         # Arrange
-        data_source = DataSource.lookup(transaction.session(), data_source_name)
+        data_source = DataSource.lookup(transaction.session, data_source_name)
         identifier = transaction.identifier(foreign_id=identifier)
         uploader = s3_uploader_fixture.create_s3_uploader(region=region, **buckets)
 
@@ -1076,7 +1076,7 @@ class TestS3Uploader:
                 MockMultipartS3Upload.aborted = True
 
         rep, ignore = create(
-            transaction.session(),
+            transaction.session,
             Representation,
             url="http://books.mrc",
             media_type=Representation.MARC_MEDIA_TYPE,
@@ -1180,7 +1180,7 @@ class TestMultiPartS3Upload:
     @staticmethod
     def _representation(transaction: DatabaseTransactionFixture):
         rep, ignore = create(
-            transaction.session(),
+            transaction.session,
             Representation,
             url="http://bucket/books.mrc",
             media_type=Representation.MARC_MEDIA_TYPE,

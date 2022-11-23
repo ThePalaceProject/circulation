@@ -48,7 +48,7 @@ class ExampleCredentialFixture:
         data.factory = LCPCredentialFactory()
         data.patron = transaction.patron()
         data.data_source = DataSource.lookup(
-            transaction.session(), DataSource.INTERNAL_PROCESSING, autocreate=True
+            transaction.session, DataSource.INTERNAL_PROCESSING, autocreate=True
         )
         return data
 
@@ -63,7 +63,7 @@ def example_credential_fixture(
 class TestCredentialFactory:
     def test_getter(self, example_credential_fixture: ExampleCredentialFixture):
         data = example_credential_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
 
         credential_type = LCPCredentialType.PATRON_ID.value
         method_name = "get_patron_id"
@@ -92,7 +92,7 @@ class TestCredentialFactory:
         self, example_credential_fixture: ExampleCredentialFixture
     ):
         data = example_credential_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
 
         # Arrange
         expected_result = LCPUnhashedPassphrase("12345")
@@ -119,7 +119,7 @@ class TestCredentialFactory:
         self, example_credential_fixture: ExampleCredentialFixture
     ):
         data = example_credential_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
 
         # Act, assert
         with pytest.raises(LCPError):
@@ -129,7 +129,7 @@ class TestCredentialFactory:
         self, example_credential_fixture: ExampleCredentialFixture
     ):
         data = example_credential_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
 
         # Arrange
         expected_result = LCPHashedPassphrase("12345")

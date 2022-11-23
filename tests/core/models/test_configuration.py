@@ -32,8 +32,6 @@ class TestConfigurationSetting:
         """Some configuration settings are considered secrets,
         and some are not.
         """
-        session = db.session()
-
         m = ConfigurationSetting._is_secret
         assert True == m("secret")
         assert True == m("password")
@@ -42,14 +40,14 @@ class TestConfigurationSetting:
         assert True == m("password_for_the_account")
         assert False == m("public_information")
 
-        assert True == ConfigurationSetting.sitewide(session, "secret_key").is_secret
-        assert False == ConfigurationSetting.sitewide(session, "public_key").is_secret
+        assert True == ConfigurationSetting.sitewide(db.session, "secret_key").is_secret
+        assert (
+            False == ConfigurationSetting.sitewide(db.session, "public_key").is_secret
+        )
 
     def test_value_or_default(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         integration, ignore = create(
-            session,
+            db.session,
             ExternalIntegration,
             goal=db.fresh_str(),
             protocol=db.fresh_str(),
@@ -71,11 +69,10 @@ class TestConfigurationSetting:
         assert "" == setting.value_or_default("default")
 
     def test_value_inheritance(self, db: DatabaseTransactionFixture):
-        session = db.session()
         key = "SomeKey"
 
         # Here's a sitewide configuration setting.
-        sitewide_conf = ConfigurationSetting.sitewide(session, key)
+        sitewide_conf = ConfigurationSetting.sitewide(db.session, key)
 
         # Its value is not set.
         assert None == sitewide_conf.value
@@ -86,7 +83,7 @@ class TestConfigurationSetting:
 
         # Here's an integration, let's say the SIP2 authentication mechanism
         sip, ignore = create(
-            session,
+            db.session,
             ExternalIntegration,
             goal=ExternalIntegration.PATRON_AUTH_GOAL,
             protocol="SIP2",
@@ -127,7 +124,7 @@ class TestConfigurationSetting:
         key = "patron_identifier_prefix"
         library_patron_prefix_conf = (
             ConfigurationSetting.for_library_and_externalintegration(
-                session, key, library, sip
+                db.session, key, library, sip
             )
         )
         assert None == library_patron_prefix_conf.value
@@ -159,26 +156,25 @@ class TestConfigurationSetting:
         (test_relationships shows that you can have two settings for the same
         key as long as library or integration is different.)
         """
-        session = db.session()
         key = db.fresh_str()
         integration, ignore = create(
-            session,
+            db.session,
             ExternalIntegration,
             goal=db.fresh_str(),
             protocol=db.fresh_str(),
         )
         library = db.default_library()
         setting = ConfigurationSetting.for_library_and_externalintegration(
-            session, key, library, integration
+            db.session, key, library, integration
         )
         setting2 = ConfigurationSetting.for_library_and_externalintegration(
-            session, key, library, integration
+            db.session, key, library, integration
         )
         assert setting.id == setting2.id
         pytest.raises(
             IntegrityError,
             create,
-            session,
+            db.session,
             ConfigurationSetting,
             key=key,
             library=library,
@@ -186,9 +182,8 @@ class TestConfigurationSetting:
         )
 
     def test_relationships(self, db: DatabaseTransactionFixture):
-        session = db.session()
         integration, ignore = create(
-            session,
+            db.session,
             ExternalIntegration,
             goal=db.fresh_str(),
             protocol=db.fresh_str(),
@@ -202,7 +197,7 @@ class TestConfigurationSetting:
         cs = ConfigurationSetting
         key = db.fresh_str()
 
-        for_neither = cs.sitewide(session, key)
+        for_neither = cs.sitewide(db.session, key)
         assert None == for_neither.library
         assert None == for_neither.external_integration
 
@@ -215,7 +210,7 @@ class TestConfigurationSetting:
         assert integration == for_integration.external_integration
 
         for_both = cs.for_library_and_externalintegration(
-            session, key, library, integration
+            db.session, key, library, integration
         )
         assert library == for_both.library
         assert integration == for_both.external_integration
@@ -234,8 +229,8 @@ class TestConfigurationSetting:
         # If we delete the integration, all configuration settings
         # associated with it are deleted, even the one that's also
         # associated with the library.
-        session.delete(integration)
-        session.commit()
+        db.session.delete(integration)
+        db.session.commit()
         assert [for_library.id] == [x.id for x in library.settings]
 
     def test_no_orphan_delete_cascade(self, db: DatabaseTransactionFixture):
@@ -243,7 +238,6 @@ class TestConfigurationSetting:
         # ExternalIntegration doesn't delete it, because it's fine for
         # a ConfigurationSetting to have no associated Library or
         # ExternalIntegration.
-        session = db.session()
         library = db.default_library()
         for_library = ConfigurationSetting.for_library(db.fresh_str(), library)
 
@@ -255,12 +249,12 @@ class TestConfigurationSetting:
         # Remove library and external_integration.
         for_library.library = None
         for_integration.external_integration = None
-        session.commit()
+        db.session.commit()
 
         # That was a weird thing to do, but the ConfigurationSettings
         # are still in the database.
         for cs in for_library, for_integration:
-            assert cs == get_one(session, ConfigurationSetting, id=cs.id)
+            assert cs == get_one(db.session, ConfigurationSetting, id=cs.id)
 
     @pytest.mark.parametrize(
         "set_to,expect",
@@ -269,13 +263,12 @@ class TestConfigurationSetting:
     def test_setter_parameterized(self, db, set_to, expect):
         # Values are converted into Unicode strings on the way in to
         # the 'value' setter.
-        setting = ConfigurationSetting.sitewide(db.session(), "setting")
+        setting = ConfigurationSetting.sitewide(db.session, "setting")
         setting.value = set_to
         assert setting.value == expect
 
     def test_stored_bytes_value(self, db: DatabaseTransactionFixture):
-        session = db.session()
-        bytes_setting = ConfigurationSetting.sitewide(session, "bytes_setting")
+        bytes_setting = ConfigurationSetting.sitewide(db.session, "bytes_setting")
         assert bytes_setting.value is None
 
         bytes_setting.value = "1234 ☃".encode()
@@ -285,8 +278,7 @@ class TestConfigurationSetting:
             bytes_setting.value = b"\x80"
 
     def test_int_value(self, db: DatabaseTransactionFixture):
-        session = db.session()
-        number = ConfigurationSetting.sitewide(session, "number")
+        number = ConfigurationSetting.sitewide(db.session, "number")
         assert None == number.int_value
 
         number.value = "1234"
@@ -296,8 +288,7 @@ class TestConfigurationSetting:
         pytest.raises(ValueError, lambda: number.int_value)
 
     def test_float_value(self, db: DatabaseTransactionFixture):
-        session = db.session()
-        number = ConfigurationSetting.sitewide(session, "number")
+        number = ConfigurationSetting.sitewide(db.session, "number")
         assert None == number.int_value
 
         number.value = "1234.5"
@@ -307,8 +298,7 @@ class TestConfigurationSetting:
         pytest.raises(ValueError, lambda: number.float_value)
 
     def test_json_value(self, db: DatabaseTransactionFixture):
-        session = db.session()
-        jsondata = ConfigurationSetting.sitewide(session, "json")
+        jsondata = ConfigurationSetting.sitewide(db.session, "json")
         assert None == jsondata.int_value
 
         jsondata.value = "[1,2]"
@@ -319,32 +309,30 @@ class TestConfigurationSetting:
 
     def test_excluded_audio_data_sources(self, db: DatabaseTransactionFixture):
         # Get a handle on the underlying ConfigurationSetting
-        session = db.session()
         setting = ConfigurationSetting.sitewide(
-            session, Configuration.EXCLUDED_AUDIO_DATA_SOURCES
+            db.session, Configuration.EXCLUDED_AUDIO_DATA_SOURCES
         )
         m = ConfigurationSetting.excluded_audio_data_sources
         # When no explicit value is set for the ConfigurationSetting,
         # the return value of the method is AUDIO_EXCLUSIONS -- whatever
         # the default is for the current version of the circulation manager.
         assert None == setting.value
-        assert ConfigurationSetting.EXCLUDED_AUDIO_DATA_SOURCES_DEFAULT == m(session)
+        assert ConfigurationSetting.EXCLUDED_AUDIO_DATA_SOURCES_DEFAULT == m(db.session)
         # When an explicit value for the ConfigurationSetting, is set, that
         # value is interpreted as JSON and returned.
         setting.value = "[]"
-        assert [] == m(session)
+        assert [] == m(db.session)
 
     def test_explain(self, db: DatabaseTransactionFixture):
         """Test that ConfigurationSetting.explain gives information
         about all site-wide configuration settings.
         """
-        session = db.session()
-        ConfigurationSetting.sitewide(session, "a_secret").value = "1"
-        ConfigurationSetting.sitewide(session, "nonsecret_setting").value = "2"
+        ConfigurationSetting.sitewide(db.session, "a_secret").value = "1"
+        ConfigurationSetting.sitewide(db.session, "nonsecret_setting").value = "2"
 
         integration = db.external_integration("a protocol", "a goal")
 
-        actual = ConfigurationSetting.explain(session, include_secrets=True)
+        actual = ConfigurationSetting.explain(db.session, include_secrets=True)
         expect = """Site-wide configuration settings:
 ---------------------------------
 a_secret='1'
@@ -352,7 +340,7 @@ nonsecret_setting='2'"""
         assert expect == "\n".join(actual)
 
         without_secrets = "\n".join(
-            ConfigurationSetting.explain(session, include_secrets=False)
+            ConfigurationSetting.explain(db.session, include_secrets=False)
         )
         assert "a_secret" not in without_secrets
         assert "nonsecret_setting" in without_secrets
@@ -361,50 +349,46 @@ nonsecret_setting='2'"""
 class TestUniquenessConstraints:
     def test_duplicate_sitewide_setting(self, db: DatabaseTransactionFixture):
         # You can't create two sitewide settings with the same key.
-        session = db.session()
         c1 = ConfigurationSetting(key="key", value="value1")
-        session.add(c1)
-        session.flush()
+        db.session.add(c1)
+        db.session.flush()
         c2 = ConfigurationSetting(key="key", value="value2")
-        session.add(c2)
-        pytest.raises(IntegrityError, session.flush)
+        db.session.add(c2)
+        pytest.raises(IntegrityError, db.session.flush)
 
     def test_duplicate_library_setting(self, db: DatabaseTransactionFixture):
         # A library can't have two settings with the same key.
-        session = db.session()
         c1 = ConfigurationSetting(
             key="key", value="value1", library=db.default_library()
         )
-        session.add(c1)
-        session.flush()
+        db.session.add(c1)
+        db.session.flush()
         c2 = ConfigurationSetting(
             key="key", value="value2", library=db.default_library()
         )
-        session.add(c2)
-        pytest.raises(IntegrityError, session.flush)
+        db.session.add(c2)
+        pytest.raises(IntegrityError, db.session.flush)
 
     def test_duplicate_integration_setting(self, db: DatabaseTransactionFixture):
         # An external integration can't have two settings with the
         # same key.
-        session = db.session()
         integration = db.external_integration(db.fresh_str())
         c1 = ConfigurationSetting(
             key="key", value="value1", external_integration=integration
         )
-        session.add(c1)
-        session.flush()
+        db.session.add(c1)
+        db.session.flush()
         c2 = ConfigurationSetting(
             key="key", value="value1", external_integration=integration
         )
-        session.add(c2)
-        pytest.raises(IntegrityError, session.flush)
+        db.session.add(c2)
+        pytest.raises(IntegrityError, db.session.flush)
 
     def test_duplicate_library_integration_setting(
         self, db: DatabaseTransactionFixture
     ):
         # A library can't configure an external integration two
         # different ways for the same key.
-        session = db.session()
         integration = db.external_integration(db.fresh_str())
         c1 = ConfigurationSetting(
             key="key",
@@ -412,16 +396,16 @@ class TestUniquenessConstraints:
             library=db.default_library(),
             external_integration=integration,
         )
-        session.add(c1)
-        session.flush()
+        db.session.add(c1)
+        db.session.flush()
         c2 = ConfigurationSetting(
             key="key",
             value="value1",
             library=db.default_library(),
             external_integration=integration,
         )
-        session.add(c2)
-        pytest.raises(IntegrityError, session.flush)
+        db.session.add(c2)
+        pytest.raises(IntegrityError, db.session.flush)
 
 
 class TestExternalIntegrationLink:
@@ -460,8 +444,6 @@ class TestExternalIntegrationLink:
 
     def test_relationships(self, db: DatabaseTransactionFixture):
         # Create a collection with two storage external integrations.
-        session = db.session()
-
         collection = db.collection(
             name="Collection",
             protocol=ExternalIntegration.OVERDRIVE,
@@ -493,7 +475,7 @@ class TestExternalIntegrationLink:
             purpose="books_mirror",
         )
 
-        qu = session.query(ExternalIntegrationLink).order_by(
+        qu = db.session.query(ExternalIntegrationLink).order_by(
             ExternalIntegrationLink.other_integration_id
         )
         external_integration_links = qu.all()
@@ -505,9 +487,9 @@ class TestExternalIntegrationLink:
         # When a storage integration is deleted, the related external
         # integration link row is deleted, and the relationship with the
         # collection is removed.
-        session.delete(storage1)
+        db.session.delete(storage1)
 
-        qu = session.query(ExternalIntegrationLink)
+        qu = db.session.query(ExternalIntegrationLink)
         external_integration_links = qu.all()
 
         assert len(external_integration_links) == 1
@@ -540,34 +522,33 @@ class TestExternalIntegration:
         self, example_externalintegration_fixture: ExampleExternalIntegrationFixture
     ):
         db = example_externalintegration_fixture.database_fixture
-        session = db.session()
         external_integration = example_externalintegration_fixture.external_integration
 
         goal = external_integration.goal
         qu = ExternalIntegration.for_library_and_goal(
-            session, db.default_library(), goal
+            db.session, db.default_library(), goal
         )
 
         # This matches nothing because the ExternalIntegration is not
         # associated with the Library.
         assert [] == qu.all()
         get_one = ExternalIntegration.one_for_library_and_goal
-        assert None == get_one(session, db.default_library(), goal)
+        assert None == get_one(db.session, db.default_library(), goal)
 
         # Associate the library with the ExternalIntegration and
         # the query starts matching it. one_for_library_and_goal
         # also starts returning it.
         external_integration.libraries.append(db.default_library())
         assert [external_integration] == qu.all()
-        assert external_integration == get_one(session, db.default_library(), goal)
+        assert external_integration == get_one(db.session, db.default_library(), goal)
 
         # Create another, similar ExternalIntegration. By itself, this
         # has no effect.
         integration2, ignore = create(
-            session, ExternalIntegration, goal=goal, protocol=db.fresh_str()
+            db.session, ExternalIntegration, goal=goal, protocol=db.fresh_str()
         )
         assert [external_integration] == qu.all()
-        assert external_integration == get_one(session, db.default_library(), goal)
+        assert external_integration == get_one(db.session, db.default_library(), goal)
 
         # Associate that ExternalIntegration with the library, and
         # the query starts picking it up, and one_for_library_and_goal
@@ -575,7 +556,7 @@ class TestExternalIntegration:
         integration2.libraries.append(db.default_library())
         assert {external_integration, integration2} == set(qu.all())
         with pytest.raises(CannotLoadConfiguration) as excinfo:
-            get_one(session, db.default_library(), goal)
+            get_one(db.session, db.default_library(), goal)
         assert "Library {} defines multiple integrations with goal {}".format(
             db.default_library().name, goal
         ) in str(excinfo.value)
@@ -584,13 +565,12 @@ class TestExternalIntegration:
         self, example_externalintegration_fixture: ExampleExternalIntegrationFixture
     ):
         db = example_externalintegration_fixture.database_fixture
-        session = db.session()
         wrong_purpose = "isbn"
         collection = db.collection()
 
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             ExternalIntegration.for_collection_and_purpose(
-                session, collection, wrong_purpose
+                db.session, collection, wrong_purpose
             )
         assert (
             "No storage integration for collection '%s' and purpose '%s' is configured"
@@ -604,7 +584,7 @@ class TestExternalIntegration:
         db.external_integration_link(integration=external_integration, purpose=purpose)
 
         integration = ExternalIntegration.for_collection_and_purpose(
-            session, collection=collection, purpose=purpose
+            db.session, collection=collection, purpose=purpose
         )
         assert isinstance(integration, ExternalIntegration)
 
@@ -612,12 +592,11 @@ class TestExternalIntegration:
         self, example_externalintegration_fixture: ExampleExternalIntegrationFixture
     ):
         db = example_externalintegration_fixture.database_fixture
-        session = db.session()
 
         def results():
             # Run the query and return all results.
             return ExternalIntegration.with_setting_value(
-                session, "protocol", "goal", "key", "value"
+                db.session, "protocol", "goal", "key", "value"
             ).all()
 
         # We start off with no results.
@@ -640,7 +619,7 @@ class TestExternalIntegration:
 
         # Create another, identical integration.
         integration2, is_new = create(
-            session, ExternalIntegration, protocol="protocol", goal="goal"
+            db.session, ExternalIntegration, protocol="protocol", goal="goal"
         )
         assert integration2 != integration
         integration2.setting("key").value = "value"
@@ -701,8 +680,6 @@ class TestExternalIntegration:
         self, example_externalintegration_fixture: ExampleExternalIntegrationFixture
     ):
         db = example_externalintegration_fixture.database_fixture
-        session = db.session()
-
         integration = db.external_integration("protocol", "goal")
         integration.name = "The Integration"
         integration.url = "http://url/"
@@ -715,14 +692,14 @@ class TestExternalIntegration:
         db.default_library().name = "First Library"
         db.default_library().integrations.append(integration)
         ConfigurationSetting.for_library_and_externalintegration(
-            session, "library-specific", db.default_library(), integration
+            db.session, "library-specific", db.default_library(), integration
         ).value = "value1"
 
         library2 = db.library()
         library2.name = "Second Library"
         library2.integrations.append(integration)
         ConfigurationSetting.for_library_and_externalintegration(
-            session, "library-specific", library2, integration
+            db.session, "library-specific", library2, integration
         ).value = "value2"
 
         # If we decline to pass in a library, we get information about how
@@ -769,7 +746,7 @@ username='someuser'"""
         self, example_externalintegration_fixture: ExampleExternalIntegrationFixture
     ):
         """Ensure that ExternalIntegration.delete clears all orphan ExternalIntegrationLinks."""
-        session = example_externalintegration_fixture.database_fixture.session()
+        session = example_externalintegration_fixture.database_fixture.session
         db = example_externalintegration_fixture.database_fixture
 
         integration1 = db.external_integration(
@@ -1189,7 +1166,7 @@ class TestNumberConfigurationMetadata:
             return_value=external_integration
         )
         configuration_storage = ConfigurationStorage(external_integration_association)
-        configuration = MockConfiguration(configuration_storage, db.session())
+        configuration = MockConfiguration(configuration_storage, db.session)
 
         configuration.setting5 = "abc"
         with pytest.raises(CannotLoadConfiguration):
@@ -1229,7 +1206,7 @@ class TestBooleanConfigurationMetadata:
         configuration_storage = ConfigurationStorage(external_integration_association)
 
         configuration = ConfigurationWithBooleanProperty(
-            configuration_storage, db.session()
+            configuration_storage, db.session
         )
 
         # We set a new value using ConfigurationMetadata.__set__

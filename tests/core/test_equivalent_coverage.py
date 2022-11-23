@@ -34,9 +34,7 @@ def equivalent_coverage_fixture(
     coverage = equivalency_coverage_record_fixture
     data = EquivalentCoverageFixture()
     data.coverage_records = coverage
-    data.provider = EquivalentIdentifiersCoverageProvider(
-        coverage.transaction.session()
-    )
+    data.provider = EquivalentIdentifiersCoverageProvider(coverage.transaction.session)
     data.transaction = coverage.transaction
     data.equivalencies = coverage.equivalencies
     data.identifiers = coverage.identifiers
@@ -53,7 +51,7 @@ class TestEquivalentCoverage:
         self, equivalent_coverage_fixture: EquivalentCoverageFixture
     ):
         data = equivalent_coverage_fixture
-        session = data.transaction.session()
+        session = data.transaction.session
         assert session.query(EquivalencyCoverageRecord).count() == 0
 
         data.provider.update_missing_coverage_records()
@@ -90,7 +88,7 @@ class TestEquivalentCoverage:
         self, equivalent_coverage_fixture: EquivalentCoverageFixture
     ):
         session, data = (
-            equivalent_coverage_fixture.transaction.session(),
+            equivalent_coverage_fixture.transaction.session,
             equivalent_coverage_fixture,
         )
 
@@ -107,7 +105,7 @@ class TestEquivalentCoverage:
         self, equivalent_coverage_fixture: EquivalentCoverageFixture
     ):
         session, data = (
-            equivalent_coverage_fixture.transaction.session(),
+            equivalent_coverage_fixture.transaction.session,
             equivalent_coverage_fixture,
         )
 
@@ -154,7 +152,7 @@ class TestEquivalentCoverage:
         self, equivalent_coverage_fixture: EquivalentCoverageFixture
     ):
         session, data = (
-            equivalent_coverage_fixture.transaction.session(),
+            equivalent_coverage_fixture.transaction.session,
             equivalent_coverage_fixture,
         )
 
@@ -196,7 +194,7 @@ class TestEquivalentCoverage:
         self, equivalent_coverage_fixture: EquivalentCoverageFixture
     ):
         session, data = (
-            equivalent_coverage_fixture.transaction.session(),
+            equivalent_coverage_fixture.transaction.session,
             equivalent_coverage_fixture,
         )
 
@@ -225,7 +223,7 @@ class TestEquivalentCoverage:
         self, equivalent_coverage_fixture: EquivalentCoverageFixture
     ):
         session, data = (
-            equivalent_coverage_fixture.transaction.session(),
+            equivalent_coverage_fixture.transaction.session,
             equivalent_coverage_fixture,
         )
 
@@ -248,7 +246,7 @@ class TestEquivalentCoverage:
         self, equivalent_coverage_fixture: EquivalentCoverageFixture
     ):
         session, data = (
-            equivalent_coverage_fixture.transaction.session(),
+            equivalent_coverage_fixture.transaction.session,
             equivalent_coverage_fixture,
         )
 
@@ -305,7 +303,7 @@ class TestEquivalentCoverage:
         self, equivalent_coverage_fixture: EquivalentCoverageFixture
     ):
         session, data = (
-            equivalent_coverage_fixture.transaction.session(),
+            equivalent_coverage_fixture.transaction.session,
             equivalent_coverage_fixture,
         )
 
@@ -329,7 +327,7 @@ class TestEquivalentCoverage:
         self, equivalent_coverage_fixture: EquivalentCoverageFixture
     ):
         session, data = (
-            equivalent_coverage_fixture.transaction.session(),
+            equivalent_coverage_fixture.transaction.session,
             equivalent_coverage_fixture,
         )
 
@@ -359,7 +357,7 @@ class TestEquivalentCoverage:
         self, equivalent_coverage_fixture: EquivalentCoverageFixture
     ):
         session, data = (
-            equivalent_coverage_fixture.transaction.session(),
+            equivalent_coverage_fixture.transaction.session,
             equivalent_coverage_fixture,
         )
 

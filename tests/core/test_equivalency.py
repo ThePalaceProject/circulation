@@ -4,20 +4,18 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 class TestEquivalency:
     def test_register_equivalency(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
-        data_source = DataSource.lookup(session, DataSource.GUTENBERG)
+        data_source = DataSource.lookup(db.session, DataSource.GUTENBERG)
         id = "549"
 
         # We've got a record.
         record, was_new = Edition.for_foreign_id(
-            session, data_source, Identifier.GUTENBERG_ID, id
+            db.session, data_source, Identifier.GUTENBERG_ID, id
         )
 
         # Then we look it up and discover another identifier for it.
-        data_source_2 = DataSource.lookup(session, DataSource.OCLC)
+        data_source_2 = DataSource.lookup(db.session, DataSource.OCLC)
         record2, was_new = Edition.for_foreign_id(
-            session, data_source_2, Identifier.OCLC_NUMBER, "22"
+            db.session, data_source_2, Identifier.OCLC_NUMBER, "22"
         )
 
         eq = record.primary_identifier.equivalent_to(
@@ -33,29 +31,27 @@ class TestEquivalency:
         assert {record, record2} == set(record.equivalent_editions().all())
 
     def test_recursively_equivalent_identifiers(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         # We start with a Gutenberg book.
-        gutenberg = DataSource.lookup(session, DataSource.GUTENBERG)
+        gutenberg = DataSource.lookup(db.session, DataSource.GUTENBERG)
         record, ignore = Edition.for_foreign_id(
-            session, gutenberg, Identifier.GUTENBERG_ID, "100"
+            db.session, gutenberg, Identifier.GUTENBERG_ID, "100"
         )
         gutenberg_id = record.primary_identifier
 
         # We use OCLC Classify to do a title/author lookup.
-        oclc = DataSource.lookup(session, DataSource.OCLC)
+        oclc = DataSource.lookup(db.session, DataSource.OCLC)
         search_id, ignore = Identifier.for_foreign_id(
-            session, Identifier.OCLC_WORK, "60010"
+            db.session, Identifier.OCLC_WORK, "60010"
         )
         gutenberg_id.equivalent_to(oclc, search_id, 1)
 
         # The title/author lookup associates the search term with two
         # different OCLC Numbers.
         oclc_id, ignore = Identifier.for_foreign_id(
-            session, Identifier.OCLC_NUMBER, "9999"
+            db.session, Identifier.OCLC_NUMBER, "9999"
         )
         oclc_id_2, ignore = Identifier.for_foreign_id(
-            session, Identifier.OCLC_NUMBER, "1000"
+            db.session, Identifier.OCLC_NUMBER, "1000"
         )
 
         search_id.equivalent_to(oclc, oclc_id, 1)
@@ -63,16 +59,16 @@ class TestEquivalency:
 
         # We then use OCLC Linked Data to connect one of the OCLC
         # Numbers with an ISBN.
-        linked_data = DataSource.lookup(session, DataSource.OCLC_LINKED_DATA)
+        linked_data = DataSource.lookup(db.session, DataSource.OCLC_LINKED_DATA)
         isbn_id, ignore = Identifier.for_foreign_id(
-            session, Identifier.ISBN, "900100434X"
+            db.session, Identifier.ISBN, "900100434X"
         )
         oclc_id.equivalent_to(linked_data, isbn_id, 1)
 
         # As it turns out, we have an Overdrive work record...
-        overdrive = DataSource.lookup(session, DataSource.OVERDRIVE)
+        overdrive = DataSource.lookup(db.session, DataSource.OVERDRIVE)
         overdrive_record, ignore = Edition.for_foreign_id(
-            session, overdrive, Identifier.OVERDRIVE_ID, "{111-222}"
+            db.session, overdrive, Identifier.OVERDRIVE_ID, "{111-222}"
         )
         overdrive_id = overdrive_record.primary_identifier
 
@@ -82,7 +78,7 @@ class TestEquivalency:
         # Finally, here's a completely unrelated Edition, which
         # will not be showing up.
         gutenberg2, ignore = Edition.for_foreign_id(
-            session, gutenberg, Identifier.GUTENBERG_ID, "200"
+            db.session, gutenberg, Identifier.GUTENBERG_ID, "200"
         )
         gutenberg2.title = "Unrelated Gutenberg record."
 

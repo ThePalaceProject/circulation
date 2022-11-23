@@ -44,12 +44,10 @@ class TestCirculationEvent:
         else:
             return int(value)
 
-    def from_dict(self, data, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
-
+    def from_dict(self, data, db: DatabaseTransactionFixture):
         # Identify the source of the event.
         source_name = data["source"]
-        source = DataSource.lookup(session, source_name)
+        source = DataSource.lookup(db.session, source_name)
 
         # Identify which LicensePool the event is talking about.
         foreign_id = data["id"]
@@ -57,7 +55,7 @@ class TestCirculationEvent:
         collection = data["collection"]
 
         license_pool, was_new = LicensePool.for_foreign_id(
-            session, source, identifier_type, foreign_id, collection=collection
+            db.session, source, identifier_type, foreign_id, collection=collection
         )
 
         # Finally, gather some information about the event itself.
@@ -68,7 +66,7 @@ class TestCirculationEvent:
         new_value = self._get_int(data, "new_value")
         delta = self._get_int(data, "delta")
         event, was_new = get_one_or_create(
-            session,
+            db.session,
             CirculationEvent,
             license_pool=license_pool,
             type=type,
@@ -123,7 +121,7 @@ class TestCirculationEvent:
         location = "Westgate Branch"
 
         m = CirculationEvent.log
-        session = db.session()
+        session = db.session
         event, is_new = m(
             session,
             license_pool=pool,
@@ -196,7 +194,7 @@ class TestCirculationEvent:
             license_pool=pool,
             type=CirculationEvent.DISTRIBUTOR_TITLE_ADD,
         )
-        session = db.session()
+        session = db.session
         event = create(session, CirculationEvent, start=now, **kwargs)
 
         # Different timestamp -- no problem.
@@ -221,17 +219,16 @@ class TestCirculationEvent:
             library=db.default_library(),
             type=CirculationEvent.DISTRIBUTOR_TITLE_ADD,
         )
-        session = db.session()
-        event = create(session, CirculationEvent, start=now, **kwargs)
+        event = create(db.session, CirculationEvent, start=now, **kwargs)
 
         # Different timestamp -- no problem.
         now2 = utc_now()
-        event2 = create(session, CirculationEvent, start=now2, **kwargs)
+        event2 = create(db.session, CirculationEvent, start=now2, **kwargs)
         assert event != event2
 
         # Reuse the timestamp and you get an IntegrityError which ruins the
         # entire transaction.
         pytest.raises(
-            IntegrityError, create, session, CirculationEvent, start=now, **kwargs
+            IntegrityError, create, db.session, CirculationEvent, start=now, **kwargs
         )
-        session.rollback()
+        db.session.rollback()

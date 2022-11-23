@@ -53,7 +53,7 @@ class TestOverdriveCoreAPI:
         overdrive_with_api_fixture: OverdriveWithAPIFixture,
         mock_web_server: MockAPIServer,
     ):
-        session = overdrive_with_api_fixture.overdrive.transaction.session()
+        session = overdrive_with_api_fixture.overdrive.transaction.session
         collection = MockOverdriveCoreAPI.mock_collection(session)
 
         # Enqueue a response for the request that the server will make for a token.
@@ -94,7 +94,7 @@ class TestOverdriveCoreAPI:
     def test_constructor_makes_no_requests(
         self, overdrive_with_api_fixture: OverdriveWithAPIFixture
     ):
-        session = overdrive_with_api_fixture.overdrive.transaction.session()
+        session = overdrive_with_api_fixture.overdrive.transaction.session
         # Invoking the OverdriveCoreAPI constructor does not, by itself,
         # make any HTTP requests.
         collection = MockOverdriveCoreAPI.mock_collection(session)
@@ -157,7 +157,7 @@ class TestOverdriveCoreAPI:
 
     def test_hosts(self, overdrive_with_api_fixture: OverdriveWithAPIFixture):
         fixture = overdrive_with_api_fixture
-        session = fixture.overdrive.transaction.session()
+        session = fixture.overdrive.transaction.session
         c = OverdriveCoreAPI
 
         # By default, OverdriveCoreAPI is initialized with the production
@@ -257,7 +257,7 @@ class TestOverdriveCoreAPI:
         self, overdrive_with_api_fixture: OverdriveWithAPIFixture
     ):
         fixture = overdrive_with_api_fixture
-        session = fixture.overdrive.transaction.session()
+        session = fixture.overdrive.transaction.session
 
         class MisconfiguredOverdriveCoreAPI(MockOverdriveCoreAPI):
             """This Overdrive client has valid credentials but the library
@@ -380,7 +380,7 @@ class TestOverdriveCoreAPI:
         self, overdrive_with_api_fixture: OverdriveWithAPIFixture
     ):
         transaction = overdrive_with_api_fixture.overdrive.transaction
-        session = transaction.session()
+        session = transaction.session
 
         # Test the differences between Advantage collections and
         # regular Overdrive collections.
@@ -529,7 +529,7 @@ class TestOverdriveRepresentationExtractor:
     ):
         # Tests that can convert an overdrive json block into a CirculationData object.
         overdrive = overdrive_with_api_fixture.overdrive
-        session = overdrive.transaction.session()
+        session = overdrive.transaction.session
 
         raw, info = overdrive.sample_json("overdrive_availability_information.json")
         extractor = OverdriveRepresentationExtractor(overdrive_with_api_fixture.api)
@@ -631,7 +631,7 @@ class TestOverdriveRepresentationExtractor:
         identifier = transaction.identifier(identifier_type=Identifier.OVERDRIVE_ID)
         info["id"] = identifier.identifier
         data = m(info)
-        assert identifier == data.primary_identifier(transaction.session())
+        assert identifier == data.primary_identifier(transaction.session)
         assert 0 == data.licenses_owned
         assert 0 == data.licenses_available
         assert 0 == data.patrons_in_hold_queue
@@ -941,7 +941,7 @@ class TestOverdriveAdvantageAccount:
         fixture = overdrive_with_api_fixture
         transaction, session = (
             fixture.overdrive.transaction,
-            fixture.overdrive.transaction.session(),
+            fixture.overdrive.transaction.session,
         )
 
         account = OverdriveAdvantageAccount(
@@ -1013,7 +1013,7 @@ class TestOverdriveBibliographicCoverageProvider:
 
         script = RunCollectionCoverageProviderScript(
             OverdriveBibliographicCoverageProvider,
-            transaction.session(),
+            transaction.session,
             api_class=MockOverdriveCoreAPI,
         )
         [provider] = script.providers

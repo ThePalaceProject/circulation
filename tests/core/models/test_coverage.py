@@ -19,42 +19,42 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 class TestTimestamp:
     def test_lookup(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         c1 = db.default_collection()
         c2 = db.collection()
 
         # Create a timestamp.
-        timestamp = Timestamp.stamp(session, "service", Timestamp.SCRIPT_TYPE, c1)
+        timestamp = Timestamp.stamp(db.session, "service", Timestamp.SCRIPT_TYPE, c1)
 
         # Look it up.
         assert timestamp == Timestamp.lookup(
-            session, "service", Timestamp.SCRIPT_TYPE, c1
+            db.session, "service", Timestamp.SCRIPT_TYPE, c1
         )
 
         # There are a number of ways to _fail_ to look up this timestamp.
         assert None == Timestamp.lookup(
-            session, "other service", Timestamp.SCRIPT_TYPE, c1
+            db.session, "other service", Timestamp.SCRIPT_TYPE, c1
         )
-        assert None == Timestamp.lookup(session, "service", Timestamp.MONITOR_TYPE, c1)
-        assert None == Timestamp.lookup(session, "service", Timestamp.SCRIPT_TYPE, c2)
+        assert None == Timestamp.lookup(
+            db.session, "service", Timestamp.MONITOR_TYPE, c1
+        )
+        assert None == Timestamp.lookup(
+            db.session, "service", Timestamp.SCRIPT_TYPE, c2
+        )
 
         # value() works the same way as lookup() but returns the actual
         # timestamp.finish value.
         assert timestamp.finish == Timestamp.value(
-            session, "service", Timestamp.SCRIPT_TYPE, c1
+            db.session, "service", Timestamp.SCRIPT_TYPE, c1
         )
-        assert None == Timestamp.value(session, "service", Timestamp.SCRIPT_TYPE, c2)
+        assert None == Timestamp.value(db.session, "service", Timestamp.SCRIPT_TYPE, c2)
 
     def test_stamp(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         service = "service"
         type = Timestamp.SCRIPT_TYPE
 
         # If no date is specified, the value of the timestamp is the time
         # stamp() was called.
-        stamp = Timestamp.stamp(session, service, type)
+        stamp = Timestamp.stamp(db.session, service, type)
         now = utc_now()
         assert (now - stamp.finish).total_seconds() < 2
         assert stamp.start == stamp.finish
@@ -67,7 +67,7 @@ class TestTimestamp:
 
         # Calling stamp() again will update the Timestamp.
         stamp2 = Timestamp.stamp(
-            session, service, type, achievements="yay", counter=100, exception="boo"
+            db.session, service, type, achievements="yay", counter=100, exception="boo"
         )
         assert stamp == stamp2
         now = utc_now()
@@ -82,7 +82,7 @@ class TestTimestamp:
 
         # Passing in a different collection will create a new Timestamp.
         stamp3 = Timestamp.stamp(
-            session, service, type, collection=db.default_collection()
+            db.session, service, type, collection=db.default_collection()
         )
         assert stamp3 != stamp
         assert db.default_collection() == stamp3.collection
@@ -90,7 +90,7 @@ class TestTimestamp:
         # Passing in CLEAR_VALUE for start, end, or exception will
         # clear an existing Timestamp.
         stamp4 = Timestamp.stamp(
-            session,
+            db.session,
             service,
             type,
             start=Timestamp.CLEAR_VALUE,
@@ -103,11 +103,9 @@ class TestTimestamp:
         assert None == stamp4.exception
 
     def test_update(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         # update() can modify the fields of a Timestamp that aren't
         # used to identify it.
-        stamp = Timestamp.stamp(session, "service", Timestamp.SCRIPT_TYPE)
+        stamp = Timestamp.stamp(db.session, "service", Timestamp.SCRIPT_TYPE)
         start = datetime_utc(2010, 1, 2)
         finish = datetime_utc(2018, 3, 4)
         achievements = db.fresh_str()
@@ -131,14 +129,12 @@ class TestTimestamp:
         assert counter == stamp.counter
         assert None == stamp.exception
 
-    def to_data(self, database_transaction: DatabaseTransactionFixture):
-        session = database_transaction.session()
-
+    def to_data(self, db: DatabaseTransactionFixture):
         stamp = Timestamp.stamp(
-            session,
+            db.session,
             "service",
             Timestamp.SCRIPT_TYPE,
-            collection=database_transaction.default_collection(),
+            collection=db.default_collection(),
             counter=10,
             achivements="a",
         )
@@ -159,9 +155,7 @@ class TestTimestamp:
 
 class TestBaseCoverageRecord:
     def test_not_covered(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
-        source = DataSource.lookup(session, DataSource.OCLC)
+        source = DataSource.lookup(db.session, DataSource.OCLC)
 
         # Here are four identifiers with four relationships to a
         # certain coverage provider: no coverage at all, successful
@@ -187,7 +181,7 @@ class TestBaseCoverageRecord:
         assert CoverageRecord.PERSISTENT_FAILURE == persistent_record.status
 
         # Here's a query that finds all four.
-        qu = session.query(Identifier).outerjoin(CoverageRecord)
+        qu = db.session.query(Identifier).outerjoin(CoverageRecord)
         assert 4 == qu.count()
 
         def check_not_covered(expect, **kwargs):
@@ -235,9 +229,7 @@ class TestBaseCoverageRecord:
 
 class TestCoverageRecord:
     def test_lookup(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
-        source = DataSource.lookup(session, DataSource.OCLC)
+        source = DataSource.lookup(db.session, DataSource.OCLC)
         edition = db.edition()
         operation = "foo"
         collection = db.default_collection()
@@ -274,16 +266,14 @@ class TestCoverageRecord:
         assert None == result
 
         # Same for data source.
-        other_source = DataSource.lookup(session, DataSource.OVERDRIVE)
+        other_source = DataSource.lookup(db.session, DataSource.OVERDRIVE)
         result = CoverageRecord.lookup(
             edition, other_source, operation, collection=collection
         )
         assert None == result
 
     def test_add_for(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
-        source = DataSource.lookup(session, DataSource.OCLC)
+        source = DataSource.lookup(db.session, DataSource.OCLC)
         edition = db.edition()
         operation = "foo"
         record, is_new = CoverageRecord.add_for(edition, source, operation)
@@ -317,9 +307,7 @@ class TestCoverageRecord:
         assert CoverageRecord.PERSISTENT_FAILURE == record.status
 
     def test_bulk_add(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
-        source = DataSource.lookup(session, DataSource.GUTENBERG)
+        source = DataSource.lookup(db.session, DataSource.GUTENBERG)
         operation = "testing"
 
         # An untouched identifier.
@@ -383,9 +371,7 @@ class TestCoverageRecord:
         assert sorted([i2, covered]) == sorted(ignored_identifiers)
 
     def test_bulk_add_with_collection(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
-        source = DataSource.lookup(session, DataSource.GUTENBERG)
+        source = DataSource.lookup(db.session, DataSource.GUTENBERG)
         operation = "testing"
 
         c1 = db.collection()
@@ -496,8 +482,6 @@ class TestWorkCoverageRecord:
         assert WorkCoverageRecord.PERSISTENT_FAILURE == record.status
 
     def test_bulk_add(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         operation = "relevant"
         irrelevant_operation = "irrelevant"
 
@@ -543,7 +527,7 @@ class TestWorkCoverageRecord:
             new_timestamp,
             status=new_status,
         )
-        session.commit()
+        db.session.commit()
 
         def relevant_records(work):
             return [x for x in work.coverage_records if x.operation == operation]
@@ -591,7 +575,7 @@ class ExampleEquivalencyCoverageRecordFixture:
             Equivalency(input_id=idn[1].id, output_id=idn[2].id, strength=1),
             Equivalency(input_id=idn[1].id, output_id=idn[0].id, strength=1),
         ]
-        session = transaction.session()
+        session = transaction.session
         session.add_all(self.equivalencies)
         session.commit()
 
@@ -610,7 +594,7 @@ class TestEquivalencyCoverageRecord:
     ):
         operation = EquivalencyCoverageRecord.RECURSIVE_EQUIVALENCY_REFRESH
         equivalencies = example_equivalency_coverage_record_fixture.equivalencies
-        session = example_equivalency_coverage_record_fixture.transaction.session()
+        session = example_equivalency_coverage_record_fixture.transaction.session
 
         for eq in equivalencies:
             record, is_new = EquivalencyCoverageRecord.add_for(
@@ -626,7 +610,7 @@ class TestEquivalencyCoverageRecord:
         example_equivalency_coverage_record_fixture: ExampleEquivalencyCoverageRecordFixture,
     ):
         equivalencies = example_equivalency_coverage_record_fixture.equivalencies
-        session = example_equivalency_coverage_record_fixture.transaction.session()
+        session = example_equivalency_coverage_record_fixture.transaction.session
 
         operation = EquivalencyCoverageRecord.RECURSIVE_EQUIVALENCY_REFRESH
         EquivalencyCoverageRecord.bulk_add(session, equivalencies, operation)
@@ -641,7 +625,7 @@ class TestEquivalencyCoverageRecord:
         example_equivalency_coverage_record_fixture: ExampleEquivalencyCoverageRecordFixture,
     ):
         equivalencies = example_equivalency_coverage_record_fixture.equivalencies
-        session = example_equivalency_coverage_record_fixture.transaction.session()
+        session = example_equivalency_coverage_record_fixture.transaction.session
 
         for eq in equivalencies:
             record, is_new = EquivalencyCoverageRecord.add_for(

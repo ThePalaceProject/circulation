@@ -19,30 +19,24 @@ class TestContributor:
             assert value in Contributor.MARC_ROLE_CODES
 
     def test_lookup_by_viaf(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         # Two contributors named Bob.
-        bob1, new = Contributor.lookup(session, sort_name="Bob", viaf="foo")
-        bob2, new = Contributor.lookup(session, sort_name="Bob", viaf="bar")
+        bob1, new = Contributor.lookup(db.session, sort_name="Bob", viaf="foo")
+        bob2, new = Contributor.lookup(db.session, sort_name="Bob", viaf="bar")
 
         assert bob1 != bob2
 
-        assert (bob1, False) == Contributor.lookup(session, viaf="foo")
+        assert (bob1, False) == Contributor.lookup(db.session, viaf="foo")
 
     def test_lookup_by_lc(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         # Two contributors named Bob.
-        bob1, new = Contributor.lookup(session, sort_name="Bob", lc="foo")
-        bob2, new = Contributor.lookup(session, sort_name="Bob", lc="bar")
+        bob1, new = Contributor.lookup(db.session, sort_name="Bob", lc="foo")
+        bob2, new = Contributor.lookup(db.session, sort_name="Bob", lc="bar")
 
         assert bob1 != bob2
 
-        assert (bob1, False) == Contributor.lookup(session, lc="foo")
+        assert (bob1, False) == Contributor.lookup(db.session, lc="foo")
 
     def test_lookup_by_viaf_interchangeable(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         # Two contributors with the same lc. This shouldn't happen, but
         # the reason it shouldn't happen is these two people are the same
         # person, so lookup() should just pick one and go with it.
@@ -50,43 +44,37 @@ class TestContributor:
         bob2, new = db.contributor()
         bob2.sort_name = "Bob"
         bob2.lc = "foo"
-        session.commit()
+        db.session.commit()
         assert bob1 != bob2
-        [some_bob], new = Contributor.lookup(session, sort_name="Bob", lc="foo")
+        [some_bob], new = Contributor.lookup(db.session, sort_name="Bob", lc="foo")
         assert False == new
         assert some_bob in (bob1, bob2)
 
     def test_lookup_by_name(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         # Two contributors named Bob.
-        bob1, new = Contributor.lookup(session, sort_name="Bob", lc="foo")
-        bob2, new = Contributor.lookup(session, sort_name="Bob", lc="bar")
+        bob1, new = Contributor.lookup(db.session, sort_name="Bob", lc="foo")
+        bob2, new = Contributor.lookup(db.session, sort_name="Bob", lc="bar")
 
         # Lookup by name finds both of them.
-        bobs, new = Contributor.lookup(session, sort_name="Bob")
+        bobs, new = Contributor.lookup(db.session, sort_name="Bob")
         assert False == new
         assert ["Bob", "Bob"] == [x.sort_name for x in bobs]
 
     def test_create_by_lookup(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
-        [bob1], new = Contributor.lookup(session, sort_name="Bob")
+        [bob1], new = Contributor.lookup(db.session, sort_name="Bob")
         assert "Bob" == bob1.sort_name
         assert True == new
 
-        [bob2], new = Contributor.lookup(session, sort_name="Bob")
+        [bob2], new = Contributor.lookup(db.session, sort_name="Bob")
         assert bob1 == bob2
         assert False == new
 
     def test_merge(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         # Here's Robert.
-        [robert], ignore = Contributor.lookup(session, sort_name="Robert")
+        [robert], ignore = Contributor.lookup(db.session, sort_name="Robert")
 
         # Here's Bob.
-        [bob], ignore = Contributor.lookup(session, sort_name="Jones, Bob")
+        [bob], ignore = Contributor.lookup(db.session, sort_name="Jones, Bob")
         bob.extra["foo"] = "bar"
         bob.aliases = ["Bobby"]
         bob.viaf = "viaf"
@@ -96,15 +84,15 @@ class TestContributor:
         bob.wikipedia_name = "Bob_(Person)"
 
         # Each is a contributor to a Edition.
-        data_source = DataSource.lookup(session, DataSource.GUTENBERG)
+        data_source = DataSource.lookup(db.session, DataSource.GUTENBERG)
 
         roberts_book, ignore = Edition.for_foreign_id(
-            session, data_source, Identifier.GUTENBERG_ID, "1"
+            db.session, data_source, Identifier.GUTENBERG_ID, "1"
         )
         roberts_book.add_contributor(robert, Contributor.AUTHOR_ROLE)
 
         bobs_book, ignore = Edition.for_foreign_id(
-            session, data_source, Identifier.GUTENBERG_ID, "10"
+            db.session, data_source, Identifier.GUTENBERG_ID, "10"
         )
         bobs_book.add_contributor(bob, Contributor.AUTHOR_ROLE)
 
@@ -131,7 +119,9 @@ class TestContributor:
         # The standalone 'Bob' record has been removed from the database.
         assert (
             []
-            == session.query(Contributor).filter(Contributor.sort_name == "Bob").all()
+            == db.session.query(Contributor)
+            .filter(Contributor.sort_name == "Bob")
+            .all()
         )
 
         # Bob's book is now associated with 'Robert', not the standalone
@@ -140,7 +130,7 @@ class TestContributor:
 
         # confirm the sort_name is propagated, if not already set in the destination contributor
         robert.sort_name = None
-        [bob], ignore = Contributor.lookup(session, sort_name="Jones, Bob")
+        [bob], ignore = Contributor.lookup(db.session, sort_name="Jones, Bob")
         bob.merge_into(robert)
         assert "Jones, Bob" == robert.sort_name
 
@@ -194,9 +184,7 @@ class TestContributor:
         self._names("Geering, R. G.", "Geering", "R. G. Geering")
 
     def test_sort_name(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
-        bob, new = get_one_or_create(session, Contributor, sort_name=None)
+        bob, new = get_one_or_create(db.session, Contributor, sort_name=None)
         assert None == bob.sort_name
 
         bob, ignore = db.contributor(sort_name="Bob Bitshifter")

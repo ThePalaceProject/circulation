@@ -34,9 +34,8 @@ class TestEntryPoint:
 
     def test_no_changes(self, db: DatabaseTransactionFixture):
         # EntryPoint doesn't modify queries or search filters.
-        session = db.session()
-        qu = session.query(Edition)
-        assert qu == EntryPoint.modify_database_query(session, qu)
+        qu = db.session.query(Edition)
+        assert qu == EntryPoint.modify_database_query(db.session, qu)
         args = dict(arg="value")
 
         filter = object()
@@ -87,11 +86,10 @@ class TestEverythingEntryPoint:
     def test_no_changes(self, db: DatabaseTransactionFixture):
         # EverythingEntryPoint doesn't modify queries or searches
         # beyond the default behavior for any entry point.
-        session = db.session()
         assert "All" == EverythingEntryPoint.INTERNAL_NAME
 
-        qu = session.query(Edition)
-        assert qu == EntryPoint.modify_database_query(session, qu)
+        qu = db.session.query(Edition)
+        assert qu == EntryPoint.modify_database_query(db.session, qu)
         args = dict(arg="value")
 
         filter = object()
@@ -101,22 +99,21 @@ class TestEverythingEntryPoint:
 class TestMediumEntryPoint:
     def test_modify_database_query(self, db: DatabaseTransactionFixture):
         # Create a video, and a entry point that contains videos.
-        session = db.session()
         work = db.work(with_license_pool=True)
         work.license_pools[0].presentation_edition.medium = Edition.VIDEO_MEDIUM
 
         class Videos(MediumEntryPoint):
             INTERNAL_NAME = Edition.VIDEO_MEDIUM
 
-        qu = session.query(Work)
+        qu = db.session.query(Work)
 
         # The default entry points filter out the video.
         for entrypoint in EbooksEntryPoint, AudiobooksEntryPoint:
-            modified = entrypoint.modify_database_query(session, qu)
+            modified = entrypoint.modify_database_query(db.session, qu)
             assert [] == modified.all()
 
         # But the video entry point includes it.
-        videos = Videos.modify_database_query(session, qu)
+        videos = Videos.modify_database_query(db.session, qu)
         assert [work.id] == [x.id for x in videos]
 
     def test_modify_search_filter(self):

@@ -8,7 +8,7 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 class TestInitializeLocalAnalyticsProvider:
     def test_initialize(self, db: DatabaseTransactionFixture):
-        session = db.session()
+        session = db.session
 
         local_analytics = get_one(
             session,
@@ -50,7 +50,7 @@ class LocalAnalyticsProviderFixture:
     def __init__(self, transaction: DatabaseTransactionFixture):
         self.transaction = transaction
         self.integration, ignore = create(
-            transaction.session(),
+            transaction.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol="core.local_analytics_provider",
@@ -73,7 +73,7 @@ class TestLocalAnalyticsProvider:
     ):
         data = local_analytics_provider_fixture
         database = local_analytics_provider_fixture.transaction
-        session = database.session()
+        session = database.session
 
         library2 = database.library()
         work = database.work(
@@ -162,7 +162,6 @@ class TestLocalAnalyticsProvider:
         # is used as CirculationEvent.location.
         data = local_analytics_provider_fixture
         database = local_analytics_provider_fixture.transaction
-        session = database.session()
 
         # The default LocalAnalytics object doesn't have a location
         # gathering policy, and the default is to ignore location.

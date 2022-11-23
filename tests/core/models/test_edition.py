@@ -45,21 +45,20 @@ class TestEdition:
         assert {lp1, lp2} == set(edition.license_pools)
 
     def test_author_contributors(self, db: DatabaseTransactionFixture):
-        session = db.session()
-        data_source = DataSource.lookup(session, DataSource.GUTENBERG)
+        data_source = DataSource.lookup(db.session, DataSource.GUTENBERG)
         id = db.fresh_str()
         type = Identifier.GUTENBERG_ID
 
-        edition, was_new = Edition.for_foreign_id(session, data_source, type, id)
+        edition, was_new = Edition.for_foreign_id(db.session, data_source, type, id)
 
         # We've listed the same person as primary author and author.
-        [alice], ignore = Contributor.lookup(session, "Adder, Alice")
+        [alice], ignore = Contributor.lookup(db.session, "Adder, Alice")
         edition.add_contributor(
             alice, [Contributor.AUTHOR_ROLE, Contributor.PRIMARY_AUTHOR_ROLE]
         )
 
         # We've listed a different person as illustrator.
-        [bob], ignore = Contributor.lookup(session, "Bitshifter, Bob")
+        [bob], ignore = Contributor.lookup(db.session, "Bitshifter, Bob")
         edition.add_contributor(bob, [Contributor.ILLUSTRATOR_ROLE])
 
         # Both contributors show up in .contributors.
@@ -71,12 +70,11 @@ class TestEdition:
 
     def test_for_foreign_id(self, db: DatabaseTransactionFixture):
         """Verify we can get a data source's view of a foreign id."""
-        session = db.session()
-        data_source = DataSource.lookup(session, DataSource.GUTENBERG)
+        data_source = DataSource.lookup(db.session, DataSource.GUTENBERG)
         id = "549"
         type = Identifier.GUTENBERG_ID
 
-        record, was_new = Edition.for_foreign_id(session, data_source, type, id)
+        record, was_new = Edition.for_foreign_id(db.session, data_source, type, id)
         assert data_source == record.data_source
         identifier = record.primary_identifier
         assert id == identifier.identifier
@@ -87,25 +85,24 @@ class TestEdition:
         # We can get the same work record by providing only the name
         # of the data source.
         record, was_new = Edition.for_foreign_id(
-            session, DataSource.GUTENBERG, type, id
+            db.session, DataSource.GUTENBERG, type, id
         )
         assert data_source == record.data_source
         assert identifier == record.primary_identifier
         assert False == was_new
 
     def test_missing_coverage_from(self, db: DatabaseTransactionFixture):
-        session = db.session()
-        gutenberg = DataSource.lookup(session, DataSource.GUTENBERG)
-        oclc = DataSource.lookup(session, DataSource.OCLC)
-        web = DataSource.lookup(session, DataSource.WEB)
+        gutenberg = DataSource.lookup(db.session, DataSource.GUTENBERG)
+        oclc = DataSource.lookup(db.session, DataSource.OCLC)
+        web = DataSource.lookup(db.session, DataSource.WEB)
 
         # Here are two Gutenberg records.
         g1, ignore = Edition.for_foreign_id(
-            session, gutenberg, Identifier.GUTENBERG_ID, "1"
+            db.session, gutenberg, Identifier.GUTENBERG_ID, "1"
         )
 
         g2, ignore = Edition.for_foreign_id(
-            session, gutenberg, Identifier.GUTENBERG_ID, "2"
+            db.session, gutenberg, Identifier.GUTENBERG_ID, "2"
         )
 
         # One of them has coverage from OCLC Classify
@@ -116,14 +113,14 @@ class TestEdition:
 
         # Here's a web record, just sitting there.
         w, ignore = Edition.for_foreign_id(
-            session, web, Identifier.URI, "http://www.foo.com/"
+            db.session, web, Identifier.URI, "http://www.foo.com/"
         )
 
         # missing_coverage_from picks up the Gutenberg record with no
         # coverage from OCLC. It doesn't pick up the other
         # Gutenberg record, and it doesn't pick up the web record.
         [in_gutenberg_but_not_in_oclc] = Edition.missing_coverage_from(
-            session, gutenberg, oclc
+            db.session, gutenberg, oclc
         ).all()
 
         assert g2 == in_gutenberg_but_not_in_oclc
@@ -132,21 +129,21 @@ class TestEdition:
         # record that has coverage for that operation, but not the one
         # that has generic OCLC coverage.
         [has_generic_coverage_only] = Edition.missing_coverage_from(
-            session, gutenberg, oclc, "some operation"
+            db.session, gutenberg, oclc, "some operation"
         ).all()
         assert g1 == has_generic_coverage_only
 
         # We don't put web sites into OCLC, so this will pick up the
         # web record (but not the Gutenberg record).
         [in_web_but_not_in_oclc] = Edition.missing_coverage_from(
-            session, web, oclc
+            db.session, web, oclc
         ).all()
         assert w == in_web_but_not_in_oclc
 
         # We don't use the web as a source of coverage, so this will
         # return both Gutenberg records (but not the web record).
         assert [g1.id, g2.id] == sorted(
-            x.id for x in Edition.missing_coverage_from(session, gutenberg, web)
+            x.id for x in Edition.missing_coverage_from(db.session, gutenberg, web)
         )
 
     def test_sort_by_priority(self, db: DatabaseTransactionFixture):
@@ -187,7 +184,7 @@ class TestEdition:
 
         edition = db.edition()
         identifier = db.identifier()
-        session = db.session()
+        session = db.session
         data_source = DataSource.lookup(session, DataSource.OCLC)
 
         identifier.equivalent_to(data_source, edition.primary_identifier, 0.6)
@@ -226,7 +223,7 @@ class TestEdition:
         # equivalent to a certain OCLC Number. We've learned from OCLC
         # Linked Data that the Open Library text is equivalent to the
         # same OCLC Number.
-        session = db.session()
+        session = db.session
         oclc_classify = DataSource.lookup(session, DataSource.OCLC)
         oclc_linked_data = DataSource.lookup(session, DataSource.OCLC_LINKED_DATA)
 
@@ -304,9 +301,8 @@ class TestEdition:
         self, db: DatabaseTransactionFixture
     ):
         wr = db.edition()
-        session = db.session()
-        session.delete(wr.contributions[0])
-        session.commit()
+        db.session.delete(wr.contributions[0])
+        db.session.commit()
         wr.calculate_presentation()
         assert "[Unknown]" == wr.sort_author
         assert "[Unknown]" == wr.author
@@ -332,8 +328,7 @@ class TestEdition:
     def test_set_summary(self, db: DatabaseTransactionFixture):
         e, pool = db.edition(with_license_pool=True)
         work = db.work(presentation_edition=e)
-        session = db.session()
-        overdrive = DataSource.lookup(session, DataSource.OVERDRIVE)
+        overdrive = DataSource.lookup(db.session, DataSource.OVERDRIVE)
 
         # Set the work's summmary.
         l1, new = pool.add_link(
@@ -354,9 +349,8 @@ class TestEdition:
         self, db: DatabaseTransactionFixture
     ):
         e, pool = db.edition(with_license_pool=True)
-        session = db.session()
-        oclc = DataSource.lookup(session, DataSource.OCLC_LINKED_DATA)
-        overdrive = DataSource.lookup(session, DataSource.OVERDRIVE)
+        oclc = DataSource.lookup(db.session, DataSource.OCLC_LINKED_DATA)
+        overdrive = DataSource.lookup(db.session, DataSource.OVERDRIVE)
 
         # There's a perfunctory description from Overdrive.
         l1, new = pool.add_link(
@@ -377,7 +371,7 @@ class TestEdition:
 
         # In a head-to-head evaluation, the OCLC Linked Data description wins.
         ids = [e.primary_identifier.id]
-        champ1, resources = Identifier.evaluate_summary_quality(session, ids)
+        champ1, resources = Identifier.evaluate_summary_quality(db.session, ids)
 
         assert {overdrive_resource, oclc_resource} == set(resources)
         assert oclc_resource == champ1
@@ -385,7 +379,7 @@ class TestEdition:
         # But if we say that Overdrive is the privileged data source, it wins
         # automatically. The other resource isn't even considered.
         champ2, resources2 = Identifier.evaluate_summary_quality(
-            session, ids, [overdrive]
+            db.session, ids, [overdrive]
         )
         assert overdrive_resource == champ2
         assert [overdrive_resource] == resources2
@@ -394,15 +388,17 @@ class TestEdition:
         # there are no descriptions from that data source, a
         # head-to-head evaluation is performed, and OCLC Linked Data
         # wins.
-        threem = DataSource.lookup(session, DataSource.THREEM)
-        champ3, resources3 = Identifier.evaluate_summary_quality(session, ids, [threem])
+        threem = DataSource.lookup(db.session, DataSource.THREEM)
+        champ3, resources3 = Identifier.evaluate_summary_quality(
+            db.session, ids, [threem]
+        )
         assert {overdrive_resource, oclc_resource} == set(resources3)
         assert oclc_resource == champ3
 
         # If there are two privileged data sources and there's no
         # description from the first, the second is used.
         champ4, resources4 = Identifier.evaluate_summary_quality(
-            session, ids, [threem, overdrive]
+            db.session, ids, [threem, overdrive]
         )
         assert [overdrive_resource] == resources4
         assert overdrive_resource == champ4
@@ -410,28 +406,29 @@ class TestEdition:
         # Even an empty string wins if it's from the most privileged data source.
         # This is not a silly example.  The librarian may choose to set the description
         # to an empty string in the admin inteface, to override a bad overdrive/etc. description.
-        staff = DataSource.lookup(session, DataSource.LIBRARY_STAFF)
+        staff = DataSource.lookup(db.session, DataSource.LIBRARY_STAFF)
         l3, new = pool.add_link(
             Hyperlink.SHORT_DESCRIPTION, None, staff, "text/plain", ""
         )
         staff_resource = l3.resource
 
         champ5, resources5 = Identifier.evaluate_summary_quality(
-            session, ids, [staff, overdrive]
+            db.session, ids, [staff, overdrive]
         )
         assert [staff_resource] == resources5
         assert staff_resource == champ5
 
     def test_calculate_presentation_cover(self, db: DatabaseTransactionFixture):
         # Here's a cover image with a thumbnail.
-        session = db.session()
         representation, ignore = get_one_or_create(
-            session, Representation, url="http://cover"
+            db.session, Representation, url="http://cover"
         )
         representation.media_type = Representation.JPEG_MEDIA_TYPE
         representation.mirrored_at = utc_now()
         representation.mirror_url = "http://mirror/cover"
-        thumb, ignore = get_one_or_create(session, Representation, url="http://thumb")
+        thumb, ignore = get_one_or_create(
+            db.session, Representation, url="http://thumb"
+        )
         thumb.media_type = Representation.JPEG_MEDIA_TYPE
         thumb.mirrored_at = utc_now()
         thumb.mirror_url = "http://mirror/thumb"
@@ -450,9 +447,9 @@ class TestEdition:
         # Verify that a cover will be used even if it's some
         # distance away along the identifier-equivalence line.
         e, pool = db.edition(with_license_pool=True)
-        oclc_classify = DataSource.lookup(session, DataSource.OCLC)
+        oclc_classify = DataSource.lookup(db.session, DataSource.OCLC)
         oclc_number, ignore = Identifier.for_foreign_id(
-            session, Identifier.OCLC_NUMBER, "22"
+            db.session, Identifier.OCLC_NUMBER, "22"
         )
         e.primary_identifier.equivalent_to(oclc_classify, oclc_number, 1)
         link, ignore = oclc_number.add_link(
@@ -469,14 +466,14 @@ class TestEdition:
             Hyperlink.IMAGE, "http://nearby-cover", e.data_source
         )
         nearby, ignore = get_one_or_create(
-            session, Representation, url=link.resource.url
+            db.session, Representation, url=link.resource.url
         )
         nearby.media_type = Representation.JPEG_MEDIA_TYPE
         nearby.mirrored_at = utc_now()
         nearby.mirror_url = "http://mirror/nearby-cover"
         link.resource.representation = nearby
         nearby_thumb, ignore = get_one_or_create(
-            session, Representation, url="http://nearby-thumb"
+            db.session, Representation, url="http://nearby-thumb"
         )
         nearby_thumb.media_type = Representation.JPEG_MEDIA_TYPE
         nearby_thumb.mirrored_at = utc_now()

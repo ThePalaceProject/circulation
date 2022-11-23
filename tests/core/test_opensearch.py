@@ -8,8 +8,7 @@ class TestOpenSearchDocument:
     def test_search_info(self, db: DatabaseTransactionFixture):
         # Searching this lane will use the language
         # and audience restrictions from the lane.
-        data = db
-        lane = data.lane()
+        lane = db.lane()
         lane.display_name = "Fiction"
         lane.languages = ["eng", "ger"]
         lane.audiences = [Classifier.AUDIENCE_YOUNG_ADULT]
@@ -22,11 +21,11 @@ class TestOpenSearchDocument:
 
         # This lane is the root for a patron type, so searching
         # it will use all the lane's restrictions.
-        root_lane = data.lane()
+        root_lane = db.lane()
         root_lane.root_for_patron_type = ["A"]
         root_lane.display_name = "Science Fiction & Fantasy"
-        sf, ignore = Genre.lookup(data.session(), "Science Fiction")
-        fantasy, ignore = Genre.lookup(data.session(), "Fantasy")
+        sf, ignore = Genre.lookup(db.session, "Science Fiction")
+        fantasy, ignore = Genre.lookup(db.session, "Fantasy")
         root_lane.add_genre(sf)
         root_lane.add_genre(fantasy)
 

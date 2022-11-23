@@ -358,12 +358,10 @@ class TestFacets:
             library.default_facet_setting(key).value = value
 
     def test_max_cache_age(self, db: DatabaseTransactionFixture):
-        data = db
-
         # A default Facets object has no opinion on what max_cache_age
         # should be.
         facets = Facets(
-            data.default_library(),
+            db.default_library(),
             Facets.COLLECTION_FULL,
             Facets.AVAILABLE_ALL,
             Facets.ORDER_TITLE,
@@ -371,10 +369,8 @@ class TestFacets:
         assert None == facets.max_cache_age
 
     def test_facet_groups(self, db: DatabaseTransactionFixture):
-        data = db
-
         facets = Facets(
-            data.default_library(),
+            db.default_library(),
             Facets.COLLECTION_FULL,
             Facets.AVAILABLE_ALL,
             Facets.ORDER_TITLE,
@@ -404,10 +400,10 @@ class TestFacets:
             Facets.COLLECTION_FACET_GROUP_NAME: Facets.COLLECTION_FEATURED,
             Facets.AVAILABILITY_FACET_GROUP_NAME: Facets.AVAILABLE_ALL,
         }
-        library = data.default_library()
+        library = db.default_library()
         self._configure_facets(library, test_enabled_facets, test_default_facets)
 
-        facets = Facets(data.default_library(), None, None, Facets.ORDER_TITLE)
+        facets = Facets(db.default_library(), None, None, Facets.ORDER_TITLE)
         all_groups = list(facets.facet_groups)
         # We have disabled almost all the facets, so the list of
         # facet transitions includes only two items.
@@ -418,7 +414,6 @@ class TestFacets:
         assert expect == sorted(list(x[:2]) + [x[-1]] for x in all_groups)
 
     def test_default(self, db: DatabaseTransactionFixture):
-        data = db
         # Calling Facets.default() is like calling the constructor with
         # no arguments except the library.
         class Mock(Facets):
@@ -426,8 +421,8 @@ class TestFacets:
                 self.library = library
                 self.kwargs = kwargs
 
-        facets = Mock.default(data.default_library())
-        assert data.default_library() == facets.library
+        facets = Mock.default(db.default_library())
+        assert db.default_library() == facets.library
         assert (
             dict(collection=None, availability=None, order=None, entrypoint=None)
             == facets.kwargs
@@ -475,8 +470,6 @@ class TestFacets:
         assert ["facet1", "facet2"] == available
 
     def test_default_availability(self, db: DatabaseTransactionFixture):
-        data = db
-
         # Normally, the availability will be the library's default availability
         # facet.
         test_enabled_facets = {
@@ -492,7 +485,7 @@ class TestFacets:
             Facets.COLLECTION_FACET_GROUP_NAME: Facets.COLLECTION_FULL,
             Facets.AVAILABILITY_FACET_GROUP_NAME: Facets.AVAILABLE_ALL,
         }
-        library = data.default_library()
+        library = db.default_library()
         self._configure_facets(library, test_enabled_facets, test_default_facets)
         facets = Facets(library, None, None, None)
         assert Facets.AVAILABLE_ALL == facets.availability
@@ -515,8 +508,6 @@ class TestFacets:
     def test_facets_can_be_enabled_at_initialization(
         self, db: DatabaseTransactionFixture
     ):
-        data = db
-
         enabled_facets = {
             Facets.ORDER_FACET_GROUP_NAME: [
                 Facets.ORDER_TITLE,
@@ -525,13 +516,13 @@ class TestFacets:
             Facets.COLLECTION_FACET_GROUP_NAME: [Facets.COLLECTION_FULL],
             Facets.AVAILABILITY_FACET_GROUP_NAME: [Facets.AVAILABLE_OPEN_ACCESS],
         }
-        library = data.default_library()
+        library = db.default_library()
         self._configure_facets(library, enabled_facets, {})
 
         # Create a new Facets object with these facets enabled,
         # no matter the Configuration.
         facets = Facets(
-            data.default_library(),
+            db.default_library(),
             Facets.COLLECTION_FULL,
             Facets.AVAILABLE_OPEN_ACCESS,
             Facets.ORDER_TITLE,
@@ -566,9 +557,8 @@ class TestFacets:
         """Verify that Facets.items() returns all information necessary
         to recreate the Facets object.
         """
-        data = db
         facets = Facets(
-            data.default_library(),
+            db.default_library(),
             Facets.COLLECTION_FULL,
             Facets.AVAILABLE_ALL,
             Facets.ORDER_TITLE,
@@ -582,12 +572,10 @@ class TestFacets:
         ] == sorted(facets.items())
 
     def test_default_order_ascending(self, db: DatabaseTransactionFixture):
-        data = db
-
         # Name-based facets are ordered ascending by default (A-Z).
         for order in (Facets.ORDER_TITLE, Facets.ORDER_AUTHOR):
             f = Facets(
-                data.default_library(),
+                db.default_library(),
                 collection=Facets.COLLECTION_FULL,
                 availability=Facets.AVAILABLE_ALL,
                 order=order,
@@ -601,7 +589,7 @@ class TestFacets:
         )
         for order in Facets.ORDER_DESCENDING_BY_DEFAULT:
             f = Facets(
-                data.default_library(),
+                db.default_library(),
                 collection=Facets.COLLECTION_FULL,
                 availability=Facets.AVAILABLE_ALL,
                 order=order,
@@ -612,12 +600,11 @@ class TestFacets:
         """Test the ability of navigate() to move between slight
         variations of a FeaturedFacets object.
         """
-        data = db
         F = Facets
 
         ebooks = EbooksEntryPoint
         f = Facets(
-            data.default_library(),
+            db.default_library(),
             F.COLLECTION_FULL,
             F.AVAILABLE_ALL,
             F.ORDER_TITLE,
@@ -650,8 +637,7 @@ class TestFacets:
         assert audiobooks == different_entrypoint.entrypoint
 
     def test_from_request(self, db: DatabaseTransactionFixture):
-        data = db
-        library = data.default_library()
+        library = db.default_library()
 
         library.setting(EntryPoint.ENABLED_SETTING).value = json.dumps(
             [AudiobooksEntryPoint.INTERNAL_NAME, EbooksEntryPoint.INTERNAL_NAME]
@@ -725,7 +711,6 @@ class TestFacets:
     def test_from_request_gets_available_facets_through_hook_methods(
         self, db: DatabaseTransactionFixture
     ):
-        data = db
         # Available and default facets are determined by calling the
         # available_facets() and default_facets() methods. This gives
         # subclasses a chance to add extra facets or change defaults.
@@ -751,7 +736,7 @@ class TestFacets:
                 cls.default_facet_calls.append((config, facet_group_name))
                 return cls.mock_enabled[facet_group_name][0]
 
-        library = data.default_library()
+        library = db.default_library()
         result = Mock.from_request(library, library, {}.get, {}.get, None)
 
         order, available, collection = Mock.available_facets_calls
@@ -780,11 +765,9 @@ class TestFacets:
         assert Facets.COLLECTION_FULL == result.collection
 
     def test_modify_search_filter(self, db: DatabaseTransactionFixture):
-        data = db
-
         # Test superclass behavior -- filter is modified by entrypoint.
         facets = Facets(
-            data.default_library(), None, None, None, entrypoint=AudiobooksEntryPoint
+            db.default_library(), None, None, None, entrypoint=AudiobooksEntryPoint
         )
         filter = Filter()
         facets.modify_search_filter(filter)
@@ -792,7 +775,7 @@ class TestFacets:
 
         # Now test the subclass behavior.
         facets = Facets(
-            data.default_library(),
+            db.default_library(),
             "some collection",
             "some availability",
             order=Facets.ORDER_ADDED_TO_COLLECTION,
@@ -802,7 +785,7 @@ class TestFacets:
 
         # The library's minimum featured quality is passed in.
         assert (
-            data.default_library().minimum_featured_quality
+            db.default_library().minimum_featured_quality
             == filter.minimum_featured_quality
         )
 
@@ -821,41 +804,39 @@ class TestFacets:
 
         # Specifying an invalid sort order doesn't cause a crash, but you
         # don't get a sort order.
-        facets = Facets(data.default_library(), None, None, "invalid order")
+        facets = Facets(db.default_library(), None, None, "invalid order")
         filter = Filter()
         facets.modify_search_filter(filter)
         assert None == filter.order
 
     def test_modify_database_query(self, db: DatabaseTransactionFixture):
-        data, session = db, db.session()
-
         # Make sure that modify_database_query handles the various
         # reasons why a book might or might not be 'available'.
-        open_access = data.work(with_open_access_download=True, title="open access")
+        open_access = db.work(with_open_access_download=True, title="open access")
         open_access.quality = 1
-        self_hosted = data.work(
+        self_hosted = db.work(
             with_license_pool=True, self_hosted=True, title="self hosted"
         )
-        unlimited_access = data.work(
+        unlimited_access = db.work(
             with_license_pool=True, unlimited_access=True, title="unlimited access"
         )
 
-        available = data.work(with_license_pool=True, title="available")
+        available = db.work(with_license_pool=True, title="available")
         [pool] = available.license_pools
         pool.licenses_owned = 1
         pool.licenses_available = 1
 
-        not_available = data.work(with_license_pool=True, title="not available")
+        not_available = db.work(with_license_pool=True, title="not available")
         [pool] = not_available.license_pools
         pool.licenses_owned = 1
         pool.licenses_available = 0
 
-        not_licensed = data.work(with_license_pool=True, title="not licensed")
+        not_licensed = db.work(with_license_pool=True, title="not licensed")
         [pool] = not_licensed.license_pools
         pool.licenses_owned = 0
         pool.licenses_available = 0
         qu = (
-            session.query(Work)
+            db.session.query(Work)
             .join(Work.license_pools)
             .join(LicensePool.presentation_edition)
         )
@@ -872,8 +853,8 @@ class TestFacets:
             (Facets.AVAILABLE_NOT_NOW, [not_available]),
         ]:
 
-            facets = Facets(data.default_library(), None, availability, None)
-            modified = facets.modify_database_query(session, qu)
+            facets = Facets(db.default_library(), None, availability, None)
+            modified = facets.modify_database_query(db.session, qu)
             assert (availability, sorted(x.title for x in modified)) == (
                 availability,
                 sorted(x.title for x in expect),
@@ -889,9 +870,9 @@ class TestFacets:
             (Facets.COLLECTION_FEATURED, [open_access]),
         ]:
             facets = Facets(
-                data.default_library(), collection, Facets.AVAILABLE_NOW, None
+                db.default_library(), collection, Facets.AVAILABLE_NOW, None
             )
-            modified = facets.modify_database_query(session, qu)
+            modified = facets.modify_database_query(db.session, qu)
             assert (collection, sorted(x.title for x in modified)) == (
                 collection,
                 sorted(x.title for x in expect),
@@ -914,8 +895,7 @@ class TestDefaultSortOrderFacets:
             )
 
     def test_sort_order_rearrangement(self, db: DatabaseTransactionFixture):
-        data = db
-        config = data.default_library()
+        config = db.default_library()
 
         # Test the case where a DefaultSortOrderFacets does nothing but
         # rearrange the default sort orders.
@@ -941,8 +921,7 @@ class TestDefaultSortOrderFacets:
         assert default_orders[0] != Facets.ORDER_TITLE
 
     def test_new_sort_order(self, db: DatabaseTransactionFixture):
-        data = db
-        config = data.default_library()
+        config = db.default_library()
 
         # Test the case where DefaultSortOrderFacets adds a sort order
         # not ordinarily supported.
@@ -969,7 +948,6 @@ class TestDefaultSortOrderFacets:
 
 class TestDatabaseBackedFacets:
     def test_available_facets(self, db: DatabaseTransactionFixture):
-        data = db
         # The only available sort orders are the ones that map
         # directly onto a database field.
 
@@ -980,11 +958,11 @@ class TestDatabaseBackedFacets:
         # subset of the ones available to a Facets under the same
         # configuration.
         f1_orders = f1.available_facets(
-            data.default_library(), FacetConstants.ORDER_FACET_GROUP_NAME
+            db.default_library(), FacetConstants.ORDER_FACET_GROUP_NAME
         )
 
         f2_orders = f2.available_facets(
-            data.default_library(), FacetConstants.ORDER_FACET_GROUP_NAME
+            db.default_library(), FacetConstants.ORDER_FACET_GROUP_NAME
         )
         assert len(f2_orders) < len(f1_orders)
         for order in f2_orders:
@@ -996,11 +974,10 @@ class TestDatabaseBackedFacets:
             FacetConstants.AVAILABILITY_FACET_GROUP_NAME,
         ):
             assert f1.available_facets(
-                data.default_library(), group
-            ) == f2.available_facets(data.default_library(), group)
+                db.default_library(), group
+            ) == f2.available_facets(db.default_library(), group)
 
     def test_default_facets(self, db: DatabaseTransactionFixture):
-        data = db
         # If the configured default sort order is not available,
         # DatabaseBackedFacets chooses the first enabled sort order.
         f1 = Facets
@@ -1011,8 +988,8 @@ class TestDatabaseBackedFacets:
             FacetConstants.COLLECTION_FACET_GROUP_NAME,
             FacetConstants.AVAILABILITY_FACET_GROUP_NAME,
         ):
-            assert f1.default_facet(data.default_library(), group) == f2.default_facet(
-                data.default_library(), group
+            assert f1.default_facet(db.default_library(), group) == f2.default_facet(
+                db.default_library(), group
             )
 
         # In this bizarre library, the default sort order is 'time
@@ -1048,13 +1025,12 @@ class TestDatabaseBackedFacets:
         assert f2.ORDER_WORK_ID == f2.default_facet(config, f2.ORDER_FACET_GROUP_NAME)
 
     def test_order_by(self, db: DatabaseTransactionFixture):
-        data = db
         E = Edition
         W = Work
 
         def order(facet, ascending=None):
             f = DatabaseBackedFacets(
-                data.default_library(),
+                db.default_library(),
                 collection=Facets.COLLECTION_FULL,
                 availability=Facets.AVAILABLE_ALL,
                 order=facet,
@@ -1094,22 +1070,21 @@ class TestDatabaseBackedFacets:
         compare(expect, actual)
 
     def test_modify_database_query(self, db: DatabaseTransactionFixture):
-        data, session = db, db.session()
         # Set up works that are matched by different types of collections.
 
         # A high-quality open-access work.
-        open_access_high = data.work(with_open_access_download=True)
+        open_access_high = db.work(with_open_access_download=True)
         open_access_high.quality = 0.8
 
         # A low-quality open-access work.
-        open_access_low = data.work(with_open_access_download=True)
+        open_access_low = db.work(with_open_access_download=True)
         open_access_low.quality = 0.2
 
         # A high-quality licensed work which is not currently available.
-        (licensed_e1, licensed_p1) = data.edition(
+        (licensed_e1, licensed_p1) = db.edition(
             data_source_name=DataSource.OVERDRIVE, with_license_pool=True
         )
-        licensed_high = data.work(presentation_edition=licensed_e1)
+        licensed_high = db.work(presentation_edition=licensed_e1)
         licensed_high.license_pools.append(licensed_p1)
         licensed_high.quality = 0.8
         licensed_p1.open_access = False
@@ -1117,35 +1092,33 @@ class TestDatabaseBackedFacets:
         licensed_p1.licenses_available = 0
 
         # A low-quality licensed work which is currently available.
-        (licensed_e2, licensed_p2) = data.edition(
+        (licensed_e2, licensed_p2) = db.edition(
             data_source_name=DataSource.OVERDRIVE, with_license_pool=True
         )
         licensed_p2.open_access = False
-        licensed_low = data.work(presentation_edition=licensed_e2)
+        licensed_low = db.work(presentation_edition=licensed_e2)
         licensed_low.license_pools.append(licensed_p2)
         licensed_low.quality = 0.2
         licensed_p2.licenses_owned = 1
         licensed_p2.licenses_available = 1
 
         # A high-quality work with unlimited access.
-        unlimited_access_high = data.work(with_license_pool=True, unlimited_access=True)
+        unlimited_access_high = db.work(with_license_pool=True, unlimited_access=True)
         unlimited_access_high.quality = 0.8
 
-        qu = DatabaseBackedWorkList.base_query(session)
+        qu = DatabaseBackedWorkList.base_query(db.session)
 
         def facetify(
             collection=Facets.COLLECTION_FULL,
             available=Facets.AVAILABLE_ALL,
             order=Facets.ORDER_TITLE,
         ):
-            f = DatabaseBackedFacets(
-                data.default_library(), collection, available, order
-            )
-            return f.modify_database_query(session, qu)
+            f = DatabaseBackedFacets(db.default_library(), collection, available, order)
+            return f.modify_database_query(db.session, qu)
 
         # When holds are allowed, we can find all works by asking
         # for everything.
-        library = data.default_library()
+        library = db.default_library()
         library.setting(Library.ALLOW_HOLDS).value = "True"
         everything = facetify()
         assert 5 == everything.count()
@@ -1222,14 +1195,13 @@ class TestFeaturedFacets:
         assert CachedFeed.GROUPS_TYPE == FeaturedFacets.CACHED_FEED_TYPE
 
     def test_default(self, db: DatabaseTransactionFixture):
-        data = db
         # Check how FeaturedFacets gets its minimum_featured_quality value.
 
-        library1 = data.default_library()
+        library1 = db.default_library()
         library1.setting(Configuration.MINIMUM_FEATURED_QUALITY).value = 0.22
-        library2 = data.library()
+        library2 = db.library()
         library2.setting(Configuration.MINIMUM_FEATURED_QUALITY).value = 0.99
-        lane = data.lane(library=library2)
+        lane = db.lane(library=library2)
 
         # FeaturedFacets can be instantiated for a library...
         facets = FeaturedFacets.default(library1)
@@ -1315,7 +1287,6 @@ class TestSearchFacets:
         assert SearchFacets.DEFAULT_MIN_SCORE == with_order.min_score
 
     def test_from_request(self, db: DatabaseTransactionFixture):
-        data = db
         # An HTTP client can customize which SearchFacets object
         # is created by sending different HTTP requests.
 
@@ -1332,15 +1303,15 @@ class TestSearchFacets:
 
         unused = object()
 
-        library = data.default_library()
+        library = db.default_library()
         library.setting(EntryPoint.ENABLED_SETTING).value = json.dumps(
             [AudiobooksEntryPoint.INTERNAL_NAME, EbooksEntryPoint.INTERNAL_NAME]
         )
 
         def from_request(**extra):
             return SearchFacets.from_request(
-                data.default_library(),
-                data.default_library(),
+                db.default_library(),
+                db.default_library(),
                 get_argument,
                 get_header,
                 unused,
@@ -1397,7 +1368,6 @@ class TestSearchFacets:
         assert None == facets.languages
 
     def test_from_request_from_admin_search(self, db: DatabaseTransactionFixture):
-        data = db
         # If the SearchFacets object is being created by a search run from the admin interface,
         # there might be order and language arguments which should be used to filter search results.
 
@@ -1414,15 +1384,15 @@ class TestSearchFacets:
 
         unused = object()
 
-        library = data.default_library()
+        library = db.default_library()
         library.setting(EntryPoint.ENABLED_SETTING).value = json.dumps(
             [AudiobooksEntryPoint.INTERNAL_NAME, EbooksEntryPoint.INTERNAL_NAME]
         )
 
         def from_request(**extra):
             return SearchFacets.from_request(
-                data.default_library(),
-                data.default_library(),
+                db.default_library(),
+                db.default_library(),
                 get_argument,
                 get_header,
                 unused,
@@ -1640,15 +1610,12 @@ class TestPagination:
 
     def test_has_next_page_total_size(self, db: DatabaseTransactionFixture):
         """Test the ability of Pagination.total_size to control whether there is a next page."""
-        data = db
-        session = data.session()
-
-        query = session.query(Work)
+        query = db.session.query(Work)
         pagination = Pagination(size=2)
 
         # When total_size is not set, Pagination assumes there is a
         # next page.
-        pagination.modify_database_query(session, query)
+        pagination.modify_database_query(db.session, query)
         assert True == pagination.has_next_page
 
         # Here, there is one more item on the next page.
@@ -1680,15 +1647,12 @@ class TestPagination:
 
     def test_has_next_page_this_page_size(self, db: DatabaseTransactionFixture):
         """Test the ability of Pagination.this_page_size to control whether there is a next page."""
-        data = db
-        session = data.session()
-
-        query = session.query(Work)
+        query = db.session.query(Work)
         pagination = Pagination(size=2)
 
         # When this_page_size is not set, Pagination assumes there is a
         # next page.
-        pagination.modify_database_query(session, query)
+        pagination.modify_database_query(db.session, query)
         assert True == pagination.has_next_page
 
         # Here, there is nothing on the current page. There is no next page.
@@ -1766,29 +1730,28 @@ class MockWorks(WorkList):
 
 class TestWorkList:
     def test_initialize(self, db: DatabaseTransactionFixture):
-        data, session = db, db.session()
         wl = WorkList()
         child = WorkList()
-        child.initialize(data.default_library())
-        sf, ignore = Genre.lookup(session, "Science Fiction")
-        romance, ignore = Genre.lookup(session, "Romance")
+        child.initialize(db.default_library())
+        sf, ignore = Genre.lookup(db.session, "Science Fiction")
+        romance, ignore = Genre.lookup(db.session, "Romance")
 
         # Create a WorkList that's associated with a Library, two genres,
         # and a child WorkList.
         wl.initialize(
-            data.default_library(),
+            db.default_library(),
             children=[child],
             genres=[sf, romance],
             entrypoints=[1, 2, 3],
         )
 
         # Access the Library.
-        assert data.default_library() == wl.get_library(session)
+        assert db.default_library() == wl.get_library(db.session)
 
         # The Collections associated with the WorkList are those associated
         # with the Library.
         assert set(wl.collection_ids) == {
-            x.id for x in data.default_library().collections
+            x.id for x in db.default_library().collections
         }
 
         # The Genres associated with the WorkList are the ones passed
@@ -1812,24 +1775,22 @@ class TestWorkList:
         assert None == worklist.collection_ids
 
     def test_initialize_with_customlists(self, db: DatabaseTransactionFixture):
-        data, session = db, db.session()
+        gutenberg = DataSource.lookup(db.session, DataSource.GUTENBERG)
 
-        gutenberg = DataSource.lookup(session, DataSource.GUTENBERG)
-
-        customlist1, ignore = data.customlist(
+        customlist1, ignore = db.customlist(
             data_source_name=gutenberg.name, num_entries=0
         )
-        customlist2, ignore = data.customlist(
+        customlist2, ignore = db.customlist(
             data_source_name=gutenberg.name, num_entries=0
         )
-        customlist3, ignore = data.customlist(
+        customlist3, ignore = db.customlist(
             data_source_name=DataSource.OVERDRIVE, num_entries=0
         )
 
         # Make a WorkList based on specific CustomLists.
         worklist = WorkList()
         worklist.initialize(
-            data.default_library(), customlists=[customlist1, customlist3]
+            db.default_library(), customlists=[customlist1, customlist3]
         )
         assert [customlist1.id, customlist3.id] == worklist.customlist_ids
         assert None == worklist.list_datasource_id
@@ -1837,23 +1798,21 @@ class TestWorkList:
         # Make a WorkList based on a DataSource, as a shorthand for
         # 'all the CustomLists from that DataSource'.
         worklist = WorkList()
-        worklist.initialize(data.default_library(), list_datasource=gutenberg)
+        worklist.initialize(db.default_library(), list_datasource=gutenberg)
         assert [customlist1.id, customlist2.id] == worklist.customlist_ids
         assert gutenberg.id == worklist.list_datasource_id
 
     def test_initialize_without_library(self, db: DatabaseTransactionFixture):
-        data, session = db, db.session()
-
         wl = WorkList()
-        sf, ignore = Genre.lookup(session, "Science Fiction")
-        romance, ignore = Genre.lookup(session, "Romance")
+        sf, ignore = Genre.lookup(db.session, "Science Fiction")
+        romance, ignore = Genre.lookup(db.session, "Romance")
 
         # Create a WorkList that's associated with two genres.
         wl.initialize(None, genres=[sf, romance])
-        wl.collection_ids = [data.default_collection().id]
+        wl.collection_ids = [db.default_collection().id]
 
         # There is no Library.
-        assert None == wl.get_library(session)
+        assert None == wl.get_library(db.session)
 
         # The Genres associated with the WorkList are the ones passed
         # in on the constructor.
@@ -1862,8 +1821,6 @@ class TestWorkList:
     def test_initialize_uses_append_child_hook_method(
         self, db: DatabaseTransactionFixture
     ):
-        data, session = db, db.session()
-
         # When a WorkList is initialized with children, the children
         # are passed individually through the append_child() hook
         # method, not simply set to WorkList.children.
@@ -1876,7 +1833,7 @@ class TestWorkList:
 
         child = WorkList()
         parent = Mock()
-        parent.initialize(data.default_library(), children=[child])
+        parent.initialize(db.default_library(), children=[child])
         assert [child] == parent.append_child_calls
 
         # They do end up in WorkList.children, since that's what the
@@ -1885,52 +1842,48 @@ class TestWorkList:
 
     def test_top_level_for_library(self, db: DatabaseTransactionFixture):
         """Test the ability to generate a top-level WorkList."""
-        data, session = db, db.session()
-
         # These two top-level lanes should be children of the WorkList.
-        lane1 = data.lane(display_name="Top-level Lane 1")
+        lane1 = db.lane(display_name="Top-level Lane 1")
         lane1.priority = 0
-        lane2 = data.lane(display_name="Top-level Lane 2")
+        lane2 = db.lane(display_name="Top-level Lane 2")
         lane2.priority = 1
 
         # This lane is invisible and will be filtered out.
-        invisible_lane = data.lane(display_name="Invisible Lane")
+        invisible_lane = db.lane(display_name="Invisible Lane")
         invisible_lane.visible = False
 
         # This lane has a parent and will be filtered out.
-        sublane = data.lane(display_name="Sublane")
+        sublane = db.lane(display_name="Sublane")
         lane1.sublanes.append(sublane)
 
         # This lane belongs to a different library.
-        other_library = data.library(name="Other Library", short_name="Other")
-        other_library_lane = data.lane(
+        other_library = db.library(name="Other Library", short_name="Other")
+        other_library_lane = db.lane(
             display_name="Other Library Lane", library=other_library
         )
 
         # The default library gets a TopLevelWorkList with the two top-level lanes as children.
-        wl = WorkList.top_level_for_library(session, data.default_library())
+        wl = WorkList.top_level_for_library(db.session, db.default_library())
         assert isinstance(wl, TopLevelWorkList)
         assert [lane1, lane2] == wl.children
         assert Edition.FULFILLABLE_MEDIA == wl.media
 
         # The other library only has one top-level lane, so we use that lane.
-        l = WorkList.top_level_for_library(session, other_library)
+        l = WorkList.top_level_for_library(db.session, other_library)
         assert other_library_lane == l
 
         # This library has no lanes configured at all.
-        no_config_library = data.library(
+        no_config_library = db.library(
             name="No configuration Library", short_name="No config"
         )
-        wl = WorkList.top_level_for_library(session, no_config_library)
+        wl = WorkList.top_level_for_library(db.session, no_config_library)
         assert isinstance(wl, TopLevelWorkList)
         assert [] == wl.children
         assert Edition.FULFILLABLE_MEDIA == wl.media
 
     def test_audience_key(self, db: DatabaseTransactionFixture):
-        data, session = db, db.session()
-
         wl = WorkList()
-        wl.initialize(library=data.default_library())
+        wl.initialize(library=db.default_library())
 
         # No audience.
         assert "" == wl.audience_key
@@ -1964,24 +1917,20 @@ class TestWorkList:
 
     def test_visible_children(self, db: DatabaseTransactionFixture):
         """Invisible children don't show up in WorkList.visible_children."""
-        data, session = db, db.session()
-
         wl = WorkList()
-        visible = data.lane()
-        invisible = data.lane()
+        visible = db.lane()
+        invisible = db.lane()
         invisible.visible = False
         child_wl = WorkList()
-        child_wl.initialize(data.default_library())
-        wl.initialize(data.default_library(), children=[visible, invisible, child_wl])
+        child_wl.initialize(db.default_library())
+        wl.initialize(db.default_library(), children=[visible, invisible, child_wl])
         assert {child_wl, visible} == set(wl.visible_children)
 
     def test_visible_children_sorted(self, db: DatabaseTransactionFixture):
         """Visible children are sorted by priority and then by display name."""
-        data, session = db, db.session()
-
         wl = WorkList()
 
-        lane_child = data.lane()
+        lane_child = db.lane()
         lane_child.display_name = "ZZ"
         lane_child.priority = 0
 
@@ -1989,7 +1938,7 @@ class TestWorkList:
         wl_child.priority = 1
         wl_child.display_name = "AA"
 
-        wl.initialize(data.default_library(), children=[lane_child, wl_child])
+        wl.initialize(db.default_library(), children=[lane_child, wl_child])
 
         # lane_child has a higher priority so it shows up first even
         # though its display name starts with a Z.
@@ -2001,7 +1950,6 @@ class TestWorkList:
         assert [wl_child, lane_child] == wl.visible_children
 
     def test_is_self_or_descendant(self, db: DatabaseTransactionFixture):
-        data, session = db, db.session()
         # Test the code that checks whether one WorkList is 'beneath'
         # another.
 
@@ -2026,16 +1974,16 @@ class TestWorkList:
 
         # A WorkList matches itself.
         child = WorkListWithParent()
-        child.initialize(data.default_library())
+        child.initialize(db.default_library())
         assert True == child.is_self_or_descendant(child)
 
         # But not any other WorkList.
         parent = WorkListWithParent()
-        parent.initialize(data.default_library())
+        parent.initialize(db.default_library())
         assert False == child.is_self_or_descendant(parent)
 
         grandparent = WorkList()
-        grandparent.initialize(data.default_library())
+        grandparent.initialize(db.default_library())
         assert False == child.is_self_or_descendant(grandparent)
 
         # Unless it's a descendant of that WorkList.
@@ -2049,29 +1997,28 @@ class TestWorkList:
         assert False == grandparent.is_self_or_descendant(parent)
 
     def test_accessible_to(self, db: DatabaseTransactionFixture):
-        data, session = db, db.session()
         # Test the circumstances under which a Patron may or may not access a
         # WorkList.
 
         wl = WorkList()
-        wl.initialize(data.default_library())
+        wl.initialize(db.default_library())
 
         # A WorkList is always accessible to unauthenticated users.
         m = wl.accessible_to
         assert True == m(None)
 
         # A WorkList is never accessible to patrons of a different library.
-        other_library = data.library()
-        other_library_patron = data.patron(library=other_library)
+        other_library = db.library()
+        other_library_patron = db.patron(library=other_library)
         assert False == m(other_library_patron)
 
         # A WorkList is always accessible to patrons with no root lane
         # set.
-        patron = data.patron()
+        patron = db.patron()
         assert True == m(patron)
 
         # Give the patron a root lane.
-        lane = data.lane()
+        lane = db.lane()
         lane.root_for_patron_type = ["1"]
         patron.external_type = "1"
 
@@ -2120,12 +2067,11 @@ class TestWorkList:
         )
 
     def test_uses_customlists(self, db: DatabaseTransactionFixture):
-        data, session = db, db.session()
         """A WorkList is said to use CustomLists if either ._customlist_ids
         or .list_datasource_id is set.
         """
         wl = WorkList()
-        wl.initialize(data.default_library())
+        wl.initialize(db.default_library())
         assert False == wl.uses_customlists
 
         wl._customlist_ids = object()
@@ -2143,7 +2089,6 @@ class TestWorkList:
         assert OPDSFeed.DEFAULT_MAX_AGE == wl.max_cache_age(object())
 
     def test_filter(self, db: DatabaseTransactionFixture):
-        data, session = db, db.session()
         # Verify that filter() calls modify_search_filter_hook()
         # and can handle either a new Filter being returned or a Filter
         # modified in place.
@@ -2154,9 +2099,9 @@ class TestWorkList:
                 filter.hook_called = True
 
         wl = ModifyInPlace()
-        wl.initialize(data.default_library())
+        wl.initialize(db.default_library())
         facets = SearchFacets()
-        filter = wl.filter(session, facets)
+        filter = wl.filter(db.session, facets)
         assert isinstance(filter, Filter)
         assert True == filter.hook_called
 
@@ -2166,9 +2111,9 @@ class TestWorkList:
                 return "A brand new Filter"
 
         wl = NewFilter()
-        wl.initialize(data.default_library())
+        wl.initialize(db.default_library())
         facets = SearchFacets()
-        filter = wl.filter(session, facets)
+        filter = wl.filter(db.session, facets)
         assert "A brand new Filter" == filter
 
     def test_groups(
@@ -2176,8 +2121,6 @@ class TestWorkList:
         db: DatabaseTransactionFixture,
         external_search_patch_fixture: ExternalSearchPatchFixture,
     ):
-        data, session = db, db.session()
-
         w1 = MockWork(1)
         w2 = MockWork(2)
         w3 = MockWork(3)
@@ -2200,20 +2143,18 @@ class TestWorkList:
         # This WorkList has two children -- the two WorkLists created
         # above.
         wl = WorkList()
-        wl.initialize(data.default_library(), children=[child1, child2])
+        wl.initialize(db.default_library(), children=[child1, child2])
 
         # Calling groups() on the parent WorkList returns three
         # 2-tuples; one for each work featured by one of its children
         # WorkLists. Note that the same work appears twice, through two
         # different children.
-        [wwl1, wwl2, wwl3] = wl.groups(session)
+        [wwl1, wwl2, wwl3] = wl.groups(db.session)
         assert (w1, child1) == wwl1
         assert (w2, child2) == wwl2
         assert (w1, child2) == wwl3
 
     def test_groups_propagates_facets(self, db: DatabaseTransactionFixture):
-        data, session = db, db.session()
-
         # Verify that the Facets object passed into groups() is
         # propagated to the methods called by groups().
         class MockWorkList(WorkList):
@@ -2241,12 +2182,12 @@ class TestWorkList:
                 return []
 
         mock = MockWorkList()
-        mock.initialize(library=data.default_library())
+        mock.initialize(library=db.default_library())
         facets = object()
 
         # First, try the situation where we're trying to make a grouped feed
         # out of the (imaginary) sublanes of this lane.
-        [x for x in mock.groups(session, facets=facets)]
+        [x for x in mock.groups(db.session, facets=facets)]
 
         # overview_facets() was not called.
         assert None == mock.overview_facets_called_with
@@ -2262,14 +2203,14 @@ class TestWorkList:
         # Now try the case where we want to use a pagination object to
         # restrict the number of results per lane.
         pagination = object()
-        [x for x in mock.groups(session, pagination=pagination, facets=facets)]
+        [x for x in mock.groups(db.session, pagination=pagination, facets=facets)]
         # The pagination object is propagated to _groups_for_lanes.
         assert (pagination, facets) == mock._groups_for_lanes_called_with
         mock._groups_for_lanes_called_with = None
 
         # Now try the situation where we're just trying to get _part_ of
         # a grouped feed -- the part for which this lane is responsible.
-        [x for x in mock.groups(session, facets=facets, include_sublanes=False)]
+        [x for x in mock.groups(db.session, facets=facets, include_sublanes=False)]
         # Now, the original faceting object was passed into
         # overview_facets().
         assert facets == mock.overview_facets_called_with
@@ -2282,8 +2223,6 @@ class TestWorkList:
         assert None == mock._groups_for_lanes_called_with
 
     def test_works(self, db: DatabaseTransactionFixture):
-        data, session = db, db.session()
-
         # Test the method that uses the search index to fetch a list of
         # results appropriate for a given WorkList.
 
@@ -2308,15 +2247,17 @@ class TestWorkList:
 
         # Here's a WorkList.
         wl = MockWorkList()
-        wl.initialize(data.default_library(), languages=["eng"])
-        facets = Facets(data.default_library(), None, None, order=Facets.ORDER_TITLE)
+        wl.initialize(db.default_library(), languages=["eng"])
+        facets = Facets(db.default_library(), None, None, order=Facets.ORDER_TITLE)
         mock_pagination = object()
         mock_debug = object()
         search_client = MockSearchClient()
 
         # Ask the WorkList for a page of works, using the search index
         # to drive the query instead of the database.
-        result = wl.works(session, facets, mock_pagination, search_client, mock_debug)
+        result = wl.works(
+            db.session, facets, mock_pagination, search_client, mock_debug
+        )
 
         # MockSearchClient.query_works was used to grab a list of work
         # IDs.
@@ -2326,7 +2267,7 @@ class TestWorkList:
         # make a Filter object, which was passed as the 'filter'
         # keyword argument.
         filter = query_works_kwargs.pop("filter")
-        assert Filter.from_worklist(session, wl, facets).build() == filter.build()
+        assert Filter.from_worklist(db.session, wl, facets).build() == filter.build()
 
         # The other arguments to query_works are either constants or
         # our mock objects.
@@ -2337,15 +2278,13 @@ class TestWorkList:
 
         # The fake work IDs returned from query_works() were passed into
         # works_for_hits().
-        assert (session, search_client.fake_work_ids) == wl.called_with
+        assert (db.session, search_client.fake_work_ids) == wl.called_with
 
         # And the fake return value of works_for_hits() was used as
         # the return value of works(), the method we're testing.
         assert wl.fake_work_list == result
 
     def test_works_for_hits(self, db: DatabaseTransactionFixture):
-        data, session = db, db.session()
-
         # Verify that WorkList.works_for_hits() just calls
         # works_for_resultsets().
         class Mock(WorkList):
@@ -2354,11 +2293,11 @@ class TestWorkList:
                 return [["some", "results"]]
 
         wl = Mock()
-        results = wl.works_for_hits(session, ["hit1", "hit2"])
+        results = wl.works_for_hits(db.session, ["hit1", "hit2"])
 
         # The list of hits was itself wrapped in a list, and passed
         # into works_for_resultsets().
-        assert (session, [["hit1", "hit2"]]) == wl.called_with
+        assert (db.session, [["hit1", "hit2"]]) == wl.called_with
 
         # The return value -- a list of lists of results, which
         # contained a single item -- was unrolled and used as the
@@ -2366,20 +2305,18 @@ class TestWorkList:
         assert ["some", "results"] == results
 
     def test_works_for_resultsets(self, db: DatabaseTransactionFixture):
-        data, session = db, db.session()
-
         # Verify that WorkList.works_for_resultsets turns lists of
         # (mocked) Hit objects into lists of Work or WorkSearchResult
         # objects.
 
         # Create the WorkList we'll be testing with.
         wl = WorkList()
-        wl.initialize(data.default_library())
+        wl.initialize(db.default_library())
         m = wl.works_for_resultsets
 
         # Create two works.
-        w1 = data.work(with_license_pool=True)
-        w2 = data.work(with_license_pool=True)
+        w1 = db.work(with_license_pool=True)
+        w2 = db.work(with_license_pool=True)
 
         class MockHit:
             def __init__(self, work_id, has_last_update=False):
@@ -2399,25 +2336,27 @@ class TestWorkList:
 
         # For each list of hits passed in, a corresponding list of
         # Works is returned.
-        assert [[w2]] == m(session, [[hit2]])
-        assert [[w2], [w1]] == m(session, [[hit2], [hit1]])
-        assert [[w1, w1], [w2, w2], []] == m(session, [[hit1, hit1], [hit2, hit2], []])
+        assert [[w2]] == m(db.session, [[hit2]])
+        assert [[w2], [w1]] == m(db.session, [[hit2], [hit1]])
+        assert [[w1, w1], [w2, w2], []] == m(
+            db.session, [[hit1, hit1], [hit2, hit2], []]
+        )
 
         # Works are returned in the order we ask for.
         for ordering in ([hit1, hit2], [hit2, hit1]):
-            [works] = m(session, [ordering])
+            [works] = m(db.session, [ordering])
             assert [x.work_id for x in ordering] == [x.id for x in works]
 
         # If we ask for a work ID that's not in the database,
         # we don't get it.
-        assert [[]] == m(session, [[MockHit(-100)]])
+        assert [[]] == m(db.session, [[MockHit(-100)]])
 
         # If we pass in Hit objects that have extra information in them,
         # we get WorkSearchResult objects
         hit1_extra = MockHit(w1, True)
         hit2_extra = MockHit(w2, True)
 
-        [results] = m(session, [[hit2_extra, hit1_extra]])
+        [results] = m(db.session, [[hit2_extra, hit1_extra]])
         assert all(isinstance(x, WorkSearchResult) for x in results)
         r1, r2 = results
 
@@ -2431,8 +2370,8 @@ class TestWorkList:
 
         # Finally, test that undeliverable works are filtered out.
         for lpdm in w2.license_pools[0].delivery_mechanisms:
-            session.delete(lpdm)
-            assert [[]] == m(session, [[hit2]])
+            db.session.delete(lpdm)
+            assert [[]] == m(db.session, [[hit2]])
 
     def test_search_target(self):
         # A WorkList can be searched - it is its own search target.
@@ -2440,8 +2379,6 @@ class TestWorkList:
         assert wl == wl.search_target
 
     def test_search(self, db: DatabaseTransactionFixture):
-        data, session = db, db.session()
-
         # Test the successful execution of WorkList.search()
 
         class MockWorkList(WorkList):
@@ -2450,7 +2387,7 @@ class TestWorkList:
                 return "A bunch of Works"
 
         wl = MockWorkList()
-        wl.initialize(data.default_library(), audiences=[Classifier.AUDIENCE_CHILDREN])
+        wl.initialize(db.default_library(), audiences=[Classifier.AUDIENCE_CHILDREN])
         query = "a query"
 
         class MockSearchClient:
@@ -2460,11 +2397,11 @@ class TestWorkList:
 
         # Search with the default arguments.
         client = MockSearchClient()
-        results = wl.search(session, query, client)
+        results = wl.search(db.session, query, client)
 
         # The results of query_works were passed into
         # MockWorkList.works_for_hits.
-        assert (session, "A bunch of work IDs") == wl.works_for_hits_called_with
+        assert (db.session, "A bunch of work IDs") == wl.works_for_hits_called_with
 
         # The return value of MockWorkList.works_for_hits is
         # used as the return value of query_works().
@@ -2496,7 +2433,7 @@ class TestWorkList:
         # objects.
         facets = SearchFacets(languages=["chi"])
         pagination = object()
-        results = wl.search(session, query, client, pagination, facets, debug=True)
+        results = wl.search(db.session, query, client, pagination, facets, debug=True)
 
         qu, filter, pag, debug = client.query_works_called_with
         assert query == qu
@@ -2512,22 +2449,20 @@ class TestWorkList:
         assert ["chi"] == filter.languages
 
     def test_search_failures(self, db: DatabaseTransactionFixture):
-        data, session = db, db.session()
-
         # Test reasons why WorkList.search() might not work.
         wl = WorkList()
-        wl.initialize(data.default_library())
+        wl.initialize(db.default_library())
         query = "a query"
 
         # If there is no SearchClient, there are no results.
-        assert [] == wl.search(session, query, None)
+        assert [] == wl.search(db.session, query, None)
 
         # If the SearchClient returns nothing, there are no results.
         class NoResults:
             def query_works(self, *args, **kwargs):
                 return None
 
-        assert [] == wl.search(session, query, NoResults())
+        assert [] == wl.search(db.session, query, NoResults())
 
         # If there's an ElasticSearch exception during the query,
         # there are no results.
@@ -2535,31 +2470,29 @@ class TestWorkList:
             def query_works(self, *args, **kwargs):
                 raise ElasticsearchException("oh no")
 
-        assert [] == wl.search(session, query, RaisesException())
+        assert [] == wl.search(db.session, query, RaisesException())
 
     def test_worklist_for_resultset_no_holds_allowed(
         self, db: DatabaseTransactionFixture
     ):
-        data, session = db, db.session()
-
         wl = WorkList()
-        wl.initialize(data.default_library())
+        wl.initialize(db.default_library())
         m = wl.works_for_resultsets
 
         # Create two works.
-        w1: Work = data.work(with_license_pool=True)
-        w2: Work = data.work(with_license_pool=True)
+        w1: Work = db.work(with_license_pool=True)
+        w2: Work = db.work(with_license_pool=True)
 
         w1.license_pools[0].licenses_available = 0
         collection1: Collection = w1.license_pools[0].collection
         cs1 = ConfigurationSetting(
-            library_id=data.default_library().id,
+            library_id=db.default_library().id,
             external_integration_id=collection1.external_integration_id,
             key=ExternalIntegration.DISPLAY_RESERVES,
             value="no",
         )
-        session.add(cs1)
-        session.commit()
+        db.session.add(cs1)
+        db.session.commit()
 
         class MockHit:
             def __init__(self, work_id, has_last_update=False):
@@ -2580,50 +2513,48 @@ class TestWorkList:
         # Basic test
         # For each list of hits passed in, a corresponding list of
         # Works is returned.
-        assert [[w2]] == m(session, [[hit2]])
-        assert [[w2], []] == m(session, [[hit2], [hit1]])
-        assert [[], [w2, w2], []] == m(session, [[hit1, hit1], [hit2, hit2], []])
+        assert [[w2]] == m(db.session, [[hit2]])
+        assert [[w2], []] == m(db.session, [[hit2], [hit1]])
+        assert [[], [w2, w2], []] == m(db.session, [[hit1, hit1], [hit2, hit2], []])
 
         # Restricted pool has availability
         w1.license_pools[0].licenses_available = 1
-        assert [[w2], [w1]] == m(session, [[hit2], [hit1]])
+        assert [[w2], [w1]] == m(db.session, [[hit2], [hit1]])
 
         # Revert back, no availablility
         w1.license_pools[0].licenses_available = 0
 
         # Work1 now has 2 licensepools, one of which has availability
-        alternate_collection = data.collection()
-        data.default_library().collections.append(alternate_collection)
-        alternate_w1_lp: LicensePool = data.licensepool(
+        alternate_collection = db.collection()
+        db.default_library().collections.append(alternate_collection)
+        alternate_w1_lp: LicensePool = db.licensepool(
             w1.presentation_edition, collection=alternate_collection
         )
         alternate_w1_lp.work_id = w1.id
-        session.add_all([alternate_collection, alternate_w1_lp])
-        assert [[w2], [w1]] == m(session, [[hit2], [hit1]])
+        db.session.add_all([alternate_collection, alternate_w1_lp])
+        assert [[w2], [w1]] == m(db.session, [[hit2], [hit1]])
 
         # Still show availability since alternate collection is not restricted
         alternate_w1_lp.licenses_available = 0
-        assert [[w2], [w1]] == m(session, [[hit2], [hit1]])
+        assert [[w2], [w1]] == m(db.session, [[hit2], [hit1]])
 
         # Now both collections are restricted and have no availability
         cs2 = ConfigurationSetting(
-            library_id=data.default_library().id,
+            library_id=db.default_library().id,
             external_integration_id=alternate_collection.external_integration_id,
             key=ExternalIntegration.DISPLAY_RESERVES,
             value="no",
         )
-        session.add(cs2)
-        assert [[w2], []] == m(session, [[hit2], [hit1]])
+        db.session.add(cs2)
+        assert [[w2], []] == m(db.session, [[hit2], [hit1]])
 
         # Both restricted but one has availability
         alternate_w1_lp.licenses_available = 1
-        assert [[w2], [w1]] == m(session, [[hit2], [hit1]])
+        assert [[w2], [w1]] == m(db.session, [[hit2], [hit1]])
 
 
 class TestDatabaseBackedWorkList:
     def test_works_from_database(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         # Verify that the works_from_database() method calls the
         # methods we expect, in the right order.
         class MockQuery:
@@ -2659,7 +2590,7 @@ class TestDatabaseBackedWorkList:
             def _stage(self, method_name, _db, qu, qu_is_previous_stage=True):
                 # _db must always be session; check it here and then
                 # ignore it.
-                assert _db == session
+                assert _db == db.session
 
                 if qu_is_previous_stage:
                     # qu must be the MockQuery returned from the
@@ -2679,7 +2610,7 @@ class TestDatabaseBackedWorkList:
             def base_query(self, _db):
                 # This kicks off the process -- most future calls will
                 # use _stage().
-                assert _db == session
+                assert _db == db.session
                 query = MockQuery(["base_query"])
                 self.stages.append(query)
                 return query
@@ -2696,7 +2627,7 @@ class TestDatabaseBackedWorkList:
                 #
                 # This implementation doesn't change anything; it will be
                 # replaced with an implementation that does.
-                assert _db == session
+                assert _db == db.session
                 self.bibliographic_filter_clauses_called_with = qu
                 return qu, []
 
@@ -2716,8 +2647,8 @@ class TestDatabaseBackedWorkList:
 
         # The simplest case: no facets or pagination,
         # and bibliographic_filter_clauses does nothing.
-        wl = MockWorkList(session)
-        result = wl.works_from_database(session, extra_kwarg="ignored")
+        wl = MockWorkList(db.session)
+        result = wl.works_from_database(db.session, extra_kwarg="ignored")
 
         # We got a MockQuery.
         assert isinstance(result, MockQuery)
@@ -2780,7 +2711,7 @@ class TestDatabaseBackedWorkList:
                 return self.wl._stage("pagination", _db, qu)
 
         result = wl.works_from_database(
-            session, facets=MockFacets(wl), pagination=MockPagination(wl)
+            db.session, facets=MockFacets(wl), pagination=MockPagination(wl)
         )
 
         # Here are the methods called before bibliographic_filter_clauses.
@@ -2818,8 +2749,6 @@ class TestDatabaseBackedWorkList:
         assert "some other field" == result._distinct
 
     def test_works_from_database_end_to_end(self, db: DatabaseTransactionFixture):
-        data, session = db, db.session()
-
         # Verify that works_from_database() correctly locates works
         # that match the criteria specified by the
         # DatabaseBackedWorkList, the faceting object, and the
@@ -2829,60 +2758,60 @@ class TestDatabaseBackedWorkList:
         # tested in more detail elsewhere.
 
         # Create two books.
-        oliver_twist = data.work(
+        oliver_twist = db.work(
             title="Oliver Twist", with_license_pool=True, language="eng"
         )
-        barnaby_rudge = data.work(
+        barnaby_rudge = db.work(
             title="Barnaby Rudge", with_license_pool=True, language="spa"
         )
 
         # A standard DatabaseBackedWorkList will find both books.
         wl = DatabaseBackedWorkList()
-        wl.initialize(data.default_library())
-        assert 2 == wl.works_from_database(session).count()
+        wl.initialize(db.default_library())
+        assert 2 == wl.works_from_database(db.session).count()
 
         # A work list with a language restriction will only find books
         # in that language.
-        wl.initialize(data.default_library(), languages=["eng"])
-        assert [oliver_twist] == [x for x in wl.works_from_database(session)]
+        wl.initialize(db.default_library(), languages=["eng"])
+        assert [oliver_twist] == [x for x in wl.works_from_database(db.session)]
 
         # A DatabaseBackedWorkList will only find books licensed
         # through one of its collections.
-        collection = data.collection()
-        data.default_library().collections = [collection]
-        wl.initialize(data.default_library())
-        assert 0 == wl.works_from_database(session).count()
+        collection = db.collection()
+        db.default_library().collections = [collection]
+        wl.initialize(db.default_library())
+        assert 0 == wl.works_from_database(db.session).count()
 
         # If a DatabaseBackedWorkList has no collections, it has no
         # books.
-        data.default_library().collections = []
-        wl.initialize(data.default_library())
-        assert 0 == wl.works_from_database(session).count()
+        db.default_library().collections = []
+        wl.initialize(db.default_library())
+        assert 0 == wl.works_from_database(db.session).count()
 
         # A DatabaseBackedWorkList can be set up with a collection
         # rather than a library. TODO: The syntax here could be improved.
         wl = DatabaseBackedWorkList()
         wl.initialize(None)
-        wl.collection_ids = [data.default_collection().id]
-        assert None == wl.get_library(session)
-        assert 2 == wl.works_from_database(session).count()
+        wl.collection_ids = [db.default_collection().id]
+        assert None == wl.get_library(db.session)
+        assert 2 == wl.works_from_database(db.session).count()
 
         # Facets and pagination can affect which entries and how many
         # are returned.
         facets = DatabaseBackedFacets(
-            data.default_library(),
+            db.default_library(),
             collection=Facets.COLLECTION_FULL,
             availability=Facets.AVAILABLE_ALL,
             order=Facets.ORDER_TITLE,
         )
         pagination = Pagination(offset=1, size=1)
         assert [oliver_twist] == wl.works_from_database(
-            session, facets, pagination
+            db.session, facets, pagination
         ).all()
 
         facets.order_ascending = False
         assert [barnaby_rudge] == wl.works_from_database(
-            session, facets, pagination
+            db.session, facets, pagination
         ).all()
 
         # Ensure that availability facets are handled properly
@@ -2895,14 +2824,14 @@ class TestDatabaseBackedWorkList:
         ot_lp.open_access = True
 
         facets.availability = Facets.AVAILABLE_ALL
-        assert 2 == wl.works_from_database(session, facets).count()
+        assert 2 == wl.works_from_database(db.session, facets).count()
 
         facets.availability = Facets.AVAILABLE_NOW
-        assert 2 == wl.works_from_database(session, facets).count()
+        assert 2 == wl.works_from_database(db.session, facets).count()
 
         facets.availability = Facets.AVAILABLE_OPEN_ACCESS
-        assert 1 == wl.works_from_database(session, facets).count()
-        assert [oliver_twist] == wl.works_from_database(session, facets).all()
+        assert 1 == wl.works_from_database(db.session, facets).count()
+        assert [oliver_twist] == wl.works_from_database(db.session, facets).all()
 
         # closed access & unavailable
         ot_lp.open_access = False
@@ -2910,18 +2839,16 @@ class TestDatabaseBackedWorkList:
         ot_lp.licenses_available = 0
 
         facets.availability = Facets.AVAILABLE_ALL
-        assert 2 == wl.works_from_database(session, facets).count()
+        assert 2 == wl.works_from_database(db.session, facets).count()
 
         facets.availability = Facets.AVAILABLE_NOW
-        assert 1 == wl.works_from_database(session, facets).count()
-        assert [barnaby_rudge] == wl.works_from_database(session, facets).all()
+        assert 1 == wl.works_from_database(db.session, facets).count()
+        assert [barnaby_rudge] == wl.works_from_database(db.session, facets).all()
 
         facets.availability = Facets.AVAILABLE_OPEN_ACCESS
-        assert 0 == wl.works_from_database(session, facets).count()
+        assert 0 == wl.works_from_database(db.session, facets).count()
 
     def test_base_query(self, db: DatabaseTransactionFixture):
-        data, session = db, db.session()
-
         # Verify that base_query makes the query we expect and then
         # calls some optimization methods (not tested).
         class Mock(DatabaseBackedWorkList):
@@ -2933,11 +2860,11 @@ class TestDatabaseBackedWorkList:
             def _defer_unused_fields(cls, qu):
                 return qu + ["_defer_unused_fields"]
 
-        result = Mock.base_query(session)
+        result = Mock.base_query(db.session)
 
         [base_query, m, d] = result
         expect = (
-            session.query(Work)
+            db.session.query(Work)
             .join(Work.license_pools)
             .join(Work.presentation_edition)
             .filter(LicensePool.superceded == False)
@@ -2947,8 +2874,6 @@ class TestDatabaseBackedWorkList:
         assert "_defer_unused_fields" == d
 
     def test_bibliographic_filter_clauses(self, db: DatabaseTransactionFixture):
-        data, session = db, db.session()
-
         called = dict()
 
         class MockWorkList(DatabaseBackedWorkList):
@@ -2998,20 +2923,20 @@ class TestDatabaseBackedWorkList:
 
         # Create a MockWorkList with a parent.
         wl = MockWorkList(parent)
-        wl.initialize(data.default_library())
-        original_qu = DatabaseBackedWorkList.base_query(session)
+        wl.initialize(db.default_library())
+        original_qu = DatabaseBackedWorkList.base_query(db.session)
 
         # If no languages or genre IDs are specified, and the hook
         # methods do nothing, then bibliographic_filter_clauses() has
         # no effect.
-        final_qu, clauses = wl.bibliographic_filter_clauses(session, original_qu)
+        final_qu, clauses = wl.bibliographic_filter_clauses(db.session, original_qu)
         assert original_qu == final_qu
         assert [] == clauses
 
         # But at least the apply_audience_filter was called with the correct
         # arguments.
         _db, qu = called["audience_filter_clauses"]
-        assert session == _db
+        assert db.session == _db
         assert original_qu == qu
 
         # age_range_filter_clauses was also called.
@@ -3029,15 +2954,15 @@ class TestDatabaseBackedWorkList:
         assert None == parent.bibliographic_filter_clauses_called_with
 
         # Set things up so that those other methods will be called.
-        empty_list, ignore = data.customlist(num_entries=0)
-        sf, ignore = Genre.lookup(session, "Science Fiction")
-        wl.initialize(data.default_library(), customlists=[empty_list], genres=[sf])
+        empty_list, ignore = db.customlist(num_entries=0)
+        sf, ignore = Genre.lookup(db.session, "Science Fiction")
+        wl.initialize(db.default_library(), customlists=[empty_list], genres=[sf])
         wl._inherit_parent_restrictions = True
 
-        final_qu, clauses = wl.bibliographic_filter_clauses(session, original_qu)
+        final_qu, clauses = wl.bibliographic_filter_clauses(db.session, original_qu)
 
         assert (
-            session,
+            (db.session),
             original_qu,
         ) == parent.bibliographic_filter_clauses_called_with
         assert original_qu == called["genre_filter_clause"]
@@ -3049,16 +2974,16 @@ class TestDatabaseBackedWorkList:
 
         # Now test the clauses that are created directly by
         # bibliographic_filter_clauses.
-        overdrive = DataSource.lookup(session, DataSource.OVERDRIVE)
+        overdrive = DataSource.lookup(db.session, DataSource.OVERDRIVE)
         wl.initialize(
-            data.default_library(),
+            db.default_library(),
             languages=["eng"],
             media=[Edition.BOOK_MEDIUM],
             fiction=True,
             license_datasource=overdrive,
         )
 
-        final_qu, clauses = wl.bibliographic_filter_clauses(session, original_qu)
+        final_qu, clauses = wl.bibliographic_filter_clauses(db.session, original_qu)
         assert original_qu == final_qu
         language, medium, fiction, datasource = clauses
 
@@ -3072,23 +2997,21 @@ class TestDatabaseBackedWorkList:
     def test_bibliographic_filter_clauses_end_to_end(
         self, db: DatabaseTransactionFixture
     ):
-        data, session = db, db.session()
-
         # Verify that bibliographic_filter_clauses generates
         # SQLAlchemy clauses that give the expected results when
         # applied to a real `works` table.
-        original_qu = DatabaseBackedWorkList.base_query(session)
+        original_qu = DatabaseBackedWorkList.base_query(db.session)
 
         # Create a work that may or may not show up in various
         # DatabaseBackedWorkLists.
-        sf, ignore = Genre.lookup(session, "Science Fiction")
-        english_sf = data.work(
+        sf, ignore = Genre.lookup(db.session, "Science Fiction")
+        english_sf = db.work(
             title="English SF",
             language="eng",
             with_license_pool=True,
             audience=Classifier.AUDIENCE_YOUNG_ADULT,
         )
-        italian_sf = data.work(
+        italian_sf = db.work(
             title="Italian SF",
             language="ita",
             with_license_pool=True,
@@ -3106,8 +3029,8 @@ class TestDatabaseBackedWorkList:
             """
             if worklist is None:
                 worklist = DatabaseBackedWorkList()
-                worklist.initialize(data.default_library(), **initialize_kwargs)
-            qu, clauses = worklist.bibliographic_filter_clauses(session, original_qu)
+                worklist.initialize(db.default_library(), **initialize_kwargs)
+            qu, clauses = worklist.bibliographic_filter_clauses(db.session, original_qu)
             qu = qu.filter(and_(*clauses))
             expect_titles = sorted(x.sort_title for x in expect_books)
             actual_titles = sorted(x.sort_title for x in qu)
@@ -3133,25 +3056,25 @@ class TestDatabaseBackedWorkList:
         # of the fields associated with the English SF book will not
         # find it.
         worklist_has_books([italian_sf], languages=["ita"], genres=[sf])
-        romance, ignore = Genre.lookup(session, "Romance")
+        romance, ignore = Genre.lookup(db.session, "Romance")
         worklist_has_books([], languages=["eng"], genres=[romance])
         worklist_has_books(
             [], languages=["eng"], genres=[sf], media=[Edition.AUDIO_MEDIUM]
         )
         worklist_has_books([], fiction=False)
         worklist_has_books(
-            [], license_datasource=DataSource.lookup(session, DataSource.OVERDRIVE)
+            [], license_datasource=DataSource.lookup(db.session, DataSource.OVERDRIVE)
         )
 
         # If the WorkList has custom list IDs, then works will only show up if
         # they're on one of the matching CustomLists.
-        sf_list, ignore = data.customlist(num_entries=0)
+        sf_list, ignore = db.customlist(num_entries=0)
         sf_list.add_entry(english_sf)
         sf_list.add_entry(italian_sf)
 
         worklist_has_books([english_sf, italian_sf], customlists=[sf_list])
 
-        empty_list, ignore = data.customlist(num_entries=0)
+        empty_list, ignore = db.customlist(num_entries=0)
         worklist_has_books([], customlists=[empty_list])
 
         # Test parent restrictions.
@@ -3161,13 +3084,13 @@ class TestDatabaseBackedWorkList:
         # but Lanes can, so let's use Lanes for the rest of this test.
 
         # This lane has books from a list of English books.
-        english_list, ignore = data.customlist(num_entries=0)
+        english_list, ignore = db.customlist(num_entries=0)
         english_list.add_entry(english_sf)
-        english_lane = data.lane()
+        english_lane = db.lane()
         english_lane.customlists.append(english_list)
 
         # This child of that lane has books from the list of SF books.
-        sf_lane = data.lane(parent=english_lane, inherit_parent_restrictions=False)
+        sf_lane = db.lane(parent=english_lane, inherit_parent_restrictions=False)
         sf_lane.customlists.append(sf_list)
 
         # When the child lane does not inherit its parent restrictions,
@@ -3192,14 +3115,14 @@ class TestDatabaseBackedWorkList:
         #
 
         # Here's a lane that finds only short stories.
-        short_stories, ignore = Genre.lookup(session, "Short Stories")
-        short_stories_lane = data.lane(genres=["Short Stories"])
+        short_stories, ignore = Genre.lookup(db.session, "Short Stories")
+        short_stories_lane = db.lane(genres=["Short Stories"])
 
         # Here's a child of that lane, which contains science fiction.
-        sf_shorts = data.lane(
+        sf_shorts = db.lane(
             genres=[sf], parent=short_stories_lane, inherit_parent_restrictions=False
         )
-        session.flush()
+        db.session.flush()
 
         # Without the parent restriction in place, all science fiction
         # shows up in sf_shorts.
@@ -3213,27 +3136,25 @@ class TestDatabaseBackedWorkList:
         worklist_has_books([english_sf], sf_shorts)
 
     def test_age_range_filter_clauses_end_to_end(self, db: DatabaseTransactionFixture):
-        data, session = db, db.session()
-
         # Standalone test of age_range_filter_clauses().
         def worklist_has_books(expect, **wl_args):
             """Make a DatabaseBackedWorkList and find all the works
             that match its age_range_filter_clauses.
             """
             wl = DatabaseBackedWorkList()
-            wl.initialize(data.default_library(), **wl_args)
-            qu = session.query(Work)
+            wl.initialize(db.default_library(), **wl_args)
+            qu = db.session.query(Work)
             clauses = wl.age_range_filter_clauses()
             qu = qu.filter(and_(*clauses))
             assert set(expect) == set(qu.all())
 
-        adult = data.work(
+        adult = db.work(
             title="For adults",
             audience=Classifier.AUDIENCE_ADULT,
             with_license_pool=True,
         )
         assert None == adult.target_age
-        fourteen_or_fifteen = data.work(
+        fourteen_or_fifteen = db.work(
             title="For teens",
             audience=Classifier.AUDIENCE_YOUNG_ADULT,
             with_license_pool=True,
@@ -3252,7 +3173,7 @@ class TestDatabaseBackedWorkList:
 
         # This lane contains no books because it skews too old for the YA
         # book, but books for adults are not allowed.
-        older_ya = data.lane()
+        older_ya = db.lane()
         older_ya.target_age = (16, 17)
         worklist_has_books([], target_age=(16, 17))
 
@@ -3261,20 +3182,18 @@ class TestDatabaseBackedWorkList:
         worklist_has_books([adult], target_age=(16, 18))
 
     def test_audience_filter_clauses(self, db: DatabaseTransactionFixture):
-        data, session = db, db.session()
-
         # Verify that audience_filter_clauses restricts a query to
         # reflect a DatabaseBackedWorkList's audience filter.
 
         # Create a children's book and a book for adults.
-        adult = data.work(
+        adult = db.work(
             title="Diseases of the Horse",
             with_license_pool=True,
             with_open_access_download=True,
             audience=Classifier.AUDIENCE_ADULT,
         )
 
-        children = data.work(
+        children = db.work(
             title="Wholesome Nursery Rhymes For All Children",
             with_license_pool=True,
             with_open_access_download=True,
@@ -3287,8 +3206,8 @@ class TestDatabaseBackedWorkList:
             """
             wl = DatabaseBackedWorkList()
             wl.audiences = audiences
-            qu = wl.base_query(session)
-            clauses = wl.audience_filter_clauses(session, qu)
+            qu = wl.base_query(db.session)
+            clauses = wl.audience_filter_clauses(db.session, qu)
             if clauses:
                 qu = qu.filter(and_(*clauses))
             return qu.all()
@@ -3300,36 +3219,34 @@ class TestDatabaseBackedWorkList:
         assert {adult, children} == set(for_audiences())
 
     def test_customlist_filter_clauses(self, db: DatabaseTransactionFixture):
-        data, session = db, db.session()
-
         # Standalone test of customlist_filter_clauses
 
         # If a lane has nothing to do with CustomLists,
         # apply_customlist_filter does nothing.
         no_lists = DatabaseBackedWorkList()
-        no_lists.initialize(data.default_library())
-        qu = no_lists.base_query(session)
+        no_lists.initialize(db.default_library())
+        qu = no_lists.base_query(db.session)
         new_qu, clauses = no_lists.customlist_filter_clauses(qu)
         assert qu == new_qu
         assert [] == clauses
 
         # Now set up a Work and a CustomList that contains the work.
-        work = data.work(with_license_pool=True)
-        gutenberg = DataSource.lookup(session, DataSource.GUTENBERG)
+        work = db.work(with_license_pool=True)
+        gutenberg = DataSource.lookup(db.session, DataSource.GUTENBERG)
         assert gutenberg == work.license_pools[0].data_source
-        gutenberg_list, ignore = data.customlist(num_entries=0)
+        gutenberg_list, ignore = db.customlist(num_entries=0)
         gutenberg_list.data_source = gutenberg
         gutenberg_list_entry, ignore = gutenberg_list.add_entry(work)
 
         # This DatabaseBackedWorkList gets every work on a specific list.
         works_on_list = DatabaseBackedWorkList()
-        works_on_list.initialize(data.default_library(), customlists=[gutenberg_list])
+        works_on_list.initialize(db.default_library(), customlists=[gutenberg_list])
 
         # This lane gets every work on every list associated with Project
         # Gutenberg.
         works_on_gutenberg_lists = DatabaseBackedWorkList()
         works_on_gutenberg_lists.initialize(
-            data.default_library(), list_datasource=gutenberg
+            db.default_library(), list_datasource=gutenberg
         )
 
         def _run(qu, clauses):
@@ -3337,7 +3254,7 @@ class TestDatabaseBackedWorkList:
             return qu.filter(and_(*clauses)).all()
 
         def results(wl=works_on_gutenberg_lists, must_be_featured=False):
-            qu = wl.base_query(session)
+            qu = wl.base_query(db.session)
             new_qu, clauses = wl.customlist_filter_clauses(qu)
 
             # The query comes out different than it goes in -- there's a
@@ -3351,17 +3268,17 @@ class TestDatabaseBackedWorkList:
 
         # If there's another list with the same work on it, the
         # work only shows up once.
-        gutenberg_list_2, ignore = data.customlist(num_entries=0)
+        gutenberg_list_2, ignore = db.customlist(num_entries=0)
         gutenberg_list_2_entry, ignore = gutenberg_list_2.add_entry(work)
         works_on_list._customlist_ids.append(gutenberg_list.id)
         assert [work] == results(works_on_list)
 
         # This WorkList gets every work on a list associated with Overdrive.
         # There are no such lists, so the lane is empty.
-        overdrive = DataSource.lookup(session, DataSource.OVERDRIVE)
+        overdrive = DataSource.lookup(db.session, DataSource.OVERDRIVE)
         works_on_overdrive_lists = DatabaseBackedWorkList()
         works_on_overdrive_lists.initialize(
-            data.default_library(), list_datasource=overdrive
+            db.default_library(), list_datasource=overdrive
         )
         assert [] == results(works_on_overdrive_lists)
 
@@ -3384,7 +3301,7 @@ class TestDatabaseBackedWorkList:
         # method.
         gutenberg_list_2_wl = DatabaseBackedWorkList()
         gutenberg_list_2_wl.initialize(
-            data.default_library(), customlists=[gutenberg_list_2]
+            db.default_library(), customlists=[gutenberg_list_2]
         )
 
         # These two lines won't work, because these are
@@ -3401,7 +3318,7 @@ class TestDatabaseBackedWorkList:
         # gutenberg_list_2_wl.parent = works_on_list
         # gutenberg_list_2_wl.inherit_parent_restrictions = True
 
-        qu = works_on_list.base_query(session)
+        qu = works_on_list.base_query(db.session)
         list_1_qu, list_1_clauses = works_on_list.customlist_filter_clauses(qu)
 
         # The query has been modified -- we've added a join against
@@ -3435,15 +3352,13 @@ class TestDatabaseBackedWorkList:
     def test_works_from_database_with_superceded_pool(
         self, db: DatabaseTransactionFixture
     ):
-        data, session = db, db.session()
-
-        work = data.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         work.license_pools[0].superceded = True
-        ignore, pool = data.edition(with_license_pool=True)
+        ignore, pool = db.edition(with_license_pool=True)
         pool.work = work
 
-        lane = data.lane()
-        [w] = lane.works_from_database(session).all()
+        lane = db.lane()
+        [w] = lane.works_from_database(db.session).all()
         # Only one pool is loaded, and it's the non-superceded one.
         assert [pool] == w.license_pools
 
@@ -3452,13 +3367,11 @@ class TestHierarchyWorkList:
     """Test HierarchyWorkList in terms of its two subclasses, Lane and TopLevelWorkList."""
 
     def test_accessible_to(self, db: DatabaseTransactionFixture):
-        data, session = db, db.session()
-
         # In addition to the general tests imposed by WorkList, a Lane
         # is only accessible to a patron if it is a descendant of
         # their root lane.
-        lane = data.lane()
-        patron = data.patron()
+        lane = db.lane()
+        patron = db.patron()
         lane.root_for_patron_type = ["1"]
         patron.external_type = "1"
 
@@ -3482,7 +3395,7 @@ class TestHierarchyWorkList:
         # TopLevelWorkList works the same way -- it's visible unless the
         # patron has a top-level lane set.
         wl = TopLevelWorkList()
-        wl.initialize(data.default_library())
+        wl.initialize(db.default_library())
 
         assert True == wl.accessible_to(None)
         assert True == wl.accessible_to(patron)
@@ -3491,7 +3404,7 @@ class TestHierarchyWorkList:
 
         # However, a TopLevelWorkList associated with library A is not
         # visible to a patron from library B.
-        library2 = data.library()
+        library2 = db.library()
         wl.initialize(library2)
         patron.external_type = None
         assert False == wl.accessible_to(patron)
@@ -3499,9 +3412,8 @@ class TestHierarchyWorkList:
 
 class TestLane:
     def test_get_library(self, db: DatabaseTransactionFixture):
-        session = db.session()
         lane = db.lane()
-        assert db.default_library() == lane.get_library(session)
+        assert db.default_library() == lane.get_library(db.session)
 
     def test_list_datasource(self, db: DatabaseTransactionFixture):
         """Test setting and retrieving the DataSource object and
@@ -3536,8 +3448,6 @@ class TestLane:
         assert [Classifier.AUDIENCE_ADULT] == lane.audiences
 
     def test_update_size(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         class Mock:
             # Mock the ExternalSearchIndex.count_works() method to
             # return specific values without consulting an actual
@@ -3567,7 +3477,7 @@ class TestLane:
         fiction.size = 44
         fiction.size_by_entrypoint = {"Nonexistent entrypoint": 33}
         with mock_search_index(search_engine):
-            fiction.update_size(session)
+            fiction.update_size(db.session)
 
         # The lane size is also calculated individually for every
         # enabled entry point. EverythingEntryPoint is used for the
@@ -3814,7 +3724,6 @@ class TestLane:
         assert tuple_to_numericrange((18, 18)) == lane.target_age
 
     def test_uses_customlists(self, db: DatabaseTransactionFixture):
-        session = db.session()
         lane = db.lane()
         assert False == lane.uses_customlists
 
@@ -3822,9 +3731,9 @@ class TestLane:
         lane.customlists = [customlist]
         assert True == lane.uses_customlists
 
-        gutenberg = DataSource.lookup(session, DataSource.GUTENBERG)
+        gutenberg = DataSource.lookup(db.session, DataSource.GUTENBERG)
         lane.list_datasource = gutenberg
-        session.commit()
+        db.session.commit()
         assert True == lane.uses_customlists
 
         # Note that the specific custom list was removed from this
@@ -3839,7 +3748,6 @@ class TestLane:
         assert True == child.uses_customlists
 
     def test_genre_ids(self, db: DatabaseTransactionFixture):
-        session = db.session()
         # By default, when you add a genre to a lane, you are saying
         # that Works classified under it and all its subgenres should
         # show up in the lane.
@@ -3849,7 +3757,7 @@ class TestLane:
         # At this point the lane picks up Fantasy and all of its
         # subgenres.
         expect = [
-            Genre.lookup(session, genre)[0].id
+            Genre.lookup(db.session, genre)[0].id
             for genre in [
                 "Fantasy",
                 "Epic Fantasy",
@@ -3861,14 +3769,14 @@ class TestLane:
 
         # Let's exclude one of the subgenres.
         fantasy.add_genre("Urban Fantasy", inclusive=False)
-        urban_fantasy, ignore = Genre.lookup(session, "Urban Fantasy")
+        urban_fantasy, ignore = Genre.lookup(db.session, "Urban Fantasy")
         # That genre's ID has disappeared from .genre_ids.
         assert urban_fantasy.id not in fantasy.genre_ids
 
         # Let's add Science Fiction, but not its subgenres.
         fantasy.add_genre("Science Fiction", recursive=False)
-        science_fiction, ignore = Genre.lookup(session, "Science Fiction")
-        space_opera, ignore = Genre.lookup(session, "Space Opera")
+        science_fiction, ignore = Genre.lookup(db.session, "Science Fiction")
+        space_opera, ignore = Genre.lookup(db.session, "Space Opera")
         assert science_fiction.id in fantasy.genre_ids
         assert space_opera.id not in fantasy.genre_ids
 
@@ -3894,7 +3802,6 @@ class TestLane:
         assert science_fiction.id not in no_inclusive_genres.genre_ids
 
     def test_customlist_ids(self, db: DatabaseTransactionFixture):
-        session = db.session()
         # WorkLists always return None for customlist_ids.
         wl = WorkList()
         wl.initialize(db.default_library())
@@ -3916,13 +3823,15 @@ class TestLane:
         # works appear in the Lane if they are on _any_ CustomList from
         # that db source.
         has_list_source = db.lane()
-        has_list_source.list_datasource = DataSource.lookup(session, DataSource.NYT)
+        has_list_source.list_datasource = DataSource.lookup(db.session, DataSource.NYT)
         assert {nyt1.id, nyt2.id} == set(has_list_source.customlist_ids)
 
         # If there are no CustomLists from that db source, an empty
         # list is returned.
         has_no_lists = db.lane()
-        has_no_lists.list_datasource = DataSource.lookup(session, DataSource.OVERDRIVE)
+        has_no_lists.list_datasource = DataSource.lookup(
+            db.session, DataSource.OVERDRIVE
+        )
         assert [] == has_no_lists.customlist_ids
 
     def test_search_target(self, db: DatabaseTransactionFixture):
@@ -4020,7 +3929,6 @@ class TestLane:
         assert [Edition.BOOK_MEDIUM] == target.media
 
     def test_search(self, db: DatabaseTransactionFixture):
-        session = db.session()
         # Searching a Lane calls search() on its search_target.
         #
         # TODO: This test could be trimmed down quite a bit with
@@ -4034,9 +3942,11 @@ class TestLane:
 
         pagination = Pagination(offset=0, size=1)
 
-        results = lane.search(session, work.title, search_client, pagination=pagination)
+        results = lane.search(
+            db.session, work.title, search_client, pagination=pagination
+        )
         target_results = lane.search_target.search(
-            session, work.title, search_client, pagination=pagination
+            db.session, work.title, search_client, pagination=pagination
         )
         assert results == target_results
 
@@ -4046,14 +3956,15 @@ class TestLane:
 
         # This still works if the lane is its own search_target.
         lane.root_for_patron_type = ["A"]
-        results = lane.search(session, work.title, search_client, pagination=pagination)
+        results = lane.search(
+            db.session, work.title, search_client, pagination=pagination
+        )
         target_results = lane.search_target.search(
-            session, work.title, search_client, pagination=pagination
+            db.session, work.title, search_client, pagination=pagination
         )
         assert results == target_results
 
     def test_search_propagates_facets(self, db: DatabaseTransactionFixture):
-        session = db.session()
         """Lane.search propagates facets when calling search() on
         its search target.
         """
@@ -4069,7 +3980,7 @@ class TestLane:
         old_wl_search = WorkList.search
         Lane.search_target = mock
         facets = SearchFacets()
-        lane.search(session, "query", None, facets=facets)
+        lane.search(db.session, "query", None, facets=facets)
         assert facets == mock.called_with
 
         # Now try the case where a lane is its own search target.  The
@@ -4077,7 +3988,7 @@ class TestLane:
         mock.called_with = None
         Lane.search_target = lane
         WorkList.search = mock.search
-        lane.search(session, "query", None, facets=facets)
+        lane.search(db.session, "query", None, facets=facets)
         assert facets == mock.called_with
 
         # Restore methods that were mocked.
@@ -4085,7 +3996,6 @@ class TestLane:
         WorkList.search = old_wl_search
 
     def test_explain(self, db: DatabaseTransactionFixture):
-        session = db.session()
         parent = db.lane(display_name="Parent")
         parent.priority = 1
         child = db.lane(parent=parent, display_name="Child")
@@ -4108,7 +4018,6 @@ class TestLane:
         ] == data
 
     def test_groups_propagates_facets(self, db: DatabaseTransactionFixture):
-        session = db.session()
         # Lane.groups propagates a received Facets object into
         # _groups_for_lanes.
         def mock(self, _db, relevant_lanes, queryable_lanes, facets, *args, **kwargs):
@@ -4119,7 +4028,7 @@ class TestLane:
         Lane._groups_for_lanes = mock
         lane = db.lane()
         facets = FeaturedFacets(0)
-        lane.groups(session, facets=facets)
+        lane.groups(db.session, facets=facets)
         assert facets == lane.called_with
         Lane._groups_for_lanes = old_value
 
@@ -4151,7 +4060,7 @@ class TestWorkListGroupsEndToEnd:
         fixture = end_to_end_search_fixture
         data, session = (
             fixture.external_search.db,
-            fixture.external_search.db.session(),
+            fixture.external_search.db.session,
         )
 
         def _w(**kwargs):
@@ -4213,7 +4122,7 @@ class TestWorkListGroupsEndToEnd:
         fixture = end_to_end_search_fixture
         db, session = (
             fixture.external_search.db,
-            fixture.external_search.db.session(),
+            fixture.external_search.db.session,
         )
         if not fixture.external_search.search:
             return
@@ -4506,7 +4415,6 @@ class TestWorkListGroups:
         random_seed_fixture: RandomSeedFixture,
         external_search_patch_fixture: ExternalSearchPatchFixture,
     ):
-        data, session = db, db.session()
         # Verify that _groups_for_lanes gives each of a WorkList's
         # non-queryable children the opportunity to adapt the incoming
         # FeaturedFacets objects to its own needs.
@@ -4539,13 +4447,13 @@ class TestWorkListGroups:
                 return [self.work]
 
         parent = MockParent()
-        child1 = MockChild(data.work(title="Lane 1"))
-        child2 = MockChild(data.work(title="Lane 2"))
+        child1 = MockChild(db.work(title="Lane 1"))
+        child2 = MockChild(db.work(title="Lane 2"))
         children = [child1, child2]
 
         for wl in children:
-            wl.initialize(library=data.default_library())
-        parent.initialize(library=data.default_library(), children=[child1, child2])
+            wl.initialize(library=db.default_library())
+        parent.initialize(library=db.default_library(), children=[child1, child2])
 
         # We're going to make a grouped feed in which both children
         # are relevant, but neither one is queryable.
@@ -4554,7 +4462,9 @@ class TestWorkListGroups:
         pagination = Pagination(size=2)
         facets = FeaturedFacets(0)
         groups = list(
-            parent._groups_for_lanes(session, relevant, queryable, pagination, facets)
+            parent._groups_for_lanes(
+                db.session, relevant, queryable, pagination, facets
+            )
         )
 
         # Each sublane was asked in turn to provide works for the feed.
@@ -4570,7 +4480,7 @@ class TestWorkListGroups:
         # Each non-queryable sublane was given a chance to adapt that
         # faceting object to its own needs.
         for wl in children:
-            assert wl.overview_facets_called_with == (session, facets)
+            assert wl.overview_facets_called_with == ((db.session), facets)
 
         # Each lane's adapted faceting object was then passed into
         # works().
@@ -4582,7 +4492,7 @@ class TestWorkListGroups:
         # a new Pagination object is created based on the featured lane
         # size for the library.
         groups = list(
-            parent._groups_for_lanes(session, relevant, queryable, None, facets)
+            parent._groups_for_lanes(db.session, relevant, queryable, None, facets)
         )
 
         (ignore1, pagination, ignore2) = parent._featured_works_with_lanes_called_with
@@ -4591,14 +4501,13 @@ class TestWorkListGroups:
         # For each sublane, we ask for 10% more items than we need to
         # reduce the chance that we'll need to put the same item in
         # multiple lanes.
-        assert int(data.default_library().featured_lane_size * 1.10) == pagination.size
+        assert int(db.default_library().featured_lane_size * 1.10) == pagination.size
 
     def test_featured_works_with_lanes(
         self,
         db: DatabaseTransactionFixture,
         random_seed_fixture: RandomSeedFixture,
     ):
-        data, session = db, db.session()
         # _featured_works_with_lanes builds a list of queries and
         # passes the list into search_engine.works_query_multi(). It
         # passes the search results into works_for_resultsets() to
@@ -4652,12 +4561,12 @@ class TestWorkListGroups:
         child1 = MockWorkList()
         child2 = MockWorkList()
         parent.initialize(
-            library=data.default_library(),
+            library=db.default_library(),
             children=[child1, child2],
             display_name="Parent lane -- call my _featured_works_with_lanes()!",
         )
-        child1.initialize(library=data.default_library(), display_name="Child 1")
-        child2.initialize(library=data.default_library(), display_name="Child 2")
+        child1.initialize(library=db.default_library(), display_name="Child 1")
+        child2.initialize(library=db.default_library(), display_name="Child 2")
 
         # We've got a search engine that's ready to find works in any
         # of these lanes.
@@ -4668,7 +4577,7 @@ class TestWorkListGroups:
         facets = FeaturedFacets(0.1)
         pagination = object()
         results = parent._featured_works_with_lanes(
-            session, [child1, child2], pagination, facets, search_engine=search
+            db.session, [child1, child2], pagination, facets, search_engine=search
         )
         results = list(results)
 
@@ -4691,18 +4600,18 @@ class TestWorkListGroups:
         # How did these Filters come about? Well, for each lane, we
         # called overview_facets() and passed in the same
         # FeaturedFacets object.
-        assert (session, facets) == child1.overview_facets_calls.pop()
+        assert ((db.session), facets) == child1.overview_facets_calls.pop()
         assert [] == child1.overview_facets_calls
-        child1_facets = child1.overview_facets(session, facets)
+        child1_facets = child1.overview_facets(db.session, facets)
 
-        assert (session, facets) == child2.overview_facets_calls.pop()
+        assert ((db.session), facets) == child2.overview_facets_calls.pop()
         assert [] == child2.overview_facets_calls
-        child2_facets = child1.overview_facets(session, facets)
+        child2_facets = child1.overview_facets(db.session, facets)
 
         # We then passed each result into Filter.from_worklist, along
         # with the corresponding lane.
-        compare_f1 = Filter.from_worklist(session, child1, child1_facets)
-        compare_f2 = Filter.from_worklist(session, child2, child2_facets)
+        compare_f1 = Filter.from_worklist(db.session, child1, child1_facets)
+        compare_f2 = Filter.from_worklist(db.session, child2, child2_facets)
 
         # Reproducing that code inside this test, which we just did,
         # gives us Filter objects -- compare_f1 and compare_f2 --
@@ -4722,7 +4631,7 @@ class TestWorkListGroups:
         #
         # This was passed into parent.works_for_resultsets():
         call = parent.works_for_resultsets_calls.pop()
-        assert call == (session, [["some"], ["search"], ["results"]])
+        assert call == ((db.session), [["some"], ["search"], ["results"]])
         assert [] == parent.works_for_resultsets_calls
 
         # The return value of works_for_resultsets -- another list of
@@ -4744,9 +4653,7 @@ class TestWorkListGroups:
         db: DatabaseTransactionFixture,
         random_seed_fixture: RandomSeedFixture,
     ):
-        data, session = db, db.session()
-
-        lane = data.lane()
+        lane = db.lane()
         m = lane._size_for_facets
 
         ebooks, audio, everything, nothing = (

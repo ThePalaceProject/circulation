@@ -39,7 +39,7 @@ class TestOPDS2Feed:
         data, transaction, session = (
             opds2_feed_fixture,
             opds2_feed_fixture.transaction,
-            opds2_feed_fixture.transaction.session(),
+            opds2_feed_fixture.transaction.session,
         )
 
         work = transaction.work(
@@ -64,7 +64,7 @@ class TestOPDS2Feed:
         data, transaction, session = (
             opds2_feed_fixture,
             opds2_feed_fixture.transaction,
-            opds2_feed_fixture.transaction.session(),
+            opds2_feed_fixture.transaction.session,
         )
 
         works = [
@@ -153,7 +153,7 @@ class TestOPDS2Annotator:
         data, transaction, session = (
             opds2_annotator_fixture,
             opds2_annotator_fixture.transaction,
-            opds2_annotator_fixture.transaction.session(),
+            opds2_annotator_fixture.transaction.session,
         )
 
         work = transaction.work()
@@ -191,7 +191,7 @@ class TestOPDS2Annotator:
         data, transaction, session = (
             opds2_annotator_fixture,
             opds2_annotator_fixture.transaction,
-            opds2_annotator_fixture.transaction.session(),
+            opds2_annotator_fixture.transaction.session,
         )
 
         work = transaction.work(

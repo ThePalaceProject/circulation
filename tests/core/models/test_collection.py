@@ -53,19 +53,17 @@ class TestCollection:
         self, example_collection_fixture: ExampleCollectionFixture
     ):
         db = example_collection_fixture.database_fixture
-        session = db.session()
-
         name = "A name"
         protocol = ExternalIntegration.OVERDRIVE
         key = (name, protocol)
 
         # Cache is empty.
-        cache = Collection._cache_from_session(session)
+        cache = Collection._cache_from_session(db.session)
         assert len(cache.id) == 0
         assert len(cache.key) == 0
 
         collection1, is_new = Collection.by_name_and_protocol(
-            session, name, ExternalIntegration.OVERDRIVE
+            db.session, name, ExternalIntegration.OVERDRIVE
         )
         assert True == is_new
 
@@ -76,7 +74,7 @@ class TestCollection:
         assert cache.stats.misses == 1
 
         collection2, is_new = Collection.by_name_and_protocol(
-            session, name, ExternalIntegration.OVERDRIVE
+            db.session, name, ExternalIntegration.OVERDRIVE
         )
         assert collection1 == collection2
         assert False == is_new
@@ -92,7 +90,7 @@ class TestCollection:
         # but the protocol doesn't match.
         with pytest.raises(ValueError) as excinfo:
             Collection.by_name_and_protocol(
-                session, name, ExternalIntegration.BIBLIOTHECA
+                db.session, name, ExternalIntegration.BIBLIOTHECA
             )
         assert 'Collection "A name" does not use protocol "Bibliotheca".' in str(
             excinfo.value
@@ -103,7 +101,6 @@ class TestCollection:
         a certain protocol.
         """
         db = example_collection_fixture.database_fixture
-        session = db.session()
         test_collection = example_collection_fixture.collection
 
         overdrive = ExternalIntegration.OVERDRIVE
@@ -112,37 +109,35 @@ class TestCollection:
         c1.parent = test_collection
         c2 = db.collection(db.fresh_str(), protocol=bibliotheca)
         assert {test_collection, c1} == set(
-            Collection.by_protocol(session, overdrive).all()
+            Collection.by_protocol(db.session, overdrive).all()
         )
-        assert ([c2]) == Collection.by_protocol(session, bibliotheca).all()
+        assert ([c2]) == Collection.by_protocol(db.session, bibliotheca).all()
         assert {test_collection, c1, c2} == set(
-            Collection.by_protocol(session, None).all()
+            Collection.by_protocol(db.session, None).all()
         )
 
         # A collection marked for deletion is filtered out.
         c1.marked_for_deletion = True
-        assert [test_collection] == Collection.by_protocol(session, overdrive).all()
+        assert [test_collection] == Collection.by_protocol(db.session, overdrive).all()
 
     def test_by_datasource(self, example_collection_fixture: ExampleCollectionFixture):
         """Collections can be found by their associated DataSource"""
         db = example_collection_fixture.database_fixture
-        session = db.session()
-
         c1 = db.collection(data_source_name=DataSource.GUTENBERG)
         c2 = db.collection(data_source_name=DataSource.OVERDRIVE)
 
         # Using the DataSource name
         assert {c1} == set(
-            Collection.by_datasource(session, DataSource.GUTENBERG).all()
+            Collection.by_datasource(db.session, DataSource.GUTENBERG).all()
         )
 
         # Using the DataSource itself
-        overdrive = DataSource.lookup(session, DataSource.OVERDRIVE)
-        assert {c2} == set(Collection.by_datasource(session, overdrive).all())
+        overdrive = DataSource.lookup(db.session, DataSource.OVERDRIVE)
+        assert {c2} == set(Collection.by_datasource(db.session, overdrive).all())
 
         # A collection marked for deletion is filtered out.
         c2.marked_for_deletion = True
-        assert 0 == Collection.by_datasource(session, overdrive).count()
+        assert 0 == Collection.by_datasource(db.session, overdrive).count()
 
     def test_parents(self, example_collection_fixture: ExampleCollectionFixture):
         db = example_collection_fixture.database_fixture
@@ -164,9 +159,9 @@ class TestCollection:
     ):
         # A newly created Collection has no associated ExternalIntegration.
         db = example_collection_fixture.database_fixture
-        session = db.session()
-
-        collection, ignore = get_one_or_create(session, Collection, name=db.fresh_str())
+        collection, ignore = get_one_or_create(
+            db.session, Collection, name=db.fresh_str()
+        )
         assert None == collection.external_integration_id
         with pytest.raises(ValueError) as excinfo:
             getattr(collection, "external_integration")
@@ -385,7 +380,7 @@ class TestCollection:
         self, example_collection_fixture: ExampleCollectionFixture
     ):
         db = example_collection_fixture.database_fixture
-        session = db.session()
+        session = db.session
 
         # Collection.pools_with_no_delivery_mechanisms returns a query
         # that finds all LicensePools in the Collection which are
@@ -504,7 +499,6 @@ class TestCollection:
         self, example_collection_fixture: ExampleCollectionFixture
     ):
         db = example_collection_fixture.database_fixture
-        session = db.session()
         test_collection = example_collection_fixture.collection
 
         data_source = "New data source"
@@ -513,7 +507,7 @@ class TestCollection:
         # identifier.
         with pytest.raises(ValueError) as excinfo:
             Collection.from_metadata_identifier(
-                session, "not a real identifier", data_source=data_source
+                db.session, "not a real identifier", data_source=data_source
             )
         assert (
             "Metadata identifier 'not a real identifier' is invalid: Incorrect padding"
@@ -522,19 +516,19 @@ class TestCollection:
 
         # Of if we pass in the empty string.
         with pytest.raises(ValueError) as excinfo:
-            Collection.from_metadata_identifier(session, "", data_source=data_source)
+            Collection.from_metadata_identifier(db.session, "", data_source=data_source)
         assert "No metadata identifier provided" in str(excinfo.value)
 
         # No new data source was created.
         def new_data_source():
-            return DataSource.lookup(session, data_source)
+            return DataSource.lookup(db.session, data_source)
 
         assert None == new_data_source()
 
         # If a mirrored collection doesn't exist, it is created.
         test_collection.external_account_id = "id"
         mirror_collection, is_new = Collection.from_metadata_identifier(
-            session, test_collection.metadata_identifier, data_source=data_source
+            db.session, test_collection.metadata_identifier, data_source=data_source
         )
         assert True == is_new
         assert test_collection.metadata_identifier == mirror_collection.name
@@ -550,7 +544,7 @@ class TestCollection:
         # If the mirrored collection already exists, it is returned.
         collection = db.collection(external_account_id=db.fresh_url())
         mirror_collection = create(
-            session, Collection, name=collection.metadata_identifier
+            db.session, Collection, name=collection.metadata_identifier
         )[0]
         mirror_collection.create_external_integration(collection.protocol)
 
@@ -563,7 +557,7 @@ class TestCollection:
 
         # Now try a lookup of an OPDS Import-type collection.
         result, is_new = Collection.from_metadata_identifier(
-            session, collection.metadata_identifier, data_source=data_source
+            db.session, collection.metadata_identifier, data_source=data_source
         )
         assert False == is_new
         assert mirror_collection == result
@@ -611,7 +605,6 @@ class TestCollection:
         self, example_collection_fixture: ExampleCollectionFixture
     ):
         db = example_collection_fixture.database_fixture
-        session = db.session()
         test_collection = example_collection_fixture.collection
 
         # A regular schmegular identifier: untouched, pure.
@@ -619,7 +612,7 @@ class TestCollection:
 
         # A 'resolved' identifier that doesn't have a work yet.
         # (This isn't supposed to happen, but jic.)
-        source = DataSource.lookup(session, DataSource.GUTENBERG)
+        source = DataSource.lookup(db.session, DataSource.GUTENBERG)
         operation = "test-thyself"
         resolved_id = db.identifier()
         db.coverage_record(
@@ -643,7 +636,7 @@ class TestCollection:
             [pure_id, resolved_id, unresolved_id, id_with_work]
         )
 
-        result = test_collection.unresolved_catalog(session, source.name, operation)
+        result = test_collection.unresolved_catalog(db.session, source.name, operation)
 
         # Only the failing identifier is in the query.
         assert [unresolved_id] == result.all()
@@ -652,8 +645,6 @@ class TestCollection:
         self, example_collection_fixture: ExampleCollectionFixture
     ):
         db = example_collection_fixture.database_fixture
-        session = db.session()
-
         # Here's a Collection.
         collection = db.default_collection()
 
@@ -666,14 +657,14 @@ class TestCollection:
         integration = collection.external_integration
         setting1 = integration.set_setting("integration setting", "value2")
         setting2 = ConfigurationSetting.for_library_and_externalintegration(
-            session,
+            db.session,
             "default_library+integration setting",
             db.default_library(),
             integration,
         )
         setting2.value = "value2"
         setting3 = ConfigurationSetting.for_library_and_externalintegration(
-            session,
+            db.session,
             "other_library+integration setting",
             other_library,
             integration,
@@ -690,7 +681,7 @@ class TestCollection:
         # Furthermore, ConfigurationSettings that configure that
         # Library's relationship to this Collection's
         # ExternalIntegration have been deleted.
-        all_settings = session.query(ConfigurationSetting).all()
+        all_settings = db.session.query(ConfigurationSetting).all()
         assert setting2 not in all_settings
 
         # The other library is unaffected.
@@ -717,7 +708,6 @@ class TestCollection:
         self, example_collection_fixture: ExampleCollectionFixture
     ):
         db = example_collection_fixture.database_fixture
-        session = db.session()
         test_collection = example_collection_fixture.collection
 
         m = test_collection.licensepools_with_works_updated_since
@@ -730,7 +720,7 @@ class TestCollection:
 
         # An empty catalog returns nothing.
         timestamp = utc_now()
-        assert [] == m(session, timestamp).all()
+        assert [] == m(db.session, timestamp).all()
 
         test_collection.catalog_identifier(w1.license_pools[0].identifier)
         test_collection.catalog_identifier(w2.license_pools[0].identifier)
@@ -743,7 +733,7 @@ class TestCollection:
         # When no timestamp is passed, all LicensePeols in the catalog
         # are returned, in order of the WorkCoverageRecord
         # timestamp on the associated Work.
-        lp1, lp2 = m(session, None).all()
+        lp1, lp2 = m(db.session, None).all()
         assert w1 == lp1.work
         assert w2 == lp2.work
 
@@ -755,13 +745,12 @@ class TestCollection:
             if c.operation == WorkCoverageRecord.GENERATE_OPDS_OPERATION
         ]
         w1_coverage_record.timestamp = utc_now()
-        assert [w1] == [x.work for x in m(session, timestamp)]
+        assert [w1] == [x.work for x in m(db.session, timestamp)]
 
     def test_isbns_updated_since(
         self, example_collection_fixture: ExampleCollectionFixture
     ):
         db = example_collection_fixture.database_fixture
-        session = db.session()
         test_collection = example_collection_fixture.collection
 
         i1 = db.identifier(identifier_type=Identifier.ISBN, foreign_id=db.isbn_take())
@@ -772,15 +761,15 @@ class TestCollection:
         timestamp = utc_now()
 
         # An empty catalog returns nothing..
-        assert [] == test_collection.isbns_updated_since(session, None).all()
+        assert [] == test_collection.isbns_updated_since(db.session, None).all()
 
         # Give the ISBNs some coverage.
-        content_cafe = DataSource.lookup(session, DataSource.CONTENT_CAFE)
+        content_cafe = DataSource.lookup(db.session, DataSource.CONTENT_CAFE)
         for isbn in [i2, i3, i1]:
             db.coverage_record(isbn, content_cafe)
 
         # Give one ISBN more than one coverage record.
-        oclc = DataSource.lookup(session, DataSource.OCLC)
+        oclc = DataSource.lookup(db.session, DataSource.OCLC)
         i1_oclc_record = db.coverage_record(i1, oclc)
 
         def assert_isbns(expected, result_query):
@@ -790,7 +779,7 @@ class TestCollection:
         # When no timestamp is given, all ISBNs in the catalog are returned,
         # in order of their CoverageRecord timestamp.
         test_collection.catalog_identifiers([i1, i2])
-        updated_isbns = test_collection.isbns_updated_since(session, None).all()
+        updated_isbns = test_collection.isbns_updated_since(db.session, None).all()
         assert_isbns([i2, i1], updated_isbns)
 
         # That CoverageRecord timestamp is also returned.
@@ -802,7 +791,7 @@ class TestCollection:
         # then will be returned.
         timestamp = utc_now()
         i1.coverage_records[0].timestamp = utc_now()
-        updated_isbns = test_collection.isbns_updated_since(session, timestamp)
+        updated_isbns = test_collection.isbns_updated_since(db.session, timestamp)
         assert_isbns([i1], updated_isbns)
 
         # Prepare an ISBN associated with a Work.
@@ -811,17 +800,16 @@ class TestCollection:
         i2.coverage_records[0].timestamp = utc_now()
 
         # ISBNs that have a Work will be ignored.
-        updated_isbns = test_collection.isbns_updated_since(session, timestamp)
+        updated_isbns = test_collection.isbns_updated_since(db.session, timestamp)
         assert_isbns([i1], updated_isbns)
 
     def test_custom_lists(self, example_collection_fixture: ExampleCollectionFixture):
         db = example_collection_fixture.database_fixture
-        session = db.session()
         test_collection = example_collection_fixture.collection
 
         # A Collection can be associated with one or more CustomLists.
-        list1, ignore = get_one_or_create(session, CustomList, name=db.fresh_str())
-        list2, ignore = get_one_or_create(session, CustomList, name=db.fresh_str())
+        list1, ignore = get_one_or_create(db.session, CustomList, name=db.fresh_str())
+        list2, ignore = get_one_or_create(db.session, CustomList, name=db.fresh_str())
         test_collection.customlists = [list1, list2]
         assert 0 == len(list1.entries)
         assert 0 == len(list2.entries)
@@ -836,16 +824,16 @@ class TestCollection:
 
         # Now remove it from one of the lists. If its presentation edition changes
         # again or its pool changes works, it's not added back.
-        session.delete(list1.entries[0])
-        session.commit()
+        db.session.delete(list1.entries[0])
+        db.session.commit()
         assert 0 == len(list1.entries)
         assert 1 == len(list2.entries)
 
         pool = work.license_pools[0]
         identifier = pool.identifier
-        staff_data_source = DataSource.lookup(session, DataSource.LIBRARY_STAFF)
+        staff_data_source = DataSource.lookup(db.session, DataSource.LIBRARY_STAFF)
         staff_edition, ignore = Edition.for_foreign_id(
-            session, staff_data_source, identifier.type, identifier.identifier
+            db.session, staff_data_source, identifier.type, identifier.identifier
         )
 
         staff_edition.title = db.fresh_str()
@@ -870,8 +858,6 @@ class TestCollection:
         The other cases are tested indirectly in lane.py, but could use a more explicit test here.
         """
         db = example_collection_fixture.database_fixture
-        session = db.session()
-
         # Create two audiobooks and one ebook.
         overdrive_audiobook = db.work(
             data_source_name=DataSource.OVERDRIVE,
@@ -891,7 +877,7 @@ class TestCollection:
         )
         feedbooks_audiobook.presentation_edition.medium = Edition.AUDIO_MEDIUM
 
-        DataSource.lookup(session, DataSource.LCP, autocreate=True)
+        DataSource.lookup(db.session, DataSource.LCP, autocreate=True)
         self_hosted_lcp_book = db.work(
             data_source_name=DataSource.LCP,
             title="Self-hosted LCP book",
@@ -918,10 +904,12 @@ class TestCollection:
         # Here's the setting which controls which data sources should
         # have their audiobooks excluded.
         setting = ConfigurationSetting.sitewide(
-            session, Configuration.EXCLUDED_AUDIO_DATA_SOURCES
+            db.session, Configuration.EXCLUDED_AUDIO_DATA_SOURCES
         )
         qu = (
-            session.query(Work).join(Work.license_pools).join(Work.presentation_edition)
+            db.session.query(Work)
+            .join(Work.license_pools)
+            .join(Work.presentation_edition)
         )
         # When its value is set to the empty list, every work shows
         # up.
@@ -957,8 +945,6 @@ class TestCollection:
         relevant related database objects.
         """
         db = example_collection_fixture.database_fixture
-        session = db.session()
-
         # This collection is doomed.
         collection = db.default_collection()
 
@@ -969,7 +955,7 @@ class TestCollection:
         integration = collection.external_integration
         setting1 = integration.set_setting("integration setting", "value2")
         setting2 = ConfigurationSetting.for_library_and_externalintegration(
-            session,
+            db.session,
             "library+integration setting",
             db.default_library(),
             integration,
@@ -1012,7 +998,7 @@ class TestCollection:
 
         # And a CirculationEvent.
         CirculationEvent.log(
-            session, pool, CirculationEvent.DISTRIBUTOR_TITLE_ADD, 0, 1
+            db.session, pool, CirculationEvent.DISTRIBUTOR_TITLE_ADD, 0, 1
         )
 
         # There's a second Work which has _two_ LicensePools from two
@@ -1047,7 +1033,7 @@ class TestCollection:
         collection.delete(search_index=index)
 
         # It's gone.
-        assert collection not in session.query(Collection).all()
+        assert collection not in db.session.query(Collection).all()
 
         # The default library now has no collections.
         assert [] == db.default_library().collections
@@ -1058,7 +1044,7 @@ class TestCollection:
         assert [] == patron.loans
         assert [] == patron2.holds
         for cls in (Loan, Hold, License, CirculationEvent):
-            assert [] == session.query(cls).all()
+            assert [] == db.session.query(cls).all()
 
         # n.b. Annotations are associated with Identifier, not
         # LicensePool, so they can and should survive the deletion of
@@ -1066,7 +1052,7 @@ class TestCollection:
 
         # The first Work has been deleted, since it lost all of its
         # LicensePools.
-        assert [work2] == session.query(Work).all()
+        assert [work2] == db.session.query(Work).all()
 
         # The second Work is still around, and it still has the other
         # LicensePool.
@@ -1078,15 +1064,15 @@ class TestCollection:
 
         # The collection ExternalIntegration, its settings, and links to other integrations have been deleted.
         # The storage ExternalIntegration remains.
-        external_integrations = session.query(ExternalIntegration).all()
+        external_integrations = db.session.query(ExternalIntegration).all()
         assert integration not in external_integrations
         assert s3_storage in external_integrations
 
-        settings = session.query(ConfigurationSetting).all()
+        settings = db.session.query(ConfigurationSetting).all()
         for setting in (setting1, setting2):
             assert setting not in settings
 
-        links = session.query(ExternalIntegrationLink).all()
+        links = db.session.query(ExternalIntegrationLink).all()
         for link in (link1, link2):
             assert link not in links
 
@@ -1099,7 +1085,7 @@ class TestCollection:
         collection2.delete()
 
         # We've now deleted every LicensePool created for this test.
-        assert 0 == session.query(LicensePool).count()
+        assert 0 == db.session.query(LicensePool).count()
         assert [] == work2.license_pools
 
 
@@ -1118,17 +1104,13 @@ class TestCollectionForMetadataWrangler:
         the Collection class.
         """
         db = example_collection_fixture.database_fixture
-        session = db.session()
-
-        collection = create(session, Collection, name="banana")[0]
+        collection = create(db.session, Collection, name="banana")[0]
         assert True == isinstance(collection, Collection)
 
 
 class TestCollectionConfigurationStorage:
     def test_load(self, example_collection_fixture: ExampleCollectionFixture):
         db = example_collection_fixture.database_fixture
-        session = db.session()
-
         # Arrange
         lcp_collection = db.collection("Test Collection", DataSource.LCP)
         external_integration = lcp_collection.external_integration
@@ -1145,7 +1127,7 @@ class TestCollectionConfigurationStorage:
         expected_result = "Test"
 
         # Act
-        storage.save(session, setting_name, expected_result)
-        result = storage.load(session, setting_name)
+        storage.save(db.session, setting_name, expected_result)
+        result = storage.load(db.session, setting_name)
 
         assert result == expected_result

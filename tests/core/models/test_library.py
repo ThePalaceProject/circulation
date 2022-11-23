@@ -24,25 +24,23 @@ class TestLibrary:
         library.library_registry_short_name = None
 
     def test_lookup(self, db: DatabaseTransactionFixture):
-        session = db.session()
         library = db.default_library()
         name = library.short_name
         assert name == library.cache_key()
 
         # Cache is empty.
-        cache = Library._cache_from_session(session)
+        cache = Library._cache_from_session(db.session)
         assert len(cache.id) == 0
         assert len(cache.key) == 0
 
-        assert library == Library.lookup(session, name)
+        assert library == Library.lookup(db.session, name)
 
         # Cache is populated.
         assert library == cache.key[name]
 
     def test_default(self, db: DatabaseTransactionFixture):
         # We start off with no libraries.
-        session = db.session()
-        assert None == Library.default(session)
+        assert None == Library.default(db.session)
 
         # Let's make a couple libraries.
         l1 = db.default_library()
@@ -54,7 +52,7 @@ class TestLibrary:
 
         # If we call Library.default, the library with the lowest database
         # ID is made the default.
-        assert l1 == Library.default(session)
+        assert l1 == Library.default(db.session)
         assert True == l1.is_default
         assert False == l2.is_default
 
@@ -67,7 +65,7 @@ class TestLibrary:
         # will set the one with the lowest database ID to the default.
         l1._is_default = True
         l2._is_default = True
-        assert l1 == Library.default(session)
+        assert l1 == Library.default(db.session)
         assert True == l1.is_default
         assert False == l2.is_default
         with pytest.raises(ValueError) as excinfo:
@@ -78,8 +76,6 @@ class TestLibrary:
         )
 
     def test_has_root_lanes(self, db: DatabaseTransactionFixture):
-        session = db.session()
-
         # A library has root lanes if any of its lanes are the root for any
         # patron type(s).
         library = db.default_library()
@@ -95,11 +91,11 @@ class TestLibrary:
         # Library._has_default_lane_cache whenever lane configuration
         # changes.)
         lane.root_for_patron_type = ["1", "2"]
-        session.flush()
+        db.session.flush()
         assert True == library.has_root_lanes
 
         lane.root_for_patron_type = None
-        session.flush()
+        db.session.flush()
         assert False == library.has_root_lanes
 
     def test_all_collections(self, db: DatabaseTransactionFixture):
@@ -145,7 +141,7 @@ class TestLibrary:
         """Test that Library.explain gives all relevant information
         about a Library.
         """
-        session = db.session()
+        session = db.session
         library = db.default_library()
         library.uuid = "uuid"
         library.name = "The Library"
