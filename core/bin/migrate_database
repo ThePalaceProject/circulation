@@ -4,6 +4,27 @@
 TARGET="head"
 DIRECTION="upgrade"
 
+# Attempt to find the alembic.ini file
+# Ansible generally runs from within the <root>/bin directory
+INI_FILE="alembic.ini"
+SRC_DIR="."
+FOUND_INI=0
+for i in 1 2 3; do
+    if [ -f "$INI_FILE" ]; then
+        FOUND_INI=1
+        break
+    else
+        # Go up one directory to try and find the ini
+        INI_FILE="../${INI_FILE}"
+        SRC_DIR="../${SRC_DIR}"
+    fi
+done
+
+if [ $FOUND_INI -eq "0" ]; then
+    echo "Could not find an alembic.ini file! Quitting the migration."
+    exit 1;
+fi
+
 while getopts "hu:d:" opt; do
     case $opt in
         h)      echo "Database migration script"
@@ -27,4 +48,4 @@ while getopts "hu:d:" opt; do
 done
 
 echo "Running 'alembic ${DIRECTION} ${TARGET}'"
-alembic ${DIRECTION} ${TARGET}
+cd ${SRC_DIR} && alembic ${DIRECTION} ${TARGET}
