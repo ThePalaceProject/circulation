@@ -962,7 +962,7 @@ class InstanceInitializationScript(TimestampScript):
 
     name = "Instance initialization"
 
-    TEST_SQL = "select * from alembic_version limit 1"
+    TEST_SQL = "SELECT * FROM pg_catalog.pg_tables where tablename='libraries';"
 
     def run(self, *args, **kwargs):
         # Create a special database session that doesn't initialize
