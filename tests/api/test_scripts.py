@@ -4,7 +4,7 @@ import json
 import logging
 from functools import partial
 from io import StringIO
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy.exc import ProgrammingError
@@ -674,13 +674,14 @@ class TestInstanceInitializationScript(DatabaseTest):
 
     def test_alembic_state(self):
         # Delete the table data, we should run the script
-        # Using a session that is not locked into the current transaction (as the script does)
+        # using a session that is not locked into the current transaction (as the script does)
         url = Configuration.database_url()
         _db = SessionManager.session(
             url, initialize_data=False, initialize_schema=False
         )
         try:
             _db.execute("DELETE FROM alembic_version")
+            _db.commit()
         except ProgrammingError as ex:
             logging.getLogger().info(
                 "The alembic_version table does not exists yet!! Continuing... "
@@ -692,7 +693,10 @@ class TestInstanceInitializationScript(DatabaseTest):
         script = InstanceInitializationScript(_db=self._db)
         # Ensure search is skipped
         script.do_run = partial(script.do_run, ignore_search=True)
-        script.run()
+        # Mock the desired response from the DB
+        with patch("scripts.SessionManager") as manager:
+            manager.session().execute().first = MagicMock(return_value=None)
+            script.run()
 
         # Alembic version got stamped
         result = self._db.execute("select * from alembic_version")
