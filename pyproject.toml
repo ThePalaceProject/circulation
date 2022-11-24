@@ -94,6 +94,7 @@ follow_imports = "skip"
 module = [
     "api.*",
     "core.classifier.*",
+    "tests.fixtures.database"
 ]
 
 [[tool.mypy.overrides]]
