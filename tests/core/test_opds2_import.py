@@ -1,5 +1,5 @@
 import datetime
-from typing import List
+from typing import List, Union
 
 import pytest
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
@@ -138,10 +138,13 @@ class TestOPDS2Importer(OPDS2Test):
             opds2_importer_fixture.transaction,
             opds2_importer_fixture.transaction.session,
         )
-        content_server_feed = opds2_files_fixture.sample_text("feed.json")
+        content_server_feed_text = opds2_files_fixture.sample_text("feed.json")
+        content_server_feed: Union[str, bytes]
 
         if manifest_type == "bytes":
-            content_server_feed = content_server_feed.encode()
+            content_server_feed = content_server_feed_text.encode()
+        else:
+            content_server_feed = content_server_feed_text
 
         # Act
         imported_editions, pools, works, failures = data.importer.import_from_feed(
