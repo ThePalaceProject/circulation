@@ -1,6 +1,6 @@
 import datetime
 import json
-from typing import Dict
+from typing import Dict, List
 
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
@@ -280,7 +280,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         return s3_uploader
 
     @classmethod
-    def get_storage_settings(cls, db: Session) -> Dict:
+    def get_storage_settings(cls, db: Session) -> List[Dict]:
         """Return the provider's configuration settings including available storage options.
 
         :param db: Database session

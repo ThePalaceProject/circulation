@@ -3,7 +3,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 
-import dateutil
+from dateutil import tz
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm.session import Session
 
@@ -36,7 +36,7 @@ class NYTAPI:
     # NOTE: entries fetched before we made the datetimes
     # timezone-aware will have their time zones set to UTC, but the
     # difference is negligible.
-    TIME_ZONE = dateutil.tz.gettz("America/New York")
+    TIME_ZONE = tz.gettz("America/New York")
 
     @classmethod
     def parse_datetime(cls, d):

@@ -305,7 +305,7 @@ class ProQuestOPDS2Importer(OPDS2Importer, BaseCirculationAPI, HasExternalIntegr
                 raise MISSING_AFFILIATION_ID
 
             self._logger.info(
-                "Since patron doesn't have an affiliation ID we set it to the test one: {1}".format(
+                "Since patron {} doesn't have an affiliation ID we set it to the test one: {}".format(
                     patron, affiliation_id
                 )
             )

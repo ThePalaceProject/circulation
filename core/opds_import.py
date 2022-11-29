@@ -3,7 +3,7 @@ import logging
 import traceback
 from contextlib import contextmanager
 from io import BytesIO
-from typing import Iterator, Optional
+from typing import Iterator, List, Optional
 from urllib.parse import quote, urljoin, urlparse
 
 import dateutil
@@ -594,7 +594,7 @@ class OPDSImporter:
     # Subclasses of OPDSImporter may define a list of status codes
     # that should be treated as indicating success, rather than failure,
     # when they show up in <simplified:message> tags.
-    SUCCESS_STATUS_CODES = None
+    SUCCESS_STATUS_CODES: Optional[List[int]] = None
 
     def __init__(
         self,

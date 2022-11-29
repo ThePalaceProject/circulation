@@ -82,7 +82,9 @@ class Library(Base, HasSessionCache):
     library_registry_shared_secret = Column(Unicode, unique=True)
 
     # A library may have many Patrons.
-    patrons = relationship("Patron", backref="library", cascade="all, delete-orphan")
+    patrons = relationship(
+        "Patron", back_populates="library", cascade="all, delete-orphan"
+    )
 
     # An Library may have many admin roles.
     adminroles = relationship(
@@ -116,7 +118,7 @@ class Library(Base, HasSessionCache):
     integrations = relationship(
         "ExternalIntegration",
         secondary=lambda: externalintegrations_libraries,  # type: ignore
-        backref="libraries",
+        back_populates="libraries",
     )
 
     # Any additional configuration information is stored as

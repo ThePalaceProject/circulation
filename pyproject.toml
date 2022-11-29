@@ -9,7 +9,7 @@ profile = "black"
 [tool.mypy]
 exclude = [
     'core/model/listeners.py',
-    'core/bin',
+    'core/bin/repair/startup.py',
     'core/classifier',
     # TODO: Post test-suite refactoring.
     'core/opds_schema\.py',
@@ -53,6 +53,7 @@ exclude = [
     'tests/fixtures/database\.py',
 ]
 files = [
+    "api",
     "customlists",
     "core",
     "tests/core",
@@ -66,6 +67,7 @@ warn_unused_ignores = true
 [[tool.mypy.overrides]]
 ignore_missing_imports = true
 module = [
+    "aws_xray_sdk.ext.*",
     "bcrypt",
     "elasticsearch.*",
     "elasticsearch_dsl.*",
@@ -74,17 +76,25 @@ module = [
     "flask_babel",
     "flask_sqlalchemy_session",
     "fuzzywuzzy",
+    "html_sanitizer",
     "isbnlib",
     "loggly.*",
     "lxml.*",
     "money",
     "multipledispatch",
     "nameparser",
+    "oauth2client",
+    "onelogin.saml2.*",
     "parameterized",
+    "pyld",
     "pymarc",
     "pyparsing",
+    "pypostalcode",
     "spellchecker",
     "textblob.*",
+    "unicodecsv",
+    "uritemplate",
+    "uszipcode",
     "watchtower",
     "webpub_manifest_parser.*",
 ]
@@ -92,7 +102,6 @@ module = [
 [[tool.mypy.overrides]]
 follow_imports = "skip"
 module = [
-    "api.*",
     "core.classifier.*",
     "tests.fixtures.database"
 ]
@@ -100,7 +109,6 @@ module = [
 [[tool.mypy.overrides]]
 follow_imports = "silent"
 module = [
-    "core.configuration.ignored_identifier",
     "core.model.listeners",
 ]
 
@@ -185,7 +193,9 @@ pyfakefs = "5.0.0"
 pytest-timeout = "*"
 requests-mock = "1.10.0"
 sqlalchemy-stubs = "^0.4"
+types-aws-xray-sdk = "^2.11.0.1"
 types-Flask = "^1.1.6"
+types-Flask-Cors = "^3.0.10"
 types-freezegun = "^1.1.10"
 types-jsonschema = "^4.17.0.1"
 types-mock = "^4.0.15.2"

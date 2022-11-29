@@ -55,7 +55,7 @@ def initialize_database(autoinitialize=True):
 
 
 from . import routes  # noqa
-from .admin import routes  # noqa
+from .admin import routes  # type: ignore  # noqa
 
 
 def run(url=None):

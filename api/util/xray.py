@@ -17,9 +17,7 @@ class PalaceXrayMiddleware(XRayMiddleware):
     XRAY_ENV_PATRON_BARCODE = "PALACE_XRAY_INCLUDE_BARCODE"
 
     @classmethod
-    def put_annotations(
-        cls, segment: Optional[Segment], seg_type: Optional[str] = None
-    ):
+    def put_annotations(cls, segment: Segment, seg_type: Optional[str] = None):
         if seg_type is not None:
             segment.put_annotation("type", seg_type)
 
@@ -75,18 +73,18 @@ class PalaceXrayMiddleware(XRayMiddleware):
         segment = self._recorder.current_segment()
 
         # Add library shortname
-        if hasattr(request, "library") and hasattr(request.library, "short_name"):
-            segment.put_annotation("library", str(request.library.short_name))
+        if hasattr(request, "library") and hasattr(request.library, "short_name"):  # type: ignore # Fixed in mypy 0.990
+            segment.put_annotation("library", str(request.library.short_name))  # type: ignore # Fixed in mypy 0.990
 
         # Add patron data
         if (
             self.include_barcode()
             and hasattr(request, "patron")
-            and hasattr(request.patron, "authorization_identifier")
+            and hasattr(request.patron, "authorization_identifier")  # type: ignore # Fixed in mypy 0.990
         ):
-            segment.set_user(str(request.patron.authorization_identifier))
+            segment.set_user(str(request.patron.authorization_identifier))  # type: ignore # Fixed in mypy 0.990
             segment.put_annotation(
-                "barcode", str(request.patron.authorization_identifier)
+                "barcode", str(request.patron.authorization_identifier)  # type: ignore # Fixed in mypy 0.990
             )
 
         # Add admin UI username

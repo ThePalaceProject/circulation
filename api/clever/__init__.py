@@ -105,7 +105,7 @@ class CleverAuthenticationAPI(OAuthAuthenticationProvider):
     # Unlike other authentication providers, external type regular expression
     # doesn't make sense for Clever. This removes the LIBRARY_SETTINGS from the
     # parent class.
-    LIBRARY_SETTINGS = []
+    LIBRARY_SETTINGS: list = []
 
     TOKEN_TYPE = "Clever token"
     TOKEN_DATA_SOURCE_NAME = "Clever"

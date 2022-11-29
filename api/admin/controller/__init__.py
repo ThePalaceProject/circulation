@@ -7,7 +7,7 @@ import sys
 import urllib.parse
 from datetime import date, datetime, timedelta
 from http.client import BAD_REQUEST
-from typing import Callable, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Union
 
 import flask
 import jwt
@@ -83,6 +83,26 @@ from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSFeedResponse, boolean_value
 from core.util.http import HTTP
 from core.util.problem_detail import ProblemDetail
+
+if TYPE_CHECKING:
+    from api.admin.problem_details import (
+        AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES,
+        CANNOT_CHANGE_LIBRARY_FOR_CUSTOM_LIST,
+        CANNOT_DELETE_SHARED_LIST,
+        COLLECTION_NOT_ASSOCIATED_WITH_LIBRARY,
+        CUSTOM_LIST_NAME_ALREADY_IN_USE,
+        INVALID_INPUT,
+        MISSING_COLLECTION,
+        MISSING_CUSTOM_LIST,
+        MISSING_INTEGRATION,
+    )
+    from api.admin.template_styles import (
+        body_style,
+        error_style,
+        hr_style,
+        logo_style,
+        small_link_style,
+    )
 
 
 def setup_admin_controllers(manager):
@@ -801,8 +821,8 @@ class CustomListsController(AdminCirculationManagerController):
             is_shared=len(list.shared_locally_with_libraries) > 0,
         )
 
-    def custom_lists(self) -> Dict:
-        library = flask.request.library
+    def custom_lists(self) -> Union[Dict, ProblemDetail, Response, None]:
+        library = flask.request.library  # type: ignore  # "Request" has no attribute "library"
         self.require_librarian(library)
 
         if flask.request.method == "GET":
@@ -817,7 +837,7 @@ class CustomListsController(AdminCirculationManagerController):
 
         if flask.request.method == "POST":
             id = flask.request.form.get("id")
-            name = flask.request.form.get("name")
+            name = flask.request.form.get("name", "")
             entries = self._getJSONFromRequest(flask.request.form.get("entries"))
             collections = self._getJSONFromRequest(
                 flask.request.form.get("collections")
@@ -839,16 +859,24 @@ class CustomListsController(AdminCirculationManagerController):
                 auto_update_query=auto_update_query,
             )
 
-    def _getJSONFromRequest(self, values: Optional[str]) -> Union[Dict, List]:
+        return None
+
+    def _getJSONFromRequest(self, values: Optional[str]) -> list:
         if values:
-            values = json.loads(values)
+            return_values = json.loads(values)
         else:
-            values = []
+            return_values = []
 
-        return values
+        return return_values
 
-    def _get_work_from_urn(self, library: Library, urn: str) -> Work:
+    def _get_work_from_urn(
+        self, library: Library, urn: Optional[str]
+    ) -> Optional[Work]:
         identifier, ignore = Identifier.parse_urn(self._db, urn)
+
+        if identifier is None:
+            return None
+
         query = (
             self._db.query(Work)
             .join(LicensePool, LicensePool.work_id == Work.id)
@@ -1037,8 +1065,8 @@ class CustomListsController(AdminCirculationManagerController):
 
         return url_fn
 
-    def custom_list(self, list_id: int) -> Union[Response, Dict, ProblemDetail]:
-        library = flask.request.library
+    def custom_list(self, list_id: int) -> Union[Response, Dict, ProblemDetail, None]:
+        library = flask.request.library  # type: ignore
         self.require_librarian(library)
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
 
@@ -1074,7 +1102,7 @@ class CustomListsController(AdminCirculationManagerController):
             return OPDSFeedResponse(str(feed), max_age=0)
 
         elif flask.request.method == "POST":
-            name = flask.request.form.get("name")
+            name = flask.request.form.get("name", "")
             entries = self._getJSONFromRequest(flask.request.form.get("entries"))
             collections = self._getJSONFromRequest(
                 flask.request.form.get("collections")
@@ -1104,7 +1132,7 @@ class CustomListsController(AdminCirculationManagerController):
 
         elif flask.request.method == "DELETE":
             # Deleting requires a library manager.
-            self.require_library_manager(flask.request.library)
+            self.require_library_manager(flask.request.library)  # type: ignore
 
             if len(list.shared_locally_with_libraries) > 0:
                 return CANNOT_DELETE_SHARED_LIST
@@ -1131,13 +1159,14 @@ class CustomListsController(AdminCirculationManagerController):
                 lane.update_size(self._db, self.search_engine)
             return Response(str(_("Deleted")), 200)
 
-    def share_locally(self, customlist_id: int) -> Union[ProblemDetail, Response]:
+        return None
+
+    def share_locally(self, customlist_id: int) -> Union[ProblemDetail, Dict[str, int]]:
         """Share this customlist with all libraries on this local CM"""
         if not customlist_id:
             return INVALID_INPUT
 
         customlist: CustomList = get_one(self._db, CustomList, id=customlist_id)
-        library: Library = None
         successes = []
         failures = []
         for library in self._db.query(Library).all():
@@ -1711,7 +1740,7 @@ class SettingsController(AdminCirculationManagerController):
         mirror_integration_id = flask.request.form.get("mirror_integration_id")
 
         if not mirror_integration_id:
-            return
+            return None
 
         # If no storage integration was selected, then delete the existing
         # external integration link.
@@ -1749,6 +1778,8 @@ class SettingsController(AdminCirculationManagerController):
             )
 
             current_integration_link.other_integration_id = storage_integration.id
+
+        return None
 
     @classmethod
     def _get_integration_protocols(cls, provider_apis, protocol_name_attr="__module__"):

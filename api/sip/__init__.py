@@ -368,7 +368,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
         # patron_status field will prohibit the patron from borrowing
         # books.
         status = info["patron_status_parsed"]
-        block_reason = PatronData.NO_VALUE
+        block_reason: Union[str, PatronData.NoValue] = PatronData.NO_VALUE
         for field in self.fields_that_deny_borrowing:
             if status.get(field) is True:
                 block_reason = self.SPECIFIC_BLOCK_REASONS.get(

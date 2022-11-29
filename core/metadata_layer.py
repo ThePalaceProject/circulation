@@ -11,7 +11,7 @@ import datetime
 import logging
 import re
 from collections import defaultdict
-from typing import Optional
+from typing import List, Optional
 
 from dateutil.parser import parse
 from pymarc import MARCReader
@@ -625,7 +625,7 @@ class LicenseData(LicenseFunctions):
         expires: Optional[datetime.datetime] = None,
         checkouts_left: Optional[int] = None,
         terms_concurrency: Optional[int] = None,
-        content_types: Optional[str] = None,
+        content_types: Optional[List[str]] = None,
     ):
         self.identifier = identifier
         self.checkout_url = checkout_url

@@ -1,4 +1,5 @@
 import logging
+import re
 import urllib.parse
 
 import requests
@@ -32,7 +33,7 @@ class FirstBookAuthenticationAPI(BasicAuthenticationProvider):
     # Server-side validation happens before the identifier
     # is converted to uppercase, which means lowercase characters
     # are valid.
-    DEFAULT_IDENTIFIER_REGULAR_EXPRESSION = "^[A-Za-z0-9@]+$"
+    DEFAULT_IDENTIFIER_REGULAR_EXPRESSION = re.compile("^[A-Za-z0-9@]+$")
     DEFAULT_PASSWORD_REGULAR_EXPRESSION = "^[0-9]+$"
 
     SETTINGS = [

@@ -98,7 +98,10 @@ class Collection(Base, HasSessionCache):
 
     # A Collection can provide books to many Libraries.
     libraries = relationship(
-        "Library", secondary=lambda: collections_libraries, backref="collections"  # type: ignore
+        "Library",
+        secondary=lambda: collections_libraries,
+        backref="collections",
+        uselist=True,
     )
 
     # A Collection can include many LicensePools.
@@ -867,7 +870,7 @@ class Collection(Base, HasSessionCache):
         _db.commit()
 
 
-collections_libraries = Table(
+collections_libraries: Table = Table(
     "collections_libraries",
     Base.metadata,
     Column(

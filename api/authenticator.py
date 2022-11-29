@@ -8,14 +8,13 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from abc import ABCMeta
-from typing import Iterable, Optional
+from typing import Dict, Iterable, List, Optional
 
 import flask
 import jwt
 from flask import redirect, url_for
 from flask_babel import lazy_gettext as _
 from money import Money
-from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.sql.expression import or_
 from werkzeug.datastructures import Headers
@@ -40,6 +39,7 @@ from core.model import (
     get_one,
     get_one_or_create,
 )
+from core.model.hybrid import hybrid_property
 from core.opds import OPDSFeed
 from core.selftest import HasSelfTests
 from core.user_profile import ProfileController
@@ -541,7 +541,7 @@ class Authenticator:
         self, _db, libraries: Iterable[Library], analytics: Optional[Analytics] = None
     ):
         # Create authenticators
-        self.library_authenticators = {}
+        self.library_authenticators: Dict[str, LibraryAuthenticator] = {}
         self.populate_authenticators(_db, libraries, analytics)
 
     @property
@@ -1294,7 +1294,7 @@ class AuthenticationProvider(OPDSAuthenticationFlow):
     # Each subclass MUST define a value for FLOW_TYPE. This is used in the
     # Authentication for OPDS document to distinguish between
     # different types of authentication.
-    FLOW_TYPE = None
+    FLOW_TYPE: Optional[str] = None
 
     # If an AuthenticationProvider authenticates patrons without identifying
     # then as specific individuals (the way a geographic gate does),
@@ -1306,7 +1306,7 @@ class AuthenticationProvider(OPDSAuthenticationFlow):
     # AuthenticationProviders. Image files MUST be stored in the
     # `resources/images` directory - the value here should be the
     # file name.
-    LOGIN_BUTTON_IMAGE = None
+    LOGIN_BUTTON_IMAGE: Optional[str] = None
 
     # Each authentication mechanism may have a list of SETTINGS that
     # must be configured for that mechanism, and may have a list of
@@ -1317,7 +1317,7 @@ class AuthenticationProvider(OPDSAuthenticationFlow):
     # For example: { "key": "username", "label": _("Client ID") }.
     # A setting is optional by default, but may have "required" set to True.
 
-    SETTINGS = []
+    SETTINGS: List[dict] = []
 
     # Each library and authentication mechanism may have an ILS-assigned
     # branch or institution ID used in the SIP2 AO field.
@@ -1765,7 +1765,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests):
     # passwords.
     alphanumerics_plus = re.compile("^[A-Za-z0-9@.-]+$")
     DEFAULT_IDENTIFIER_REGULAR_EXPRESSION = alphanumerics_plus
-    DEFAULT_PASSWORD_REGULAR_EXPRESSION = None
+    DEFAULT_PASSWORD_REGULAR_EXPRESSION: Optional[str] = None
 
     # Configuration settings that are common to all Basic Auth-type
     # authentication techniques.
@@ -2632,14 +2632,6 @@ class OAuthAuthenticationProvider(AuthenticationProvider, BearerTokenSigner):
         """
         raise NotImplementedError()
 
-    def remote_patron_lookup(self, access_token):
-        """Use a bearer token to look up as much information as possible about
-        a patron.
-
-        :return: A ProblemDetail if there's a problem. Otherwise, a PatronData.
-        """
-        raise NotImplementedError()
-
     def _internal_authenticate_url(self, _db):
         """A patron who wants to log in should hit this URL on the circulation
         manager. They'll be redirected to the OAuth provider, which will
@@ -2817,6 +2809,6 @@ class BaseSAMLAuthenticationProvider(
 
     FLOW_TYPE = "http://librarysimplified.org/authtype/SAML-2.0"
 
-    SETTINGS = SAMLSettings()
+    SETTINGS = SAMLSettings()  # type: ignore
 
-    LIBRARY_SETTINGS = []
+    LIBRARY_SETTINGS: List[dict] = []

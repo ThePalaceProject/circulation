@@ -5,7 +5,7 @@ from io import BytesIO
 from typing import Any, Dict, Optional
 
 import flask
-import wcag_contrast_ratio
+import wcag_contrast_ratio  # type: ignore
 from flask import Response
 from flask_babel import lazy_gettext as _
 from PIL import Image
@@ -399,7 +399,7 @@ class LibrarySettingsController(SettingsController):
         return json.dumps([_f for _f in value if _f])
 
     @staticmethod
-    def _data_url_for_image(image: Image, _format="PNG") -> str:
+    def _data_url_for_image(image: Image.Image, _format="PNG") -> str:
         """Produce the `data` URL for the setting's uploaded image file.
 
         :param image: A Pillow Image.

@@ -5,11 +5,6 @@ from core.config import Configuration
 
 
 class TestPalaceXrayMiddleware:
-    def test_put_annotations_none(self):
-        # If no segment is passed in nothing is returned
-        value = PalaceXrayMiddleware.put_annotations(None)
-        assert value is None
-
     def test_put_annotations(self):
         # Type annotation set based on seg_type passed into put_annotation
         segment = MagicMock()

@@ -23,7 +23,7 @@ from ..util.string_helpers import random_string
 from . import Base, get_one, get_one_or_create
 from .constants import DataSourceConstants
 from .hassessioncache import HasSessionCache
-from .library import Library
+from .library import Library, externalintegrations_libraries
 
 if TYPE_CHECKING:
     # This is needed during type checking so we have the
@@ -339,6 +339,12 @@ class ExternalIntegration(Base):
         backref="other_integration",
         foreign_keys="ExternalIntegrationLink.other_integration_id",
         cascade="all, delete-orphan",
+    )
+
+    libraries = relationship(
+        "Library",
+        back_populates="integrations",
+        secondary=lambda: externalintegrations_libraries,
     )
 
     def __repr__(self):

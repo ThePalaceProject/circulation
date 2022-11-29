@@ -4,7 +4,7 @@ import sys
 import time
 from abc import ABC, abstractmethod
 from threading import Thread
-from typing import Dict, Optional, Type
+from typing import Dict, List, Optional, Tuple, Type
 
 import flask
 import sqlalchemy
@@ -459,11 +459,11 @@ class BaseCirculationAPI:
 
     # These collection-specific settings should be inherited by all
     # distributors.
-    SETTINGS = []
+    SETTINGS: List[dict] = []
 
     # These library- and collection-specific settings should be
     # inherited by all distributors.
-    LIBRARY_SETTINGS = []
+    LIBRARY_SETTINGS: List[dict] = []
 
     BORROW_STEP = "borrow"
     FULFILL_STEP = "fulfill"
@@ -477,7 +477,7 @@ class BaseCirculationAPI:
     # wait til the point of fulfillment to set a delivery mechanism
     # (Overdrive), set this to FULFILL_STEP. If there is no choice of
     # delivery mechanisms (3M), set this to None.
-    SET_DELIVERY_MECHANISM_AT = FULFILL_STEP
+    SET_DELIVERY_MECHANISM_AT: Optional[str] = FULFILL_STEP
 
     # Different APIs have different internal names for delivery
     # mechanisms. This is a mapping of (content_type, drm_type)
@@ -486,7 +486,9 @@ class BaseCirculationAPI:
     # For instance, the combination ("application/epub+zip",
     # "vnd.adobe/adept+xml") is called "ePub" in Axis 360 and 3M, but
     # is called "ebook-epub-adobe" in Overdrive.
-    delivery_mechanism_to_internal_format = {}
+    delivery_mechanism_to_internal_format: Dict[
+        Tuple[Optional[str], Optional[str]], str
+    ] = {}
 
     def internal_format(self, delivery_mechanism):
         """Look up the internal format for this delivery mechanism or
@@ -714,7 +716,7 @@ class CirculationAPI:
         self.analytics = analytics
         self.initialization_exceptions = dict()
         api_map = api_map or self.default_api_map
-        fulfillment_post_processors_map = (
+        fulfillment_post_processors_mapping = (
             fulfillment_post_processors_map
             or self.default_fulfillment_post_processors_map
         )
@@ -737,7 +739,7 @@ class CirculationAPI:
             if collection.protocol in api_map:
                 api = None
                 try:
-                    api = api_map[collection.protocol](db, collection)
+                    api = api_map[collection.protocol](db, collection)  # type: ignore
                 except CannotLoadConfiguration as exception:
                     self.log.exception(
                         "Error loading configuration for {}: {}".format(
@@ -749,10 +751,12 @@ class CirculationAPI:
                     self.api_for_collection[collection.id] = api
                     self.collection_ids_for_sync.append(collection.id)
 
-            if collection.protocol in fulfillment_post_processors_map:
-                fulfillment_post_processor = fulfillment_post_processors_map[
+            if collection.protocol in fulfillment_post_processors_mapping:
+                fulfillment_post_processor = fulfillment_post_processors_mapping[
                     collection.protocol
-                ](collection)
+                ](
+                    collection
+                )  # type: ignore
                 self._fulfillment_post_processors_map[
                     collection.id
                 ] = fulfillment_post_processor

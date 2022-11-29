@@ -21,7 +21,7 @@ class IndividualAdminSettingsController(SettingsController):
             return self.process_post()
 
     def _highest_authorized_role(self) -> Optional[AdminRole]:
-        highest_role = None
+        highest_role: Optional[AdminRole] = None
         has_auth = False
 
         admin = getattr(flask.request, "admin", None)

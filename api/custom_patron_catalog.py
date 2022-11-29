@@ -2,6 +2,8 @@
 document to describe an unusual setup.
 """
 
+from typing import Dict
+
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm.session import Session
 
@@ -25,7 +27,7 @@ class CustomPatronCatalog:
     from their session.
     """
 
-    BY_PROTOCOL = {}
+    BY_PROTOCOL: Dict[str, "CustomPatronCatalog"] = {}
 
     GOAL = "custom_patron_catalog"
 

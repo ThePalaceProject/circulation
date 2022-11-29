@@ -6,6 +6,8 @@ We're keeping it around because existing iOS versions of SimplyE need the
 OPDS navigation feed it generates.
 """
 
+from typing import Dict
+
 from flask import Response
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm.session import Session
@@ -32,7 +34,7 @@ class CustomIndexView:
     disconnecting them from their session.
     """
 
-    BY_PROTOCOL = {}
+    BY_PROTOCOL: Dict[str, "CustomIndexView"] = {}
 
     GOAL = "custom_index"
 
