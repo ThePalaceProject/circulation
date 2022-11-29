@@ -12,7 +12,7 @@ import unicodedata
 import uuid
 from collections import defaultdict
 from enum import Enum
-from typing import Generator, Optional
+from typing import Generator, Optional, Type
 
 from sqlalchemy import and_, exists, text, tuple_
 from sqlalchemy.exc import ProgrammingError
@@ -1942,7 +1942,7 @@ class OPDSImportScript(CollectionInputScript):
     name = "Import all books from the OPDS feed associated with a collection."
 
     IMPORTER_CLASS = OPDSImporter
-    MONITOR_CLASS = OPDSImportMonitor
+    MONITOR_CLASS: Type[OPDSImportMonitor] = OPDSImportMonitor
     PROTOCOL = ExternalIntegration.OPDS_IMPORT
 
     def __init__(
