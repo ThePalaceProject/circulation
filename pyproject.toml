@@ -10,7 +10,47 @@ profile = "black"
 exclude = [
     'core/model/listeners.py',
     'core/bin',
-    'core/classifier'
+    'core/classifier',
+    # TODO: Post test-suite refactoring.
+    'core/opds_schema\.py',
+    'tests/core/models/test_admin\.py',
+    'tests/core/models/test_cachedfeed\.py',
+    'tests/core/models/test_collection\.py',
+    'tests/core/models/test_configuration\.py',
+    'tests/core/models/test_coverage\.py',
+    'tests/core/models/test_credential\.py',
+    'tests/core/models/test_datasource\.py',
+    'tests/core/models/test_devicetoken\.py',
+    'tests/core/models/test_hassessioncache\.py',
+    'tests/core/models/test_identifier\.py',
+    'tests/core/models/test_library\.py',
+    'tests/core/models/test_licensing\.py',
+    'tests/core/models/test_listeners\.py',
+    'tests/core/models/test_measurement\.py',
+    'tests/core/models/test_patron\.py',
+    'tests/core/models/test_work\.py',
+    'tests/core/test_analytics\.py',
+    'tests/core/test_app_server\.py',
+    'tests/core/test_circulation_data\.py',
+    'tests/core/test_config\.py',
+    'tests/core/test_coverage\.py',
+    'tests/core/test_equivalent_coverage\.py',
+    'tests/core/test_external_list\.py',
+    'tests/core/test_external_search\.py',
+    'tests/core/test_lane\.py',
+    'tests/core/test_local_analytics_provider\.py',
+    'tests/core/test_marc\.py',
+    'tests/core/test_metadata\.py',
+    'tests/core/test_monitor\.py',
+    'tests/core/test_opds2\.py',
+    'tests/core/test_opds2_import\.py',
+    'tests/core/test_opds\.py',
+    'tests/core/test_opds_import\.py',
+    'tests/core/test_overdrive\.py',
+    'tests/core/test_s3\.py',
+    'tests/core/test_scripts\.py',
+    'tests/core/test_selftest\.py',
+    'tests/fixtures/database\.py',
 ]
 files = [
     "customlists",
@@ -54,6 +94,7 @@ follow_imports = "skip"
 module = [
     "api.*",
     "core.classifier.*",
+    "tests.fixtures.database"
 ]
 
 [[tool.mypy.overrides]]
@@ -159,5 +200,10 @@ pg = ["psycopg2"]
 pg-binary = ["psycopg2-binary"]
 
 [tool.pytest.ini_options]
+addopts = "--strict-markers"
+markers = [
+    "elasticsearch: mark test as requiring elasticsearch",
+    "minio: mark test as requiring minio",
+]
 timeout = "600"
 timeout_method = "thread"

@@ -29,32 +29,50 @@ from core.model.licensing import (
 from core.model.resource import Hyperlink, Representation
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestDeliveryMechanism(DatabaseTest):
-    def setup_method(self):
-        super().setup_method()
-        self.epub_no_drm, ignore = DeliveryMechanism.lookup(
-            self._db, Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM
-        )
-        self.epub_adobe_drm, ignore = DeliveryMechanism.lookup(
-            self._db, Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM
-        )
-        self.overdrive_streaming_text, ignore = DeliveryMechanism.lookup(
-            self._db,
-            DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
-            DeliveryMechanism.OVERDRIVE_DRM,
-        )
-        self.audiobook_drm_scheme, ignore = DeliveryMechanism.lookup(
-            self._db,
-            Representation.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-            DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
-        )
+class TestDeliveryMechanismFixture:
+    epub_no_drm: DeliveryMechanism
+    epub_adobe_drm: DeliveryMechanism
+    overdrive_streaming_text: DeliveryMechanism
+    audiobook_drm_scheme: DeliveryMechanism
+    transaction: DatabaseTransactionFixture
 
-    def test_implicit_medium(self):
-        assert Edition.BOOK_MEDIUM == self.epub_no_drm.implicit_medium
-        assert Edition.BOOK_MEDIUM == self.epub_adobe_drm.implicit_medium
-        assert Edition.BOOK_MEDIUM == self.overdrive_streaming_text.implicit_medium
+
+@pytest.fixture()
+def test_delivery_mechanism_fixture(
+    db: DatabaseTransactionFixture,
+) -> TestDeliveryMechanismFixture:
+    fix = TestDeliveryMechanismFixture()
+    fix.epub_no_drm, ignore = DeliveryMechanism.lookup(
+        db.session, Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM
+    )
+    fix.epub_adobe_drm, ignore = DeliveryMechanism.lookup(
+        db.session, Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM
+    )
+    fix.overdrive_streaming_text, ignore = DeliveryMechanism.lookup(
+        db.session,
+        DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+        DeliveryMechanism.OVERDRIVE_DRM,
+    )
+    fix.audiobook_drm_scheme, ignore = DeliveryMechanism.lookup(
+        db.session,
+        Representation.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+        DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
+    )
+    fix.transaction = db
+    return fix
+
+
+class TestDeliveryMechanism:
+    def test_implicit_medium(
+        self, test_delivery_mechanism_fixture: TestDeliveryMechanismFixture
+    ):
+        data = test_delivery_mechanism_fixture
+        assert Edition.BOOK_MEDIUM == data.epub_no_drm.implicit_medium
+        assert Edition.BOOK_MEDIUM == data.epub_adobe_drm.implicit_medium
+        assert Edition.BOOK_MEDIUM == data.overdrive_streaming_text.implicit_medium
 
     def test_is_media_type(self):
         assert False == DeliveryMechanism.is_media_type(None)
@@ -66,35 +84,49 @@ class TestDeliveryMechanism(DatabaseTest):
             DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE
         )
 
-    def test_is_streaming(self):
-        assert False == self.epub_no_drm.is_streaming
-        assert False == self.epub_adobe_drm.is_streaming
-        assert True == self.overdrive_streaming_text.is_streaming
+    def test_is_streaming(
+        self, test_delivery_mechanism_fixture: TestDeliveryMechanismFixture
+    ):
+        data = test_delivery_mechanism_fixture
+        assert False == data.epub_no_drm.is_streaming
+        assert False == data.epub_adobe_drm.is_streaming
+        assert True == data.overdrive_streaming_text.is_streaming
 
-    def test_drm_scheme_media_type(self):
-        assert None == self.epub_no_drm.drm_scheme_media_type
-        assert DeliveryMechanism.ADOBE_DRM == self.epub_adobe_drm.drm_scheme_media_type
-        assert None == self.overdrive_streaming_text.drm_scheme_media_type
+    def test_drm_scheme_media_type(
+        self, test_delivery_mechanism_fixture: TestDeliveryMechanismFixture
+    ):
+        data = test_delivery_mechanism_fixture
+        assert None == data.epub_no_drm.drm_scheme_media_type
+        assert DeliveryMechanism.ADOBE_DRM == data.epub_adobe_drm.drm_scheme_media_type
+        assert None == data.overdrive_streaming_text.drm_scheme_media_type
 
-    def test_content_type_media_type(self):
+    def test_content_type_media_type(
+        self, test_delivery_mechanism_fixture: TestDeliveryMechanismFixture
+    ):
+        data = test_delivery_mechanism_fixture
         assert (
-            Representation.EPUB_MEDIA_TYPE == self.epub_no_drm.content_type_media_type
+            Representation.EPUB_MEDIA_TYPE == data.epub_no_drm.content_type_media_type
         )
         assert (
             Representation.EPUB_MEDIA_TYPE
-            == self.epub_adobe_drm.content_type_media_type
+            == data.epub_adobe_drm.content_type_media_type
         )
         assert (
             Representation.TEXT_HTML_MEDIA_TYPE + DeliveryMechanism.STREAMING_PROFILE
-            == self.overdrive_streaming_text.content_type_media_type
+            == data.overdrive_streaming_text.content_type_media_type
         )
         assert (
             Representation.AUDIOBOOK_MANIFEST_MEDIA_TYPE
             + DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_PROFILE
-            == self.audiobook_drm_scheme.content_type_media_type
+            == data.audiobook_drm_scheme.content_type_media_type
         )
 
-    def test_default_fulfillable(self):
+    def test_default_fulfillable(
+        self, test_delivery_mechanism_fixture: TestDeliveryMechanismFixture
+    ):
+        data = test_delivery_mechanism_fixture
+        session = data.transaction.session
+
         # Try some well-known media type/DRM combinations known to be
         # fulfillable by the default client.
         for media, drm in (
@@ -109,54 +141,61 @@ class TestDeliveryMechanism(DatabaseTest):
         ):
             # All of these DeliveryMechanisms were created when the
             # database was initialized.
-            mechanism, is_new = DeliveryMechanism.lookup(self._db, media, drm)
+            mechanism, is_new = DeliveryMechanism.lookup(session, media, drm)
             assert False == is_new
             assert True == mechanism.default_client_can_fulfill
 
         # It's possible to create new DeliveryMechanisms at runtime,
         # but their .default_client_can_fulfill will be False.
         mechanism, is_new = DeliveryMechanism.lookup(
-            self._db, MediaTypes.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM
+            session, MediaTypes.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM
         )
         assert False == is_new
         assert True == mechanism.default_client_can_fulfill
 
         mechanism, is_new = DeliveryMechanism.lookup(
-            self._db, MediaTypes.PDF_MEDIA_TYPE, DeliveryMechanism.STREAMING_DRM
+            session, MediaTypes.PDF_MEDIA_TYPE, DeliveryMechanism.STREAMING_DRM
         )
         assert True == is_new
         assert False == mechanism.default_client_can_fulfill
 
-    def test_association_with_licensepool(self):
-        ignore, with_download = self._edition(with_open_access_download=True)
+    def test_association_with_licensepool(
+        self, test_delivery_mechanism_fixture: TestDeliveryMechanismFixture
+    ):
+        data = test_delivery_mechanism_fixture
+        ignore, with_download = data.transaction.edition(with_open_access_download=True)
         [lpmech] = with_download.delivery_mechanisms
         assert b"Dummy content" == lpmech.resource.representation.content
         mech = lpmech.delivery_mechanism
         assert MediaTypes.EPUB_MEDIA_TYPE == mech.content_type
         assert mech.NO_DRM == mech.drm_scheme
 
-    def test_compatible_with(self):
+    def test_compatible_with(
+        self, test_delivery_mechanism_fixture: TestDeliveryMechanismFixture
+    ):
+        session = test_delivery_mechanism_fixture.transaction.session
+
         """Test the rules about which DeliveryMechanisms are
         mutually compatible and which are mutually exclusive.
         """
         epub_adobe, ignore = DeliveryMechanism.lookup(
-            self._db, MediaTypes.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM
+            session, MediaTypes.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM
         )
 
         pdf_adobe, ignore = DeliveryMechanism.lookup(
-            self._db, MediaTypes.PDF_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM
+            session, MediaTypes.PDF_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM
         )
 
         epub_no_drm, ignore = DeliveryMechanism.lookup(
-            self._db, MediaTypes.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM
+            session, MediaTypes.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM
         )
 
         pdf_no_drm, ignore = DeliveryMechanism.lookup(
-            self._db, MediaTypes.PDF_MEDIA_TYPE, DeliveryMechanism.NO_DRM
+            session, MediaTypes.PDF_MEDIA_TYPE, DeliveryMechanism.NO_DRM
         )
 
         streaming, ignore = DeliveryMechanism.lookup(
-            self._db,
+            session,
             DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
             DeliveryMechanism.STREAMING_DRM,
         )
@@ -181,48 +220,51 @@ class TestDeliveryMechanism(DatabaseTest):
         assert True == epub_no_drm.compatible_with(pdf_no_drm, True)
         assert False == epub_no_drm.compatible_with(pdf_adobe, True)
 
-    def test_uniqueness_constraint(self):
+    def test_uniqueness_constraint(
+        self, test_delivery_mechanism_fixture: TestDeliveryMechanismFixture
+    ):
+        session = test_delivery_mechanism_fixture.transaction.session
         dm = DeliveryMechanism
 
         # You can't create two DeliveryMechanisms with the same values
         # for content_type and drm_scheme.
         with_drm_args = dict(content_type="type1", drm_scheme="scheme1")
         without_drm_args = dict(content_type="type1", drm_scheme=None)
-        with_drm = create(self._db, dm, **with_drm_args)
-        pytest.raises(IntegrityError, create, self._db, dm, **with_drm_args)
-        self._db.rollback()
+        with_drm = create(session, dm, **with_drm_args)
+        pytest.raises(IntegrityError, create, session, dm, **with_drm_args)
+        session.rollback()
 
         # You can't create two DeliveryMechanisms with the same value
         # for content_type and a null value for drm_scheme.
-        without_drm = create(self._db, dm, **without_drm_args)
-        pytest.raises(IntegrityError, create, self._db, dm, **without_drm_args)
-        self._db.rollback()
+        without_drm = create(session, dm, **without_drm_args)
+        pytest.raises(IntegrityError, create, session, dm, **without_drm_args)
+        session.rollback()
 
 
-class TestRightsStatus(DatabaseTest):
-    def test_lookup(self):
-        status = RightsStatus.lookup(self._db, RightsStatus.IN_COPYRIGHT)
+class TestRightsStatus:
+    def test_lookup(self, db: DatabaseTransactionFixture):
+        status = RightsStatus.lookup(db.session, RightsStatus.IN_COPYRIGHT)
         assert RightsStatus.IN_COPYRIGHT == status.uri
         assert RightsStatus.NAMES.get(RightsStatus.IN_COPYRIGHT) == status.name
 
-        status = RightsStatus.lookup(self._db, RightsStatus.CC0)
+        status = RightsStatus.lookup(db.session, RightsStatus.CC0)
         assert RightsStatus.CC0 == status.uri
         assert RightsStatus.NAMES.get(RightsStatus.CC0) == status.name
 
-        status = RightsStatus.lookup(self._db, "not a known rights uri")
+        status = RightsStatus.lookup(db.session, "not a known rights uri")
         assert RightsStatus.UNKNOWN == status.uri
         assert RightsStatus.NAMES.get(RightsStatus.UNKNOWN) == status.name
 
-    def test_unique_uri_constraint(self):
+    def test_unique_uri_constraint(self, db: DatabaseTransactionFixture):
         # We already have this RightsStatus.
-        status = RightsStatus.lookup(self._db, RightsStatus.IN_COPYRIGHT)
+        status = RightsStatus.lookup(db.session, RightsStatus.IN_COPYRIGHT)
 
         # Let's try to create another one with the same URI.
         dupe = RightsStatus(uri=RightsStatus.IN_COPYRIGHT)
-        self._db.add(dupe)
+        db.session.add(dupe)
 
         # Nope.
-        pytest.raises(IntegrityError, self._db.commit)
+        pytest.raises(IntegrityError, db.session.commit)
 
 
 class TestLicense(DatabaseTest):
@@ -460,17 +502,17 @@ class TestLicense(DatabaseTest):
         assert None == self.pool.best_available_license()
 
 
-class TestLicensePool(DatabaseTest):
-    def test_for_foreign_id(self):
+class TestLicensePool:
+    def test_for_foreign_id(self, db: DatabaseTransactionFixture):
         """Verify we can get a LicensePool for a data source, an
         appropriate work identifier, and a Collection."""
         now = utc_now()
         pool, was_new = LicensePool.for_foreign_id(
-            self._db,
+            db.session,
             DataSource.GUTENBERG,
             Identifier.GUTENBERG_ID,
             "541",
-            collection=self._collection(),
+            collection=db.collection(),
         )
         assert (pool.availability_time - now).total_seconds() < 2
         assert True == was_new
@@ -482,43 +524,47 @@ class TestLicensePool(DatabaseTest):
         assert 0 == pool.licenses_reserved
         assert 0 == pool.patrons_in_hold_queue
 
-    def test_for_foreign_id_fails_when_no_collection_provided(self):
+    def test_for_foreign_id_fails_when_no_collection_provided(
+        self, db: DatabaseTransactionFixture
+    ):
         """We cannot create a LicensePool that is not associated
         with some Collection.
         """
         pytest.raises(
             CollectionMissing,
             LicensePool.for_foreign_id,
-            self._db,
+            db.session,
             DataSource.GUTENBERG,
             Identifier.GUTENBERG_ID,
             "541",
             collection=None,
         )
 
-    def test_with_no_delivery_mechanisms(self):
+    def test_with_no_delivery_mechanisms(self, db: DatabaseTransactionFixture):
         # LicensePool.with_no_delivery_mechanisms returns a
         # query that finds all LicensePools which are missing
         # delivery mechanisms.
-        qu = LicensePool.with_no_delivery_mechanisms(self._db)
-        pool = self._licensepool(None)
+        qu = LicensePool.with_no_delivery_mechanisms(db.session)
+        pool = db.licensepool(None)
 
         # The LicensePool was created with a delivery mechanism.
         assert [] == qu.all()
 
         # Let's delete it.
-        [self._db.delete(x) for x in pool.delivery_mechanisms]
+        [db.session.delete(x) for x in pool.delivery_mechanisms]
         assert [pool] == qu.all()
 
-    def test_no_license_pool_for_non_primary_identifier(self):
+    def test_no_license_pool_for_non_primary_identifier(
+        self, db: DatabaseTransactionFixture
+    ):
         """Overdrive offers licenses, but to get an Overdrive license pool for
         a book you must identify the book by Overdrive's primary
         identifier, not some other kind of identifier.
         """
-        collection = self._collection()
+        collection = db.collection()
         with pytest.raises(ValueError) as excinfo:
             LicensePool.for_foreign_id(
-                self._db,
+                db.session,
                 DataSource.OVERDRIVE,
                 Identifier.ISBN,
                 "{1-2-3}",
@@ -529,18 +575,20 @@ class TestLicensePool(DatabaseTest):
             in str(excinfo.value)
         )
 
-    def test_licensepools_for_same_identifier_have_same_presentation_edition(self):
+    def test_licensepools_for_same_identifier_have_same_presentation_edition(
+        self, db: DatabaseTransactionFixture
+    ):
         """Two LicensePools for the same Identifier will get the same
         presentation edition.
         """
-        identifier = self._identifier()
-        edition1, pool1 = self._edition(
+        identifier = db.identifier()
+        edition1, pool1 = db.edition(
             with_license_pool=True,
             data_source_name=DataSource.GUTENBERG,
             identifier_type=identifier.type,
             identifier_id=identifier.identifier,
         )
-        edition2, pool2 = self._edition(
+        edition2, pool2 = db.edition(
             with_license_pool=True,
             data_source_name=DataSource.UNGLUE_IT,
             identifier_type=identifier.type,
@@ -550,15 +598,17 @@ class TestLicensePool(DatabaseTest):
         pool2.set_presentation_edition()
         assert pool1.presentation_edition == pool2.presentation_edition
 
-    def test_collection_datasource_identifier_must_be_unique(self):
+    def test_collection_datasource_identifier_must_be_unique(
+        self, db: DatabaseTransactionFixture
+    ):
         """You can't have two LicensePools with the same Collection,
         DataSource, and Identifier.
         """
-        data_source = DataSource.lookup(self._db, DataSource.GUTENBERG)
-        identifier = self._identifier()
-        collection = self._default_collection
+        data_source = DataSource.lookup(db.session, DataSource.GUTENBERG)
+        identifier = db.identifier()
+        collection = db.default_collection()
         pool = create(
-            self._db,
+            db.session,
             LicensePool,
             data_source=data_source,
             identifier=identifier,
@@ -568,39 +618,38 @@ class TestLicensePool(DatabaseTest):
         pytest.raises(
             IntegrityError,
             create,
-            self._db,
+            db.session,
             LicensePool,
             data_source=data_source,
             identifier=identifier,
             collection=collection,
         )
 
-    def test_with_no_work(self):
+    def test_with_no_work(self, db: DatabaseTransactionFixture):
         p1, ignore = LicensePool.for_foreign_id(
-            self._db,
+            db.session,
             DataSource.GUTENBERG,
             Identifier.GUTENBERG_ID,
             "1",
-            collection=self._default_collection,
+            collection=db.default_collection(),
         )
 
         p2, ignore = LicensePool.for_foreign_id(
-            self._db,
+            db.session,
             DataSource.OVERDRIVE,
             Identifier.OVERDRIVE_ID,
             "2",
-            collection=self._default_collection,
+            collection=db.default_collection(),
         )
 
-        work = self._work(title="Foo")
+        work = db.work(title="Foo")
         p1.work = work
 
         assert p1 in work.license_pools
+        assert [p2] == LicensePool.with_no_work(db.session)
 
-        assert [p2] == LicensePool.with_no_work(self._db)
-
-    def test_update_availability(self):
-        work = self._work(with_license_pool=True)
+    def test_update_availability(self, db: DatabaseTransactionFixture):
+        work = db.work(with_license_pool=True)
         work.last_update_time = None
 
         [pool] = work.license_pools
@@ -613,13 +662,15 @@ class TestLicensePool(DatabaseTest):
         # Updating availability also modified work.last_update_time.
         assert (utc_now() - work.last_update_time) < datetime.timedelta(seconds=2)
 
-    def test_update_availability_does_nothing_if_given_no_data(self):
+    def test_update_availability_does_nothing_if_given_no_data(
+        self, db: DatabaseTransactionFixture
+    ):
         """Passing an empty set of data into update_availability is
         a no-op.
         """
 
         # Set up a Work.
-        work = self._work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         work.last_update_time = None
 
         # Set up a LicensePool.
@@ -652,15 +703,15 @@ class TestLicensePool(DatabaseTest):
         assert 30 == pool.licenses_reserved
         assert 40 == pool.patrons_in_hold_queue
 
-    def test_open_access_links(self):
-        edition, pool = self._edition(with_open_access_download=True)
-        source = DataSource.lookup(self._db, DataSource.GUTENBERG)
+    def test_open_access_links(self, db: DatabaseTransactionFixture):
+        edition, pool = db.edition(with_open_access_download=True)
+        source = DataSource.lookup(db.session, DataSource.GUTENBERG)
 
         [oa1] = list(pool.open_access_links)
 
         # We have one open-access download, let's
         # add another.
-        url = self._url
+        url = db.fresh_url()
         media_type = MediaTypes.EPUB_MEDIA_TYPE
         link2, new = pool.identifier.add_link(
             Hyperlink.OPEN_ACCESS_DOWNLOAD, url, source, media_type
@@ -668,24 +719,24 @@ class TestLicensePool(DatabaseTest):
         oa2 = link2.resource
 
         # And let's add a link that's not an open-access download.
-        url = self._url
+        url = db.fresh_url()
         image, new = pool.identifier.add_link(
             Hyperlink.IMAGE, url, source, MediaTypes.JPEG_MEDIA_TYPE
         )
-        self._db.commit()
+        db.session.commit()
 
         # Only the two open-access download links show up.
         assert {oa1, oa2} == set(pool.open_access_links)
 
-    def test_better_open_access_pool_than(self):
-        gutenberg_1 = self._licensepool(
+    def test_better_open_access_pool_than(self, db: DatabaseTransactionFixture):
+        gutenberg_1 = db.licensepool(
             None,
             open_access=True,
             data_source_name=DataSource.GUTENBERG,
             with_open_access_download=True,
         )
 
-        gutenberg_2 = self._licensepool(
+        gutenberg_2 = db.licensepool(
             None,
             open_access=True,
             data_source_name=DataSource.GUTENBERG,
@@ -696,7 +747,7 @@ class TestLicensePool(DatabaseTest):
             gutenberg_2.identifier.identifier
         )
 
-        standard_ebooks = self._licensepool(
+        standard_ebooks = db.licensepool(
             None,
             open_access=True,
             data_source_name=DataSource.STANDARD_EBOOKS,
@@ -706,20 +757,20 @@ class TestLicensePool(DatabaseTest):
         # Make sure Feedbooks data source exists -- it's not created
         # by default.
         feedbooks_data_source = DataSource.lookup(
-            self._db, DataSource.FEEDBOOKS, autocreate=True
+            db.session, DataSource.FEEDBOOKS, autocreate=True
         )
-        feedbooks = self._licensepool(
+        feedbooks = db.licensepool(
             None,
             open_access=True,
             data_source_name=DataSource.FEEDBOOKS,
             with_open_access_download=True,
         )
 
-        overdrive = self._licensepool(
+        overdrive = db.licensepool(
             None, open_access=False, data_source_name=DataSource.OVERDRIVE
         )
 
-        suppressed = self._licensepool(
+        suppressed = db.licensepool(
             None, open_access=True, data_source_name=DataSource.GUTENBERG
         )
         suppressed.suppressed = True
@@ -750,7 +801,7 @@ class TestLicensePool(DatabaseTest):
         # If a supposedly open-access LicensePool doesn't have an
         # open-access download resource, it will only be considered if
         # there is no other alternative.
-        no_resource = self._licensepool(
+        no_resource = db.licensepool(
             None,
             open_access=True,
             data_source_name=DataSource.STANDARD_EBOOKS,
@@ -760,25 +811,24 @@ class TestLicensePool(DatabaseTest):
         assert True == better(no_resource, None)
         assert False == better(no_resource, gutenberg_1)
 
-    def test_set_presentation_edition(self):
+    def test_set_presentation_edition(self, db: DatabaseTransactionFixture):
         """
         Make sure composite edition creation makes good choices when combining
         field data from provider, metadata wrangler, admin interface, etc. editions.
         """
-
         # Here's an Overdrive audiobook which also has data from the metadata
         # wrangler and from library staff.
-        od, pool = self._edition(
+        od, pool = db.edition(
             data_source_name=DataSource.OVERDRIVE, with_license_pool=True
         )
         od.medium = Edition.AUDIO_MEDIUM
 
-        admin = self._edition(
+        admin = db.edition(
             data_source_name=DataSource.LIBRARY_STAFF, with_license_pool=False
         )
         admin.primary_identifier = pool.identifier
 
-        mw = self._edition(
+        mw = db.edition(
             data_source_name=DataSource.METADATA_WRANGLER, with_license_pool=False
         )
         mw.primary_identifier = pool.identifier
@@ -825,9 +875,9 @@ class TestLicensePool(DatabaseTest):
         # Now, change the admin interface's opinion about who the
         # author is.
         for c in admin.contributions:
-            self._db.delete(c)
-        self._db.commit()
-        [jane], ignore = Contributor.lookup(self._db, "Doe, Jane")
+            db.session.delete(c)
+        db.session.commit()
+        [jane], ignore = Contributor.lookup(db.session, "Doe, Jane")
         jane.family_name, jane.display_name = jane.default_names()
         admin.add_contributor(jane, Contributor.AUTHOR_ROLE)
         pool.set_presentation_edition()
@@ -836,8 +886,8 @@ class TestLicensePool(DatabaseTest):
         # edition, and the new contributor added.
         assert {jane} == presentation.contributors
 
-    def test_circulation_changelog(self):
-        edition, pool = self._edition(with_license_pool=True)
+    def test_circulation_changelog(self, db: DatabaseTransactionFixture):
+        edition, pool = db.edition(with_license_pool=True)
         pool.licenses_owned = 10
         pool.licenses_available = 9
         pool.licenses_reserved = 8
@@ -894,12 +944,12 @@ class TestLicensePool(DatabaseTest):
         assert "[NO TITLE]" == args[1]
         assert "[NO AUTHOR]" == args[2]
 
-    def test_update_availability_from_delta(self):
+    def test_update_availability_from_delta(self, db: DatabaseTransactionFixture):
         """A LicensePool may have its availability information updated based
         on a single observed change.
         """
 
-        edition, pool = self._edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
         assert None == pool.last_checked
         assert 1 == pool.licenses_owned
         assert 1 == pool.licenses_available
@@ -967,12 +1017,12 @@ class TestLicensePool(DatabaseTest):
         # No more DISTRIBUTOR events
         assert 0 == analytics.count
 
-    def test_calculate_change_from_one_event(self):
+    def test_calculate_change_from_one_event(self, db: DatabaseTransactionFixture):
         """Test the internal method called by update_availability_from_delta."""
         CE = CirculationEvent
 
         # Create a LicensePool with a large number of available licenses.
-        edition, pool = self._edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
         pool.licenses_owned = 5
         pool.licenses_available = 4
         pool.licenses_reserved = 0
@@ -1056,15 +1106,15 @@ class TestLicensePool(DatabaseTest):
         # patrons in the hold queue.
         assert (6, 0, 1, 3) == calc(CE.DISTRIBUTOR_LICENSE_ADD, 1)
 
-    def test_loan_to_patron(self):
+    def test_loan_to_patron(self, db: DatabaseTransactionFixture):
         # Test our ability to loan LicensePools to Patrons.
         #
         # TODO: The path where the LicensePool is loaned to an
         # IntegrationClient rather than a Patron is currently not
         # directly tested.
 
-        pool = self._licensepool(None)
-        patron = self._patron()
+        pool = db.licensepool(None)
+        patron = db.patron()
         now = utc_now()
         patron.last_loan_activity_sync = now
 
@@ -1072,7 +1122,7 @@ class TestLicensePool(DatabaseTest):
         tomorrow = now + datetime.timedelta(days=1)
 
         fulfillment = pool.delivery_mechanisms[0]
-        external_identifier = self._str
+        external_identifier = db.fresh_str()
         loan, is_new = pool.loan_to(
             patron,
             start=yesterday,
@@ -1111,14 +1161,14 @@ class TestLicensePool(DatabaseTest):
         assert loan == loan2
         assert now == patron.last_loan_activity_sync
 
-    def test_on_hold_to_patron(self):
+    def test_on_hold_to_patron(self, db: DatabaseTransactionFixture):
         # Test our ability to put a Patron in the holds queue for a LicensePool.
         #
         # TODO: The path where the 'patron' is an IntegrationClient
         # rather than a Patron is currently not directly tested.
 
-        pool = self._licensepool(None)
-        patron = self._patron()
+        pool = db.licensepool(None)
+        patron = db.patron()
         now = utc_now()
         patron.last_loan_activity_sync = now
 
@@ -1127,7 +1177,7 @@ class TestLicensePool(DatabaseTest):
 
         fulfillment = pool.delivery_mechanisms[0]
         position = 99
-        external_identifier = self._str
+        external_identifier = db.fresh_str()
         hold, is_new = pool.on_hold_to(
             patron,
             start=yesterday,
@@ -1167,10 +1217,12 @@ class TestLicensePool(DatabaseTest):
         assert now == patron.last_loan_activity_sync
 
 
-class TestLicensePoolDeliveryMechanism(DatabaseTest):
-    def test_lpdm_change_may_change_open_access_status(self):
+class TestLicensePoolDeliveryMechanism:
+    def test_lpdm_change_may_change_open_access_status(
+        self, db: DatabaseTransactionFixture
+    ):
         # Here's a book that's not open access.
-        edition, pool = self._edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
         assert False == pool.open_access
 
         # We're going to use LicensePoolDeliveryMechanism.set to
@@ -1188,7 +1240,10 @@ class TestLicensePoolDeliveryMechanism(DatabaseTest):
 
         # Now give it an open-access LPDM.
         link, new = pool.identifier.add_link(
-            Hyperlink.OPEN_ACCESS_DOWNLOAD, self._url, data_source, content_type
+            Hyperlink.OPEN_ACCESS_DOWNLOAD,
+            db.fresh_url(),
+            data_source,
+            content_type,
         )
         oa_lpdm = LicensePoolDeliveryMechanism.set(
             data_source,
@@ -1206,9 +1261,9 @@ class TestLicensePoolDeliveryMechanism(DatabaseTest):
         oa_lpdm.delete()
         assert False == pool.open_access
 
-    def test_set_rights_status(self):
+    def test_set_rights_status(self, db: DatabaseTransactionFixture):
         # Here's a non-open-access book.
-        edition, pool = self._edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
         pool.open_access = False
         [lpdm] = pool.delivery_mechanisms
 
@@ -1263,10 +1318,10 @@ class TestLicensePoolDeliveryMechanism(DatabaseTest):
         lpdm2.set_rights_status(uri)
         assert False == pool.open_access
 
-    def test_uniqueness_constraint(self):
+    def test_uniqueness_constraint(self, db: DatabaseTransactionFixture):
         # with_open_access_download will create a LPDM
         # for the open-access download.
-        edition, pool = self._edition(
+        edition, pool = db.edition(
             with_license_pool=True, with_open_access_download=True
         )
         [lpdm] = pool.delivery_mechanisms
@@ -1274,7 +1329,10 @@ class TestLicensePoolDeliveryMechanism(DatabaseTest):
         # We can create a second LPDM with the same data type and DRM status,
         # so long as the resource is different.
         link, new = pool.identifier.add_link(
-            Hyperlink.OPEN_ACCESS_DOWNLOAD, self._url, pool.data_source, "text/html"
+            Hyperlink.OPEN_ACCESS_DOWNLOAD,
+            db.fresh_url(),
+            pool.data_source,
+            "text/html",
         )
         lpdm2 = pool.set_delivery_mechanism(
             lpdm.delivery_mechanism.content_type,
@@ -1301,21 +1359,21 @@ class TestLicensePoolDeliveryMechanism(DatabaseTest):
         pytest.raises(
             IntegrityError,
             create,
-            self._db,
+            db.session,
             LicensePoolDeliveryMechanism,
             delivery_mechanism=lpdm3.delivery_mechanism,
             identifier=pool.identifier,
             data_source=pool.data_source,
             resource=None,
         )
-        self._db.rollback()
+        db.session.rollback()
 
-    def test_compatible_with(self):
+    def test_compatible_with(self, db: DatabaseTransactionFixture):
         """Test the rules about which LicensePoolDeliveryMechanisms are
         mutually compatible and which are mutually exclusive.
         """
 
-        edition, pool = self._edition(
+        edition, pool = db.edition(
             with_license_pool=True, with_open_access_download=True
         )
         [mech] = pool.delivery_mechanisms
@@ -1326,7 +1384,7 @@ class TestLicensePoolDeliveryMechanism(DatabaseTest):
         assert True == mech.compatible_with(mech)
 
         # Now let's set up a scenario that works and then see how it fails.
-        self._add_generic_delivery_mechanism(pool)
+        db.add_generic_delivery_mechanism(pool)
 
         # This book has two different LicensePoolDeliveryMechanisms
         # with the same underlying DeliveryMechanism. They're
@@ -1338,44 +1396,46 @@ class TestLicensePoolDeliveryMechanism(DatabaseTest):
 
         # The LicensePoolDeliveryMechanisms must identify the same
         # book from the same data source.
-        mech1.data_source_id = self._id
+        mech1.data_source_id = db.fresh_id()
         assert False == mech1.compatible_with(mech2)
 
         mech1.data_source_id = mech2.data_source_id
-        mech1.identifier_id = self._id
+        mech1.identifier_id = db.fresh_id()
         assert False == mech1.compatible_with(mech2)
         mech1.identifier_id = mech2.identifier_id
 
         # The underlying delivery mechanisms don't have to be exactly
         # the same, but they must be compatible.
         pdf_adobe, ignore = DeliveryMechanism.lookup(
-            self._db, MediaTypes.PDF_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM
+            db.session, MediaTypes.PDF_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM
         )
         mech1.delivery_mechanism = pdf_adobe
-        self._db.commit()
+        db.session.commit()
         assert False == mech1.compatible_with(mech2)
 
         streaming, ignore = DeliveryMechanism.lookup(
-            self._db,
+            db.session,
             DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
             DeliveryMechanism.STREAMING_DRM,
         )
         mech1.delivery_mechanism = streaming
-        self._db.commit()
+        db.session.commit()
         assert True == mech1.compatible_with(mech2)
 
-    def test_compatible_with_calls_compatible_with_on_deliverymechanism(self):
+    def test_compatible_with_calls_compatible_with_on_deliverymechanism(
+        self, db: DatabaseTransactionFixture
+    ):
         # Create two LicensePoolDeliveryMechanisms with different
         # media types.
-        edition, pool = self._edition(
+        edition, pool = db.edition(
             with_license_pool=True, with_open_access_download=True
         )
         [mech1] = pool.delivery_mechanisms
-        mech2 = self._add_generic_delivery_mechanism(pool)
+        mech2 = db.add_generic_delivery_mechanism(pool)
         mech2.delivery_mechanism, ignore = DeliveryMechanism.lookup(
-            self._db, MediaTypes.PDF_MEDIA_TYPE, DeliveryMechanism.NO_DRM
+            db.session, MediaTypes.PDF_MEDIA_TYPE, DeliveryMechanism.NO_DRM
         )
-        self._db.commit()
+        db.session.commit()
 
         assert True == mech1.is_open_access
         assert False == mech2.is_open_access

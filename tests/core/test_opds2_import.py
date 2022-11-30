@@ -1,8 +1,7 @@
 import datetime
-import os
-from typing import List
+from typing import List, Union
 
-from parameterized import parameterized
+import pytest
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
 from core.model import (
@@ -27,10 +26,11 @@ from core.opds2_import import (
     RWPMManifestParser,
 )
 
-from .test_opds_import import OPDSTest
+from ..fixtures.database import DatabaseTransactionFixture
+from ..fixtures.opds2_files import OPDS2FilesFixture
 
 
-class OPDS2Test(OPDSTest):
+class OPDS2Test:
     @staticmethod
     def _get_edition_by_identifier(editions, identifier):
         """Find an edition in the list by its identifier.
@@ -80,6 +80,34 @@ class OPDS2Test(OPDSTest):
         return None
 
 
+class TestOPDS2ImporterFixture:
+    transaction: DatabaseTransactionFixture
+    collection: Collection
+    data_source: DataSource
+    importer: OPDS2Importer
+    configuration_storage: ConfigurationStorage
+    configuration_factory: ConfigurationFactory
+
+
+@pytest.fixture
+def opds2_importer_fixture(
+    db: DatabaseTransactionFixture,
+) -> TestOPDS2ImporterFixture:
+    data = TestOPDS2ImporterFixture()
+    data.transaction = db
+    data.collection = db.default_collection()
+    data.data_source = DataSource.lookup(
+        db.session, "OPDS 2.0 Data Source", autocreate=True
+    )
+    data.collection.data_source = data.data_source
+    data.importer = OPDS2Importer(
+        db.session, data.collection, RWPMManifestParser(OPDS2FeedParserFactory())
+    )
+    data.configuration_storage = ConfigurationStorage(data.importer)
+    data.configuration_factory = ConfigurationFactory()
+    return data
+
+
 class TestOPDS2Importer(OPDS2Test):
     MOBY_DICK_ISBN_IDENTIFIER = "urn:isbn:978-3-16-148410-0"
     HUCKLEBERRY_FINN_URI_IDENTIFIER = "http://example.org/huckleberry-finn"
@@ -87,49 +115,39 @@ class TestOPDS2Importer(OPDS2Test):
         "urn:librarysimplified.org/terms/id/ProQuest%20Doc%20ID/181639"
     )
 
-    def sample_opds(self, filename, file_type="r"):
-        base_path = os.path.split(__file__)[0]
-        resource_path = os.path.join(base_path, "files", "opds2")
-        return open(os.path.join(resource_path, filename)).read()
-
-    def setup_method(self):
-        super().setup_method()
-
-        self._collection: Collection = self._default_collection
-        self._data_source: DataSource = DataSource.lookup(
-            self._db, "OPDS 2.0 Data Source", autocreate=True
-        )
-
-        self._collection.data_source = self._data_source
-
-        self._importer: OPDS2Importer = OPDS2Importer(
-            self._db, self._collection, RWPMManifestParser(OPDS2FeedParserFactory())
-        )
-        self._configuration_storage: ConfigurationStorage = ConfigurationStorage(
-            self._importer
-        )
-        self._configuration_factory: ConfigurationFactory = ConfigurationFactory()
-
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,manifest_type",
         [
             ("manifest encoded as a string", "string"),
             ("manifest encoded as a byte-string", "bytes"),
-        ]
+        ],
     )
     def test_opds2_importer_correctly_imports_valid_opds2_feed(
-        self, _, manifest_type: str
+        self,
+        opds2_importer_fixture: TestOPDS2ImporterFixture,
+        opds2_files_fixture: OPDS2FilesFixture,
+        name: str,
+        manifest_type: str,
     ):
         """Ensure that OPDS2Importer correctly imports valid OPDS 2.x feeds.
         :param manifest_type: Manifest's type: string or binary
         """
         # Arrange
-        content_server_feed = self.sample_opds("feed.json")
+        data, transaction, session = (
+            opds2_importer_fixture,
+            opds2_importer_fixture.transaction,
+            opds2_importer_fixture.transaction.session,
+        )
+        content_server_feed_text = opds2_files_fixture.sample_text("feed.json")
+        content_server_feed: Union[str, bytes]
 
         if manifest_type == "bytes":
-            content_server_feed = content_server_feed.encode()
+            content_server_feed = content_server_feed_text.encode()
+        else:
+            content_server_feed = content_server_feed_text
 
         # Act
-        imported_editions, pools, works, failures = self._importer.import_from_feed(
+        imported_editions, pools, works, failures = data.importer.import_from_feed(
             content_server_feed
         )
 
@@ -164,7 +182,7 @@ class TestOPDS2Importer(OPDS2Test):
         assert moby_dick_edition == moby_dick_author_contribution.edition
         assert Contributor.AUTHOR_ROLE == moby_dick_author_contribution.role
 
-        assert self._data_source == moby_dick_edition.data_source
+        assert data.data_source == moby_dick_edition.data_source
 
         assert "Test Publisher" == moby_dick_edition.publisher
         assert datetime.date(2015, 9, 29) == moby_dick_edition.published
@@ -221,7 +239,7 @@ class TestOPDS2Importer(OPDS2Test):
         assert huckleberry_finn_edition == huckleberry_finn_author_contribution.edition
         assert Contributor.AUTHOR_ROLE == huckleberry_finn_author_contribution.role
 
-        assert self._data_source == huckleberry_finn_edition.data_source
+        assert data.data_source == huckleberry_finn_edition.data_source
 
         assert "Test Publisher" == huckleberry_finn_edition.publisher
         assert datetime.date(2014, 9, 28) == huckleberry_finn_edition.published
@@ -351,7 +369,8 @@ class TestOPDS2Importer(OPDS2Test):
             == huckleberry_finn_work.summary_text
         )
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "this_identifier_type,ignore_identifier_type,identifier",
         [
             (
                 IdentifierType.ISBN,
@@ -368,10 +387,12 @@ class TestOPDS2Importer(OPDS2Test):
                 [IdentifierType.ISBN, IdentifierType.URI],
                 POSTMODERNISM_PROQUEST_IDENTIFIER,
             ),
-        ]
+        ],
     )
     def test_opds2_importer_skips_publications_with_unsupported_identifier_types(
         self,
+        opds2_importer_fixture: TestOPDS2ImporterFixture,
+        opds2_files_fixture: OPDS2FilesFixture,
         this_identifier_type,
         ignore_identifier_type: List[IdentifierType],
         identifier: str,
@@ -382,18 +403,24 @@ class TestOPDS2Importer(OPDS2Test):
         First, it tries to import the feed marking ISBN as the only supported identifier type. Secondly, it uses URI.
         Each time it checks that CM imported only the publication having the selected identifier type.
         """
+        data, transaction, session = (
+            opds2_importer_fixture,
+            opds2_importer_fixture.transaction,
+            opds2_importer_fixture.transaction.session,
+        )
+
         # Arrange
         # Update the list of supported identifier types in the collection's configuration settings
         # and set the identifier type passed as a parameter as the only supported identifier type.
-        with self._configuration_factory.create(
-            self._configuration_storage, self._db, OPDS2ImporterConfiguration
+        with data.configuration_factory.create(
+            data.configuration_storage, session, OPDS2ImporterConfiguration
         ) as configuration:
             configuration.set_ignored_identifier_types(ignore_identifier_type)
 
-        content_server_feed = self.sample_opds("feed.json")
+        content_server_feed = opds2_files_fixture.sample_text("feed.json")
 
         # Act
-        imported_editions, pools, works, failures = self._importer.import_from_feed(
+        imported_editions, pools, works, failures = data.importer.import_from_feed(
             content_server_feed
         )
 
@@ -410,13 +437,23 @@ class TestOPDS2Importer(OPDS2Test):
         edition = self._get_edition_by_identifier(imported_editions, identifier)
         assert edition is not None
 
-    def test_auth_token_feed(self):
-        content = self.sample_opds("auth_token_feed.json")
-        imported_editions, pools, works, failures = self._importer.import_from_feed(
+    def test_auth_token_feed(
+        self,
+        opds2_importer_fixture: TestOPDS2ImporterFixture,
+        opds2_files_fixture: OPDS2FilesFixture,
+    ):
+        data, transaction, session = (
+            opds2_importer_fixture,
+            opds2_importer_fixture.transaction,
+            opds2_importer_fixture.transaction.session,
+        )
+
+        content = opds2_files_fixture.sample_text("auth_token_feed.json")
+        imported_editions, pools, works, failures = data.importer.import_from_feed(
             content
         )
         setting = ConfigurationSetting.for_externalintegration(
-            ExternalIntegration.TOKEN_AUTH, self._collection.external_integration
+            ExternalIntegration.TOKEN_AUTH, data.collection.external_integration
         )
 
         # Did the token endpoint get stored correctly?
