@@ -253,7 +253,15 @@ class CirculationManagerAnnotator(Annotator):
         ).prioritize_for_pool(licensepool)
 
     def annotate_work_entry(
-        self, work, active_license_pool, edition, identifier, feed, entry, updated=None
+        self,
+        work,
+        active_license_pool,
+        edition,
+        identifier,
+        feed,
+        entry,
+        updated=None,
+        add_open_access_links=True,
     ):
         # If ElasticSearch included a more accurate last_update_time,
         # use it instead of Work.last_update_time
@@ -305,6 +313,7 @@ class CirculationManagerAnnotator(Annotator):
         can_revoke_hold=True,
         set_mechanism_at_borrow=False,
         direct_fulfillment_delivery_mechanisms=[],
+        add_open_access_links=True,
     ):
         """Generate a number of <link> tags that enumerate all acquisition
         methods.
@@ -452,7 +461,11 @@ class CirculationManagerAnnotator(Annotator):
 
         # If this is an open-access book, add an open-access link for
         # every delivery mechanism with an associated resource.
-        if active_license_pool and active_license_pool.open_access:
+        if (
+            add_open_access_links
+            and active_license_pool
+            and active_license_pool.open_access
+        ):
             for lpdm in active_license_pool.delivery_mechanisms:
                 if lpdm.resource:
                     open_access_links.append(
@@ -627,6 +640,15 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         self._top_level_title = top_level_title
         self.identifies_patrons = library_identifies_patrons
         self.facets = facets or None
+
+        # Open access links are added only when the library needs no authentication,
+        # else we must not have direct fulfillment links in the feed.
+        # The Patron should go through the authenticated borrow workflow in that case.
+        _db = Session.object_session(self.library)
+        integrations = ExternalIntegration.for_library_and_goal(
+            _db, self.library, ExternalIntegration.PATRON_AUTH_GOAL
+        )
+        self.add_open_access_links = integrations.count() == 0
 
     @classmethod
     def _hidden_content_types(self, library):
@@ -1165,6 +1187,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             ),
             set_mechanism_at_borrow=set_mechanism_at_borrow,
             direct_fulfillment_delivery_mechanisms=direct_fulfillment_delivery_mechanisms,
+            add_open_access_links=self.add_open_access_links,
         )
 
     def revoke_link(self, active_license_pool, active_loan, active_hold):

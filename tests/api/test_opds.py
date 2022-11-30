@@ -42,8 +42,10 @@ from core.model import (
     Representation,
     RightsStatus,
     Work,
+    get_one_or_create,
 )
 from core.model.formats import FormatPriorities
+from core.model.library import Library
 from core.model.licensing import LicensePool
 from core.opds import AcquisitionFeed, MockAnnotator, UnfulfillableWork
 from core.opds_import import OPDSXMLParser
@@ -492,6 +494,24 @@ class TestLibraryAnnotator(VendorIDTest):
         # 'open-access' link relation.
         link = self.annotator.fulfill_link(pool, None, lpdm, OPDSFeed.OPEN_ACCESS_REL)
         assert OPDSFeed.OPEN_ACCESS_REL == link.attrib["rel"]
+
+    def test_add_open_access_links(self):
+        library: Library = self._library()
+        integration, _ = get_one_or_create(
+            self._db,
+            ExternalIntegration,
+            goal=ExternalIntegration.PATRON_AUTH_GOAL,
+            name="Name",
+            protocol="protocol",
+        )
+
+        library.integrations.append(integration)
+        annotator = LibraryAnnotator(None, None, library)
+        assert annotator.add_open_access_links == False
+
+        library.integrations.remove(integration)
+        annotator = LibraryAnnotator(None, None, library)
+        assert annotator.add_open_access_links == True
 
     # We freeze the test time here, because this test checks that the client token
     # in the feed matches a generated client token. The client token contains an
@@ -1698,6 +1718,19 @@ class TestLibraryAnnotator(VendorIDTest):
         assert "http://opds-spec.org/acquisition/open-access" == open_access.attrib.get(
             "rel"
         )
+
+        # Remove direct open-access downloads
+        annotator.add_open_access_links = False
+        loan1_links = annotator.acquisition_links(
+            loan1.license_pool, loan1, None, None, feed, loan1.license_pool.identifier
+        )
+        assert len(loan1_links) == 2
+        assert {"http://host/revoke_loan_or_hold", "http://host/fulfill"} == {
+            link.attrib.get("href").split("?")[0] for link in loan1_links
+        }
+
+        # Revert the annotator state
+        annotator.add_open_access_links = True
 
         loan2_links = annotator.acquisition_links(
             loan2.license_pool, loan2, None, None, feed, loan2.license_pool.identifier
