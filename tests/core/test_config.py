@@ -18,6 +18,7 @@ class MockConfiguration(BaseConfiguration):
 class ConfigurationTestFixture:
     def __init__(self, database_transaction: DatabaseTransactionFixture):
         self.Conf = MockConfiguration
+        self.Conf.instance = dict()
         self.root_dir = os.path.join(os.path.split(__file__)[0], "..", "..")
         self.VERSION_FILENAME = os.path.join(self.root_dir, self.Conf.VERSION_FILENAME)
         self.transaction = database_transaction
@@ -84,9 +85,6 @@ class TestConfiguration:
         assert {"site.com": "http://cdn/"} == integrations[ExternalIntegration.CDN]
         assert True == data.Conf.instance[data.Conf.CDNS_LOADED_FROM_DATABASE]
 
-    @pytest.mark.skip(
-        reason="This test _may_ be incompatible with the use of a database fixture."
-    )
     def test_cdns_loaded_dynamically(
         self, configuration_test_fixture: ConfigurationTestFixture
     ):
