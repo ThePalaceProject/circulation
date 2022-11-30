@@ -146,7 +146,7 @@ psycopg2 = { version = "~2.9.5", optional = true }
 psycopg2-binary = { version = "~2.9.5", optional = true }
 py-bcrypt = "0.4"
 pycryptodome = "3.15.0"
-pyinstrument = "<4.4"
+pyinstrument = "<4.5"
 PyJWT = "2.4.0"
 PyLD = "2.0.3"
 pymarc = "4.2.1"
@@ -154,7 +154,7 @@ pyOpenSSL = "22.1.0"
 pyparsing = "3.0.9"
 pypostalcode = "0.4.1"
 pyspellchecker = "0.7.0"
-pytest = "^7"  # Can't be made a dev dep because mocks included beside prod code.
+pytest = ">=7.2.0"  # Can't be made a dev dep because mocks included beside prod code.
 python = ">=3.7,<4"
 python-dateutil = "2.8.2"
 python-Levenshtein = "~0.20"
@@ -174,7 +174,7 @@ Werkzeug = "1.0.1"
 
 [tool.poetry.dev-dependencies]
 boto3-stubs = "^1.26.1"
-botocore-stubs = "^1.28.3"
+botocore-stubs = "^1.29.15"
 freezegun = "~1.2"
 Jinja2 = "2.11.3"
 markupsafe = "2.0.1"
