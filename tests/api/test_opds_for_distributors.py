@@ -2,9 +2,11 @@ import datetime
 import json
 import os
 from typing import Callable
+from unittest.mock import patch
 
 import pytest
 
+import core.opds_import
 from api.circulation_exceptions import *
 from api.opds_for_distributors import (
     MockOPDSForDistributorsAPI,
@@ -581,6 +583,69 @@ class TestOPDSForDistributorsImporter(DatabaseTest, BaseOPDSForDistributorsTest)
 
         # Undo the mock of SUPPORTED_MEDIA_TYPES.
         api.SUPPORTED_MEDIA_TYPES = old_value
+
+    def test_update_work_for_edition_returns_correct_license_pool(self):
+        # If there are two or more collections, `update_work_for_edition`
+        # should return the license pool for the right one.
+        data_source_name = "BiblioBoard"
+        _ = DataSource.lookup(self._db, data_source_name, autocreate=True)
+        data_source = DataSource.lookup(self._db, data_source_name, autocreate=True)
+
+        def setup_collection(*, name: str, datasource: DataSource) -> Collection:
+            collection = MockOPDSForDistributorsAPI.mock_collection(self._db, name=name)
+            collection.external_integration.set_setting(
+                Collection.DATA_SOURCE_NAME_SETTING, data_source.name
+            )
+            return collection
+
+        collection1 = setup_collection(name="Test Collection 1", datasource=data_source)
+        collection2 = setup_collection(name="Test Collection 2", datasource=data_source)
+
+        work = self._work(
+            with_license_pool=True,
+            collection=collection1,
+            data_source_name=data_source_name,
+        )
+        edition = work.presentation_edition
+
+        collection1_lp = self._licensepool(
+            edition=edition,
+            collection=collection1,
+        )
+        collection2_lp = self._licensepool(
+            edition=edition,
+            collection=collection2,
+        )
+        importer1 = OPDSForDistributorsImporter(
+            self._db,
+            collection=collection1,
+        )
+        importer2 = OPDSForDistributorsImporter(
+            self._db,
+            collection=collection2,
+        )
+
+        with patch(
+            "core.opds_import.get_one", wraps=core.opds_import.get_one
+        ) as get_one_mock:
+            importer1_lp, _ = importer1.update_work_for_edition(edition)
+            importer2_lp, _ = importer2.update_work_for_edition(edition)
+
+        # Ensure distinct collections.
+        assert collection1_lp != collection2_lp
+        assert collection1_lp.collection.name == "Test Collection 1"
+        assert collection2_lp.collection.name == "Test Collection 2"
+
+        # The license pool returned to the importer should be the
+        # same one originally created for a given collection.
+        assert collection1_lp == importer1_lp
+        assert collection2_lp == importer2_lp
+
+        # With OPDS for Distributors imports, `update_work_for_edition`
+        # should include `collection` in the license pool lookup criteria.
+        assert 2 == len(get_one_mock.call_args_list)
+        for call_args in get_one_mock.call_args_list:
+            assert "collection" in call_args.kwargs
 
 
 class TestOPDSForDistributorsReaperMonitor(DatabaseTest, BaseOPDSForDistributorsTest):
