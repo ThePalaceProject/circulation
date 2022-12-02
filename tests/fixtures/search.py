@@ -41,6 +41,9 @@ class ExternalSearchFixture:
         fixture = ExternalSearchFixture()
         fixture.db = db
         fixture.indexes = []
+        testing_version = os.environ.get(
+            "SIMPLIFIED_TEST_SEARCH_VERSION", ExternalSearchIndex.SEARCH_VERSION_ES6_8
+        )
         fixture.integration = db.external_integration(
             ExternalIntegration.ELASTICSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
@@ -48,11 +51,12 @@ class ExternalSearchFixture:
             settings={
                 ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY: "test_index",
                 ExternalSearchIndex.TEST_SEARCH_TERM_KEY: "test_search_term",
+                ExternalSearchIndex.SEARCH_VERSION: testing_version,
             },
         )
 
         try:
-            fixture.search = SearchClientForTesting(db.session)
+            fixture.search = SearchClientForTesting(db.session, version=testing_version)
         except Exception as e:
             fixture.search = None
             logging.error(
