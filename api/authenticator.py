@@ -1763,7 +1763,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests):
     # By default, patron identifiers can only contain alphanumerics and
     # a few other characters. By default, there are no restrictions on
     # passwords.
-    alphanumerics_plus = re.compile("^[A-Za-z0-9@.-]+$")
+    alphanumerics_plus = "^[A-Za-z0-9@.-]+$"
     DEFAULT_IDENTIFIER_REGULAR_EXPRESSION = alphanumerics_plus
     DEFAULT_PASSWORD_REGULAR_EXPRESSION: Optional[str] = None
 

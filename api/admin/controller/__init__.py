@@ -1065,7 +1065,9 @@ class CustomListsController(AdminCirculationManagerController):
 
         return url_fn
 
-    def custom_list(self, list_id: int) -> Union[Response, Dict, ProblemDetail, None]:
+    def custom_list(
+        self, list_id: int
+    ) -> Optional[Union[Response, Dict, ProblemDetail]]:
         library = flask.request.library  # type: ignore
         self.require_librarian(library)
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)

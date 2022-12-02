@@ -285,7 +285,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
 
         :param db: Database session
 
-        :return: Dictionary containing the provider's configuration settings
+        :return: List containing the provider's configuration settings
         """
         storage_integrations = ExternalIntegration.for_goal(
             db, ExternalIntegration.STORAGE_GOAL

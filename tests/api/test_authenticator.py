@@ -2052,7 +2052,10 @@ class TestBasicAuthenticationProvider(AuthenticatorTest):
             self._str, goal=ExternalIntegration.PATRON_AUTH_GOAL
         )
         provider = ConfigAuthenticationProvider(self._default_library, integration)
-        assert b.DEFAULT_IDENTIFIER_REGULAR_EXPRESSION == provider.identifier_re
+        assert (
+            re.compile(b.DEFAULT_IDENTIFIER_REGULAR_EXPRESSION)
+            == provider.identifier_re
+        )
         assert None == provider.password_re
 
     def test_testing_patron(self):
@@ -2253,10 +2256,7 @@ class TestBasicAuthenticationProvider(AuthenticatorTest):
         integration.setting(b.IDENTIFIER_REGULAR_EXPRESSION).value = None
         integration.setting(b.PASSWORD_REGULAR_EXPRESSION).value = None
         provider = b(self._default_library, integration)
-        assert (
-            b.DEFAULT_IDENTIFIER_REGULAR_EXPRESSION.pattern
-            == provider.identifier_re.pattern
-        )
+        assert b.DEFAULT_IDENTIFIER_REGULAR_EXPRESSION == provider.identifier_re.pattern
         assert None == provider.password_re
         assert True == provider.server_side_validation("food", "barbecue")
         assert True == provider.server_side_validation("a", None)
