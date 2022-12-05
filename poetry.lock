@@ -986,7 +986,7 @@ python-versions = "*"
 
 [[package]]
 name = "nameparser"
-version = "1.1.1"
+version = "1.1.2"
 description = "A simple Python module for parsing human names into their individual components."
 category = "main"
 optional = false
@@ -1933,7 +1933,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.7,<4"
-content-hash = "c4fc4422ccbc91f0ec10719fb1079fdb52295ba1ac501217ba430c73868a9694"
+content-hash = "e4883fd69048945ecf15fb8decca3b1ef302f9cbdd5c2455f83ce2b6964e0c3f"
 
 [metadata.files]
 atomicwrites = [
@@ -2604,8 +2604,8 @@ mypy-extensions = [
     {file = "mypy_extensions-0.4.3.tar.gz", hash = "sha256:2d82818f5bb3e369420cb3c4060a7970edba416647068eb4c5343488a6c604a8"},
 ]
 nameparser = [
-    {file = "nameparser-1.1.1-py2.py3-none-any.whl", hash = "sha256:8166a5cbce24e31d33219c64e7235b1096904224c95a09948bb9809c4bf56b28"},
-    {file = "nameparser-1.1.1.tar.gz", hash = "sha256:ce8336ed7464fa7b9b8745f48b9c62dea6bed931b99715ca9479360544992143"},
+    {file = "nameparser-1.1.2-py2.py3-none-any.whl", hash = "sha256:ea2e01d1d9d04c0648be230f161f27316a1b5be431a1cc64e8799fac548fb3bc"},
+    {file = "nameparser-1.1.2.tar.gz", hash = "sha256:f4b6c7c1048d528bd6aa2b27cf42a06447d2b31e45a95b20449513078f1d86ef"},
 ]
 nltk = [
     {file = "nltk-3.7-py3-none-any.whl", hash = "sha256:ba3de02490308b248f9b94c8bc1ac0683e9aa2ec49ee78536d8667afb5e3eec8"},
