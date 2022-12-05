@@ -217,7 +217,7 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
         pagination: Pagination,
         search_engine: ExternalSearchIndex,
         annotator: OPDS2Annotator,
-        max_age: int = None,
+        max_age: Optional[int] = None,
     ):
         """The publication feed, cached"""
         # do some caching magic

@@ -1186,7 +1186,7 @@ class Work(Base):
             self, operation=WorkCoverageRecord.GENERATE_MARC_OPERATION
         )
 
-    def active_license_pool(self, library: Library = None) -> LicensePool | None:
+    def active_license_pool(self, library: Library | None = None) -> LicensePool | None:
         # The active license pool is the one that *would* be
         # associated with a loan, were a loan to be issued right
         # now.

@@ -156,13 +156,13 @@ class OPDS2Importer(
         db: sqlalchemy.orm.session.Session,
         collection: Collection,
         parser: RWPMManifestParser,
-        data_source_name: str = None,
-        identifier_mapping: dict = None,
-        http_get: Callable = None,
-        metadata_client: SimplifiedOPDSLookup = None,
-        content_modifier: Callable = None,
-        map_from_collection: dict = None,
-        mirrors: dict[str, MirrorUploader] = None,
+        data_source_name: str | None = None,
+        identifier_mapping: dict | None = None,
+        http_get: Callable | None = None,
+        metadata_client: SimplifiedOPDSLookup | None = None,
+        content_modifier: Callable | None = None,
+        map_from_collection: dict | None = None,
+        mirrors: dict[str, MirrorUploader] | None = None,
     ):
         """Initialize a new instance of OPDS2Importer class.
 

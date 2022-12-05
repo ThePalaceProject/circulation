@@ -288,7 +288,7 @@ class S3Uploader(MirrorUploader):
     def __init__(
         self,
         integration: ExternalIntegration,
-        client_class: Any = None,
+        client_class: Optional[Any] = None,
         host: str = S3_HOST,
     ) -> None:
         """Instantiate an S3Uploader from an ExternalIntegration.
@@ -548,7 +548,7 @@ class S3Uploader(MirrorUploader):
         library: Library,
         license_pool: LicensePool,
         end_time: datetime,
-        start_time: datetime = None,
+        start_time: Optional[datetime] = None,
     ):
         """The path to the analytics data file for the given library, license
         pool and date range."""
