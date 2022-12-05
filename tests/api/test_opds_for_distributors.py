@@ -645,7 +645,9 @@ class TestOPDSForDistributorsImporter(DatabaseTest, BaseOPDSForDistributorsTest)
         # should include `collection` in the license pool lookup criteria.
         assert 2 == len(get_one_mock.call_args_list)
         for call_args in get_one_mock.call_args_list:
-            assert "collection" in call_args.kwargs
+            # TODO: Once Python 3.7 is no longer supported, change
+            #  `call_args[1]` to `call_args.kwargs`.
+            assert "collection" in call_args[1]
 
 
 class TestOPDSForDistributorsReaperMonitor(DatabaseTest, BaseOPDSForDistributorsTest):
