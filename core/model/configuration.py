@@ -1075,7 +1075,7 @@ class ConfigurationMetadata:
         type: ConfigurationAttributeType,
         required: bool = False,
         default: Any | None = None,
-        options: list[ConfigurationOption] = None,
+        options: list[ConfigurationOption] | None = None,
         category: str | None = None,
         format=None,
         index=None,

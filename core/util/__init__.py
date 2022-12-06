@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import string
 from collections import Counter
-from typing import Any, Iterable
+from typing import Any, Iterable, Optional
 
 import flask_sqlalchemy_session
 import sqlalchemy
@@ -558,7 +558,7 @@ def is_session(value: object) -> bool:
     )
 
 
-def first_or_default(collection: Iterable, default: Any = None) -> Any:
+def first_or_default(collection: Iterable, default: Any | None = None) -> Any:
     """Return first element of the specified collection or the default value if the collection is empty.
 
     :param collection: Collection

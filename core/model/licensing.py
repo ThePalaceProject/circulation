@@ -614,8 +614,8 @@ class LicensePool(Base):
 
     def update_availability_from_licenses(
         self,
-        analytics: Analytics = None,
-        as_of: datetime.datetime = None,
+        analytics: Analytics | None = None,
+        as_of: datetime.datetime | None = None,
     ):
         """
         Update the LicensePool with new availability information, based on the
