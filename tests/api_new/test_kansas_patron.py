@@ -75,9 +75,7 @@ def kansas_patron_fixture(
 class TestKansasPatronAPI:
     def test_request(self, kansas_patron_fixture: KansasPatronFixture):
         request = KansasAuthenticationAPI.create_authorize_request("12345", "6666")
-        mock_request = kansas_patron_fixture.api.sample_data(
-            "authorize_request.xml"
-        )
+        mock_request = kansas_patron_fixture.api.sample_data("authorize_request.xml")
         parser = etree.XMLParser(remove_blank_text=True)
         mock_request = etree.tostring(etree.fromstring(mock_request, parser=parser))
         assert request == mock_request
