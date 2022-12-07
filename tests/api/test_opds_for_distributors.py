@@ -588,7 +588,6 @@ class TestOPDSForDistributorsImporter(DatabaseTest, BaseOPDSForDistributorsTest)
         # If there are two or more collections, `update_work_for_edition`
         # should return the license pool for the right one.
         data_source_name = "BiblioBoard"
-        _ = DataSource.lookup(self._db, data_source_name, autocreate=True)
         data_source = DataSource.lookup(self._db, data_source_name, autocreate=True)
 
         def setup_collection(*, name: str, datasource: DataSource) -> Collection:
