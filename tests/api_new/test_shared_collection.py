@@ -18,7 +18,7 @@ from core.model import (
     create,
     get_one,
 )
-from core.testing import DatabaseTest, MockRequestsResponse
+from core.testing import MockRequestsResponse
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -73,7 +73,7 @@ def shared_collection_fixture(
     return SharedCollectionFixture(db)
 
 
-class TestSharedCollectionAPI(DatabaseTest):
+class TestSharedCollectionAPI:
     def test_initialization_exception(
         self, shared_collection_fixture: SharedCollectionFixture
     ):
@@ -101,7 +101,7 @@ class TestSharedCollectionAPI(DatabaseTest):
         db = shared_collection_fixture.db
 
         collection = db.collection(protocol=ODLAPI.NAME)
-        edition, pool = self._edition(with_license_pool=True, collection=collection)
+        edition, pool = db.edition(with_license_pool=True, collection=collection)
         shared_collection = SharedCollectionAPI(db.session)
         assert isinstance(shared_collection.api_for_licensepool(pool), ODLAPI)
 
