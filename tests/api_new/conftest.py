@@ -7,6 +7,7 @@ pytest_plugins = [
     "tests.fixtures.api_millenium_files",
     "tests.fixtures.api_novelist_files",
     "tests.fixtures.api_nyt_files",
+    "tests.fixtures.api_odilo_files",
     "tests.fixtures.api_onix_files",
     "tests.fixtures.api_opds_dist_files",
     "tests.fixtures.csv_files",
