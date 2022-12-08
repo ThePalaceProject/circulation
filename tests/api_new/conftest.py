@@ -1,4 +1,5 @@
 pytest_plugins = [
+    "tests.fixtures.announcements",
     "tests.fixtures.api_axis_files",
     "tests.fixtures.api_bibliotheca_files",
     "tests.fixtures.api_enki_files",
