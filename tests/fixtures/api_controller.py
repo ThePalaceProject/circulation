@@ -1,4 +1,6 @@
+import datetime
 import json
+import logging
 from contextlib import contextmanager
 from typing import Any
 
@@ -207,4 +209,9 @@ class ControllerFixture:
 def controller_fixture(
     db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture
 ):
-    return ControllerFixture(db, vendor_id_fixture)
+    time_then = datetime.datetime.now()
+    fixture = ControllerFixture(db, vendor_id_fixture)
+    time_now = datetime.datetime.now()
+    time_diff = time_now - time_then
+    logging.info("controller init took %s", time_diff)
+    yield fixture
