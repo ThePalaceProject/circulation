@@ -135,7 +135,7 @@ class TestExternalSearch:
         ExternalSearchTest.setup) plus a version number associated
         with this version of the core code.
         """
-        assert "test_index-v4" == external_search_fixture.search.works_index_name(
+        assert "test_index-v5" == external_search_fixture.search.works_index_name(
             session
         )
 
@@ -1298,6 +1298,9 @@ class TestExternalSearchWithWorks:
                 (None, match_nothing, first_item),
             ],
         )
+
+        # Case-insensitive genre search, genre is saved as 'Fantasy'
+        expect([data.lincoln_vampire], "fantasy")
 
 
 class TestFacetFiltersData:
@@ -5224,7 +5227,8 @@ class TestJSONQuery:
             .filter(DataSource.name == DataSource.GUTENBERG)
             .first()
         )
-        q = self._jq(self._leaf("data_source", DataSource.GUTENBERG))
+        # Test case-insensitivity as well
+        q = self._jq(self._leaf("data_source", DataSource.GUTENBERG.upper()))
         assert q.elasticsearch_query.to_dict() == {
             "nested": {
                 "path": "licensepools",

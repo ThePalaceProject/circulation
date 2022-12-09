@@ -862,6 +862,10 @@ class MappingDocument:
             "normalizer": "filterable_string",
         }
 
+    def keyword_property_hook(self, description):
+        """Hook method to ensure the keyword type attributes are case-insensitive"""
+        description["normalizer"] = "filterable_string"
+
 
 class Mapping(MappingDocument):
     """A class that defines the mapping for a particular version of the search index.
@@ -956,7 +960,7 @@ class CurrentMapping(Mapping):
     * contributors -- these Contributors worked on the Work
     """
 
-    VERSION_NAME = "v4"
+    VERSION_NAME = "v5"
 
     # Use regular expressions to normalized values in sortable fields.
     # These regexes are applied in order; that way "H. G. Wells"
@@ -1135,6 +1139,7 @@ class CurrentMapping(Mapping):
             "sort_author_keyword": ["sort_author"],
             "integer": ["series_position", "work_id"],
             "long": ["last_update_time", "published"],
+            "keyword": ["audience", "language"],
         }
         self.add_properties(fields_by_type)
 
@@ -1982,7 +1987,7 @@ class JSONQuery(Query):
 
     # The fields mappings in the search DB
     FIELD_MAPPING: Dict[str, Dict] = {
-        "audience": _KEYWORD_ONLY,
+        "audience": dict(),
         "author": _KEYWORD_ONLY,
         "classifications.scheme": _KEYWORD_ONLY,
         "classifications.term": _KEYWORD_ONLY,
@@ -2000,7 +2005,7 @@ class JSONQuery(Query):
         "identifiers.identifier": dict(path="identifiers"),
         "identifiers.type": dict(path="identifiers"),
         "imprint": _KEYWORD_ONLY,
-        "language": _KEYWORD_ONLY,
+        "language": dict(),
         "licensepools.available": dict(path="licensepools"),
         "licensepools.availability_time": dict(path="licensepools"),
         "licensepools.collection_id": dict(path="licensepools"),
@@ -2038,7 +2043,7 @@ class JSONQuery(Query):
             """Transform a datasource name into a datasource id"""
             sources = CachedData.cache.data_sources()
             for source in sources:
-                if source.name == value:
+                if source.name.lower() == value.lower():
                     return source.id
 
             # No such value was found, so return a non-id
