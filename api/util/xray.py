@@ -73,18 +73,18 @@ class PalaceXrayMiddleware(XRayMiddleware):
         segment = self._recorder.current_segment()
 
         # Add library shortname
-        if hasattr(request, "library") and hasattr(request.library, "short_name"):  # type: ignore # Fixed in mypy 0.990
-            segment.put_annotation("library", str(request.library.short_name))  # type: ignore # Fixed in mypy 0.990
+        if hasattr(request, "library") and hasattr(request.library, "short_name"):
+            segment.put_annotation("library", str(request.library.short_name))
 
         # Add patron data
         if (
             self.include_barcode()
             and hasattr(request, "patron")
-            and hasattr(request.patron, "authorization_identifier")  # type: ignore # Fixed in mypy 0.990
+            and hasattr(request.patron, "authorization_identifier")
         ):
-            segment.set_user(str(request.patron.authorization_identifier))  # type: ignore # Fixed in mypy 0.990
+            segment.set_user(str(request.patron.authorization_identifier))
             segment.put_annotation(
-                "barcode", str(request.patron.authorization_identifier)  # type: ignore # Fixed in mypy 0.990
+                "barcode", str(request.patron.authorization_identifier)
             )
 
         # Add admin UI username
