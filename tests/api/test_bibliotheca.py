@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import json
 import os
 import random
 from datetime import datetime, timedelta
 from io import BytesIO, StringIO
+from typing import ClassVar, Protocol, runtime_checkable
 from unittest import mock
 from unittest.mock import MagicMock
 
@@ -52,6 +55,7 @@ from core.scripts import RunCollectionCoverageProviderScript
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.http import BadResponseException
+from core.util.problem_detail import ProblemDetail
 from core.util.web_publication_manifest import AudiobookManifest
 
 from . import sample_data
@@ -66,8 +70,8 @@ class BibliothecaAPITest(DatabaseTest):
     base_path = os.path.split(__file__)[0]
     resource_path = os.path.join(base_path, "files", "bibliotheca")
 
-    @classmethod
-    def sample_data(self, filename):
+    @staticmethod
+    def sample_data(filename: str) -> bytes:
         return sample_data(filename, "bibliotheca")
 
 
@@ -782,79 +786,164 @@ class TestCheckoutResponseParser(BibliothecaAPITest):
         assert datetime_utc(2015, 4, 16, 0, 32, 36) == due_date
 
 
-class TestErrorParser(BibliothecaAPITest):
-    def test_exceeded_limit(self):
-        """The normal case--we get a helpful error message which we turn into
-        an appropriate circulation exception.
-        """
-        msg = self.sample_data("error_exceeded_limit.xml")
-        error = ErrorParser().process_all(msg)
-        assert isinstance(error, PatronLoanLimitReached)
-        assert "Patron cannot loan more than 12 documents" == error.message
+class TestErrorParser:
 
-    def test_exceeded_hold_limit(self):
-        msg = self.sample_data("error_exceeded_hold_limit.xml")
-        error = ErrorParser().process_all(msg)
-        assert isinstance(error, PatronHoldLimitReached)
-        assert "Patron cannot have more than 15 holds" == error.message
+    BIBLIOTHECA_ERROR_RESPONSE_BODY_TEMPLATE = (
+        '<Error xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
+        "<Code>Gen-001</Code><Message>"
+        "{message}"
+        "</Message></Error>"
+    )
 
-    def test_wrong_status(self):
-        msg = self.sample_data("error_no_licenses.xml")
-        error = ErrorParser().process_all(msg)
-        assert isinstance(error, NoLicenses)
-        assert (
-            "the patron document status was CAN_WISH and not one of CAN_LOAN,RESERVATION"
-            == error.message
+    @runtime_checkable
+    class CirculationExceptionWithProblemDetail(Protocol):
+        status_code: ClassVar[int]
+
+        def as_problem_detail_document(self, debug=False) -> ProblemDetail:
+            ...
+
+    @pytest.mark.parametrize(
+        "incoming_message, error_class, error_code, problem_detail_title, problem_detail_code",
+        [
+            (
+                "Patron cannot loan more than 12 documents",
+                PatronLoanLimitReached,
+                500,
+                "Loan limit reached.",
+                403,
+            ),
+            (
+                "Patron cannot have more than 15 holds",
+                PatronHoldLimitReached,
+                500,
+                "Limit reached.",
+                403,
+            ),
+            (
+                "the patron document status was CAN_WISH and not one of CAN_LOAN,RESERVATION",
+                NoLicenses,
+                404,
+                "No licenses.",
+                404,
+            ),
+            (
+                "the patron document status was CAN_HOLD and not one of CAN_LOAN,RESERVATION",
+                NoAvailableCopies,
+                400,
+                None,
+                None,
+            ),
+            (
+                "the patron document status was LOAN and not one of CAN_LOAN,RESERVATION",
+                AlreadyCheckedOut,
+                400,
+                None,
+                None,
+            ),
+            (
+                "The patron has no eBooks checked out",
+                NotCheckedOut,
+                400,
+                None,
+                None,
+            ),
+            (
+                "the patron document status was CAN_LOAN and not one of CAN_HOLD",
+                CurrentlyAvailable,
+                400,
+                None,
+                None,
+            ),
+            (
+                "the patron document status was HOLD and not one of CAN_HOLD",
+                AlreadyOnHold,
+                400,
+                None,
+                None,
+            ),
+            (
+                "The patron does not have the book on hold",
+                NotOnHold,
+                400,
+                None,
+                None,
+            ),
+            # This is such a weird case we don't have a special exception for it.
+            (
+                "the patron document status was LOAN and not one of CAN_HOLD",
+                CannotHold,
+                500,
+                None,
+                None,
+            ),
+        ],
+    )
+    def test_exception(
+        self,
+        incoming_message: str,
+        error_class: type[CirculationException | CirculationExceptionWithProblemDetail],
+        error_code: int,
+        problem_detail_title: str,
+        problem_detail_code: int,
+    ):
+        document = self.BIBLIOTHECA_ERROR_RESPONSE_BODY_TEMPLATE.format(
+            message=incoming_message
         )
+        error = ErrorParser().process_all(document)
+        assert isinstance(error, error_class)
+        assert incoming_message == str(error)
+        assert error_code == error.status_code
 
+        if isinstance(error, self.CirculationExceptionWithProblemDetail):
+            problem = error.as_problem_detail_document()
+            assert problem_detail_code == problem.status_code
+            assert problem_detail_title == problem.title
+
+    @pytest.mark.parametrize(
+        "incoming_message, error_string",
+        [
+            (
+                # Simulate the message we get when the server goes down.
+                "The server has encountered an error",
+                "The server has encountered an error",
+            ),
+            (
+                # Simulate the message we get when the server gives a vague error.
+                BibliothecaAPITest.sample_data("error_unknown.xml"),
+                "Unknown error",
+            ),
+            (
+                # Simulate the message we get when the error message is
+                # 'Authentication failed' but our authentication information is
+                # set up correctly.
+                BibliothecaAPITest.sample_data("error_authentication_failed.xml"),
+                "Authentication failed",
+            ),
+            (
+                """<weird>This error does not follow the standard set out by Bibliotheca.</weird>""",
+                "Unknown error",
+            ),
+            (
+                # Empty error message
+                """<Error xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><Message/></Error>""",
+                "Unknown error",
+            ),
+        ],
+    )
+    def test_remote_initiated_server_error(
+        self, incoming_message: str, error_string: str
+    ):
+        error = ErrorParser().process_all(incoming_message)
         problem = error.as_problem_detail_document()
-        assert "The library currently has no licenses for this book." == problem.detail
-        assert 404 == problem.status_code
 
-    def test_internal_server_error_beomces_remote_initiated_server_error(self):
-        """Simulate the message we get when the server goes down."""
-        msg = "The server has encountered an error"
-        error = ErrorParser().process_all(msg)
         assert isinstance(error, RemoteInitiatedServerError)
         assert BibliothecaAPI.SERVICE_NAME == error.service_name
         assert 502 == error.status_code
-        assert msg == error.message
-        doc = error.as_problem_detail_document()
-        assert 502 == doc.status_code
-        assert "Integration error communicating with Bibliotheca" == doc.detail
+        assert error_string == str(error)
 
-    def test_unknown_error_becomes_remote_initiated_server_error(self):
-        """Simulate the message we get when the server gives a vague error."""
-        msg = self.sample_data("error_unknown.xml")
-        error = ErrorParser().process_all(msg)
-        assert isinstance(error, RemoteInitiatedServerError)
-        assert BibliothecaAPI.SERVICE_NAME == error.service_name
-        assert "Unknown error" == error.message
-
-    def test_remote_authentication_failed_becomes_remote_initiated_server_error(self):
-        """Simulate the message we get when the error message is
-        'Authentication failed' but our authentication information is
-        set up correctly.
-        """
-        msg = self.sample_data("error_authentication_failed.xml")
-        error = ErrorParser().process_all(msg)
-        assert isinstance(error, RemoteInitiatedServerError)
-        assert BibliothecaAPI.SERVICE_NAME == error.service_name
-        assert "Authentication failed" == error.message
-
-    def test_malformed_error_message_becomes_remote_initiated_server_error(self):
-        msg = """<weird>This error does not follow the standard set out by Bibliotheca.</weird>"""
-        error = ErrorParser().process_all(msg)
-        assert isinstance(error, RemoteInitiatedServerError)
-        assert BibliothecaAPI.SERVICE_NAME == error.service_name
-        assert "Unknown error" == error.message
-
-    def test_blank_error_message_becomes_remote_initiated_server_error(self):
-        msg = """<Error xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><Message/></Error>"""
-        error = ErrorParser().process_all(msg)
-        assert isinstance(error, RemoteInitiatedServerError)
-        assert BibliothecaAPI.SERVICE_NAME == error.service_name
-        assert "Unknown error" == error.message
+        assert 502 == problem.status_code
+        assert "Integration error communicating with Bibliotheca" == problem.detail
+        assert "Third-party service failed." == problem.title
 
 
 class TestBibliothecaEventParser:
@@ -914,56 +1003,6 @@ class TestBibliothecaEventParser:
         correct_end = datetime_utc(2014, 4, 2, 23, 57, 37)
         assert correct_start == start_time
         assert correct_end == end_time
-
-
-class TestErrorParser:
-
-    # Some sample error documents.
-
-    NOT_LOANABLE = '<Error xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><Code>Gen-001</Code><Message>the patron document status was CAN_HOLD and not one of CAN_LOAN,RESERVATION</Message></Error>'
-
-    ALREADY_ON_LOAN = '<Error xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><Code>Gen-001</Code><Message>the patron document status was LOAN and not one of CAN_LOAN,RESERVATION</Message></Error>'
-
-    TRIED_TO_RETURN_UNLOANED_BOOK = '<Error xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><Code>Gen-001</Code><Message>The patron has no eBooks checked out</Message></Error>'
-
-    TRIED_TO_HOLD_LOANABLE_BOOK = '<Error xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><Code>Gen-001</Code><Message>the patron document status was CAN_LOAN and not one of CAN_HOLD</Message></Error>'
-
-    TRIED_TO_HOLD_BOOK_ON_LOAN = '<Error xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><Code>Gen-001</Code><Message>the patron document status was LOAN and not one of CAN_HOLD</Message></Error>'
-
-    ALREADY_ON_HOLD = '<Error xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><Code>Gen-001</Code><Message>the patron document status was HOLD and not one of CAN_HOLD</Message></Error>'
-
-    TRIED_TO_CANCEL_NONEXISTENT_HOLD = '<Error xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><Code>Gen-001</Code><Message>The patron does not have the book on hold</Message></Error>'
-
-    TOO_MANY_LOANS = '<Error xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><Code>Gen-001</Code><Message>Patron cannot loan more than 12 documents</Message></Error>'
-
-    def test_exception(self):
-        parser = ErrorParser()
-
-        error = parser.process_all(self.NOT_LOANABLE)
-        assert isinstance(error, NoAvailableCopies)
-
-        error = parser.process_all(self.ALREADY_ON_LOAN)
-        assert isinstance(error, AlreadyCheckedOut)
-
-        error = parser.process_all(self.ALREADY_ON_HOLD)
-        assert isinstance(error, AlreadyOnHold)
-
-        error = parser.process_all(self.TOO_MANY_LOANS)
-        assert isinstance(error, PatronLoanLimitReached)
-
-        error = parser.process_all(self.TRIED_TO_CANCEL_NONEXISTENT_HOLD)
-        assert isinstance(error, NotOnHold)
-
-        error = parser.process_all(self.TRIED_TO_RETURN_UNLOANED_BOOK)
-        assert isinstance(error, NotCheckedOut)
-
-        error = parser.process_all(self.TRIED_TO_HOLD_LOANABLE_BOOK)
-        assert isinstance(error, CurrentlyAvailable)
-
-        # This is such a weird case we don't have a special
-        # exception for it.
-        error = parser.process_all(self.TRIED_TO_HOLD_BOOK_ON_LOAN)
-        assert isinstance(error, CannotHold)
 
 
 class TestBibliothecaPurchaseMonitor(BibliothecaAPITest):
