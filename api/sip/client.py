@@ -31,6 +31,7 @@ import re
 import socket
 import ssl
 import tempfile
+from typing import Optional
 
 from api.sip.dialect import GenericILS
 from core.util.datetime_helpers import utc_now
@@ -93,9 +94,9 @@ class named:
         internal_name: str,
         sip_code: str,
         required=False,
-        length: int = None,
+        length: Optional[int] = None,
         allow_multiple=False,
-        log: logging.Logger = None,
+        log: Optional[logging.Logger] = None,
     ):
         self.sip_code = sip_code
         self.internal_name = internal_name

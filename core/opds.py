@@ -459,7 +459,7 @@ class Annotator:
 
     @classmethod
     def active_licensepool_for(
-        cls, work: Work, library: Library = None
+        cls, work: Work, library: Library | None = None
     ) -> LicensePool | None:
         """Which license pool would be/has been used to issue a license for
         this work?

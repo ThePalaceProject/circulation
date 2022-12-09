@@ -56,7 +56,7 @@ class CustomListQueries:
         start_page: int = 1,
         max_pages: int = 1000,
         page_size: int = 100,
-        json_query: dict = None,
+        json_query: dict | None = None,
     ) -> int:
         """Populate the custom list while paging through the search query results
         :param _db: The database conenction

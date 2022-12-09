@@ -32,7 +32,7 @@ class HasSelfTests(CoreHasSelfTests):
             detail (optional) -- additional explanation of the error
         """
 
-        def __init__(self, message: str, *, detail: str = None):
+        def __init__(self, message: str, *, detail: Optional[str] = None):
             super().__init__(message=message)
             self.message = message
             self.detail = detail
