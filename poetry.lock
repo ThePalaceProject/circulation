@@ -1663,14 +1663,6 @@ optional = false
 python-versions = "*"
 
 [[package]]
-name = "types-mock"
-version = "4.0.15.2"
-description = "Typing stubs for mock"
-category = "dev"
-optional = false
-python-versions = "*"
-
-[[package]]
 name = "types-pillow"
 version = "9.3.0.4"
 description = "Typing stubs for Pillow"
@@ -1878,7 +1870,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.8,<4"
-content-hash = "b3ea7e29c2de99121ae141557c9ade03a67e5634d859047cb22af8bcb71947eb"
+content-hash = "f286678a7bc8f2027cbe5fff4c9c2569455ca934e97b6ee51cd11fb9f27406c6"
 
 [metadata.files]
 atomicwrites = [
@@ -3246,10 +3238,6 @@ types-jsonschema = [
 types-markupsafe = [
     {file = "types-MarkupSafe-1.1.10.tar.gz", hash = "sha256:85b3a872683d02aea3a5ac2a8ef590193c344092032f58457287fbf8e06711b1"},
     {file = "types_MarkupSafe-1.1.10-py3-none-any.whl", hash = "sha256:ca2bee0f4faafc45250602567ef38d533e877d2ddca13003b319c551ff5b3cc5"},
-]
-types-mock = [
-    {file = "types-mock-4.0.15.2.tar.gz", hash = "sha256:83fe479741adb92210c3c92f006fe058297d5051e93c2cec36f1a9e0bae16e9e"},
-    {file = "types_mock-4.0.15.2-py3-none-any.whl", hash = "sha256:39d489b6d9361b75448677680a3087701c0cfab61260363cfc0f646d2bf0a8b2"},
 ]
 types-pillow = [
     {file = "types-Pillow-9.3.0.4.tar.gz", hash = "sha256:c18d466dc18550d96b8b4a279ff94f0cbad696825b5ad55466604f1daf5709de"},

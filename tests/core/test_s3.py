@@ -1,5 +1,5 @@
 import functools
-import sys
+from unittest.mock import MagicMock
 
 import botocore
 import pytest
@@ -29,11 +29,6 @@ from core.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.s3 import S3UploaderFixture, S3UploaderIntegrationFixture
 from tests.fixtures.sample_covers import SampleCoversFixture
-
-if sys.version_info < (3, 8):
-    from mock import MagicMock
-else:
-    from unittest.mock import MagicMock
 
 
 class TestS3Uploader:

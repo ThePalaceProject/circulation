@@ -1,8 +1,8 @@
 import datetime
 import json
 import os
-import sys
 from typing import Callable
+from unittest.mock import patch
 
 import pytest
 
@@ -31,12 +31,6 @@ from core.model import (
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import OPDSFeed
-
-# TODO: we can drop this when we drop support for Python 3.7
-if sys.version_info < (3, 8):
-    from mock import patch
-else:
-    from unittest.mock import patch
 
 
 @pytest.fixture()
