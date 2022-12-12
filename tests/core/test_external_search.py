@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Callable, Collection, List
 
 import pytest
-from elasticsearch.exceptions import ElasticsearchException
+from elasticsearch.exceptions import ElasticsearchException, NotFoundError
 from elasticsearch_dsl import Q
 from elasticsearch_dsl.function import RandomScore, ScriptScore
 from elasticsearch_dsl.query import (
@@ -206,6 +206,14 @@ class TestExternalSearch:
         # If the -current alias is already set on a different index, it
         # won't be reassigned. Instead, search will occur against the
         # index itself.
+        # So we must delete the alias first
+        _alias_name = "my-app-" + search.CURRENT_ALIAS_SUFFIX
+        try:
+            search.indices.delete_alias("*", _alias_name)
+        except NotFoundError:
+            # It's ok if the alias did not exist
+            pass
+
         ExternalSearchIndex.reset()
         external_search_fixture.integration.set_setting(
             ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY, "my-app"
@@ -213,7 +221,7 @@ class TestExternalSearch:
         self.search = ExternalSearchIndex(session)
 
         assert "my-app-%s" % version == self.search.works_index
-        assert "my-app-" + self.search.CURRENT_ALIAS_SUFFIX == self.search.works_alias
+        assert _alias_name == self.search.works_alias
 
     def test_transfer_current_alias(
         self, external_search_fixture: ExternalSearchFixture
