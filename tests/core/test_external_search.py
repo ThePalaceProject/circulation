@@ -2303,6 +2303,15 @@ class TestFeaturedFacets:
         #
         # The random element is relatively small, so it mainly acts
         # to rearrange works whose scores were similar before.
+        # The order of the works depends on 4 things
+        # - The seed
+        # - The id (work_id)
+        # - The index name
+        # - The shard id
+        # If any of those change the order of works in this result may change,
+        # and hence the order of works in this assert must also change
+        # Eg. If the index version changes from v5 to v6, this may affect the order of works queried
+        # Keeping everything else the same, the order of works will remain reproducable across test runs
         random_facets = FeaturedFacets(1, random_seed=43)
         assert_featured(
             "Works permuted by a random seed",
@@ -2311,8 +2320,8 @@ class TestFeaturedFacets:
             [
                 data.hq_available_2,
                 data.hq_available,
-                data.not_featured_on_list,
                 data.hq_not_available,
+                data.not_featured_on_list,
                 data.featured_on_list,
             ],
         )
