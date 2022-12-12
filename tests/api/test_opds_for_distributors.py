@@ -1,8 +1,8 @@
 import datetime
 import json
 import os
+import sys
 from typing import Callable
-from unittest.mock import patch
 
 import pytest
 
@@ -31,6 +31,12 @@ from core.model import (
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import OPDSFeed
+
+# TODO: we can drop this when we drop support for Python 3.7
+if sys.version_info < (3, 8):
+    from mock import patch
+else:
+    from unittest.mock import patch
 
 
 @pytest.fixture()
@@ -601,19 +607,17 @@ class TestOPDSForDistributorsImporter(DatabaseTest, BaseOPDSForDistributorsTest)
         collection2 = setup_collection(name="Test Collection 2", datasource=data_source)
 
         work = self._work(
-            with_license_pool=True,
+            with_license_pool=False,
             collection=collection1,
             data_source_name=data_source_name,
         )
         edition = work.presentation_edition
 
         collection1_lp = self._licensepool(
-            edition=edition,
-            collection=collection1,
+            edition=edition, collection=collection1, set_edition_as_presentation=True
         )
         collection2_lp = self._licensepool(
-            edition=edition,
-            collection=collection2,
+            edition=edition, collection=collection2, set_edition_as_presentation=True
         )
         importer1 = OPDSForDistributorsImporter(
             self._db,
@@ -644,9 +648,7 @@ class TestOPDSForDistributorsImporter(DatabaseTest, BaseOPDSForDistributorsTest)
         # should include `collection` in the license pool lookup criteria.
         assert 2 == len(get_one_mock.call_args_list)
         for call_args in get_one_mock.call_args_list:
-            # TODO: Once Python 3.7 is no longer supported, change
-            #  `call_args[1]` to `call_args.kwargs`.
-            assert "collection" in call_args[1]
+            assert "collection" in call_args.kwargs
 
 
 class TestOPDSForDistributorsReaperMonitor(DatabaseTest, BaseOPDSForDistributorsTest):
