@@ -9,7 +9,6 @@ import wcag_contrast_ratio
 from flask import Response
 from flask_babel import lazy_gettext as _
 from PIL import Image
-from PIL.PngImagePlugin import _OUTMODES as PNG_MODES
 
 from api.admin.announcement_list_validator import AnnouncementListValidator
 from api.admin.geographic_validator import GeographicValidator
@@ -408,8 +407,9 @@ class LibrarySettingsController(SettingsController):
         :return: The `data` URL for the image.
         """
         buffer = BytesIO()
-        # Ensure the image is in a valid PNG format
-        if _format == "PNG" and image.mode not in PNG_MODES:
+        # If the image is not RGB, RGBA or P convert it
+        # https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes
+        if image.mode not in ("RGB", "RGBA", "P"):
             image = image.convert("RGBA")
         image.save(buffer, format=_format)
         b64 = base64.b64encode(buffer.getvalue())
