@@ -135,8 +135,10 @@ class TestExternalSearch:
         ExternalSearchTest.setup) plus a version number associated
         with this version of the core code.
         """
-        assert "test_index-v4" == external_search_fixture.search.works_index_name(
-            session
+        version = external_search_fixture.search.mapping.VERSION_NAME
+        assert (
+            f"test_index-{version}"
+            == external_search_fixture.search.works_index_name(session)
         )
 
     def test_setup_index_creates_new_index(
@@ -1299,6 +1301,9 @@ class TestExternalSearchWithWorks:
             ],
         )
 
+        # Case-insensitive genre search, genre is saved as 'Fantasy'
+        expect([data.lincoln_vampire], "fantasy")
+
 
 class TestFacetFiltersData:
     becoming: Work
@@ -2300,6 +2305,16 @@ class TestFeaturedFacets:
         #
         # The random element is relatively small, so it mainly acts
         # to rearrange works whose scores were similar before.
+        #
+        # The order of the works when using random depends on 4 things:
+        # - The seed
+        # - The id (work_id)
+        # - The index name
+        # - The shard id
+        # If any of those change the order of works in this result may change,
+        # and hence the order of works in this assert must also change
+        # E.g. If the index version changes from v5 to v6, this may affect the order of works queried
+        # Keeping everything else the same, the order of works will remain reproducible across test runs
         random_facets = FeaturedFacets(1, random_seed=43)
         assert_featured(
             "Works permuted by a random seed",
@@ -2308,8 +2323,8 @@ class TestFeaturedFacets:
             [
                 data.hq_available_2,
                 data.hq_available,
-                data.not_featured_on_list,
                 data.hq_not_available,
+                data.not_featured_on_list,
                 data.featured_on_list,
             ],
         )
@@ -5225,6 +5240,15 @@ class TestJSONQuery:
             .first()
         )
         q = self._jq(self._leaf("data_source", DataSource.GUTENBERG))
+        assert q.elasticsearch_query.to_dict() == {
+            "nested": {
+                "path": "licensepools",
+                "query": {"term": {"licensepools.data_source_id": gutenberg.id}},
+            }
+        }
+
+        # Test case-insensitivity for data sources
+        q = self._jq(self._leaf("data_source", DataSource.GUTENBERG.upper()))
         assert q.elasticsearch_query.to_dict() == {
             "nested": {
                 "path": "licensepools",
