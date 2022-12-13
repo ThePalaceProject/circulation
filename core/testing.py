@@ -7,7 +7,7 @@ import time
 import uuid
 from datetime import timedelta
 from pathlib import Path
-from typing import Optional, Set, Union
+from typing import Optional, Union
 from unittest import mock
 
 import pytest
@@ -1163,18 +1163,13 @@ class ExternalSearchTest(DatabaseTest):
         "SIMPLIFIED_TEST_ELASTICSEARCH", "http://localhost:9200"
     )
 
-    DUAL_TESTS_RUN: Set[str] = set()
+    def setup_method(self):
 
-    def setup_method(self, request):
         super().setup_method()
 
         # Track the indexes created so they can be torn down at the
         # end of the test.
         self.indexes = []
-
-        self.TESTING_VERSION = os.environ.get(
-            "SIMPLIFIED_TEST_SEARCH_VERSION", ExternalSearchIndex.SEARCH_VERSION_ES6_8
-        )
 
         self.integration = self._external_integration(
             ExternalIntegration.ELASTICSEARCH,
@@ -1183,12 +1178,11 @@ class ExternalSearchTest(DatabaseTest):
             settings={
                 ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY: "test_index",
                 ExternalSearchIndex.TEST_SEARCH_TERM_KEY: "test_search_term",
-                ExternalSearchIndex.SEARCH_VERSION: self.TESTING_VERSION,
             },
         )
 
         try:
-            self.search = SearchClientForTesting(self._db, version=self.TESTING_VERSION)
+            self.search = SearchClientForTesting(self._db)
         except Exception as e:
             self.search = None
             logging.error(
@@ -1228,8 +1222,8 @@ class EndToEndSearchTest(ExternalSearchTest):
     search index and run searches against it.
     """
 
-    def setup_method(self, request):
-        super().setup_method(request)
+    def setup_method(self):
+        super().setup_method()
 
         # Create some works.
         if not self.search:
