@@ -2890,7 +2890,7 @@ class TestLoanNotificationsScript:
         # Sitewide notifications are turned off
         self.script.process_loan.reset_mock()
         ConfigurationSetting.sitewide(
-            self._db, Configuration.PUSH_NOTIFICATIONS_STATUS
+            db.session, Configuration.PUSH_NOTIFICATIONS_STATUS
         ).value = ConfigurationConstants.FALSE
         self.script.do_run()
         assert self.script.process_loan.call_count == 0

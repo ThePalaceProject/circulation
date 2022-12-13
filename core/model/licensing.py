@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 # PolicyException LicensePool, LicensePoolDeliveryMechanism, DeliveryMechanism,
 # RightsStatus
 from __future__ import annotations
