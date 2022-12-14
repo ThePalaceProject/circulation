@@ -407,6 +407,10 @@ class LibrarySettingsController(SettingsController):
         :return: The `data` URL for the image.
         """
         buffer = BytesIO()
+        # If the image is not RGB, RGBA or P convert it
+        # https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes
+        if image.mode not in ("RGB", "RGBA", "P"):
+            image = image.convert("RGBA")
         image.save(buffer, format=_format)
         b64 = base64.b64encode(buffer.getvalue())
         return "data:image/png;base64,%s" % b64.decode("utf-8")
