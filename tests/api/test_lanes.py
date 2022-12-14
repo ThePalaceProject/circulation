@@ -299,6 +299,18 @@ class TestLaneCreation(DatabaseTest):
         [world] = [x for x in lanes if x.display_name == "World Languages"]
         assert 5 == world.priority
 
+        # ensure the target age is appropriately set for the children and middle grade lane
+        [children_and_middle_grade_lane] = [
+            x for x in lanes if x.display_name == "Children and Middle Grade"
+        ]
+        target_age = children_and_middle_grade_lane.target_age
+        assert 0 == target_age.lower
+        assert 13 == target_age.upper
+        # and that the audience is set to children
+        audiences = children_and_middle_grade_lane.audiences
+        assert 1 == len(audiences)
+        assert Classifier.AUDIENCE_CHILDREN == audiences[0]
+
     def test_lane_configuration_from_collection_sizes(self):
 
         # If the library has no holdings, we assume it has a large English
