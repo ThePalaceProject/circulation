@@ -261,7 +261,6 @@ class CirculationManagerAnnotator(Annotator):
         feed,
         entry,
         updated=None,
-        add_open_access_links=True,
     ):
         # If ElasticSearch included a more accurate last_update_time,
         # use it instead of Work.last_update_time
