@@ -1139,8 +1139,22 @@ class CustomListsController(AdminCirculationManagerController):
         """Share this customlist with all libraries on this local CM"""
         if not customlist_id:
             return INVALID_INPUT
-
         customlist: CustomList = get_one(self._db, CustomList, id=customlist_id)
+        if customlist.library != flask.request.library:
+            return ADMIN_NOT_AUTHORIZED.detailed(
+                _("This library does not have permissions on this customlist.")
+            )
+
+        if flask.request.method == "POST":
+            return self.share_locally_POST(customlist)
+        elif flask.request.method == "DELETE":
+            return self.share_locally_DELETE(customlist)
+        else:
+            return METHOD_NOT_ALLOWED
+
+    def share_locally_POST(
+        self, customlist: CustomList
+    ) -> Union[ProblemDetail, Response]:
         library: Library = None
         successes = []
         failures = []
@@ -1165,6 +1179,37 @@ class CustomListsController(AdminCirculationManagerController):
 
         self._db.commit()
         return dict(successes=len(successes), failures=len(failures))
+
+    def share_locally_DELETE(
+        self, customlist: CustomList
+    ) -> Union[ProblemDetail, Response]:
+        """Delete the shared status of a custom list
+        If a customlist is actively in use by another library, then disallow the unshare
+        """
+        if not customlist.shared_locally_with_libraries:
+            return Response("", 204)
+
+        shared_list_lanes = (
+            self._db.query(Lane)
+            .filter(
+                Lane.customlists.contains(customlist),
+                Lane.library_id != customlist.library_id,
+            )
+            .count()
+        )
+
+        if shared_list_lanes > 0:
+            return CUSTOMLIST_CANNOT_DELETE_SHARE.detailed(
+                _(
+                    "This list cannot be unshared because it is currently being used by one or more libraries on this Palace Manager."
+                )
+            )
+
+        # This list is not in use by any other libraries, we can delete the share
+        # by simply emptying the list of shared libraries
+        customlist.shared_locally_with_libraries = []
+
+        return Response("", status=204)
 
 
 class LanesController(AdminCirculationManagerController):

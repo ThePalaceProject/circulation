@@ -1725,8 +1725,10 @@ class TestCustomListsController(AdminControllerTest):
             list=list,
         )
 
-    def _share_locally(self, customlist):
-        with self.request_context_with_library_and_admin("/", method="POST"):
+    def _share_locally(self, customlist, library):
+        with self.request_context_with_library_and_admin(
+            "/", library=library, method="POST"
+        ):
             response = self.manager.admin_custom_lists_controller.share_locally(
                 customlist.id
             )
@@ -1746,14 +1748,14 @@ class TestCustomListsController(AdminControllerTest):
 
     def test_share_locally_missing_collection(self):
         s = self._setup_share_locally()
-        response = self._share_locally(s.list)
+        response = self._share_locally(s.list, s.primary_library)
         assert response["failures"] == 2
         assert response["successes"] == 0
 
     def test_share_locally_success(self):
         s = self._setup_share_locally()
         s.shared_with.collections.append(s.collection1)
-        response = self._share_locally(s.list)
+        response = self._share_locally(s.list, s.primary_library)
         assert response["successes"] == 1
         assert response["failures"] == 1  # The default library
 
@@ -1761,7 +1763,7 @@ class TestCustomListsController(AdminControllerTest):
         assert len(s.list.shared_locally_with_libraries) == 1
 
         # Try again should have 0 more libraries as successes
-        response = self._share_locally(s.list)
+        response = self._share_locally(s.list, s.primary_library)
         assert response["successes"] == 0
         assert response["failures"] == 1  # The default library
 
@@ -1775,7 +1777,7 @@ class TestCustomListsController(AdminControllerTest):
         w = self._work(collection=collection2)
         s.list.add_entry(w)
 
-        response = self._share_locally(s.list)
+        response = self._share_locally(s.list, s.primary_library)
         assert response["failures"] == 2
         assert response["successes"] == 0
 
@@ -1784,7 +1786,7 @@ class TestCustomListsController(AdminControllerTest):
         s = self._setup_share_locally()
         s.shared_with.collections.append(s.collection1)
 
-        resp = self._share_locally(s.list)
+        resp = self._share_locally(s.list, s.primary_library)
         assert resp["successes"] == 1
 
         self.admin.add_role(AdminRole.LIBRARIAN, s.shared_with)
@@ -1809,6 +1811,61 @@ class TestCustomListsController(AdminControllerTest):
                 is_owner=False,
                 is_shared=True,
             )
+
+    def test_share_locally_delete(self):
+        """Test the deleting of a lists shared status"""
+        s = self._setup_share_locally()
+        s.shared_with.collections.append(s.collection1)
+
+        resp = self._share_locally(s.list, s.primary_library)
+        assert resp["successes"] == 1
+
+        # First, we are shared with a library which uses the list
+        # so we cannot delete the share status
+        lane_with_shared, _ = create(
+            self._db, Lane, library_id=s.shared_with.id, customlists=[s.list]
+        )
+
+        with self.request_context_with_library_and_admin(
+            "/", method="DELETE", library=s.primary_library
+        ):
+            response = self.manager.admin_custom_lists_controller.share_locally(
+                s.list.id
+            )
+            assert type(response) == ProblemDetail
+
+        # Second, we remove the lane that uses the shared list
+        # making it available to unshare
+        self._db.delete(lane_with_shared)
+        self._db.commit()
+
+        with self.request_context_with_library_and_admin(
+            "/", method="DELETE", library=s.primary_library
+        ):
+            response = self.manager.admin_custom_lists_controller.share_locally(
+                s.list.id
+            )
+            assert response.status_code == 204
+
+        assert s.list.shared_locally_with_libraries == []
+
+        # Third, it is in use by the owner library (not the shared library)
+        # so the list can still be unshared
+        resp = self._share_locally(s.list, s.primary_library)
+        assert resp["successes"] == 1
+
+        lane_with_primary, _ = create(
+            self._db, Lane, library_id=s.primary_library.id, customlists=[s.list]
+        )
+        with self.request_context_with_library_and_admin(
+            "/", method="DELETE", library=s.primary_library
+        ):
+            response = self.manager.admin_custom_lists_controller.share_locally(
+                s.list.id
+            )
+            assert response.status_code == 204
+
+        assert s.list.shared_locally_with_libraries == []
 
     def test_auto_update_edit(self):
         w1 = self._work()
