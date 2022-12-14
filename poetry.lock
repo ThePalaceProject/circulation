@@ -456,7 +456,7 @@ crt = ["awscrt (==0.12.5)"]
 
 [[package]]
 name = "botocore-stubs"
-version = "1.29.28"
+version = "1.29.30"
 description = "Type annotations and code completion for botocore"
 category = "dev"
 optional = false
@@ -1936,7 +1936,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.7,<4"
-content-hash = "e63ce17540e1df286eca17c8f48331316d40073ea80edb3e87e8d4f630de04e6"
+content-hash = "272bec0f27872b80a6cfc9567334427c8c656f4f1533b082d440bcc025a41195"
 
 [metadata.files]
 atomicwrites = [
@@ -1976,8 +1976,8 @@ botocore = [
     {file = "botocore-1.21.65.tar.gz", hash = "sha256:6437d6a3999a189e7d45b3fcd8f794a46670fb255ae670c946d3f224caa8b46a"},
 ]
 botocore-stubs = [
-    {file = "botocore_stubs-1.29.28-py3-none-any.whl", hash = "sha256:471cbe441d841cf6d39168fc06bd253fc77ec13ad366ba9abc2cf2e0b3f5bc71"},
-    {file = "botocore_stubs-1.29.28.tar.gz", hash = "sha256:ad47e600f8283cb02dae45c3d5608dc821a152685631efa894934c9b6de6c903"},
+    {file = "botocore_stubs-1.29.30-py3-none-any.whl", hash = "sha256:606c9012ddb0c917a69d9287fd0969a4a69454fa3e64522ca79a61960d954d54"},
+    {file = "botocore_stubs-1.29.30.tar.gz", hash = "sha256:43fd72ea0a4fb2d27c5296d1ac8502e171fa87e6b030d1784e23294971a33594"},
 ]
 cachetools = [
     {file = "cachetools-5.1.0-py3-none-any.whl", hash = "sha256:4ebbd38701cdfd3603d1f751d851ed248ab4570929f2d8a7ce69e30c420b141c"},
