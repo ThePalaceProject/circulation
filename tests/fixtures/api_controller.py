@@ -2,7 +2,7 @@ import datetime
 import json
 import logging
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, List
 
 import flask
 import pytest
@@ -14,6 +14,8 @@ from api.config import Configuration
 from api.controller import CirculationManager, CirculationManagerController
 from api.lanes import create_default_lanes
 from api.simple_authentication import SimpleAuthenticationProvider
+from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EntryPoint
+from core.lane import Lane
 from core.model import (
     Collection,
     ConfigurationSetting,
@@ -21,6 +23,7 @@ from core.model import (
     Library,
     Patron,
     Session,
+    Work,
     create,
     get_one_or_create,
 )
@@ -38,9 +41,9 @@ class ControllerFixture:
     collections: list[Collection]
     controller: CirculationManagerController
     db: DatabaseTransactionFixture
-    default_patron: object
+    default_patron: Patron
     default_patrons: dict[Any, Any]
-    english_adult_fiction: object
+    english_adult_fiction: Lane
     libraries: list[Library]
     library: Library
     manager: CirculationManager
@@ -53,28 +56,28 @@ class ControllerFixture:
     valid_credentials = dict(username="unittestuser", password="unittestpassword")
 
     def __init__(
-        self, db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture
+        self,
+        db: DatabaseTransactionFixture,
+        vendor_id_fixture: VendorIDFixture,
+        setup_cm: bool,
     ):
         self.vendor_ids = vendor_id_fixture
         self.db = db
         self.app = app
 
-        if not hasattr(self, "setup_circulation_manager"):
-            self.setup_circulation_manager = True
-
-            # PRESERVE_CONTEXT_ON_EXCEPTION needs to be off in tests
-            # to prevent one test failure from breaking later tests as well.
-            # When used with flask's test_request_context, exceptions
-            # from previous tests would cause flask to roll back the db
-            # when you entered a new request context, deleting rows that
-            # were created in the test setup.
+        # PRESERVE_CONTEXT_ON_EXCEPTION needs to be off in tests
+        # to prevent one test failure from breaking later tests as well.
+        # When used with flask's test_request_context, exceptions
+        # from previous tests would cause flask to roll back the db
+        # when you entered a new request context, deleting rows that
+        # were created in the test setup.
         app.config["PRESERVE_CONTEXT_ON_EXCEPTION"] = False
 
         Configuration.instance[Configuration.INTEGRATIONS][ExternalIntegration.CDN] = {
             "": "http://cdn"
         }
 
-        if self.setup_circulation_manager:
+        if setup_cm:
             # NOTE: Any reference to self._default_library below this
             # point in this method will cause the tests in
             # TestScopedSession to hang.
@@ -210,8 +213,124 @@ def controller_fixture(
     db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture
 ):
     time_then = datetime.datetime.now()
-    fixture = ControllerFixture(db, vendor_id_fixture)
+    fixture = ControllerFixture(db, vendor_id_fixture, setup_cm=True)
     time_now = datetime.datetime.now()
     time_diff = time_now - time_then
     logging.info("controller init took %s", time_diff)
+    yield fixture
+
+
+@pytest.fixture(scope="function")
+def controller_fixture_without_cm(
+    db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture
+):
+    time_then = datetime.datetime.now()
+    fixture = ControllerFixture(db, vendor_id_fixture, setup_cm=False)
+    time_now = datetime.datetime.now()
+    time_diff = time_now - time_then
+    logging.info("controller init took %s", time_diff)
+    yield fixture
+
+
+class WorkSpec:
+    variable_name: str
+    title: str
+    author: str
+    language: str
+    fiction: bool
+
+    def __init__(
+        self, variable_name: str, title: str, author: str, language: str, fiction: bool
+    ):
+        self.variable_name = variable_name
+        self.title = title
+        self.author = author
+        self.language = language
+        self.fiction = fiction
+
+
+class CirculationControllerFixture(ControllerFixture):
+    works: list[Work]
+    english_1: Work
+
+    # These tests generally need at least one Work created,
+    # but some need more.
+
+    BOOKS: List[WorkSpec] = [
+        WorkSpec(
+            variable_name="english_1",
+            title="Quite British",
+            author="John Bull",
+            language="eng",
+            fiction=True,
+        )
+    ]
+
+    def __init__(
+        self, db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture
+    ):
+        super().__init__(db, vendor_id_fixture, setup_cm=True)
+        self.works = []
+        self.add_works(self.BOOKS)
+
+        # Enable the audiobook entry point for the default library -- a lot of
+        # tests verify that non-default entry points can be selected.
+        self.db.default_library().setting(
+            EntryPoint.ENABLED_SETTING
+        ).value = json.dumps(
+            [EbooksEntryPoint.INTERNAL_NAME, AudiobooksEntryPoint.INTERNAL_NAME]
+        )
+
+    def add_works(self, works: List[WorkSpec]):
+        """Add works to the database."""
+        for spec in works:
+            work = self.db.work(
+                spec.title,
+                spec.author,
+                language=spec.language,
+                fiction=spec.fiction,
+                with_open_access_download=True,
+            )
+            setattr(self, spec.variable_name, work)
+            work.license_pools[0].collection = self.collection
+            self.works.append(work)
+        self.manager.external_search.bulk_update(self.works)
+
+    def assert_bad_search_index_gives_problem_detail(self, test_function):
+        """Helper method to test that a controller method serves a problem
+        detail document when the search index isn't set up.
+
+        Mocking a broken search index is a lot of work; thus the helper method.
+        """
+        old_setup = self.manager.setup_external_search
+        old_value = self.manager._external_search
+
+        try:
+            self.manager._external_search = None
+            self.manager.setup_external_search = lambda: None
+            with self.request_context_with_library("/"):
+                response = test_function()
+                assert 502 == response.status_code
+                assert (
+                    "http://librarysimplified.org/terms/problem/remote-integration-failed"
+                    == response.uri
+                )
+                assert (
+                    "The search index for this site is not properly configured."
+                    == response.detail
+                )
+        finally:
+            self.manager.setup_external_search = old_setup
+            self.manager._external_search = old_value
+
+
+@pytest.fixture(scope="function")
+def circulation_fixture(
+    db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture
+):
+    time_then = datetime.datetime.now()
+    fixture = CirculationControllerFixture(db, vendor_id_fixture)
+    time_now = datetime.datetime.now()
+    time_diff = time_now - time_then
+    logging.info("circulation controller init took %s", time_diff)
     yield fixture
