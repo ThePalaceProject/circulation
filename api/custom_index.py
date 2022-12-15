@@ -5,8 +5,7 @@ This code is DEPRECATED; you probably want a CustomPatronCatalog instead.
 We're keeping it around because existing iOS versions of SimplyE need the
 OPDS navigation feed it generates.
 """
-
-from typing import Dict
+from __future__ import annotations
 
 from flask import Response
 from flask_babel import lazy_gettext as _
@@ -34,7 +33,7 @@ class CustomIndexView:
     disconnecting them from their session.
     """
 
-    BY_PROTOCOL: Dict[str, "CustomIndexView"] = {}
+    BY_PROTOCOL: dict[str, CustomIndexView] = {}
 
     GOAL = "custom_index"
 

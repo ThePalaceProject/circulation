@@ -5,7 +5,7 @@ from io import BytesIO
 from typing import Any, Dict, Optional
 
 import flask
-import wcag_contrast_ratio  # type: ignore
+import wcag_contrast_ratio
 from flask import Response
 from flask_babel import lazy_gettext as _
 from PIL import Image

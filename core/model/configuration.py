@@ -1402,7 +1402,7 @@ class ConfigurationGrouping(HasConfigurationSettings):
             }
 
     @classmethod
-    def to_settings(cls) -> list[dict]:
+    def to_settings(cls) -> list[dict[str, Any]]:
         """Return a list of settings in a format understandable by circulation-admin.
 
         :return: list of settings in a format understandable by circulation-admin.

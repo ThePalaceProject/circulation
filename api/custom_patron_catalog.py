@@ -1,8 +1,7 @@
 """A custom patron catalog annotates a library's authentication
 document to describe an unusual setup.
 """
-
-from typing import Dict
+from __future__ import annotations
 
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm.session import Session
@@ -27,7 +26,7 @@ class CustomPatronCatalog:
     from their session.
     """
 
-    BY_PROTOCOL: Dict[str, "CustomPatronCatalog"] = {}
+    BY_PROTOCOL: dict[str, CustomPatronCatalog] = {}
 
     GOAL = "custom_patron_catalog"
 

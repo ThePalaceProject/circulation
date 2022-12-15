@@ -490,6 +490,9 @@ class BaseCirculationAPI:
         Tuple[Optional[str], Optional[str]], str
     ] = {}
 
+    def __init__(self, _db, collection):
+        raise NotImplementedError()
+
     def internal_format(self, delivery_mechanism):
         """Look up the internal format for this delivery mechanism or
         raise an exception.
@@ -649,6 +652,9 @@ class CirculationFulfillmentPostProcessor(ABC):
     It takes a FulfillmentInfo object and transforms it according to its internal logic.
     """
 
+    def __init__(self, collection):
+        raise NotImplementedError()
+
     @abstractmethod
     def fulfill(
         self,
@@ -739,7 +745,7 @@ class CirculationAPI:
             if collection.protocol in api_map:
                 api = None
                 try:
-                    api = api_map[collection.protocol](db, collection)  # type: ignore
+                    api = api_map[collection.protocol](db, collection)
                 except CannotLoadConfiguration as exception:
                     self.log.exception(
                         "Error loading configuration for {}: {}".format(
@@ -754,9 +760,7 @@ class CirculationAPI:
             if collection.protocol in fulfillment_post_processors_mapping:
                 fulfillment_post_processor = fulfillment_post_processors_mapping[
                     collection.protocol
-                ](
-                    collection
-                )  # type: ignore
+                ](collection)
                 self._fulfillment_post_processors_map[
                     collection.id
                 ] = fulfillment_post_processor

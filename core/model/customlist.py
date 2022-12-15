@@ -63,7 +63,7 @@ class CustomList(Base):
     # List sharing mechanisms
     shared_locally_with_libraries = relationship(
         "Library",
-        secondary=lambda: customlist_sharedlibrary,  # type: ignore
+        secondary=lambda: customlist_sharedlibrary,
         backref="shared_custom_lists",
         uselist=True,
     )
@@ -330,7 +330,7 @@ class CustomList(Base):
         self.size = CustomList.entries_having_works(db, self.id).count()
 
 
-customlist_sharedlibrary = Table(
+customlist_sharedlibrary: Table = Table(
     "customlist_sharedlibraries",
     Base.metadata,
     Column(

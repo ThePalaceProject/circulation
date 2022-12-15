@@ -1,5 +1,6 @@
 import json
 import os
+from typing import Any, Dict, List
 
 from flask_babel import lazy_gettext as lgt
 
@@ -105,7 +106,7 @@ class CleverAuthenticationAPI(OAuthAuthenticationProvider):
     # Unlike other authentication providers, external type regular expression
     # doesn't make sense for Clever. This removes the LIBRARY_SETTINGS from the
     # parent class.
-    LIBRARY_SETTINGS: list = []
+    LIBRARY_SETTINGS: List[Dict[str, Any]] = []
 
     TOKEN_TYPE = "Clever token"
     TOKEN_DATA_SOURCE_NAME = "Clever"

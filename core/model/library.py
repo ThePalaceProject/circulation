@@ -23,6 +23,7 @@ from ..config import Configuration
 from ..entrypoint import EntryPoint
 from ..facets import FacetConstants
 from . import Base, get_one
+from .customlist import customlist_sharedlibrary
 from .edition import Edition
 from .hassessioncache import HasSessionCache
 from .licensing import LicensePool
@@ -107,12 +108,16 @@ class Library(Base, HasSessionCache):
 
     # A Library may have many CustomLists.
     custom_lists = relationship(
-        "CustomList",
-        backref="library",
-        lazy="joined",
+        "CustomList", backref="library", lazy="joined", uselist=True
     )
+
     # Lists shared with this library
-    shared_custom_lists: "CustomList"
+    shared_custom_lists = relationship(
+        "CustomList",
+        secondary=lambda: customlist_sharedlibrary,
+        back_populates="shared_locally_with_libraries",
+        uselist=True,
+    )
 
     # A Library may have many ExternalIntegrations.
     integrations = relationship(

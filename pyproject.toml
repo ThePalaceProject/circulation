@@ -98,6 +98,7 @@ module = [
     "uszipcode",
     "watchtower",
     "webpub_manifest_parser.*",
+    "wcag_contrast_ratio"
 ]
 
 [[tool.mypy.overrides]]

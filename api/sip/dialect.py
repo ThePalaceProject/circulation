@@ -1,6 +1,3 @@
-from typing import Optional
-
-
 class Dialect:
     """Describe a SIP2 dialect."""
 
@@ -9,7 +6,7 @@ class Dialect:
     AG_VERSO = "AutoGraphicsVerso"
 
     # Settings defined in each class
-    sendEndSession: Optional[bool] = None
+    sendEndSession: bool = False
 
     # Map a string to the correct class
     @staticmethod

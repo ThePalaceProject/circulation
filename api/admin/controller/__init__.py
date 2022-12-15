@@ -822,7 +822,7 @@ class CustomListsController(AdminCirculationManagerController):
         )
 
     def custom_lists(self) -> Union[Dict, ProblemDetail, Response, None]:
-        library = flask.request.library  # type: ignore  # "Request" has no attribute "library"
+        library: Library = flask.request.library  # type: ignore  # "Request" has no attribute "library"
         self.require_librarian(library)
 
         if flask.request.method == "GET":
@@ -1068,7 +1068,7 @@ class CustomListsController(AdminCirculationManagerController):
     def custom_list(
         self, list_id: int
     ) -> Optional[Union[Response, Dict, ProblemDetail]]:
-        library = flask.request.library  # type: ignore
+        library: Library = flask.request.library  # type: ignore
         self.require_librarian(library)
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
 
