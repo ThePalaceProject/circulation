@@ -460,6 +460,8 @@ class CirculationManagerAnnotator(Annotator):
 
         # If this is an open-access book, add an open-access link for
         # every delivery mechanism with an associated resource.
+        # But only if this library allows it, generally this is if
+        # a library has no patron authentication attached to it
         if (
             add_open_access_links
             and active_license_pool
@@ -639,15 +641,6 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         self._top_level_title = top_level_title
         self.identifies_patrons = library_identifies_patrons
         self.facets = facets or None
-
-        # Open access links are added only when the library needs no authentication,
-        # else we must not have direct fulfillment links in the feed.
-        # The Patron should go through the authenticated borrow workflow in that case.
-        _db = Session.object_session(self.library)
-        integrations = ExternalIntegration.for_library_and_goal(
-            _db, self.library, ExternalIntegration.PATRON_AUTH_GOAL
-        )
-        self.add_open_access_links = integrations.count() == 0
 
     @classmethod
     def _hidden_content_types(self, library):
@@ -1186,7 +1179,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             ),
             set_mechanism_at_borrow=set_mechanism_at_borrow,
             direct_fulfillment_delivery_mechanisms=direct_fulfillment_delivery_mechanisms,
-            add_open_access_links=self.add_open_access_links,
+            add_open_access_links=(not self.identifies_patrons),
         )
 
     def revoke_link(self, active_license_pool, active_loan, active_hold):
