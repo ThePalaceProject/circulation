@@ -2534,15 +2534,6 @@ class OAuthAuthenticationProvider(AuthenticationProvider, BearerTokenSigner):
             _db, data_source, self.TOKEN_TYPE, patron, duration, token
         )
 
-    def remote_patron_lookup(self, patron_or_patrondata):
-        """Ask the remote for detailed information about a patron's account.
-
-        By default, there is no way to ask an OAuth provider for
-        information about a specific patron after the fact.
-
-        """
-        return None
-
     def external_authenticate_url(self, state, _db):
         """Generate the URL provided by the OAuth provider which will present
         the patron with a login form.
@@ -2629,6 +2620,14 @@ class OAuthAuthenticationProvider(AuthenticationProvider, BearerTokenSigner):
 
         :return: A ProblemDetail if there's a problem; otherwise, the
             bearer token.
+        """
+        raise NotImplementedError()
+
+    def remote_patron_lookup(self, access_token):
+        """Use a bearer token to look up as much information as possible about
+        a patron.
+
+        :return: A ProblemDetail if there's a problem. Otherwise, a PatronData.
         """
         raise NotImplementedError()
 
