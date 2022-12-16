@@ -1952,7 +1952,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.7,<4"
-content-hash = "eb1567e1947470320525dba58a06706bbcc94f18c6dd6881a6a0c634ee811a19"
+content-hash = "ad7c04d5164cae11c1921934eee5fc89d7cf8098c17bb1d6596b35194fe5c130"
 
 [metadata.files]
 atomicwrites = [

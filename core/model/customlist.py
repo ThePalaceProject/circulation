@@ -64,7 +64,7 @@ class CustomList(Base):
     shared_locally_with_libraries = relationship(
         "Library",
         secondary=lambda: customlist_sharedlibrary,
-        backref="shared_custom_lists",
+        back_populates="shared_custom_lists",
         uselist=True,
     )
 

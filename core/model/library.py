@@ -112,6 +112,7 @@ class Library(Base, HasSessionCache):
     )
 
     # Lists shared with this library
+    # shared_custom_lists: "CustomList"
     shared_custom_lists = relationship(
         "CustomList",
         secondary=lambda: customlist_sharedlibrary,
@@ -122,7 +123,7 @@ class Library(Base, HasSessionCache):
     # A Library may have many ExternalIntegrations.
     integrations = relationship(
         "ExternalIntegration",
-        secondary=lambda: externalintegrations_libraries,  # type: ignore
+        secondary=lambda: externalintegrations_libraries,
         back_populates="libraries",
     )
 
@@ -488,7 +489,7 @@ class Library(Base, HasSessionCache):
                 library._is_default = False
 
 
-externalintegrations_libraries = Table(
+externalintegrations_libraries: Table = Table(
     "externalintegrations_libraries",
     Base.metadata,
     Column(
