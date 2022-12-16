@@ -691,6 +691,7 @@ def custom_list(list_id):
 )
 @returns_json_or_response_or_problem_detail
 def custom_list_share(list_id: int):
+    """Share a custom list with all libraries in the CM that share the collections of this library and works of this list"""
     return app.manager.admin_custom_lists_controller.share_locally(list_id)
 
 
@@ -701,6 +702,7 @@ def custom_list_share(list_id: int):
 @api_spec.validate(resp=spec_Response(HTTP_204=None), tags=["admin", "customlist"])
 @returns_json_or_response_or_problem_detail
 def custom_list_unshare(list_id: int):
+    """Unshare the list from all libraries, as long as no other lirbary is using the list in its lanes"""
     return app.manager.admin_custom_lists_controller.share_locally(list_id)
 
 
