@@ -3,17 +3,18 @@ from functools import wraps
 
 import flask
 from flask import Response, make_response, redirect
+from flask_pydantic_spec import Response as spec_Response
 
 from api.admin.config import Configuration as AdminClientConfig
-from api.app import app
+from api.app import api_spec, app
 from api.config import Configuration
 from api.routes import allows_library, has_library, library_route
-from core.app_server import returns_problem_detail
+from core.app_server import ensure_pydantic_after_problem_detail, returns_problem_detail
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.model import ConfigurationSetting
-from core.util.problem_detail import ProblemDetail
+from core.util.problem_detail import ProblemDetail, ProblemDetailModel
 
-from .controller import setup_admin_controllers
+from .controller import CustomListsController, setup_admin_controllers
 from .templates import admin_sign_in_again as sign_in_again_template
 
 # An admin's session will expire after this amount of time and
@@ -89,6 +90,8 @@ def requires_csrf_token(f):
 
 
 def returns_json_or_response_or_problem_detail(f):
+    ensure_pydantic_after_problem_detail(f)
+
     @wraps(f)
     def decorated(*args, **kwargs):
         v = f(*args, **kwargs)
@@ -675,12 +678,29 @@ def custom_list(list_id):
     return app.manager.admin_custom_lists_controller.custom_list(list_id)
 
 
-@library_route("/admin/custom_list/<list_id>/share", methods=["POST", "DELETE"])
+@library_route("/admin/custom_list/<list_id>/share", methods=["POST"])
 @has_library
-@returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def custom_list_share(list_id):
+@api_spec.validate(
+    resp=spec_Response(
+        HTTP_200=CustomListsController.CustomListSharePostResponse,
+        HTTP_403=ProblemDetailModel,
+    ),
+    tags=["admin", "customlist"],
+)
+@returns_json_or_response_or_problem_detail
+def custom_list_share(list_id: int):
+    return app.manager.admin_custom_lists_controller.share_locally(list_id)
+
+
+@library_route("/admin/custom_list/<list_id>/share", methods=["DELETE"])
+@has_library
+@requires_admin
+@requires_csrf_token
+@api_spec.validate(resp=spec_Response(HTTP_204=None), tags=["admin", "customlist"])
+@returns_json_or_response_or_problem_detail
+def custom_list_unshare(list_id: int):
     return app.manager.admin_custom_lists_controller.share_locally(list_id)
 
 

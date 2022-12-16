@@ -12,6 +12,7 @@ import flask
 import jwt
 from flask import Response, redirect
 from flask_babel import lazy_gettext as _
+from pydantic import BaseModel
 from sqlalchemy.sql import func
 from sqlalchemy.sql.expression import and_, desc, distinct, join, nullslast, select
 
@@ -781,6 +782,10 @@ class FeedController(AdminCirculationManagerController):
 
 
 class CustomListsController(AdminCirculationManagerController):
+    class CustomListSharePostResponse(BaseModel):
+        successes: int = 0
+        failures: int = 0
+
     def _list_as_json(self, list: CustomList, is_owner=True) -> Dict:
         """Transform a CustomList object into a response ready dict"""
         collections = []
@@ -1178,7 +1183,9 @@ class CustomListsController(AdminCirculationManagerController):
                 successes.append(library)
 
         self._db.commit()
-        return dict(successes=len(successes), failures=len(failures))
+        return self.CustomListSharePostResponse(
+            successes=len(successes), failures=len(failures)
+        ).dict()
 
     def share_locally_DELETE(
         self, customlist: CustomList

@@ -6,6 +6,7 @@ import json as j
 import logging
 
 from flask_babel import LazyString
+from pydantic import BaseModel
 
 from ..exceptions import BaseError
 
@@ -21,6 +22,14 @@ def json(type, status, title, detail=None, instance=None, debug_message=None):
     if debug_message:
         d["debug_message"] = debug_message
     return j.dumps(d)
+
+
+class ProblemDetailModel(BaseModel):
+    type: str = None
+    status: int = None
+    title: str = None
+    detail: str = None
+    debug_message: str = None
 
 
 class ProblemDetail:
