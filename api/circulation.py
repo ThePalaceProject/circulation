@@ -491,7 +491,7 @@ class BaseCirculationAPI:
     ] = {}
 
     def __init__(self, _db, collection):
-        raise NotImplementedError()
+        pass
 
     def internal_format(self, delivery_mechanism):
         """Look up the internal format for this delivery mechanism or
