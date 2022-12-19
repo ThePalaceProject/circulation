@@ -76,6 +76,7 @@ module = [
     "expiringdict",
     "feedparser",
     "flask_babel",
+    "flask_pydantic_spec.*",
     "flask_sqlalchemy_session",
     "fuzzywuzzy",
     "isbnlib",
