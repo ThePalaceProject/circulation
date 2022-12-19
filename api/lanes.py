@@ -590,7 +590,9 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
     ya_nonfiction_priority += 1
 
     children_common_args = dict(common_args)
-    children_common_args["audiences"] = CHILDREN
+    children_common_args["target_age"] = Classifier.range_tuple(
+        0, Classifier.YOUNG_ADULT_AGE_CUTOFF - 1
+    )
 
     children, ignore = create(
         _db,
