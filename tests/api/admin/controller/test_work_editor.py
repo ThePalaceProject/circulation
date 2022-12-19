@@ -14,6 +14,7 @@ import pytest
 from PIL import Image
 from werkzeug.datastructures import ImmutableMultiDict, MultiDict
 
+from api.admin.controller import CustomListsController
 from api.admin.exceptions import *
 from api.admin.problem_details import *
 from core.classifier import SimplifiedGenreClassifier
@@ -42,6 +43,7 @@ from core.testing import (
 from core.util.datetime_helpers import datetime_utc
 from tests.api.admin.controller.test_controller import AdminControllerTest
 from tests.api.test_controller import CirculationControllerTest
+from tests.core.util.test_flask_util import add_request_context
 
 
 class TestWorkController(AdminControllerTest):
@@ -1240,12 +1242,16 @@ class TestWorkController(AdminControllerTest):
         identifier = work.presentation_edition.primary_identifier
 
         with self.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            form = MultiDict(
                 [
                     ("id", "4"),
                     ("name", "name"),
                 ]
             )
+            add_request_context(
+                flask.request, CustomListsController.CustomListPostRequest, form=form
+            )
+
             response = self.manager.admin_custom_lists_controller.custom_lists()
             assert MISSING_CUSTOM_LIST == response
 

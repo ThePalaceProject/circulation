@@ -3,7 +3,9 @@ from functools import wraps
 
 import flask
 from flask import Response, make_response, redirect
-from flask_pydantic_spec import Response as spec_Response
+from flask_pydantic_spec import FileResponse as SpecFileResponse
+from flask_pydantic_spec import Request as SpecRequest
+from flask_pydantic_spec import Response as SpecResponse
 
 from api.admin.config import Configuration as AdminClientConfig
 from api.app import api_spec, app
@@ -660,49 +662,88 @@ def discovery_service_library_registrations():
     )
 
 
-@library_route("/admin/custom_lists", methods=["GET", "POST"])
+@library_route("/admin/custom_lists", methods=["POST"])
+@api_spec.validate(
+    resp=SpecFileResponse(content_type="application/atom+xml"),
+    body=SpecRequest(CustomListsController.CustomListPostRequest),
+)
 @has_library
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def custom_lists():
+def custom_lists_post():
     return app.manager.admin_custom_lists_controller.custom_lists()
 
 
-@library_route("/admin/custom_list/<list_id>", methods=["GET", "POST", "DELETE"])
+@library_route("/admin/custom_lists", methods=["GET"])
+@api_spec.validate(
+    resp=SpecFileResponse(content_type="application/atom+xml"),
+)
 @has_library
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def custom_list(list_id):
+def custom_lists_get():
+    return app.manager.admin_custom_lists_controller.custom_lists()
+
+
+@library_route("/admin/custom_list/<list_id>", methods=["GET"])
+@api_spec.validate(resp=SpecFileResponse(content_type="application/atom+xml"))
+@has_library
+@returns_json_or_response_or_problem_detail
+@requires_admin
+@requires_csrf_token
+def custom_list_get(list_id: int):
+    return app.manager.admin_custom_lists_controller.custom_list(list_id)
+
+
+@library_route("/admin/custom_list/<list_id>", methods=["POST"])
+@api_spec.validate(
+    resp=SpecFileResponse(content_type="application/atom+xml"),
+    body=SpecRequest(CustomListsController.CustomListPostRequest),
+)
+@has_library
+@returns_json_or_response_or_problem_detail
+@requires_admin
+@requires_csrf_token
+def custom_list_post(list_id):
+    return app.manager.admin_custom_lists_controller.custom_list(list_id)
+
+
+@library_route("/admin/custom_list/<list_id>", methods=["DELETE"])
+@has_library
+@returns_json_or_response_or_problem_detail
+@requires_admin
+@requires_csrf_token
+def custom_list_delete(list_id):
     return app.manager.admin_custom_lists_controller.custom_list(list_id)
 
 
 @library_route("/admin/custom_list/<list_id>/share", methods=["POST"])
-@has_library
-@requires_admin
-@requires_csrf_token
 @api_spec.validate(
-    resp=spec_Response(
+    resp=SpecResponse(
         HTTP_200=CustomListsController.CustomListSharePostResponse,
         HTTP_403=ProblemDetailModel,
     ),
     tags=["admin", "customlist"],
 )
+@has_library
 @returns_json_or_response_or_problem_detail
+@requires_admin
+@requires_csrf_token
 def custom_list_share(list_id: int):
     """Share a custom list with all libraries in the CM that share the collections of this library and works of this list"""
     return app.manager.admin_custom_lists_controller.share_locally(list_id)
 
 
 @library_route("/admin/custom_list/<list_id>/share", methods=["DELETE"])
+@api_spec.validate(resp=SpecResponse(HTTP_204=None), tags=["admin", "customlist"])
 @has_library
+@returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-@api_spec.validate(resp=spec_Response(HTTP_204=None), tags=["admin", "customlist"])
-@returns_json_or_response_or_problem_detail
 def custom_list_unshare(list_id: int):
-    """Unshare the list from all libraries, as long as no other lirbary is using the list in its lanes"""
+    """Unshare the list from all libraries, as long as no other library is using the list in its lanes"""
     return app.manager.admin_custom_lists_controller.share_locally(list_id)
 
 
