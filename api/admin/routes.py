@@ -666,6 +666,7 @@ def discovery_service_library_registrations():
 @api_spec.validate(
     resp=SpecFileResponse(content_type="application/atom+xml"),
     body=SpecRequest(CustomListsController.CustomListPostRequest),
+    tags=["admin.customlists"],
 )
 @has_library
 @returns_json_or_response_or_problem_detail
@@ -678,6 +679,7 @@ def custom_lists_post():
 @library_route("/admin/custom_lists", methods=["GET"])
 @api_spec.validate(
     resp=SpecFileResponse(content_type="application/atom+xml"),
+    tags=["admin.customlists"],
 )
 @has_library
 @returns_json_or_response_or_problem_detail
@@ -688,7 +690,10 @@ def custom_lists_get():
 
 
 @library_route("/admin/custom_list/<list_id>", methods=["GET"])
-@api_spec.validate(resp=SpecFileResponse(content_type="application/atom+xml"))
+@api_spec.validate(
+    resp=SpecFileResponse(content_type="application/atom+xml"),
+    tags=["admin.customlists"],
+)
 @has_library
 @returns_json_or_response_or_problem_detail
 @requires_admin
@@ -701,6 +706,7 @@ def custom_list_get(list_id: int):
 @api_spec.validate(
     resp=SpecFileResponse(content_type="application/atom+xml"),
     body=SpecRequest(CustomListsController.CustomListPostRequest),
+    tags=["admin.customlists"],
 )
 @has_library
 @returns_json_or_response_or_problem_detail
@@ -725,7 +731,7 @@ def custom_list_delete(list_id):
         HTTP_200=CustomListsController.CustomListSharePostResponse,
         HTTP_403=ProblemDetailModel,
     ),
-    tags=["admin", "customlist"],
+    tags=["admin.customlists"],
 )
 @has_library
 @returns_json_or_response_or_problem_detail
@@ -737,7 +743,7 @@ def custom_list_share(list_id: int):
 
 
 @library_route("/admin/custom_list/<list_id>/share", methods=["DELETE"])
-@api_spec.validate(resp=SpecResponse(HTTP_204=None), tags=["admin", "customlist"])
+@api_spec.validate(resp=SpecResponse(HTTP_204=None), tags=["admin.customlists"])
 @has_library
 @returns_json_or_response_or_problem_detail
 @requires_admin
