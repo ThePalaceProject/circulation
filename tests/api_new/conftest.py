@@ -13,6 +13,7 @@ pytest_plugins = [
     "tests.fixtures.api_odilo_files",
     "tests.fixtures.api_onix_files",
     "tests.fixtures.api_opds_dist_files",
+    "tests.fixtures.api_opds_files",
     "tests.fixtures.api_overdrive_files",
     "tests.fixtures.csv_files",
     "tests.fixtures.database",

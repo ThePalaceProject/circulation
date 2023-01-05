@@ -5,6 +5,7 @@ from tests.fixtures.files import APIFilesFixture
 
 class OverdriveAPIFilesFixture(APIFilesFixture):
     """A fixture providing access to Overdrive files."""
+
     def __init__(self):
         super().__init__("overdrive")
 
