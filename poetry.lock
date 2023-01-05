@@ -965,7 +965,7 @@ python-versions = "*"
 
 [[package]]
 name = "nltk"
-version = "3.8"
+version = "3.8.1"
 description = "Natural Language Toolkit"
 category = "main"
 optional = false
@@ -1869,7 +1869,7 @@ pg-binary = ["psycopg2-binary"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.8,<4"
-content-hash = "44e846897783dccad68345f9c2162698e769df277c59841ddbaac6095850a878"
+content-hash = "ef579884be790465ac8f5db59428e0c630df90bbb6fe0597ce1d03d02eeca88f"
 
 [metadata.files]
 atomicwrites = [
@@ -2549,8 +2549,8 @@ nameparser = [
     {file = "nameparser-1.1.2.tar.gz", hash = "sha256:f4b6c7c1048d528bd6aa2b27cf42a06447d2b31e45a95b20449513078f1d86ef"},
 ]
 nltk = [
-    {file = "nltk-3.8-py3-none-any.whl", hash = "sha256:3306502f487aa9fb0566e23443fa287a85a8d8d0821e2ef1655b4e3f0ea4aeee"},
-    {file = "nltk-3.8.zip", hash = "sha256:74b30826a37d78d53427105bbd037dd880251be269fca64ee530838a46ed55fc"},
+    {file = "nltk-3.8.1-py3-none-any.whl", hash = "sha256:fd5c9109f976fa86bcadba8f91e47f5e9293bd034474752e92a520f81c93dda5"},
+    {file = "nltk-3.8.1.zip", hash = "sha256:1834da3d0682cba4f2cede2f9aad6b0fafb6461ba451db0efb6f9c39798d64d3"},
 ]
 nodeenv = [
     {file = "nodeenv-1.6.0-py2.py3-none-any.whl", hash = "sha256:621e6b7076565ddcacd2db0294c0381e01fd28945ab36bcf00f41c5daf63bef7"},
