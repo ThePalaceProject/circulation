@@ -140,7 +140,7 @@ nameparser = "1.1.2"  # nameparser is for author name manipulations
 nltk = "3.8"  # nltk is a textblob dependency.
 oauth2client = "4.1.3"  # Deprecated and should be replaced.
 palace-webpub-manifest-parser = "~3.0.0"
-Pillow = "9.3.0"
+Pillow = "9.4.0"
 psycopg2 = {version = "~2.9.5", optional = true}
 psycopg2-binary = {version = "~2.9.5", optional = true}
 py-bcrypt = "0.4"
