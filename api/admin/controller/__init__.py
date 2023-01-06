@@ -13,6 +13,7 @@ import flask
 import jwt
 from flask import Response, redirect
 from flask_babel import lazy_gettext as _
+from sqlalchemy.orm import lazyload_all
 from sqlalchemy.sql import func
 from sqlalchemy.sql.expression import and_, desc, distinct, join, nullslast, select
 
@@ -72,13 +73,16 @@ from core.model import (
     get_one,
     get_one_or_create,
 )
+from core.model.classification import Classification, Genre, Subject
 from core.model.configuration import ExternalIntegrationLink
+from core.model.edition import Edition
 from core.opds import AcquisitionFeed
 from core.opds2_import import OPDS2Importer
 from core.opds_import import OPDSImporter, OPDSImportMonitor
 from core.query.customlist import CustomListQueries
 from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
+from core.util.cache import memoize
 from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSFeedResponse, boolean_value
 from core.util.http import HTTP
@@ -207,6 +211,8 @@ def setup_admin_controllers(manager):
     from api.admin.controller.announcement_service import AnnouncementSettings
 
     manager.admin_announcement_service = AnnouncementSettings(manager)
+
+    manager.admin_search_controller = AdminSearchController(manager)
 
 
 class AdminController:
@@ -2539,3 +2545,97 @@ class SitewideRegistrationController(SettingsController):
         # Sign a JWT with the private key to prove ownership of the site.
         token = jwt.encode(payload, private_key, algorithm="RS256")
         return dict(url=public_key_url, jwt=token)
+
+
+class AdminSearchController(AdminController):
+    """APIs for the admin search pages
+    Eg. Lists Creation
+    """
+
+    def search_field_values(self) -> dict:
+        """Enumerate the possible values for the search fields with counts
+        - Audience
+        - Distributor
+        - Genre
+        - Language
+        - Publisher
+        - Subject
+        """
+        library = flask.request.library
+        collection_ids = [coll.id for coll in library.collections]
+        return self._search_field_values_cached(collection_ids)
+
+    # 1 hour in-memory cache
+    @memoize(ttls=3600)
+    def _search_field_values_cached(self, collection_ids: List[int]) -> dict:
+        def _unzip(values: List[tuple]) -> dict:
+            """Covert a list of tuples to a {value0: value1} dictionary"""
+            return {a[0]: a[1] for a in values if type(a[0]) is str}
+
+        # Reusable queries
+        classification_query = (
+            self._db.query(Classification)
+            .join(Classification.subject)
+            .join(
+                LicensePool, LicensePool.identifier_id == Classification.identifier_id
+            )
+            .filter(LicensePool.collection_id.in_(collection_ids))
+        )
+
+        editions_query = (
+            self._db.query(LicensePool)
+            .join(LicensePool.presentation_edition)
+            .filter(LicensePool.collection_id.in_(collection_ids))
+        )
+
+        # Concrete values
+        subjects = list(
+            classification_query.group_by(Subject.name).values(
+                func.distinct(Subject.name), func.count(Subject.name)
+            )
+        )
+        subjects = _unzip(subjects)
+
+        audiences = list(
+            classification_query.group_by(Subject.audience).values(
+                func.distinct(Subject.audience), func.count(Subject.audience)
+            )
+        )
+        audiences = _unzip(audiences)
+
+        genres = list(
+            classification_query.join(Subject.genre)
+            .group_by(Genre.name)
+            .values(func.distinct(Genre.name), func.count(Genre.name))
+        )
+        genres = _unzip(genres)
+
+        distributors = list(
+            editions_query.join(Edition.data_source)
+            .group_by(DataSource.name)
+            .values(func.distinct(DataSource.name), func.count(DataSource.name))
+        )
+        distributors = _unzip(distributors)
+
+        languages = list(
+            editions_query.group_by(Edition.language).values(
+                func.distinct(Edition.language), func.count(Edition.language)
+            )
+        )
+        languages = _unzip(languages)
+
+        publishers = list(
+            editions_query.group_by(Edition.publisher).values(
+                func.distinct(Edition.publisher), func.count(Edition.publisher)
+            )
+        )
+        publishers = _unzip(publishers)
+
+        return {
+            "subjects": subjects,
+            "audiences": audiences,
+            "genres": genres,
+            "distributors": distributors,
+            "languages": languages,
+            "publishers": publishers,
+        }

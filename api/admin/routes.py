@@ -738,6 +738,15 @@ def change_lane_order():
     return app.manager.admin_lanes_controller.change_order()
 
 
+@library_route("/admin/search_field_values", methods=["GET"])
+@has_library
+@returns_json_or_response_or_problem_detail
+@requires_admin
+@requires_csrf_token
+def search_field_values():
+    return app.manager.admin_search_controller.search_field_values()
+
+
 @app.route("/admin/diagnostics")
 @requires_admin
 @returns_json_or_response_or_problem_detail
