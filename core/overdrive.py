@@ -482,7 +482,7 @@ class OverdriveCoreAPI(HasExternalIntegration):
         payload: Dict[str, str],
         is_fulfillment=False,
         headers={},
-        **kwargs
+        **kwargs,
     ) -> Response:
         """Make an HTTP POST request for purposes of getting an OAuth token."""
         headers = dict(headers)
@@ -902,6 +902,18 @@ class OverdriveRepresentationExtractor:
         ),
     }
 
+    # A mapping of the overdrive format name to end sample content type
+    # Overdrive samples are not DRM protected so the links should be
+    # stored as the end sample content type
+    sample_format_to_content_type = {
+        "ebook-overdrive": "text/html",
+        "audiobook-wma": "application/octet-stream",
+        "audiobook-mp3": "audio/mpeg",
+        "audiobook-overdrive": "text/html",
+        "ebook-epub-adobe": "application/epub+zip",
+        "magazine-overdrive": "text/html",
+    }
+
     @classmethod
     def internal_formats(cls, overdrive_format):
         """Yield all internal formats for the given Overdrive format.
@@ -1279,23 +1291,25 @@ class OverdriveRepresentationExtractor:
                         if not overdrive_format_name:
                             # Malformed sample
                             continue
-                        internal_names = list(
-                            cls.internal_formats(overdrive_format_name)
+                        content_type = cls.sample_format_to_content_type.get(
+                            overdrive_format_name
                         )
-                        if not internal_names:
-                            # Useless to us.
+                        if not content_type:
+                            # Unusable by us.
+                            cls.log.warning(
+                                f"Did not find a sample format mapping for '{overdrive_format_name}': {href}"
+                            )
                             continue
 
-                        for content_type, drm_scheme in internal_names:
-                            if Representation.is_media_type(content_type):
-                                links.append(
-                                    LinkData(
-                                        rel=Hyperlink.SAMPLE,
-                                        href=href,
-                                        media_type=content_type,
-                                    )
+                        if Representation.is_media_type(content_type):
+                            links.append(
+                                LinkData(
+                                    rel=Hyperlink.SAMPLE,
+                                    href=href,
+                                    media_type=content_type,
                                 )
-                                sample_hrefs.add(href)
+                            )
+                            sample_hrefs.add(href)
 
             # A cover and its thumbnail become a single LinkData.
             if "images" in book:
