@@ -907,7 +907,7 @@ class OverdriveRepresentationExtractor:
     # stored as the end sample content type
     sample_format_to_content_type = {
         "ebook-overdrive": "text/html",
-        "audiobook-wma": "application/octet-stream",
+        "audiobook-wma": "audio/x-ms-wma",
         "audiobook-mp3": "audio/mpeg",
         "audiobook-overdrive": "text/html",
         "ebook-epub-adobe": "application/epub+zip",
