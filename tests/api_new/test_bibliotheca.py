@@ -26,7 +26,20 @@ from api.bibliotheca import (
     PatronCirculationParser,
 )
 from api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
-from api.circulation_exceptions import *
+from api.circulation_exceptions import (
+    AlreadyCheckedOut,
+    AlreadyOnHold,
+    CannotHold,
+    CirculationException,
+    CurrentlyAvailable,
+    NoAvailableCopies,
+    NoLicenses,
+    NotCheckedOut,
+    NotOnHold,
+    PatronHoldLimitReached,
+    PatronLoanLimitReached,
+    RemoteInitiatedServerError,
+)
 from api.web_publication_manifest import FindawayManifest
 from core.metadata_layer import ReplacementPolicy, TimestampData
 from core.mock_analytics_provider import MockAnalyticsProvider
@@ -447,7 +460,7 @@ class TestBibliothecaAPI:
         bibliotheca_fixture.api.queue_response(
             404, content=bibliotheca_fixture.files.sample_data("error_unknown.xml")
         )
-        with pytest.raises(RemoteInitiatedServerError) as excinfo:  # type: ignore
+        with pytest.raises(RemoteInitiatedServerError) as excinfo:
             [x for x in bibliotheca_fixture.api.marc_request(start, end, 10, 20)]
 
     def test_sync_bookshelf(self, bibliotheca_fixture: BibliothecaAPITestFixture):
@@ -511,7 +524,7 @@ class TestBibliothecaAPI:
             ),
         )
         pytest.raises(
-            PatronHoldLimitReached,  # type: ignore
+            PatronHoldLimitReached,
             bibliotheca_fixture.api.place_hold,
             patron,
             "pin",
@@ -784,7 +797,7 @@ class TestEventParser:
         # But if we consider not having events for a certain time
         # period, then an exception should be raised.
         no_events_error = True
-        with pytest.raises(RemoteInitiatedServerError) as excinfo:  # type: ignore
+        with pytest.raises(RemoteInitiatedServerError) as excinfo:
             list(EventParser().process_all(data, no_events_error))
         assert (
             "No events returned from server. This may not be an error, but treating it as one to be safe."
