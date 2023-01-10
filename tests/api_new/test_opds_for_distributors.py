@@ -1,7 +1,7 @@
 import datetime
 import json
-import sys
 from typing import Callable
+from unittest.mock import patch
 
 import pytest
 
@@ -31,12 +31,6 @@ from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import OPDSFeed
 from tests.fixtures.api_opds_dist_files import OPDSForDistributorsFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
-
-# TODO: we can drop this when we drop support for Python 3.7
-if sys.version_info < (3, 8):
-    from mock import patch
-else:
-    from unittest.mock import patch
 
 
 @pytest.fixture()
@@ -662,14 +656,20 @@ class TestOPDSForDistributorsImporter:
         # Undo the mock of SUPPORTED_MEDIA_TYPES.
         api.SUPPORTED_MEDIA_TYPES = old_value
 
-    def test_update_work_for_edition_returns_correct_license_pool(self):
+    def test_update_work_for_edition_returns_correct_license_pool(
+        self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture
+    ):
         # If there are two or more collections, `update_work_for_edition`
         # should return the license pool for the right one.
         data_source_name = "BiblioBoard"
-        data_source = DataSource.lookup(self._db, data_source_name, autocreate=True)
+        data_source = DataSource.lookup(
+            opds_dist_api_fixture.db.session, data_source_name, autocreate=True
+        )
 
         def setup_collection(*, name: str, datasource: DataSource) -> Collection:
-            collection = MockOPDSForDistributorsAPI.mock_collection(self._db, name=name)
+            collection = MockOPDSForDistributorsAPI.mock_collection(
+                opds_dist_api_fixture.db.session, name=name
+            )
             collection.external_integration.set_setting(
                 Collection.DATA_SOURCE_NAME_SETTING, data_source.name
             )
@@ -678,25 +678,25 @@ class TestOPDSForDistributorsImporter:
         collection1 = setup_collection(name="Test Collection 1", datasource=data_source)
         collection2 = setup_collection(name="Test Collection 2", datasource=data_source)
 
-        work = self._work(
+        work = opds_dist_api_fixture.db.work(
             with_license_pool=False,
             collection=collection1,
             data_source_name=data_source_name,
         )
         edition = work.presentation_edition
 
-        collection1_lp = self._licensepool(
+        collection1_lp = opds_dist_api_fixture.db.licensepool(
             edition=edition, collection=collection1, set_edition_as_presentation=True
         )
-        collection2_lp = self._licensepool(
+        collection2_lp = opds_dist_api_fixture.db.licensepool(
             edition=edition, collection=collection2, set_edition_as_presentation=True
         )
         importer1 = OPDSForDistributorsImporter(
-            self._db,
+            opds_dist_api_fixture.db.session,
             collection=collection1,
         )
         importer2 = OPDSForDistributorsImporter(
-            self._db,
+            opds_dist_api_fixture.db.session,
             collection=collection2,
         )
 

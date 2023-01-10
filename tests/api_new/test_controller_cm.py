@@ -1,4 +1,4 @@
-import sys
+from unittest.mock import MagicMock
 
 from api.adobe_vendor_id import AuthdataUtility, DeviceManagementProtocolController
 from api.authenticator import LibraryAuthenticator, OAuthController
@@ -18,11 +18,6 @@ from core.util.problem_detail import ProblemDetail
 
 # TODO: we can drop this when we drop support for Python 3.6 and 3.7
 from tests.fixtures.api_controller import CirculationControllerFixture
-
-if sys.version_info < (3, 8):
-    from mock import MagicMock
-else:
-    from unittest.mock import MagicMock
 
 
 class TestCirculationManager:
