@@ -1841,9 +1841,10 @@ class TestODLImporter:
         mock_get,
         metadata_client,
     ) -> ODLImporter:
+        library = odl_fixture.library()
         return ODLImporter(
             db.session,
-            collection=odl_fixture.collection(odl_fixture.library()),
+            collection=odl_fixture.collection(library),
             http_get=mock_get.get,
             metadata_client=metadata_client,
         )
