@@ -1,5 +1,6 @@
 import datetime
 import json
+from typing import Callable, List, Tuple
 
 import pytest
 from freezegun import freeze_time
@@ -24,14 +25,10 @@ from core.model import (
 from core.model.configuration import ConfigurationFactory, ConfigurationStorage
 from core.model.constants import IdentifierConstants
 from core.model.resource import Hyperlink
-from tests.api_new.test_odl import (
-    LicenseHelper,
-    LicenseInfoHelper,
-    ODLFixture,
-    TestODLImporter,
-)
+from tests.api_new.test_odl import LicenseHelper, LicenseInfoHelper, TestODLImporter
 from tests.fixtures.api_odl2_files import ODL2APIFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.odl import ODLTestFixture
 
 
 class TestODL2Importer(TestODLImporter):
@@ -69,17 +66,37 @@ class TestODL2Importer(TestODLImporter):
         return ODL2API.NAME
 
     @pytest.fixture()
+    def import_templated(  # type: ignore
+        self,
+        mock_get,
+        importer,
+        feed_template: str,
+        api_odl2_files_fixture: ODL2APIFilesFixture,
+    ) -> Callable:
+        def i(licenses: List[LicenseInfoHelper]) -> Tuple[List, List, List, List]:
+            feed_licenses = [l.license for l in licenses]
+            [mock_get.add(l) for l in licenses]
+            feed = self.get_templated_feed(
+                files=api_odl2_files_fixture,
+                filename=feed_template,
+                licenses=feed_licenses,
+            )
+            return importer.import_from_feed(feed)
+
+        return i
+
+    @pytest.fixture()
     def importer(
         self,
         db: DatabaseTransactionFixture,
-        odl_fixture: ODLFixture,
+        odl_test_fixture: ODLTestFixture,
         mock_get,
         metadata_client,
     ) -> ODL2Importer:
-        library = odl_fixture.library()
+        library = odl_test_fixture.library()
         return ODL2Importer(
             db.session,
-            collection=odl_fixture.collection(library),
+            collection=odl_test_fixture.collection(library),
             http_get=mock_get.get,
             metadata_client=metadata_client,
         )
