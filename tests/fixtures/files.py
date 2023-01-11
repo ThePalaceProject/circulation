@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from typing import TextIO
 
 import pytest
 
@@ -47,6 +48,9 @@ class FilesFixture:
 
     def sample_path(self, filename) -> str:
         return os.path.join(self._resource_path, filename)
+
+    def sample_fd(self, filename) -> TextIO:
+        return open(self.sample_path(filename))
 
 
 class APIFilesFixture:

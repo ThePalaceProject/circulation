@@ -105,7 +105,7 @@ class LicenseInfoHelper:
         """Initialize a new instance of LicenseInfoHelper class."""
         self.license: LicenseHelper = license
         self.status: str = status
-        self.left: int = left
+        self.left: Optional[int] = left
         self.available: int = available
 
     def __str__(self) -> str:
@@ -121,9 +121,9 @@ class LicenseInfoHelper:
             },
         }
         if self.license.expires is not None:
-            output["terms"]["expires"] = self.license.expires
+            output["terms"]["expires"] = self.license.expires  # type: ignore
         if self.left is not None:
-            output["checkouts"]["left"] = self.left
+            output["checkouts"]["left"] = self.left  # type: ignore
         return json.dumps(output)
 
 
@@ -408,7 +408,7 @@ class TestODLAPI:
         assert expires_t > now
         assert expires_t < after_expiration
 
-        notification_url = urllib.parse.unquote_plus(params.get("notification_url")[0])
+        notification_url = urllib.parse.unquote_plus(params.get("notification_url")[0])  # type: ignore
         assert (
             "http://odl_notify?library_short_name=%s&loan_id=%s"
             % (odl_api_fixture.library.short_name, loan.id)
@@ -449,7 +449,7 @@ class TestODLAPI:
         self, db: DatabaseTransactionFixture, odl_api_fixture: ODLAPIFixture
     ):
         # A patron has a copy of this book checked out.
-        odl_api_fixture.license.setup(concurrency=7, available=6)
+        odl_api_fixture.license.setup(concurrency=7, available=6)  # type: ignore
 
         loan, _ = odl_api_fixture.license.loan_to(odl_api_fixture.patron)
         loan.external_identifier = "http://loan/" + db.fresh_str()
@@ -474,7 +474,7 @@ class TestODLAPI:
         self, db: DatabaseTransactionFixture, odl_api_fixture: ODLAPIFixture
     ):
         # A patron has the only copy of this book checked out.
-        odl_api_fixture.license.setup(concurrency=1, available=0)
+        odl_api_fixture.license.setup(concurrency=1, available=0)  # type: ignore
         loan, _ = odl_api_fixture.license.loan_to(odl_api_fixture.patron)
         loan.external_identifier = "http://loan/" + db.fresh_str()
         loan.end = utc_now() + datetime.timedelta(days=3)
@@ -504,7 +504,7 @@ class TestODLAPI:
         self, db: DatabaseTransactionFixture, odl_api_fixture: ODLAPIFixture
     ):
         # The loan is already fulfilled.
-        odl_api_fixture.license.setup(concurrency=7, available=6)
+        odl_api_fixture.license.setup(concurrency=7, available=6)  # type: ignore
         loan, _ = odl_api_fixture.license.loan_to(odl_api_fixture.patron)
         loan.external_identifier = db.fresh_str()
         loan.end = utc_now() + datetime.timedelta(days=3)
@@ -597,19 +597,19 @@ class TestODLAPI:
         self, db: DatabaseTransactionFixture, odl_api_fixture: ODLAPIFixture
     ):
         # This book is available to check out.
-        odl_api_fixture.license.setup(concurrency=6, available=6, left=30)
+        odl_api_fixture.license.setup(concurrency=6, available=6, left=30)  # type: ignore
 
         # A patron checks out the book successfully.
         loan_url = db.fresh_str()
         loan, _ = odl_api_fixture.checkout(loan_url=loan_url)
 
-        assert odl_api_fixture.collection == loan.collection(db.session)
-        assert odl_api_fixture.pool.data_source.name == loan.data_source_name
-        assert odl_api_fixture.pool.identifier.type == loan.identifier_type
-        assert odl_api_fixture.pool.identifier.identifier == loan.identifier
-        assert loan.start_date > utc_now() - datetime.timedelta(minutes=1)
-        assert loan.start_date < utc_now() + datetime.timedelta(minutes=1)
-        assert datetime_utc(3017, 10, 21, 11, 12, 13) == loan.end_date
+        assert odl_api_fixture.collection == loan.collection(db.session)  # type: ignore
+        assert odl_api_fixture.pool.data_source.name == loan.data_source_name  # type: ignore
+        assert odl_api_fixture.pool.identifier.type == loan.identifier_type  # type: ignore
+        assert odl_api_fixture.pool.identifier.identifier == loan.identifier  # type: ignore
+        assert loan.start_date > utc_now() - datetime.timedelta(minutes=1)  # type: ignore
+        assert loan.start_date < utc_now() + datetime.timedelta(minutes=1)  # type: ignore
+        assert datetime_utc(3017, 10, 21, 11, 12, 13) == loan.end_date  # type: ignore
         assert loan_url == loan.external_identifier
         assert 1 == db.session.query(Loan).count()
 
@@ -618,8 +618,8 @@ class TestODLAPI:
         db_loan = db.session.query(Loan).one()
         assert odl_api_fixture.pool == db_loan.license_pool
         assert odl_api_fixture.license == db_loan.license
-        assert loan.start_date == db_loan.start
-        assert loan.end_date == db_loan.end
+        assert loan.start_date == db_loan.start  # type: ignore
+        assert loan.end_date == db_loan.end  # type: ignore
 
         # The pool's availability and the license's remaining checkouts have decreased.
         assert 5 == odl_api_fixture.pool.licenses_available
@@ -634,7 +634,7 @@ class TestODLAPI:
             start=utc_now() - datetime.timedelta(days=1),
             position=0,
         )
-        odl_api_fixture.license.setup(concurrency=1, available=1, left=5)
+        odl_api_fixture.license.setup(concurrency=1, available=1, left=5)  # type: ignore
 
         assert odl_api_fixture.pool.licenses_available == 0
         assert odl_api_fixture.pool.licenses_reserved == 1
@@ -645,13 +645,13 @@ class TestODLAPI:
         loan, _ = odl_api_fixture.checkout(loan_url=loan_url)
 
         # The patron gets a loan successfully.
-        assert odl_api_fixture.collection == loan.collection(db.session)
-        assert odl_api_fixture.pool.data_source.name == loan.data_source_name
-        assert odl_api_fixture.pool.identifier.type == loan.identifier_type
-        assert odl_api_fixture.pool.identifier.identifier == loan.identifier
-        assert loan.start_date > utc_now() - datetime.timedelta(minutes=1)
-        assert loan.start_date < utc_now() + datetime.timedelta(minutes=1)
-        assert datetime_utc(3017, 10, 21, 11, 12, 13) == loan.end_date
+        assert odl_api_fixture.collection == loan.collection(db.session)  # type: ignore
+        assert odl_api_fixture.pool.data_source.name == loan.data_source_name  # type: ignore
+        assert odl_api_fixture.pool.identifier.type == loan.identifier_type  # type: ignore
+        assert odl_api_fixture.pool.identifier.identifier == loan.identifier  # type: ignore
+        assert loan.start_date > utc_now() - datetime.timedelta(minutes=1)  # type: ignore
+        assert loan.start_date < utc_now() + datetime.timedelta(minutes=1)  # type: ignore
+        assert datetime_utc(3017, 10, 21, 11, 12, 13) == loan.end_date  # type: ignore
         assert loan_url == loan.external_identifier
         assert 1 == db.session.query(Loan).count()
 
@@ -669,7 +669,7 @@ class TestODLAPI:
     def test_checkout_already_checked_out(
         self, db: DatabaseTransactionFixture, odl_api_fixture: ODLAPIFixture
     ):
-        odl_api_fixture.license.setup(concurrency=2, available=1)
+        odl_api_fixture.license.setup(concurrency=2, available=1)  # type: ignore
 
         # Checkout succeeds the first time
         odl_api_fixture.checkout()
@@ -688,7 +688,7 @@ class TestODLAPI:
             odl_api_fixture.patron, start=yesterday, end=yesterday, position=0
         )
         other_hold, _ = odl_api_fixture.pool.on_hold_to(db.patron(), start=utc_now())
-        odl_api_fixture.license.setup(concurrency=2, available=1)
+        odl_api_fixture.license.setup(concurrency=2, available=1)  # type: ignore
 
         pytest.raises(
             NoAvailableCopies,
@@ -703,7 +703,7 @@ class TestODLAPI:
         self, db: DatabaseTransactionFixture, odl_api_fixture: ODLAPIFixture
     ):
         # A different patron has the only copy checked out.
-        odl_api_fixture.license.setup(concurrency=1, available=0)
+        odl_api_fixture.license.setup(concurrency=1, available=0)  # type: ignore
         existing_loan, _ = odl_api_fixture.license.loan_to(db.patron())
 
         pytest.raises(
@@ -776,7 +776,7 @@ class TestODLAPI:
     def test_checkout_no_licenses(
         self, db: DatabaseTransactionFixture, odl_api_fixture: ODLAPIFixture
     ):
-        odl_api_fixture.license.setup(concurrency=1, available=1, left=0)
+        odl_api_fixture.license.setup(concurrency=1, available=1, left=0)  # type: ignore
 
         pytest.raises(
             NoLicenses,
@@ -791,7 +791,7 @@ class TestODLAPI:
 
     def test_checkout_when_all_licenses_expired(self, odl_api_fixture: ODLAPIFixture):
         # license expired by expiration date
-        odl_api_fixture.license.setup(
+        odl_api_fixture.license.setup(  # type: ignore
             concurrency=1,
             available=2,
             left=1,
@@ -808,7 +808,7 @@ class TestODLAPI:
         )
 
         # license expired by no remaining checkouts
-        odl_api_fixture.license.setup(
+        odl_api_fixture.license.setup(  # type: ignore
             concurrency=1,
             available=2,
             left=0,
@@ -921,7 +921,7 @@ class TestODLAPI:
         links,
     ):
         # Fulfill a loan in a way that gives access to a license file.
-        odl_api_fixture.license.setup(concurrency=1, available=1)
+        odl_api_fixture.license.setup(concurrency=1, available=1)  # type: ignore
         odl_api_fixture.checkout()
 
         lsd = json.dumps(
@@ -948,7 +948,7 @@ class TestODLAPI:
     def test_fulfill_cannot_fulfill(
         self, db: DatabaseTransactionFixture, odl_api_fixture: ODLAPIFixture
     ):
-        odl_api_fixture.license.setup(concurrency=7, available=7)
+        odl_api_fixture.license.setup(concurrency=7, available=7)  # type: ignore
         odl_api_fixture.checkout()
 
         assert 1 == db.session.query(Loan).count()
@@ -1365,12 +1365,12 @@ class TestODLAPI:
         assert odl_api_fixture.pool.identifier.identifier == hold.identifier
         assert hold.start_date > utc_now() - datetime.timedelta(minutes=1)
         assert hold.start_date < utc_now() + datetime.timedelta(minutes=1)
-        assert loan.end_date == hold.end_date
+        assert loan.end_date == hold.end_date  # type: ignore
         assert 1 == hold.hold_position
         assert 1 == db.session.query(Hold).count()
 
     def test_place_hold_already_on_hold(self, odl_api_fixture: ODLAPIFixture):
-        odl_api_fixture.license.setup(concurrency=1, available=0)
+        odl_api_fixture.license.setup(concurrency=1, available=0)  # type: ignore
         odl_api_fixture.pool.on_hold_to(odl_api_fixture.patron)
         pytest.raises(
             AlreadyOnHold,
@@ -1524,7 +1524,7 @@ class TestODLAPI:
     def test_update_loan_still_active(
         self, db: DatabaseTransactionFixture, odl_api_fixture: ODLAPIFixture
     ):
-        odl_api_fixture.license.setup(concurrency=6, available=6)
+        odl_api_fixture.license.setup(concurrency=6, available=6)  # type: ignore
         loan, _ = odl_api_fixture.license.loan_to(odl_api_fixture.patron)
         loan.external_identifier = db.fresh_str()
         status_doc = {
@@ -1539,7 +1539,7 @@ class TestODLAPI:
     def test_update_loan_removes_loan(
         self, db: DatabaseTransactionFixture, odl_api_fixture: ODLAPIFixture
     ):
-        odl_api_fixture.license.setup(concurrency=7, available=7)
+        odl_api_fixture.license.setup(concurrency=7, available=7)  # type: ignore
         _, loan = odl_api_fixture.checkout()
 
         assert 6 == odl_api_fixture.pool.licenses_available
@@ -1621,7 +1621,7 @@ class TestODLAPI:
 
         # The book can also be placed on hold to an external library,
         # if there are no copies available.
-        odl_api_fixture.license.setup(concurrency=1, available=0)
+        odl_api_fixture.license.setup(concurrency=1, available=0)  # type: ignore
 
         hold = odl_api_fixture.api.checkout_to_external_library(
             odl_api_fixture.client, odl_api_fixture.pool
@@ -1689,7 +1689,7 @@ class TestODLAPI:
         self, db: DatabaseTransactionFixture, odl_api_fixture: ODLAPIFixture
     ):
         # An integration client has a copy of this book checked out.
-        odl_api_fixture.license.setup(concurrency=7, available=6)
+        odl_api_fixture.license.setup(concurrency=7, available=6)  # type: ignore
         loan, ignore = odl_api_fixture.license.loan_to(odl_api_fixture.client)
         loan.external_identifier = "http://loan/" + db.fresh_str()
         loan.end = utc_now() + datetime.timedelta(days=3)
@@ -1762,7 +1762,7 @@ class TestODLAPI:
     def test_release_hold_from_external_library(
         self, db: DatabaseTransactionFixture, odl_api_fixture: ODLAPIFixture
     ):
-        odl_api_fixture.license.setup(concurrency=1, available=1)
+        odl_api_fixture.license.setup(concurrency=1, available=1)  # type: ignore
         other_patron = db.patron()
         odl_api_fixture.checkout(patron=other_patron)
         hold, ignore = odl_api_fixture.pool.on_hold_to(
