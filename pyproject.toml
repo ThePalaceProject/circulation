@@ -55,7 +55,6 @@ exclude = [
 files = [
     "core",
     "customlists",
-    "tests/api_new",
     "tests/core",
 ]
 plugins = ["sqlmypy"]

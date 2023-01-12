@@ -25,7 +25,7 @@ from core.model import (
 from core.model.configuration import ConfigurationFactory, ConfigurationStorage
 from core.model.constants import IdentifierConstants
 from core.model.resource import Hyperlink
-from tests.api_new.test_odl import LicenseHelper, LicenseInfoHelper, TestODLImporter
+from tests.api.test_odl import LicenseHelper, LicenseInfoHelper, TestODLImporter
 from tests.fixtures.api_odl2_files import ODL2APIFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.odl import ODLTestFixture

@@ -10,7 +10,7 @@ from api.admin.problem_details import *
 from api.controller import CirculationManager
 
 from ..test_controller import ControllerTest
-from ..test_routes import MockApp, MockController, MockManager, RouteTestFixtures
+from .test_routes_fixture import MockApp, MockController, MockManager, RouteTestFixtures
 
 
 class MockAdminApp:
