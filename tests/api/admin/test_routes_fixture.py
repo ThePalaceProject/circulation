@@ -277,4 +277,3 @@ class RouteTest(ControllerTest, RouteTestFixtures):
     def teardown_method(self):
         super().teardown_method()
         self.routes.app = self.original_app
-

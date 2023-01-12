@@ -7,16 +7,10 @@ from api.adobe_vendor_id import AuthdataUtility
 from api.app import app
 from api.config import Configuration
 from api.controller import CirculationManager, CirculationManagerController
-from api.lanes import (
-    create_default_lanes,
-)
+from api.lanes import create_default_lanes
 from api.simple_authentication import SimpleAuthenticationProvider
 from api.testing import VendorIDTest
-from core.entrypoint import (
-    AudiobooksEntryPoint,
-    EbooksEntryPoint,
-    EntryPoint,
-)
+from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EntryPoint
 from core.model import (
     ConfigurationSetting,
     ExternalIntegration,
