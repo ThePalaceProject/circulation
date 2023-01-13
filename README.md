@@ -185,10 +185,16 @@ Python 3.9.9
 
 For brevity, these instructions assume that all shell commands will be executed within a virtual environment.
 
-Install the dependencies:
+Install the dependencies (including dev and CI):
 
 ```sh
 poetry install
+```
+
+Install only the production dependencies:
+
+```sh
+poetry install --only main,pg
 ```
 
 Run the application with:
@@ -413,16 +419,16 @@ before pushing changes to make sure you find any failing tests before committing
 For each push to a branch, CI also creates a docker image for the code in the branch. These images can be used for
 testing the branch, or deploying hotfixes.
 
+To install the tools used by CI run:
+
+```sh
+poetry install --only ci
+```
+
 ## Testing
 
 The Github Actions CI service runs the unit tests against Python 3.8, 3.9, 3.10, and 3.11 automatically using
 [tox](https://tox.readthedocs.io/en/latest/).
-
-To run `pytest` unit tests locally, install `tox`.
-
-```sh
-pip install tox
-```
 
 Tox has an environment for each python version, the module being tested, and an optional `-docker` factor that will
 automatically use docker to deploy service containers used for the tests. You can select the environment you would like
@@ -470,11 +476,7 @@ missing Python versions in your system for local testing.
 If you install `tox-docker` tox will take care of setting up all the service containers necessary to run the unit tests
 and pass the correct environment variables to configure the tests to use these services. Using `tox-docker` is not
 required, but it is the recommended way to run the tests locally, since it runs the tests in the same way they are run
-on the Github Actions CI server.
-
-```sh
-pip install tox-docker
-```
+on the Github Actions CI server. `tox-docker` is automatically included when installing the `ci` dependency group.
 
 The docker functionality is included in a `docker` factor that can be added to the environment. To run an environment
 with a particular factor you add it to the end of the environment.
