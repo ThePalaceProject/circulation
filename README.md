@@ -188,7 +188,7 @@ For brevity, these instructions assume that all shell commands will be executed 
 Install the dependencies:
 
 ```sh
-poetry install --no-root -E pg-binary
+poetry install
 ```
 
 Run the application with:
