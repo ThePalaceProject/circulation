@@ -902,6 +902,18 @@ class OverdriveRepresentationExtractor:
         ),
     }
 
+    # A mapping of the overdrive format name to end sample content type
+    # Overdrive samples are not DRM protected so the links should be
+    # stored as the end sample content type
+    sample_format_to_content_type = {
+        "ebook-overdrive": "text/html",
+        "audiobook-wma": "audio/x-ms-wma",
+        "audiobook-mp3": "audio/mpeg",
+        "audiobook-overdrive": "text/html",
+        "ebook-epub-adobe": "application/epub+zip",
+        "magazine-overdrive": "text/html",
+    }
+
     @classmethod
     def internal_formats(cls, overdrive_format):
         """Yield all internal formats for the given Overdrive format.
@@ -1235,6 +1247,7 @@ class OverdriveRepresentationExtractor:
 
             identifiers = []
             links = []
+            sample_hrefs = set()
             for format in book.get("formats", []):
                 for new_id in format.get("identifiers", []):
                     t = new_id["type"]
@@ -1267,22 +1280,36 @@ class OverdriveRepresentationExtractor:
 
                 # Samples become links.
                 if "samples" in format:
-                    overdrive_name = format["id"]
-                    internal_names = list(cls.internal_formats(overdrive_name))
-                    if not internal_names:
-                        # Useless to us.
-                        continue
-                    for content_type, drm_scheme in internal_names:
+                    for sample_info in format["samples"]:
+                        href = sample_info["url"]
+                        # Have we already parsed this sample? Overdrive repeats samples per format
+                        if href in sample_hrefs:
+                            continue
+
+                        # Every sample has its own format type
+                        overdrive_format_name = sample_info.get("formatType")
+                        if not overdrive_format_name:
+                            # Malformed sample
+                            continue
+                        content_type = cls.sample_format_to_content_type.get(
+                            overdrive_format_name
+                        )
+                        if not content_type:
+                            # Unusable by us.
+                            cls.log.warning(
+                                f"Did not find a sample format mapping for '{overdrive_format_name}': {href}"
+                            )
+                            continue
+
                         if Representation.is_media_type(content_type):
-                            for sample_info in format["samples"]:
-                                href = sample_info["url"]
-                                links.append(
-                                    LinkData(
-                                        rel=Hyperlink.SAMPLE,
-                                        href=href,
-                                        media_type=content_type,
-                                    )
+                            links.append(
+                                LinkData(
+                                    rel=Hyperlink.SAMPLE,
+                                    href=href,
+                                    media_type=content_type,
                                 )
+                            )
+                            sample_hrefs.add(href)
 
             # A cover and its thumbnail become a single LinkData.
             if "images" in book:

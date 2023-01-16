@@ -799,9 +799,21 @@ class TestOverdriveRepresentationExtractor:
             "https://samples.overdrive.com/?crid=9BD24F82-35C0-4E0A-B5E7-BCFED07835CF&.epub-sample.overdrive.com"
             == manifest_sample.href
         )
-        assert (
-            MediaTypes.OVERDRIVE_EBOOK_MANIFEST_MEDIA_TYPE == manifest_sample.media_type
-        )
+        # Assert we have the end content type of the sample, no DRM formats
+        assert "text/html" == manifest_sample.media_type
+
+    def test_book_info_with_unknown_sample(self):
+        raw, info = self.sample_json("has_sample.json")
+
+        # Just use one format, and change a sample type to unknown
+        # Only one (known sample) should be extracted then
+        info["formats"] = [info["formats"][1]]
+        info["formats"][0]["samples"][1]["formatType"] = "overdrive-unknown"
+        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
+        samples = [x for x in metadata.links if x.rel == Hyperlink.SAMPLE]
+
+        assert 1 == len(samples)
+        assert samples[0].media_type == MediaTypes.EPUB_MEDIA_TYPE
 
     def test_book_info_with_grade_levels(self, overdrive_fixture: OverdriveFixture):
         raw, info = overdrive_fixture.sample_json("has_grade_levels.json")
