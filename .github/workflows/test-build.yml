@@ -69,6 +69,9 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
+        with:
+          driver-opts: |
+            image=moby/buildkit:v0.10.6
 
       - name: Create version file
         run: git rev-parse --short HEAD > .version
@@ -120,6 +123,9 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
+        with:
+          driver-opts: |
+            image=moby/buildkit:v0.10.6
 
       - name: Create version file
         run: git rev-parse --short HEAD > .version
@@ -171,6 +177,9 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
+        with:
+          driver-opts: |
+            image=moby/buildkit:v0.10.6
 
       - name: Create version file
         run: git rev-parse --short HEAD > .version
