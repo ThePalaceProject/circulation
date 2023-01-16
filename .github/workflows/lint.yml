@@ -18,9 +18,14 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Install Poetry
+        uses: ./.github/actions/poetry
+
       - name: Install Pre-commit
         run: |
-          pip install pre-commit
+          poetry install --only ci
+        env:
+          POETRY_VIRTUALENVS_CREATE: false
 
       - name: Restore pre-commit cache
         uses: actions/cache@v3
