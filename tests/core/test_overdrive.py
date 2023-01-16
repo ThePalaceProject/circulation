@@ -802,8 +802,8 @@ class TestOverdriveRepresentationExtractor:
         # Assert we have the end content type of the sample, no DRM formats
         assert "text/html" == manifest_sample.media_type
 
-    def test_book_info_with_unknown_sample(self):
-        raw, info = self.sample_json("has_sample.json")
+    def test_book_info_with_unknown_sample(self, overdrive_fixture: OverdriveFixture):
+        raw, info = overdrive_fixture.sample_json("has_sample.json")
 
         # Just use one format, and change a sample type to unknown
         # Only one (known sample) should be extracted then
