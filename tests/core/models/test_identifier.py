@@ -757,9 +757,9 @@ class TestIdentifier:
         # we just want to make sure that repr doesn't throw any unexpected exceptions
         _ = repr(identifier)
 
-    def test_add_link(self):
-        identifier: Identifier = self._identifier()
-        datasource = DataSource.lookup(self._db, DataSource.GUTENBERG)
+    def test_add_link(self, db: DatabaseTransactionFixture):
+        identifier: Identifier = db.identifier()
+        datasource = DataSource.lookup(db.session, DataSource.GUTENBERG)
         identifier.add_link(
             Hyperlink.SAMPLE,
             "http://example.org/sample",
