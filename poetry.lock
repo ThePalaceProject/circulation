@@ -3183,14 +3183,14 @@ files = [
 
 [[package]]
 name = "types-pillow"
-version = "9.3.0.4"
+version = "9.4.0.2"
 description = "Typing stubs for Pillow"
 category = "dev"
 optional = false
 python-versions = "*"
 files = [
-    {file = "types-Pillow-9.3.0.4.tar.gz", hash = "sha256:c18d466dc18550d96b8b4a279ff94f0cbad696825b5ad55466604f1daf5709de"},
-    {file = "types_Pillow-9.3.0.4-py3-none-any.whl", hash = "sha256:98b8484ff343676f6f7051682a6cfd26896e993e86b3ce9badfa0ec8750f5405"},
+    {file = "types-Pillow-9.4.0.2.tar.gz", hash = "sha256:e30304da1247949e666adf3e976d823c9a09266813b8b88cd01ba7b2a273aee2"},
+    {file = "types_Pillow-9.4.0.2-py3-none-any.whl", hash = "sha256:16676d29746af176e58b18dfc7d807c54dec3c83f2bd9bf384eab7082b26ae3d"},
 ]
 
 [[package]]
