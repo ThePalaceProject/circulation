@@ -11,7 +11,7 @@ from typing import Callable, Dict, List, Optional, Union
 
 import flask
 import jwt
-from flask import Response, redirect
+from flask import Request, Response, redirect
 from flask_babel import lazy_gettext as _
 from sqlalchemy.sql import func
 from sqlalchemy.sql.expression import and_, desc, distinct, join, nullslast, select
@@ -25,8 +25,16 @@ from api.admin.opds import AdminAnnotator, AdminFeed
 from api.admin.password_admin_authentication_provider import (
     PasswordAdminAuthenticationProvider,
 )
-from api.admin.template_styles import *
+from api.admin.template_styles import (
+    body_style,
+    error_style,
+    hr_style,
+    logo_style,
+    section_style,
+    small_link_style,
+)
 from api.admin.templates import admin as admin_template
+from api.admin.templates import response_template_with_message_and_redirect_button
 from api.admin.validator import Validator
 from api.adobe_vendor_id import AuthdataUtility
 from api.authenticator import CannotCreateLocalPatron, LibraryAuthenticator, PatronData
@@ -96,6 +104,7 @@ def setup_admin_controllers(manager):
 
     manager.admin_view_controller = ViewController(manager)
     manager.admin_sign_in_controller = SignInController(manager)
+    manager.admin_reset_password_controller = ResetPasswordController(manager)
     manager.timestamps_controller = TimestampsController(manager)
     from api.admin.controller.work_editor import WorkController
 
@@ -648,6 +657,187 @@ class SignInController(AdminController):
             status_code=problem_detail.status_code, message=problem_detail.detail
         )
         return Response(html, problem_detail.status_code)
+
+
+class ResetPasswordController(AdminController):
+    FORGOT_PASSWORD_TEMPLATE = SignInController.SIGN_IN_TEMPLATE
+    RESET_PASSWORD_TEMPLATE = SignInController.SIGN_IN_TEMPLATE
+
+    HEAD_TEMPLATE = SignInController.HEAD_TEMPLATE
+
+    RESPONSE_TEMPLATE_WITH_MESSAGE = (
+        response_template_with_message_and_redirect_button.format(
+            head_html=HEAD_TEMPLATE, hr=hr_style, link=small_link_style
+        )
+    )
+
+    # TODO: better error response (use error_response from class above or something similar)
+    # TODO: or maybe add message to sign in template and show it on redirect
+
+    def forgot_password(self) -> Union[ProblemDetail, Response]:
+        """Shows forgot password page or starts off forgot password workflow"""
+
+        if not self.admin_auth_providers:
+            return ADMIN_AUTH_NOT_CONFIGURED
+
+        auth = self.admin_auth_provider(PasswordAdminAuthenticationProvider.NAME)
+        if not auth:
+            return ADMIN_AUTH_MECHANISM_NOT_CONFIGURED
+
+        admin = self.authenticated_admin_from_request()
+
+        admin_view_redirect = redirect(self.url_for("admin_view"))
+
+        if isinstance(admin, Admin):
+            return admin_view_redirect
+
+        if flask.request.method == "GET":
+            auth_provider_html = auth.forgot_password_template(admin_view_redirect)
+
+            html = self.FORGOT_PASSWORD_TEMPLATE % dict(
+                auth_provider_html=auth_provider_html,
+                logo_url=AdminClientConfig.lookup_asset_url(key="admin_logo"),
+            )
+            headers = dict()
+            headers["Content-Type"] = "text/html"
+
+            return Response(html, 200, headers)
+
+        admin = self._extract_admin_from_request(flask.request)
+
+        if not admin:
+            return self.response_with_message_and_redirect_button(
+                INVALID_ADMIN_CREDENTIALS.detail,
+                self.url_for("admin_forgot_password"),
+                "Try again",
+                is_error=True,
+                status_code=INVALID_ADMIN_CREDENTIALS.status_code,
+            )
+
+        reset_password_url = self._generate_reset_password_url(admin, auth)
+
+        auth.send_reset_password_email(admin, reset_password_url)
+
+        return self.response_with_message_and_redirect_button(
+            "Email successfully sent! Please check your inbox.",
+            self.url_for("admin_sign_in"),
+            "Sign in",
+        )
+
+    def _extract_admin_from_request(self, request: Request) -> Optional[Admin]:
+        email = request.form.get("email")
+
+        admin = get_one(self._db, Admin, email=email)
+
+        return admin
+
+    def _generate_reset_password_url(
+        self, admin: Admin, auth: PasswordAdminAuthenticationProvider
+    ) -> str:
+        reset_password_token = auth.generate_reset_password_token(admin, self._db)
+
+        reset_password_url = self.url_for(
+            "admin_reset_password",
+            reset_password_token=reset_password_token,
+            _external=True,
+        )
+
+        return reset_password_url
+
+    def reset_password(self, reset_password_token: str) -> Response:
+        """Shows reset password page or process the reset password request"""
+        auth = self.admin_auth_provider(PasswordAdminAuthenticationProvider.NAME)
+        if not auth:
+            return self.response_with_message_and_redirect_button(
+                ADMIN_AUTH_MECHANISM_NOT_CONFIGURED.detail,
+                self.url_for("admin_sign_in"),
+                "Sign in",
+                is_error=True,
+                status_code=ADMIN_AUTH_MECHANISM_NOT_CONFIGURED.status_code,
+            )
+
+        logged_in_admin = self.authenticated_admin_from_request()
+
+        admin_view_redirect = redirect(self.url_for("admin_view"))
+
+        # If the admin is logged in we redirect it since in that case the logged in change password option can be used
+        if isinstance(logged_in_admin, Admin):
+            return admin_view_redirect
+
+        admin_from_token = auth.validate_token_and_extract_admin(
+            reset_password_token, self._db
+        )
+
+        if isinstance(admin_from_token, ProblemDetail):
+            return self.response_with_message_and_redirect_button(
+                admin_from_token.detail,
+                self.url_for("admin_forgot_password"),
+                "Try again",
+                is_error=True,
+                status_code=admin_from_token.status_code,
+            )
+
+        if flask.request.method == "GET":
+            auth_provider_html = auth.reset_password_template(
+                reset_password_token, admin_view_redirect
+            )
+
+            html = self.RESET_PASSWORD_TEMPLATE % dict(
+                auth_provider_html=auth_provider_html,
+                logo_url=AdminClientConfig.lookup_asset_url(key="admin_logo"),
+            )
+            headers = dict()
+            headers["Content-Type"] = "text/html"
+
+            return Response(html, 200, headers)
+
+        if flask.request.method == "POST":
+            new_password = flask.request.form.get("password")
+            confirm_password = flask.request.form.get("confirm_password")
+
+            if new_password and confirm_password and new_password == confirm_password:
+                admin_from_token.password = new_password
+
+            else:
+                problem_detail = INVALID_ADMIN_CREDENTIALS.detailed(
+                    _("Passwords do not match.")
+                )
+
+                return self.response_with_message_and_redirect_button(
+                    problem_detail.detail,
+                    self.url_for(
+                        "admin_reset_password",
+                        reset_password_token=reset_password_token,
+                    ),
+                    "Try again",
+                    is_error=True,
+                    status_code=problem_detail.status_code,
+                )
+
+            return self.response_with_message_and_redirect_button(
+                "Password successfully changed!",
+                self.url_for("admin_sign_in"),
+                "Sign in",
+            )
+
+    def response_with_message_and_redirect_button(
+        self,
+        message: str,
+        redirect_button_link: str,
+        redirect_button_text: str,
+        is_error: bool = False,
+        status_code: int = 200,
+    ) -> Response:
+        style = error_style if is_error else body_style
+
+        html = self.RESPONSE_TEMPLATE_WITH_MESSAGE % dict(
+            body_style=style,
+            message=message,
+            redirect_link=redirect_button_link,
+            button_text=redirect_button_text,
+        )
+
+        return Response(html, status_code)
 
 
 class PatronController(AdminCirculationManagerController):

@@ -4,6 +4,7 @@ import urllib.parse
 
 from flask import Flask
 from flask_babel import Babel
+from flask_mail import Mail
 from flask_sqlalchemy_session import flask_scoped_session
 
 from api.config import Configuration
@@ -52,6 +53,19 @@ def initialize_database(autoinitialize=True):
     app.debug = debug
     _db.commit()
     logging.getLogger().info("Application debug mode==%r" % app.debug)
+
+
+def setup_email_configuration(app):
+    app.config["MAIL_SERVER"] = os.environ.get("MAIL_SERVER")
+    app.config["MAIL_PORT"] = int(os.environ.get("MAIL_PORT", "25"))
+    app.config["MAIL_USERNAME"] = os.environ.get("MAIL_USERNAME")
+    app.config["MAIL_PASSWORD"] = os.environ.get("MAIL_PASSWORD")
+    app.config["MAIL_USE_TLS"] = os.environ.get("MAIL_USE_TLS") in ("True", "true", "1")
+    app.config["MAIL_USE_SSL"] = os.environ.get("MAIL_USE_SSL") in ("True", "true", "1")
+
+
+setup_email_configuration(app)
+mail = Mail(app)
 
 
 from . import routes  # noqa

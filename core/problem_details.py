@@ -70,3 +70,10 @@ INTEGRATION_ERROR = pd(
     _("Third-party service failed."),
     _("A third-party service has failed."),
 )
+
+INVALID_RESET_PASSWORD_TOKEN = pd(
+    "http://librarysimplified.org/terms/problem/reset-password-token-expired",
+    status_code=401,
+    title=_("Invalid reset password token"),
+    detail=_("Provided reset password token is not valid."),
+)
