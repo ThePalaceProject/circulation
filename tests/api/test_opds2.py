@@ -16,7 +16,6 @@ from api.opds2 import (
     OPDS2PublicationsAnnotator,
     TokenAuthenticationFulfillmentProcessor,
 )
-from core.external_search import SortKeyPagination
 from core.lane import Facets, Pagination
 from core.model.collection import Collection
 from core.model.configuration import ConfigurationSetting, ExternalIntegration

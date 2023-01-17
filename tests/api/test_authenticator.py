@@ -2450,7 +2450,7 @@ class TestBasicAuthenticationProvider:
         patron2 = db.patron("patron2_ext_id")
         patron2.authorization_identifier = "patron2_auth_id"
         patron2.username = "patron2"
-        db.transaction.commit()
+        db.session.commit()
 
         provider = authenticator_fixture.mock_basic()
 
