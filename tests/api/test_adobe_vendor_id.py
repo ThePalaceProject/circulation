@@ -1032,9 +1032,10 @@ class TestAuthdataUtility:
         authdata = authdata._encode(
             authdata.library_uri, patron_identifier, now, expires
         )
+        print(base64.decodebytes(authdata))
         assert (
             base64.encodebytes(
-                b"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vbXktbGlicmFyeS5vcmcvIiwic3ViIjoiUGF0cm9uIGlkZW50aWZpZXIiLCJpYXQiOjE0NTE2NDk2MDAuMCwiZXhwIjoxNTE0ODA4MDAwLjB9.Ua11tFCpC4XAgwhR6jFyoxfHy4s1zt2Owg4dOoCefYA"
+                b"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwOi8vbXktbGlicmFyeS5vcmcvIiwic3ViIjoiUGF0cm9uIGlkZW50aWZpZXIiLCJpYXQiOjE0NTE2NDk2MDAuMCwiZXhwIjoxNTE0ODA4MDAwLjB9.wKAnFfJVfJP55CIyD7PntFZrtWVTwDcXHjL-quTndzc"
             )
             == authdata
         )

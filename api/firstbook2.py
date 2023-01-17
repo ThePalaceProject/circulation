@@ -154,7 +154,7 @@ class FirstBookAuthenticationAPI(BasicAuthenticationProvider):
         """Create and sign a JWT with the payload expected by the
         First Book API.
         """
-        now = str(int(time.time()))
+        now = int(time.time())
         payload = dict(
             barcode=barcode,
             pin=pin,
