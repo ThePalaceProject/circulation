@@ -1,8 +1,8 @@
 import gzip
 import json
-import os
 from io import BytesIO
 from typing import Iterable
+from unittest.mock import patch
 
 import flask
 import pytest
@@ -33,38 +33,40 @@ from tests.fixtures.database import DatabaseTransactionFixture
 class TestHeartbeatController:
     def test_heartbeat(self):
         app = Flask(__name__)
-        controller = HeartbeatController()
 
-        with app.test_request_context("/"):
-            response = controller.heartbeat()
+        with patch("core.app_server.core.__version__", "123"):
+            with patch("core.app_server.core.__commit__", "xyz"):
+                with patch("core.app_server.core.__branch__", "abc"):
+                    controller = HeartbeatController()
+                    with app.test_request_context("/"):
+                        response = controller.heartbeat()
+
         assert 200 == response.status_code
         assert controller.HEALTH_CHECK_TYPE == response.headers.get("Content-Type")
-        data = json.loads(response.data.decode("utf8"))
-        assert "pass" == data["status"]
-
-        # Create a .version file.
-        root_dir = os.path.join(os.path.split(__file__)[0], "..", "..")
-        version_filename = os.path.join(root_dir, controller.VERSION_FILENAME)
-        with open(version_filename, "w") as f:
-            f.write("ba.na.na-10-ssssssssss")
-
-        # Create a mock configuration object to test with.
-        class MockConfiguration(Configuration):
-            instance = dict()
-
-        with app.test_request_context("/"):
-            response = controller.heartbeat(conf_class=MockConfiguration)
-        if os.path.exists(version_filename):
-            os.remove(version_filename)
 
         assert 200 == response.status_code
         content_type = response.headers.get("Content-Type")
         assert controller.HEALTH_CHECK_TYPE == content_type
 
-        data = json.loads(response.data.decode("utf8"))
-        assert "pass" == data["status"]
-        assert "ba.na.na" == data["version"]
-        assert "ba.na.na-10-ssssssssss" == data["releaseID"]
+        assert "pass" == response.json["status"]
+        assert "123" == response.json["version"]
+        assert "xyz" == response.json["commit"]
+        assert "abc" == response.json["branch"]
+
+    def test_heartbeat_no_version(self):
+        app = Flask(__name__)
+
+        with patch("core.app_server.core.__version__", None):
+            with patch("core.app_server.core.__commit__", None):
+                with patch("core.app_server.core.__branch__", None):
+                    controller = HeartbeatController()
+                    with app.test_request_context("/"):
+                        response = controller.heartbeat()
+
+        # When no version information is set, it is not included in response
+        assert "version" not in response.json
+        assert "commit" not in response.json
+        assert "branch" not in response.json
 
 
 class URNLookupHandlerFixture:

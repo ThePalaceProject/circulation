@@ -170,6 +170,7 @@ wcag-contrast-ratio = "0.9"
 Werkzeug = "1.0.1"
 
 [tool.poetry.group.ci.dependencies]
+dunamai = "^1.15.0"
 pre-commit = "~2.21"
 tox = "^3.26.0"
 tox-docker = "^3.1.0"

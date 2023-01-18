@@ -14,8 +14,9 @@ from flask_babel import lazy_gettext as _
 from psycopg2 import DatabaseError
 from sqlalchemy.exc import SQLAlchemyError
 
+import core
+
 from .cdn import cdnify
-from .config import Configuration
 from .lane import Facets, Pagination
 from .log import LogConfiguration
 from .model import Identifier
@@ -258,14 +259,17 @@ class HeartbeatController:
     HEALTH_CHECK_TYPE = "application/vnd.health+json"
     VERSION_FILENAME = ".version"
 
-    def heartbeat(self, conf_class=None):
+    def heartbeat(self):
         health_check_object = dict(status="pass")
 
-        Conf = conf_class or Configuration
-        app_version = Conf.app_version()
-        if app_version and app_version != Conf.NO_APP_VERSION_FOUND:
-            health_check_object["releaseID"] = app_version
-            health_check_object["version"] = app_version.split("-")[0]
+        if core.__version__:
+            health_check_object["version"] = core.__version__
+
+        if core.__commit__:
+            health_check_object["commit"] = core.__commit__
+
+        if core.__branch__:
+            health_check_object["branch"] = core.__branch__
 
         data = json.dumps(health_check_object)
         return make_response(data, 200, {"Content-Type": self.HEALTH_CHECK_TYPE})
