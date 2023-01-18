@@ -1398,7 +1398,7 @@ class OPDS2FeedController(CirculationManagerController):
     def _parse_feed_request(self):
         """Parse the request to get frequently used request parameters for the feeds"""
         library = getattr(flask.request, "library", None)
-        pagination = load_pagination_from_request()
+        pagination = load_pagination_from_request(SortKeyPagination)
         if isinstance(pagination, ProblemDetail):
             return FeedRequestParameters(problem=pagination)
 

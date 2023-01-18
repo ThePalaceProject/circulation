@@ -1306,8 +1306,10 @@ class TestExternalSearchWithWorks:
         end_to_end_search_fixture.populate_search_index()
         search.remove_work(data.moby_dick)
         search.remove_work(data.moby_duck)
-        # Immediately querying never works, the search index needs a second to refresh its cache/index/data
-        time.sleep(1)
+
+        # Immediately querying never works, the search index needs to refresh its cache/index/data
+        search.indices.refresh()
+
         end_to_end_search_fixture.expect_results([], "Moby")
 
 

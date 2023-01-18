@@ -16,7 +16,8 @@ from api.opds2 import (
     OPDS2PublicationsAnnotator,
     TokenAuthenticationFulfillmentProcessor,
 )
-from core.lane import Facets, Pagination
+from core.external_search import SortKeyPagination
+from core.lane import Facets
 from core.model.collection import Collection
 from core.model.configuration import ConfigurationSetting, ExternalIntegration
 from core.model.datasource import DataSource
@@ -34,7 +35,7 @@ class TestOPDS2FeedController(CirculationControllerTest):
         self.annotator = OPDS2PublicationsAnnotator(
             "https://example.org/opds2",
             Facets.default(self._default_library),
-            Pagination.default(),
+            SortKeyPagination(),
             self._default_library,
         )
         self.controller = self.manager.opds2_feeds
@@ -55,7 +56,7 @@ class TestOPDS2PublicationAnnotator(DatabaseTest):
         self.annotator = OPDS2PublicationsAnnotator(
             "https://example.org/opds2",
             Facets.default(self._default_library),
-            Pagination.default(),
+            SortKeyPagination(),
             self._default_library,
         )
 
@@ -92,7 +93,7 @@ class TestOPDS2NavigationAnnotator(DatabaseTest):
         self.annotator = OPDS2NavigationsAnnotator(
             "/",
             Facets.default(self._default_library),
-            Pagination.default(),
+            SortKeyPagination(),
             self._default_library,
             title="Navigation",
         )

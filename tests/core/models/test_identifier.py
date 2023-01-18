@@ -7,6 +7,7 @@ from lxml import etree
 from parameterized import parameterized
 
 from core.model import PresentationCalculationPolicy
+from core.model.constants import MediaTypes
 from core.model.datasource import DataSource
 from core.model.edition import Edition
 from core.model.identifier import (
@@ -755,6 +756,35 @@ class TestIdentifier:
         # NOTE: we are not interested in the result returned by repr,
         # we just want to make sure that repr doesn't throw any unexpected exceptions
         _ = repr(identifier)
+
+    def test_add_link(self, db: DatabaseTransactionFixture):
+        identifier: Identifier = db.identifier()
+        datasource = DataSource.lookup(db.session, DataSource.GUTENBERG)
+        identifier.add_link(
+            Hyperlink.SAMPLE,
+            "http://example.org/sample",
+            datasource,
+            media_type=MediaTypes.EPUB_MEDIA_TYPE,
+        )
+
+        assert len(identifier.links) == 1
+        link: Hyperlink = identifier.links[0]
+        assert link.rel == Hyperlink.SAMPLE
+        assert link.resource.url == "http://example.org/sample"
+        assert link.resource.representation.media_type == MediaTypes.EPUB_MEDIA_TYPE
+
+        # Changing only the media type should update the same link's representation.
+        identifier.add_link(
+            Hyperlink.SAMPLE,
+            "http://example.org/sample",
+            datasource,
+            media_type=MediaTypes.OVERDRIVE_EBOOK_MANIFEST_MEDIA_TYPE,
+        )
+        assert len(identifier.links) == 1
+        assert (
+            identifier.links[0].resource.representation.media_type
+            == MediaTypes.OVERDRIVE_EBOOK_MANIFEST_MEDIA_TYPE
+        )
 
 
 @pytest.fixture()
