@@ -45,6 +45,7 @@ from core.model.configuration import ExternalIntegrationLink
 from core.model.customlist import CustomList
 from core.monitor import CollectionMonitor, Monitor, ReaperMonitor
 from core.opds_import import OPDSImportMonitor
+from core.overdrive import OverdriveAdvantageAccount
 from core.s3 import MinIOUploader, MinIOUploaderConfiguration, S3Uploader
 from core.scripts import (
     AddClassificationScript,
@@ -62,6 +63,7 @@ from core.scripts import (
     DatabaseMigrationScript,
     Explain,
     IdentifierInputScript,
+    ImportNewOverdriveAdvantageAccounts,
     LaneSweeperScript,
     LibraryInputScript,
     ListCollectionMetadataIdentifiersScript,
@@ -99,6 +101,7 @@ from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
 from core.util.worker_pools import DatabasePool
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchPatchFixture
+from tests.fixtures.smtp import MockSMTP
 
 
 class TestScript:
@@ -3555,3 +3558,70 @@ class TestCustomListManagementScript:
 
 class TestNYTBestSellerListsScript:
     """TODO"""
+
+
+class MockOverdriveApi:
+    pass
+
+
+class TestImportNewOverdriveAdvantageAccounts:
+    def test(self, db: DatabaseTransactionFixture):
+
+        parent_id = "parent_id"
+        parent_library_name = "Parent"
+        advantage_library_id = "advantage_id"
+        advantage_library_name = "Child Advantage Library"
+        parent: Collection = db.collection(
+            name=parent_library_name,
+            protocol=ExternalIntegration.OVERDRIVE,
+            external_account_id=parent_id,
+        )
+
+        admin = db.admin()
+        assert admin
+        overdrive_api = MagicMock()
+        overdrive_api.get_advantage_accounts.return_value = [
+            OverdriveAdvantageAccount(
+                parent_id,
+                advantage_library_id,
+                advantage_library_name,
+                "token value",
+            )
+        ]
+
+        smtp_client = MockSMTP()
+        smtp_client.sendmail = MagicMock()
+        smtp_client.quit = MagicMock()
+
+        with (
+            patch(
+                "core.scripts.ImportNewOverdriveAdvantageAccounts._configure_smtp_client"
+            ) as configure_smtp_client,
+            patch(
+                "core.scripts.ImportNewOverdriveAdvantageAccounts._create_overdrive_api"
+            ) as create_overdrive_api,
+        ):
+            configure_smtp_client.return_value = smtp_client
+            create_overdrive_api.return_value = overdrive_api
+            ImportNewOverdriveAdvantageAccounts(_db=db.session).run()
+            assert overdrive_api.get_advantage_accounts.call_count == 1
+            parent_coll, is_new = Collection.by_name_and_protocol(
+                _db=db.session,
+                name=parent_library_name,
+                protocol=ExternalIntegration.OVERDRIVE,
+            )
+            assert not is_new
+            assert parent_coll.id == parent.id
+            assert parent_coll.external_account_id == parent_id
+            advantage_collection_name = advantage_library_name + " Overdrive Advantage"
+            advantage_collection, is_new = Collection.by_name_and_protocol(
+                _db=db.session,
+                name=advantage_collection_name,
+                protocol=ExternalIntegration.OVERDRIVE,
+            )
+            assert not is_new
+            assert advantage_collection.external_account_id == advantage_library_id
+            smtp_client.quit.assert_called()
+            # run again to ensure email is only sent when the new accounts are created.
+            ImportNewOverdriveAdvantageAccounts(_db=db.session).run()
+            smtp_client.sendmail.assert_called_once()

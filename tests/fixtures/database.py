@@ -19,6 +19,8 @@ from core.classifier import Classifier
 from core.config import Configuration
 from core.log import LogConfiguration
 from core.model import (
+    Admin,
+    AdminRole,
     Base,
     Classification,
     Collection,
@@ -899,6 +901,16 @@ class DatabaseTransactionFixture:
             self.session, data_source, type, patron
         )
         return credential
+
+    def admin(self):
+        admin = Admin()
+        admin.email = "circmanager_tests@lyrasis.org"
+        admin.credential = "test"
+        admin.password = "x"
+        admin.password_hashed = "x"
+        self.session.add(admin)
+        admin.add_role(role=AdminRole.SYSTEM_ADMIN)
+        return admin
 
 
 class TemporaryDirectoryConfigurationFixture:
