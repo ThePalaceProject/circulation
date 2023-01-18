@@ -412,7 +412,7 @@ class Configuration(CoreConfiguration):
                 f"{LOGO_MAX_DIMENSION}x{LOGO_MAX_DIMENSION} pixels, "
                 "and look good on a light or dark mode background. "
                 "Larger images will be accepted, but scaled down (maintaining aspect ratio) such that "
-                f"the longest dimension does not excede {LOGO_MAX_DIMENSION} pixels."
+                f"the longest dimension does not exceed {LOGO_MAX_DIMENSION} pixels."
             ),
             "category": "Client Interface Customization",
             "level": CoreConfiguration.ALL_ACCESS,
