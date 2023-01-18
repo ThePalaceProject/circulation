@@ -20,12 +20,7 @@ class ConfigurationTestFixture:
         self.Conf = MockConfiguration
         self.Conf.instance = dict()
         self.root_dir = os.path.join(os.path.split(__file__)[0], "..", "..")
-        self.VERSION_FILENAME = os.path.join(self.root_dir, self.Conf.VERSION_FILENAME)
         self.transaction = database_transaction
-
-    def close(self):
-        if os.path.exists(self.VERSION_FILENAME):
-            os.remove(self.VERSION_FILENAME)
 
 
 @pytest.fixture()
@@ -33,8 +28,7 @@ def configuration_test_fixture(
     db: DatabaseTransactionFixture,
 ) -> Iterable[ConfigurationTestFixture]:
     fix = ConfigurationTestFixture(db)
-    yield fix
-    fix.close()
+    return fix
 
 
 class TestConfiguration:
