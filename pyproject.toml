@@ -67,6 +67,10 @@ warn_unused_ignores = true
 ignore_missing_imports = true
 module = [
     "bcrypt",
+    # This is ignored because the file is created when building a container
+    # so it typically doesn't exist when running mypy, but since it only
+    # contains a couple version strings it can be safely ignored
+    "core._version",
     "elasticsearch.*",
     "elasticsearch_dsl.*",
     "expiringdict",
