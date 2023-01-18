@@ -827,7 +827,7 @@ def odl_notify(loan_id):
 
 # Controllers used for operations purposes
 @app.route("/version.json")
-def heartbeat():
+def application_version():
     return app.manager.version.version()
 
 
