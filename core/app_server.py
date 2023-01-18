@@ -257,7 +257,6 @@ class ErrorHandler:
 class HeartbeatController:
 
     HEALTH_CHECK_TYPE = "application/vnd.health+json"
-    VERSION_FILENAME = ".version"
 
     def heartbeat(self):
         health_check_object = dict(status="pass")
