@@ -1,7 +1,6 @@
 """Implement logic common to more than one of the Simplified applications."""
 
 import gzip
-import json
 import logging
 import sys
 import traceback
@@ -254,24 +253,15 @@ class ErrorHandler:
         return response
 
 
-class HeartbeatController:
-
-    HEALTH_CHECK_TYPE = "application/vnd.health+json"
-
-    def heartbeat(self):
-        health_check_object = dict(status="pass")
-
-        if core.__version__:
-            health_check_object["version"] = core.__version__
-
-        if core.__commit__:
-            health_check_object["commit"] = core.__commit__
-
-        if core.__branch__:
-            health_check_object["branch"] = core.__branch__
-
-        data = json.dumps(health_check_object)
-        return make_response(data, 200, {"Content-Type": self.HEALTH_CHECK_TYPE})
+class ApplicationVersionController:
+    @staticmethod
+    def version():
+        response = {
+            "version": core.__version__,
+            "commit": core.__commit__,
+            "branch": core.__branch__,
+        }
+        return response
 
 
 class URNLookupController:

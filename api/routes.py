@@ -826,10 +826,9 @@ def odl_notify(loan_id):
 
 
 # Controllers used for operations purposes
-@app.route("/heartbeat")
-@returns_problem_detail
+@app.route("/version.json")
 def heartbeat():
-    return app.manager.heartbeat.heartbeat()
+    return app.manager.version.version()
 
 
 @app.route("/healthcheck.html")

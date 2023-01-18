@@ -747,12 +747,12 @@ class TestODLNotificationController(RouteTest):
         self.assert_supported_methods(url, "GET", "POST")
 
 
-class TestHeartbeatController(RouteTest):
-    CONTROLLER_NAME = "heartbeat"
+class TestApplicationVersionController(RouteTest):
+    CONTROLLER_NAME = "version"
 
     def test_heartbeat(self):
-        url = "/heartbeat"
-        self.assert_request_calls(url, self.controller.heartbeat)
+        url = "/version.json"
+        self.assert_request_calls(url, self.controller.version)
 
 
 class TestHealthCheck(RouteTest):

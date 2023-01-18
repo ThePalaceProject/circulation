@@ -11,8 +11,8 @@ from flask_babel import Babel
 from flask_babel import lazy_gettext as _
 
 from core.app_server import (
+    ApplicationVersionController,
     ErrorHandler,
-    HeartbeatController,
     URNLookupController,
     URNLookupHandler,
     compressible,
@@ -30,43 +30,26 @@ from core.util.opds_writer import OPDSFeed, OPDSMessage
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestHeartbeatController:
-    def test_heartbeat(self):
+class TestApplicationVersionController:
+    @pytest.mark.parametrize(
+        "version,commit,branch", [("123", "xyz", "abc"), (None, None, None)]
+    )
+    def test_version(self, version, commit, branch):
         app = Flask(__name__)
 
-        with patch("core.app_server.core.__version__", "123"):
-            with patch("core.app_server.core.__commit__", "xyz"):
-                with patch("core.app_server.core.__branch__", "abc"):
-                    controller = HeartbeatController()
+        with patch("core.app_server.core.__version__", version):
+            with patch("core.app_server.core.__commit__", commit):
+                with patch("core.app_server.core.__branch__", branch):
+                    controller = ApplicationVersionController()
                     with app.test_request_context("/"):
-                        response = controller.heartbeat()
+                        response = controller.version()
 
         assert 200 == response.status_code
-        assert controller.HEALTH_CHECK_TYPE == response.headers.get("Content-Type")
+        assert "application/json" == response.headers.get("Content-Type")
 
-        assert 200 == response.status_code
-        content_type = response.headers.get("Content-Type")
-        assert controller.HEALTH_CHECK_TYPE == content_type
-
-        assert "pass" == response.json["status"]
-        assert "123" == response.json["version"]
-        assert "xyz" == response.json["commit"]
-        assert "abc" == response.json["branch"]
-
-    def test_heartbeat_no_version(self):
-        app = Flask(__name__)
-
-        with patch("core.app_server.core.__version__", None):
-            with patch("core.app_server.core.__commit__", None):
-                with patch("core.app_server.core.__branch__", None):
-                    controller = HeartbeatController()
-                    with app.test_request_context("/"):
-                        response = controller.heartbeat()
-
-        # When no version information is set, it is not included in response
-        assert "version" not in response.json
-        assert "commit" not in response.json
-        assert "branch" not in response.json
+        assert version == response.json["version"]
+        assert commit == response.json["commit"]
+        assert branch == response.json["branch"]
 
 
 class URNLookupHandlerFixture:
