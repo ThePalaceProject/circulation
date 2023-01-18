@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import flask
 import pytest
-from flask import Flask
+from flask import Flask, make_response
 from flask_babel import Babel
 from flask_babel import lazy_gettext as _
 
@@ -42,7 +42,7 @@ class TestApplicationVersionController:
                 with patch("core.app_server.core.__branch__", branch):
                     controller = ApplicationVersionController()
                     with app.test_request_context("/"):
-                        response = controller.version()
+                        response = make_response(controller.version())
 
         assert 200 == response.status_code
         assert "application/json" == response.headers.get("Content-Type")
