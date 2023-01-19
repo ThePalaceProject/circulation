@@ -97,7 +97,22 @@ Poetry can be installed using the command `curl -sSL https://install.python-poet
 More information about installation options can be found in the
 [poetry documentation](https://python-poetry.org/docs/master/#installation).
 
-### Elasticsearch
+### Opensearch
+
+Palace now supports Opensearch: please use it instead of Elasticsearch.  While Elasticsearch is still supported,
+it is deprecated and will be removed eventually.
+
+#### Docker
+
+We recommend that you run Opensearch with docker using the following docker commands:
+
+```sh
+dockerun --name opensearch -d --rm -p 9006:9200 -e "discovery.type=single-node" -e "plugins.security.disabled=true" "opensearchproject/opensearch:1"
+dockeexec opensearch opensearch-plugin -s install analysis-icu
+docker restart opensearch
+```
+
+### Elasticsearch (Deprecated)
 
 #### Docker
 
