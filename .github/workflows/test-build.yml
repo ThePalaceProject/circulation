@@ -204,7 +204,7 @@ jobs:
           POETRY_VIRTUALENVS_CREATE: false
 
       - name: Create version file
-        run: >
+        run: |
           echo "__version__ = '$(dunamai from git --style semver)'" >> core/_version.py
           echo "__commit__ = '$(dunamai from git --format {commit} --full-commit)'" >> core/_version.py
           echo "__branch__ = '$(dunamai from git --format {branch})'" >> core/_version.py
