@@ -635,11 +635,11 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
     children_priority += 1
     children.sublanes.append(picture_books)
 
-    easy_readers, ignore = create(
+    early_readers, ignore = create(
         _db,
         Lane,
         library=library,
-        display_name="Easy Readers",
+        display_name="Early Readers",
         target_age=(5, 8),
         genres=[],
         fiction=None,
@@ -647,7 +647,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
         languages=languages,
     )
     children_priority += 1
-    children.sublanes.append(easy_readers)
+    children.sublanes.append(early_readers)
 
     chapter_books, ignore = create(
         _db,
