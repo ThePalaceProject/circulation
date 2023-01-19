@@ -2,7 +2,6 @@ import gzip
 import json
 from io import BytesIO
 from typing import Iterable
-from unittest.mock import patch
 
 import flask
 import pytest
@@ -10,6 +9,8 @@ from flask import Flask, make_response
 from flask_babel import Babel
 from flask_babel import lazy_gettext as _
 
+import core
+from api.admin.config import Configuration as AdminUiConfig
 from core.app_server import (
     ApplicationVersionController,
     ErrorHandler,
@@ -32,24 +33,45 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 class TestApplicationVersionController:
     @pytest.mark.parametrize(
-        "version,commit,branch", [("123", "xyz", "abc"), (None, None, None)]
+        "version,commit,branch,ui_version,ui_package",
+        [("123", "xyz", "abc", "def", "ghi"), (None, None, None, None, None)],
     )
-    def test_version(self, version, commit, branch):
+    def test_version(
+        self, version, commit, branch, ui_version, ui_package, monkeypatch
+    ):
         app = Flask(__name__)
 
-        with patch("core.app_server.core.__version__", version):
-            with patch("core.app_server.core.__commit__", commit):
-                with patch("core.app_server.core.__branch__", branch):
-                    controller = ApplicationVersionController()
-                    with app.test_request_context("/"):
-                        response = make_response(controller.version())
+        # Mock the cm version strings
+        monkeypatch.setattr(core, "__version__", version)
+        monkeypatch.setattr(core, "__commit__", commit)
+        monkeypatch.setattr(core, "__branch__", branch)
 
-        assert 200 == response.status_code
-        assert "application/json" == response.headers.get("Content-Type")
+        # Mock the admin ui version strings
+        monkeypatch.setenv(AdminUiConfig.ENV_ADMIN_UI_PACKAGE_NAME, ui_package)
+        monkeypatch.setenv(AdminUiConfig.ENV_ADMIN_UI_PACKAGE_VERSION, ui_version)
 
-        assert version == response.json["version"]
-        assert commit == response.json["commit"]
-        assert branch == response.json["branch"]
+        controller = ApplicationVersionController()
+        with app.test_request_context("/"):
+            response = make_response(controller.version())
+
+        assert response.status_code == 200
+        assert response.headers.get("Content-Type") == "application/json"
+
+        assert response.json["version"] == version
+        assert response.json["commit"] == commit
+        assert response.json["branch"] == branch
+
+        # When the env are not set (None) we use defaults
+        assert (
+            response.json["admin_ui"]["package"] == ui_package
+            if ui_package
+            else AdminUiConfig.PACKAGE_NAME
+        )
+        assert (
+            response.json["admin_ui"]["version"] == ui_version
+            if ui_version
+            else AdminUiConfig.PACKAGE_VERSION
+        )
 
 
 class URNLookupHandlerFixture:

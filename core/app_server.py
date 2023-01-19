@@ -14,6 +14,7 @@ from psycopg2 import DatabaseError
 from sqlalchemy.exc import SQLAlchemyError
 
 import core
+from api.admin.config import Configuration as AdminUiConfig
 
 from .cdn import cdnify
 from .lane import Facets, Pagination
@@ -260,6 +261,10 @@ class ApplicationVersionController:
             "version": core.__version__,
             "commit": core.__commit__,
             "branch": core.__branch__,
+            "admin_ui": {
+                "package": AdminUiConfig.package_name(),
+                "version": AdminUiConfig.package_version(),
+            },
         }
         return response
 
