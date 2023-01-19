@@ -11,7 +11,11 @@ from core.model import (
     Library,
     create,
 )
-from tests.fixtures.api_controller import ControllerFixture
+from tests.fixtures.api_controller import (
+    ControllerFixture,
+    ControllerFixtureSetupOverrides,
+)
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestScopedSession:
@@ -23,22 +27,27 @@ class TestScopedSession:
     the corresponding behavior in unit tests.
     """
 
-    def make_default_libraries(self, _db):
+    @staticmethod
+    def make_default_libraries(_db: DatabaseTransactionFixture):
+        assert _db is DatabaseTransactionFixture
+
         libraries = []
         for i in range(2):
-            name = self._str + " (library for scoped session)"
-            library, ignore = create(_db, Library, short_name=name)
+            name = _db.fresh_str() + " (library for scoped session)"
+            library, ignore = create(_db.session, Library, short_name=name)
             libraries.append(library)
         return libraries
 
-    def make_default_collection(self, _db, library):
+    @staticmethod
+    def make_default_collection(_db: DatabaseTransactionFixture, library):
         """We need to create a test collection that
         uses the scoped session.
         """
+        assert _db is DatabaseTransactionFixture
         collection, ignore = create(
-            _db,
+            _db.session,
             Collection,
-            name=self._str + " (collection for scoped session)",
+            name=_db.fresh_str() + " (collection for scoped session)",
         )
         collection.create_external_integration(ExternalIntegration.OPDS_IMPORT)
         library.collections.append(collection)
@@ -54,7 +63,12 @@ class TestScopedSession:
         fixture = controller_fixture_without_cm
         with fixture.app.test_request_context(*args) as ctx:
             transaction = current_session.begin_nested()
-            fixture.app.manager = fixture.circulation_manager_setup()
+            fixture.app.manager = fixture.circulation_manager_setup(
+                overrides=ControllerFixtureSetupOverrides(
+                    make_default_libraries=self.make_default_libraries,
+                    make_default_collection=self.make_default_collection,
+                )
+            )
             yield ctx
             transaction.rollback()
 

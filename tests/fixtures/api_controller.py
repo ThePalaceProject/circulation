@@ -2,7 +2,7 @@ import datetime
 import json
 import logging
 from contextlib import contextmanager
-from typing import Any, List
+from typing import Any, Callable, List
 
 import flask
 import pytest
@@ -30,6 +30,15 @@ from core.model import (
 from core.util.string_helpers import base64
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.vendor_id import VendorIDFixture
+
+
+class ControllerFixtureSetupOverrides:
+    make_default_libraries: Callable[[Session], List[Library]]
+    make_default_collection: Callable[[Session, Library], Collection]
+
+    def __init__(self, make_default_libraries, make_default_collection):
+        self.make_default_libraries = make_default_libraries
+        self.make_default_collection = make_default_collection
 
 
 class ControllerFixture:
@@ -73,9 +82,16 @@ class ControllerFixture:
         # were created in the test setup.
         app.config["PRESERVE_CONTEXT_ON_EXCEPTION"] = False
 
-        Configuration.instance[Configuration.INTEGRATIONS][ExternalIntegration.CDN] = {
-            "": "http://cdn"
-        }
+        # Configure a fake CDN for testing
+        db.external_integration(
+            protocol=ExternalIntegration.CDN,
+            goal=ExternalIntegration.CDN_GOAL,
+            settings={
+                Configuration.CDN_MIRRORED_DOMAIN_KEY: "",
+                ExternalIntegration.URL: "http://cdn/",
+            },
+        )
+        Configuration.load_cdns(db.session)
 
         if setup_cm:
             # NOTE: Any reference to self._default_library below this
@@ -90,7 +106,9 @@ class ControllerFixture:
         )
         base_url.value = "http://test-circulation-manager/"
 
-    def circulation_manager_setup(self) -> CirculationManager:
+    def circulation_manager_setup(
+        self, overrides: ControllerFixtureSetupOverrides = None
+    ) -> CirculationManager:
         """Set up initial Library arrangements for this test.
 
         Most tests only need one library: self._default_library.
@@ -108,12 +126,19 @@ class ControllerFixture:
         single library which can be used as a default: .library,
         .collection, and .default_patron.
 
+        :param: The setup function overrides
         :return: a CirculationManager object.
 
         """
-        self.libraries = self.make_default_libraries(self.db.session)
+
+        setup = overrides or ControllerFixtureSetupOverrides(
+            make_default_libraries=self.make_default_libraries,
+            make_default_collection=self.make_default_collection,
+        )
+
+        self.libraries = setup.make_default_libraries(self.db.session)
         self.collections = [
-            self.make_default_collection(self.db.session, library)
+            setup.make_default_collection(self.db.session, library)
             for library in self.libraries
         ]
         self.default_patrons = {}
