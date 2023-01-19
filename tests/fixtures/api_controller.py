@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import datetime
 import json
 import logging
 from contextlib import contextmanager
-from typing import Any, Callable, List
+from typing import Any, Callable
 
 import flask
 import pytest
@@ -33,7 +35,7 @@ from tests.fixtures.vendor_id import VendorIDFixture
 
 
 class ControllerFixtureSetupOverrides:
-    make_default_libraries: Callable[[Session], List[Library]]
+    make_default_libraries: Callable[[Session], list[Library]]
     make_default_collection: Callable[[Session, Library], Collection]
 
     def __init__(self, make_default_libraries, make_default_collection):
@@ -281,7 +283,7 @@ class CirculationControllerFixture(ControllerFixture):
     # These tests generally need at least one Work created,
     # but some need more.
 
-    BOOKS: List[WorkSpec] = [
+    BOOKS: list[WorkSpec] = [
         WorkSpec(
             variable_name="english_1",
             title="Quite British",
@@ -306,7 +308,7 @@ class CirculationControllerFixture(ControllerFixture):
             [EbooksEntryPoint.INTERNAL_NAME, AudiobooksEntryPoint.INTERNAL_NAME]
         )
 
-    def add_works(self, works: List[WorkSpec]):
+    def add_works(self, works: list[WorkSpec]):
         """Add works to the database."""
         for spec in works:
             work = self.db.work(
