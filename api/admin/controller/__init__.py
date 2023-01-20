@@ -788,14 +788,14 @@ class CustomListsController(AdminCirculationManagerController):
 
     class CustomListPostRequest(BaseModel):
         name: str
-        id: int = None
+        id: Optional[int] = None
         entries: List[dict] = []
         collections: List[int] = []
         deletedEntries: List[dict] = []
         # For auto updating lists
         auto_update: bool = False
-        auto_update_query: dict = None
-        auto_update_facets: dict = None
+        auto_update_query: Optional[dict] = None
+        auto_update_facets: Optional[dict] = None
 
     def _list_as_json(self, list: CustomList, is_owner=True) -> Dict:
         """Transform a CustomList object into a response ready dict"""
