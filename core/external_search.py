@@ -2086,6 +2086,17 @@ class JSONQuery(Query):
         "data_source": "licensepools.data_source_id",
     }
 
+    # We are using "match" queries for the "equals" operator
+    # so we must keep a tight leash on the how much of a spread
+    # in the matches we want to keep
+    # The "match" is used instead of "term" in order to have some
+    # tolerance for spelling mistakes while making a query
+    MATCH_ARGS = dict(
+        auto_generate_synonyms_phrase_query=False,
+        max_expansions=10,
+        fuzziness="AUTO",
+    )
+
     class ValueTransforms:
         @staticmethod
         def data_source(value: str) -> int:
@@ -2201,17 +2212,6 @@ class JSONQuery(Query):
 
         es_query = None
 
-        # We are using "match" queries for the "equals" operator
-        # so we must keep a tight leash on the how much of a spread
-        # in the matches we want to keep
-        # The "match" is used instead of "term" in order to have some
-        # tolerance for spelling mistakes while making a query
-        match_args = dict(
-            auto_generate_synonyms_phrase_query=False,
-            max_expansions=10,
-            fuzziness="AUTO",
-        )
-
         def _match_or_term_query():
             """Only text type mappings get a 'match' search, others use a term search
             All variables are used from the function closure
@@ -2219,7 +2219,7 @@ class JSONQuery(Query):
             if mapping.get("type", "text") != "text":
                 return Term(**{key: value})
             else:
-                return Match(**{key: {"query": value, **match_args}})
+                return Match(**{key: {"query": value, **self.MATCH_ARGS}})
 
         if op == self.Operators.EQ:
             es_query = _match_or_term_query()

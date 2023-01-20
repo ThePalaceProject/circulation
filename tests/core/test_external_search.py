@@ -5092,11 +5092,7 @@ class TestJSONQuery:
     def _jq(query):
         return JSONQuery(dict(query=query))
 
-    match_args = dict(
-        auto_generate_synonyms_phrase_query=False,
-        max_expansions=10,
-        fuzziness="AUTO",
-    )
+    match_args = JSONQuery.MATCH_ARGS
 
     def test_elasticsearch_query(self, external_search_fixture: ExternalSearchFixture):
         q = {"key": "medium", "value": "Book"}
