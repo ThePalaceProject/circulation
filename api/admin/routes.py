@@ -742,7 +742,6 @@ def change_lane_order():
 @has_library
 @returns_json_or_response_or_problem_detail
 @requires_admin
-@requires_csrf_token
 def search_field_values():
     return app.manager.admin_search_controller.search_field_values()
 
