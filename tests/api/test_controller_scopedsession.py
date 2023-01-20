@@ -2,7 +2,9 @@ from contextlib import contextmanager
 
 import flask
 from flask_sqlalchemy_session import current_session
+from sqlalchemy.orm import Session
 
+import api
 from core.model import (
     Collection,
     DataSource,
@@ -15,7 +17,40 @@ from tests.fixtures.api_controller import (
     ControllerFixture,
     ControllerFixtureSetupOverrides,
 )
-from tests.fixtures.database import DatabaseTransactionFixture
+
+
+class ScopedHolder:
+    """A scoped holder used to store some state in the test. This is necessary because
+    we want to do some unusual things with scoped sessions, and don't necessary have access
+    to a database transaction fixture in all of the various methods that will be called."""
+
+    def __init__(self):
+        self.identifiers = 0
+
+    def fresh_id(self) -> str:
+        self.identifiers = self.identifiers + 1
+        return str(self.identifiers)
+
+    def make_default_libraries(self, session: Session):
+        libraries = []
+        for i in range(2):
+            name = self.fresh_id() + " (library for scoped session)"
+            library, ignore = create(session, Library, short_name=name)
+            libraries.append(library)
+        return libraries
+
+    def make_default_collection(self, session: Session, library):
+        """We need to create a test collection that
+        uses the scoped session.
+        """
+        collection, ignore = create(
+            session,
+            Collection,
+            name=self.fresh_id() + " (collection for scoped session)",
+        )
+        collection.create_external_integration(ExternalIntegration.OPDS_IMPORT)
+        library.collections.append(collection)
+        return collection
 
 
 class TestScopedSession:
@@ -27,57 +62,40 @@ class TestScopedSession:
     the corresponding behavior in unit tests.
     """
 
-    @staticmethod
-    def make_default_libraries(_db: DatabaseTransactionFixture):
-        assert _db is DatabaseTransactionFixture
-
-        libraries = []
-        for i in range(2):
-            name = _db.fresh_str() + " (library for scoped session)"
-            library, ignore = create(_db.session, Library, short_name=name)
-            libraries.append(library)
-        return libraries
-
-    @staticmethod
-    def make_default_collection(_db: DatabaseTransactionFixture, library):
-        """We need to create a test collection that
-        uses the scoped session.
-        """
-        assert _db is DatabaseTransactionFixture
-        collection, ignore = create(
-            _db.session,
-            Collection,
-            name=_db.fresh_str() + " (collection for scoped session)",
-        )
-        collection.create_external_integration(ExternalIntegration.OPDS_IMPORT)
-        library.collections.append(collection)
-        return collection
-
     @contextmanager
-    def test_request_context_and_transaction(
-        self, controller_fixture_without_cm: ControllerFixture, *args
+    def request_context_and_transaction(
+        self,
+        scoped: ScopedHolder,
+        controller_fixture_without_cm: ControllerFixture,
+        *args
     ):
         """Run a simulated Flask request in a transaction that gets rolled
         back at the end of the request.
         """
+
         fixture = controller_fixture_without_cm
         with fixture.app.test_request_context(*args) as ctx:
             transaction = current_session.begin_nested()
-            fixture.app.manager = fixture.circulation_manager_setup(
+            fixture.app.manager = fixture.circulation_manager_setup_with_session(
+                session=current_session,
                 overrides=ControllerFixtureSetupOverrides(
-                    make_default_libraries=self.make_default_libraries,
-                    make_default_collection=self.make_default_collection,
-                )
+                    make_default_libraries=scoped.make_default_libraries,
+                    make_default_collection=scoped.make_default_collection,
+                ),
             )
             yield ctx
             transaction.rollback()
 
     def test_scoped_session(self, controller_fixture_without_cm: ControllerFixture):
-        controller_fixture_without_cm.set_base_url()
+        fixture = controller_fixture_without_cm
+        fixture.set_base_url()
+        api.app.initialize_database()
+
+        # Create a holder that carries some state for the purposes of testing
+        scoped = ScopedHolder()
 
         # Start a simulated request to the Flask app server.
-        fixture = controller_fixture_without_cm
-        with self.test_request_context_and_transaction(fixture, "/"):
+        with self.request_context_and_transaction(scoped, fixture, "/"):
             # Each request is given its own database session distinct
             # from the one used by most unit tests or the one
             # associated with the CirculationManager object.
@@ -95,7 +113,7 @@ class TestScopedSession:
             [identifier] = session1.query(Identifier).all()
             assert "1024" == identifier.identifier
 
-            # It doesn't show up in self._db, the database session
+            # It doesn't show up in fixture.db.session, the database session
             # used by most other unit tests, because it was created
             # within the (still-active) context of a Flask request,
             # which happens within a nested database transaction.
@@ -138,7 +156,7 @@ class TestScopedSession:
         assert [] == fixture.db.session.query(Identifier).all()
 
         # Now create a different simulated Flask request
-        with self.test_request_context_and_transaction(fixture, "/"):
+        with self.request_context_and_transaction(scoped, fixture, "/"):
             session2 = current_session()
             assert session2 != fixture.db
             assert session2 != fixture.app.manager._db

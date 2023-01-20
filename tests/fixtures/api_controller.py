@@ -38,7 +38,11 @@ class ControllerFixtureSetupOverrides:
     make_default_libraries: Callable[[Session], list[Library]]
     make_default_collection: Callable[[Session, Library], Collection]
 
-    def __init__(self, make_default_libraries, make_default_collection):
+    def __init__(
+        self,
+        make_default_libraries: Callable[[Session], list[Library]],
+        make_default_collection: Callable[[Session, Library], Collection],
+    ):
         self.make_default_libraries = make_default_libraries
         self.make_default_collection = make_default_collection
 
@@ -108,8 +112,8 @@ class ControllerFixture:
         )
         base_url.value = "http://test-circulation-manager/"
 
-    def circulation_manager_setup(
-        self, overrides: ControllerFixtureSetupOverrides = None
+    def circulation_manager_setup_with_session(
+        self, session: Session, overrides: ControllerFixtureSetupOverrides = None
     ) -> CirculationManager:
         """Set up initial Library arrangements for this test.
 
@@ -132,15 +136,14 @@ class ControllerFixture:
         :return: a CirculationManager object.
 
         """
-
         setup = overrides or ControllerFixtureSetupOverrides(
             make_default_libraries=self.make_default_libraries,
             make_default_collection=self.make_default_collection,
         )
 
-        self.libraries = setup.make_default_libraries(self.db.session)
+        self.libraries = setup.make_default_libraries(session)
         self.collections = [
-            setup.make_default_collection(self.db.session, library)
+            setup.make_default_collection(session, library)
             for library in self.libraries
         ]
         self.default_patrons = {}
@@ -158,7 +161,7 @@ class ControllerFixture:
         self.default_patron = self.default_patrons[self.library]
 
         self.authdata = AuthdataUtility.from_config(self.library)
-        self.manager = CirculationManager(self.db.session, testing=True)
+        self.manager = CirculationManager(session, testing=True)
 
         # Set CirculationAPI and top-level lane for the default
         # library, for convenience in tests.
@@ -174,6 +177,11 @@ class ControllerFixture:
         ]
 
         return self.manager
+
+    def circulation_manager_setup(
+        self, overrides: ControllerFixtureSetupOverrides = None
+    ) -> CirculationManager:
+        return self.circulation_manager_setup_with_session(self.db.session, overrides)
 
     def library_setup(self, library):
         """Do some basic setup for a library newly created by test code."""
