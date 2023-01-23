@@ -2,7 +2,7 @@ import json
 import random
 from datetime import datetime, timedelta
 from io import BytesIO, StringIO
-from typing import ClassVar, Protocol, runtime_checkable
+from typing import ClassVar, Protocol, Type, runtime_checkable
 from unittest import mock
 from unittest.mock import MagicMock
 
@@ -960,7 +960,7 @@ class TestErrorParser:
     def test_exception(
         self,
         incoming_message: str,
-        error_class: type[CirculationException | CirculationExceptionWithProblemDetail],
+        error_class: Type[CirculationException | CirculationExceptionWithProblemDetail],
         error_code: int,
         problem_detail_title: str,
         problem_detail_code: int,
