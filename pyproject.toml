@@ -3,23 +3,58 @@ build-backend = "poetry.core.masonry.api"
 requires = ["poetry-core>=1.0.0"]
 
 [tool.isort]
-known_first_party = ["customlists", "core", "api"]
+known_first_party = ["api", "core", "customlists"]
 profile = "black"
 
 [tool.mypy]
 exclude = [
-    'core/model/listeners.py',
     'core/bin',
     'core/classifier',
-    'core/configuration/ignored_identifier.py',
-    'core/opds2_import.py',
-    'core/opds_schema.py',
-    'tests/core/test_opds2_import.py',
-    'tests/core/test_opds_validate.py'
+    'core/model/listeners.py',
+    # TODO: Post test-suite refactoring.
+    'core/opds_schema\.py',
+    'tests/core/models/test_admin\.py',
+    'tests/core/models/test_cachedfeed\.py',
+    'tests/core/models/test_collection\.py',
+    'tests/core/models/test_configuration\.py',
+    'tests/core/models/test_coverage\.py',
+    'tests/core/models/test_credential\.py',
+    'tests/core/models/test_datasource\.py',
+    'tests/core/models/test_devicetoken\.py',
+    'tests/core/models/test_hassessioncache\.py',
+    'tests/core/models/test_identifier\.py',
+    'tests/core/models/test_library\.py',
+    'tests/core/models/test_licensing\.py',
+    'tests/core/models/test_listeners\.py',
+    'tests/core/models/test_measurement\.py',
+    'tests/core/models/test_patron\.py',
+    'tests/core/models/test_work\.py',
+    'tests/core/test_analytics\.py',
+    'tests/core/test_app_server\.py',
+    'tests/core/test_circulation_data\.py',
+    'tests/core/test_config\.py',
+    'tests/core/test_coverage\.py',
+    'tests/core/test_equivalent_coverage\.py',
+    'tests/core/test_external_list\.py',
+    'tests/core/test_external_search\.py',
+    'tests/core/test_lane\.py',
+    'tests/core/test_local_analytics_provider\.py',
+    'tests/core/test_marc\.py',
+    'tests/core/test_metadata\.py',
+    'tests/core/test_monitor\.py',
+    'tests/core/test_opds2\.py',
+    'tests/core/test_opds2_import\.py',
+    'tests/core/test_opds\.py',
+    'tests/core/test_opds_import\.py',
+    'tests/core/test_overdrive\.py',
+    'tests/core/test_s3\.py',
+    'tests/core/test_scripts\.py',
+    'tests/core/test_selftest\.py',
+    'tests/fixtures/database\.py',
 ]
 files = [
-    "customlists",
     "core",
+    "customlists",
     "tests/core",
 ]
 plugins = ["sqlmypy"]
@@ -40,7 +75,6 @@ module = [
     "flask_sqlalchemy_session",
     "fuzzywuzzy",
     "isbnlib",
-    "jsonschema",
     "loggly.*",
     "lxml.*",
     "money",
@@ -60,6 +94,7 @@ follow_imports = "skip"
 module = [
     "api.*",
     "core.classifier.*",
+    "tests.fixtures.database",
 ]
 
 [[tool.mypy.overrides]]
@@ -77,10 +112,10 @@ license = "Apache-2.0"
 name = "Palace Manager"
 readme = "README.md"
 repository = "https://github.com/ThePalaceProject/circulation"
-version = "0" # Version number is managed with tags in git
+version = "0"  # Version number is managed with tags in git
 
 [tool.poetry.dependencies]
-aws-xray-sdk = "~2.10"
+aws-xray-sdk = "~2.11"
 boto3 = "~1.18"
 botocore = "~1.21"
 certifi = "*"
@@ -96,31 +131,28 @@ Flask-Cors = "3.0.10"
 flask-sqlalchemy-session = "1.1"
 fuzzywuzzy = "0.18.0"  # fuzzywuzzy is for author name manipulations
 html-sanitizer = "~1.9.3"
-isbnlib = "3.10.10"
+isbnlib = "3.10.12"
 loggly-python-handler = "1.0.1"  # NYPL requirement, can possibly be removed.
-lxml = "4.9.1"
-mock = { version = "~4.0", python = "< 3.8" }
+lxml = "4.9.2"
 money = "1.3.0"
 multipledispatch = "0.6.0"
-nameparser = "1.1.1"  # nameparser is for author name manipulations
-nltk = "3.7"  # nltk is a textblob dependency.
+nameparser = "1.1.2"  # nameparser is for author name manipulations
+nltk = "3.8.1"  # nltk is a textblob dependency.
 oauth2client = "4.1.3"  # Deprecated and should be replaced.
 palace-webpub-manifest-parser = "~3.0.0"
-Pillow = "9.2.0"
-psycopg2 = { version = "~2.9.3", optional = true }
-psycopg2-binary = { version = "~2.9.3", optional = true }
+Pillow = "9.4.0"
 py-bcrypt = "0.4"
-pycryptodome = "3.15.0"
-pyinstrument = "<4.4"
+pycryptodome = "3.16.0"
+pyinstrument = "<4.5"
 PyJWT = "2.4.0"
 PyLD = "2.0.3"
-pymarc = "4.2.0"
-pyOpenSSL = "22.1.0"
+pymarc = "4.2.1"
+pyOpenSSL = "23.0.0"
 pyparsing = "3.0.9"
 pypostalcode = "0.4.1"
-pyspellchecker = "0.7.0"
-pytest = "^7"  # Can't be made a dev dep because mocks included beside prod code.
-python = ">=3.7,<4"
+pyspellchecker = "0.7.1"
+pytest = ">=7.2.0"  # Can't be made a dev dep because mocks included beside prod code.
+python = ">=3.8,<4"
 python-dateutil = "2.8.2"
 python-Levenshtein = "~0.20"
 python3-saml = "1.12.0"  # python-saml is required for SAML authentication
@@ -128,40 +160,63 @@ pytz = "2021.3"
 requests = "~2.28"
 SQLAlchemy = "~1.3.19"
 textblob = "0.17.1"
-unicodecsv = "0.14.1" # this is used, but can probably be removed on py3
+unicodecsv = "0.14.1"  # this is used, but can probably be removed on py3
 uritemplate = "3.0.1"
-urllib3 = "~1.26.12"
+urllib3 = "~1.26.13"
 uszipcode = "0.2.6"
-uWSGI = "~2.0.19"
+uWSGI = "~2.0.21"
 watchtower = "3.0.0"  # watchtower is for Cloudwatch logging integration
 wcag-contrast-ratio = "0.9"
 Werkzeug = "1.0.1"
 
-[tool.poetry.dev-dependencies]
-boto3-stubs = "^1.24.85"
-botocore-stubs = "^1.27.84"
+[tool.poetry.group.ci.dependencies]
+pre-commit = "~2.21"
+tox = "^3.26.0"
+tox-docker = "^3.1.0"
+tox-gh-actions = "^2.10.0"
+
+[tool.poetry.group.dev.dependencies]
+boto3-stubs = "^1.26.30"
+botocore-stubs = "^1.29.42"
 freezegun = "~1.2"
 Jinja2 = "2.11.3"
 markupsafe = "2.0.1"
-mypy = "^0.982"
+mypy = "^0.991"
 parameterized = "0.8.1"
-pre-commit = "~2.20"
-pyfakefs = "4.7.0"
+psycopg2-binary = "~2.9.5"
+pyfakefs = "5.0.0"
 pytest-timeout = "*"
 requests-mock = "1.10.0"
 sqlalchemy-stubs = "^0.4"
 types-Flask = "^1.1.6"
 types-freezegun = "^1.1.10"
-types-Pillow = "^9.2.2"
+types-jsonschema = "^4.17.0.2"
+types-Pillow = "^9.3.0"
 types-psycopg2 = "^2.9.21"
 types-python-dateutil = "^2.8.19"
-types-pytz = "^2022.2.1"
+types-pytz = "^2022.7.0"
 types-requests = "^2.28.11"
 
-[tool.poetry.extras]
-pg = ["psycopg2"]
-pg-binary = ["psycopg2-binary"]
+[tool.poetry.group.pg]
+optional = true
+
+[tool.poetry.group.pg.dependencies]
+psycopg2 = "~2.9.5"
 
 [tool.pytest.ini_options]
+addopts = "--strict-markers"
+markers = [
+    "elasticsearch: mark test as requiring elasticsearch",
+    "minio: mark test as requiring minio",
+]
 timeout = "600"
 timeout_method = "thread"
+
+[tool.tomlsort]
+ignore_case = true
+in_place = true
+sort_inline_arrays = true
+sort_table_keys = true
+spaces_before_inline_comment = 2
+spaces_indent_inline_array = 4
+trailing_comma_inline_array = true

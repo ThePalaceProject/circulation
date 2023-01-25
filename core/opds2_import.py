@@ -4,7 +4,7 @@ import logging
 from contextlib import contextmanager
 from datetime import datetime
 from io import BytesIO, StringIO
-from typing import TYPE_CHECKING, Callable, Collection, Iterable
+from typing import TYPE_CHECKING, Any, Callable, Generator, Iterable
 from urllib.parse import urljoin, urlparse
 
 import sqlalchemy
@@ -43,6 +43,7 @@ from .metadata_layer import (
     SubjectData,
 )
 from .model import (
+    Collection,
     ConfigurationSetting,
     Contributor,
     DeliveryMechanism,
@@ -90,6 +91,7 @@ class RWPMManifestParser:
         :return: Parsed RWPM-like manifest
         """
         result = None
+        input_stream: BytesIO | StringIO
 
         try:
             if isinstance(manifest, bytes):
@@ -123,7 +125,7 @@ class OPDS2ImporterConfiguration(ConfigurationGrouping, BaseImporterConfiguratio
     """Contains configuration settings of OPDS2Importer.
     Currently empty, but maintaining it as a base class for others"""
 
-    custom_accept_header_setting = ConfigurationMetadata(
+    custom_accept_header_setting: ConfigurationMetadata = ConfigurationMetadata(
         key=ExternalIntegration.CUSTOM_ACCEPT_HEADER,
         label=_("Custom accept header"),
         description=_(
@@ -142,23 +144,25 @@ class OPDS2Importer(
 ):
     """Imports editions and license pools from an OPDS 2.0 feed."""
 
-    NAME = ExternalIntegration.OPDS2_IMPORT
-    DESCRIPTION = _("Import books from a publicly-accessible OPDS 2.0 feed.")
-    SETTINGS = OPDSImporter.SETTINGS + OPDS2ImporterConfiguration.to_settings()
-    NEXT_LINK_RELATION = "next"
+    NAME: str = ExternalIntegration.OPDS2_IMPORT
+    DESCRIPTION: str = _("Import books from a publicly-accessible OPDS 2.0 feed.")
+    SETTINGS: list[dict] = (
+        OPDSImporter.SETTINGS + OPDS2ImporterConfiguration.to_settings()
+    )
+    NEXT_LINK_RELATION: str = "next"
 
     def __init__(
         self,
         db: sqlalchemy.orm.session.Session,
         collection: Collection,
         parser: RWPMManifestParser,
-        data_source_name: str = None,
-        identifier_mapping: dict = None,
-        http_get: Callable = None,
-        metadata_client: SimplifiedOPDSLookup = None,
-        content_modifier: Callable = None,
-        map_from_collection: dict = None,
-        mirrors: dict[str, MirrorUploader] = None,
+        data_source_name: str | None = None,
+        identifier_mapping: dict | None = None,
+        http_get: Callable | None = None,
+        metadata_client: SimplifiedOPDSLookup | None = None,
+        content_modifier: Callable | None = None,
+        map_from_collection: dict | None = None,
+        mirrors: dict[str, MirrorUploader] | None = None,
     ):
         """Initialize a new instance of OPDS2Importer class.
 
@@ -354,7 +358,7 @@ class OPDS2Importer(
 
     def _extract_description_link(
         self, publication: opds2_ast.OPDS2Publication
-    ) -> LinkData:
+    ) -> LinkData | None:
         """Extract description from the publication object and create a Hyperlink.DESCRIPTION link containing it.
 
         :param publication: Publication object
@@ -571,8 +575,8 @@ class OPDS2Importer(
     @staticmethod
     def _extract_medium(
         publication: opds2_ast.OPDS2Publication,
-        default_medium: str = Edition.BOOK_MEDIUM,
-    ) -> str:
+        default_medium: str | None = Edition.BOOK_MEDIUM,
+    ) -> str | None:
         """Extract the publication's medium from its metadata.
 
         :param publication: Publication object
@@ -686,7 +690,7 @@ class OPDS2Importer(
         )
 
         # FIXME: There are no measurements in OPDS 2.0
-        measurements = []
+        measurements: list[Any] = []
 
         # FIXME: There is no series information in OPDS 2.0
         series = None
@@ -781,7 +785,7 @@ class OPDS2Importer(
     @contextmanager
     def _get_configuration(
         self, db: sqlalchemy.orm.session.Session
-    ) -> OPDS2ImporterConfiguration:
+    ) -> Generator[OPDS2ImporterConfiguration, None, None]:
         """Return the configuration object.
         :param db: Database session
         :return: Configuration object
@@ -961,7 +965,7 @@ class OPDS2Importer(
         parser_result = self._parser.parse_manifest(feed)
         feed = parser_result.root
         publication_metadata_dictionary = {}
-        failures = {}
+        failures: dict[str, list[CoverageFailure]] = {}
 
         if feed.links:
             self._parse_feed_links(feed.links)

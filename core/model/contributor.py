@@ -3,6 +3,7 @@
 
 import logging
 import re
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, ForeignKey, Integer, Unicode, UniqueConstraint
 from sqlalchemy.dialects.postgresql import ARRAY, JSON
@@ -13,6 +14,9 @@ from sqlalchemy.orm.session import Session
 
 from ..util.personal_names import display_name_to_sort_name
 from . import Base, flush, get_one_or_create
+
+if TYPE_CHECKING:
+    from core.model import Edition  # noqa: autoflake
 
 
 class Contributor(Base):
@@ -49,7 +53,7 @@ class Contributor(Base):
 
     extra = Column(MutableDict.as_mutable(JSON), default={})
 
-    contributions = relationship("Contribution", backref="contributor")
+    contributions = relationship("Contribution", backref="contributor", uselist=True)
 
     # Types of roles
     AUTHOR_ROLE = "Author"
@@ -470,10 +474,14 @@ class Contribution(Base):
 
     __tablename__ = "contributions"
     id = Column(Integer, primary_key=True)
+
+    edition = relationship("Edition", back_populates="contributions")
     edition_id = Column(Integer, ForeignKey("editions.id"), index=True, nullable=False)
+
     contributor_id = Column(
         Integer, ForeignKey("contributors.id"), index=True, nullable=False
     )
     contributor: Contributor  # for typing
+
     role = Column(Unicode, index=True, nullable=False)
     __table_args__ = (UniqueConstraint("edition_id", "contributor_id", "role"),)

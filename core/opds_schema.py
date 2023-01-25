@@ -28,9 +28,9 @@ class OPDS2SchemaValidationMixin:
         try:
             schema_validator.validate(feed, opds2_schema)
         except ValidationError as e:
-            self.log.error("Validation failed for feed")
+            self.log.error("Validation failed for feed")  # type: ignore
             for attr in ["message", "path", "schema_path", "validator_value"]:
-                self.log.error(f"{attr}: {getattr(e, attr, None)}")
+                self.log.error(f"{attr}: {getattr(e, attr, None)}")  # type: ignore
             raise
 
 

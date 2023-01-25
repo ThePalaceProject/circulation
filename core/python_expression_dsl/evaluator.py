@@ -397,8 +397,8 @@ class DSLEvaluator:
     def evaluate(
         self,
         expression: str,
-        context: Union[Dict, object] = None,
-        safe_classes: List[type] = None,
+        context: Optional[Union[Dict, object]] = None,
+        safe_classes: Optional[List[type]] = None,
     ):
         """Evaluate the expression and return the resulting value.
 

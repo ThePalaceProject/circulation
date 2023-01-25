@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import re
-from typing import IO, Iterable, List, Union
+from typing import IO, Any, Iterable, List, Mapping, Union
 from urllib.parse import unquote
 
 import feedparser
@@ -252,7 +252,7 @@ class CustomListExports:
     def size(self) -> int:
         return len(self._lists)
 
-    def serialize(self, schema: str) -> str:
+    def serialize(self, schema: Mapping[str, Any]) -> str:
         document_dict = self.to_dict()
         jsonschema.validate(document_dict, schema)
         return json.dumps(document_dict, sort_keys=True, indent=2)
@@ -498,7 +498,7 @@ class CustomListExporter:
 
     def _save_customlists_document(self, document: CustomListExports) -> None:
         with open(self._schema_file, "rb") as schema_file:
-            schema: str = json.load(schema_file)
+            schema: Mapping[str, Any] = json.load(schema_file)
 
         output_file_tmp: str = self._output_file + ".tmp"
         serialized: str = document.serialize(schema)

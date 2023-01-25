@@ -3426,7 +3426,7 @@ class UpdateLaneSizeScript(LaneSweeperScript):
 
 class UpdateCustomListSizeScript(CustomListSweeperScript):
     def process_custom_list(self, custom_list):
-        custom_list.update_size()
+        custom_list.update_size(self._db)
 
 
 class RemovesSearchCoverage:

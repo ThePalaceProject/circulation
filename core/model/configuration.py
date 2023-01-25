@@ -28,6 +28,9 @@ from .library import Library
 if TYPE_CHECKING:
     # This is needed during type checking so we have the
     # types of related models.
+    from core.configuration.ignored_identifier import (  # noqa: autoflake
+        IgnoredIdentifierConfiguration,
+    )
     from core.model import Collection  # noqa: autoflake
 
 
@@ -1072,7 +1075,7 @@ class ConfigurationMetadata:
         type: ConfigurationAttributeType,
         required: bool = False,
         default: Any | None = None,
-        options: list[ConfigurationOption] = None,
+        options: list[ConfigurationOption] | None = None,
         category: str | None = None,
         format=None,
         index=None,
@@ -1106,7 +1109,9 @@ class ConfigurationMetadata:
 
     def __get__(
         self,
-        owner_instance: HasConfigurationSettings | None,
+        owner_instance: HasConfigurationSettings
+        | IgnoredIdentifierConfiguration
+        | None,
         owner_type: type | None,
     ) -> Any:
         """Returns a value of the setting
@@ -1125,13 +1130,23 @@ class ConfigurationMetadata:
 
         if not isinstance(owner_instance, HasConfigurationSettings):
             raise Exception(
-                "owner must be an instance of ConfigurationSettingsMetadataOwner type"
+                "owner must be an instance of HasConfigurationSettings type"
             )
 
         setting_value = owner_instance.get_setting_value(self._key)
 
         if setting_value is None:
             setting_value = self.default
+        elif self.type == ConfigurationAttributeType.NUMBER:
+            try:
+                setting_value = float(setting_value)
+            except ValueError:
+                if setting_value != "":
+                    # A non-empty value is a "bad" value, and should raise an exception
+                    raise CannotLoadConfiguration(
+                        f"Could not covert {self.label}'s value '{setting_value}'."
+                    )
+                setting_value = self.default
         else:
             # LIST and MENU configuration settings are stored as JSON-serialized lists in the database.
             # We need to deserialize them to get actual values.
@@ -1154,7 +1169,11 @@ class ConfigurationMetadata:
         return setting_value
 
     def __set__(
-        self, owner_instance: HasConfigurationSettings | None, value: Any
+        self,
+        owner_instance: HasConfigurationSettings
+        | IgnoredIdentifierConfiguration
+        | None,
+        value: Any,
     ) -> Any:
         """Updates the setting's value
 
@@ -1164,7 +1183,7 @@ class ConfigurationMetadata:
         """
         if not isinstance(owner_instance, HasConfigurationSettings):
             raise Exception(
-                "owner must be an instance ConfigurationSettingsMetadataOwner type"
+                "owner must be an instance of HasConfigurationSettings type"
             )
 
         return owner_instance.set_setting_value(self._key, value)

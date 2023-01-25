@@ -158,7 +158,7 @@ class Work(Base):
     target_age = Column(INT4RANGE, index=True)
     fiction = Column(Boolean, index=True)
 
-    summary_id = Column(
+    summary_id: Column[int | None] = Column(
         Integer,
         ForeignKey("resources.id", use_alter=True, name="fk_works_summary_id"),
         index=True,
@@ -1186,7 +1186,7 @@ class Work(Base):
             self, operation=WorkCoverageRecord.GENERATE_MARC_OPERATION
         )
 
-    def active_license_pool(self, library: Library = None) -> LicensePool | None:
+    def active_license_pool(self, library: Library | None = None) -> LicensePool | None:
         # The active license pool is the one that *would* be
         # associated with a loan, were a loan to be issued right
         # now.

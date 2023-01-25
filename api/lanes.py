@@ -589,7 +589,9 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
     ya_nonfiction_priority += 1
 
     children_common_args = dict(common_args)
-    children_common_args["audiences"] = CHILDREN
+    children_common_args["target_age"] = Classifier.range_tuple(
+        0, Classifier.YOUNG_ADULT_AGE_CUTOFF - 1
+    )
 
     children, ignore = create(
         _db,
@@ -633,11 +635,11 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
     children_priority += 1
     children.sublanes.append(picture_books)
 
-    easy_readers, ignore = create(
+    early_readers, ignore = create(
         _db,
         Lane,
         library=library,
-        display_name="Easy Readers",
+        display_name="Early Readers",
         target_age=(5, 8),
         genres=[],
         fiction=None,
@@ -645,7 +647,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
         languages=languages,
     )
     children_priority += 1
-    children.sublanes.append(easy_readers)
+    children.sublanes.append(early_readers)
 
     chapter_books, ignore = create(
         _db,

@@ -2,12 +2,12 @@ import datetime
 import email
 import json
 import random
-import sys
 import urllib.parse
 from contextlib import contextmanager
 from decimal import Decimal
 from pathlib import Path
 from time import mktime
+from unittest.mock import MagicMock, patch
 from wsgiref.handlers import format_date_time
 
 import feedparser
@@ -135,12 +135,6 @@ from core.util.opds_writer import OPDSFeed
 from core.util.problem_detail import ProblemDetail
 from core.util.string_helpers import base64
 from tests.api.test_odl import BaseODLTest
-
-# TODO: we can drop this when we drop support for Python 3.6 and 3.7
-if sys.version_info < (3, 8):
-    from mock import MagicMock, patch
-else:
-    from unittest.mock import MagicMock, patch
 
 
 class ControllerTest(VendorIDTest):

@@ -168,7 +168,7 @@ class MirrorUploader(metaclass=ABCMeta):
         """
         raise NotImplementedError()
 
-    def sign_url(self, url: str, expiration: int = None) -> str:
+    def sign_url(self, url: str, expiration: int | None = None) -> str:
         """Signs a URL and make it expirable
 
         :param url: URL

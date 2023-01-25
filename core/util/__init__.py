@@ -1,9 +1,11 @@
 """Miscellaneous utilities"""
 
+from __future__ import annotations
+
 import re
 import string
 from collections import Counter
-from typing import Any, Iterable
+from typing import Any, Iterable, Optional
 
 import flask_sqlalchemy_session
 import sqlalchemy
@@ -526,15 +528,21 @@ class MoneyUtility:
     DEFAULT_CURRENCY = "USD"
 
     @classmethod
-    def parse(cls, amount):
+    def parse(cls, amount: str | float | int | None) -> Money:
         """Attempt to turn a string into a Money object."""
         currency = cls.DEFAULT_CURRENCY
         if not amount:
             amount = "0"
         amount = str(amount)
+
         if amount[0] == "$":
             currency = "USD"
             amount = amount[1:]
+
+        # `Money` does not properly handle commas in the amount, so we strip
+        # them out of US dollar amounts, since it won't change the "value."
+        if currency == "USD":
+            amount = "".join(amount.split(","))
         return Money(amount, currency)
 
 
@@ -550,7 +558,7 @@ def is_session(value: object) -> bool:
     )
 
 
-def first_or_default(collection: Iterable, default: Any = None) -> Any:
+def first_or_default(collection: Iterable, default: Any | None = None) -> Any:
     """Return first element of the specified collection or the default value if the collection is empty.
 
     :param collection: Collection

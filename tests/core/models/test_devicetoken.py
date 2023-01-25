@@ -7,17 +7,17 @@ from core.model.devicetokens import (
     DuplicateDeviceTokenError,
     InvalidTokenTypeError,
 )
-from core.testing import DatabaseTest
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestDeviceToken(DatabaseTest):
-    def test_create(self):
-        patron = self._patron()
+class TestDeviceToken:
+    def test_create(self, db: DatabaseTransactionFixture):
+        patron = db.patron()
         device = DeviceToken.create(
-            self._db, DeviceTokenTypes.FCM_ANDROID, "xxxx", patron
+            db.session, DeviceTokenTypes.FCM_ANDROID, "xxxx", patron
         )
 
-        new_device = self._db.query(DeviceToken).get(device.id)
+        new_device = db.session.query(DeviceToken).get(device.id)
         assert new_device.device_token == "xxxx"
         assert new_device.token_type == DeviceTokenTypes.FCM_ANDROID
 
@@ -25,40 +25,40 @@ class TestDeviceToken(DatabaseTest):
         assert new_device.patron == patron
         assert patron.device_tokens == [new_device]
 
-    def test_create_duplicate(self):
-        patron = self._patron()
+    def test_create_duplicate(self, db: DatabaseTransactionFixture):
+        patron = db.patron()
         device = DeviceToken.create(
-            self._db, DeviceTokenTypes.FCM_ANDROID, "xxxx", patron
+            db.session, DeviceTokenTypes.FCM_ANDROID, "xxxx", patron
         )
 
         with pytest.raises(DuplicateDeviceTokenError):
-            DeviceToken.create(self._db, DeviceTokenTypes.FCM_IOS, "xxxx", patron)
+            DeviceToken.create(db.session, DeviceTokenTypes.FCM_IOS, "xxxx", patron)
 
-    def test_duplicate_different_patron(self):
-        patron = self._patron()
+    def test_duplicate_different_patron(self, db: DatabaseTransactionFixture):
+        patron = db.patron()
         device = DeviceToken.create(
-            self._db, DeviceTokenTypes.FCM_ANDROID, "xxxx", patron
+            db.session, DeviceTokenTypes.FCM_ANDROID, "xxxx", patron
         )
-        patron1 = self._patron()
+        patron1 = db.patron()
         device = DeviceToken.create(
-            self._db, DeviceTokenTypes.FCM_ANDROID, "xxxx", patron1
+            db.session, DeviceTokenTypes.FCM_ANDROID, "xxxx", patron1
         )
         assert device.id is not None
 
-    def test_invalid_type(self):
-        patron = self._patron()
+    def test_invalid_type(self, db: DatabaseTransactionFixture):
+        patron = db.patron()
         with pytest.raises(InvalidTokenTypeError):
-            DeviceToken.create(self._db, "invalidtype", "xxxx", patron)
+            DeviceToken.create(db.session, "invalidtype", "xxxx", patron)
 
-    def test_cascade(self):
+    def test_cascade(self, db: DatabaseTransactionFixture):
         """Ensure the devicetoken is deleted after a patron is deleted
         Else need to run 20220701-add-devicetoken-cascade.sql"""
-        patron = self._patron()
+        patron = db.patron()
         device = DeviceToken.create(
-            self._db, DeviceTokenTypes.FCM_ANDROID, "xxxx", patron
+            db.session, DeviceTokenTypes.FCM_ANDROID, "xxxx", patron
         )
 
-        self._db.delete(patron)
-        self._db.commit()
+        db.session.delete(patron)
+        db.session.commit()
         with pytest.raises(InvalidRequestError):
-            self._db.refresh(device)
+            db.session.refresh(device)

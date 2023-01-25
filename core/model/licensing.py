@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 # PolicyException LicensePool, LicensePoolDeliveryMechanism, DeliveryMechanism,
 # RightsStatus
 import datetime
 import logging
 from enum import Enum as PythonEnum
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, Column, DateTime
 from sqlalchemy import Enum as AlchemyEnum
@@ -43,15 +45,15 @@ class LicenseStatus(PythonEnum):
 
 
 class LicenseFunctions:
-    identifier: "Column[Optional[str]]"
-    checkout_url: "Column[Optional[str]]"
-    status_url: "Column[Optional[str]]"
-    status: "Optional[LicenseStatus]"
-    expires: "Column[Optional[datetime.datetime]]"
-    checkouts_left: "Column[Optional[int]]"
-    checkouts_available: "Column[Optional[int]]"
-    terms_concurrency: "Column[Optional[int]]"
-    content_types: "Column[Optional[str]]"
+    identifier: Column[str | None]
+    checkout_url: Column[str | None]
+    status_url: Column[str | None]
+    status: LicenseStatus | None
+    expires: Column[datetime.datetime | None]
+    checkouts_left: Column[int | None]
+    checkouts_available: Column[int | None]
+    terms_concurrency: Column[int | None]
+    content_types: Column[str | None]
 
     @property
     def is_perpetual(self) -> bool:
@@ -75,7 +77,7 @@ class LicenseFunctions:
         )
 
     @property
-    def total_remaining_loans(self) -> Optional[int]:
+    def total_remaining_loans(self) -> int | None:
         if self.is_inactive:
             return 0
         elif self.is_loan_limited:
@@ -84,7 +86,7 @@ class LicenseFunctions:
             return self.terms_concurrency
 
     @property
-    def currently_available_loans(self) -> Optional[int]:
+    def currently_available_loans(self) -> int | None:
         if self.is_inactive:
             return 0
         else:
@@ -612,8 +614,8 @@ class LicensePool(Base):
 
     def update_availability_from_licenses(
         self,
-        analytics: "Analytics" = None,
-        as_of: datetime.datetime = None,
+        analytics: Analytics | None = None,
+        as_of: datetime.datetime | None = None,
     ):
         """
         Update the LicensePool with new availability information, based on the
@@ -1428,11 +1430,11 @@ class LicensePoolDeliveryMechanism(Base):
 
     id = Column(Integer, primary_key=True)
 
-    data_source_id = Column(
+    data_source_id: Column[int] = Column(
         Integer, ForeignKey("datasources.id"), index=True, nullable=False
     )
 
-    identifier_id = Column(
+    identifier_id: Column[int] = Column(
         Integer, ForeignKey("identifiers.id"), index=True, nullable=False
     )
 

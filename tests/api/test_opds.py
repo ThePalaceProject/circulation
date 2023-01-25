@@ -1685,25 +1685,42 @@ class TestLibraryAnnotator(VendorIDTest):
         work5 = self._work(with_license_pool=True)
         loan5, ignore = work5.license_pools[0].loan_to(patron, start=now)
 
-        opds_parser = OPDSXMLParser()
+        # Ensure the state variable
+        assert annotator.identifies_patrons == True
 
         loan1_links = annotator.acquisition_links(
             loan1.license_pool, loan1, None, None, feed, loan1.license_pool.identifier
         )
-        # Fulfill, open access, and revoke.
-        [revoke, fulfill, open_access] = sorted(
-            loan1_links, key=lambda x: x.attrib.get("rel")
-        )
+        # Fulfill, and revoke.
+        [revoke, fulfill] = sorted(loan1_links, key=lambda x: x.attrib.get("rel"))
         assert "revoke_loan_or_hold" in revoke.attrib.get("href")
         assert "http://librarysimplified.org/terms/rel/revoke" == revoke.attrib.get(
             "rel"
         )
         assert "fulfill" in fulfill.attrib.get("href")
         assert "http://opds-spec.org/acquisition" == fulfill.attrib.get("rel")
-        assert "fulfill" in open_access.attrib.get("href")
-        assert "http://opds-spec.org/acquisition/open-access" == open_access.attrib.get(
-            "rel"
+
+        # Allow direct open-access downloads
+        # This will also filter out loan revoke links
+        annotator.identifies_patrons = False
+        loan1_links = annotator.acquisition_links(
+            loan1.license_pool, loan1, None, None, feed, loan1.license_pool.identifier
         )
+        assert len(loan1_links) == 1
+        assert {"http://opds-spec.org/acquisition/open-access"} == {
+            link.attrib.get("rel") for link in loan1_links
+        }
+
+        # Work 2 has no open access links
+        loan2_links = annotator.acquisition_links(
+            loan2.license_pool, loan2, None, None, feed, loan2.license_pool.identifier
+        )
+        assert len(loan2_links) == 0
+
+        # Revert the annotator state
+        annotator.identifies_patrons = True
+
+        opds_parser = OPDSXMLParser()
 
         availability = opds_parser._xpath1(fulfill, "opds:availability")
         assert _strftime(loan1.start) == availability.attrib.get("since")

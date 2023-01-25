@@ -26,7 +26,7 @@ jobs:
           sudo apt-get install --yes libxmlsec1-dev libxml2-dev
 
       - name: Install Python Packages 📦
-        run: poetry install
+        run: poetry install --without ci
 
       - name: Run MyPy 🪄
         run: poetry run mypy

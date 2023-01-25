@@ -1,5 +1,6 @@
 import os
 from enum import Enum
+from typing import Optional
 from urllib.parse import urljoin
 
 
@@ -12,7 +13,7 @@ class Configuration:
 
     APP_NAME = "Palace Collection Manager"
     PACKAGE_NAME = "@thepalaceproject/circulation-admin"
-    PACKAGE_VERSION = "0.3.0"
+    PACKAGE_VERSION = "0.4.2"
 
     STATIC_ASSETS = {
         "admin_js": "circulation-admin.js",
@@ -61,7 +62,7 @@ class Configuration:
 
     @classmethod
     def lookup_asset_url(
-        cls, key: str, *, _operational_mode: OperationalMode = None
+        cls, key: str, *, _operational_mode: Optional[OperationalMode] = None
     ) -> str:
         """Get the URL for the asset_type.
 
@@ -84,7 +85,7 @@ class Configuration:
         )
 
     @classmethod
-    def package_url(cls, *, _operational_mode: OperationalMode = None) -> str:
+    def package_url(cls, *, _operational_mode: Optional[OperationalMode] = None) -> str:
         """Compute the URL for the admin UI package.
 
         :param _operational_mode: For testing. The operational mode is
@@ -106,7 +107,7 @@ class Configuration:
         return url
 
     @classmethod
-    def package_development_directory(cls, *, _base_dir: str = None) -> str:
+    def package_development_directory(cls, *, _base_dir: Optional[str] = None) -> str:
         """Absolute path for the admin UI package when in development mode.
 
         :param _base_dir: For testing purposes. Not used in normal operation.
@@ -121,7 +122,7 @@ class Configuration:
         )
 
     @classmethod
-    def static_files_directory(cls, *, _base_dir: str = None) -> str:
+    def static_files_directory(cls, *, _base_dir: Optional[str] = None) -> str:
         """Absolute path for the admin UI static files.
 
         :param _base_dir: For testing purposes. Not used in normal operation.

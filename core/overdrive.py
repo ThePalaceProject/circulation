@@ -2,7 +2,7 @@ import datetime
 import json
 import logging
 from threading import RLock
-from typing import Dict, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import quote, urlsplit, urlunsplit
 
 import isbnlib
@@ -122,6 +122,10 @@ class OverdriveConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
 
 
 class OverdriveCoreAPI(HasExternalIntegration):
+    # An OverDrive defined constant indicating the "main" or parent account
+    # associated with an OverDrive collection.
+    OVERDRIVE_MAIN_ACCOUNT_ID = -1
+
     log = logging.getLogger("Overdrive API")
 
     # A lock for threaded usage.
@@ -367,8 +371,9 @@ class OverdriveCoreAPI(HasExternalIntegration):
         """The library ID for this library, as we should look for it in
         certain API documents served by Overdrive.
 
-        For ordinary collections, and for consortial collections
-        shared among libraries, this will be -1.
+        For ordinary collections (ie non-Advantage) with or without associated
+        Advantage (ie child) collections shared among libraries, this will be
+        equal to the OVERDRIVE_MAIN_ACCOUNT_ID.
 
         For Overdrive Advantage accounts, this will be the numeric
         value of the Overdrive library ID.
@@ -377,8 +382,8 @@ class OverdriveCoreAPI(HasExternalIntegration):
             # This is not an Overdrive Advantage collection.
             #
             # Instead of looking for the library ID itself in these
-            # documents, we should look for the constant -1.
-            return -1
+            # documents, we should look for the constant main account id.
+            return self.OVERDRIVE_MAIN_ACCOUNT_ID
         return int(self._library_id)
 
     def check_creds(self, force_refresh=False):
@@ -477,7 +482,7 @@ class OverdriveCoreAPI(HasExternalIntegration):
         payload: Dict[str, str],
         is_fulfillment=False,
         headers={},
-        **kwargs
+        **kwargs,
     ) -> Response:
         """Make an HTTP POST request for purposes of getting an OAuth token."""
         headers = dict(headers)
@@ -672,14 +677,14 @@ class OverdriveCoreAPI(HasExternalIntegration):
     def _do_get(self, url: str, headers, **kwargs) -> Response:
         """This method is overridden in MockOverdriveAPI."""
         url = self.endpoint(url)
-        kwargs["max_retry_count"] = self._configuration.max_retry_count
+        kwargs["max_retry_count"] = int(self._configuration.max_retry_count)
         kwargs["timeout"] = 120
         return HTTP.get_with_timeout(url, headers=headers, **kwargs)
 
     def _do_post(self, url: str, payload, headers, **kwargs) -> Response:
         """This method is overridden in MockOverdriveAPI."""
         url = self.endpoint(url)
-        kwargs["max_retry_count"] = self._configuration.max_retry_count
+        kwargs["max_retry_count"] = int(self._configuration.max_retry_count)
         kwargs["timeout"] = 120
         return HTTP.post_with_timeout(url, payload, headers=headers, **kwargs)
 
@@ -897,6 +902,18 @@ class OverdriveRepresentationExtractor:
         ),
     }
 
+    # A mapping of the overdrive format name to end sample content type
+    # Overdrive samples are not DRM protected so the links should be
+    # stored as the end sample content type
+    sample_format_to_content_type = {
+        "ebook-overdrive": "text/html",
+        "audiobook-wma": "audio/x-ms-wma",
+        "audiobook-mp3": "audio/mpeg",
+        "audiobook-overdrive": "text/html",
+        "ebook-epub-adobe": "application/epub+zip",
+        "magazine-overdrive": "text/html",
+    }
+
     @classmethod
     def internal_formats(cls, overdrive_format):
         """Yield all internal formats for the given Overdrive format.
@@ -1024,24 +1041,18 @@ class OverdriveRepresentationExtractor:
             patrons_in_hold_queue = 0
         elif book.get("isOwnedByCollections") is not False:
             # We own this book.
-            for account in book.get("accounts", []):
-                # Only keep track of copies owned by the collection
-                # we're tracking.
-                if account.get("id") != self.library_id:
-                    continue
+            licenses_owned = 0
+            licenses_available = 0
 
-                if "copiesOwned" in account:
-                    if licenses_owned is None:
-                        licenses_owned = 0
-                    licenses_owned += int(account["copiesOwned"])
-                if "copiesAvailable" in account:
-                    if licenses_available is None:
-                        licenses_available = 0
-                    licenses_available += int(account["copiesAvailable"])
+            for account in self._get_applicable_accounts(book.get("accounts", [])):
+                licenses_owned += int(account.get("copiesOwned", 0))
+                licenses_available += int(account.get("copiesAvailable", 0))
+
             if "numberOfHolds" in book:
                 if patrons_in_hold_queue is None:
                     patrons_in_hold_queue = 0
                 patrons_in_hold_queue += book["numberOfHolds"]
+
         return CirculationData(
             data_source=DataSource.OVERDRIVE,
             primary_identifier=primary_identifier,
@@ -1050,6 +1061,41 @@ class OverdriveRepresentationExtractor:
             licenses_reserved=licenses_reserved,
             patrons_in_hold_queue=patrons_in_hold_queue,
         )
+
+    def _get_applicable_accounts(
+        self, accounts: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        Returns those accounts from the accounts array that apply the
+        current overdrive collection context.
+
+        If this is an overdrive parent collection, we want to return accounts
+        associated with the main OverDrive "library" and any non-main account
+        with sharing enabled.
+
+        If this is a child OverDrive collection, then we return only the
+        account associated with that child's OverDrive Advantage "library".
+        Additionally, we want to exclude the account if it is "shared" since
+        we will be counting it with the parent collection.
+        """
+
+        if self.library_id == OverdriveCoreAPI.OVERDRIVE_MAIN_ACCOUNT_ID:
+            # this is a parent collection
+            filtered_result = filter(
+                lambda account: account.get("id")
+                == OverdriveCoreAPI.OVERDRIVE_MAIN_ACCOUNT_ID
+                or account.get("shared", False),
+                accounts,
+            )
+        else:
+            # this is child collection
+            filtered_result = filter(
+                lambda account: account.get("id") == self.library_id
+                and not account.get("shared", False),
+                accounts,
+            )
+
+        return list(filtered_result)
 
     @classmethod
     def image_link_to_linkdata(cls, link, rel):
@@ -1201,6 +1247,7 @@ class OverdriveRepresentationExtractor:
 
             identifiers = []
             links = []
+            sample_hrefs = set()
             for format in book.get("formats", []):
                 for new_id in format.get("identifiers", []):
                     t = new_id["type"]
@@ -1233,22 +1280,36 @@ class OverdriveRepresentationExtractor:
 
                 # Samples become links.
                 if "samples" in format:
-                    overdrive_name = format["id"]
-                    internal_names = list(cls.internal_formats(overdrive_name))
-                    if not internal_names:
-                        # Useless to us.
-                        continue
-                    for content_type, drm_scheme in internal_names:
+                    for sample_info in format["samples"]:
+                        href = sample_info["url"]
+                        # Have we already parsed this sample? Overdrive repeats samples per format
+                        if href in sample_hrefs:
+                            continue
+
+                        # Every sample has its own format type
+                        overdrive_format_name = sample_info.get("formatType")
+                        if not overdrive_format_name:
+                            # Malformed sample
+                            continue
+                        content_type = cls.sample_format_to_content_type.get(
+                            overdrive_format_name
+                        )
+                        if not content_type:
+                            # Unusable by us.
+                            cls.log.warning(
+                                f"Did not find a sample format mapping for '{overdrive_format_name}': {href}"
+                            )
+                            continue
+
                         if Representation.is_media_type(content_type):
-                            for sample_info in format["samples"]:
-                                href = sample_info["url"]
-                                links.append(
-                                    LinkData(
-                                        rel=Hyperlink.SAMPLE,
-                                        href=href,
-                                        media_type=content_type,
-                                    )
+                            links.append(
+                                LinkData(
+                                    rel=Hyperlink.SAMPLE,
+                                    href=href,
+                                    media_type=content_type,
                                 )
+                            )
+                            sample_hrefs.add(href)
 
             # A cover and its thumbnail become a single LinkData.
             if "images" in book:

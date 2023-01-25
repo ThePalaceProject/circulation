@@ -288,7 +288,7 @@ class S3Uploader(MirrorUploader):
     def __init__(
         self,
         integration: ExternalIntegration,
-        client_class: Any = None,
+        client_class: Optional[Any] = None,
         host: str = S3_HOST,
     ) -> None:
         """Instantiate an S3Uploader from an ExternalIntegration.
@@ -547,8 +547,9 @@ class S3Uploader(MirrorUploader):
         self,
         library: Library,
         license_pool: LicensePool,
+        event_type: str,
         end_time: datetime,
-        start_time: datetime = None,
+        start_time: Optional[datetime] = None,
     ):
         """The path to the analytics data file for the given library, license
         pool and date range."""
@@ -560,9 +561,17 @@ class S3Uploader(MirrorUploader):
             time_part = str(end_time)
 
         # ensure the uniqueness of file name (in case of overlapping events)
+        collection = license_pool.collection_id if license_pool else "NONE"
         random_string = "".join(random.choices(string.ascii_lowercase, k=10))
-        parts = [time_part, license_pool.collection_id, random_string]
-        return root + self.key_join(parts) + ".json"
+        file_name = "-".join([time_part, event_type, str(collection), random_string])
+        # nest file in directories that allow for easy purging by year, month or day
+        parts = [
+            str(end_time.year),
+            str(end_time.month),
+            str(end_time.day),
+            file_name + ".json",
+        ]
+        return root + self.key_join(parts)
 
     def split_url(self, url: str, unquote: bool = True) -> Tuple[str, str]:
         """Splits the URL into the components: bucket and file path

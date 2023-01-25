@@ -2,7 +2,6 @@ import time
 from unittest.mock import MagicMock
 
 from core.model.datasource import DataSource
-from core.testing import DatabaseTest
 from core.util.cache import CachedData, _signature, memoize
 
 
@@ -34,13 +33,15 @@ class TestMemoize:
         )
 
 
-class TestCacheData(DatabaseTest):
-    def test_data_sources(self):
+class TestCacheData:
+    def test_data_sources(self, db):
+        session = db.session
+
         def to_ids(objects):
             return [o.id for o in objects]
 
-        CachedData.initialize(self._db)
-        all_sources = to_ids(self._db.query(DataSource).order_by(DataSource.id))
+        CachedData.initialize(session)
+        all_sources = to_ids(session.query(DataSource).order_by(DataSource.id))
         assert to_ids(CachedData.cache.data_sources()) == all_sources
 
         # Mock the db object

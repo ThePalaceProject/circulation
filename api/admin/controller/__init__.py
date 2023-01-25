@@ -865,8 +865,8 @@ class CustomListsController(AdminCirculationManagerController):
         name: str,
         entries: List[Dict],
         collections: List[int],
-        deleted_entries: List[Dict] = None,
-        id: int = None,
+        deleted_entries: Optional[List[Dict]] = None,
+        id: Optional[int] = None,
         auto_update: Optional[bool] = None,
         auto_update_query: Optional[str] = None,
         auto_update_facets: Optional[str] = None,
@@ -1053,12 +1053,7 @@ class CustomListsController(AdminCirculationManagerController):
             if isinstance(pagination, ProblemDetail):
                 return pagination
 
-            query = (
-                self._db.query(Work)
-                .join(Work.custom_list_entries)
-                .filter(CustomListEntry.list_id == list_id)
-                .order_by(Work.id)
-            )
+            query = CustomList.entries_having_works(self._db, list_id)
             url = self.url_for(
                 "custom_list",
                 list_name=list.name,
