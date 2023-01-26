@@ -1,5 +1,4 @@
 import os
-from typing import Iterable
 
 import pytest
 from sqlalchemy.orm.session import Session
@@ -26,9 +25,8 @@ class ConfigurationTestFixture:
 @pytest.fixture()
 def configuration_test_fixture(
     db: DatabaseTransactionFixture,
-) -> Iterable[ConfigurationTestFixture]:
-    fix = ConfigurationTestFixture(db)
-    return fix
+) -> ConfigurationTestFixture:
+    return ConfigurationTestFixture(db)
 
 
 class TestConfiguration:
