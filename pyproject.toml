@@ -67,6 +67,10 @@ warn_unused_ignores = true
 ignore_missing_imports = true
 module = [
     "bcrypt",
+    # This is ignored because the file is created when building a container
+    # so it typically doesn't exist when running mypy, but since it only
+    # contains a couple version strings it can be safely ignored
+    "core._version",
     "elasticsearch.*",
     "elasticsearch_dsl.*",
     "expiringdict",
@@ -170,6 +174,7 @@ wcag-contrast-ratio = "0.9"
 Werkzeug = "1.0.1"
 
 [tool.poetry.group.ci.dependencies]
+dunamai = "^1.15.0"
 pre-commit = "~2.21"
 tox = "^3.26.0"
 tox-docker = "^3.1.0"

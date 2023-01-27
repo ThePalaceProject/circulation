@@ -1,7 +1,6 @@
 """Implement logic common to more than one of the Simplified applications."""
 
 import gzip
-import json
 import logging
 import sys
 import traceback
@@ -14,8 +13,10 @@ from flask_babel import lazy_gettext as _
 from psycopg2 import DatabaseError
 from sqlalchemy.exc import SQLAlchemyError
 
+import core
+from api.admin.config import Configuration as AdminUiConfig
+
 from .cdn import cdnify
-from .config import Configuration
 from .lane import Facets, Pagination
 from .log import LogConfiguration
 from .model import Identifier
@@ -253,22 +254,19 @@ class ErrorHandler:
         return response
 
 
-class HeartbeatController:
-
-    HEALTH_CHECK_TYPE = "application/vnd.health+json"
-    VERSION_FILENAME = ".version"
-
-    def heartbeat(self, conf_class=None):
-        health_check_object = dict(status="pass")
-
-        Conf = conf_class or Configuration
-        app_version = Conf.app_version()
-        if app_version and app_version != Conf.NO_APP_VERSION_FOUND:
-            health_check_object["releaseID"] = app_version
-            health_check_object["version"] = app_version.split("-")[0]
-
-        data = json.dumps(health_check_object)
-        return make_response(data, 200, {"Content-Type": self.HEALTH_CHECK_TYPE})
+class ApplicationVersionController:
+    @staticmethod
+    def version():
+        response = {
+            "version": core.__version__,
+            "commit": core.__commit__,
+            "branch": core.__branch__,
+            "admin_ui": {
+                "package": AdminUiConfig.package_name(),
+                "version": AdminUiConfig.package_version(),
+            },
+        }
+        return response
 
 
 class URNLookupController:
