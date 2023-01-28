@@ -1625,8 +1625,6 @@ class DashboardController(AdminCirculationManagerController):
             for stats in list(library_stats.values())
         )
 
-        # TODO: show shared collection loans and holds for libraries outside this
-        # circ manager?
         total_loans = sum(
             stats.get("patrons", {}).get("loans", 0)
             for stats in list(library_stats.values())
