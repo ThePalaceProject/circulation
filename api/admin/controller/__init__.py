@@ -13,6 +13,7 @@ from flask import Response, redirect, url_for
 from flask_babel import lazy_gettext as _
 from flask_pydantic_spec.flask_backend import Context
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from sqlalchemy.sql.expression import and_, desc, distinct, join, nullslast, select
 
@@ -1440,6 +1441,13 @@ class LanesController(AdminCirculationManagerController):
 
 class DashboardController(AdminCirculationManagerController):
     def stats(self):
+        return self.dashboard_stats_api(
+            admin=flask.request.admin,
+            _db=self._db,
+        )
+
+    @staticmethod
+    def dashboard_stats_api(*, admin: Admin, _db: Session = None):
         library_stats = {}
 
         total_title_count = 0
@@ -1447,14 +1455,12 @@ class DashboardController(AdminCirculationManagerController):
         total_available_license_count = 0
 
         collection_counts = dict()
-        for collection in self._db.query(Collection):
-            if not flask.request.admin or not flask.request.admin.can_see_collection(
-                collection
-            ):
+        for collection in _db.query(Collection):
+            if not admin or not admin.can_see_collection(collection):
                 continue
 
             licensed_title_count = (
-                self._db.query(LicensePool)
+                _db.query(LicensePool)
                 .filter(LicensePool.collection_id == collection.id)
                 .filter(
                     and_(
@@ -1466,7 +1472,7 @@ class DashboardController(AdminCirculationManagerController):
             )
 
             open_title_count = (
-                self._db.query(LicensePool)
+                _db.query(LicensePool)
                 .filter(LicensePool.collection_id == collection.id)
                 .filter(LicensePool.open_access == True)
                 .count()
@@ -1476,7 +1482,7 @@ class DashboardController(AdminCirculationManagerController):
             # no license pools in the db.
 
             license_count = (
-                self._db.query(func.sum(LicensePool.licenses_owned))
+                _db.query(func.sum(LicensePool.licenses_owned))
                 .filter(LicensePool.collection_id == collection.id)
                 .filter(
                     LicensePool.open_access == False,
@@ -1486,7 +1492,7 @@ class DashboardController(AdminCirculationManagerController):
             )
 
             available_license_count = (
-                self._db.query(func.sum(LicensePool.licenses_available))
+                _db.query(func.sum(LicensePool.licenses_available))
                 .filter(LicensePool.collection_id == collection.id)
                 .filter(
                     LicensePool.open_access == False,
@@ -1506,17 +1512,17 @@ class DashboardController(AdminCirculationManagerController):
                 available_licenses=available_license_count,
             )
 
-        for library in self._db.query(Library):
+        for library in _db.query(Library):
             # Only include libraries this admin has librarian access to.
-            if not flask.request.admin or not flask.request.admin.is_librarian(library):
+            if not admin or not admin.is_librarian(library):
                 continue
 
             patron_count = (
-                self._db.query(Patron).filter(Patron.library_id == library.id).count()
+                _db.query(Patron).filter(Patron.library_id == library.id).count()
             )
 
             active_loans_patron_count = (
-                self._db.query(distinct(Patron.id))
+                _db.query(distinct(Patron.id))
                 .join(Patron.loans)
                 .filter(
                     Loan.end >= datetime.now(),
@@ -1559,11 +1565,11 @@ class DashboardController(AdminCirculationManagerController):
                 [func.count(distinct(active_patrons.c.id))]
             ).select_from(active_patrons)
 
-            result = self._db.execute(active_loans_or_holds_patron_count_query)
+            result = _db.execute(active_loans_or_holds_patron_count_query)
             active_loans_or_holds_patron_count = [r[0] for r in result][0]
 
             loan_count = (
-                self._db.query(Loan)
+                _db.query(Loan)
                 .join(Loan.patron)
                 .filter(Patron.library_id == library.id)
                 .filter(Loan.end >= datetime.now())
@@ -1571,7 +1577,7 @@ class DashboardController(AdminCirculationManagerController):
             )
 
             hold_count = (
-                self._db.query(Hold)
+                _db.query(Hold)
                 .join(Hold.patron)
                 .filter(Patron.library_id == library.id)
                 .count()
