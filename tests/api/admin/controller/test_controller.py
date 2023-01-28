@@ -21,6 +21,7 @@ from api.admin.controller import (
     SettingsController,
     setup_admin_controllers,
 )
+from api.admin.dashboard_stats import dashboard_stats_api
 from api.admin.exceptions import *
 from api.admin.google_oauth_admin_authentication_provider import (
     GoogleOAuthAdminAuthenticationProvider,
@@ -2554,7 +2555,9 @@ class TestDashboardController(AdminControllerTest):
             self.admin.add_role(AdminRole.SYSTEM_ADMIN)
 
             # At first, there's one patron in the database.
-            response = self.manager.admin_dashboard_controller.stats()
+            response = self.manager.admin_dashboard_controller.stats(
+                stats_function=dashboard_stats_api
+            )
             library_data = response.get(self._default_library.short_name)
             total_data = response.get("total")
             for data in [library_data, total_data]:
@@ -2583,7 +2586,9 @@ class TestDashboardController(AdminControllerTest):
             patron3 = self._patron()
             open_access_pool.loan_to(patron3)
 
-            response = self.manager.admin_dashboard_controller.stats()
+            response = self.manager.admin_dashboard_controller.stats(
+                stats_function=dashboard_stats_api
+            )
             library_data = response.get(self._default_library.short_name)
             total_data = response.get("total")
             for data in [library_data, total_data]:
@@ -2601,7 +2606,9 @@ class TestDashboardController(AdminControllerTest):
             patron5 = self._patron(library=l2)
             pool.on_hold_to(patron5)
 
-            response = self.manager.admin_dashboard_controller.stats()
+            response = self.manager.admin_dashboard_controller.stats(
+                stats_function=dashboard_stats_api
+            )
             library_data = response.get(self._default_library.short_name)
             total_data = response.get("total")
             assert 4 == library_data.get("patrons").get("total")
@@ -2620,7 +2627,9 @@ class TestDashboardController(AdminControllerTest):
             self.admin.remove_role(AdminRole.SYSTEM_ADMIN)
             self.admin.add_role(AdminRole.LIBRARIAN, self._default_library)
 
-            response = self.manager.admin_dashboard_controller.stats()
+            response = self.manager.admin_dashboard_controller.stats(
+                stats_function=dashboard_stats_api
+            )
             library_data = response.get(self._default_library.short_name)
             total_data = response.get("total")
             assert 4 == library_data.get("patrons").get("total")
@@ -2640,7 +2649,9 @@ class TestDashboardController(AdminControllerTest):
 
             # At first, there is 1 open access title in the database,
             # created in CirculationControllerTest.setup.
-            response = self.manager.admin_dashboard_controller.stats()
+            response = self.manager.admin_dashboard_controller.stats(
+                stats_function=dashboard_stats_api
+            )
             library_data = response.get(self._default_library.short_name)
             total_data = response.get("total")
             for data in [library_data, total_data]:
@@ -2671,7 +2682,9 @@ class TestDashboardController(AdminControllerTest):
             pool3.licenses_owned = 5
             pool3.licenses_available = 4
 
-            response = self.manager.admin_dashboard_controller.stats()
+            response = self.manager.admin_dashboard_controller.stats(
+                stats_function=dashboard_stats_api
+            )
             library_data = response.get(self._default_library.short_name)
             total_data = response.get("total")
             for data in [library_data, total_data]:
@@ -2688,7 +2701,9 @@ class TestDashboardController(AdminControllerTest):
             pool4.licenses_owned = 2
             pool4.licenses_available = 2
 
-            response = self.manager.admin_dashboard_controller.stats()
+            response = self.manager.admin_dashboard_controller.stats(
+                stats_function=dashboard_stats_api
+            )
             library_data = response.get(self._default_library.short_name)
             total_data = response.get("total")
             assert 3 == library_data.get("inventory").get("titles")
@@ -2703,7 +2718,9 @@ class TestDashboardController(AdminControllerTest):
 
             # The admin can no longer see the other collection, so it's not
             # counted in the totals.
-            response = self.manager.admin_dashboard_controller.stats()
+            response = self.manager.admin_dashboard_controller.stats(
+                stats_function=dashboard_stats_api
+            )
             library_data = response.get(self._default_library.short_name)
             total_data = response.get("total")
             for data in [library_data, total_data]:
@@ -2718,7 +2735,9 @@ class TestDashboardController(AdminControllerTest):
 
             # At first, there is 1 open access title in the database,
             # created in CirculationControllerTest.setup.
-            response = self.manager.admin_dashboard_controller.stats()
+            response = self.manager.admin_dashboard_controller.stats(
+                stats_function=dashboard_stats_api
+            )
             library_data = response.get(self._default_library.short_name)
             total_data = response.get("total")
             for data in [library_data, total_data]:
@@ -2773,7 +2792,9 @@ class TestDashboardController(AdminControllerTest):
             pool4.licenses_owned = 5
             pool4.licenses_available = 5
 
-            response = self.manager.admin_dashboard_controller.stats()
+            response = self.manager.admin_dashboard_controller.stats(
+                stats_function=dashboard_stats_api
+            )
             library_data = response.get(self._default_library.short_name)
             total_data = response.get("total")
             library_collections_data = library_data.get("collections")
@@ -2805,7 +2826,9 @@ class TestDashboardController(AdminControllerTest):
 
             # c2 is no longer included in the totals since the admin's library does
             # not use it.
-            response = self.manager.admin_dashboard_controller.stats()
+            response = self.manager.admin_dashboard_controller.stats(
+                stats_function=dashboard_stats_api
+            )
             library_data = response.get(self._default_library.short_name)
             total_data = response.get("total")
             for data in [library_data, total_data]:
@@ -2835,7 +2858,9 @@ class TestDashboardController(AdminControllerTest):
         self.admin.add_role(AdminRole.LIBRARIAN, library)
 
         with self.request_context_with_library_and_admin("/", library=library):
-            response = self.manager.admin_dashboard_controller.stats()
+            response = self.manager.admin_dashboard_controller.stats(
+                stats_function=dashboard_stats_api
+            )
             stats = response["total"]["collections"]
         # Child is in stats, but parent is not
         # No exceptions were thrown

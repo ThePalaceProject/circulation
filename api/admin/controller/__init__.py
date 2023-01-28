@@ -6,18 +6,18 @@ import os
 import sys
 import urllib.parse
 from datetime import date, datetime, timedelta
-from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, TypeVar, Union
 
 import flask
 from flask import Response, redirect, url_for
 from flask_babel import lazy_gettext as _
 from flask_pydantic_spec.flask_backend import Context
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from sqlalchemy.sql.expression import and_, desc, distinct, join, nullslast, select
 
 from api.admin.config import Configuration as AdminClientConfig
-from api.admin.dashboard_stats import dashboard_stats_api
 from api.admin.exceptions import *
 from api.admin.google_oauth_admin_authentication_provider import (
     GoogleOAuthAdminAuthenticationProvider,
@@ -1440,8 +1440,13 @@ class LanesController(AdminCirculationManagerController):
 
 
 class DashboardController(AdminCirculationManagerController):
-    def stats(self):
-        return dashboard_stats_api(flask.request.admin, _db=self._db)
+
+    Statistics = TypeVar("Statistics", bound=Dict[str, Any])
+
+    def stats(
+        self, stats_function: Callable[[Admin, Session], Statistics]
+    ) -> Statistics:
+        return stats_function(flask.request.admin, self._db)
 
     def circulation_events(self):
         annotator = AdminAnnotator(self.circulation, flask.request.library)
