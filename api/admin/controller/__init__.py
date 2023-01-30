@@ -12,6 +12,7 @@ import flask
 import jwt
 from flask import Response, redirect
 from flask_babel import lazy_gettext as _
+from pydantic import BaseModel
 from sqlalchemy.sql import func
 from sqlalchemy.sql.expression import and_, desc, distinct, join, nullslast, select
 
@@ -781,6 +782,21 @@ class FeedController(AdminCirculationManagerController):
 
 
 class CustomListsController(AdminCirculationManagerController):
+    class CustomListSharePostResponse(BaseModel):
+        successes: int = 0
+        failures: int = 0
+
+    class CustomListPostRequest(BaseModel):
+        name: str
+        id: Optional[int] = None
+        entries: List[dict] = []
+        collections: List[int] = []
+        deletedEntries: List[dict] = []
+        # For auto updating lists
+        auto_update: bool = False
+        auto_update_query: Optional[dict] = None
+        auto_update_facets: Optional[dict] = None
+
     def _list_as_json(self, list: CustomList, is_owner=True) -> Dict:
         """Transform a CustomList object into a response ready dict"""
         collections = []
@@ -820,27 +836,16 @@ class CustomListsController(AdminCirculationManagerController):
             return dict(custom_lists=custom_lists)
 
         if flask.request.method == "POST":
-            id = flask.request.form.get("id")
-            name = flask.request.form.get("name")
-            entries = self._getJSONFromRequest(flask.request.form.get("entries"))
-            collections = self._getJSONFromRequest(
-                flask.request.form.get("collections")
-            )
-            # For auto updating lists
-            auto_update = flask.request.form.get(
-                "auto_update", False, type=boolean_value
-            )
-            auto_update_query = flask.request.form.get("auto_update_query")
-            auto_update_facets = flask.request.form.get("auto_update_facets")
+            ctx = flask.request.context.body
             return self._create_or_update_list(
                 library,
-                name,
-                entries,
-                collections,
-                id=id,
-                auto_update=auto_update,
-                auto_update_facets=auto_update_facets,
-                auto_update_query=auto_update_query,
+                ctx.name,
+                ctx.entries,
+                ctx.collections,
+                id=ctx.id,
+                auto_update=ctx.auto_update,
+                auto_update_facets=ctx.auto_update_facets,
+                auto_update_query=ctx.auto_update_query,
             )
 
     def _getJSONFromRequest(self, values: Optional[str]) -> Union[Dict, List]:
@@ -900,10 +905,11 @@ class CustomListsController(AdminCirculationManagerController):
 
         # Test JSON viability of auto update data
         try:
-            auto_update_query_dict = None
-            if auto_update_query:
+            auto_update_query_str = None
+            auto_update_facets_str = None
+            if auto_update_query is not None:
                 try:
-                    auto_update_query_dict = json.loads(auto_update_query)
+                    auto_update_query_str = json.dumps(auto_update_query)
                 except json.JSONDecodeError:
                     raise Exception(
                         INVALID_INPUT.detailed(
@@ -916,9 +922,9 @@ class CustomListsController(AdminCirculationManagerController):
                 if deleted_entries and len(deleted_entries) > 0:
                     raise Exception(AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES)
 
-            if auto_update_facets:
+            if auto_update_facets is not None:
                 try:
-                    json.loads(auto_update_facets)
+                    auto_update_facets_str = json.dumps(auto_update_facets)
                 except json.JSONDecodeError:
                     raise Exception(
                         INVALID_INPUT.detailed(
@@ -950,9 +956,9 @@ class CustomListsController(AdminCirculationManagerController):
         if auto_update is not None:
             list.auto_update_enabled = auto_update
         if auto_update_query is not None:
-            list.auto_update_query = auto_update_query
+            list.auto_update_query = auto_update_query_str
         if auto_update_facets is not None:
-            list.auto_update_facets = auto_update_facets
+            list.auto_update_facets = auto_update_facets_str
 
         # In case this is a new list with no entries, populate the first page
         if (
@@ -964,7 +970,7 @@ class CustomListsController(AdminCirculationManagerController):
         elif (
             not is_new
             and list.auto_update_enabled
-            and auto_update_query_dict
+            and auto_update_query
             and previous_auto_update_query
         ):
             # In case this is a previous auto update list, we must check if the
@@ -972,7 +978,7 @@ class CustomListsController(AdminCirculationManagerController):
             # JSON maps are unordered by definition, so we must deserialize and compare dicts
             try:
                 prev_query_dict = json.loads(previous_auto_update_query)
-                if prev_query_dict != auto_update_query_dict:
+                if prev_query_dict != auto_update_query:
                     list.auto_update_status = CustomList.REPOPULATE
             except json.JSONDecodeError:
                 # Do nothing if the previous query was not valid
@@ -1033,7 +1039,7 @@ class CustomListsController(AdminCirculationManagerController):
     ) -> Callable[[int], str]:
         def url_fn(after):
             return self.url_for(
-                "custom_list",
+                "custom_list_get",
                 after=after,
                 library_short_name=library.short_name,
                 list_id=list.id,
@@ -1059,7 +1065,7 @@ class CustomListsController(AdminCirculationManagerController):
 
             query = CustomList.entries_having_works(self._db, list_id)
             url = self.url_for(
-                "custom_list",
+                "custom_list_get",
                 list_name=list.name,
                 library_short_name=library.short_name,
                 list_id=list_id,
@@ -1078,32 +1084,17 @@ class CustomListsController(AdminCirculationManagerController):
             return OPDSFeedResponse(str(feed), max_age=0)
 
         elif flask.request.method == "POST":
-            name = flask.request.form.get("name")
-            entries = self._getJSONFromRequest(flask.request.form.get("entries"))
-            collections = self._getJSONFromRequest(
-                flask.request.form.get("collections")
-            )
-            deleted_entries = self._getJSONFromRequest(
-                flask.request.form.get("deletedEntries")
-            )
-
-            # For auto updating lists
-            auto_update = flask.request.form.get(
-                "auto_update", False, type=boolean_value
-            )
-            auto_update_query = flask.request.form.get("auto_update_query")
-            auto_update_facets = flask.request.form.get("auto_update_facets")
-
+            ctx = flask.request.context.body
             return self._create_or_update_list(
                 library,
-                name,
-                entries,
-                collections,
-                deleted_entries=deleted_entries,
+                ctx.name,
+                ctx.entries,
+                ctx.collections,
+                deleted_entries=ctx.deletedEntries,
                 id=list_id,
-                auto_update=auto_update,
-                auto_update_query=auto_update_query,
-                auto_update_facets=auto_update_facets,
+                auto_update=ctx.auto_update,
+                auto_update_query=ctx.auto_update_query,
+                auto_update_facets=ctx.auto_update_facets,
             )
 
         elif flask.request.method == "DELETE":
@@ -1139,8 +1130,22 @@ class CustomListsController(AdminCirculationManagerController):
         """Share this customlist with all libraries on this local CM"""
         if not customlist_id:
             return INVALID_INPUT
-
         customlist: CustomList = get_one(self._db, CustomList, id=customlist_id)
+        if customlist.library != flask.request.library:
+            return ADMIN_NOT_AUTHORIZED.detailed(
+                _("This library does not have permissions on this customlist.")
+            )
+
+        if flask.request.method == "POST":
+            return self.share_locally_POST(customlist)
+        elif flask.request.method == "DELETE":
+            return self.share_locally_DELETE(customlist)
+        else:
+            return METHOD_NOT_ALLOWED
+
+    def share_locally_POST(
+        self, customlist: CustomList
+    ) -> Union[ProblemDetail, Response]:
         library: Library = None
         successes = []
         failures = []
@@ -1164,7 +1169,40 @@ class CustomListsController(AdminCirculationManagerController):
                 successes.append(library)
 
         self._db.commit()
-        return dict(successes=len(successes), failures=len(failures))
+        return self.CustomListSharePostResponse(
+            successes=len(successes), failures=len(failures)
+        ).dict()
+
+    def share_locally_DELETE(
+        self, customlist: CustomList
+    ) -> Union[ProblemDetail, Response]:
+        """Delete the shared status of a custom list
+        If a customlist is actively in use by another library, then disallow the unshare
+        """
+        if not customlist.shared_locally_with_libraries:
+            return Response("", 204)
+
+        shared_list_lanes = (
+            self._db.query(Lane)
+            .filter(
+                Lane.customlists.contains(customlist),
+                Lane.library_id != customlist.library_id,
+            )
+            .count()
+        )
+
+        if shared_list_lanes > 0:
+            return CUSTOMLIST_CANNOT_DELETE_SHARE.detailed(
+                _(
+                    "This list cannot be unshared because it is currently being used by one or more libraries on this Palace Manager."
+                )
+            )
+
+        # This list is not in use by any other libraries, we can delete the share
+        # by simply emptying the list of shared libraries
+        customlist.shared_locally_with_libraries = []
+
+        return Response("", status=204)
 
 
 class LanesController(AdminCirculationManagerController):

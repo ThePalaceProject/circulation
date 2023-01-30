@@ -4,8 +4,10 @@ As per http://datatracker.ietf.org/doc/draft-ietf-appsawg-http-problem/
 """
 import json as j
 import logging
+from typing import Optional
 
 from flask_babel import LazyString
+from pydantic import BaseModel
 
 from ..exceptions import BaseError
 
@@ -21,6 +23,14 @@ def json(type, status, title, detail=None, instance=None, debug_message=None):
     if debug_message:
         d["debug_message"] = debug_message
     return j.dumps(d)
+
+
+class ProblemDetailModel(BaseModel):
+    type: Optional[str] = None
+    status: Optional[int] = None
+    title: Optional[str] = None
+    detail: Optional[str] = None
+    debug_message: Optional[str] = None
 
 
 class ProblemDetail:
