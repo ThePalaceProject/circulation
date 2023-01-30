@@ -2798,14 +2798,16 @@ class TestLoanController(CirculationControllerTest):
         "collection_default_loan_period",
         [
             [
+                # Loan without duration, collection without configured loan period
                 None,
                 None,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD,
                 ExternalIntegration.OPDS_IMPORT,
                 None,
                 None,
-            ],  # difference between db and opds response
+            ],  # DB and OPDS response loan duration mismatch
             [
+                # Loan duration < CM STANDARD_DEFAULT_LOAN_PERIOD, collection without configured loan period
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
@@ -2814,6 +2816,7 @@ class TestLoanController(CirculationControllerTest):
                 None,
             ],
             [
+                # Loan duration > CM STANDARD_DEFAULT_LOAN_PERIOD, collection without configured loan period
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
@@ -2822,14 +2825,16 @@ class TestLoanController(CirculationControllerTest):
                 None,
             ],
             [
+                # Loan without duration, collection loan period < CM STANDARD_DEFAULT_LOAN_PERIOD
                 None,
                 None,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 2,
                 ExternalIntegration.BIBLIOTHECA,
                 DataSource.BIBLIOTHECA,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 2,
-            ],  # difference between db and opds response
+            ],  # DB and OPDS response loan duration mismatch
             [
+                # Loan duration < collection loan period < CM STANDARD_DEFAULT_LOAN_PERIOD
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 3,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 3,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 3,
@@ -2838,6 +2843,7 @@ class TestLoanController(CirculationControllerTest):
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 2,
             ],
             [
+                # Collection loan period < loan duration < CM STANDARD_DEFAULT_LOAN_PERIOD
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
@@ -2846,6 +2852,7 @@ class TestLoanController(CirculationControllerTest):
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 2,
             ],
             [
+                # Collection loan period < CM STANDARD_DEFAULT_LOAN_PERIOD < loan duration
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
@@ -2854,14 +2861,16 @@ class TestLoanController(CirculationControllerTest):
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 2,
             ],
             [
+                # Loan without duration, CM STANDARD_DEFAULT_LOAN_PERIOD < collection loan period
                 None,
                 None,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 2,
                 ExternalIntegration.BIBLIOTHECA,
                 DataSource.BIBLIOTHECA,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 2,
-            ],  # difference between db and opds response
+            ],  # DB and OPDS response loan duration mismatch
             [
+                # Loan duration < CM STANDARD_DEFAULT_LOAN_PERIOD < collection loan period
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
@@ -2870,6 +2879,7 @@ class TestLoanController(CirculationControllerTest):
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 2,
             ],
             [
+                # CM STANDARD_DEFAULT_LOAN_PERIOD < loan duration < collection loan period
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
@@ -2878,6 +2888,7 @@ class TestLoanController(CirculationControllerTest):
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 2,
             ],
             [
+                # CM STANDARD_DEFAULT_LOAN_PERIOD < collection loan period < loan duration
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 3,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 3,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 3,
@@ -2887,7 +2898,7 @@ class TestLoanController(CirculationControllerTest):
             ],
         ],
     )
-    def test_loan_duration_settings_impact_on_loans_and_borrow_response_parametrized(
+    def test_loan_duration_settings_impact_on_loans_and_borrow_response(
         self,
         target_loan_duration,
         db_loan_duration,
@@ -2991,414 +3002,6 @@ class TestLoanController(CirculationControllerTest):
             assert format_datetime(loan.end) == format_datetime(expected_db_loan_end)
             assert format_datetime(loan_response_until) == format_datetime(
                 expected_opds_response_loan_end
-            )
-
-    def test_loan_duration_settings_impact_on_loans_records_and_borrow_response(self):
-        with self.request_context_with_library(
-            "/", headers=dict(Authorization=self.valid_auth)
-        ):
-            self.manager.loans.authenticated_patron_from_request()
-
-            def create_work_and_return_license_pool_and_loan_info(**kwargs):
-                loan_end = kwargs.pop("loan_end", None)
-
-                work = self._work(
-                    with_license_pool=True, with_open_access_download=False, **kwargs
-                )
-                license_pool = work.license_pools[0]
-
-                loan_info = LoanInfo(
-                    license_pool.collection,
-                    license_pool.data_source.name,
-                    license_pool.identifier.type,
-                    license_pool.identifier.identifier,
-                    utc_now(),
-                    loan_end,
-                )
-
-                return license_pool, loan_info
-
-            # Let us first test default collection without any configured loan duration
-
-            # Test loan with no loan.end
-            (
-                license_pool_1,
-                loan_info_1,
-            ) = create_work_and_return_license_pool_and_loan_info()
-
-            self.manager.d_circulation.queue_checkout(license_pool_1, loan_info_1)
-
-            response = self.manager.loans.borrow(
-                license_pool_1.identifier.type, license_pool_1.identifier.identifier
-            )
-
-            loan_1 = get_one(self._db, Loan, license_pool=license_pool_1)
-            assert loan_1 is not None
-
-            def parse_loan_until_field_from_opds_response(opds_response):
-                feed = feedparser.parse(opds_response.data)
-                [entry] = feed.get("entries")
-                availability = entry.get("opds_availability")
-                until = availability.get("until")
-
-                return until
-
-            loan_1_response_until = parse_loan_until_field_from_opds_response(response)
-
-            assert loan_1.end is None
-
-            # Loan record end is None and response until field is set to STANDARD_DEFAULT_LOAN_PERIOD
-            # TODO: this should not be the case
-            assert loan_1_response_until == datetime.datetime.strftime(
-                loan_1.start
-                + datetime.timedelta(days=Collection.STANDARD_DEFAULT_LOAN_PERIOD),
-                "%Y-%m-%dT%H:%M:%S+00:00",
-            )
-
-            # TODO: loan_1_response_until should be None
-            # When that is fixed we can uncomment next two lines
-            # assert loan_1_response_until is None
-            # assert loan_1.end == loan_1_response_until
-
-            # Test loan with loan duration less than STANDARD_DEFAULT_LOAN_PERIOD days
-            loan_2_target_end = utc_now() + datetime.timedelta(
-                days=Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1
-            )
-            (
-                license_pool_2,
-                loan_info_2,
-            ) = create_work_and_return_license_pool_and_loan_info(
-                loan_end=loan_2_target_end
-            )
-
-            self.manager.d_circulation.queue_checkout(license_pool_2, loan_info_2)
-
-            response = self.manager.loans.borrow(
-                license_pool_2.identifier.type, license_pool_2.identifier.identifier
-            )
-
-            loan_2 = get_one(self._db, Loan, license_pool=license_pool_2)
-            assert loan_2 is not None
-
-            loan_2_response_until = parse_loan_until_field_from_opds_response(response)
-
-            # Loan end in the loan record and in the response are the same as the set value
-            # which is less than STANDARD_DEFAULT_LOAN_PERIOD days
-            assert loan_2.end == loan_2_target_end
-            assert loan_2_response_until == datetime.datetime.strftime(
-                loan_2.end, "%Y-%m-%dT%H:%M:%S+00:00"
-            )
-
-            # Test loan with loan duration more than STANDARD_DEFAULT_LOAN_PERIOD days
-            loan_3_target_end = utc_now() + datetime.timedelta(
-                days=Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1
-            )
-            (
-                license_pool_3,
-                loan_info_3,
-            ) = create_work_and_return_license_pool_and_loan_info(
-                loan_end=loan_3_target_end
-            )
-
-            self.manager.d_circulation.queue_checkout(license_pool_3, loan_info_3)
-
-            response = self.manager.loans.borrow(
-                license_pool_3.identifier.type, license_pool_3.identifier.identifier
-            )
-
-            loan_3 = get_one(self._db, Loan, license_pool=license_pool_3)
-            assert loan_3 is not None
-
-            loan_3_response_until = parse_loan_until_field_from_opds_response(response)
-
-            # Loan end in the loan record and in the response are the same as the set value
-            # which is more than STANDARD_DEFAULT_LOAN_PERIOD days
-            assert loan_3.end == loan_3_target_end
-            assert loan_3_response_until == datetime.datetime.strftime(
-                loan_3.end, "%Y-%m-%dT%H:%M:%S+00:00"
-            )
-
-            # Now lets test with a collection with configured loan period that is less than STANDARD_DEFAULT_LOAN_PERIOD
-            collection_with_short_configuration = self._collection(
-                protocol=ExternalIntegration.BIBLIOTHECA,
-                data_source_name=DataSource.BIBLIOTHECA,
-            )
-            loan_period_shorter_than_default = (
-                Collection.STANDARD_DEFAULT_LOAN_PERIOD - 2
-            )
-            collection_with_short_configuration.default_loan_period_setting(
-                self._default_library
-            ).value = loan_period_shorter_than_default
-
-            self._default_library.collections.append(
-                collection_with_short_configuration
-            )
-
-            # Test loan with no loan.end
-            (
-                license_pool_4,
-                loan_info_4,
-            ) = create_work_and_return_license_pool_and_loan_info(
-                data_source_name=DataSource.BIBLIOTHECA,
-                collection=collection_with_short_configuration,
-            )
-
-            self.manager.d_circulation.queue_checkout(license_pool_4, loan_info_4)
-
-            response = self.manager.loans.borrow(
-                license_pool_4.identifier.type, license_pool_4.identifier.identifier
-            )
-
-            loan_4 = get_one(self._db, Loan, license_pool=license_pool_4)
-            assert loan_4 is not None
-
-            loan_4_response_until = parse_loan_until_field_from_opds_response(response)
-
-            # Loan record has no end but response contains until field that corresponds to the collection configuration
-            # TODO: do we want it to be like this?
-            assert loan_4.end is None
-
-            assert loan_4_response_until == datetime.datetime.strftime(
-                loan_4.start + datetime.timedelta(loan_period_shorter_than_default),
-                "%Y-%m-%dT%H:%M:%S+00:00",
-            )
-
-            # Test loan with loan duration shorter than collection configuration
-            loan_5_target_end = utc_now() + datetime.timedelta(
-                days=loan_period_shorter_than_default - 1
-            )
-
-            (
-                license_pool_5,
-                loan_info_5,
-            ) = create_work_and_return_license_pool_and_loan_info(
-                loan_end=loan_5_target_end,
-                data_source_name=DataSource.BIBLIOTHECA,
-                collection=collection_with_short_configuration,
-            )
-
-            self.manager.d_circulation.queue_checkout(license_pool_5, loan_info_5)
-
-            response = self.manager.loans.borrow(
-                license_pool_5.identifier.type, license_pool_5.identifier.identifier
-            )
-
-            loan_5 = get_one(self._db, Loan, license_pool=license_pool_5)
-            assert loan_5 is not None
-
-            loan_5_response_until = parse_loan_until_field_from_opds_response(response)
-
-            # Loan end in the loan record and in the response are the same as the set value
-            # which is shorter than the collection configuration and STANDARD_DEFAULT_LOAN_PERIOD
-            assert loan_5.end == loan_5_target_end
-            assert loan_5_response_until == datetime.datetime.strftime(
-                loan_5.end, "%Y-%m-%dT%H:%M:%S+00:00"
-            )
-
-            # Test loan with loan duration longer than collection configuration
-            # but shorter than STANDARD_DEFAULT_LOAN_PERIOD
-            loan_6_target_end = utc_now() + datetime.timedelta(
-                days=loan_period_shorter_than_default + 1
-            )
-
-            (
-                license_pool_6,
-                loan_info_6,
-            ) = create_work_and_return_license_pool_and_loan_info(
-                loan_end=loan_6_target_end,
-                data_source_name=DataSource.BIBLIOTHECA,
-                collection=collection_with_short_configuration,
-            )
-
-            self.manager.d_circulation.queue_checkout(license_pool_6, loan_info_6)
-
-            response = self.manager.loans.borrow(
-                license_pool_6.identifier.type, license_pool_6.identifier.identifier
-            )
-
-            loan_6 = get_one(self._db, Loan, license_pool=license_pool_6)
-            assert loan_6 is not None
-
-            loan_6_response_until = parse_loan_until_field_from_opds_response(response)
-
-            # Loan end in the loan record and in the response are the same as the set value
-            # which is longer than the collection configuration and shorter than the STANDARD_DEFAULT_LOAN_PERIOD
-            assert loan_6.end == loan_6_target_end
-            assert loan_6_response_until == datetime.datetime.strftime(
-                loan_6.end, "%Y-%m-%dT%H:%M:%S+00:00"
-            )
-
-            # Test loan with loan duration longer than the STANDARD_DEFAULT_LOAN_PERIOD
-            loan_7_target_end = utc_now() + datetime.timedelta(
-                days=Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1
-            )
-
-            (
-                license_pool_7,
-                loan_info_7,
-            ) = create_work_and_return_license_pool_and_loan_info(
-                loan_end=loan_7_target_end,
-                data_source_name=DataSource.BIBLIOTHECA,
-                collection=collection_with_short_configuration,
-            )
-
-            self.manager.d_circulation.queue_checkout(license_pool_7, loan_info_7)
-
-            response = self.manager.loans.borrow(
-                license_pool_7.identifier.type, license_pool_7.identifier.identifier
-            )
-
-            loan_7 = get_one(self._db, Loan, license_pool=license_pool_7)
-            assert loan_7 is not None
-
-            loan_7_response_until = parse_loan_until_field_from_opds_response(response)
-
-            # Loan end in the loan record and in the response are the same as the set value
-            # which is longer than the STANDARD_DEFAULT_LOAN_PERIOD
-            assert loan_7.end == loan_7_target_end
-            assert loan_7_response_until == datetime.datetime.strftime(
-                loan_7.end, "%Y-%m-%dT%H:%M:%S+00:00"
-            )
-
-            # Finally, lets test with collection with configured loan period that is longer than
-            # the STANDARD_DEFAULT_LOAN_PERIOD
-            collection_with_long_configuration = self._collection(
-                protocol=ExternalIntegration.BIBLIOTHECA,
-                data_source_name=DataSource.BIBLIOTHECA,
-            )
-
-            loan_period_longer_than_default = (
-                Collection.STANDARD_DEFAULT_LOAN_PERIOD + 2
-            )
-            collection_with_long_configuration.default_loan_period_setting(
-                self._default_library
-            ).value = loan_period_longer_than_default
-
-            self._default_library.collections.append(collection_with_long_configuration)
-
-            # Test loan with no loan.end
-            (
-                license_pool_8,
-                loan_info_8,
-            ) = create_work_and_return_license_pool_and_loan_info(
-                data_source_name=DataSource.BIBLIOTHECA,
-                collection=collection_with_long_configuration,
-            )
-
-            self.manager.d_circulation.queue_checkout(license_pool_8, loan_info_8)
-
-            response = self.manager.loans.borrow(
-                license_pool_8.identifier.type, license_pool_8.identifier.identifier
-            )
-
-            loan_8 = get_one(self._db, Loan, license_pool=license_pool_8)
-            assert loan_8 is not None
-
-            loan_8_response_until = parse_loan_until_field_from_opds_response(response)
-
-            # Loan record has no end but response contains until field that corresponds to the collection configuration
-            # TODO: do we want it to be like this?
-            assert loan_8.end is None
-
-            assert loan_8_response_until == datetime.datetime.strftime(
-                loan_8.start + datetime.timedelta(loan_period_longer_than_default),
-                "%Y-%m-%dT%H:%M:%S+00:00",
-            )
-
-            # Test loan with loan duration shorter than both STANDARD_DEFAULT_LOAN_PERIOD and collection configuration
-            loan_9_target_end = utc_now() + datetime.timedelta(
-                days=Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1
-            )
-
-            (
-                license_pool_9,
-                loan_info_9,
-            ) = create_work_and_return_license_pool_and_loan_info(
-                loan_end=loan_9_target_end,
-                data_source_name=DataSource.BIBLIOTHECA,
-                collection=collection_with_long_configuration,
-            )
-
-            self.manager.d_circulation.queue_checkout(license_pool_9, loan_info_9)
-
-            response = self.manager.loans.borrow(
-                license_pool_9.identifier.type, license_pool_9.identifier.identifier
-            )
-
-            loan_9 = get_one(self._db, Loan, license_pool=license_pool_9)
-            assert loan_9 is not None
-
-            loan_9_response_until = parse_loan_until_field_from_opds_response(response)
-
-            # Loan end in the loan record and in the response are the same as the set value
-            # which is shorter than the collection configuration and STANDARD_DEFAULT_LOAN_PERIOD
-            assert loan_9.end == loan_9_target_end
-            assert loan_9_response_until == datetime.datetime.strftime(
-                loan_9.end, "%Y-%m-%dT%H:%M:%S+00:00"
-            )
-
-            # Test loan with duration longer than STANDARD_DEFAULT_LOAN_PERIOD but shorter than collection configuration
-            loan_10_target_end = utc_now() + datetime.timedelta(
-                days=loan_period_longer_than_default - 1
-            )
-
-            (
-                license_pool_10,
-                loan_info_10,
-            ) = create_work_and_return_license_pool_and_loan_info(
-                loan_end=loan_10_target_end,
-                data_source_name=DataSource.BIBLIOTHECA,
-                collection=collection_with_long_configuration,
-            )
-
-            self.manager.d_circulation.queue_checkout(license_pool_10, loan_info_10)
-
-            response = self.manager.loans.borrow(
-                license_pool_10.identifier.type, license_pool_10.identifier.identifier
-            )
-
-            loan_10 = get_one(self._db, Loan, license_pool=license_pool_10)
-            assert loan_10 is not None
-
-            loan_10_response_until = parse_loan_until_field_from_opds_response(response)
-
-            # Loan end in the loan record and in the response are the same as the set value
-            # which is in between STANDARD_DEFAULT_LOAN_PERIOD and the collection configuration
-            assert loan_10.end == loan_10_target_end
-            assert loan_10_response_until == datetime.datetime.strftime(
-                loan_10.end, "%Y-%m-%dT%H:%M:%S+00:00"
-            )
-
-            # Test loan with duration longer than both STANDARD_DEFAULT_LOAN_PERIOD and collection configuration
-            loan_11_target_end = utc_now() + datetime.timedelta(
-                days=loan_period_longer_than_default + 1
-            )
-
-            (
-                license_pool_11,
-                loan_info_11,
-            ) = create_work_and_return_license_pool_and_loan_info(
-                loan_end=loan_11_target_end,
-                data_source_name=DataSource.BIBLIOTHECA,
-                collection=collection_with_long_configuration,
-            )
-
-            self.manager.d_circulation.queue_checkout(license_pool_11, loan_info_11)
-
-            response = self.manager.loans.borrow(
-                license_pool_11.identifier.type, license_pool_11.identifier.identifier
-            )
-
-            loan_11 = get_one(self._db, Loan, license_pool=license_pool_11)
-            assert loan_11 is not None
-
-            loan_11_response_until = parse_loan_until_field_from_opds_response(response)
-
-            # Loan end in the loan record and in the response are the same as the set value
-            # which is longer than STANDARD_DEFAULT_LOAN_PERIOD and the collection configuration
-            assert loan_11.end == loan_11_target_end
-            assert loan_11_response_until == datetime.datetime.strftime(
-                loan_11.end, "%Y-%m-%dT%H:%M:%S+00:00"
             )
 
 
