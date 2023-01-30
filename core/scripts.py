@@ -3575,6 +3575,66 @@ class CustomListUpdateEntriesScript(CustomListSweeperScript):
         custom_list.auto_update_status = CustomList.UPDATED
 
 
+class DeleteInvisibleLanesScript(LibraryInputScript):
+    """Delete lanes that are flagged as invisible including any visible sub-lanes."""
+
+    def process_library(self, library):
+
+        try:
+            continue_update = True
+            while continue_update:
+                rows = self._db.execute(
+                    "select count(l.id) from  lanes l, \
+                 (select id from lanes where visible = false and library_id = :library_id) invisible_lanes  \
+                 where l.visible = true and l.library_id = :library_id and  \
+                 l.parent_id = invisible_lanes.id",
+                    {"library_id": library.id},
+                )
+                if rows.first()[0] == 0:
+                    continue_update = False
+                else:
+                    self._db.execute(
+                        "update lanes set visible = false where id in ( select l.id from  lanes l, "
+                        "(select id from lanes where visible = false and  library_id = :library_id) "
+                        "invisible_lanes where l.visible = true and l.library_id = :library_id and  "
+                        "l.parent_id = invisible_lanes.id)",
+                        {"library_id": library.id},
+                    )
+
+            self._db.execute(
+                "delete from lanes_genres where lane_id in "
+                "(select id from lanes where library_id = :library_id and visible = false)",
+                {"library_id": library.id},
+            )
+
+            self._db.execute(
+                "delete from cachedfeeds where lane_id in ( "
+                "select id from lanes where library_id = :library_id and visible = false)",
+                {"library_id": library.id},
+            )
+
+            self._db.execute(
+                "delete from lanes where library_id = :library_id and visible = false",
+                {"library_id": library.id},
+            )
+
+            self._db.commit()
+
+            logging.info(f"Completed hidden lane deletion for {library.short_name}")
+        except Exception as e:
+            try:
+                logging.exception(
+                    f"hidden lane deletion failed for {library.short_name}. "
+                    f"Attempting to rollback updates",
+                    e,
+                )
+                self._db.rollback()
+            except Exception as e:
+                logging.exception(
+                    f"hidden lane deletion rollback for {library.short_name} failed", e
+                )
+
+
 class MockStdin:
     """Mock a list of identifiers passed in on standard input."""
 
