@@ -70,11 +70,16 @@ ignore_missing_imports = true
 module = [
     "aws_xray_sdk.ext.*",
     "bcrypt",
+    # This is ignored because the file is created when building a container
+    # so it typically doesn't exist when running mypy, but since it only
+    # contains a couple version strings it can be safely ignored
+    "core._version",
     "elasticsearch.*",
     "elasticsearch_dsl.*",
     "expiringdict",
     "feedparser",
     "flask_babel",
+    "flask_pydantic_spec.*",
     "flask_sqlalchemy_session",
     "fuzzywuzzy",
     "html_sanitizer",
@@ -138,6 +143,7 @@ feedparser = "6.0.10"
 Flask = "~1.1.2"
 Flask-Babel = "2.0.0"
 Flask-Cors = "3.0.10"
+flask-pydantic-spec = "^0.4.1"
 flask-sqlalchemy-session = "1.1"
 fuzzywuzzy = "0.18.0"  # fuzzywuzzy is for author name manipulations
 html-sanitizer = "~1.9.3"
@@ -180,6 +186,7 @@ wcag-contrast-ratio = "0.9"
 Werkzeug = "1.0.1"
 
 [tool.poetry.group.ci.dependencies]
+dunamai = "^1.15.0"
 pre-commit = "~2.21"
 tox = "^3.26.0"
 tox-docker = "^3.1.0"

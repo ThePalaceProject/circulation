@@ -8,7 +8,7 @@ from requests import sessions
 from requests.adapters import HTTPAdapter, Response
 from urllib3 import Retry
 
-from core.config import Configuration
+import core
 from core.exceptions import IntegrationException
 from core.problem_details import INTEGRATION_ERROR
 
@@ -159,6 +159,10 @@ class RequestTimedOut(RequestNetworkException, requests.exceptions.Timeout):
 class HTTP:
     """A helper for the `requests` module."""
 
+    # In case an app version is not present, we can use this version as a fallback
+    # for all outgoing http requests without a custom user-agent
+    DEFAULT_USER_AGENT_VERSION = "1.x.x"
+
     @classmethod
     def get_with_timeout(cls, url: str, *args, **kwargs) -> Response:
         """Make a GET request with timeout handling."""
@@ -224,11 +228,8 @@ class HTTP:
         headers = kwargs.get("headers", {})
         # Set a user-agent if not already present
         if "User-Agent" not in headers:
-            version = Configuration.app_version()
             version = (
-                version
-                if version and version != Configuration.NO_APP_VERSION_FOUND
-                else Configuration.DEFAULT_USER_AGENT_VERSION
+                core.__version__ if core.__version__ else cls.DEFAULT_USER_AGENT_VERSION
             )
             headers["User-Agent"] = f"Palace Manager/{version}"
         new_headers = {}
