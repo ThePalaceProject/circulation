@@ -1,7 +1,6 @@
 """Implement logic common to more than one of the Simplified applications."""
 
 import gzip
-import json
 import logging
 import sys
 import traceback
@@ -11,11 +10,14 @@ from io import BytesIO
 import flask
 from flask import make_response, url_for
 from flask_babel import lazy_gettext as _
+from flask_pydantic_spec import FlaskPydanticSpec
 from psycopg2 import DatabaseError
 from sqlalchemy.exc import SQLAlchemyError
 
+import core
+from api.admin.config import Configuration as AdminUiConfig
+
 from .cdn import cdnify
-from .config import Configuration
 from .lane import Facets, Pagination
 from .log import LogConfiguration
 from .model import Identifier
@@ -64,7 +66,7 @@ def load_facets_from_request(
         get_header,
         worklist,
         default_entrypoint,
-        **kwargs
+        **kwargs,
     )
 
 
@@ -85,7 +87,24 @@ def load_pagination_from_request(
     return base_class.from_request(get_arg, default_size, **kwargs)
 
 
+def ensure_pydantic_after_problem_detail(func):
+    """We must ensure the problem_detail decorators are always placed below the
+    `spec.validate` decorator because the `spec.validate` decorator will always expect a
+    tuple or dict-like response, not a ProblemDetail like response.
+    The problem_detail decorators will convert the ProblemDetail before the response gets validated.
+    """
+    spec = getattr(func, "_decorator", None)
+    if spec and isinstance(spec, FlaskPydanticSpec):
+        raise RuntimeError(
+            "FlaskPydanticSpec MUST be decorated above the problem_detail decorator"
+            + ", else problem details will throw errors during response validation"
+            + f": {func}"
+        )
+
+
 def returns_problem_detail(f):
+    ensure_pydantic_after_problem_detail(f)
+
     @wraps(f)
     def decorated(*args, **kwargs):
         v = f(*args, **kwargs)
@@ -253,22 +272,19 @@ class ErrorHandler:
         return response
 
 
-class HeartbeatController:
-
-    HEALTH_CHECK_TYPE = "application/vnd.health+json"
-    VERSION_FILENAME = ".version"
-
-    def heartbeat(self, conf_class=None):
-        health_check_object = dict(status="pass")
-
-        Conf = conf_class or Configuration
-        app_version = Conf.app_version()
-        if app_version and app_version != Conf.NO_APP_VERSION_FOUND:
-            health_check_object["releaseID"] = app_version
-            health_check_object["version"] = app_version.split("-")[0]
-
-        data = json.dumps(health_check_object)
-        return make_response(data, 200, {"Content-Type": self.HEALTH_CHECK_TYPE})
+class ApplicationVersionController:
+    @staticmethod
+    def version():
+        response = {
+            "version": core.__version__,
+            "commit": core.__commit__,
+            "branch": core.__branch__,
+            "admin_ui": {
+                "package": AdminUiConfig.package_name(),
+                "version": AdminUiConfig.package_version(),
+            },
+        }
+        return response
 
 
 class URNLookupController:
