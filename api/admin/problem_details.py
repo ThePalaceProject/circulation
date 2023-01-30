@@ -526,3 +526,10 @@ CUSTOMLIST_ENTRY_NOT_VALID_FOR_LIBRARY = pd(
         "An entry in the customlist was not valid for the library being shared with."
     ),
 )
+
+CUSTOMLIST_CANNOT_DELETE_SHARE = pd(
+    "http://librarysimplified.org/terms/problem/customlist-cannot-delete-share",
+    status_code=409,
+    title=_("Cannot delete the Custom List share"),
+    detail=_("Unable to delete the shared status of the given list"),
+)

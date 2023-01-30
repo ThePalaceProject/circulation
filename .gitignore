@@ -75,3 +75,5 @@ docs/source/*
 
 # Mac OS
 .DS_Store
+
+core/_version.py

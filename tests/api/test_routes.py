@@ -837,8 +837,8 @@ class TestODLNotificationController:
         fixture.assert_supported_methods(url, "GET", "POST")
 
 
-class TestHeartbeatController:
-    CONTROLLER_NAME = "heartbeat"
+class TestApplicationVersionController:
+    CONTROLLER_NAME = "version"
 
     @pytest.fixture(scope="function")
     def fixture(self, route_test: RouteTestFixture) -> RouteTestFixture:
@@ -846,8 +846,8 @@ class TestHeartbeatController:
         return route_test
 
     def test_heartbeat(self, fixture: RouteTestFixture):
-        url = "/heartbeat"
-        fixture.assert_request_calls(url, fixture.controller.heartbeat)
+        url = "/version.json"
+        fixture.assert_request_calls(url, fixture.controller.version)
 
 
 class TestHealthCheck:

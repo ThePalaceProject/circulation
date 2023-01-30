@@ -1,5 +1,4 @@
 import os
-from typing import Iterable
 
 import pytest
 from sqlalchemy.orm.session import Session
@@ -20,52 +19,17 @@ class ConfigurationTestFixture:
         self.Conf = MockConfiguration
         self.Conf.instance = dict()
         self.root_dir = os.path.join(os.path.split(__file__)[0], "..", "..")
-        self.VERSION_FILENAME = os.path.join(self.root_dir, self.Conf.VERSION_FILENAME)
         self.transaction = database_transaction
-
-    def close(self):
-        if os.path.exists(self.VERSION_FILENAME):
-            os.remove(self.VERSION_FILENAME)
 
 
 @pytest.fixture()
 def configuration_test_fixture(
     db: DatabaseTransactionFixture,
-) -> Iterable[ConfigurationTestFixture]:
-    fix = ConfigurationTestFixture(db)
-    yield fix
-    fix.close()
+) -> ConfigurationTestFixture:
+    return ConfigurationTestFixture(db)
 
 
 class TestConfiguration:
-    def test_app_version(self, configuration_test_fixture: ConfigurationTestFixture):
-        data = configuration_test_fixture
-        data.Conf.instance = dict()
-
-        def create_version_file(content):
-            with open(data.VERSION_FILENAME, "w") as f:
-                f.write(content)
-
-        # Without a .version file, the key is set to a null object.
-        result = data.Conf.app_version()
-        assert data.Conf.APP_VERSION in data.Conf.instance
-        assert data.Conf.NO_APP_VERSION_FOUND == result
-        assert data.Conf.NO_APP_VERSION_FOUND == data.Conf.get(data.Conf.APP_VERSION)
-
-        # An empty .version file yields the same results.
-        data.Conf.instance = dict()
-        create_version_file(" \n")
-        result = data.Conf.app_version()
-        assert data.Conf.NO_APP_VERSION_FOUND == result
-        assert data.Conf.NO_APP_VERSION_FOUND == data.Conf.get(data.Conf.APP_VERSION)
-
-        # A .version file with content loads the content.
-        data.Conf.instance = dict()
-        create_version_file("ba.na.na")
-        result = data.Conf.app_version()
-        assert "ba.na.na" == result
-        assert "ba.na.na" == data.Conf.get(data.Conf.APP_VERSION)
-
     def test_load_cdns(self, configuration_test_fixture: ConfigurationTestFixture):
         """Test our ability to load CDN configuration from the database."""
         data = configuration_test_fixture

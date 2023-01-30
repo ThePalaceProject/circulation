@@ -86,11 +86,6 @@ class Configuration(ConfigurationConstants):
     OD_FULFILLMENT_CLIENT_KEY_SUFFIX = "OVERDRIVE_FULFILLMENT_CLIENT_KEY"
     OD_FULFILLMENT_CLIENT_SECRET_SUFFIX = "OVERDRIVE_FULFILLMENT_CLIENT_SECRET"
 
-    # The version of the app.
-    APP_VERSION = "app_version"
-    VERSION_FILENAME = ".version"
-    NO_APP_VERSION_FOUND = object()
-
     # Logging stuff
     LOGGING_LEVEL = "level"
     LOGGING_FORMAT = "format"
@@ -184,10 +179,6 @@ class Configuration(ConfigurationConstants):
     ]
 
     EXCLUDED_AUDIO_DATA_SOURCES = "excluded_audio_data_sources"
-
-    # In case an app version is not present, we can use this version as a fallback
-    # for all outgoing http requests without a custom user-agent
-    DEFAULT_USER_AGENT_VERSION = "1.x.x"
 
     SITEWIDE_SETTINGS = [
         {
@@ -383,7 +374,6 @@ class Configuration(ConfigurationConstants):
             # Only do the database portion of the work if
             # a database connection was provided.
             cls.load_cdns(_db)
-        cls.app_version()
         for parent in cls.__bases__:
             if parent.__name__.endswith("Configuration"):
                 parent.load(_db)
@@ -521,26 +511,6 @@ class Configuration(ConfigurationConstants):
         if not key:
             raise CannotLoadConfiguration("Invalid fulfillment credentials.")
         return {"key": key, "secret": secret}
-
-    @classmethod
-    def app_version(cls):
-        """Returns the git version of the app, if a .version file exists."""
-        version = cls.get(cls.APP_VERSION, None)
-        if version:
-            # The version has been set in Configuration before.
-            return version
-
-        # Look in the parent directory, e.g. circulation/ or metadata/
-        root_dir = os.path.join(os.path.split(__file__)[0], "..")
-        version_file = os.path.join(root_dir, cls.VERSION_FILENAME)
-
-        version = cls.NO_APP_VERSION_FOUND
-        if os.path.exists(version_file):
-            with open(version_file) as f:
-                version = f.readline().strip() or version
-
-        cls.instance[cls.APP_VERSION] = version
-        return version
 
     @classmethod
     def data_directory(cls):
