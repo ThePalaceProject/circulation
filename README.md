@@ -107,8 +107,8 @@ it is deprecated and will be removed eventually.
 We recommend that you run Opensearch with docker using the following docker commands:
 
 ```sh
-dockerun --name opensearch -d --rm -p 9006:9200 -e "discovery.type=single-node" -e "plugins.security.disabled=true" "opensearchproject/opensearch:1"
-dockeexec opensearch opensearch-plugin -s install analysis-icu
+docker run --name opensearch -d --rm -p 9006:9200 -e "discovery.type=single-node" -e "plugins.security.disabled=true" "opensearchproject/opensearch:1"
+docker exec opensearch opensearch-plugin -s install analysis-icu
 docker restart opensearch
 ```
 
