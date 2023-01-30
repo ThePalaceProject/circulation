@@ -767,7 +767,6 @@ class CirculationAPI:
         API class Y to handle that collection.
         """
         from api.lcp.collection import LCPAPI
-        from api.proquest.importer import ProQuestOPDS2Importer
 
         from .axis import Axis360API
         from .bibliotheca import BibliothecaAPI
@@ -789,7 +788,6 @@ class CirculationAPI:
             ODL2API.NAME: ODL2API,
             SharedODLAPI.NAME: SharedODLAPI,
             LCPAPI.NAME: LCPAPI,
-            ProQuestOPDS2Importer.NAME: ProQuestOPDS2Importer,
         }
 
     @property

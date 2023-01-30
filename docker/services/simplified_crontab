@@ -118,10 +118,6 @@ HOME=/var/www/circulation
 #
 */15 * * * * root core/bin/run odilo_monitor_recent >> /var/log/cron.log 2>&1
 
-# ProQuest
-#
-0 7 * * 2,5 root core/bin/run proquest_import_monitor --process-removals >> /var/log/cron.log 2>&1
-
 # SAML
 #
 0 5 * * * root core/bin/run saml_monitor >> /var/log/cron.log 2>&1
