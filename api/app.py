@@ -4,6 +4,7 @@ import urllib.parse
 
 from flask import Flask
 from flask_babel import Babel
+from flask_pydantic_spec import FlaskPydanticSpec
 from flask_sqlalchemy_session import flask_scoped_session
 from redmail import EmailSender
 
@@ -25,6 +26,12 @@ app.config["BABEL_DEFAULT_LOCALE"] = LanguageCodes.three_to_two[
 ]
 app.config["BABEL_TRANSLATION_DIRECTORIES"] = "../translations"
 babel = Babel(app)
+
+# The autodoc spec, can be accessed at "/apidoc/swagger"
+api_spec = FlaskPydanticSpec(
+    "Palace Manager", mode="strict", title="Palace Manager API"
+)
+api_spec.register(app)
 
 # We use URIs as identifiers throughout the application, meaning that
 # we never want werkzeug's merge_slashes feature.

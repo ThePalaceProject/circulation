@@ -305,7 +305,9 @@ class OPDSForDistributorsImporter(OPDSImporter):
         not open-access, but a library that can perform this import has
         a license for the title and can distribute unlimited copies.
         """
-        pool, work = super().update_work_for_edition(*args, **kwargs)
+        pool, work = super().update_work_for_edition(
+            *args, is_open_access=False, **kwargs
+        )
         pool.update_availability(
             new_licenses_owned=1,
             new_licenses_available=1,

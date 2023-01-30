@@ -157,7 +157,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
             "series": work.series if work else None,
             "series_position": work.series_position if work else None,
             "language": work.language if work else None,
-            "open_access": license_pool.open_access,
+            "open_access": license_pool.open_access if license_pool else None,
         }
 
         return event

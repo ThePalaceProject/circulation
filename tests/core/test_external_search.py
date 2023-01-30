@@ -123,9 +123,7 @@ class TestExternalSearch:
 
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             Mock(session)
-        assert "Exception communicating with Elasticsearch server: " in str(
-            excinfo.value
-        )
+        assert "Exception communicating with Search server: " in str(excinfo.value)
         assert "very bad" in str(excinfo.value)
 
     def test_works_index_name(self, external_search_fixture: ExternalSearchFixture):
@@ -135,8 +133,10 @@ class TestExternalSearch:
         ExternalSearchTest.setup) plus a version number associated
         with this version of the core code.
         """
-        assert "test_index-v4" == external_search_fixture.search.works_index_name(
-            session
+        version = external_search_fixture.search.mapping.VERSION_NAME
+        assert (
+            f"test_index-{version}"
+            == external_search_fixture.search.works_index_name(session)
         )
 
     def test_setup_index_creates_new_index(
@@ -353,7 +353,7 @@ class TestExternalSearch:
         collection = transaction.collection()
 
         search_result = MockSearchResult("Sample Book Title", "author", {}, "id")
-        index.index("index", "doc type", "id", search_result)
+        index.index("index", "id", search_result)
         test_results = [x for x in index._run_self_tests(session, in_testing=True)]
 
         assert "Search results for 'a search term':" == test_results[0].name
@@ -403,14 +403,12 @@ class TestExternalSearch:
         put_mapping = search._update_index_mapping(dry_run=True)
         assert "new_long_property" not in put_mapping
 
-        new_mapping = search.indices.get_mapping(
-            search.works_index, search.work_document_type
-        )
-        assert (
-            "new_long_property"
-            in new_mapping[search.works_index]["mappings"][search.work_document_type][
-                "properties"
-            ]
+        new_mapping = search.indices.get_mapping(search.works_index)
+        new_mapping = new_mapping[search.works_index]["mappings"]
+        assert "new_long_property" in (
+            new_mapping["properties"]
+            if not search.work_document_type
+            else new_mapping[search.work_document_type]["properties"]
         )
 
 
@@ -1298,6 +1296,21 @@ class TestExternalSearchWithWorks:
                 (None, match_nothing, first_item),
             ],
         )
+
+        # Case-insensitive genre search, genre is saved as 'Fantasy'
+        expect([data.lincoln_vampire], "fantasy")
+
+    def test_remove_work(self, end_to_end_search_fixture: EndToEndSearchFixture):
+        search = end_to_end_search_fixture.external_search.search
+        data = self._populate_works(end_to_end_search_fixture)
+        end_to_end_search_fixture.populate_search_index()
+        search.remove_work(data.moby_dick)
+        search.remove_work(data.moby_duck)
+
+        # Immediately querying never works, the search index needs to refresh its cache/index/data
+        search.indices.refresh()
+
+        end_to_end_search_fixture.expect_results([], "Moby")
 
 
 class TestFacetFiltersData:
@@ -2300,6 +2313,16 @@ class TestFeaturedFacets:
         #
         # The random element is relatively small, so it mainly acts
         # to rearrange works whose scores were similar before.
+        #
+        # The order of the works when using random depends on 4 things:
+        # - The seed
+        # - The id (work_id)
+        # - The index name
+        # - The shard id
+        # If any of those change the order of works in this result may change,
+        # and hence the order of works in this assert must also change
+        # E.g. If the index version changes from v5 to v6, this may affect the order of works queried
+        # Keeping everything else the same, the order of works will remain reproducible across test runs
         random_facets = FeaturedFacets(1, random_seed=43)
         assert_featured(
             "Works permuted by a random seed",
@@ -2308,8 +2331,8 @@ class TestFeaturedFacets:
             [
                 data.hq_available_2,
                 data.hq_available,
-                data.not_featured_on_list,
                 data.hq_not_available,
+                data.not_featured_on_list,
                 data.featured_on_list,
             ],
         )
@@ -5071,18 +5094,26 @@ class TestJSONQuery:
     def _jq(query):
         return JSONQuery(dict(query=query))
 
+    match_args = JSONQuery.MATCH_ARGS
+
     def test_elasticsearch_query(self, external_search_fixture: ExternalSearchFixture):
         q = {"key": "medium", "value": "Book"}
         q = self._jq(q)
-        q.elasticsearch_query.to_dict() == {"term": {"medium.keyword": "Book"}}
+        q.elasticsearch_query.to_dict() == {
+            "match": {"medium.keyword": {"query": "Book", **self.match_args}}
+        }
 
         q = {"or": [self._leaf("medium", "Book"), self._leaf("medium", "Audio")]}
         q = self._jq(q)
         q.elasticsearch_query.to_dict() == {
             "bool": {
                 "should": [
-                    {"term": {"medium.keyword": "Book"}},
-                    {"term": {"medium.keyword": "Audio"}},
+                    {"match": {"medium.keyword": {"query": "Book", **self.match_args}}},
+                    {
+                        "match": {
+                            "medium.keyword": {"query": "Audio", **self.match_args}
+                        }
+                    },
                 ]
             }
         }
@@ -5092,8 +5123,12 @@ class TestJSONQuery:
         q.elasticsearch_query.to_dict() == {
             "bool": {
                 "must": [
-                    {"term": {"medium.keyword": "Book"}},
-                    {"term": {"medium.keyword": "Audio"}},
+                    {"match": {"medium.keyword": {"query": "Book", **self.match_args}}},
+                    {
+                        "match": {
+                            "medium.keyword": {"query": "Audio", **self.match_args}
+                        }
+                    },
                 ]
             }
         }
@@ -5111,12 +5146,26 @@ class TestJSONQuery:
                     {
                         "bool": {
                             "should": [
-                                {"term": {"medium.keyword": "Book"}},
-                                {"term": {"medium.keyword": "Audio"}},
+                                {
+                                    "match": {
+                                        "medium.keyword": {
+                                            "query": "Book",
+                                            **self.match_args,
+                                        }
+                                    }
+                                },
+                                {
+                                    "match": {
+                                        "medium.keyword": {
+                                            "query": "Audio",
+                                            **self.match_args,
+                                        }
+                                    }
+                                },
                             ]
                         }
                     },
-                    {"term": {"title.keyword": "Title"}},
+                    {"match": {"title.keyword": {"query": "Title", **self.match_args}}},
                 ]
             }
         }
@@ -5126,8 +5175,21 @@ class TestJSONQuery:
         assert q.elasticsearch_query.to_dict() == {
             "bool": {
                 "should": [
-                    {"term": {"medium.keyword": "Book"}},
-                    {"bool": {"must_not": [{"term": {"medium.keyword": "Audio"}}]}},
+                    {"match": {"medium.keyword": {"query": "Book", **self.match_args}}},
+                    {
+                        "bool": {
+                            "must_not": [
+                                {
+                                    "match": {
+                                        "medium.keyword": {
+                                            "query": "Audio",
+                                            **self.match_args,
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
                 ]
             }
         }
@@ -5142,8 +5204,21 @@ class TestJSONQuery:
         assert q.elasticsearch_query.to_dict() == {
             "bool": {
                 "must": [
-                    {"term": {"title.keyword": "Title"}},
-                    {"bool": {"must_not": [{"term": {"author.keyword": "Geoffrey"}}]}},
+                    {"match": {"title.keyword": {"query": "Title", **self.match_args}}},
+                    {
+                        "bool": {
+                            "must_not": [
+                                {
+                                    "match": {
+                                        "author.keyword": {
+                                            "query": "Geoffrey",
+                                            **self.match_args,
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
                 ]
             }
         }
@@ -5166,7 +5241,7 @@ class TestJSONQuery:
             ("contributors.display_name", "name", True),
             ("contributors.lc", "name", False),
             ("genres.name", "name", False),
-            ("licensepools.open_access", True, False),
+            ("licensepools.medium", "Book", False),
         ]
     )
     def test_elasticsearch_query_nested(self, key, value, is_keyword):
@@ -5174,7 +5249,10 @@ class TestJSONQuery:
         term = key if not is_keyword else f"{key}.keyword"
         root = key.split(".")[0]
         assert q.elasticsearch_query.to_dict() == {
-            "nested": {"path": root, "query": {"term": {term: value}}}
+            "nested": {
+                "path": root,
+                "query": {"match": {term: {"query": value, **self.match_args}}},
+            }
         }
 
     @parameterized.expand(
@@ -5208,7 +5286,9 @@ class TestJSONQuery:
     def test_field_transforms(self):
         q = self._jq(self._leaf("classification", "cls"))
         assert q.elasticsearch_query.to_dict() == {
-            "term": {"classifications.term.keyword": "cls"}
+            "match": {
+                "classifications.term.keyword": {"query": "cls", **self.match_args}
+            }
         }
         q = self._jq(self._leaf("open_access", True))
         assert q.elasticsearch_query.to_dict() == {
@@ -5225,6 +5305,15 @@ class TestJSONQuery:
             .first()
         )
         q = self._jq(self._leaf("data_source", DataSource.GUTENBERG))
+        assert q.elasticsearch_query.to_dict() == {
+            "nested": {
+                "path": "licensepools",
+                "query": {"term": {"licensepools.data_source_id": gutenberg.id}},
+            }
+        }
+
+        # Test case-insensitivity for data sources
+        q = self._jq(self._leaf("data_source", DataSource.GUTENBERG.upper()))
         assert q.elasticsearch_query.to_dict() == {
             "nested": {
                 "path": "licensepools",
@@ -5252,6 +5341,18 @@ class TestJSONQuery:
         assert "Operator 'gt' is not allowed for 'data_source'. Only use ['eq']" == str(
             exc.value
         )
+
+    @parameterized.expand(
+        [
+            ("title", "value", True),
+            ("licensepools.open_access", True, False),
+            ("published", "1990-01-01", False),
+        ]
+    )
+    def test_type_queries(self, key, value, is_text):
+        """Bool and long types are term queries, whereas text is a match query"""
+        q = self._jq(self._leaf(key, value))
+        q.elasticsearch_query.to_dict().keys() == ["match" if is_text else "term"]
 
 
 class TestExternalSearchJSONQueryData:

@@ -22,7 +22,7 @@ from sqlalchemy.orm.exc import NoResultFound
 from api.opds2 import OPDS2NavigationsAnnotator, OPDS2PublicationsAnnotator
 from api.saml.controller import SAMLController
 from core.analytics import Analytics
-from core.app_server import HeartbeatController
+from core.app_server import ApplicationVersionController
 from core.app_server import URNLookupController as CoreURNLookupController
 from core.app_server import (
     cdn_url_for,
@@ -449,7 +449,7 @@ class CirculationManager:
         self.analytics_controller = AnalyticsController(self)
         self.profiles = ProfileController(self)
         self.patron_devices = DeviceTokensController(self)
-        self.heartbeat = HeartbeatController()
+        self.version = ApplicationVersionController()
         self.odl_notification_controller = ODLNotificationController(self)
         self.shared_collection_controller = SharedCollectionController(self)
         self.static_files = StaticFileController(self)
@@ -1398,7 +1398,7 @@ class OPDS2FeedController(CirculationManagerController):
     def _parse_feed_request(self):
         """Parse the request to get frequently used request parameters for the feeds"""
         library = getattr(flask.request, "library", None)
-        pagination = load_pagination_from_request()
+        pagination = load_pagination_from_request(SortKeyPagination)
         if isinstance(pagination, ProblemDetail):
             return FeedRequestParameters(problem=pagination)
 

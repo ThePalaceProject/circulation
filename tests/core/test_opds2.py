@@ -1,10 +1,11 @@
 import json
 from datetime import datetime
+from unittest.mock import Mock
 
 import pytest
 
 from core.classifier import Classifier
-from core.external_search import MockExternalSearchIndex
+from core.external_search import MockExternalSearchIndex, SortKeyPagination
 from core.lane import Facets, Lane, Pagination, SearchFacets
 from core.model.classification import Subject
 from core.model.edition import Edition
@@ -132,7 +133,7 @@ def opds2_annotator_fixture(
     data.annotator = OPDS2Annotator(
         "http://example.org/feed",
         Facets.default(db.default_library()),
-        Pagination(),
+        SortKeyPagination("lastitemonpage"),
         db.default_library(),
     )
     return data
@@ -140,6 +141,11 @@ def opds2_annotator_fixture(
 
 class TestOPDS2Annotator:
     def test_feed_links(self, opds2_annotator_fixture: TestOPDS2AnnotatorFixture):
+        # Mock the pagination
+        m = Mock()
+        m.meta = Mock()
+        m.meta.sort = ["Item"]
+        opds2_annotator_fixture.annotator.pagination.page_loaded([m])
         links = opds2_annotator_fixture.annotator.feed_links()
         assert len(links) == 2
         assert links[0] == {
@@ -147,7 +153,7 @@ class TestOPDS2Annotator:
             "href": "http://example.org/feed",
             "type": "application/opds+json",
         }
-        assert "after=50" in links[1]["href"]
+        assert "key=%5B%22Item%22%5D" in links[1]["href"]
 
     def test_image_links(self, opds2_annotator_fixture: TestOPDS2AnnotatorFixture):
         data, transaction, session = (
@@ -229,5 +235,4 @@ class TestOPDS2Annotator:
         assert meta == {
             "title": "OPDS2 Feed",
             "itemsPerPage": Pagination.DEFAULT_SIZE,
-            "currentPage": 1,
         }

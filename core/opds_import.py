@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import datetime
 import logging
 import traceback
 from contextlib import contextmanager
 from io import BytesIO
-from typing import Iterator, Optional
+from typing import TYPE_CHECKING, Iterator
 from urllib.parse import quote, urljoin, urlparse
 
 import dateutil
@@ -60,6 +62,9 @@ from .util.http import HTTP, BadResponseException
 from .util.opds_writer import OPDSFeed, OPDSMessage
 from .util.string_helpers import base64
 from .util.xmlparser import XMLParser
+
+if TYPE_CHECKING:
+    from .model import Work
 
 
 def parse_identifier(db, identifier):
@@ -909,25 +914,41 @@ class OPDSImporter:
 
         return edition
 
-    def update_work_for_edition(self, edition):
+    def update_work_for_edition(
+        self,
+        edition: Edition,
+        is_open_access=True,
+    ) -> tuple[LicensePool | None, Work | None]:
         """If possible, ensure that there is a presentation-ready Work for the
         given edition's primary identifier.
+
+        :param edition: The edition whose license pool and work we're interested in.
+        :param is_open_access: Whether this is an open access edition.
+        :return: 2-Tuple of license pool (optional) and work (optional) for edition.
         """
+
         work = None
 
-        # Find a LicensePool for the primary identifier. Any LicensePool will
-        # do--the collection doesn't have to match, since all
-        # LicensePools for a given identifier have the same Work.
+        # Looks up a license pool for the primary identifier associated with
+        # the given edition. If this is not an open access book, then the
+        # collection is also used as criteria for the lookup. Open access
+        # books don't require a collection match, according to this explanation
+        # from prior work:
+        #   Find a LicensePool for the primary identifier. Any LicensePool will
+        #   do--the collection doesn't have to match, since all
+        #   LicensePools for a given identifier have the same Work.
         #
         # If we have CirculationData, a pool was created when we
         # imported the edition. If there was already a pool from a
         # different data source or a different collection, that's fine
         # too.
+        collection_criteria = {} if is_open_access else {"collection": self.collection}
         pool = get_one(
             self._db,
             LicensePool,
             identifier=edition.primary_identifier,
             on_multiple="interchangeable",
+            **collection_criteria,
         )
 
         if pool:
@@ -1933,7 +1954,7 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests, HasExternalIntegration)
 
         self._configuration_storage: ConfigurationStorage = ConfigurationStorage(self)
         self._configuration_factory: ConfigurationFactory = ConfigurationFactory()
-        self._max_retry_count: Optional[int] = None
+        self._max_retry_count: int | None = None
 
         with self._get_configuration(_db) as configuration:
             self._max_retry_count = (

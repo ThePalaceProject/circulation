@@ -1,9 +1,8 @@
 import datetime
 import json
-from unittest.mock import patch
+from unittest.mock import create_autospec, patch
 
 import pytest
-from mock import create_autospec
 
 from api.s3_analytics_provider import S3AnalyticsProvider
 from core.classifier import Classifier

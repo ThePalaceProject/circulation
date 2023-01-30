@@ -4,7 +4,7 @@ from typing import Any, Iterable, List, Optional
 from unittest import mock
 
 import pytest
-import requests
+from _pytest.fixtures import FixtureRequest
 
 from core import external_search
 from core.external_search import (
@@ -27,32 +27,43 @@ class ExternalSearchFixture:
     to ensure that it works well overall, with a realistic index.
     """
 
-    SIMPLIFIED_TEST_ELASTICSEARCH = os.environ.get(
-        "SIMPLIFIED_TEST_ELASTICSEARCH", "http://localhost:9200"
-    )
+    SEARCH_TEST_URLS = {
+        ExternalSearchIndex.SEARCH_VERSION_ES6_8: os.environ.get(
+            "SIMPLIFIED_TEST_ELASTICSEARCH", "http://localhost:9200"
+        ),
+        ExternalSearchIndex.SEARCH_VERSION_OS1_X: os.environ.get(
+            "SIMPLIFIED_TEST_OPENSEARCH", "http://localhost:9200"
+        ),
+    }
 
     indexes: List[Any]
     integration: ExternalIntegration
     search: Optional[SearchClientForTesting]
     db: DatabaseTransactionFixture
+    version: str
 
     @classmethod
-    def create(cls, db: DatabaseTransactionFixture) -> "ExternalSearchFixture":
+    def create(
+        cls, db: DatabaseTransactionFixture, testing_version: str
+    ) -> "ExternalSearchFixture":
         fixture = ExternalSearchFixture()
         fixture.db = db
         fixture.indexes = []
+        fixture.version = testing_version
+
         fixture.integration = db.external_integration(
             ExternalIntegration.ELASTICSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
-            url=ExternalSearchFixture.SIMPLIFIED_TEST_ELASTICSEARCH,
+            url=fixture.url,
             settings={
                 ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY: "test_index",
                 ExternalSearchIndex.TEST_SEARCH_TERM_KEY: "test_search_term",
+                ExternalSearchIndex.SEARCH_VERSION: fixture.version,
             },
         )
 
         try:
-            fixture.search = SearchClientForTesting(db.session)
+            fixture.search = SearchClientForTesting(db.session, version=testing_version)
         except Exception as e:
             fixture.search = None
             logging.error(
@@ -60,6 +71,10 @@ class ExternalSearchFixture:
                 exc_info=e,
             )
         return fixture
+
+    @property
+    def url(self) -> str:
+        return self.SEARCH_TEST_URLS[self.version]
 
     def close(self):
         if self.search:
@@ -87,25 +102,22 @@ class ExternalSearchFixture:
         work.set_presentation_ready()
         return work
 
-    @staticmethod
-    def refresh_and_wait():
-        target = ExternalSearchFixture.SIMPLIFIED_TEST_ELASTICSEARCH + "/_refresh"
-        logging.info("sending request to " + target)
-        response = requests.get(target)
-        if response.status_code >= 400:
-            raise RuntimeError(
-                "Attempting to refresh Elasticsearch index resulted in status "
-                + str(response.status_code)
-            )
 
-
-@pytest.fixture(scope="function")
+@pytest.fixture(
+    scope="function",
+    params=[
+        ExternalSearchIndex.SEARCH_VERSION_ES6_8,
+        ExternalSearchIndex.SEARCH_VERSION_OS1_X,
+    ],
+)
 def external_search_fixture(
+    request: FixtureRequest,
     db: DatabaseTransactionFixture,
 ) -> Iterable[ExternalSearchFixture]:
     """Ask for an external search system."""
     """Note: You probably want EndToEndSearchFixture instead."""
-    data = ExternalSearchFixture.create(db)
+    version = request.param
+    data = ExternalSearchFixture.create(db, version)
     yield data
     data.close()
 
@@ -117,9 +129,11 @@ class EndToEndSearchFixture:
     external_search: ExternalSearchFixture
 
     @classmethod
-    def create(cls, transaction: DatabaseTransactionFixture) -> "EndToEndSearchFixture":
+    def create(
+        cls, transaction: DatabaseTransactionFixture, test_version: str
+    ) -> "EndToEndSearchFixture":
         data = EndToEndSearchFixture()
-        data.external_search = ExternalSearchFixture.create(transaction)
+        data.external_search = ExternalSearchFixture.create(transaction, test_version)
         return data
 
     def populate_search_index(self):
@@ -135,7 +149,7 @@ class EndToEndSearchFixture:
             self.external_search.db.session,
             search_index_client=self.external_search.search,
         ).run_once_and_update_timestamp()
-        self.external_search.refresh_and_wait()
+        self.external_search.search.indices.refresh()
 
     @staticmethod
     def assert_works(description, expect, actual, should_be_ordered=True):
@@ -254,12 +268,19 @@ class EndToEndSearchFixture:
         self.external_search.close()
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(
+    scope="function",
+    params=[
+        ExternalSearchIndex.SEARCH_VERSION_ES6_8,
+        ExternalSearchIndex.SEARCH_VERSION_OS1_X,
+    ],
+)
 def end_to_end_search_fixture(
+    request: FixtureRequest,
     db: DatabaseTransactionFixture,
 ) -> Iterable[EndToEndSearchFixture]:
     """Ask for an external search system that can be populated with data for end-to-end tests."""
-    data = EndToEndSearchFixture.create(db)
+    data = EndToEndSearchFixture.create(db, request.param)
     yield data
     data.close()
 

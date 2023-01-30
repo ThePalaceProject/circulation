@@ -303,6 +303,20 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
         data_url = LibrarySettingsController._data_url_for_image(image)
         assert expected_data_url == data_url
 
+        # A non PNG mode should work as RGBA
+        image = logo_properties["image"].convert("CMYK")
+        assert image.mode == "CMYK"
+
+        data_url = LibrarySettingsController._data_url_for_image(image)
+        rgba_image = image.convert("RGBA")
+        bio = BytesIO()
+        rgba_image.save(bio, "PNG")
+        bio.seek(0)
+        expected_data_url = "data:image/png;base64," + base64.b64encode(
+            bio.read()
+        ).decode("utf-8")
+        assert expected_data_url == data_url
+
     def test_libraries_post_create(self, logo_properties):
         class TestFileUpload(BytesIO):
             headers = {"Content-Type": "image/png"}

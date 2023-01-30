@@ -1,18 +1,19 @@
 import gzip
 import json
-import os
 from io import BytesIO
 from typing import Iterable
 
 import flask
 import pytest
-from flask import Flask
+from flask import Flask, make_response
 from flask_babel import Babel
 from flask_babel import lazy_gettext as _
 
+import core
+from api.admin.config import Configuration as AdminUiConfig
 from core.app_server import (
+    ApplicationVersionController,
     ErrorHandler,
-    HeartbeatController,
     URNLookupController,
     URNLookupHandler,
     compressible,
@@ -30,41 +31,47 @@ from core.util.opds_writer import OPDSFeed, OPDSMessage
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestHeartbeatController:
-    def test_heartbeat(self):
+class TestApplicationVersionController:
+    @pytest.mark.parametrize(
+        "version,commit,branch,ui_version,ui_package",
+        [("123", "xyz", "abc", "def", "ghi"), (None, None, None, None, None)],
+    )
+    def test_version(
+        self, version, commit, branch, ui_version, ui_package, monkeypatch
+    ):
         app = Flask(__name__)
-        controller = HeartbeatController()
 
+        # Mock the cm version strings
+        monkeypatch.setattr(core, "__version__", version)
+        monkeypatch.setattr(core, "__commit__", commit)
+        monkeypatch.setattr(core, "__branch__", branch)
+
+        # Mock the admin ui version strings
+        monkeypatch.setenv(AdminUiConfig.ENV_ADMIN_UI_PACKAGE_NAME, ui_package)
+        monkeypatch.setenv(AdminUiConfig.ENV_ADMIN_UI_PACKAGE_VERSION, ui_version)
+
+        controller = ApplicationVersionController()
         with app.test_request_context("/"):
-            response = controller.heartbeat()
-        assert 200 == response.status_code
-        assert controller.HEALTH_CHECK_TYPE == response.headers.get("Content-Type")
-        data = json.loads(response.data.decode("utf8"))
-        assert "pass" == data["status"]
+            response = make_response(controller.version())
 
-        # Create a .version file.
-        root_dir = os.path.join(os.path.split(__file__)[0], "..", "..")
-        version_filename = os.path.join(root_dir, controller.VERSION_FILENAME)
-        with open(version_filename, "w") as f:
-            f.write("ba.na.na-10-ssssssssss")
+        assert response.status_code == 200
+        assert response.headers.get("Content-Type") == "application/json"
 
-        # Create a mock configuration object to test with.
-        class MockConfiguration(Configuration):
-            instance = dict()
+        assert response.json["version"] == version
+        assert response.json["commit"] == commit
+        assert response.json["branch"] == branch
 
-        with app.test_request_context("/"):
-            response = controller.heartbeat(conf_class=MockConfiguration)
-        if os.path.exists(version_filename):
-            os.remove(version_filename)
-
-        assert 200 == response.status_code
-        content_type = response.headers.get("Content-Type")
-        assert controller.HEALTH_CHECK_TYPE == content_type
-
-        data = json.loads(response.data.decode("utf8"))
-        assert "pass" == data["status"]
-        assert "ba.na.na" == data["version"]
-        assert "ba.na.na-10-ssssssssss" == data["releaseID"]
+        # When the env are not set (None) we use defaults
+        assert (
+            response.json["admin_ui"]["package"] == ui_package
+            if ui_package
+            else AdminUiConfig.PACKAGE_NAME
+        )
+        assert (
+            response.json["admin_ui"]["version"] == ui_version
+            if ui_version
+            else AdminUiConfig.PACKAGE_VERSION
+        )
 
 
 class URNLookupHandlerFixture:
