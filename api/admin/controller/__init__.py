@@ -6,12 +6,13 @@ import os
 import sys
 import urllib.parse
 from datetime import date, datetime, timedelta
-from typing import Callable, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Union
 
 import flask
 import jwt
 from flask import Response, redirect
 from flask_babel import lazy_gettext as _
+from flask_pydantic_spec.flask_backend import Context
 from pydantic import BaseModel
 from sqlalchemy.sql import func
 from sqlalchemy.sql.expression import and_, desc, distinct, join, nullslast, select
@@ -856,7 +857,7 @@ class CustomListsController(AdminCirculationManagerController):
             return dict(custom_lists=custom_lists)
 
         if flask.request.method == "POST":
-            ctx = flask.request.context.body
+            ctx: Context = flask.request.context.body  # type: ignore
             return self._create_or_update_list(
                 library,
                 ctx.name,
@@ -1114,7 +1115,7 @@ class CustomListsController(AdminCirculationManagerController):
             return OPDSFeedResponse(str(feed), max_age=0)
 
         elif flask.request.method == "POST":
-            ctx = flask.request.context.body
+            ctx: Context = flask.request.context.body  # type: ignore
             return self._create_or_update_list(
                 library,
                 ctx.name,
@@ -1158,12 +1159,14 @@ class CustomListsController(AdminCirculationManagerController):
 
         return None
 
-    def share_locally(self, customlist_id: int) -> Union[ProblemDetail, Dict[str, int]]:
+    def share_locally(
+        self, customlist_id: int
+    ) -> Union[ProblemDetail, Dict[str, int], Response]:
         """Share this customlist with all libraries on this local CM"""
         if not customlist_id:
             return INVALID_INPUT
         customlist: CustomList = get_one(self._db, CustomList, id=customlist_id)
-        if customlist.library != flask.request.library:
+        if customlist.library != flask.request.library:  # type: ignore
             return ADMIN_NOT_AUTHORIZED.detailed(
                 _("This library does not have permissions on this customlist.")
             )
@@ -1177,8 +1180,7 @@ class CustomListsController(AdminCirculationManagerController):
 
     def share_locally_POST(
         self, customlist: CustomList
-    ) -> Union[ProblemDetail, Response]:
-        library: Library = None
+    ) -> Union[ProblemDetail, Dict[str, int]]:
         successes = []
         failures = []
         for library in self._db.query(Library).all():
@@ -2631,7 +2633,7 @@ class AdminSearchController(AdminController):
         - Publisher
         - Subject
         """
-        library = flask.request.library
+        library: Library = flask.request.library  # type: ignore
         collection_ids = [coll.id for coll in library.collections]
         return self._search_field_values_cached(collection_ids)
 
@@ -2659,47 +2661,47 @@ class AdminSearchController(AdminController):
         )
 
         # Concrete values
-        subjects = list(
+        subjects_list = list(
             classification_query.group_by(Subject.name).values(
                 func.distinct(Subject.name), func.count(Subject.name)
             )
         )
-        subjects = _unzip(subjects)
+        subjects = _unzip(subjects_list)
 
-        audiences = list(
+        audiences_list = list(
             classification_query.group_by(Subject.audience).values(
                 func.distinct(Subject.audience), func.count(Subject.audience)
             )
         )
-        audiences = _unzip(audiences)
+        audiences = _unzip(audiences_list)
 
-        genres = list(
+        genres_list = list(
             classification_query.join(Subject.genre)
             .group_by(Genre.name)
             .values(func.distinct(Genre.name), func.count(Genre.name))
         )
-        genres = _unzip(genres)
+        genres = _unzip(genres_list)
 
-        distributors = list(
+        distributors_list = list(
             editions_query.join(Edition.data_source)
             .group_by(DataSource.name)
             .values(func.distinct(DataSource.name), func.count(DataSource.name))
         )
-        distributors = _unzip(distributors)
+        distributors = _unzip(distributors_list)
 
-        languages = list(
+        languages_list = list(
             editions_query.group_by(Edition.language).values(
                 func.distinct(Edition.language), func.count(Edition.language)
             )
         )
-        languages = _unzip(languages)
+        languages = _unzip(languages_list)
 
-        publishers = list(
+        publishers_list = list(
             editions_query.group_by(Edition.publisher).values(
                 func.distinct(Edition.publisher), func.count(Edition.publisher)
             )
         )
-        publishers = _unzip(publishers)
+        publishers = _unzip(publishers_list)
 
         return {
             "subjects": subjects,
