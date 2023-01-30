@@ -1,11 +1,10 @@
 from typing import Union
 
 from flask import render_template_string, url_for
-from flask_mail import Message
 from sqlalchemy.orm.session import Session
 
 from api.admin.config import Configuration as AdminClientConfig
-from api.app import mail
+from api.app import app
 from api.config import Configuration
 from core.model import Admin, ConfigurationSetting
 from core.util.problem_detail import ProblemDetail
@@ -93,27 +92,28 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider):
         return reset_password_token
 
     def send_reset_password_email(self, admin: Admin, reset_password_url: str) -> None:
-        msg = Message(
-            f"{AdminClientConfig.APP_NAME} - Reset password email",
-            sender=(
-                f"{AdminClientConfig.APP_NAME}",
-                "do-not-reply@thepalaceproject.org",
-            ),
-            recipients=[admin.email],
-        )
+        subject = f"{AdminClientConfig.APP_NAME} - Reset password email"
+        sender = f"{AdminClientConfig.APP_NAME} <do-not-reply@thepalaceproject.org>"
+        receivers = [admin.email]
 
-        msg.html = render_template_string(
-            reset_password_email_html,
-            app_name=AdminClientConfig.APP_NAME,
-            reset_password_url=reset_password_url,
-        )
-        msg.body = render_template_string(
+        mail_text = render_template_string(
             reset_password_email_text,
             app_name=AdminClientConfig.APP_NAME,
             reset_password_url=reset_password_url,
         )
+        mail_html = render_template_string(
+            reset_password_email_html,
+            app_name=AdminClientConfig.APP_NAME,
+            reset_password_url=reset_password_url,
+        )
 
-        mail.send(msg)
+        app.mail.send(
+            subject=subject,
+            sender=sender,
+            receivers=receivers,
+            text=mail_text,
+            html=mail_html,
+        )
 
     def validate_token_and_extract_admin(
         self, reset_password_token: str, _db: Session

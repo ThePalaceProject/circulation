@@ -671,9 +671,6 @@ class ResetPasswordController(AdminController):
         )
     )
 
-    # TODO: better error response (use error_response from class above or something similar)
-    # TODO: or maybe add message to sign in template and show it on redirect
-
     def forgot_password(self) -> Union[ProblemDetail, Response]:
         """Shows forgot password page or starts off forgot password workflow"""
 
@@ -706,7 +703,7 @@ class ResetPasswordController(AdminController):
         admin = self._extract_admin_from_request(flask.request)
 
         if not admin:
-            return self.response_with_message_and_redirect_button(
+            return self._response_with_message_and_redirect_button(
                 INVALID_ADMIN_CREDENTIALS.detail,
                 self.url_for("admin_forgot_password"),
                 "Try again",
@@ -718,7 +715,7 @@ class ResetPasswordController(AdminController):
 
         auth.send_reset_password_email(admin, reset_password_url)
 
-        return self.response_with_message_and_redirect_button(
+        return self._response_with_message_and_redirect_button(
             "Email successfully sent! Please check your inbox.",
             self.url_for("admin_sign_in"),
             "Sign in",
@@ -748,7 +745,7 @@ class ResetPasswordController(AdminController):
         """Shows reset password page or process the reset password request"""
         auth = self.admin_auth_provider(PasswordAdminAuthenticationProvider.NAME)
         if not auth:
-            return self.response_with_message_and_redirect_button(
+            return self._response_with_message_and_redirect_button(
                 ADMIN_AUTH_MECHANISM_NOT_CONFIGURED.detail,
                 self.url_for("admin_sign_in"),
                 "Sign in",
@@ -769,7 +766,7 @@ class ResetPasswordController(AdminController):
         )
 
         if isinstance(admin_from_token, ProblemDetail):
-            return self.response_with_message_and_redirect_button(
+            return self._response_with_message_and_redirect_button(
                 admin_from_token.detail,
                 self.url_for("admin_forgot_password"),
                 "Try again",
@@ -803,7 +800,7 @@ class ResetPasswordController(AdminController):
                     _("Passwords do not match.")
                 )
 
-                return self.response_with_message_and_redirect_button(
+                return self._response_with_message_and_redirect_button(
                     problem_detail.detail,
                     self.url_for(
                         "admin_reset_password",
@@ -814,13 +811,13 @@ class ResetPasswordController(AdminController):
                     status_code=problem_detail.status_code,
                 )
 
-            return self.response_with_message_and_redirect_button(
+            return self._response_with_message_and_redirect_button(
                 "Password successfully changed!",
                 self.url_for("admin_sign_in"),
                 "Sign in",
             )
 
-    def response_with_message_and_redirect_button(
+    def _response_with_message_and_redirect_button(
         self,
         message: str,
         redirect_button_link: str,

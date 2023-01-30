@@ -187,7 +187,7 @@ class TestAdmin:
         db_session = admin_fixture.db.session
         secret_key = "secret"
 
-        # Random manually generated token
+        # Random manually generated token - unsuccessful validation
         random_token = "random"
         invalid_token = Admin.validate_reset_password_token_and_fetch_admin(
             random_token, db_session, secret_key
@@ -195,7 +195,7 @@ class TestAdmin:
         assert isinstance(invalid_token, ProblemDetail)
         assert invalid_token == INVALID_RESET_PASSWORD_TOKEN
 
-        # Generated valid token but manually changed
+        # Generated valid token but manually changed - unsuccessful validation
         tampered_token = f"tampered-{admin.generate_reset_password_token(secret_key)}"
         invalid_token = Admin.validate_reset_password_token_and_fetch_admin(
             tampered_token, db_session, secret_key
@@ -203,7 +203,7 @@ class TestAdmin:
         assert isinstance(invalid_token, ProblemDetail)
         assert invalid_token == INVALID_RESET_PASSWORD_TOKEN
 
-        # Valid token but too much time has passed
+        # Valid token but too much time has passed - unsuccessful validation with "expired" keyword
         valid_token = admin.generate_reset_password_token(secret_key)
         with freeze_time(
             utc_now() + timedelta(seconds=Admin.RESET_PASSWORD_TOKEN_MAX_AGE + 1)
