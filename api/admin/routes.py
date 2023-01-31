@@ -8,8 +8,8 @@ from flask_pydantic_spec import Request as SpecRequest
 from flask_pydantic_spec import Response as SpecResponse
 
 from api.admin.config import Configuration as AdminClientConfig
+from api.admin.dashboard_stats import generate_statistics
 from api.app import api_spec, app
-from api.admin.dashboard_stats import dashboard_stats_api
 from api.config import Configuration
 from api.routes import allows_library, has_library, library_route
 from core.app_server import ensure_pydantic_after_problem_detail, returns_problem_detail
@@ -338,7 +338,7 @@ def circulation_events():
 @requires_admin
 def stats():
     return app.manager.admin_dashboard_controller.stats(
-        stats_function=dashboard_stats_api
+        stats_function=generate_statistics
     )
 
 

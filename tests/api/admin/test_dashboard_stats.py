@@ -2,7 +2,7 @@ from datetime import timedelta
 
 import pytest
 
-from api.admin.dashboard_stats import dashboard_stats_api
+from api.admin.dashboard_stats import generate_statistics
 from core.model import Admin, AdminRole, Collection, DataSource, create
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
@@ -25,7 +25,7 @@ class TestDashboardStatistics(DatabaseTest):
         default_library = db.library("Default Library", "default")
 
         # At first, there are no patrons in the database.
-        response = dashboard_stats_api(admin, db_session)
+        response = generate_statistics(admin, db_session)
         library_data = response.get(default_library.short_name)
         total_data = response.get("total")
         for data in [library_data, total_data]:
@@ -54,7 +54,7 @@ class TestDashboardStatistics(DatabaseTest):
         patron3 = db.patron()
         open_access_pool.loan_to(patron3)
 
-        response = dashboard_stats_api(admin, db_session)
+        response = generate_statistics(admin, db_session)
         library_data = response.get(default_library.short_name)
         total_data = response.get("total")
         for data in [library_data, total_data]:
@@ -73,7 +73,7 @@ class TestDashboardStatistics(DatabaseTest):
         patron5 = db.patron(library=l2)
         pool.on_hold_to(patron5)
 
-        response = dashboard_stats_api(admin, db_session)
+        response = generate_statistics(admin, db_session)
         library_data = response.get(default_library.short_name)
         total_data = response.get("total")
         assert 3 == library_data.get("patrons").get("total")
@@ -92,7 +92,7 @@ class TestDashboardStatistics(DatabaseTest):
         admin.remove_role(AdminRole.SYSTEM_ADMIN)
         admin.add_role(AdminRole.LIBRARIAN, default_library)
 
-        response = dashboard_stats_api(admin, db_session)
+        response = generate_statistics(admin, db_session)
         library_data = response.get(default_library.short_name)
         total_data = response.get("total")
         assert 3 == library_data.get("patrons").get("total")
@@ -114,7 +114,7 @@ class TestDashboardStatistics(DatabaseTest):
         default_library = db.library("Default Library", "default")
 
         # At first, there are no titles in the database.
-        response = dashboard_stats_api(admin, db_session)
+        response = generate_statistics(admin, db_session)
         library_data = response.get(default_library.short_name)
         total_data = response.get("total")
         for data in [library_data, total_data]:
@@ -145,7 +145,7 @@ class TestDashboardStatistics(DatabaseTest):
         pool3.licenses_owned = 5
         pool3.licenses_available = 4
 
-        response = dashboard_stats_api(admin, db_session)
+        response = generate_statistics(admin, db_session)
         library_data = response.get(default_library.short_name)
         total_data = response.get("total")
         for data in [library_data, total_data]:
@@ -162,7 +162,7 @@ class TestDashboardStatistics(DatabaseTest):
         pool4.licenses_owned = 2
         pool4.licenses_available = 2
 
-        response = dashboard_stats_api(admin, db_session)
+        response = generate_statistics(admin, db_session)
         library_data = response.get(default_library.short_name)
         total_data = response.get("total")
         assert 2 == library_data.get("inventory").get("titles")
@@ -177,7 +177,7 @@ class TestDashboardStatistics(DatabaseTest):
 
         # The admin can no longer see the other collection, so it's not
         # counted in the totals.
-        response = dashboard_stats_api(admin, db_session)
+        response = generate_statistics(admin, db_session)
         library_data = response.get(default_library.short_name)
         total_data = response.get("total")
         for data in [library_data, total_data]:
@@ -202,7 +202,7 @@ class TestDashboardStatistics(DatabaseTest):
 
         # At first, there is 1 open access title in the database,
         # created in CirculationControllerTest.setup.
-        response = dashboard_stats_api(admin, db_session)
+        response = generate_statistics(admin, db_session)
         library_data = response.get(default_library.short_name)
         total_data = response.get("total")
         for data in [library_data, total_data]:
@@ -257,7 +257,7 @@ class TestDashboardStatistics(DatabaseTest):
         pool4.licenses_owned = 5
         pool4.licenses_available = 5
 
-        response = dashboard_stats_api(admin, db_session)
+        response = generate_statistics(admin, db_session)
         library_data = response.get(default_library.short_name)
         total_data = response.get("total")
         library_collections_data = library_data.get("collections")
@@ -289,7 +289,7 @@ class TestDashboardStatistics(DatabaseTest):
 
         # c2 is no longer included in the totals since the admin's library does
         # not use it.
-        response = dashboard_stats_api(admin, db_session)
+        response = generate_statistics(admin, db_session)
         library_data = response.get(default_library.short_name)
         total_data = response.get("total")
         for data in [library_data, total_data]:
@@ -320,7 +320,7 @@ class TestDashboardStatistics(DatabaseTest):
         child.libraries.append(library)
         admin.add_role(AdminRole.LIBRARIAN, library)
 
-        response = dashboard_stats_api(admin, db.session)
+        response = generate_statistics(admin, db.session)
         stats = response["total"]["collections"]
 
         # Child is in stats, but parent is not

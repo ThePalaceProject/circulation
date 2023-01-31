@@ -9,7 +9,7 @@ from sqlalchemy.sql.expression import and_, distinct, join, select
 from core.model import Admin, Collection, Hold, Library, LicensePool, Loan, Patron
 
 
-def dashboard_stats_api(admin: Admin, _db: Session):
+def generate_statistics(admin: Admin, _db: Session):
     library_stats = {}
 
     total_title_count = 0
