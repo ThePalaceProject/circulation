@@ -12,6 +12,7 @@ from sqlalchemy import (
     Table,
     Unicode,
     UniqueConstraint,
+    desc,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
@@ -393,7 +394,7 @@ class Library(Base, HasSessionCache):
             .join(Work.presentation_edition)
             .filter(Edition.language != None)
             .group_by(Edition.language)
-            .order_by("work_count desc")
+            .order_by(desc(func.count(Work.id).label("work_count")))
         )
         qu = self.restrict_to_ready_deliverable_works(qu)
         if not include_open_access:
