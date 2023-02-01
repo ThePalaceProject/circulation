@@ -3304,14 +3304,14 @@ files = [
 
 [[package]]
 name = "types-pillow"
-version = "9.3.0.4"
+version = "9.4.0.6"
 description = "Typing stubs for Pillow"
 category = "dev"
 optional = false
 python-versions = "*"
 files = [
-    {file = "types-Pillow-9.3.0.4.tar.gz", hash = "sha256:c18d466dc18550d96b8b4a279ff94f0cbad696825b5ad55466604f1daf5709de"},
-    {file = "types_Pillow-9.3.0.4-py3-none-any.whl", hash = "sha256:98b8484ff343676f6f7051682a6cfd26896e993e86b3ce9badfa0ec8750f5405"},
+    {file = "types-Pillow-9.4.0.6.tar.gz", hash = "sha256:51ba83bcebd7d3e21a5a3b558a9ba86b21b0eb3f18d5c66c93189c6ee4c0578b"},
+    {file = "types_Pillow-9.4.0.6-py3-none-any.whl", hash = "sha256:fa638b8be75acf5dac21c7f01dfee645d2885f63a55b7aad95d65b05ac4d7b7d"},
 ]
 
 [[package]]
@@ -3687,4 +3687,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "348930e6cb79c644454fda07068923408b800a90960b9ea6f27f503cd000392f"
+content-hash = "d0fe80ba3b52862d86a77b7714a418278d0b49edf21027d82f7f4e6bf5e415ad"
