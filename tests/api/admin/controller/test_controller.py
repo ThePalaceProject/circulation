@@ -843,6 +843,152 @@ class TestResetPasswordController(AdminControllerTest):
             assert len(receivers) == 1
             assert receivers[0] == self.admin.email
 
+    @mock.patch("api.admin.password_admin_authentication_provider.EmailManager")
+    def test_reset_password_get(self, mock_email_manager):
+        reset_password_ctrl = self.manager.admin_reset_password_controller
+        token = "token"
+
+        # If there is no admin with password then there is no auth providers and we should get error response
+        self.admin.password_hashed = None
+        with self.app.test_request_context("/admin/reset_password"):
+            assert [] == reset_password_ctrl.admin_auth_providers
+
+            response = reset_password_ctrl.reset_password(token)
+
+            assert (
+                response.status_code == ADMIN_AUTH_MECHANISM_NOT_CONFIGURED.status_code
+            )
+            assert str(ADMIN_AUTH_MECHANISM_NOT_CONFIGURED.detail) in response.get_data(
+                as_text=True
+            )
+
+        # If there is only Google OAuth we should also get an error
+        create(
+            self._db,
+            ExternalIntegration,
+            protocol=ExternalIntegration.GOOGLE_OAUTH,
+            goal=ExternalIntegration.ADMIN_AUTH_GOAL,
+        )
+        with self.app.test_request_context("/admin/reset_password"):
+            response = reset_password_ctrl.reset_password(token)
+
+            assert (
+                response.status_code == ADMIN_AUTH_MECHANISM_NOT_CONFIGURED.status_code
+            )
+            assert str(ADMIN_AUTH_MECHANISM_NOT_CONFIGURED.detail) in response.get_data(
+                as_text=True
+            )
+
+        # If admin is already signed in it gets redirected since it can use regular reset password flow
+        self.admin.password = "password"
+        with self.app.test_request_context("/admin/reset_password"):
+            flask.request.form = MultiDict(
+                [
+                    ("email", self.admin.email),
+                    ("password", "password"),
+                    ("redirect", "foo"),
+                ]
+            )
+            sign_in_response = self.manager.admin_sign_in_controller.password_sign_in()
+
+            # Check that sign in is successful
+            assert sign_in_response.status_code == 302
+            assert "foo" == sign_in_response.headers["Location"]
+
+            response = reset_password_ctrl.reset_password(token)
+            assert response.status_code == 302
+            assert "admin/web" in response.headers.get("Location")
+
+        # If we use bad token we get an error response with "Try again" button
+        with self.app.test_request_context("/admin/reset_password"):
+            response = reset_password_ctrl.reset_password(token)
+
+            assert response.status_code == 401
+            assert "Try again" in response.get_data(as_text=True)
+
+        # Finally, if we use good token we get back view with the form for the new password
+        # Let's get valid token first
+        with self.app.test_request_context("/admin/forgot_password", method="POST"):
+            flask.request.form = MultiDict([("email", self.admin.email)])
+
+            response = reset_password_ctrl.forgot_password()
+            assert response.status_code == 200
+
+            call_args, call_kwargs = mock_email_manager.send_email.call_args_list[0]
+            _, _, _, mail_text, _ = call_args
+
+            token = self._extract_reset_pass_token_from_mail_text(mail_text)
+
+        with self.app.test_request_context("/admin/reset_password"):
+            response = reset_password_ctrl.reset_password(token)
+
+            assert response.status_code == 200
+
+            response_body = response.get_data(as_text=True)
+            assert "New Password" in response_body
+            assert "Confirm New Password" in response_body
+
+    def _extract_reset_pass_token_from_mail_text(self, mail_text):
+        # Reset password url is in form of http[s]://url/admin/forgot_password/token
+        reset_pass_url = re.search("(?P<url>https?://[^\\s]+)", mail_text).group("url")
+        token = reset_pass_url.split("/")[-1]
+
+        return token
+
+    @mock.patch("api.admin.password_admin_authentication_provider.EmailManager")
+    def test_reset_password_post(self, mock_email_manager):
+        reset_password_ctrl = self.manager.admin_reset_password_controller
+
+        # Let's get valid token first
+        with self.app.test_request_context("/admin/forgot_password", method="POST"):
+            flask.request.form = MultiDict([("email", self.admin.email)])
+
+            response = reset_password_ctrl.forgot_password()
+            assert response.status_code == 200
+
+            call_args, call_kwargs = mock_email_manager.send_email.call_args_list[0]
+            _, _, _, mail_text, _ = call_args
+
+            token = self._extract_reset_pass_token_from_mail_text(mail_text)
+
+        # If there is no passwords we get an error
+        with self.app.test_request_context("/admin/reset_password", method="POST"):
+            flask.request.form = MultiDict([])
+
+            response = reset_password_ctrl.reset_password(token)
+            assert response.status_code == INVALID_ADMIN_CREDENTIALS.status_code
+
+        # If there is only one password we get an error
+        with self.app.test_request_context("/admin/reset_password", method="POST"):
+            flask.request.form = MultiDict([("password", "only_one")])
+
+            response = reset_password_ctrl.reset_password(token)
+            assert response.status_code == INVALID_ADMIN_CREDENTIALS.status_code
+
+        # If there are both passwords but they do not match we also get an error
+        with self.app.test_request_context("/admin/reset_password", method="POST"):
+            flask.request.form = MultiDict(
+                [("password", "something"), ("confirm_password", "something_different")]
+            )
+
+            response = reset_password_ctrl.reset_password(token)
+            assert response.status_code == INVALID_ADMIN_CREDENTIALS.status_code
+
+        # Finally, let's change that password!
+        # Check current password
+        assert self.admin.has_password("password")
+
+        new_password = "new_password"
+        with self.app.test_request_context("/admin/reset_password", method="POST"):
+            flask.request.form = MultiDict(
+                [("password", new_password), ("confirm_password", new_password)]
+            )
+
+            response = reset_password_ctrl.reset_password(token)
+            assert response.status_code == 200
+
+            assert self.admin.has_password(new_password)
+
 
 class TestPatronController(AdminControllerTest):
     def setup_method(self):
