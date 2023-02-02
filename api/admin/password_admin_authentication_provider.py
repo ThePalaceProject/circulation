@@ -4,9 +4,9 @@ from flask import render_template_string, url_for
 from sqlalchemy.orm.session import Session
 
 from api.admin.config import Configuration as AdminClientConfig
-from api.app import app
 from api.config import Configuration
 from core.model import Admin, ConfigurationSetting
+from core.util.email import EmailManager
 from core.util.problem_detail import ProblemDetail
 
 from .admin_authentication_provider import AdminAuthenticationProvider
@@ -107,13 +107,7 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider):
             reset_password_url=reset_password_url,
         )
 
-        app.mail.send(
-            subject=subject,
-            sender=sender,
-            receivers=receivers,
-            text=mail_text,
-            html=mail_html,
-        )
+        EmailManager.send_email(subject, sender, receivers, mail_text, mail_html)
 
     def validate_token_and_extract_admin(
         self, reset_password_token: str, _db: Session

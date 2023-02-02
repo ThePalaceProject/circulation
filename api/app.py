@@ -6,7 +6,6 @@ from flask import Flask
 from flask_babel import Babel
 from flask_pydantic_spec import FlaskPydanticSpec
 from flask_sqlalchemy_session import flask_scoped_session
-from redmail import EmailSender
 
 from api.config import Configuration
 from core.log import LogConfiguration
@@ -60,24 +59,6 @@ def initialize_database(autoinitialize=True):
     app.debug = debug
     _db.commit()
     logging.getLogger().info("Application debug mode==%r" % app.debug)
-
-
-def setup_email_configuration():
-    mail_server = os.environ.get("MAIL_SERVER")
-    mail_port = int(os.environ.get("MAIL_PORT", "25"))
-    mail_username = os.environ.get("MAIL_USERNAME")
-    mail_password = os.environ.get("MAIL_PASSWORD")
-
-    return EmailSender(
-        host=mail_server,
-        port=mail_port,
-        username=mail_username,
-        password=mail_password,
-        use_starttls=False,
-    )
-
-
-app.mail = setup_email_configuration()
 
 
 from . import routes  # noqa

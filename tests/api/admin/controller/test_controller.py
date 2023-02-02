@@ -745,6 +745,105 @@ class TestSignInController(AdminControllerTest):
             assert None == flask.session.get("auth_type")
 
 
+class TestResetPasswordController(AdminControllerTest):
+    def test_forgot_password_get(self):
+        reset_password_ctrl = self.manager.admin_reset_password_controller
+
+        # If there is no admin with password then there is no auth providers and we should get error response
+        self.admin.password_hashed = None
+        with self.app.test_request_context("/admin/forgot_password"):
+            assert [] == reset_password_ctrl.admin_auth_providers
+
+            response = reset_password_ctrl.forgot_password()
+
+            assert response.status_code == 500
+            assert response.uri == ADMIN_AUTH_NOT_CONFIGURED.uri
+
+        # If there is only Google OAuth we should also get an error
+        create(
+            self._db,
+            ExternalIntegration,
+            protocol=ExternalIntegration.GOOGLE_OAUTH,
+            goal=ExternalIntegration.ADMIN_AUTH_GOAL,
+        )
+        with self.app.test_request_context("/admin/forgot_password"):
+            response = reset_password_ctrl.forgot_password()
+
+            assert response.status_code == 400
+            assert response.uri == ADMIN_AUTH_MECHANISM_NOT_CONFIGURED.uri
+
+        # If auth providers are set we should get forgot password page - success path
+        self.admin.password = "password"
+        with self.app.test_request_context("/admin/forgot_password"):
+            response = reset_password_ctrl.forgot_password()
+
+            assert response.status_code == 200
+            assert "Send reset password email" in response.get_data(as_text=True)
+
+        # If admin is already signed in it gets redirected since it can use regular reset password flow
+        with self.app.test_request_context("/admin/forgot_password"):
+            flask.request.form = MultiDict(
+                [
+                    ("email", self.admin.email),
+                    ("password", "password"),
+                    ("redirect", "foo"),
+                ]
+            )
+            sign_in_response = self.manager.admin_sign_in_controller.password_sign_in()
+
+            # Check that sign in is successful
+            assert sign_in_response.status_code == 302
+            assert "foo" == sign_in_response.headers["Location"]
+
+            response = reset_password_ctrl.forgot_password()
+            assert response.status_code == 302
+
+            assert "admin/web" in response.headers.get("Location")
+
+    @mock.patch("api.admin.password_admin_authentication_provider.EmailManager")
+    def test_forgot_password_post(self, mock_email_manager):
+        reset_password_ctrl = self.manager.admin_reset_password_controller
+
+        # If there is no admin sent in the request we should get error response
+        with self.app.test_request_context("/admin/forgot_password", method="POST"):
+            flask.request.form = MultiDict([])
+
+            response = reset_password_ctrl.forgot_password()
+            assert response.status_code == INVALID_ADMIN_CREDENTIALS.status_code
+            assert str(INVALID_ADMIN_CREDENTIALS.detail) in response.get_data(
+                as_text=True
+            )
+
+        # If the admin does not exist we should also get an error
+        with self.app.test_request_context("/admin/forgot_password", method="POST"):
+            flask.request.form = MultiDict([("email", "fake@admin.com")])
+
+            response = reset_password_ctrl.forgot_password()
+            assert response.status_code == INVALID_ADMIN_CREDENTIALS.status_code
+            assert str(INVALID_ADMIN_CREDENTIALS.detail) in response.get_data(
+                as_text=True
+            )
+
+        # When the real admin is used the email is sent and we get success message in the response
+        with self.app.test_request_context("/admin/forgot_password", method="POST"):
+            flask.request.form = MultiDict([("email", self.admin.email)])
+
+            response = reset_password_ctrl.forgot_password()
+            assert response.status_code == 200
+            assert "Email successfully sent" in response.get_data(as_text=True)
+
+            # Check the email is sent
+            assert mock_email_manager.send_email.call_count == 1
+
+            call_args, call_kwargs = mock_email_manager.send_email.call_args_list[0]
+
+            # Check that the email is sent to the right admin
+            _, _, receivers, _, _ = call_args
+
+            assert len(receivers) == 1
+            assert receivers[0] == self.admin.email
+
+
 class TestPatronController(AdminControllerTest):
     def setup_method(self):
         super().setup_method()
