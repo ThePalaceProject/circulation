@@ -939,21 +939,23 @@ class TestResetPasswordController(AdminControllerTest):
 
         return token
 
-    @mock.patch("api.admin.password_admin_authentication_provider.EmailManager")
-    def test_reset_password_post(self, mock_email_manager):
+    def test_reset_password_post(self):
         reset_password_ctrl = self.manager.admin_reset_password_controller
 
         # Let's get valid token first
-        with self.app.test_request_context("/admin/forgot_password", method="POST"):
-            flask.request.form = MultiDict([("email", self.admin.email)])
+        with mock.patch(
+            "api.admin.password_admin_authentication_provider.EmailManager"
+        ) as mock_email_manager:
+            with self.app.test_request_context("/admin/forgot_password", method="POST"):
+                flask.request.form = MultiDict([("email", self.admin.email)])
 
-            response = reset_password_ctrl.forgot_password()
-            assert response.status_code == 200
+                response = reset_password_ctrl.forgot_password()
+                assert response.status_code == 200
 
-            call_args, call_kwargs = mock_email_manager.send_email.call_args_list[0]
-            _, _, _, mail_text, _ = call_args
+                call_args, call_kwargs = mock_email_manager.send_email.call_args_list[0]
+                _, _, _, mail_text, _ = call_args
 
-            token = self._extract_reset_pass_token_from_mail_text(mail_text)
+                token = self._extract_reset_pass_token_from_mail_text(mail_text)
 
         # If there is no passwords we get an error
         with self.app.test_request_context("/admin/reset_password", method="POST"):
