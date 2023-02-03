@@ -168,6 +168,18 @@ To let the application know which database to use set the `SIMPLIFIED_PRODUCTION
 export SIMPLIFIED_PRODUCTION_DATABASE="postgres://palace:test@localhost:5432/circ"
 ```
 
+### Email sending
+
+To use the features that require sending emails, for example to reset the password for logged-out users, you will need
+to have a working SMTP server and set some environment variables:
+
+```sh
+export SIMPLIFIED_MAIL_SERVER=example.smtp.com
+export SIMPLIFIED_MAIL_PORT=465
+export SIMPLIFIED_MAIL_USERNAME=username
+export SIMPLIFIED_MAIL_PASSWORD=password
+```
+
 ### Running the Application
 
 As mentioned in the [pyenv](#pyenv) section, the `poetry` tool should be executed under a virtual environment
