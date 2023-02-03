@@ -800,8 +800,7 @@ class TestResetPasswordController(AdminControllerTest):
 
             assert "admin/web" in response.headers.get("Location")
 
-    @mock.patch("api.admin.password_admin_authentication_provider.EmailManager")
-    def test_forgot_password_post(self, mock_email_manager):
+    def test_forgot_password_post(self):
         reset_password_ctrl = self.manager.admin_reset_password_controller
 
         # If there is no admin sent in the request we should get error response
@@ -825,26 +824,28 @@ class TestResetPasswordController(AdminControllerTest):
             )
 
         # When the real admin is used the email is sent and we get success message in the response
-        with self.app.test_request_context("/admin/forgot_password", method="POST"):
-            flask.request.form = MultiDict([("email", self.admin.email)])
+        with mock.patch(
+            "api.admin.password_admin_authentication_provider.EmailManager"
+        ) as mock_email_manager:
+            with self.app.test_request_context("/admin/forgot_password", method="POST"):
+                flask.request.form = MultiDict([("email", self.admin.email)])
 
-            response = reset_password_ctrl.forgot_password()
-            assert response.status_code == 200
-            assert "Email successfully sent" in response.get_data(as_text=True)
+                response = reset_password_ctrl.forgot_password()
+                assert response.status_code == 200
+                assert "Email successfully sent" in response.get_data(as_text=True)
 
-            # Check the email is sent
-            assert mock_email_manager.send_email.call_count == 1
+                # Check the email is sent
+                assert mock_email_manager.send_email.call_count == 1
 
-            call_args, call_kwargs = mock_email_manager.send_email.call_args_list[0]
+                call_args, call_kwargs = mock_email_manager.send_email.call_args_list[0]
 
-            # Check that the email is sent to the right admin
-            _, _, receivers, _, _ = call_args
+                # Check that the email is sent to the right admin
+                _, _, receivers, _, _ = call_args
 
-            assert len(receivers) == 1
-            assert receivers[0] == self.admin.email
+                assert len(receivers) == 1
+                assert receivers[0] == self.admin.email
 
-    @mock.patch("api.admin.password_admin_authentication_provider.EmailManager")
-    def test_reset_password_get(self, mock_email_manager):
+    def test_reset_password_get(self):
         reset_password_ctrl = self.manager.admin_reset_password_controller
         token = "token"
 
@@ -908,16 +909,19 @@ class TestResetPasswordController(AdminControllerTest):
 
         # Finally, if we use good token we get back view with the form for the new password
         # Let's get valid token first
-        with self.app.test_request_context("/admin/forgot_password", method="POST"):
-            flask.request.form = MultiDict([("email", self.admin.email)])
+        with mock.patch(
+            "api.admin.password_admin_authentication_provider.EmailManager"
+        ) as mock_email_manager:
+            with self.app.test_request_context("/admin/forgot_password", method="POST"):
+                flask.request.form = MultiDict([("email", self.admin.email)])
 
-            response = reset_password_ctrl.forgot_password()
-            assert response.status_code == 200
+                response = reset_password_ctrl.forgot_password()
+                assert response.status_code == 200
 
-            call_args, call_kwargs = mock_email_manager.send_email.call_args_list[0]
-            _, _, _, mail_text, _ = call_args
+                call_args, call_kwargs = mock_email_manager.send_email.call_args_list[0]
+                _, _, _, mail_text, _ = call_args
 
-            token = self._extract_reset_pass_token_from_mail_text(mail_text)
+                token = self._extract_reset_pass_token_from_mail_text(mail_text)
 
         with self.app.test_request_context("/admin/reset_password"):
             response = reset_password_ctrl.reset_password(token)
