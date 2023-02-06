@@ -8,7 +8,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from abc import ABCMeta
-from typing import Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 import flask
 import jwt
@@ -2810,4 +2810,4 @@ class BaseSAMLAuthenticationProvider(
 
     SETTINGS = SAMLSettings()  # type: ignore
 
-    LIBRARY_SETTINGS: List[dict] = []
+    LIBRARY_SETTINGS: List[Dict[str, Any]] = []
