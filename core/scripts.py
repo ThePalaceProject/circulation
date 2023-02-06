@@ -14,7 +14,7 @@ import uuid
 from collections import defaultdict
 from email.message import EmailMessage
 from enum import Enum
-from typing import Generator, Optional
+from typing import Generator, List, Optional, Set
 
 from sqlalchemy import and_, exists, text, tuple_
 from sqlalchemy.exc import ProgrammingError
@@ -68,7 +68,7 @@ from .model.configuration import ExternalIntegrationLink
 from .model.listeners import site_configuration_has_changed
 from .monitor import CollectionMonitor, ReaperMonitor
 from .opds_import import OPDSImporter, OPDSImportMonitor
-from .overdrive import OverdriveCoreAPI
+from .overdrive import OverdriveAdvantageAccount, OverdriveCoreAPI
 from .util import fast_query_count
 from .util.datetime_helpers import strptime_utc, to_utc, utc_now
 from .util.personal_names import contributor_name_match_ratio, display_name_to_sort_name
@@ -3520,7 +3520,7 @@ class ImportNewOverdriveAdvantageAccounts(InputScript):
 
     def __init__(self, _db=None, *args, **kwargs):
         super().__init__(_db, args, kwargs)
-        self._data: List[List[str]] = list()
+        self._set_properties_from_environment()
 
     @classmethod
     def arg_parser(cls):
@@ -3543,16 +3543,20 @@ class ImportNewOverdriveAdvantageAccounts(InputScript):
         msg["To"] = to_address
         smtp.sendmail(from_addr=from_address, to_addrs=to_address, msg=msg.as_string())
 
-    def _configure_smtp_client(self):
-        mail_host = os.environ.get("MAIL_HOST") or "localhost"
-        mail_port = os.environ.get("MAIL_PORT") or 587
-        mail_user = os.environ.get("MAIL_USER") or "no-mail-user"
-        mail_password = os.environ.get("MAIL_PASSWORD") or "no-mail-password"
-        use_tls = os.environ.get("MAIL_USE_TLS") in ("True", "true", "1")
-        smtp: smtplib.SMTP = smtplib.SMTP(host=mail_host, port=mail_port)
-        if use_tls:
+    def _set_properties_from_environment(self):
+        self.mail_host = os.environ.get("MAIL_HOST") or "localhost"
+        self.mail_port = os.environ.get("MAIL_PORT") or 587
+        self.mail_user = os.environ.get("MAIL_USER") or "no-mail-user"
+        self.mail_password = os.environ.get("MAIL_PASSWORD") or "no-mail-password"
+        self.use_tls = os.environ.get("MAIL_USE_TLS") in ("True", "true", "1")
+        self.cm_base_url = os.environ.get("CM_BASE_URL") or "http://localhost:6500"
+
+    def _configure_smtp_client(self) -> smtplib.SMTP:
+
+        smtp: smtplib.SMTP = smtplib.SMTP(host=self.mail_host, port=self.mail_port)
+        if self.use_tls:
             smtp.starttls()
-        smtp.login(mail_user, mail_password)
+        smtp.login(self.mail_user, self.mail_password)
         return smtp
 
     def _create_overdrive_api(self, c: Collection):
@@ -3560,7 +3564,7 @@ class ImportNewOverdriveAdvantageAccounts(InputScript):
 
     def do_run(self, *args, **kwargs):
         parsed = self.parse_command_line(_db=self._db, *args, **kwargs)
-        cm_base_url = os.environ.get("CM_BASE_URL") or "http://localhost:6500"
+        self.smtp_client = self._configure_smtp_client()
         system_admins = list(
             filter(
                 lambda x: x.is_system_admin()
@@ -3568,88 +3572,100 @@ class ImportNewOverdriveAdvantageAccounts(InputScript):
                 self._db.query(Admin),
             )
         )
-        system_admin_email_addresses: List = list(map(lambda x: x.email, system_admins))
-
+        self.email_recipients: List = list(map(lambda x: x.email, system_admins))
         query: Query = Collection.by_protocol(
             self._db, protocol=ExternalIntegration.OVERDRIVE
+        ).filter(Collection.parent_id == None)
+        for c in query:
+            self._process_collection(c)
+
+        self.smtp_client.quit()
+
+    def _process_collection(self, collection: Collection):
+        try:
+
+            accounts_to_be_created = self._resolve_list_of_new_advantage_accounts(
+                collection
+            )
+
+            # the advantage_accounts list now contains only accounts not yet associated with a Palace
+            # Overdrive Advantage Collection.
+            for aa in accounts_to_be_created:
+                # create collection.
+                adv_coll, is_new = Collection.by_name_and_protocol(
+                    self._db,
+                    name=aa.name + " Overdrive Advantage",
+                    protocol=ExternalIntegration.OVERDRIVE,
+                )
+                # associate the parent collection
+                adv_coll.parent = collection
+                # and the Overdrive library_id with the newly created collection.
+                adv_coll.external_account_id = aa.library_id
+                # send notification emails to sys admins.
+                if is_new:
+                    self._notify_recipients(
+                        parent_collection=collection, advantage_collection=adv_coll
+                    )
+                self._db.commit()
+
+        except Exception as e:
+            logging.error(
+                f"Could not connect to collection {collection.name}: reason: {str(e)} : Skipping..."
+            )
+
+    def _resolve_list_of_new_advantage_accounts(
+        self, collection
+    ) -> Set[OverdriveAdvantageAccount]:
+
+        # get a list of advantage accounts from overdrive
+        api = self._create_overdrive_api(collection)
+        # create a set from the list
+        advantage_accounts = {account for account in api.get_advantage_accounts()}
+
+        # get a list of existing advantage collections associated with this collection
+        existing_advantage_accounts = (
+            Collection.by_protocol(self._db, protocol=ExternalIntegration.OVERDRIVE)
+            .filter(Collection.parent_id == collection.id)
+            .all()
         )
-        smtp_client = self._configure_smtp_client()
-        for c in query.filter(Collection.parent_id == None):
-            collection: Collection = c
-            try:
-                api = self._create_overdrive_api(c)
-                advantage_accounts = {
-                    account for account in api.get_advantage_accounts()
-                }
-                # get a list of existing advantage collections associated with this collection
-                existing_advantage_accounts = (
-                    Collection.by_protocol(
-                        self._db, protocol=ExternalIntegration.OVERDRIVE
-                    )
-                    .filter(Collection.parent_id == collection.id)
-                    .all()
+        # for each existing account
+        for existing_account in existing_advantage_accounts:
+            # resolve the associated library_id
+            library_id = existing_account.external_account_id
+
+            # and remove the advantage account from the Overdrive api supplied account list with that id
+            # so we don't create duplicate collection records.
+            if library_id:
+                advantage_account = next(
+                    (x for x in advantage_accounts if x.library_id == library_id),
+                    None,
                 )
-                # for each existing account
-                for existing_account in existing_advantage_accounts:
-                    # resolve the associated library_id
-                    library_id = existing_account.external_account_id
+                if advantage_account:
+                    advantage_accounts.remove(advantage_account)
 
-                    # and remove the advantage account from the Overdrive api supplied account list with that id
-                    if library_id:
-                        advantage_account = next(
-                            (
-                                x
-                                for x in advantage_accounts
-                                if x.library_id == library_id
-                            ),
-                            None,
-                        )
-                        if advantage_account:
-                            advantage_accounts.remove(advantage_account)
+        return advantage_accounts
 
-                # the advantage_accounts list now contains only accounts not yet associated with a Palace
-                # Overdrive Advantage Collection.
-                for aa in advantage_accounts:
-                    # create collection.
-                    adv_coll, is_new = Collection.by_name_and_protocol(
-                        self._db,
-                        name=aa.name + " Overdrive Advantage",
-                        protocol=ExternalIntegration.OVERDRIVE,
-                    )
-                    # associate the parent collection
-                    adv_coll.parent = collection
-                    # and the Overdrive library_id with the newly created collection.
-                    adv_coll.external_account_id = aa.library_id
-                    # send notification emails to sys admins.
-                    if is_new:
-                        collection_url = f"{cm_base_url}/admin/web/config/collections/edit/{adv_coll.id}"
-                        message = (
-                            f"New Overdrive Advantage collection added to {collection.name}, "
-                            f'New Overdrive Advantage collection: "{adv_coll.name}", '
-                            f"external account id={aa.library_id}."
-                        )
-                        logging.info(message)
-                        message_body = (
-                            message
-                            + f"\n\nClick to complete configuration: {collection_url}"
-                        )
-                        for email in system_admin_email_addresses:
-                            self._send_email(
-                                smtp=smtp_client,
-                                from_address="no-reply@thepalaceproject.org",
-                                to_address=email,
-                                subject=f"New Overdrive Advantage collection: {adv_coll.name}",
-                                body=message_body,
-                            )
-
-                    self._db.commit()
-
-            except Exception as e:
-                logging.error(
-                    f"Could not connect to collection {c.name}: reason: {str(e)} : Skipping..."
-                )
-
-        smtp_client.quit()
+    def _notify_recipients(
+        self, parent_collection: Collection, advantage_collection: Collection
+    ):
+        collection_url = f"{self.cm_base_url}/admin/web/config/collections/edit/{advantage_collection.id}"
+        message = (
+            f"New Overdrive Advantage collection added to {parent_collection.name}, "
+            f'New Overdrive Advantage collection: "{advantage_collection.name}", '
+            f"external account id={advantage_collection.external_account_id}."
+        )
+        logging.info(message)
+        message_body = (
+            message + f"\n\nclick to complete configuration: {collection_url}"
+        )
+        for email in self.email_recipients:
+            self._send_email(
+                smtp=self.smtp_client,
+                from_address="no-reply@thepalaceproject.org",
+                to_address=email,
+                subject=f"New overdrive advantage collection: {advantage_collection.name}",
+                body=message_body,
+            )
 
 
 class CustomListUpdateEntriesScript(CustomListSweeperScript):
