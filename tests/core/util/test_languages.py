@@ -105,6 +105,9 @@ class TestLanguageCodes:
         assert "tib" == m("bod")
         # test reserved codes
         assert "qab" == m("qab")
+        assert "per" == m("Persian")
+        assert "per" == m("Farsi")
+        assert "per" == m("per")
         # test bad data
         assert None == m(self.NONEXISTENT_LABEL)
 
