@@ -3420,8 +3420,20 @@ class UpdateLaneSizeScript(LaneSweeperScript):
 
     def process_lane(self, lane):
         """Update the estimated size of a Lane."""
+
+        # We supress the configuration changes updates, as each lane is updated
+        # and call the site_configuration_has_changed function once after this
+        # script has finished running.
+        #
+        # This is done because calling site_configuration_has_changed repeatedly
+        # was causing performance problems, when we have lots of lanes to update.
+        lane._suppress_configuration_changes = True
         lane.update_size(self._db)
         self.log.info("%s: %d", lane.full_identifier, lane.size)
+
+    def do_run(self, *args, **kwargs):
+        super().do_run(*args, **kwargs)
+        site_configuration_has_changed(self._db)
 
 
 class UpdateCustomListSizeScript(CustomListSweeperScript):

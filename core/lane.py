@@ -2696,6 +2696,14 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         cascade="all, delete-orphan",
     )
 
+    # We add this property to the class, so that we can disable the sqlalchemy
+    # listener that calls site_configuration_has_changed. Calling this repeatedly
+    # when updating lanes can cause performance issues. The plan is for this to
+    # be a temporary fix while we replace the need for the site_configuration_has_changed
+    # and listeners at all.
+    # TODO: we should remove this, once we remove the site_configuration_has_changed listeners
+    _suppress_configuration_changes = False
+
     __table_args__ = (UniqueConstraint("parent_id", "display_name"),)
 
     def get_library(self, _db):
@@ -3236,7 +3244,10 @@ def configuration_relevant_lifecycle_event(mapper, connection, target):
 @event.listens_for(Lane, "after_update")
 @event.listens_for(LaneGenre, "after_update")
 def configuration_relevant_update(mapper, connection, target):
-    if directly_modified(target):
+    suppressed = (
+        target._suppress_configuration_changes if isinstance(target, Lane) else False
+    )
+    if directly_modified(target) and not suppressed:
         site_configuration_has_changed(target)
 
 
