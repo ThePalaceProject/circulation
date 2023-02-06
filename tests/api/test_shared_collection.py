@@ -18,7 +18,8 @@ from core.model import (
     create,
     get_one,
 )
-from core.testing import DatabaseTest, MockRequestsResponse
+from core.testing import MockRequestsResponse
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class MockAPI(BaseSharedCollectionAPI):
@@ -44,64 +45,89 @@ class MockAPI(BaseSharedCollectionAPI):
         self.released_holds.append((client, hold))
 
 
-class TestSharedCollectionAPI(DatabaseTest):
-    def setup_method(self):
-        super().setup_method()
-        self.collection = self._collection(protocol="Mock")
+class SharedCollectionFixture:
+    def __init__(self, db: DatabaseTransactionFixture):
+        self.db = db
+        self.collection = db.collection(protocol="Mock")
         self.shared_collection = SharedCollectionAPI(
-            self._db, api_map={"Mock": MockAPI}
+            db.session, api_map={"Mock": MockAPI}
         )
         self.api = self.shared_collection.api(self.collection)
         ConfigurationSetting.for_externalintegration(
             BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS,
             self.collection.external_integration,
         ).value = json.dumps(["http://library.org"])
-        self.client, ignore = IntegrationClient.register(self._db, "http://library.org")
-        edition, self.pool = self._edition(
+        self.client, ignore = IntegrationClient.register(
+            db.session, "http://library.org"
+        )
+        edition, self.pool = db.edition(
             with_license_pool=True, collection=self.collection
         )
         [self.delivery_mechanism] = self.pool.delivery_mechanisms
 
-    def test_initialization_exception(self):
+
+@pytest.fixture(scope="function")
+def shared_collection_fixture(
+    db: DatabaseTransactionFixture,
+) -> SharedCollectionFixture:
+    return SharedCollectionFixture(db)
+
+
+class TestSharedCollectionAPI:
+    def test_initialization_exception(
+        self, shared_collection_fixture: SharedCollectionFixture
+    ):
+        db = shared_collection_fixture.db
+
         class MisconfiguredAPI:
             def __init__(self, _db, collection):
                 raise CannotLoadConfiguration("doomed!")
 
-        api_map = {self._default_collection.protocol: MisconfiguredAPI}
-        shared_collection = SharedCollectionAPI(self._db, api_map=api_map)
+        api_map = {db.default_collection().protocol: MisconfiguredAPI}
+        shared_collection = SharedCollectionAPI(db.session, api_map=api_map)
         # Although the SharedCollectionAPI was created, it has no functioning
         # APIs.
         assert {} == shared_collection.api_for_collection
 
         # Instead, the CannotLoadConfiguration exception raised by the
         # constructor has been stored in initialization_exceptions.
-        e = shared_collection.initialization_exceptions[self._default_collection.id]
+        e = shared_collection.initialization_exceptions[db.default_collection().id]
         assert isinstance(e, CannotLoadConfiguration)
         assert "doomed!" == str(e)
 
-    def test_api_for_licensepool(self):
-        collection = self._collection(protocol=ODLAPI.NAME)
-        edition, pool = self._edition(with_license_pool=True, collection=collection)
-        shared_collection = SharedCollectionAPI(self._db)
+    def test_api_for_licensepool(
+        self, shared_collection_fixture: SharedCollectionFixture
+    ):
+        db = shared_collection_fixture.db
+
+        collection = db.collection(protocol=ODLAPI.NAME)
+        edition, pool = db.edition(with_license_pool=True, collection=collection)
+        shared_collection = SharedCollectionAPI(db.session)
         assert isinstance(shared_collection.api_for_licensepool(pool), ODLAPI)
 
-    def test_api_for_collection(self):
-        collection = self._collection()
-        shared_collection = SharedCollectionAPI(self._db)
+    def test_api_for_collection(
+        self, shared_collection_fixture: SharedCollectionFixture
+    ):
+        db = shared_collection_fixture.db
+
+        collection = db.collection()
+        shared_collection = SharedCollectionAPI(db.session)
         # The collection isn't a shared collection, so looking up its API
         # raises an exception.
-        pytest.raises(CirculationException, shared_collection.api, collection)
+        pytest.raises(CirculationException, shared_collection.api, collection)  # type: ignore
 
         collection.protocol = ODLAPI.NAME
-        shared_collection = SharedCollectionAPI(self._db)
+        shared_collection = SharedCollectionAPI(db.session)
         assert isinstance(shared_collection.api(collection), ODLAPI)
 
-    def test_register(self):
+    def test_register(self, shared_collection_fixture: SharedCollectionFixture):
+        db = shared_collection_fixture.db
+
         # An auth document URL is required to register.
         pytest.raises(
-            InvalidInputException,
-            self.shared_collection.register,
-            self.collection,
+            InvalidInputException,  # type: ignore
+            shared_collection_fixture.shared_collection.register,
+            shared_collection_fixture.collection,
             None,
         )
 
@@ -112,9 +138,9 @@ class TestSharedCollectionAPI(DatabaseTest):
             return MockRequestsResponse(200, content=auth_response)
 
         pytest.raises(
-            RemoteInitiatedServerError,
-            self.shared_collection.register,
-            self.collection,
+            RemoteInitiatedServerError,  # type: ignore
+            shared_collection_fixture.shared_collection.register,
+            shared_collection_fixture.collection,
             "http://library.org/auth",
             do_get=do_get,
         )
@@ -122,9 +148,9 @@ class TestSharedCollectionAPI(DatabaseTest):
         # The auth document also must have a link to the library's catalog.
         auth_response = json.dumps({"links": []})
         pytest.raises(
-            RemoteInitiatedServerError,
-            self.shared_collection.register,
-            self.collection,
+            RemoteInitiatedServerError,  # type: ignore
+            shared_collection_fixture.shared_collection.register,
+            shared_collection_fixture.collection,
             "http://library.org/auth",
             do_get=do_get,
         )
@@ -135,12 +161,12 @@ class TestSharedCollectionAPI(DatabaseTest):
         )
         ConfigurationSetting.for_externalintegration(
             BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS,
-            self.collection.external_integration,
+            shared_collection_fixture.collection.external_integration,
         ).value = None
         pytest.raises(
-            AuthorizationFailedException,
-            self.shared_collection.register,
-            self.collection,
+            AuthorizationFailedException,  # type: ignore
+            shared_collection_fixture.shared_collection.register,
+            shared_collection_fixture.collection,
             "http://library.org/auth",
             do_get=do_get,
         )
@@ -151,12 +177,12 @@ class TestSharedCollectionAPI(DatabaseTest):
         )
         ConfigurationSetting.for_externalintegration(
             BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS,
-            self.collection.external_integration,
+            shared_collection_fixture.collection.external_integration,
         ).value = json.dumps(["http://library.org"])
         pytest.raises(
-            AuthorizationFailedException,
-            self.shared_collection.register,
-            self.collection,
+            AuthorizationFailedException,  # type: ignore
+            shared_collection_fixture.shared_collection.register,
+            shared_collection_fixture.collection,
             "http://differentlibrary.org/auth",
             do_get=do_get,
         )
@@ -166,9 +192,9 @@ class TestSharedCollectionAPI(DatabaseTest):
             {"links": [{"href": "http://library.org", "rel": "start"}]}
         )
         pytest.raises(
-            RemoteInitiatedServerError,
-            self.shared_collection.register,
-            self.collection,
+            RemoteInitiatedServerError,  # type: ignore
+            shared_collection_fixture.shared_collection.register,
+            shared_collection_fixture.collection,
             "http://library.org/auth",
             do_get=do_get,
         )
@@ -180,9 +206,9 @@ class TestSharedCollectionAPI(DatabaseTest):
             }
         )
         pytest.raises(
-            RemoteInitiatedServerError,
-            self.shared_collection.register,
-            self.collection,
+            RemoteInitiatedServerError,  # type: ignore
+            shared_collection_fixture.shared_collection.register,
+            shared_collection_fixture.collection,
             "http://library.org/auth",
             do_get=do_get,
         )
@@ -194,9 +220,9 @@ class TestSharedCollectionAPI(DatabaseTest):
             }
         )
         pytest.raises(
-            RemoteInitiatedServerError,
-            self.shared_collection.register,
-            self.collection,
+            RemoteInitiatedServerError,  # type: ignore
+            shared_collection_fixture.shared_collection.register,
+            shared_collection_fixture.collection,
             "http://library.org/auth",
             do_get=do_get,
         )
@@ -211,13 +237,15 @@ class TestSharedCollectionAPI(DatabaseTest):
                 "links": [{"href": "http://library.org", "rel": "start"}],
             }
         )
-        response = self.shared_collection.register(
-            self.collection, "http://library.org/auth", do_get=do_get
+        response = shared_collection_fixture.shared_collection.register(
+            shared_collection_fixture.collection,
+            "http://library.org/auth",
+            do_get=do_get,
         )
 
         # An IntegrationClient has been created.
         client = get_one(
-            self._db,
+            db.session,
             IntegrationClient,
             url=IntegrationClient.normalize_url("http://library.org/"),
         )
@@ -226,125 +254,179 @@ class TestSharedCollectionAPI(DatabaseTest):
         )
         assert client.shared_secret == decrypted_secret.decode("utf-8")
 
-    def test_borrow(self):
+    def test_borrow(self, shared_collection_fixture: SharedCollectionFixture):
+        db = shared_collection_fixture.db
+
         # This client is registered, but isn't one of the allowed URLs for the collection
         # (maybe it was registered for a different shared collection).
         other_client, ignore = IntegrationClient.register(
-            self._db, "http://other_library.org"
+            db.session, "http://other_library.org"
         )
 
         # Trying to borrow raises an exception.
         pytest.raises(
-            AuthorizationFailedException,
-            self.shared_collection.borrow,
-            self.collection,
+            AuthorizationFailedException,  # type: ignore
+            shared_collection_fixture.shared_collection.borrow,
+            shared_collection_fixture.collection,
             other_client,
-            self.pool,
+            shared_collection_fixture.pool,
         )
 
         # A client that's registered with the collection can borrow.
-        self.shared_collection.borrow(self.collection, self.client, self.pool)
-        assert [(self.client, self.pool)] == self.api.checkouts
+        shared_collection_fixture.shared_collection.borrow(
+            shared_collection_fixture.collection,
+            shared_collection_fixture.client,
+            shared_collection_fixture.pool,
+        )
+        assert [
+            (shared_collection_fixture.client, shared_collection_fixture.pool)
+        ] == shared_collection_fixture.api.checkouts
 
         # If the client's checking out an existing hold, the hold must be for that client.
         hold, ignore = create(
-            self._db, Hold, integration_client=other_client, license_pool=self.pool
+            db.session,
+            Hold,
+            integration_client=other_client,
+            license_pool=shared_collection_fixture.pool,
         )
         pytest.raises(
-            CannotLoan,
-            self.shared_collection.borrow,
-            self.collection,
-            self.client,
-            self.pool,
+            CannotLoan,  # type: ignore
+            shared_collection_fixture.shared_collection.borrow,
+            shared_collection_fixture.collection,
+            shared_collection_fixture.client,
+            shared_collection_fixture.pool,
             hold=hold,
         )
 
-        hold.integration_client = self.client
-        self.shared_collection.borrow(
-            self.collection, self.client, self.pool, hold=hold
+        hold.integration_client = shared_collection_fixture.client
+        shared_collection_fixture.shared_collection.borrow(
+            shared_collection_fixture.collection,
+            shared_collection_fixture.client,
+            shared_collection_fixture.pool,
+            hold=hold,
         )
-        assert [(self.client, self.pool)] == self.api.checkouts[1:]
+        assert [
+            (shared_collection_fixture.client, shared_collection_fixture.pool)
+        ] == shared_collection_fixture.api.checkouts[1:]
 
-    def test_revoke_loan(self):
+    def test_revoke_loan(self, shared_collection_fixture: SharedCollectionFixture):
+        db = shared_collection_fixture.db
+
         other_client, ignore = IntegrationClient.register(
-            self._db, "http://other_library.org"
+            db.session, "http://other_library.org"
         )
         loan, ignore = create(
-            self._db, Loan, integration_client=other_client, license_pool=self.pool
+            db.session,
+            Loan,
+            integration_client=other_client,
+            license_pool=shared_collection_fixture.pool,
         )
         pytest.raises(
-            NotCheckedOut,
-            self.shared_collection.revoke_loan,
-            self.collection,
-            self.client,
+            NotCheckedOut,  # type: ignore
+            shared_collection_fixture.shared_collection.revoke_loan,
+            shared_collection_fixture.collection,
+            shared_collection_fixture.client,
             loan,
         )
 
-        loan.integration_client = self.client
-        self.shared_collection.revoke_loan(self.collection, self.client, loan)
-        assert [(self.client, loan)] == self.api.returns
+        loan.integration_client = shared_collection_fixture.client
+        shared_collection_fixture.shared_collection.revoke_loan(
+            shared_collection_fixture.collection, shared_collection_fixture.client, loan
+        )
+        assert [
+            (shared_collection_fixture.client, loan)
+        ] == shared_collection_fixture.api.returns
 
-    def test_fulfill(self):
+    def test_fulfill(self, shared_collection_fixture: SharedCollectionFixture):
+        db = shared_collection_fixture.db
+
         other_client, ignore = IntegrationClient.register(
-            self._db, "http://other_library.org"
+            db.session, "http://other_library.org"
         )
         loan, ignore = create(
-            self._db, Loan, integration_client=other_client, license_pool=self.pool
+            db.session,
+            Loan,
+            integration_client=other_client,
+            license_pool=shared_collection_fixture.pool,
         )
         pytest.raises(
-            CannotFulfill,
-            self.shared_collection.fulfill,
-            self.collection,
-            self.client,
+            CannotFulfill,  # type: ignore
+            shared_collection_fixture.shared_collection.fulfill,
+            shared_collection_fixture.collection,
+            shared_collection_fixture.client,
             loan,
-            self.delivery_mechanism,
+            shared_collection_fixture.delivery_mechanism,
         )
 
-        loan.integration_client = self.client
+        loan.integration_client = shared_collection_fixture.client
 
         # If the API does not return content or a content link, the loan can't be fulfilled.
         pytest.raises(
-            CannotFulfill,
-            self.shared_collection.fulfill,
-            self.collection,
-            self.client,
+            CannotFulfill,  # type: ignore
+            shared_collection_fixture.shared_collection.fulfill,
+            shared_collection_fixture.collection,
+            shared_collection_fixture.client,
             loan,
-            self.delivery_mechanism,
+            shared_collection_fixture.delivery_mechanism,
         )
-        assert [(self.client, loan, self.delivery_mechanism)] == self.api.fulfills
+        assert [
+            (
+                shared_collection_fixture.client,
+                loan,
+                shared_collection_fixture.delivery_mechanism,
+            )
+        ] == shared_collection_fixture.api.fulfills
 
-        self.api.fulfillment = FulfillmentInfo(
-            self.collection,
-            self.pool.data_source.name,
-            self.pool.identifier.type,
-            self.pool.identifier.identifier,
+        shared_collection_fixture.api.fulfillment = FulfillmentInfo(
+            shared_collection_fixture.collection,
+            shared_collection_fixture.pool.data_source.name,
+            shared_collection_fixture.pool.identifier.type,
+            shared_collection_fixture.pool.identifier.identifier,
             "http://content",
             "text/html",
             None,
             None,
         )
-        fulfillment = self.shared_collection.fulfill(
-            self.collection, self.client, loan, self.delivery_mechanism
+        fulfillment = shared_collection_fixture.shared_collection.fulfill(
+            shared_collection_fixture.collection,
+            shared_collection_fixture.client,
+            loan,
+            shared_collection_fixture.delivery_mechanism,
         )
-        assert [(self.client, loan, self.delivery_mechanism)] == self.api.fulfills[1:]
-        assert self.delivery_mechanism == loan.fulfillment
+        assert [
+            (
+                shared_collection_fixture.client,
+                loan,
+                shared_collection_fixture.delivery_mechanism,
+            )
+        ] == shared_collection_fixture.api.fulfills[1:]
+        assert shared_collection_fixture.delivery_mechanism == loan.fulfillment
 
-    def test_revoke_hold(self):
+    def test_revoke_hold(self, shared_collection_fixture: SharedCollectionFixture):
+        db = shared_collection_fixture.db
+
         other_client, ignore = IntegrationClient.register(
-            self._db, "http://other_library.org"
+            db.session, "http://other_library.org"
         )
         hold, ignore = create(
-            self._db, Hold, integration_client=other_client, license_pool=self.pool
+            db.session,
+            Hold,
+            integration_client=other_client,
+            license_pool=shared_collection_fixture.pool,
         )
 
         pytest.raises(
-            CannotReleaseHold,
-            self.shared_collection.revoke_hold,
-            self.collection,
-            self.client,
+            CannotReleaseHold,  # type: ignore
+            shared_collection_fixture.shared_collection.revoke_hold,
+            shared_collection_fixture.collection,
+            shared_collection_fixture.client,
             hold,
         )
 
-        hold.integration_client = self.client
-        self.shared_collection.revoke_hold(self.collection, self.client, hold)
-        assert [(self.client, hold)] == self.api.released_holds
+        hold.integration_client = shared_collection_fixture.client
+        shared_collection_fixture.shared_collection.revoke_hold(
+            shared_collection_fixture.collection, shared_collection_fixture.client, hold
+        )
+        assert [
+            (shared_collection_fixture.client, hold)
+        ] == shared_collection_fixture.api.released_holds

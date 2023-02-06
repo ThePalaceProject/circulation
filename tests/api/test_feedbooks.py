@@ -15,17 +15,17 @@ from core.model import (
 from core.model.configuration import ExternalIntegrationLink
 from core.opds import OPDSFeed
 from core.s3 import MockS3Uploader
-from core.testing import DatabaseTest, DummyHTTPClient, DummyMetadataClient
-
-from . import sample_data
+from core.testing import DummyHTTPClient, DummyMetadataClient
+from tests.fixtures.api_feedbooks_files import FeedbooksFilesFixture
+from tests.fixtures.database import DatabaseTransactionFixture
 
 LIFE_PLUS_70 = "This work is available for countries where copyright is Life+70."
 
 
-class TestFeedbooksOPDSImporter(DatabaseTest):
-    def _importer(self, **settings):
-        collection = self._collection(
-            name=DataSource.FEEDBOOKS + self._str,
+class FeedbooksTestFixture:
+    def create_importer(self, **settings):
+        collection = self.db.collection(
+            name=DataSource.FEEDBOOKS + self.db.fresh_str(),
             protocol=ExternalIntegration.FEEDBOOKS,
         )
 
@@ -44,72 +44,93 @@ class TestFeedbooksOPDSImporter(DatabaseTest):
             collection.external_integration.set_setting(setting, value)
 
         return collection, FeedbooksOPDSImporter(
-            self._db,
+            self.db.session,
             collection,
             http_get=self.http.do_get,
             mirrors=self.mirrors,
             metadata_client=self.metadata,
         )
 
-    def setup_method(self):
-        super().setup_method()
+    def __init__(
+        self,
+        db: DatabaseTransactionFixture,
+        api_feedbooks_files_fixture: FeedbooksFilesFixture,
+    ):
+        self.db = db
+        self.files = api_feedbooks_files_fixture
         self.http = DummyHTTPClient()
         self.metadata = DummyMetadataClient()
         self.mirrors = dict(
             covers_mirror=MockS3Uploader(), books_mirror=MockS3Uploader()
         )
 
-        self.data_source = DataSource.lookup(self._db, DataSource.FEEDBOOKS)
-
+        self.data_source = DataSource.lookup(db.session, DataSource.FEEDBOOKS)
         # Create a default importer that's good enough for most tests.
-        self.collection, self.importer = self._importer()
+        self.collection, self.importer = self.create_importer()
 
     def sample_file(self, filename, mode="r"):
-        return sample_data(filename, "feedbooks", mode)
+        return self.files.sample_data(filename)
 
-    def test_safety_switch(self):
+
+@pytest.fixture(scope="function")
+def feedbooks_test_fixture(
+    db: DatabaseTransactionFixture, api_feedbooks_files_fixture: FeedbooksFilesFixture
+) -> FeedbooksTestFixture:
+    return FeedbooksTestFixture(db, api_feedbooks_files_fixture)
+
+
+class TestFeedbooksOPDSImporter:
+    def test_safety_switch(self, feedbooks_test_fixture: FeedbooksTestFixture):
         """The importer won't be instantiated if REALLY_IMPORT_KEY is not
         set to true.
         """
         settings = {FeedbooksOPDSImporter.REALLY_IMPORT_KEY: "false"}
         with pytest.raises(Exception) as excinfo:
-            self._importer(**settings)
+            feedbooks_test_fixture.create_importer(**settings)
         assert "configured to not actually do an import" in str(excinfo.value)
 
-    def test_unique_identifier(self):
+    def test_unique_identifier(self, feedbooks_test_fixture: FeedbooksTestFixture):
         # The unique account ID is the language of the Feedbooks
         # feed in use.
-        assert "de" == self.collection.unique_account_id
+        assert "de" == feedbooks_test_fixture.collection.unique_account_id
 
-    def test_error_retrieving_replacement_css(self):
+    def test_error_retrieving_replacement_css(
+        self, feedbooks_test_fixture: FeedbooksTestFixture
+    ):
         # The importer cannot be instantiated if a replacement CSS
         # is specified but the replacement CSS document cannot be
         # retrieved or does not appear to be CSS.
 
         settings = {FeedbooksOPDSImporter.REPLACEMENT_CSS_KEY: "http://foo"}
 
-        self.http.queue_response(500, content="An error message")
+        feedbooks_test_fixture.http.queue_response(500, content="An error message")
         with pytest.raises(IOError) as excinfo:
-            self._importer(**settings)
+            feedbooks_test_fixture.create_importer(**settings)
         assert "Replacement stylesheet URL returned 500 response code" in str(
             excinfo.value
         )
 
-        self.http.queue_response(
+        feedbooks_test_fixture.http.queue_response(
             200, content="We have many CSS offerings", media_type="text/html"
         )
         with pytest.raises(IOError) as excinfo:
-            self._importer(**settings)
+            feedbooks_test_fixture.create_importer(**settings)
         assert "Replacement stylesheet is 'text/html', not a CSS document." in str(
             excinfo.value
         )
 
-    def test_extract_feed_data_improves_descriptions(self):
-        feed = self.sample_file("feed.atom")
-        self.http.queue_response(
-            200, OPDSFeed.ENTRY_TYPE, content=self.sample_file("677.atom")
+    def test_extract_feed_data_improves_descriptions(
+        self, feedbooks_test_fixture: FeedbooksTestFixture
+    ):
+        feed = feedbooks_test_fixture.sample_file("feed.atom")
+        feedbooks_test_fixture.http.queue_response(
+            200,
+            OPDSFeed.ENTRY_TYPE,
+            content=feedbooks_test_fixture.sample_file("677.atom"),
         )
-        metadata, failures = self.importer.extract_feed_data(feed, "http://url/")
+        metadata, failures = feedbooks_test_fixture.importer.extract_feed_data(
+            feed, "http://url/"
+        )
         [(key, value)] = metadata.items()
         assert "http://www.feedbooks.com/book/677" == key
         assert "Discourse on the Method" == value.title
@@ -119,9 +140,9 @@ class TestFeedbooksOPDSImporter(DatabaseTest):
         [description] = [x for x in value.links if x.rel == Hyperlink.DESCRIPTION]
         assert 1818 == len(description.content)
 
-    def test_improve_description(self):
+    def test_improve_description(self, feedbooks_test_fixture: FeedbooksTestFixture):
         # Here's a Metadata that has a bad (truncated) description.
-        metadata = Metadata(self.data_source)
+        metadata = Metadata(feedbooks_test_fixture.data_source)
 
         bad_description = LinkData(
             rel=Hyperlink.DESCRIPTION,
@@ -160,9 +181,11 @@ class TestFeedbooksOPDSImporter(DatabaseTest):
 
         # Two requests will be made. The first will result in a 404
         # error. The second will give us an OPDS entry.
-        self.http.queue_response(404, content="Not found")
-        self.http.queue_response(
-            200, OPDSFeed.ENTRY_TYPE, content=self.sample_file("677.atom")
+        feedbooks_test_fixture.http.queue_response(404, content="Not found")
+        feedbooks_test_fixture.http.queue_response(
+            200,
+            OPDSFeed.ENTRY_TYPE,
+            content=feedbooks_test_fixture.sample_file("677.atom"),
         )
 
         metadata.links = [
@@ -174,7 +197,7 @@ class TestFeedbooksOPDSImporter(DatabaseTest):
             alternate4,
         ]
 
-        self.importer.improve_description("some ID", metadata)
+        feedbooks_test_fixture.importer.improve_description("some ID", metadata)
 
         # The descriptions have been removed from metatadata.links,
         # because 677.atom included a description we know was better.
@@ -196,9 +219,11 @@ class TestFeedbooksOPDSImporter(DatabaseTest):
         assert alternate4 in metadata.links
 
         # Two HTTP requests were made.
-        assert ["http://foo/", "http://baz/"] == self.http.requests
+        assert ["http://foo/", "http://baz/"] == feedbooks_test_fixture.http.requests
 
-    def test_generic_acquisition_epub_link_picked_up_as_open_access(self):
+    def test_generic_acquisition_epub_link_picked_up_as_open_access(
+        self, feedbooks_test_fixture: FeedbooksTestFixture
+    ):
         """The OPDS feed has links with generic OPDS "acquisition"
         relations. We know that the EPUB link should be open-access
         relations, and we modify its relation on the way in.
@@ -207,8 +232,8 @@ class TestFeedbooksOPDSImporter(DatabaseTest):
         formats, which means they don't get picked up at all.
         """
 
-        feed = self.sample_file("feed_with_open_access_book.atom")
-        imports, errors = self.importer.extract_feed_data(feed)
+        feed = feedbooks_test_fixture.sample_file("feed_with_open_access_book.atom")
+        imports, errors = feedbooks_test_fixture.importer.extract_feed_data(feed)
         [book] = list(imports.values())
         open_access_links = [
             x for x in book.circulation.links if x.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD
@@ -223,12 +248,14 @@ class TestFeedbooksOPDSImporter(DatabaseTest):
         ]
         assert [] == generic_links
 
-    def test_open_access_book_modified_and_mirrored(self):
+    def test_open_access_book_modified_and_mirrored(
+        self, feedbooks_test_fixture: FeedbooksTestFixture
+    ):
         # If no replacement CSS is specified (this is the case with
         # the default importer), the OPDSImporter.content_modifier
         # method is not assigned.
-        assert None == self.importer.new_css
-        assert None == self.importer.content_modifier
+        assert None == feedbooks_test_fixture.importer.new_css
+        assert None == feedbooks_test_fixture.importer.content_modifier
 
         # Let's create an importer that does specify a replacement
         # CSS file.
@@ -236,16 +263,16 @@ class TestFeedbooksOPDSImporter(DatabaseTest):
 
         # The very first request made is going to be to the
         # REPLACEMENT_CSS_KEY URL.
-        self.http.queue_response(
+        feedbooks_test_fixture.http.queue_response(
             200,
             content="Some new CSS",
             media_type="text/css",
         )
-        ignore, importer = self._importer(**settings)
+        ignore, importer = feedbooks_test_fixture.create_importer(**settings)
 
         # The replacement CSS is retrieved during the FeedbooksImporter
         # constructor.
-        assert ["http://css/"] == self.http.requests
+        assert ["http://css/"] == feedbooks_test_fixture.http.requests
 
         # OPDSImporter.content_modifier has been set to call replace_css
         # when necessary.
@@ -254,9 +281,9 @@ class TestFeedbooksOPDSImporter(DatabaseTest):
 
         # The requests to the various copies of the book will succeed,
         # and the books will be mirrored.
-        self.http.queue_response(
+        feedbooks_test_fixture.http.queue_response(
             200,
-            content=self.sample_file("677.epub", "rb"),
+            content=feedbooks_test_fixture.sample_file("677.epub", "rb"),
             media_type=Representation.EPUB_MEDIA_TYPE,
         )
 
@@ -264,11 +291,13 @@ class TestFeedbooksOPDSImporter(DatabaseTest):
         # http://covers.feedbooks.net/book/677.jpg?size=large&t=1428398185'
         # will result in a 404 error, and the image will not be
         # mirrored.
-        self.http.queue_response(404, media_type="text/plain")
+        feedbooks_test_fixture.http.queue_response(404, media_type="text/plain")
 
-        self.metadata.lookups = {"René Descartes": "Descartes, Rene"}
-        feed = self.sample_file("feed_with_open_access_book.atom")
-        self.http.queue_response(200, OPDSFeed.ACQUISITION_FEED_TYPE, content=feed)
+        feedbooks_test_fixture.metadata.lookups = {"René Descartes": "Descartes, Rene"}
+        feed = feedbooks_test_fixture.sample_file("feed_with_open_access_book.atom")
+        feedbooks_test_fixture.http.queue_response(
+            200, OPDSFeed.ACQUISITION_FEED_TYPE, content=feed
+        )
 
         [edition], [pool], [work], failures = importer.import_from_feed(feed)
 
@@ -283,7 +312,7 @@ class TestFeedbooksOPDSImporter(DatabaseTest):
             "http://css/",
             "http://www.feedbooks.com/book/677.epub",
             "http://covers.feedbooks.net/book/677.jpg?size=large&t=1428398185",
-        ] == self.http.requests
+        ] == feedbooks_test_fixture.http.requests
 
         # The EPUB was 'uploaded' to the mock S3 service and turned
         # into a LicensePoolDeliveryMechanism. The other formats were
@@ -309,7 +338,9 @@ class TestFeedbooksOPDSImporter(DatabaseTest):
         # The mirrored content contains the modified CSS in the books mirror
         # due to the link rel type.
         content = BytesIO(
-            self.mirrors[ExternalIntegrationLink.OPEN_ACCESS_BOOKS].content[0]
+            feedbooks_test_fixture.mirrors[
+                ExternalIntegrationLink.OPEN_ACCESS_BOOKS
+            ].content[0]
         )
         with ZipFile(content) as zip:
             # The zip still contains the original epub's files.
@@ -325,23 +356,34 @@ class TestFeedbooksOPDSImporter(DatabaseTest):
             with zip.open("OPS/css/about.css") as f:
                 assert b"Some new CSS" == f.read()
 
-    def test_in_copyright_book_not_mirrored(self):
+    def test_in_copyright_book_not_mirrored(
+        self, feedbooks_test_fixture: FeedbooksTestFixture
+    ):
+        feedbooks_test_fixture.metadata.lookups = {"René Descartes": "Descartes, Rene"}
+        feed = feedbooks_test_fixture.sample_file("feed_with_in_copyright_book.atom")
+        feedbooks_test_fixture.http.queue_response(
+            200, OPDSFeed.ACQUISITION_FEED_TYPE, content=feed
+        )
 
-        self.metadata.lookups = {"René Descartes": "Descartes, Rene"}
-        feed = self.sample_file("feed_with_in_copyright_book.atom")
-        self.http.queue_response(200, OPDSFeed.ACQUISITION_FEED_TYPE, content=feed)
-
-        [edition], [pool], [work], failures = self.importer.import_from_feed(feed)
+        (
+            [edition],
+            [pool],
+            [work],
+            failures,
+        ) = feedbooks_test_fixture.importer.import_from_feed(feed)
 
         # The work has been created and has metadata.
         assert "Discourse on the Method" == work.title
         assert "Ren\xe9 Descartes" == work.author
 
         # No mock HTTP requests were made.
-        assert [] == self.http.requests
+        assert [] == feedbooks_test_fixture.http.requests
 
         # Nothing was uploaded to the mock S3 covers mirror.
-        assert [] == self.mirrors[ExternalIntegrationLink.COVERS].uploaded
+        assert (
+            []
+            == feedbooks_test_fixture.mirrors[ExternalIntegrationLink.COVERS].uploaded
+        )
 
         # The LicensePool's delivery mechanism is set appropriately
         # to reflect an in-copyright work.
@@ -436,19 +478,21 @@ class TestRehostingPolicy:
         )
 
 
-class TestFeedbooksImportMonitor(DatabaseTest):
-    def test_subclass_methods(self):
+class TestFeedbooksImportMonitor:
+    def test_subclass_methods(self, feedbooks_test_fixture: FeedbooksTestFixture):
         """Test methods of OPDSImportMonitor overridden with special
         Feedbooks logic.
         """
-        collection = self._collection(protocol=ExternalIntegration.FEEDBOOKS)
+        collection = feedbooks_test_fixture.db.collection(
+            protocol=ExternalIntegration.FEEDBOOKS
+        )
         collection.external_account_id = "somelanguage"
         collection.external_integration.set_setting(
             FeedbooksOPDSImporter.REALLY_IMPORT_KEY, "true"
         )
 
         monitor = FeedbooksImportMonitor(
-            self._db,
+            feedbooks_test_fixture.db.session,
             collection,
             import_class=FeedbooksOPDSImporter,
         )
