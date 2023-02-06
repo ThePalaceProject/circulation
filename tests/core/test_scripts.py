@@ -3593,35 +3593,35 @@ class TestImportNewOverdriveAdvantageAccounts:
         smtp_client.sendmail = MagicMock()
         smtp_client.quit = MagicMock()
 
-        with (
-            patch(
-                "core.scripts.ImportNewOverdriveAdvantageAccounts._configure_smtp_client"
-            ) as configure_smtp_client,
-            patch(
+        with patch(
+            "core.scripts.ImportNewOverdriveAdvantageAccounts._configure_smtp_client"
+        ) as configure_smtp_client:
+            with patch(
                 "core.scripts.ImportNewOverdriveAdvantageAccounts._create_overdrive_api"
-            ) as create_overdrive_api,
-        ):
-            configure_smtp_client.return_value = smtp_client
-            create_overdrive_api.return_value = overdrive_api
-            ImportNewOverdriveAdvantageAccounts(_db=db.session).run()
-            assert overdrive_api.get_advantage_accounts.call_count == 1
-            parent_coll, is_new = Collection.by_name_and_protocol(
-                _db=db.session,
-                name=parent_library_name,
-                protocol=ExternalIntegration.OVERDRIVE,
-            )
-            assert not is_new
-            assert parent_coll.id == parent.id
-            assert parent_coll.external_account_id == parent_id
-            advantage_collection_name = advantage_library_name + " Overdrive Advantage"
-            advantage_collection, is_new = Collection.by_name_and_protocol(
-                _db=db.session,
-                name=advantage_collection_name,
-                protocol=ExternalIntegration.OVERDRIVE,
-            )
-            assert not is_new
-            assert advantage_collection.external_account_id == advantage_library_id
-            smtp_client.quit.assert_called()
-            # run again to ensure email is only sent when the new accounts are created.
-            ImportNewOverdriveAdvantageAccounts(_db=db.session).run()
-            smtp_client.sendmail.assert_called_once()
+            ) as create_od_api:
+                configure_smtp_client.return_value = smtp_client
+                create_od_api.return_value = overdrive_api
+                ImportNewOverdriveAdvantageAccounts(_db=db.session).run()
+                assert overdrive_api.get_advantage_accounts.call_count == 1
+                parent_coll, is_new = Collection.by_name_and_protocol(
+                    _db=db.session,
+                    name=parent_library_name,
+                    protocol=ExternalIntegration.OVERDRIVE,
+                )
+                assert not is_new
+                assert parent_coll.id == parent.id
+                assert parent_coll.external_account_id == parent_id
+                advantage_collection_name = (
+                    advantage_library_name + " Overdrive Advantage"
+                )
+                advantage_collection, is_new = Collection.by_name_and_protocol(
+                    _db=db.session,
+                    name=advantage_collection_name,
+                    protocol=ExternalIntegration.OVERDRIVE,
+                )
+                assert not is_new
+                assert advantage_collection.external_account_id == advantage_library_id
+                smtp_client.quit.assert_called()
+                # run again to ensure email is only sent when the new accounts are created.
+                ImportNewOverdriveAdvantageAccounts(_db=db.session).run()
+                smtp_client.sendmail.assert_called_once()
