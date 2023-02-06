@@ -3247,9 +3247,7 @@ def configuration_relevant_lifecycle_event(mapper, connection, target):
 @event.listens_for(Lane, "after_update")
 @event.listens_for(LaneGenre, "after_update")
 def configuration_relevant_update(mapper, connection, target):
-    suppressed = (
-        target._suppress_configuration_changes if isinstance(target, Lane) else False
-    )
+    suppressed = getattr(target, "_suppress_configuration_changes", False)
     if directly_modified(target) and not suppressed:
         site_configuration_has_changed(target)
 
