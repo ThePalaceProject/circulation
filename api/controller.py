@@ -585,7 +585,7 @@ class CirculationManager:
             # itself.
             value = json.loads(value)
             value["_debug"] = dict(
-                url=self.url_for(
+                url=url_for(
                     "authentication_document", library_short_name=name, _external=True
                 ),
                 environ=str(dict(flask.request.environ)),
@@ -867,7 +867,11 @@ class IndexController(CirculationManagerController):
         library_short_name = flask.request.library.short_name
         if not self.has_root_lanes():
             return redirect(
-                url_for("acquisition_groups", library_short_name=library_short_name)
+                url_for(
+                    "acquisition_groups",
+                    library_short_name=library_short_name,
+                    _external=True,
+                )
             )
 
         # The more complex case. We must authorize the patron, check
@@ -910,6 +914,7 @@ class IndexController(CirculationManagerController):
                 url_for(
                     "acquisition_groups",
                     library_short_name=library_short_name,
+                    _external=True,
                 )
             )
 
@@ -918,6 +923,7 @@ class IndexController(CirculationManagerController):
                 "acquisition_groups",
                 library_short_name=library_short_name,
                 lane_identifier=root_lane.id,
+                _external=True,
             )
         )
 
@@ -1217,10 +1223,11 @@ class OPDSFeedController(CirculationManagerController):
         # request arguments, and another way if there is a query
         # string.
         make_url_kwargs = dict(list(facets.items()))
-        make_url = lambda: self.url_for(
+        make_url = lambda: url_for(
             "lane_search",
             lane_identifier=lane_identifier,
             library_short_name=library_short_name,
+            _external=True,
             **make_url_kwargs,
         )
         if not query:
@@ -1272,9 +1279,8 @@ class OPDSFeedController(CirculationManagerController):
         if isinstance(search_engine, ProblemDetail):
             return search_engine
 
-        url = self.url_for(
-            controller_name,
-            library_short_name=library.short_name,
+        url = url_for(
+            controller_name, library_short_name=library.short_name, _external=True
         )
 
         facets = load_facets_from_request(

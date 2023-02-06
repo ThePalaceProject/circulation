@@ -15,7 +15,7 @@ class TestIndexController:
             flask.request.library = circulation_fixture.library  # type: ignore
             response = circulation_fixture.manager.index_controller()
             assert 302 == response.status_code
-            assert "http://cdn/default/groups/" == response.headers["location"]
+            assert "http://localhost/default/groups/" == response.headers["location"]
 
     def test_custom_index_view(self, circulation_fixture: CirculationControllerFixture):
         """If a custom index view is registered for a library,
@@ -81,7 +81,7 @@ class TestIndexController:
             response = circulation_fixture.manager.index_controller()
             assert 302 == response.status_code
             assert (
-                "http://cdn/default/groups/%s" % root_1.id
+                "http://localhost/default/groups/%s" % root_1.id
                 == response.headers["location"]
             )
 
@@ -92,7 +92,7 @@ class TestIndexController:
             response = circulation_fixture.manager.index_controller()
             assert 302 == response.status_code
             assert (
-                "http://cdn/default/groups/%s" % root_1.id
+                "http://localhost/default/groups/%s" % root_1.id
                 == response.headers["location"]
             )
 
@@ -103,7 +103,7 @@ class TestIndexController:
             response = circulation_fixture.manager.index_controller()
             assert 302 == response.status_code
             assert (
-                "http://cdn/default/groups/%s" % root_2.id
+                "http://localhost/default/groups/%s" % root_2.id
                 == response.headers["location"]
             )
 
@@ -114,7 +114,7 @@ class TestIndexController:
         ):
             response = circulation_fixture.manager.index_controller()
             assert 302 == response.status_code
-            assert "http://cdn/default/groups/" == response.headers["location"]
+            assert "http://localhost/default/groups/" == response.headers["location"]
 
         # Patrons with no type get sent to the top-level lane.
         circulation_fixture.default_patron.external_type = None
@@ -123,7 +123,7 @@ class TestIndexController:
         ):
             response = circulation_fixture.manager.index_controller()
             assert 302 == response.status_code
-            assert "http://cdn/default/groups/" == response.headers["location"]
+            assert "http://localhost/default/groups/" == response.headers["location"]
 
     def test_authentication_document(
         self, circulation_fixture: CirculationControllerFixture
