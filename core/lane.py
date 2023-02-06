@@ -2696,15 +2696,18 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         cascade="all, delete-orphan",
     )
 
-    # We add this property to the class, so that we can disable the sqlalchemy
-    # listener that calls site_configuration_has_changed. Calling this repeatedly
-    # when updating lanes can cause performance issues. The plan is for this to
-    # be a temporary fix while we replace the need for the site_configuration_has_changed
-    # and listeners at all.
-    # TODO: we should remove this, once we remove the site_configuration_has_changed listeners
-    _suppress_configuration_changes = False
-
     __table_args__ = (UniqueConstraint("parent_id", "display_name"),)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # We add this property to the class, so that we can disable the sqlalchemy
+        # listener that calls site_configuration_has_changed. Calling this repeatedly
+        # when updating lanes can cause performance issues. The plan is for this to
+        # be a temporary fix while we replace the need for the site_configuration_has_changed
+        # and listeners at all.
+        # TODO: we should remove this, once we remove the site_configuration_has_changed listeners
+        self._suppress_configuration_changes = False
 
     def get_library(self, _db):
         """For compatibility with WorkList.get_library()."""
