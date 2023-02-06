@@ -13,7 +13,6 @@ from sqlalchemy.orm.session import Session
 from core.external_search import QueryParseException
 from core.problem_details import INVALID_INPUT
 
-from .cdn import cdnify
 from .classifier import Classifier
 from .entrypoint import EntryPoint
 from .facets import FacetConstants
@@ -226,10 +225,10 @@ class Annotator:
         if work:
             _db = Session.object_session(work)
             if work.cover_thumbnail_url:
-                thumbnails = [cdnify(work.cover_thumbnail_url)]
+                thumbnails = [work.cover_thumbnail_url]
 
             if work.cover_full_url:
-                full = [cdnify(work.cover_full_url)]
+                full = [work.cover_full_url]
         return thumbnails, full
 
     @classmethod

@@ -878,11 +878,6 @@ class TestLibraryRegistrationScript:
         # registry at http://registry/.
         assert "http://registry/" == registration.integration.url
 
-        # An application environment was created and the url_for
-        # implementation for that environment was passed into
-        # process_library.
-        assert url_for == app.manager.url_for
-
         # Let's say the other library was earlier registered in production.
         registration_2 = Registration(registration.registry, library2)
         registration_2.stage_field.value = Registration.PRODUCTION_STAGE

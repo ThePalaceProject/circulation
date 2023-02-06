@@ -10,7 +10,7 @@ from typing import Callable, Dict, List, Optional, Union
 
 import flask
 import jwt
-from flask import Response, redirect
+from flask import Response, redirect, url_for
 from flask_babel import lazy_gettext as _
 from pydantic import BaseModel
 from sqlalchemy.sql import func
@@ -121,9 +121,6 @@ def setup_admin_controllers(manager):
     manager.admin_discovery_service_library_registrations_controller = (
         DiscoveryServiceLibraryRegistrationsController(manager)
     )
-    from api.admin.controller.cdn_services import CDNServicesController
-
-    manager.admin_cdn_services_controller = CDNServicesController(manager)
     from api.admin.controller.analytics_services import AnalyticsServicesController
 
     manager.admin_analytics_services_controller = AnalyticsServicesController(manager)
@@ -217,8 +214,6 @@ class AdminController:
     def __init__(self, manager):
         self.manager = manager
         self._db = self.manager._db
-        self.url_for = self.manager.url_for
-        self.cdn_url_for = self.manager.cdn_url_for
 
     @property
     def admin_auth_providers(self):
@@ -228,7 +223,7 @@ class AdminController:
             auth_providers.append(
                 GoogleOAuthAdminAuthenticationProvider(
                     auth_service,
-                    self.url_for("google_auth_callback"),
+                    url_for("google_auth_callback", _external=True),
                     test_mode=self.manager.testing,
                 )
             )
@@ -382,7 +377,9 @@ class ViewController(AdminController):
                     redirect_url = redirect_url.replace(
                         quoted_book, quoted_book.replace("/", "%2F")
                     )
-                return redirect(self.url_for("admin_sign_in", redirect=redirect_url))
+                return redirect(
+                    url_for("admin_sign_in", redirect=redirect_url, _external=True)
+                )
 
             if not collection and not book and not path:
                 if self._db.query(Library).count() > 0:
@@ -399,7 +396,11 @@ class ViewController(AdminController):
                             ),
                             200,
                         )
-                    return redirect(self.url_for("admin_view", collection=library_name))
+                    return redirect(
+                        self.url_for(
+                            "admin_view", collection=library_name, _external=True
+                        )
+                    )
 
             email = admin.email
             for role in admin.roles:
@@ -641,8 +642,10 @@ class SignInController(AdminController):
         flask.session.pop("admin_email", None)
         flask.session.pop("auth_type", None)
 
-        redirect_url = self.url_for(
-            "admin_sign_in", redirect=self.url_for("admin_view"), _external=True
+        redirect_url = url_for(
+            "admin_sign_in",
+            redirect=url_for("admin_view", _external=True),
+            _external=True,
         )
         return redirect(redirect_url)
 

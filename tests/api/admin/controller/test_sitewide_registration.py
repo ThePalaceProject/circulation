@@ -5,6 +5,7 @@ import os
 
 import flask
 import jwt
+from flask import url_for
 from werkzeug.datastructures import MultiDict
 
 from api.admin.problem_details import *
@@ -219,7 +220,7 @@ class TestSitewideRegistration(SettingsControllerTest):
             doc = controller.sitewide_registration_document()
 
             # The registrar knows where to go to get our public key.
-            assert doc["url"] == controller.url_for("public_key_document")
+            assert doc["url"] == url_for("public_key_document", _external=True)
 
             # The JWT proves that we control the public/private key pair.
             public_key, private_key = self.manager.sitewide_key_pair

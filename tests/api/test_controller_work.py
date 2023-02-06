@@ -6,6 +6,7 @@ from typing import Any, Dict
 import feedparser
 import flask
 import pytest
+from flask import url_for
 
 from api.circulation import FulfillmentInfo, LoanInfo
 from api.lanes import (
@@ -225,10 +226,11 @@ class TestWorkController:
         url_kwargs.update(dict(list(facets.items())))
         url_kwargs.update(dict(list(pagination.items())))
         with work_fixture.request_context_with_library(""):
-            expect_url = work_fixture.manager.opds_feeds.url_for(
+            expect_url = url_for(
                 route,
                 lane_identifier=None,
                 library_short_name=library.short_name,
+                _external=True,
                 **url_kwargs,
             )
         assert kwargs.pop("url") == expect_url
@@ -610,8 +612,11 @@ class TestWorkController:
         url_kwargs.update(dict(list(facets.items())))
         url_kwargs.update(dict(list(pagination.items())))
         with work_fixture.request_context_with_library(""):
-            expect_url = work_fixture.manager.work_controller.url_for(
-                route, library_short_name=library.short_name, **url_kwargs
+            expect_url = url_for(
+                route,
+                library_short_name=library.short_name,
+                _external=True,
+                **url_kwargs,
             )
         assert kwargs.pop("url") == expect_url
 
@@ -808,10 +813,11 @@ class TestWorkController:
         route, url_kwargs = lane.url_arguments
         url_kwargs.update(dict(list(facets.items())))
         with work_fixture.request_context_with_library(""):
-            expect_url = work_fixture.manager.work_controller.url_for(
+            expect_url = url_for(
                 route,
                 lane_identifier=None,
                 library_short_name=library.short_name,
+                _external=True,
                 **url_kwargs,
             )
         assert kwargs.pop("url") == expect_url

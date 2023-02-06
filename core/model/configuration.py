@@ -152,10 +152,6 @@ class ExternalIntegration(Base):
     # S3 that provide access to book covers.
     STORAGE_GOAL = MirrorUploader.STORAGE_GOAL
 
-    # These integrations are associated with external services like
-    # Cloudfront or other CDNs that mirror and/or cache certain domains.
-    CDN_GOAL = "CDN"
-
     # These integrations are associated with external services such as
     # Elasticsearch that provide indexed search.
     SEARCH_GOAL = "search"
@@ -239,9 +235,6 @@ class ExternalIntegration(Base):
     S3 = "Amazon S3"
     MINIO = "MinIO"
     LCP = "LCP"
-
-    # Integrations with CDN_GOAL
-    CDN = "CDN"
 
     # Integrations with SEARCH_GOAL
     ELASTICSEARCH = "Elasticsearch"

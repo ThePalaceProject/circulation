@@ -46,10 +46,6 @@ class ControllerTest(VendorIDTest):
         # were created in the test setup.
         app.config["PRESERVE_CONTEXT_ON_EXCEPTION"] = False
 
-        Configuration.instance[Configuration.INTEGRATIONS][ExternalIntegration.CDN] = {
-            "": "http://cdn"
-        }
-
         if self.setup_circulation_manager:
             # NOTE: Any reference to self._default_library below this
             # point in this method will cause the tests in

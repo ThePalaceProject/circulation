@@ -5,6 +5,7 @@ from typing import Any, Dict
 from unittest.mock import MagicMock
 
 import feedparser
+from flask import url_for
 
 from api.controller import CirculationManager
 from api.lanes import HasSeriesFacets, JackpotFacets, JackpotWorkList
@@ -188,7 +189,7 @@ class TestOPDSFeedController:
 
             # While we're in request context, generate the URL we
             # expect to be used for this feed.
-            expect_url = circulation_fixture.controller.cdn_url_for(
+            expect_url = url_for(
                 "feed",
                 lane_identifier=lane_id,
                 library_short_name=circulation_fixture.db.default_library().short_name,
@@ -255,7 +256,7 @@ class TestOPDSFeedController:
             controller = circulation_fixture.manager.opds_feeds
             response = controller.groups(None)
             assert 302 == response.status_code
-            expect_url = controller.cdn_url_for(
+            expect_url = url_for(
                 "acquisition_groups",
                 library_short_name=circulation_fixture.db.default_library().short_name,
                 lane_identifier=lane.id,
@@ -328,7 +329,7 @@ class TestOPDSFeedController:
 
             # While we're in request context, generate the URL we
             # expect to be used for this feed.
-            expect_url = circulation_fixture.manager.opds_feeds.cdn_url_for(
+            expect_url = url_for(
                 "acquisition_groups",
                 lane_identifier=None,
                 library_short_name=library.short_name,
@@ -367,7 +368,7 @@ class TestOPDSFeedController:
 
             # While we're in request context, generate the URL we
             # expect to be used for this feed.
-            expect_url = circulation_fixture.manager.opds_feeds.cdn_url_for(
+            expect_url = url_for(
                 "feed",
                 lane_identifier=circulation_fixture.english_adult_fiction.id,
                 library_short_name=library.short_name,
@@ -577,12 +578,13 @@ class TestOPDSFeedController:
         # original request.
         library = circulation_fixture.db.default_library()
         with circulation_fixture.request_context_with_library(""):
-            expect_url = circulation_fixture.manager.opds_feeds.url_for(
+            expect_url = url_for(
                 "lane_search",
                 lane_identifier=None,
                 library_short_name=library.short_name,
                 **dict(list(facets.items())),
                 q=query,
+                _external=True
             )
         assert expect_url == kwargs.pop("url")
 
@@ -673,9 +675,10 @@ class TestOPDSFeedController:
 
         # Now test success.
         with circulation_fixture.request_context_with_library("/"):
-            expect_url = circulation_fixture.manager.opds_feeds.url_for(
+            expect_url = url_for(
                 "qa_feed",
                 library_short_name=circulation_fixture.db.default_library().short_name,
+                _external=True,
             )
 
             response = m(*args)

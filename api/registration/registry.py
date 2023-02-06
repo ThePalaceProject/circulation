@@ -3,6 +3,7 @@ import json
 import logging
 
 import feedparser
+from flask import url_for
 from flask_babel import lazy_gettext as _
 from html_sanitizer import Sanitizer
 from sqlalchemy.orm.exc import NoResultFound
@@ -584,7 +585,7 @@ class LibraryRegistrationScript(LibraryInputScript):
         for library in parsed.libraries:
             registration = Registration(registry, library)
             library_stage = stage or registration.stage_field.value
-            self.process_library(registration, library_stage, app.manager.url_for)
+            self.process_library(registration, library_stage, url_for)
         ctx.pop()
 
         # For testing purposes, return the application object that was

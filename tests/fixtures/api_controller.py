@@ -88,17 +88,6 @@ class ControllerFixture:
         # were created in the test setup.
         app.config["PRESERVE_CONTEXT_ON_EXCEPTION"] = False
 
-        # Configure a fake CDN for testing
-        db.external_integration(
-            protocol=ExternalIntegration.CDN,
-            goal=ExternalIntegration.CDN_GOAL,
-            settings={
-                Configuration.CDN_MIRRORED_DOMAIN_KEY: "",
-                ExternalIntegration.URL: "http://cdn/",
-            },
-        )
-        Configuration.load_cdns(db.session)
-
         if setup_cm:
             # NOTE: Any reference to self._default_library below this
             # point in this method will cause the tests in
