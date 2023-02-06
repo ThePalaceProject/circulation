@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Regenerate the lanes for a library."""
+"""Delete invisible lanes associated with one or more libraries."""
 import os
 import sys
 
