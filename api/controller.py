@@ -994,6 +994,7 @@ class OPDSFeedController(CirculationManagerController):
             lane_identifier=lane_identifier,
             library_short_name=library.short_name,
             _facets=facets,
+            _external=True,
         )
 
         annotator = self.manager.annotator(lane, facets)
@@ -1034,6 +1035,7 @@ class OPDSFeedController(CirculationManagerController):
             lane_identifier=lane_identifier,
             library_short_name=library_short_name,
             _facets=facets,
+            _external=True,
         )
 
         annotator = self.manager.annotator(lane, facets=facets)
@@ -1060,6 +1062,7 @@ class OPDSFeedController(CirculationManagerController):
             "navigation_feed",
             lane_identifier=lane_identifier,
             library_short_name=library_short_name,
+            _external=True,
         )
 
         title = lane.display_name
@@ -1084,6 +1087,7 @@ class OPDSFeedController(CirculationManagerController):
         url = url_for(
             "crawlable_library_feed",
             library_short_name=library.short_name,
+            _external=True,
         )
         title = library.name
         lane = CrawlableCollectionBasedLane()
@@ -1098,7 +1102,9 @@ class OPDSFeedController(CirculationManagerController):
         if not collection:
             return NO_SUCH_COLLECTION
         title = collection.name
-        url = url_for("crawlable_collection_feed", collection_name=collection.name)
+        url = url_for(
+            "crawlable_collection_feed", collection_name=collection.name, _external=True
+        )
         lane = CrawlableCollectionBasedLane()
         lane.initialize([collection])
         if collection.protocol in [ODLAPI.NAME]:
@@ -1127,6 +1133,7 @@ class OPDSFeedController(CirculationManagerController):
             "crawlable_list_feed",
             list_name=list.name,
             library_short_name=library_short_name,
+            _external=True,
         )
         lane = CrawlableCustomListBasedLane()
         lane.initialize(library, list)

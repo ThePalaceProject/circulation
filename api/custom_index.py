@@ -145,7 +145,9 @@ class COPPAGate(CustomIndexView):
     def _navigation_feed(self, library, annotator, url_for=None):
         """Generate an OPDS feed for navigating the COPPA age gate."""
         url_for = url_for or flask_url_for
-        base_url = url_for("index", library_short_name=library.short_name)
+        base_url = url_for(
+            "index", library_short_name=library.short_name, _external=True
+        )
 
         # An entry for grown-ups.
         feed = OPDSFeed(title=library.name, url=base_url)
