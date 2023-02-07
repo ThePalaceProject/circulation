@@ -301,7 +301,7 @@ class TestRepresentation:
         open(path, "wb").write(b"some text")
 
         representation, ignore = db.representation(db.fresh_url(), "text/plain")
-        representation.set_fetched_content(None, filename)
+        representation.set_fetched_content(None, path)
         fh = representation.content_fh()
         assert b"some text" == fh.read()
 
