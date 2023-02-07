@@ -355,16 +355,9 @@ class ContributorData:
 
         return destination, made_changes
 
-    def find_sort_name(self, _db, identifiers, metadata_client):
-
+    def find_sort_name(self, _db):
         """Try as hard as possible to find this person's sort name."""
-        log = logging.getLogger("Abstract metadata layer")
         if self.sort_name:
-            # log.debug(
-            #     "%s already has a sort name: %s",
-            #     self.display_name,
-            #     self.sort_name
-            # )
             return True
 
         if not self.display_name:
@@ -414,52 +407,6 @@ class ContributorData:
             )
             return contributors[0].sort_name
         return None
-
-    def _display_name_to_sort_name(self, _db, metadata_client, identifier_obj):
-        response = metadata_client.canonicalize_author_name(
-            identifier_obj, self.display_name
-        )
-        sort_name = None
-
-        if isinstance(response, (bytes, str)):
-            sort_name = response
-        else:
-            log = logging.getLogger("Abstract metadata layer")
-            if response.status_code == 200 and response.headers[
-                "Content-Type"
-            ].startswith("text/plain"):
-                sort_name = response.content
-                log.info(
-                    "Canonicalizer found sort name for %r: %s => %s",
-                    identifier_obj,
-                    self.display_name,
-                    sort_name,
-                )
-            else:
-                log.warning(
-                    "Canonicalizer could not find sort name for %r/%s",
-                    identifier_obj,
-                    self.display_name,
-                )
-        return sort_name
-
-    def display_name_to_sort_name_through_canonicalizer(
-        self, _db, identifiers, metadata_client
-    ):
-        sort_name = None
-        for identifier in identifiers:
-            if identifier.type != Identifier.ISBN:
-                continue
-            identifier_obj, ignore = identifier.load(_db)
-            sort_name = self._display_name_to_sort_name(
-                _db, metadata_client, identifier_obj
-            )
-            if sort_name:
-                break
-
-        if not sort_name:
-            sort_name = self._display_name_to_sort_name(_db, metadata_client, None)
-        return sort_name
 
 
 class IdentifierData:
@@ -1536,12 +1483,6 @@ class Metadata(MetaToModelUtility):
             **kwargs,
         )
 
-    def normalize_contributors(self, metadata_client):
-        """Make sure that all contributors without a .sort_name get one."""
-        for contributor in contributors:
-            if not contributor.sort_name:
-                contributor.normalize(metadata_client)
-
     @property
     def primary_author(self):
         primary_author = None
@@ -1577,19 +1518,12 @@ class Metadata(MetaToModelUtility):
             if not (old_value and new_value[0].sort_name == Edition.UNKNOWN_AUTHOR):
                 setattr(self, "contributors", new_value)
 
-    def calculate_permanent_work_id(self, _db, metadata_client):
-        """Try to calculate a permanent work ID from this metadata.
-
-        This may require asking a metadata wrangler to turn a display name
-        into a sort name--thus the `metadata_client` argument.
-        """
+    def calculate_permanent_work_id(self, _db):
+        """Try to calculate a permanent work ID from this metadata."""
         primary_author = self.primary_author
 
         if not primary_author:
             return None, None
-
-        if not primary_author.sort_name and metadata_client:
-            primary_author.find_sort_name(_db, self.identifiers, metadata_client)
 
         sort_author = primary_author.sort_name
         pwid = Edition.calculate_permanent_work_id_for_title_and_author(
@@ -1676,7 +1610,7 @@ class Metadata(MetaToModelUtility):
             )
         self.identifiers = new_identifiers
 
-    def guess_license_pools(self, _db, metadata_client):
+    def guess_license_pools(self, _db):
         """Try to find existing license pools for this Metadata."""
         potentials = {}
         for contributor in self.contributors:
@@ -1685,7 +1619,7 @@ class Metadata(MetaToModelUtility):
                 for x in (Contributor.AUTHOR_ROLE, Contributor.PRIMARY_AUTHOR_ROLE)
             ):
                 continue
-            contributor.find_sort_name(_db, self.identifiers, metadata_client)
+            contributor.find_sort_name(_db)
             confidence = 0
 
             base = (
@@ -1696,7 +1630,7 @@ class Metadata(MetaToModelUtility):
             success = False
 
             # A match based on work ID is the most reliable.
-            pwid = self.calculate_permanent_work_id(_db, metadata_client)
+            pwid = self.calculate_permanent_work_id(_db)
             clause = and_(
                 Edition.data_source_id == LicensePool.data_source_id,
                 Edition.primary_identifier_id == LicensePool.identifier_id,
@@ -1743,7 +1677,6 @@ class Metadata(MetaToModelUtility):
         self,
         edition,
         collection,
-        metadata_client=None,
         replace=None,
         replace_identifiers=False,
         replace_subjects=False,
@@ -1814,9 +1747,6 @@ class Metadata(MetaToModelUtility):
                     # The metadata has not changed since last time. Do nothing.
                     return edition, False
 
-        if metadata_client and not self.permanent_work_id:
-            self.calculate_permanent_work_id(_db, metadata_client)
-
         identifier = edition.primary_identifier
 
         self.log.info("APPLYING METADATA TO EDITION: %s", self.title)
@@ -1837,7 +1767,7 @@ class Metadata(MetaToModelUtility):
         # Create equivalencies between all given identifiers and
         # the edition's primary identifier.
         contributors_changed = self.update_contributions(
-            _db, edition, metadata_client, replace.contributions
+            _db, edition, replace.contributions
         )
         if contributors_changed:
             work_requires_new_presentation_edition = True
@@ -2154,7 +2084,7 @@ class Metadata(MetaToModelUtility):
             )
         return thumbnail_obj
 
-    def update_contributions(self, _db, edition, metadata_client=None, replace=True):
+    def update_contributions(self, _db, edition, replace=True):
         contributors_changed = False
         old_contributors = []
         new_contributors = []
@@ -2174,7 +2104,7 @@ class Metadata(MetaToModelUtility):
             edition.contributions = surviving_contributions
 
         for contributor_data in self.contributors:
-            contributor_data.find_sort_name(_db, self.identifiers, metadata_client)
+            contributor_data.find_sort_name(_db)
             if (
                 contributor_data.sort_name
                 or contributor_data.lc

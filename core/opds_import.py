@@ -309,7 +309,6 @@ class OPDSImporter:
         data_source_name=None,
         identifier_mapping=None,
         http_get=None,
-        metadata_client=None,
         content_modifier=None,
         map_from_collection=None,
         mirrors=None,
@@ -331,9 +330,6 @@ class OPDSImporter:
 
         :param http_get: Use this method to make an HTTP GET request. This
         can be replaced with a stub method for testing purposes.
-
-        :param metadata_client: A SimplifiedOPDSLookup object that is used
-        to fill in missing metadata.
 
         :param content_modifier: A function that may modify-in-place
         representations (such as images and EPUB documents) as they
@@ -361,7 +357,6 @@ class OPDSImporter:
             data_source_name = data_source_name or DataSource.METADATA_WRANGLER
         self.data_source_name = data_source_name
         self.identifier_mapping = identifier_mapping
-        self.metadata_client = None
 
         # Check to see if a mirror for each purpose was passed in.
         # If not, then attempt to create one.
@@ -599,7 +594,6 @@ class OPDSImporter:
         metadata.apply(
             edition=edition,
             collection=self.collection,
-            metadata_client=self.metadata_client,
             replace=policy,
         )
 

@@ -6,7 +6,6 @@ import pytest
 from api.nyt import NYTAPI, NYTBestSellerAPI, NYTBestSellerList, NYTBestSellerListTitle
 from core.config import CannotLoadConfiguration
 from core.model import Contributor, CustomListEntry, Edition, ExternalIntegration
-from core.testing import DummyMetadataClient
 from core.util.http import IntegrationException
 from tests.fixtures.api_nyt_files import NYTFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -16,7 +15,6 @@ class DummyNYTBestSellerAPI(NYTBestSellerAPI):
     def __init__(self, _db, files: NYTFilesFixture):
         self._db = _db
         self.files = files
-        self.metadata_client = DummyMetadataClient()
 
     def sample_json(self, filename):
         return json.loads(self.files.sample_data(filename))
@@ -45,7 +43,6 @@ class NYTBestSellerAPIFixture:
     def __init__(self, db: DatabaseTransactionFixture, files: NYTFilesFixture):
         self.db = db
         self.api = DummyNYTBestSellerAPI(db.session, files)
-        self.metadata_client = DummyMetadataClient()
 
 
 @pytest.fixture(scope="function")
@@ -79,7 +76,6 @@ class TestNYTBestSellerAPI:
         # configured.
         api = NYTBestSellerAPI.from_config(nyt_fixture.db.session)
         assert "api key" == api.api_key
-        assert None == api.metadata_client
 
         api = NYTBestSellerAPI.from_config(nyt_fixture.db.session)
 
@@ -162,7 +158,6 @@ class TestNYTBestSellerList:
 
     def test_update(self, nyt_fixture: NYTBestSellerAPIFixture):
         list_name = "combined-print-and-e-book-fiction"
-        nyt_fixture.metadata_client.lookups["Paula Hawkins"] = "Hawkins, Paula"
         l = nyt_fixture.api.best_seller_list(list_name)
         nyt_fixture.api.update(l)
 
@@ -204,7 +199,6 @@ class TestNYTBestSellerList:
 
     def test_to_customlist(self, nyt_fixture: NYTBestSellerAPIFixture):
         list_name = "combined-print-and-e-book-fiction"
-        nyt_fixture.metadata_client.lookups["Paula Hawkins"] = "Hawkins, Paula"
         l = nyt_fixture.api.best_seller_list(list_name)
         nyt_fixture.api.update(l)
         custom = l.to_customlist(nyt_fixture.db.session)
@@ -254,7 +248,7 @@ class TestNYTBestSellerListTitle:
     def test_creation(self, nyt_fixture: NYTBestSellerAPIFixture):
         title = NYTBestSellerListTitle(self.one_list_title, Edition.BOOK_MEDIUM)
 
-        edition = title.to_edition(nyt_fixture.db.session, nyt_fixture.metadata_client)
+        edition = title.to_edition(nyt_fixture.db.session)
         assert "9780698185395" == edition.primary_identifier.identifier
 
         # The alternate ISBN is marked as equivalent to the primary identifier,
@@ -283,19 +277,7 @@ class TestNYTBestSellerListTitle:
         contributor.display_name = "Paula Hawkins"
 
         title = NYTBestSellerListTitle(self.one_list_title, Edition.BOOK_MEDIUM)
-        edition = title.to_edition(nyt_fixture.db.session, nyt_fixture.metadata_client)
+        edition = title.to_edition(nyt_fixture.db.session)
         assert contributor.sort_name == edition.sort_author
         assert contributor.display_name == edition.author
-        assert edition.permanent_work_id is not None
-
-    def test_to_edition_sets_sort_author_name_if_metadata_client_provides_it(
-        self, nyt_fixture: NYTBestSellerAPIFixture
-    ):
-
-        # Set the metadata client up for success.
-        nyt_fixture.metadata_client.lookups["Paula Hawkins"] = "Hawkins, Paula Z."
-
-        title = NYTBestSellerListTitle(self.one_list_title, Edition.BOOK_MEDIUM)
-        edition = title.to_edition(nyt_fixture.db.session, nyt_fixture.metadata_client)
-        assert "Hawkins, Paula Z." == edition.sort_author
         assert edition.permanent_work_id is not None

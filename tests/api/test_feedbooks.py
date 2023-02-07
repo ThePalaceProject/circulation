@@ -48,7 +48,6 @@ class FeedbooksTestFixture:
             collection,
             http_get=self.http.do_get,
             mirrors=self.mirrors,
-            metadata_client=self.metadata,
         )
 
     def __init__(

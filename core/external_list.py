@@ -4,7 +4,6 @@ from collections import defaultdict
 from sqlalchemy import or_
 from sqlalchemy.orm.session import Session
 
-from .config import Configuration
 from .metadata_layer import CSVMetadataImporter, ReplacementPolicy
 from .model import (
     Classification,
@@ -17,7 +16,6 @@ from .model import (
     Work,
     get_one_or_create,
 )
-from .opds_import import SimplifiedOPDSLookup
 from .util.datetime_helpers import utc_now
 
 
@@ -28,7 +26,6 @@ class CustomListFromCSV(CSVMetadataImporter):
         self,
         data_source_name,
         list_name,
-        metadata_client=None,
         overwrite_old_data=False,
         annotation_field="text",
         annotation_author_name_field="name",
@@ -40,13 +37,6 @@ class CustomListFromCSV(CSVMetadataImporter):
         self.foreign_identifier = list_name
         self.list_name = list_name
         self.overwrite_old_data = overwrite_old_data
-
-        if not metadata_client:
-            metadata_url = Configuration.integration_url(
-                Configuration.METADATA_WRANGLER_INTEGRATION, required=True
-            )
-            metadata_client = SimplifiedOPDSLookup(metadata_url)
-        self.metadata_client = metadata_client
 
         self.annotation_field = annotation_field
         self.annotation_author_name_field = annotation_author_name_field
@@ -86,7 +76,7 @@ class CustomListFromCSV(CSVMetadataImporter):
 
         title_from_external_list = self.metadata_to_title(now, metadata)
         list_entry, was_new = title_from_external_list.to_custom_list_entry(
-            custom_list, self.metadata_client, self.overwrite_old_data
+            custom_list, self.overwrite_old_data
         )
         e = list_entry.edition
 
@@ -155,12 +145,10 @@ class TitleFromExternalList:
         self.most_recent_appearance = most_recent_appearance or utc_now()
         self.annotation = annotation
 
-    def to_custom_list_entry(
-        self, custom_list, metadata_client, overwrite_old_data=False
-    ):
+    def to_custom_list_entry(self, custom_list, overwrite_old_data=False):
         """Turn this object into a CustomListEntry with associated Edition."""
         _db = Session.object_session(custom_list)
-        edition = self.to_edition(_db, metadata_client, overwrite_old_data)
+        edition = self.to_edition(_db, overwrite_old_data)
 
         list_entry, is_new = get_one_or_create(
             _db, CustomListEntry, edition=edition, customlist=custom_list
@@ -194,10 +182,10 @@ class TitleFromExternalList:
 
         list_entry.annotation = self.annotation
 
-        list_entry.set_work(self.metadata, metadata_client)
+        list_entry.set_work(self.metadata)
         return list_entry, is_new
 
-    def to_edition(self, _db, metadata_client, overwrite_old_data=False):
+    def to_edition(self, _db, overwrite_old_data=False):
         """Create or update an Edition object for this list item.
 
         We have two goals here:
@@ -240,7 +228,6 @@ class TitleFromExternalList:
         self.metadata.apply(
             edition=edition,
             collection=None,
-            metadata_client=metadata_client,
             replace=policy,
         )
         self.metadata.associate_with_identifiers_based_on_permanent_work_id(_db)
