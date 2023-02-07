@@ -649,7 +649,7 @@ class TestRegistration:
         m = registration_fixture.registration._create_registration_payload
 
         # Mock url_for to create good-looking callback URLs.
-        def url_for(controller, library_short_name):
+        def url_for(controller, library_short_name, **kwargs):
             return f"http://server/{library_short_name}/{controller}"
 
         # First, test with no configuration contact configured for the

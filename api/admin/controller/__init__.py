@@ -2575,7 +2575,7 @@ class SitewideRegistrationController(SettingsController):
         # Advertise the public key so that the foreign site can encrypt
         # things for us.
         public_key_dict = dict(type="RSA", value=public_key)
-        public_key_url = self.url_for("public_key_document")
+        public_key_url = url_for("public_key_document", _external=True)
         in_one_minute = utc_now() + timedelta(seconds=60)
         payload = {"exp": in_one_minute}
         # Sign a JWT with the private key to prove ownership of the site.

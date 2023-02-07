@@ -167,7 +167,8 @@ class TestCOPPAGate:
         def mock_url_for(controller, library_short_name, **kwargs):
             """Create a real-looking URL for any random controller."""
             url_for_calls.append((controller, library_short_name, kwargs))
-            query = "&".join([f"{k}={v}" for k, v in sorted(kwargs.items())])
+            filtered_args = {k: v for k, v in kwargs.items() if not k.startswith("_")}
+            query = "&".join([f"{k}={v}" for k, v in sorted(filtered_args.items())])
             return f"http://{library_short_name}/{controller}?{query}"
 
         navigation_entry_calls = []
