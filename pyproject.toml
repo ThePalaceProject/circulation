@@ -171,7 +171,7 @@ uritemplate = "3.0.1"
 urllib3 = "~1.26.14"
 uszipcode = "0.2.6"
 uWSGI = "~2.0.21"
-watchtower = "3.0.0"  # watchtower is for Cloudwatch logging integration
+watchtower = "3.0.1"  # watchtower is for Cloudwatch logging integration
 wcag-contrast-ratio = "0.9"
 Werkzeug = "1.0.1"
 
