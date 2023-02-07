@@ -3517,21 +3517,21 @@ testing = ["coverage (>=4)", "coverage-enable-subprocess (>=1)", "flaky (>=3)", 
 
 [[package]]
 name = "watchtower"
-version = "3.0.0"
+version = "3.0.1"
 description = "Python CloudWatch Logging"
 category = "main"
 optional = false
-python-versions = ">=3.6"
+python-versions = ">=3.7"
 files = [
-    {file = "watchtower-3.0.0-py3-none-any.whl", hash = "sha256:7f51411a4e736baad0504ce9a68fae5babecf009c15ec4df96451c6fecacbf4c"},
-    {file = "watchtower-3.0.0.tar.gz", hash = "sha256:c66283efb4af22f1dd7565b12450dad4ef9175878f3d65b56ccff0dcf0a53c28"},
+    {file = "watchtower-3.0.1-py3-none-any.whl", hash = "sha256:566874a9dee34b90517b9a9b7c2d5e6b15fb9fd00dacb03bff8a7bf4c6295fe0"},
+    {file = "watchtower-3.0.1.tar.gz", hash = "sha256:e60b828e9c368d54044a631466322e8c6f5f9d57da0b69fbaf32ec134697367e"},
 ]
 
 [package.dependencies]
 boto3 = ">=1.9.253,<2"
 
 [package.extras]
-tests = ["build", "coverage", "flake8 (>=4.0.1,<5)", "mypy", "pyyaml (>=5.3.1,<6)", "wheel"]
+tests = ["build", "coverage", "flake8", "mypy", "pyyaml", "wheel"]
 
 [[package]]
 name = "wcag-contrast-ratio"
@@ -3694,4 +3694,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "e607c1b1abff55635ecbfce8d5529717a1de9e3376a86af64d732f97dc461a09"
+content-hash = "746f9a4cfe9ceb52883fcce64170157a829ab1cdcfe63ec69d01a3fe90d13d2d"
