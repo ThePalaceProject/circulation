@@ -3585,7 +3585,6 @@ class TestImportNewOverdriveAdvantageAccounts:
                 parent_id,
                 advantage_library_id,
                 advantage_library_name,
-                "token value",
             )
         ]
 
