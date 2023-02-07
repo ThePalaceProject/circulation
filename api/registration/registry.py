@@ -409,7 +409,9 @@ class Registration(RegistrationConstants):
         :return: A dictionary suitable for passing into requests.post.
         """
         auth_document_url = url_for(
-            "authentication_document", library_short_name=self.library.short_name
+            "authentication_document",
+            library_short_name=self.library.short_name,
+            _external=True,
         )
         payload = dict(url=auth_document_url, stage=stage)
 

@@ -58,6 +58,7 @@ class TestCrawlableFeed:
                 expect_url = url_for(
                     "crawlable_library_feed",
                     library_short_name=library.short_name,
+                    _external=True,
                 )
 
         # The response of the mock _crawlable_feed was returned as-is;
@@ -107,6 +108,7 @@ class TestCrawlableFeed:
                 expect_url = url_for(
                     "crawlable_collection_feed",
                     collection_name=collection.name,
+                    _external=True,
                 )
 
         # The response of the mock _crawlable_feed was returned as-is;
@@ -174,6 +176,7 @@ class TestCrawlableFeed:
                     "crawlable_list_feed",
                     list_name=customlist.name,
                     library_short_name=library.short_name,
+                    _external=True,
                 )
 
         # The response of the mock _crawlable_feed was returned as-is;

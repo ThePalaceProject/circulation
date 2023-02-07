@@ -397,9 +397,7 @@ class ViewController(AdminController):
                             200,
                         )
                     return redirect(
-                        self.url_for(
-                            "admin_view", collection=library_name, _external=True
-                        )
+                        url_for("admin_view", collection=library_name, _external=True)
                     )
 
             email = admin.email
@@ -755,7 +753,7 @@ class FeedController(AdminCirculationManagerController):
     def suppressed(self):
         self.require_librarian(flask.request.library)
 
-        this_url = self.url_for("suppressed")
+        this_url = url_for("suppressed", _external=True)
         annotator = AdminAnnotator(self.circulation, flask.request.library)
         pagination = load_pagination_from_request()
         if isinstance(pagination, ProblemDetail):
@@ -1066,11 +1064,12 @@ class CustomListsController(AdminCirculationManagerController):
                 return pagination
 
             query = CustomList.entries_having_works(self._db, list_id)
-            url = self.url_for(
+            url = url_for(
                 "custom_list_get",
                 list_name=list.name,
                 library_short_name=library.short_name,
                 list_id=list_id,
+                _external=True,
             )
 
             worklist = WorkList()

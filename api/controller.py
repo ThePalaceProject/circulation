@@ -2517,8 +2517,10 @@ class SharedCollectionController(CirculationManagerController):
         if not collection:
             return NO_SUCH_COLLECTION
 
-        register_url = self.url_for(
-            "shared_collection_register", collection_name=collection_name
+        register_url = url_for(
+            "shared_collection_register",
+            collection_name=collection_name,
+            _external=True,
         )
         register_link = dict(href=register_url, rel="register")
         content = json.dumps(dict(links=[register_link]))
