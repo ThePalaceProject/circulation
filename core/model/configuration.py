@@ -232,7 +232,6 @@ class ExternalIntegration(Base):
     NOVELIST = "NoveList Select"
     NYPL_SHADOWCAT = "Shadowcat"
     NYT = "New York Times"
-    METADATA_WRANGLER = "Metadata Wrangler"
     CONTENT_SERVER = "Content Server"
 
     # Integrations with STORAGE_GOAL

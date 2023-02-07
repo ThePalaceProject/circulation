@@ -18,7 +18,6 @@ from core.model import (
     Representation,
     get_one_or_create,
 )
-from core.opds_import import MetadataWranglerOPDSLookup
 from core.selftest import HasSelfTests
 
 from .config import CannotLoadConfiguration, IntegrationException
@@ -100,13 +99,6 @@ class NYTBestSellerAPI(NYTAPI, HasSelfTests):
             raise CannotLoadConfiguration("No NYT API key is specified")
         self.api_key = api_key
         self.do_get = do_get or Representation.simple_http_get
-        if not metadata_client:
-            try:
-                metadata_client = MetadataWranglerOPDSLookup.from_config(self._db)
-            except CannotLoadConfiguration as e:
-                self.log.error(
-                    "Metadata wrangler integration is not configured, proceeding without one."
-                )
         self.metadata_client = metadata_client
 
     @classmethod

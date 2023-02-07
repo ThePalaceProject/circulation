@@ -47,7 +47,6 @@ from .model.configuration import ExternalIntegrationLink
 from .model.licensing import LicenseFunctions, LicenseStatus
 from .util import LanguageCodes
 from .util.datetime_helpers import strptime_utc, to_utc, utc_now
-from .util.http import RemoteIntegrationException
 from .util.median import median
 from .util.personal_names import display_name_to_sort_name, name_tidy
 
@@ -383,27 +382,6 @@ class ContributorData:
             self.sort_name = sort_name
             return True
 
-        # Time to break out the big guns. Ask the metadata wrangler
-        # if it can find a sort name for this display name.
-        if metadata_client:
-            try:
-                sort_name = self.display_name_to_sort_name_through_canonicalizer(
-                    _db, identifiers, metadata_client
-                )
-            except RemoteIntegrationException as e:
-                # There was some kind of problem with the metadata
-                # wrangler. Act as though no metadata wrangler had
-                # been provided.
-                log = logging.getLogger("Abstract metadata layer")
-                log.error(
-                    "Metadata client exception while determining sort name for %s",
-                    self.display_name,
-                    exc_info=e,
-                )
-            if sort_name:
-                self.sort_name = sort_name
-                return True
-
         # If there's still no sort name, take our best guess based
         # on the display name.
         self.sort_name = display_name_to_sort_name(self.display_name)
@@ -416,9 +394,6 @@ class ContributorData:
 
         'Easy' means we already have an established sort name for a
         Contributor with this exact display name.
-
-        If it's not easy, this will be taken care of later with a call to
-        the metadata wrangler's author canonicalization service.
 
         If we have a copy of this book in our collection (the only
         time an external list item is relevant), this will probably be
@@ -1454,7 +1429,7 @@ class Metadata(MetaToModelUtility):
         circulation=None,
         **kwargs,
     ):
-        # data_source is where the data comes from (e.g. overdrive, metadata wrangler, admin interface),
+        # data_source is where the data comes from (e.g. overdrive, admin interface),
         # and not necessarily where the associated Identifier's LicencePool's lending licenses are coming from.
         self._data_source = data_source
         if isinstance(self._data_source, DataSource):

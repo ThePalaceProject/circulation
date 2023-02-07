@@ -10,7 +10,6 @@ from api.admin.problem_details import INVALID_URL
 from api.novelist import NoveListAPI
 from api.nyt import NYTBestSellerAPI
 from core.model import AdminRole, ExternalIntegration, Library, create, get_one
-from core.opds_import import MetadataWranglerOPDSLookup
 
 from .test_controller import SettingsControllerTest
 
@@ -79,33 +78,12 @@ class TestMetadataServices(SettingsControllerTest):
             [library] = service.get("libraries")
             assert self._default_library.short_name == library.get("short_name")
 
-    def test_process_get_with_self_tests(self):
-        metadata_service = self.create_service("METADATA_WRANGLER")
-        metadata_service.name = "Test"
-        controller = self.manager.admin_metadata_services_controller
-
-        with self.request_context_with_admin("/"):
-            response = controller.process_get()
-            [service] = response.get("metadata_services")
-            assert metadata_service.id == service.get("id")
-            assert ExternalIntegration.METADATA_WRANGLER == service.get("protocol")
-            assert "self_test_results" in service
-            # The exception is because there isn't a library registered with the metadata service.
-            # But we just need to make sure that the response has a self_test_results attribute--for this test,
-            # it doesn't matter what it is--so that's fine.
-            assert (
-                service.get("self_test_results").get("exception")
-                == "Exception getting self-test results for metadata service Test: Metadata Wrangler improperly configured."
-            )
-
     def test_find_protocol_class(self):
-        [wrangler, nyt, novelist, fake] = [
-            self.create_service(x)
-            for x in ["METADATA_WRANGLER", "NYT", "NOVELIST", "FAKE"]
+        [nyt, novelist, fake] = [
+            self.create_service(x) for x in ["NYT", "NOVELIST", "FAKE"]
         ]
         m = self.manager.admin_metadata_services_controller.find_protocol_class
 
-        assert m(wrangler)[0] == MetadataWranglerOPDSLookup
         assert m(nyt)[0] == NYTBestSellerAPI
         assert m(novelist)[0] == NoveListAPI
         pytest.raises(NotImplementedError, m, fake)
@@ -342,48 +320,6 @@ class TestMetadataServices(SettingsControllerTest):
             assert (do_get, do_post, True, integration) == controller.called_with
             assert integration == controller.called_with[-1]
             assert self._db == integration._sa_instance_state.session
-
-    def test_register_with_metadata_wrangler(self):
-        """Verify that register_with_metadata wrangler calls
-        process_sitewide_registration appropriately.
-        """
-
-        class Mock(MetadataServicesController):
-            called_with = None
-
-            def process_sitewide_registration(self, integration, do_get, do_post):
-                self.called_with = (integration, do_get, do_post)
-
-        controller = Mock(self.manager)
-        m = controller.register_with_metadata_wrangler
-        do_get = object()
-        do_post = object()
-
-        # If register_with_metadata_wrangler is called on an ExternalIntegration
-        # with some other service, nothing happens.
-        integration = self._external_integration(protocol=ExternalIntegration.NOVELIST)
-        m(do_get, do_post, True, integration)
-        assert None == controller.called_with
-
-        # If it's called on an existing metadata wrangler integration
-        # that that already has a password set, nothing happens.
-        integration = self._external_integration(
-            protocol=ExternalIntegration.METADATA_WRANGLER
-        )
-        integration.password = "already done"
-        m(do_get, do_post, False, integration)
-        assert None == controller.called_with
-
-        # If it's called on a new metadata wrangler integration,
-        # register_with_metadata_wrangler is called.
-        m(do_get, do_post, True, integration)
-        assert (integration, do_get, do_post) == controller.called_with
-
-        # Same if it's called on an old integration that's missing its
-        # password.
-        controller.called_with = None
-        integration.password = None
-        result = m(do_get, do_post, False, integration)
 
     def test_check_name_unique(self):
         kwargs = dict(

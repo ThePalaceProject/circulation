@@ -6,7 +6,6 @@ import pytest
 from api.nyt import NYTAPI, NYTBestSellerAPI, NYTBestSellerList, NYTBestSellerListTitle
 from core.config import CannotLoadConfiguration
 from core.model import Contributor, CustomListEntry, Edition, ExternalIntegration
-from core.opds_import import MetadataWranglerOPDSLookup
 from core.testing import DummyMetadataClient
 from core.util.http import IntegrationException
 from tests.fixtures.api_nyt_files import NYTFilesFixture
@@ -82,16 +81,7 @@ class TestNYTBestSellerAPI:
         assert "api key" == api.api_key
         assert None == api.metadata_client
 
-        # But if you do, it's picked up.
-        mw = nyt_fixture.db.external_integration(
-            protocol=ExternalIntegration.METADATA_WRANGLER,
-            goal=ExternalIntegration.METADATA_GOAL,
-        )
-        mw.url = nyt_fixture.db.fresh_url()
-
         api = NYTBestSellerAPI.from_config(nyt_fixture.db.session)
-        assert isinstance(api.metadata_client, MetadataWranglerOPDSLookup)
-        assert api.metadata_client.base_url.startswith(mw.url)
 
         # external_integration() finds the integration used to create
         # the API object.
