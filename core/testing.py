@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import shutil
 import time
 import uuid
 from datetime import timedelta
@@ -147,16 +146,6 @@ class DatabaseTest:
         # Destroy the database connection and engine.
         cls.connection.close()
         cls.engine.dispose()
-
-        if cls.tmp_data_dir.startswith("/tmp"):
-            logging.debug("Removing temporary directory %s" % cls.tmp_data_dir)
-            shutil.rmtree(cls.tmp_data_dir)
-
-        else:
-            logging.warning(
-                "Cowardly refusing to remove 'temporary' directory %s"
-                % cls.tmp_data_dir
-            )
 
     @pytest.fixture(autouse=True)
     def search_mock(self, request):

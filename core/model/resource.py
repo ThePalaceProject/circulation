@@ -1001,7 +1001,7 @@ class Representation(Base, MediaTypes):
     def normalize_content_path(cls, content_path, base=None):
         if not content_path:
             return None
-        if content_path.startswith(base):
+        if base and content_path.startswith(base):
             content_path = content_path[len(base) :]
             if content_path.startswith("/"):
                 content_path = content_path[1:]
