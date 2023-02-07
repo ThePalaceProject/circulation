@@ -89,13 +89,6 @@ from core.util.problem_detail import ProblemDetail
 
 def setup_admin_controllers(manager):
     """Set up all the controllers that will be used by the admin parts of the web app."""
-    if not manager.testing:
-        try:
-            manager.config = Configuration.load(manager._db)
-        except CannotLoadConfiguration as e:
-            logging.error("Could not load configuration file: %s", e)
-            sys.exit()
-
     manager.admin_view_controller = ViewController(manager)
     manager.admin_sign_in_controller = SignInController(manager)
     manager.timestamps_controller = TimestampsController(manager)

@@ -93,10 +93,6 @@ class Script:
             self._log = logging.getLogger(self.script_name)
         return self._log
 
-    @property
-    def data_directory(self):
-        return Configuration.data_directory()
-
     @classmethod
     def parse_command_line(cls, _db=None, cmd_args=None):
         parser = cls.arg_parser()
@@ -2408,10 +2404,6 @@ class DatabaseMigrationScript(Script):
         super().__init__(*args, **kwargs)
         self.python_only = False
 
-    def load_configuration(self):
-        """Load configuration without accessing the database."""
-        Configuration.load(None)
-
     def run(self, test_db=None, test=False, cmd_args=None):
         # Use or create a database session.
         if test_db:
@@ -2690,7 +2682,6 @@ class DatabaseMigrationScript(Script):
         # Update the script's Session to a new one that has the changed schema
         # and other important info.
         self._session = Session(connection)
-        self.load_configuration()
         DataSource.well_known_sources(self._db)
 
     def update_timestamps(self, migration_file):

@@ -31,7 +31,6 @@ from sqlalchemy.orm import backref, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import or_
 
-from ..config import Configuration
 from ..util.datetime_helpers import utc_now
 from ..util.http import HTTP
 from . import Base, get_one, get_one_or_create
@@ -1002,7 +1001,6 @@ class Representation(Base, MediaTypes):
     def normalize_content_path(cls, content_path, base=None):
         if not content_path:
             return None
-        base = base or Configuration.data_directory()
         if content_path.startswith(base):
             content_path = content_path[len(base) :]
             if content_path.startswith("/"):
@@ -1192,9 +1190,7 @@ class Representation(Base, MediaTypes):
     @property
     def local_path(self):
         """Return the full local path to the representation on disk."""
-        if not self.local_content_path:
-            return None
-        return os.path.join(Configuration.data_directory(), self.local_content_path)
+        return self.local_content_path
 
     @property
     def clean_media_type(self):

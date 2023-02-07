@@ -1,11 +1,9 @@
 import argparse
-import csv
 import logging
 import os
 import sys
 import time
 from datetime import timedelta
-from io import StringIO
 
 from api.adobe_vendor_id import AuthdataUtility
 from api.authenticator import LibraryAuthenticator
@@ -26,7 +24,6 @@ from api.opds_for_distributors import (
 )
 from api.overdrive import OverdriveAPI
 from core.entrypoint import EntryPoint
-from core.external_list import CustomListFromCSV
 from core.external_search import ExternalSearchIndex
 from core.lane import Facets, FeaturedFacets, Lane, Pagination
 from core.marc import MARCExporter
@@ -44,7 +41,6 @@ from core.model import (
     Collection,
     ConfigurationSetting,
     Contribution,
-    CustomList,
     DataSource,
     DeliveryMechanism,
     Edition,
@@ -59,7 +55,6 @@ from core.model import (
     Representation,
     RightsStatus,
     SessionManager,
-    Subject,
     Timestamp,
     get_one,
 )
@@ -82,9 +77,7 @@ from core.util.opds_writer import OPDSFeed
 
 
 class Script(CoreScript):
-    def load_config(self):
-        if not Configuration.instance:
-            Configuration.load(self._db)
+    ...
 
 
 class MetadataCalculationScript(Script):
@@ -161,48 +154,6 @@ class FillInAuthorScript(MetadataCalculationScript):
             .join(Contribution.contributor)
             .filter(Edition.sort_author == None)
         )
-
-
-class UpdateStaffPicksScript(Script):
-
-    DEFAULT_URL_TEMPLATE = "https://docs.google.com/spreadsheets/d/%s/export?format=csv"
-
-    def run(self):
-        inp = self.open()
-        tag_fields = {
-            "tags": Subject.NYPL_APPEAL,
-        }
-
-        integ = Configuration.integration(Configuration.STAFF_PICKS_INTEGRATION)
-        fields = integ.get(Configuration.LIST_FIELDS, {})
-
-        importer = CustomListFromCSV(
-            DataSource.LIBRARY_STAFF, CustomList.STAFF_PICKS_NAME, **fields
-        )
-        reader = csv.DictReader(inp, dialect="excel-tab")
-        importer.to_customlist(self._db, reader)
-        self._db.commit()
-
-    def open(self):
-        if len(sys.argv) > 1:
-            return open(sys.argv[1])
-
-        url = Configuration.integration_url(Configuration.STAFF_PICKS_INTEGRATION, True)
-        if not url.startswith("https://") or url.startswith("http://"):
-            url = self.DEFAULT_URL_TEMPLATE % url
-        self.log.info("Retrieving %s", url)
-        representation, cached = Representation.get(
-            self._db,
-            url,
-            do_get=Representation.browser_http_get,
-            accept="text/csv",
-            max_age=timedelta(days=1),
-        )
-        if representation.status_code != 200:
-            raise ValueError("Unexpected status code %s" % representation.status_code)
-        if not representation.media_type.startswith("text/csv"):
-            raise ValueError("Unexpected media type %s" % representation.media_type)
-        return StringIO(representation.content)
 
 
 class CacheRepresentationPerLane(TimestampScript, LaneSweeperScript):

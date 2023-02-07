@@ -207,14 +207,8 @@ class DatabaseTransactionFixture:
         # Reset the Analytics singleton between tests.
         Analytics._reset_singleton_instance()
 
-        # Also roll back any record of those changes in the
-        # Configuration instance.
-        for key in [
-            Configuration.SITE_CONFIGURATION_LAST_UPDATE,
-            Configuration.LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE,
-        ]:
-            if key in Configuration.instance:
-                del Configuration.instance[key]
+        Configuration.SITE_CONFIGURATION_LAST_UPDATE = None
+        Configuration.LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE = None
 
     @property
     def database(self) -> DatabaseFixture:
@@ -908,7 +902,6 @@ class TemporaryDirectoryConfigurationFixture:
         fix = TemporaryDirectoryConfigurationFixture()
         fix._directory = tempfile.mkdtemp(dir="/tmp")
         assert isinstance(fix._directory, str)
-        Configuration.instance[Configuration.DATA_DIRECTORY] = fix._directory
         return fix
 
     def close(self):
