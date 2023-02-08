@@ -6,7 +6,6 @@ from werkzeug.datastructures import MultiDict
 
 from api.admin.controller.metadata_services import MetadataServicesController
 from api.admin.exceptions import *
-from api.admin.problem_details import INVALID_URL
 from api.novelist import NoveListAPI
 from api.nyt import NYTBestSellerAPI
 from core.model import AdminRole, ExternalIntegration, Library, create, get_one
@@ -237,89 +236,6 @@ class TestMetadataServices(SettingsControllerTest):
             )
             response = controller.process_post()
             assert response.status_code == 200
-
-    def test_metadata_services_post_calls_register_with_metadata_wrangler(self):
-        """Verify that process_post() calls register_with_metadata_wrangler
-        if the rest of the request is handled successfully.
-        """
-
-        class Mock(MetadataServicesController):
-            RETURN_VALUE = INVALID_URL
-            called_with = None
-
-            def register_with_metadata_wrangler(self, do_get, do_post, is_new, service):
-                self.called_with = (do_get, do_post, is_new, service)
-                return self.RETURN_VALUE
-
-        controller = Mock(self.manager)
-        library, ignore = create(
-            self._db,
-            Library,
-            name="Library",
-            short_name="L",
-        )
-        do_get = object()
-        do_post = object()
-        with self.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict([])
-            controller.process_post(do_get, do_post)
-
-            # Since there was an error condition,
-            # register_with_metadata_wrangler was not called.
-            assert None == controller.called_with
-
-        form = MultiDict(
-            [
-                ("name", "Name"),
-                ("protocol", ExternalIntegration.NOVELIST),
-                (ExternalIntegration.USERNAME, "user"),
-                (ExternalIntegration.PASSWORD, "pass"),
-            ]
-        )
-
-        with self.request_context_with_admin("/", method="POST"):
-            flask.request.form = form
-            response = controller.process_post(do_get=do_get, do_post=do_post)
-
-            # register_with_metadata_wrangler was called, but it
-            # returned a ProblemDetail, so the overall request
-            # failed.
-            assert (do_get, do_post, True) == controller.called_with[:-1]
-            assert INVALID_URL == response
-
-            # We ended up not creating an ExternalIntegration.
-            assert None == get_one(
-                self._db, ExternalIntegration, goal=ExternalIntegration.METADATA_GOAL
-            )
-
-            # But the ExternalIntegration we _would_ have created was
-            # passed in to register_with_metadata_wrangler.
-            bad_integration = controller.called_with[-1]
-
-            # We can tell it's bad because it was disconnected from
-            # our database session.
-            assert None == bad_integration._sa_instance_state.session
-
-        # Now try the same scenario, except that
-        # register_with_metadata_wrangler does _not_ return a
-        # ProblemDetail.
-        Mock.RETURN_VALUE = "It's all good"
-        Mock.called_with = None
-        with self.request_context_with_admin("/", method="POST"):
-            flask.request.form = form
-            response = controller.process_post(do_get=do_get, do_post=do_post)
-
-            # This time we successfully created an ExternalIntegration.
-            integration = get_one(
-                self._db, ExternalIntegration, goal=ExternalIntegration.METADATA_GOAL
-            )
-            assert integration != None
-
-            # It was passed in to register_with_metadata_wrangler
-            # along with the rest of the arguments we expect.
-            assert (do_get, do_post, True, integration) == controller.called_with
-            assert integration == controller.called_with[-1]
-            assert self._db == integration._sa_instance_state.session
 
     def test_check_name_unique(self):
         kwargs = dict(
