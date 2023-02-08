@@ -66,6 +66,7 @@ from .model.configuration import ExternalIntegrationLink
 from .model.listeners import site_configuration_has_changed
 from .monitor import CollectionMonitor, ReaperMonitor
 from .opds_import import OPDSImporter, OPDSImportMonitor
+from .overdrive import OverdriveCoreAPI
 from .util import fast_query_count
 from .util.datetime_helpers import strptime_utc, utc_now
 from .util.personal_names import contributor_name_match_ratio, display_name_to_sort_name
@@ -2840,30 +2841,40 @@ class GenerateOverdriveAdvantageAccountList(InputScript):
     advantage_name
     advantage_id
     advantage_token
+    already_configured
     """
 
     def __init__(self, _db=None, *args, **kwargs):
         super().__init__(_db, args, kwargs)
         self._data: List[List[str]] = list()
 
-    def do_run(self, *args, **kwargs):
-        parsed = self.parse_command_line(_db=self._db, *args, **kwargs)
-        from core.model import Collection
-        from core.overdrive import OverdriveCoreAPI
+    def _create_overdrive_api(self, c: Collection):
+        return OverdriveCoreAPI(_db=self._db, collection=c)
 
+    def do_run(self, *args, **kwargs):
+        parsed = GenerateOverdriveAdvantageAccountList.parse_command_line(
+            _db=self._db, *args, **kwargs
+        )
         query: Query = Collection.by_protocol(
             self._db, protocol=ExternalIntegration.OVERDRIVE
         )
         for c in query.filter(Collection.parent_id == None):
             collection: Collection = c
-            api = OverdriveCoreAPI(_db=self._db, collection=c)
+            api = self._create_overdrive_api(collection=collection)
             client_key = api.client_key().decode()
             client_secret = api.client_secret().decode()
 
             try:
                 library_token = api.collection_token
                 advantage_accounts = api.get_advantage_accounts()
+
                 for aa in advantage_accounts:
+                    existing_child_collections = query.filter(
+                        Collection.parent_id == collection.id
+                    )
+                    already_configured_aa_libraries = [
+                        e.external_account_id for e in existing_child_collections
+                    ]
                     self._data.append(
                         [
                             collection.name,
@@ -2874,6 +2885,7 @@ class GenerateOverdriveAdvantageAccountList(InputScript):
                             aa.name,
                             aa.library_id,
                             aa.token,
+                            aa.library_id in already_configured_aa_libraries,
                         ]
                     )
             except Exception as e:
@@ -2899,6 +2911,7 @@ class GenerateOverdriveAdvantageAccountList(InputScript):
                     "advantage_name",
                     "advantage_id",
                     "advantage_token",
+                    "already_configured",
                 ]
             )
             for i in self._data:
