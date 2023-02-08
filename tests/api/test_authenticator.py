@@ -11,7 +11,6 @@ import urllib.request
 from copy import deepcopy
 from decimal import Decimal
 from typing import Any
-
 from unittest.mock import MagicMock, call, patch
 
 import flask
@@ -3331,9 +3330,7 @@ class SirsiDynixAuthenticatorFixture:
             },
         )
 
-        with patch.dict(
-            os.environ, {Configuration.SIRSI_DYNIX_APP_ID: "UNITTEST"}
-        ):
+        with patch.dict(os.environ, {Configuration.SIRSI_DYNIX_APP_ID: "UNITTEST"}):
             self.api = SirsiDynixHorizonAuthenticationProvider(
                 db.default_library(), self.integration
             )
@@ -3373,7 +3370,7 @@ class TestSirsiDynixAuthenticationProvider:
                 "http://example.org/sirsi/user/patron/login",
                 json=dict(login="username", password="pwd"),
                 headers=self._headers(sirsi_fixture.api),
-                timeout=120
+                timeout=120,
             )
             assert response == response_dict
 
@@ -3408,7 +3405,9 @@ class TestSirsiDynixAuthenticationProvider:
             }
         }
         sirsi_fixture.api.api_read_patron_data = MagicMock(return_value=ok_patron_resp)
-        sirsi_fixture.api.api_patron_status_info = MagicMock(return_value=patron_status_resp)
+        sirsi_fixture.api.api_patron_status_info = MagicMock(
+            return_value=patron_status_resp
+        )
         patrondata = sirsi_fixture.api._remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
@@ -3424,7 +3423,9 @@ class TestSirsiDynixAuthenticationProvider:
         with pytest.raises(ValueError):
             sirsi_fixture.api._request("GET", "/leadingslash")
 
-    def test_blocked_patron_status_info(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
+    def test_blocked_patron_status_info(
+        self, sirsi_fixture: SirsiDynixAuthenticatorFixture
+    ):
         patron_info = {
             "itemsCheckedOutCount": 0,
             "itemsCheckedOutMax": 25,
@@ -3469,7 +3470,9 @@ class TestSirsiDynixAuthenticationProvider:
             info_copy = deepcopy(patron_info)
             info_copy.update(status)
 
-            sirsi_fixture.api.api_read_patron_data = MagicMock(return_value=ok_patron_resp)
+            sirsi_fixture.api.api_read_patron_data = MagicMock(
+                return_value=ok_patron_resp
+            )
             sirsi_fixture.api.api_patron_status_info = MagicMock(
                 return_value={"fields": info_copy}
             )

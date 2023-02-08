@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from functools import lru_cache
 from gettext import gettext as _
 from typing import TYPE_CHECKING
 from urllib.parse import urljoin
@@ -249,29 +248,6 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
         if response.status_code != 200:
             self.log.info(
                 f"Could not fetch patron status info for {patron_key}: {response.text}"
-            )
-            return False
-        return response.json()
-
-    @lru_cache()
-    def api_policy_query(self, policy_resource: str, key: str = "*") -> bool | list:
-        """API request to get detailed information about a policy.
-        Cached, since policy information is static
-
-        :param policy_resource: The policy resource uri
-        :param key: The specific key of the policy to query for, defaults to all keys(*)
-        """
-        # Drop the leading slash for policy resources
-        if policy_resource.startswith("/"):
-            policy_resource = policy_resource[1:]
-
-        response = self._request(
-            "GET",
-            f"{policy_resource}/simpleQuery?key={key}",
-        )
-        if response.status_code != 200:
-            self.log.info(
-                f"Could not fetch policy info for {policy_resource}[{key}]: {response.text}"
             )
             return False
         return response.json()
