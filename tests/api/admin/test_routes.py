@@ -209,10 +209,6 @@ class TestAdminSignIn(AdminRouteTest):
 
     CONTROLLER_NAME = "admin_sign_in_controller"
 
-    def test_google_auth_callback(self):
-        url = "/admin/GoogleAuth/callback"
-        self.assert_request_calls(url, self.controller.redirect_after_google_sign_in)
-
     def test_sign_in_with_password(self):
         url = "/admin/sign_in_with_password"
         self.assert_request_calls(

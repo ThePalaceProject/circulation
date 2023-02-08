@@ -130,8 +130,7 @@ class ExternalIntegration(Base):
 
     # Possible goals of ExternalIntegrations.
     #
-    # These integrations are associated with external services such as
-    # Google Enterprise which authenticate library administrators.
+    # These integrations are associated with external services which authenticate library administrators
     ADMIN_AUTH_GOAL = "admin_auth"
 
     # These integrations are associated with external services such as
@@ -255,11 +254,8 @@ class ExternalIntegration(Base):
     # Integrations with ANALYTICS_GOAL
     GOOGLE_ANALYTICS = "Google Analytics"
 
-    # Integrations with ADMIN_AUTH_GOAL
-    GOOGLE_OAUTH = "Google OAuth"
-
     # List of such ADMIN_AUTH_GOAL integrations
-    ADMIN_AUTH_PROTOCOLS = [GOOGLE_OAUTH]
+    ADMIN_AUTH_PROTOCOLS = []
 
     # Integrations with LOGGING_GOAL
     INTERNAL_LOGGING = "Internal logging"

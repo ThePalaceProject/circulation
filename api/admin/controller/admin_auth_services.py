@@ -2,9 +2,6 @@ import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
 
-from api.admin.google_oauth_admin_authentication_provider import (
-    GoogleOAuthAdminAuthenticationProvider,
-)
 from api.admin.problem_details import *
 from core.model import ExternalIntegration, get_one, get_one_or_create
 from core.util.problem_detail import ProblemDetail
@@ -15,7 +12,7 @@ from . import SettingsController
 class AdminAuthServicesController(SettingsController):
     def __init__(self, manager):
         super().__init__(manager)
-        provider_apis = [GoogleOAuthAdminAuthenticationProvider]
+        provider_apis = []
         self.protocols = self._get_integration_protocols(
             provider_apis, protocol_name_attr="NAME"
         )

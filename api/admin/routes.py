@@ -106,12 +106,6 @@ def returns_json_or_response_or_problem_detail(f):
     return decorated
 
 
-@app.route("/admin/GoogleAuth/callback")
-@returns_problem_detail
-def google_auth_callback():
-    return app.manager.admin_sign_in_controller.redirect_after_google_sign_in()
-
-
 @app.route("/admin/sign_in_with_password", methods=["POST"])
 @returns_problem_detail
 def password_auth():

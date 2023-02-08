@@ -18,9 +18,6 @@ from sqlalchemy.sql.expression import and_, desc, distinct, join, nullslast, sel
 
 from api.admin.config import Configuration as AdminClientConfig
 from api.admin.exceptions import *
-from api.admin.google_oauth_admin_authentication_provider import (
-    GoogleOAuthAdminAuthenticationProvider,
-)
 from api.admin.opds import AdminAnnotator, AdminFeed
 from api.admin.password_admin_authentication_provider import (
     PasswordAdminAuthenticationProvider,
@@ -224,14 +221,7 @@ class AdminController:
     def admin_auth_providers(self):
         auth_providers = []
         auth_service = ExternalIntegration.admin_authentication(self._db)
-        if auth_service and auth_service.protocol == ExternalIntegration.GOOGLE_OAUTH:
-            auth_providers.append(
-                GoogleOAuthAdminAuthenticationProvider(
-                    auth_service,
-                    self.url_for("google_auth_callback"),
-                    test_mode=self.manager.testing,
-                )
-            )
+
         if Admin.with_password(self._db).count() != 0:
             auth_providers.append(
                 PasswordAdminAuthenticationProvider(
@@ -281,7 +271,7 @@ class AdminController:
                     library = Library.lookup(self._db, role.get("library"))
                     if role.get("library") and not library:
                         self.log.warn(
-                            "%s authentication provider specifiec an unknown library for a new admin: %s"
+                            "%s authentication provider specified an unknown library for a new admin: %s"
                             % (admin_details.get("type"), role.get("library"))
                         )
                     else:
@@ -596,23 +586,6 @@ class SignInController(AdminController):
             return Response(html, 200, headers)
         elif admin:
             return redirect(flask.request.args.get("redirect"), Response=Response)
-
-    def redirect_after_google_sign_in(self):
-        """Uses the Google OAuth client to determine admin details upon
-        callback. Barring error, redirects to the provided redirect url.."""
-        if not self.admin_auth_providers:
-            return ADMIN_AUTH_NOT_CONFIGURED
-
-        auth = self.admin_auth_provider(GoogleOAuthAdminAuthenticationProvider.NAME)
-        if not auth:
-            return ADMIN_AUTH_MECHANISM_NOT_CONFIGURED
-
-        admin_details, redirect_url = auth.callback(self._db, flask.request.args)
-        if isinstance(admin_details, ProblemDetail):
-            return self.error_response(admin_details)
-
-        admin = self.authenticated_admin(admin_details)
-        return redirect(redirect_url, Response=Response)
 
     def password_sign_in(self):
         if not self.admin_auth_providers:
