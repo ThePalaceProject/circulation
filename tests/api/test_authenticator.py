@@ -8,6 +8,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+from copy import deepcopy
 from decimal import Decimal
 from typing import Any
 
@@ -40,6 +41,7 @@ from api.problem_details import *
 from api.problem_details import PATRON_OF_ANOTHER_LIBRARY
 from api.simple_authentication import SimpleAuthenticationProvider
 from api.sirsidynix_authentication_provider import (
+    SirsiBlockReasons,
     SirsiDynixHorizonAuthenticationProvider,
     SirsiDynixPatronData,
 )
@@ -3371,6 +3373,7 @@ class TestSirsiDynixAuthenticationProvider:
                 "http://example.org/sirsi/user/patron/login",
                 json=dict(login="username", password="pwd"),
                 headers=self._headers(sirsi_fixture.api),
+                timeout=120
             )
             assert response == response_dict
 
@@ -3395,9 +3398,7 @@ class TestSirsiDynixAuthenticationProvider:
 
     def test_remote_patron_lookup(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
         # Test the happy path, patron OK, some fines
-        ok_patron_resp = {
-            "fields": {"displayName": "Test User", "standing": {"key": "OK"}}
-        }
+        ok_patron_resp = {"fields": {"displayName": "Test User", "approved": True}}
         patron_status_resp = {
             "fields": {
                 "estimatedFines": {
@@ -3418,32 +3419,62 @@ class TestSirsiDynixAuthenticationProvider:
         assert patrondata.fines == 50.00
         assert patrondata.block_reason == None
 
-        # Test for patron standing not OK, with a policy resource
-        barred_patron_resp = {
-            "fields": {
-                "displayName": "Test User",
-                "standing": {"key": "BARRED", "resource": "/policy/patronStanding"},
-            }
-        }
-        patron_standing_policy_resp = {
-            "fields": {"translatedMessage": "This card is BARRED"}
-        }
-        sirsi_fixture.api.api_read_patron_data = MagicMock(return_value=barred_patron_resp)
-        sirsi_fixture.api.api_policy_query = MagicMock(
-            return_value=[patron_standing_policy_resp]
-        )
-        sirsi_fixture.api.api_patron_status_info.reset_mock()
-        patrondata = sirsi_fixture.api._remote_patron_lookup(
-            SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
-        )
-
-        assert sirsi_fixture.api.api_policy_query.call_count == 1
-        assert sirsi_fixture.api.api_policy_query.call_args == call(
-            "/policy/patronStanding", key="BARRED"
-        )
-        assert patrondata.block_reason == "This card is BARRED"
-
     def test__request(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
         # Leading slash on the path is not allowed, as it overwrites the urljoin prefix
         with pytest.raises(ValueError):
             sirsi_fixture.api._request("GET", "/leadingslash")
+
+    def test_blocked_patron_status_info(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
+        patron_info = {
+            "itemsCheckedOutCount": 0,
+            "itemsCheckedOutMax": 25,
+            "hasMaxItemsCheckedOut": False,
+            "fines": {"currencyCode": "USD", "amount": "0.00"},
+            "finesMax": {"currencyCode": "USD", "amount": "5.00"},
+            "hasMaxFines": False,
+            "itemsClaimsReturnedCount": 0,
+            "itemsClaimsReturnedMax": 10,
+            "hasMaxItemsClaimsReturned": False,
+            "lostItemCount": 0,
+            "lostItemMax": 15,
+            "hasMaxLostItem": False,
+            "overdueItemCount": 0,
+            "overdueItemMax": 50,
+            "hasMaxOverdueItem": False,
+            "overdueDays": 0,
+            "overdueDaysMax": 9999,
+            "hasMaxOverdueDays": False,
+            "daysWithFines": 0,
+            "daysWithFinesMax": None,
+            "hasMaxDaysWithFines": False,
+            "availableHoldCount": 0,
+            "datePrivilegeExpires": "2024-09-14",
+            "estimatedOverdueCount": 0,
+            "expired": False,
+            "amountOwed": {"currencyCode": "USD", "amount": "0.00"},
+        }
+
+        statuses = [
+            ({"hasMaxDaysWithFines": True}, PatronData.EXCESSIVE_FINES),
+            ({"hasMaxFines": True}, PatronData.EXCESSIVE_FINES),
+            ({"hasMaxLostItem": True}, PatronData.TOO_MANY_LOST),
+            ({"hasMaxOverdueDays": True}, PatronData.TOO_MANY_OVERDUE),
+            ({"hasMaxOverdueItem": True}, PatronData.TOO_MANY_OVERDUE),
+            ({"hasMaxItemsCheckedOut": True}, PatronData.TOO_MANY_LOANS),
+            ({"expired": True}, SirsiBlockReasons.EXPIRED),
+        ]
+        ok_patron_resp = {"fields": {"displayName": "Test User", "approved": True}}
+
+        for status, reason in statuses:
+            info_copy = deepcopy(patron_info)
+            info_copy.update(status)
+
+            sirsi_fixture.api.api_read_patron_data = MagicMock(return_value=ok_patron_resp)
+            sirsi_fixture.api.api_patron_status_info = MagicMock(
+                return_value={"fields": info_copy}
+            )
+
+            data = sirsi_fixture.api.remote_patron_lookup(
+                SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
+            )
+            assert data.block_reason == reason

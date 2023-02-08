@@ -19,6 +19,11 @@ if TYPE_CHECKING:
     from core.model.patron import Patron
 
 
+class SirsiBlockReasons:
+    NOT_APPROVED = _("Patron has not yet been approved")
+    EXPIRED = _("Patron membership has expired")
+
+
 class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
     """SirsiDynix Authentication API implementation.
 
@@ -131,19 +136,10 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
 
         data = data["fields"]
         patrondata.personal_name = data.get("displayName")
-        standing = data.get("standing", {})
-        patron_ok = standing.get("key")
 
-        # If the patron is not "OK", then pull the detailed reason of the issue
-        if patron_ok != "OK":
-            status_info = self.api_policy_query(standing["resource"], key=patron_ok)
-            if status_info and len(status_info) > 0:
-                patrondata.block_reason = (
-                    status_info[0].get("fields", {}).get("translatedMessage")
-                )
-            # fallback block reason
-            if not patrondata.block_reason:
-                patrondata.block_reason = patron_ok
+        if not data.get("approved", False):
+            patrondata.block_reason = SirsiBlockReasons.NOT_APPROVED
+            return patrondata
 
         # Get patron "fines" information
         status = self.api_patron_status_info(
@@ -158,7 +154,18 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
         fines = status.get("estimatedFines")
         if fines is not None:
             # We ignore currency for now, and assume USD
-            patrondata.fines = float(fines.get("amount"))
+            patrondata.fines = float(fines.get("amount", 0))
+
+        if status.get("hasMaxDaysWithFines") or status.get("hasMaxFines"):
+            patrondata.block_reason = PatronData.EXCESSIVE_FINES
+        elif status.get("hasMaxLostItem"):
+            patrondata.block_reason = PatronData.TOO_MANY_LOST
+        elif status.get("hasMaxOverdueDays") or status.get("hasMaxOverdueItem"):
+            patrondata.block_reason = PatronData.TOO_MANY_OVERDUE
+        elif status.get("hasMaxItemsCheckedOut"):
+            patrondata.block_reason = PatronData.TOO_MANY_LOANS
+        elif status.get("expired"):
+            patrondata.block_reason = SirsiBlockReasons.EXPIRED
 
         patrondata.complete = True
         return patrondata
@@ -189,7 +196,10 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             headers["x-sirs-sessionToken"] = session_token
 
         url = urljoin(self.server_url, path)
-        return HTTP.request_with_timeout(method, url, headers=headers, json=json)
+        # Adding a long timeout because /patronStatusInfo would fail often
+        return HTTP.request_with_timeout(
+            method, url, headers=headers, json=json, timeout=120
+        )
 
     def api_patron_login(self, username: str, password: str) -> bool | dict:
         """API request to verify credentials of a user.
