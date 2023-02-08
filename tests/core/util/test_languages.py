@@ -107,6 +107,8 @@ class TestLanguageCodes:
         assert "qab" == m("qab")
         assert "per" == m("Persian")
         assert "per" == m("Farsi")
+        # Baker and Taylor sends "Persian Farsi" rather than "Persian" or "Farsi"
+        assert "per" == m("Persian Farsi")
         assert "per" == m("per")
         # test bad data
         assert None == m(self.NONEXISTENT_LABEL)
@@ -153,6 +155,11 @@ class TestLanguageNames:
         coded("irish", "gle")
         coded("tokelau", "tkl")
         coded("persian", "per")
+        coded("farsi", "per")
+
+        # for baker and taylor (they are not sending the correct
+        # english name and are unwilling to fix their metadata FWIW
+        coded("persian farsi", "per")
 
         # (Some) native-language names work
         coded("francais", "fre")
