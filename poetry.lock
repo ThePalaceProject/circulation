@@ -118,14 +118,14 @@ crt = ["botocore[crt] (>=1.21.0,<2.0a0)"]
 
 [[package]]
 name = "boto3-stubs"
-version = "1.26.65"
-description = "Type annotations for boto3 1.26.65 generated with mypy-boto3-builder 7.12.3"
+version = "1.26.66"
+description = "Type annotations for boto3 1.26.66 generated with mypy-boto3-builder 7.12.3"
 category = "dev"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "boto3-stubs-1.26.65.tar.gz", hash = "sha256:1d40dc60df0e0e7a41e932a1a413bdd2bd24c82ccb8eda6772f06c4f2d71e271"},
-    {file = "boto3_stubs-1.26.65-py3-none-any.whl", hash = "sha256:2101e605b545d4d2638d70dd0e72a8f4a1408761684bce645b467af642c30acb"},
+    {file = "boto3-stubs-1.26.66.tar.gz", hash = "sha256:c861d596dda030b7120acde5f27994c0d5834f0626c33875e18ceb4d342befb1"},
+    {file = "boto3_stubs-1.26.66-py3-none-any.whl", hash = "sha256:f66e56fa5b9d83b92dcc5ef9545d93e1e9cc813ab5bb8e5e8fe42623071e1707"},
 ]
 
 [package.dependencies]
@@ -168,7 +168,7 @@ backup-gateway = ["mypy-boto3-backup-gateway (>=1.26.0,<1.27.0)"]
 backupstorage = ["mypy-boto3-backupstorage (>=1.26.0,<1.27.0)"]
 batch = ["mypy-boto3-batch (>=1.26.0,<1.27.0)"]
 billingconductor = ["mypy-boto3-billingconductor (>=1.26.0,<1.27.0)"]
-boto3 = ["boto3 (==1.26.65)", "botocore (==1.29.65)"]
+boto3 = ["boto3 (==1.26.66)", "botocore (==1.29.66)"]
 braket = ["mypy-boto3-braket (>=1.26.0,<1.27.0)"]
 budgets = ["mypy-boto3-budgets (>=1.26.0,<1.27.0)"]
 ce = ["mypy-boto3-ce (>=1.26.0,<1.27.0)"]
@@ -3706,4 +3706,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "1235a043b3e54698b49eb5996334475e0ce93a8481bf4c81bc097b0fe47bf807"
+content-hash = "864e8e8bebde549cdf57c4d773d30646612730cfde42bc5c58f5f9b96be1ee11"
