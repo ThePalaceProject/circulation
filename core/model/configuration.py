@@ -255,7 +255,7 @@ class ExternalIntegration(Base):
     GOOGLE_ANALYTICS = "Google Analytics"
 
     # List of such ADMIN_AUTH_GOAL integrations
-    ADMIN_AUTH_PROTOCOLS = []
+    ADMIN_AUTH_PROTOCOLS: list[str] = []
 
     # Integrations with LOGGING_GOAL
     INTERNAL_LOGGING = "Internal logging"
