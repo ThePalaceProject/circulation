@@ -532,6 +532,22 @@ Only run the `test_google_analytics_provider` tests with Python 3.8 using docker
 tox -e "py38-api-docker" -- tests/api/test_google_analytics_provider.py
 ```
 
+### Coverage Reports
+
+Code coverage is automatically tracked with [`pytest-cov`](https://pypi.org/project/pytest-cov/) when tests are run.
+When the tests are run with github actions, the coverage report is automatically uploaded to
+[codecov](https://about.codecov.io/) and the results are added to the relevant pull request.
+
+When running locally, the results from each individual run can be collected and combined into an HTML report using
+the `report` tox environment. This can be run on its own after running the tests, or as part of the tox environment
+selection.
+
+```shell
+# Run core and api tests under Python 3.8, using docker
+# containers for dependencies, and generate code coverage report
+tox -e "py38-{core,api}-docker,report"
+```
+
 ## Usage with Docker
 
 Check out the [Docker README](/docker/README.md) in the `/docker` directory for in-depth information on optionally
