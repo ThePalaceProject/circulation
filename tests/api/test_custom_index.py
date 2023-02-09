@@ -168,7 +168,7 @@ class TestCOPPAGate:
             """
             Create a real-looking URL for any random controller.
 
-            The URL is creates looks like: http://{library_short_name}/{controller}?{query}
+            The URL it creates looks like: http://{library_short_name}/{controller}?{query}
             Where query is made up of the kwargs passed into the function, just like the normal flask url_for
             method, minus those that start with _. Since flask defines a number of special parameters to change
             the url_for behavior.
