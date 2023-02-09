@@ -1729,7 +1729,6 @@ class SettingsController(AdminCirculationManagerController):
         ODLAPI,
         ODL2API,
         SharedODLAPI,
-        FeedbooksOPDSImporter,
         LCPAPI,
     ]
 
