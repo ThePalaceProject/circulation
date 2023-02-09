@@ -45,7 +45,9 @@ class EnkiTestFixure:
 
 @pytest.fixture(scope="function")
 def enki_test_fixture(
-    db: DatabaseTransactionFixture, api_enki_files_fixture: EnkiFilesFixture
+    db: DatabaseTransactionFixture,
+    api_enki_files_fixture: EnkiFilesFixture,
+    mock_config_key_pair: None,
 ) -> EnkiTestFixure:
     return EnkiTestFixure(db, api_enki_files_fixture)
 

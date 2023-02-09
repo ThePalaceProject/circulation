@@ -93,7 +93,9 @@ class TestBibliothecaAPI:
             == bibliotheca_fixture.api.external_integration(object())
         )
 
-    def test__run_self_tests(self, bibliotheca_fixture: BibliothecaAPITestFixture):
+    def test__run_self_tests(
+        self, bibliotheca_fixture: BibliothecaAPITestFixture, mock_config_key_pair: None
+    ):
         db = bibliotheca_fixture.db
         # Verify that BibliothecaAPI._run_self_tests() calls the right
         # methods.

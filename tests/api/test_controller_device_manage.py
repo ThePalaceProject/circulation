@@ -35,7 +35,11 @@ class DeviceManagementFixture(ControllerFixture):
 
 
 @pytest.fixture(scope="function")
-def device_fixture(db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture):
+def device_fixture(
+    db: DatabaseTransactionFixture,
+    vendor_id_fixture: VendorIDFixture,
+    mock_config_key_pair: None,
+):
     return DeviceManagementFixture(db, vendor_id_fixture)
 
 

@@ -130,7 +130,7 @@ class TestAxis360API:
             == axis360.api.external_integration(object())
         )
 
-    def test__run_self_tests(self, axis360: Axis360Fixture):
+    def test__run_self_tests(self, axis360: Axis360Fixture, mock_config_key_pair: None):
         # Verify that Axis360API._run_self_tests() calls the right
         # methods.
 

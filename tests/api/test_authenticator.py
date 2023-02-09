@@ -10,6 +10,7 @@ import urllib.parse
 import urllib.request
 from decimal import Decimal
 from typing import Any
+from unittest.mock import patch
 
 import flask
 import pytest
@@ -204,7 +205,9 @@ class AuthenticatorFixture:
 
 
 @pytest.fixture(scope="function")
-def authenticator_fixture(db: DatabaseTransactionFixture) -> AuthenticatorFixture:
+def authenticator_fixture(
+    db: DatabaseTransactionFixture, mock_config_key_pair: None
+) -> AuthenticatorFixture:
     return AuthenticatorFixture(db)
 
 
@@ -1639,10 +1642,18 @@ class TestLibraryAuthenticator:
         assert not hasattr(auth, "private_key")
         assert (public, private) == auth.key_pair
 
+    def test_key_pair_per_library(self, authenticator_fixture: AuthenticatorFixture):
         # Each library has its own key pair.
+        db = authenticator_fixture.db
+        library1 = db.default_library()
         library2 = db.library()
-        auth2 = LibraryAuthenticator.from_config(db.session, library2)
-        assert auth.public_key != auth2.public_key
+        with patch.object(Configuration, "key_pair") as patched:
+            patched.return_value = ("public", "private")
+            LibraryAuthenticator.from_config(db.session, library1)
+            assert patched.call_count == 1
+            LibraryAuthenticator.from_config(db.session, library2)
+            assert patched.call_count == 2
+            assert patched.call_args_list[0] != patched.call_args_list[1]
 
     def test__geographic_areas(self, authenticator_fixture: AuthenticatorFixture):
         """Test the _geographic_areas helper method."""

@@ -62,7 +62,11 @@ class WorkFixture(CirculationControllerFixture):
 
 
 @pytest.fixture(scope="function")
-def work_fixture(db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture):
+def work_fixture(
+    db: DatabaseTransactionFixture,
+    vendor_id_fixture: VendorIDFixture,
+    mock_config_key_pair: None,
+):
     return WorkFixture(db, vendor_id_fixture)
 
 
