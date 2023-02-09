@@ -259,6 +259,7 @@ class TestIndividualAdmins(SettingsControllerTest):
             flask.request.form = MultiDict(
                 [
                     ("email", "test@library.org"),
+                    ("password", "334df3f70bfe1979"),
                     (
                         "roles",
                         json.dumps(
@@ -277,6 +278,7 @@ class TestIndividualAdmins(SettingsControllerTest):
             flask.request.form = MultiDict(
                 [
                     ("email", "test@library.org"),
+                    ("password", "334df3f70bfe1979"),
                     (
                         "roles",
                         json.dumps(
@@ -295,27 +297,40 @@ class TestIndividualAdmins(SettingsControllerTest):
         l2 = self._library()
         system, ignore = create(self._db, Admin, email="system@example.com")
         system.add_role(AdminRole.SYSTEM_ADMIN)
+        assert system.is_system_admin()
+
         sitewide_manager, ignore = create(
             self._db, Admin, email="sitewide_manager@example.com"
         )
         sitewide_manager.add_role(AdminRole.SITEWIDE_LIBRARY_MANAGER)
+        assert sitewide_manager.is_sitewide_library_manager()
+
         sitewide_librarian, ignore = create(
             self._db, Admin, email="sitewide_librarian@example.com"
         )
         sitewide_librarian.add_role(AdminRole.SITEWIDE_LIBRARIAN)
+        assert sitewide_manager.is_sitewide_librarian()
+
         manager1, ignore = create(
             self._db, Admin, email="library_manager_l1@example.com"
         )
         manager1.add_role(AdminRole.LIBRARY_MANAGER, l1)
+        assert manager1.is_library_manager(l1)
+
         librarian1, ignore = create(self._db, Admin, email="librarian_l1@example.com")
         librarian1.add_role(AdminRole.LIBRARIAN, l1)
+        assert librarian1.is_librarian(l1)
+
         l2 = self._library()
         manager2, ignore = create(
             self._db, Admin, email="library_manager_l2@example.com"
         )
         manager2.add_role(AdminRole.LIBRARY_MANAGER, l2)
+        assert manager2.is_library_manager(l2)
+
         librarian2, ignore = create(self._db, Admin, email="librarian_l2@example.com")
         librarian2.add_role(AdminRole.LIBRARIAN, l2)
+        assert librarian2.is_librarian(l2)
 
         def test_changing_roles(
             admin_making_request, target_admin, roles=None, allowed=False
@@ -648,11 +663,11 @@ class TestIndividualAdmins(SettingsControllerTest):
         admin = get_one(self._db, Admin, id=system_admin.id)
         assert None == admin
 
-    def test_individual_admins_post_create_on_setup(self):
+    def test_individual_admins_post_create_not_system(self):
+        """Creating an admin that's not a system admin will fail."""
         for admin in self._db.query(Admin):
             self._db.delete(admin)
 
-        # Creating an admin that's not a system admin will fail.
         with self.app.test_request_context("/", method="POST"):
             flask.request.form = MultiDict(
                 [
@@ -676,9 +691,12 @@ class TestIndividualAdmins(SettingsControllerTest):
                 AdminNotAuthorized,
                 self.manager.admin_individual_admin_settings_controller.process_post,
             )
-            self._db.rollback()
 
-        # The password is required.
+    def test_individual_admins_post_create_requires_password(self):
+        """The password is required."""
+        for admin in self._db.query(Admin):
+            self._db.delete(admin)
+
         with self.app.test_request_context("/", method="POST"):
             flask.request.form = MultiDict(
                 [
@@ -693,7 +711,11 @@ class TestIndividualAdmins(SettingsControllerTest):
             assert 400 == response.status_code
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
-        # Creating a system admin with a password works.
+    def test_individual_admins_post_create_on_setup(self):
+        """Creating a system admin with a password works."""
+        for admin in self._db.query(Admin):
+            self._db.delete(admin)
+
         with self.app.test_request_context("/", method="POST"):
             flask.request.form = MultiDict(
                 [
