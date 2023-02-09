@@ -2,6 +2,11 @@
 build-backend = "poetry.core.masonry.api"
 requires = ["poetry-core>=1.0.0"]
 
+[tool.coverage.run]
+branch = true
+relative_files = true
+source = ["api", "core"]
+
 [tool.isort]
 known_first_party = ["api", "core", "customlists"]
 profile = "black"
@@ -192,6 +197,7 @@ mypy = "^0.991"
 parameterized = "0.8.1"
 psycopg2-binary = "~2.9.5"
 pyfakefs = "5.0.0"
+pytest-cov = "^4.0.0"
 pytest-timeout = "*"
 requests-mock = "1.10.0"
 sqlalchemy-stubs = "^0.4"
@@ -211,7 +217,11 @@ optional = true
 psycopg2 = "~2.9.5"
 
 [tool.pytest.ini_options]
-addopts = "--strict-markers"
+addopts = [
+    "--cov",
+    "--cov-report=xml",
+    "--strict-markers",
+]
 markers = [
     "elasticsearch: mark test as requiring elasticsearch",
     "minio: mark test as requiring minio",
