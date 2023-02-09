@@ -2,9 +2,7 @@ import json
 
 import flask
 
-from api.config import Configuration
 from core.lane import Lane
-from core.model import ConfigurationSetting
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from tests.fixtures.api_controller import CirculationControllerFixture
 
@@ -205,50 +203,3 @@ class TestIndexController:
                 circulation_fixture.manager.index_controller.authentication_document()
             )
             assert "_debug" not in response.get_data(as_text=True)
-
-    def test_public_key_integration_document(
-        self, circulation_fixture: CirculationControllerFixture
-    ):
-        base_url = ConfigurationSetting.sitewide(
-            circulation_fixture.db.session, Configuration.BASE_URL_KEY
-        ).value
-
-        # When a sitewide key pair exists (which should be all the
-        # time), all of its data is included.
-        key_setting = ConfigurationSetting.sitewide(
-            circulation_fixture.db.session, Configuration.KEY_PAIR
-        )
-        key_setting.value = json.dumps(["public key", "private key"])
-        with circulation_fixture.app.test_request_context("/"):
-            response = (
-                circulation_fixture.manager.index_controller.public_key_document()
-            )
-
-        assert 200 == response.status_code
-        assert "application/opds+json" == response.headers.get("Content-Type")
-
-        data = json.loads(response.get_data(as_text=True))
-        assert "RSA" == data.get("public_key", {}).get("type")
-        assert "public key" == data.get("public_key", {}).get("value")
-
-        # If there is no sitewide key pair (which should never
-        # happen), a new one is created. Library-specific public keys
-        # are ignored.
-        key_setting.value = None
-        ConfigurationSetting.for_library(
-            Configuration.KEY_PAIR, circulation_fixture.library
-        ).value = "ignore me"
-
-        with circulation_fixture.app.test_request_context("/"):
-            response = (
-                circulation_fixture.manager.index_controller.public_key_document()
-            )
-
-        assert 200 == response.status_code
-        assert "application/opds+json" == response.headers.get("Content-Type")
-
-        data = json.loads(response.get_data(as_text=True))
-        assert "http://test-circulation-manager/" == data.get("id")
-        key = data.get("public_key")
-        assert "RSA" == key["type"]
-        assert "BEGIN PUBLIC KEY" in key["value"]

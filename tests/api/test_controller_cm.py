@@ -251,29 +251,6 @@ class TestCirculationManager:
         # ID configuration.
         assert obj == circulation_fixture.manager.adobe_vendor_id
 
-    def test_sitewide_key_pair(self, circulation_fixture: CirculationControllerFixture):
-        # A public/private key pair was created when the
-        # CirculationManager was initialized. Clear it out.
-        pair = ConfigurationSetting.sitewide(
-            circulation_fixture.db.session, Configuration.KEY_PAIR
-        )
-        pair.value = None
-
-        # Calling sitewide_key_pair will create a new pair of keys.
-        new_public, new_private = circulation_fixture.manager.sitewide_key_pair
-        assert "BEGIN PUBLIC KEY" in new_public
-        assert "BEGIN RSA PRIVATE KEY" in new_private
-
-        # The new values are stored in the appropriate
-        # ConfigurationSetting.
-        assert [new_public, new_private] == pair.json_value
-
-        # Calling it again will do nothing.
-        assert (
-            new_public,
-            new_private,
-        ) == circulation_fixture.manager.sitewide_key_pair
-
     def test_annotator(self, circulation_fixture: CirculationControllerFixture):
         # Test our ability to find an appropriate OPDSAnnotator for
         # any request context.

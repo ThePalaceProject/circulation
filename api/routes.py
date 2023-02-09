@@ -306,13 +306,6 @@ def authentication_document():
     return app.manager.index_controller.authentication_document()
 
 
-@library_route("/public_key_document")
-@returns_problem_detail
-@compressible
-def public_key_document():
-    return app.manager.index_controller.public_key_document()
-
-
 @library_dir_route("/groups", defaults=dict(lane_identifier=None))
 @library_route("/groups/<lane_identifier>")
 @has_library
