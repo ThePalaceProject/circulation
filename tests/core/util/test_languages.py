@@ -157,8 +157,8 @@ class TestLanguageNames:
         coded("persian", "per")
         coded("farsi", "per")
 
-        # for baker and taylor (they are not sending the correct
-        # english name and are unwilling to fix their metadata FWIW
+        # This non-standard English name has been added to accommodate Baker and Taylor
+        # as they are not sending the correct English name and are unwilling to fix their metadata.
         coded("persian farsi", "per")
 
         # (Some) native-language names work
