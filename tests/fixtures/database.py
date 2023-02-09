@@ -51,6 +51,7 @@ from core.model import (
 from core.model.devicetokens import DeviceToken
 from core.model.licensing import License, LicensePoolDeliveryMechanism, LicenseStatus
 from core.util.datetime_helpers import utc_now
+from tests.fixtures.api_config import KeyPairFixture
 
 
 class ApplicationFixture:
@@ -938,7 +939,7 @@ def temporary_directory_configuration() -> Iterable[
 
 
 @pytest.fixture(scope="session")
-def application() -> Iterable[ApplicationFixture]:
+def application(mock_config_key_pair: KeyPairFixture) -> Iterable[ApplicationFixture]:
     app = ApplicationFixture.create()
     yield app
     app.close()

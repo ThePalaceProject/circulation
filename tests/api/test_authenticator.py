@@ -10,6 +10,7 @@ import urllib.parse
 import urllib.request
 from decimal import Decimal
 from typing import Any
+from unittest.mock import patch
 
 import flask
 import pytest
@@ -1639,10 +1640,23 @@ class TestLibraryAuthenticator:
         assert not hasattr(auth, "private_key")
         assert (public, private) == auth.key_pair
 
-        # Each library has its own key pair.
+    def test_key_pair_per_library(self, authenticator_fixture: AuthenticatorFixture):
+        # Ensure that each library obtains its own key pair.
+        db = authenticator_fixture.db
+        library1 = db.default_library()
         library2 = db.library()
-        auth2 = LibraryAuthenticator.from_config(db.session, library2)
-        assert auth.public_key != auth2.public_key
+
+        # We mock the key_pair function here, and make sure its called twice, with
+        # different settings because the get_mock_config_key_pair mock always returns
+        # the same key. So we need to do a bit more work to verify that different
+        # libraries get different keys.
+        with patch.object(Configuration, "key_pair") as patched:
+            patched.return_value = ("public", "private")
+            LibraryAuthenticator.from_config(db.session, library1)
+            assert patched.call_count == 1
+            LibraryAuthenticator.from_config(db.session, library2)
+            assert patched.call_count == 2
+            assert patched.call_args_list[0] != patched.call_args_list[1]
 
     def test__geographic_areas(self, authenticator_fixture: AuthenticatorFixture):
         """Test the _geographic_areas helper method."""
