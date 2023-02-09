@@ -1639,14 +1639,12 @@ class TestODLImporter:
         db: DatabaseTransactionFixture,
         odl_test_fixture: ODLTestFixture,
         mock_get,
-        metadata_client,
     ) -> ODLImporter:
         library = odl_test_fixture.library()
         return ODLImporter(
             db.session,
             collection=odl_test_fixture.collection(library),
             http_get=mock_get.get,
-            metadata_client=metadata_client,
         )
 
     @pytest.fixture()
@@ -1659,10 +1657,6 @@ class TestODLImporter:
             Collection.DATA_SOURCE_NAME_SETTING, data_source.name
         )
         return data_source
-
-    @pytest.fixture()
-    def metadata_client(self) -> MockMetadataClient:
-        return self.MockMetadataClient()
 
     @pytest.fixture()
     def feed_template(self):
@@ -2910,12 +2904,7 @@ class TestSharedODLImporter:
             def canonicalize_author_name(self, identifier, working_display_name):
                 return working_display_name
 
-        metadata_client = MockMetadataClient()
-        importer = SharedODLImporter(
-            db.session,
-            collection=collection,
-            metadata_client=metadata_client,
-        )
+        importer = SharedODLImporter(db.session, collection=collection)
 
         (
             imported_editions,

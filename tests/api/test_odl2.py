@@ -91,14 +91,12 @@ class TestODL2Importer(TestODLImporter):
         db: DatabaseTransactionFixture,
         odl_test_fixture: ODLTestFixture,
         mock_get,
-        metadata_client,
     ) -> ODL2Importer:
         library = odl_test_fixture.library()
         return ODL2Importer(
             db.session,
             collection=odl_test_fixture.collection(library),
             http_get=mock_get.get,
-            metadata_client=metadata_client,
         )
 
     @pytest.fixture()
