@@ -150,7 +150,7 @@ class Admin(Base, HasSessionCache):
         # First check if the admin is a manager of _all_ libraries.
         if self.is_sitewide_library_manager():
             return True
-        # If not, they could stil be a manager of _this_ library.
+        # If not, they could still be a manager of _this_ library.
         def lookup_hook():
             return (
                 get_one(
