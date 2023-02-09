@@ -30,10 +30,7 @@ class ProfileFixture(ControllerFixture):
 
 
 @pytest.fixture(scope="function")
-def profile_fixture(
-    db: DatabaseTransactionFixture,
-    vendor_id_fixture: VendorIDFixture,
-):
+def profile_fixture(db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture):
     return ProfileFixture(db, vendor_id_fixture)
 
 

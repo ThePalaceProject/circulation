@@ -24,8 +24,7 @@ class AnnotationFixture(CirculationControllerFixture):
 
 @pytest.fixture(scope="function")
 def annotation_fixture(
-    db: DatabaseTransactionFixture,
-    vendor_id_fixture: VendorIDFixture,
+    db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture
 ):
     return AnnotationFixture(db, vendor_id_fixture)
 

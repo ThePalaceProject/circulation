@@ -81,10 +81,7 @@ class LoanFixture(CirculationControllerFixture):
 
 
 @pytest.fixture(scope="function")
-def loan_fixture(
-    db: DatabaseTransactionFixture,
-    vendor_id_fixture: VendorIDFixture,
-):
+def loan_fixture(db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture):
     return LoanFixture(db, vendor_id_fixture)
 
 

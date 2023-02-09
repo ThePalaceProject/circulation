@@ -74,8 +74,7 @@ class OdiloFixture:
 
 @pytest.fixture(scope="function")
 def odilo(
-    db: DatabaseTransactionFixture,
-    api_odilo_files_fixture: OdiloFilesFixture,
+    db: DatabaseTransactionFixture, api_odilo_files_fixture: OdiloFilesFixture
 ) -> OdiloFixture:
     return OdiloFixture(db, api_odilo_files_fixture)
 

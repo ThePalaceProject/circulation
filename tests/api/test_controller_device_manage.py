@@ -35,10 +35,7 @@ class DeviceManagementFixture(ControllerFixture):
 
 
 @pytest.fixture(scope="function")
-def device_fixture(
-    db: DatabaseTransactionFixture,
-    vendor_id_fixture: VendorIDFixture,
-):
+def device_fixture(db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture):
     return DeviceManagementFixture(db, vendor_id_fixture)
 
 

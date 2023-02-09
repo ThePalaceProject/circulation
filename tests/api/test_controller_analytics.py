@@ -21,8 +21,7 @@ class AnalyticsFixture(CirculationControllerFixture):
 
 @pytest.fixture(scope="function")
 def analytics_fixture(
-    db: DatabaseTransactionFixture,
-    vendor_id_fixture: VendorIDFixture,
+    db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture
 ):
     return AnalyticsFixture(db, vendor_id_fixture)
 

@@ -81,10 +81,7 @@ class SharedCollectionFixture(ControllerFixture):
 
 
 @pytest.fixture(scope="function")
-def shared_fixture(
-    db: DatabaseTransactionFixture,
-    vendor_id_fixture: VendorIDFixture,
-):
+def shared_fixture(db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture):
     return SharedCollectionFixture(db, vendor_id_fixture)
 
 
