@@ -1,4 +1,9 @@
 # Reference: https://docs.codecov.com/docs/codecovyml-reference
+coverage:
+  status:
+    project:
+      default:
+        threshold: 0.2%
 
 comment:
   # Only comment when coverage changes
