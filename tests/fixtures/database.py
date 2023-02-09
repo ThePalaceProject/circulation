@@ -938,7 +938,7 @@ def temporary_directory_configuration() -> Iterable[
 
 
 @pytest.fixture(scope="session")
-def application() -> Iterable[ApplicationFixture]:
+def application(mock_config_key_pair: None) -> Iterable[ApplicationFixture]:
     app = ApplicationFixture.create()
     yield app
     app.close()

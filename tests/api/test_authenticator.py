@@ -205,9 +205,7 @@ class AuthenticatorFixture:
 
 
 @pytest.fixture(scope="function")
-def authenticator_fixture(
-    db: DatabaseTransactionFixture, mock_config_key_pair: None
-) -> AuthenticatorFixture:
+def authenticator_fixture(db: DatabaseTransactionFixture) -> AuthenticatorFixture:
     return AuthenticatorFixture(db)
 
 

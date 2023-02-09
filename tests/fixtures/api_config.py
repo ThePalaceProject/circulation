@@ -49,7 +49,7 @@ def get_mock_config_key_pair():
     return mock_key_pair
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def mock_config_key_pair():
     """
     Key pair generation takes a significant amount of time, and has to be done each time

@@ -68,9 +68,7 @@ class CirculationAPIFixture:
 
 
 @pytest.fixture(scope="function")
-def circulation_api(
-    db: DatabaseTransactionFixture, mock_config_key_pair: None
-) -> CirculationAPIFixture:
+def circulation_api(db: DatabaseTransactionFixture) -> CirculationAPIFixture:
     return CirculationAPIFixture(db)
 
 

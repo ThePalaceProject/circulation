@@ -84,7 +84,6 @@ class SharedCollectionFixture(ControllerFixture):
 def shared_fixture(
     db: DatabaseTransactionFixture,
     vendor_id_fixture: VendorIDFixture,
-    mock_config_key_pair: None,
 ):
     return SharedCollectionFixture(db, vendor_id_fixture)
 

@@ -33,7 +33,6 @@ class ProfileFixture(ControllerFixture):
 def profile_fixture(
     db: DatabaseTransactionFixture,
     vendor_id_fixture: VendorIDFixture,
-    mock_config_key_pair: None,
 ):
     return ProfileFixture(db, vendor_id_fixture)
 

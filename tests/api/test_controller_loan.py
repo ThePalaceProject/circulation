@@ -84,7 +84,6 @@ class LoanFixture(CirculationControllerFixture):
 def loan_fixture(
     db: DatabaseTransactionFixture,
     vendor_id_fixture: VendorIDFixture,
-    mock_config_key_pair: None,
 ):
     return LoanFixture(db, vendor_id_fixture)
 

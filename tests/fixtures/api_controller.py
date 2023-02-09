@@ -247,7 +247,6 @@ class ControllerFixture:
 def controller_fixture(
     db: DatabaseTransactionFixture,
     vendor_id_fixture: VendorIDFixture,
-    mock_config_key_pair,
 ):
     time_then = datetime.datetime.now()
     fixture = ControllerFixture(db, vendor_id_fixture, setup_cm=True)
@@ -261,7 +260,6 @@ def controller_fixture(
 def controller_fixture_without_cm(
     db: DatabaseTransactionFixture,
     vendor_id_fixture: VendorIDFixture,
-    mock_config_key_pair,
 ):
     time_then = datetime.datetime.now()
     fixture = ControllerFixture(db, vendor_id_fixture, setup_cm=False)
@@ -367,7 +365,6 @@ class CirculationControllerFixture(ControllerFixture):
 def circulation_fixture(
     db: DatabaseTransactionFixture,
     vendor_id_fixture: VendorIDFixture,
-    mock_config_key_pair: None,
 ):
     time_then = datetime.datetime.now()
     fixture = CirculationControllerFixture(db, vendor_id_fixture)

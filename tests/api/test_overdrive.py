@@ -84,7 +84,6 @@ class OverdriveAPIFixture:
 def overdrive_api_fixture(
     db: DatabaseTransactionFixture,
     api_overdrive_files_fixture: OverdriveAPIFilesFixture,
-    mock_config_key_pair: None,
 ) -> OverdriveAPIFixture:
     return OverdriveAPIFixture(db, api_overdrive_files_fixture)
 

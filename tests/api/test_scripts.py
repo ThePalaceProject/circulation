@@ -126,9 +126,7 @@ class LaneScriptFixture:
 
 
 @pytest.fixture(scope="function")
-def lane_script_fixture(
-    db: DatabaseTransactionFixture, mock_config_key_pair: None
-) -> LaneScriptFixture:
+def lane_script_fixture(db: DatabaseTransactionFixture) -> LaneScriptFixture:
     return LaneScriptFixture(db)
 
 
@@ -776,7 +774,6 @@ class ShortClientTokenLibraryConfigurationFixture:
 @pytest.fixture(scope="function")
 def short_client_token_fixture(
     db: DatabaseTransactionFixture,
-    mock_config_key_pair: None,
 ) -> ShortClientTokenLibraryConfigurationFixture:
     return ShortClientTokenLibraryConfigurationFixture(db)
 
