@@ -738,3 +738,46 @@ class TestIndividualAdmins(SettingsControllerTest):
 
         [role] = admin_match.roles
         assert AdminRole.SYSTEM_ADMIN == role.role
+
+    def test_individual_admins_post_create_second_admin(self):
+        """Creating a second admin with a password works."""
+        for admin in self._db.query(Admin):
+            self._db.delete(admin)
+
+        system_admin, ignore = create(self._db, Admin, email=self._str)
+        system_admin.add_role(AdminRole.SYSTEM_ADMIN)
+
+        with self.request_context_with_admin("/", method="POST", admin=system_admin):
+            flask.request.form = MultiDict(
+                [
+                    ("email", "second_admin@nypl.org"),
+                    ("password", "pass"),
+                    ("roles", []),
+                ]
+            )
+            flask.request.files = {}
+            response = (
+                self.manager.admin_individual_admin_settings_controller.process_post()
+            )
+            assert 201 == response.status_code
+
+    def test_individual_admins_post_create_second_admin_no_password(self):
+        """Creating a second admin without a password fails."""
+        for admin in self._db.query(Admin):
+            self._db.delete(admin)
+
+        system_admin, ignore = create(self._db, Admin, email=self._str)
+        system_admin.add_role(AdminRole.SYSTEM_ADMIN)
+
+        with self.request_context_with_admin("/", method="POST", admin=system_admin):
+            flask.request.form = MultiDict(
+                [
+                    ("email", "second_admin@nypl.org"),
+                    ("roles", []),
+                ]
+            )
+            flask.request.files = {}
+            response = (
+                self.manager.admin_individual_admin_settings_controller.process_post()
+            )
+            assert 400 == response.status_code
