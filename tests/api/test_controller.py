@@ -20,7 +20,7 @@ from core.model import (
     get_one_or_create,
 )
 from core.util.string_helpers import base64
-from tests.fixtures.api_config import get_mock_config_key_pair
+from tests.fixtures.api_config import get_key_pair_fixture, get_mock_config_key_pair
 
 
 class ControllerTest(VendorIDTest):
@@ -37,8 +37,9 @@ class ControllerTest(VendorIDTest):
         from _pytest.monkeypatch import MonkeyPatch
 
         self.patch = MonkeyPatch()
+        fixture = get_key_pair_fixture()
         self.patch.setattr(
-            "api.config.Configuration.key_pair", get_mock_config_key_pair()
+            "api.config.Configuration.key_pair", get_mock_config_key_pair(fixture)
         )
         self.app = app
 

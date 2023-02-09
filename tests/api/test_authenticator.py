@@ -1641,10 +1641,15 @@ class TestLibraryAuthenticator:
         assert (public, private) == auth.key_pair
 
     def test_key_pair_per_library(self, authenticator_fixture: AuthenticatorFixture):
-        # Each library has its own key pair.
+        # Ensure that each library obtains its own key pair.
         db = authenticator_fixture.db
         library1 = db.default_library()
         library2 = db.library()
+
+        # We mock the key_pair function here, and make sure its called twice, with
+        # different settings because the get_mock_config_key_pair mock always returns
+        # the same key. So we need to do a bit more work to verify that different
+        # libraries get different keys.
         with patch.object(Configuration, "key_pair") as patched:
             patched.return_value = ("public", "private")
             LibraryAuthenticator.from_config(db.session, library1)

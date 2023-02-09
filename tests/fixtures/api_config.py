@@ -1,11 +1,23 @@
 import json
+from dataclasses import dataclass
 from textwrap import dedent
+from typing import TYPE_CHECKING, Callable, Tuple
 
 import pytest
 from Crypto.PublicKey.RSA import import_key
 
+if TYPE_CHECKING:
+    from core.model import ConfigurationSetting
 
-def get_mock_config_key_pair():
+
+@dataclass(frozen=True)
+class KeyPairFixture:
+    public: str
+    private: str
+    json: str
+
+
+def get_key_pair_fixture() -> KeyPairFixture:
     # Just a dummy key used for testing.
     key_string = """\
         -----BEGIN RSA PRIVATE KEY-----
@@ -24,7 +36,13 @@ def get_mock_config_key_pair():
     private_key = key.exportKey().decode("utf8")
     value = json.dumps([public_key, private_key])
 
-    def mock_key_pair(setting):
+    return KeyPairFixture(public_key, private_key, value)
+
+
+def get_mock_config_key_pair(
+    fixture: KeyPairFixture,
+) -> Callable[[ConfigurationSetting], Tuple[str, str]]:
+    def mock_key_pair(setting: ConfigurationSetting) -> Tuple[str, str]:
         public = None
         private = None
 
@@ -34,9 +52,9 @@ def get_mock_config_key_pair():
             pass
 
         if not public or not private:
-            setting.value = value
-            public = public_key
-            private = private_key
+            setting.value = fixture.json
+            public = fixture.public
+            private = fixture.private
 
         return public, private
 
@@ -44,16 +62,21 @@ def get_mock_config_key_pair():
 
 
 @pytest.fixture(scope="session")
-def mock_config_key_pair():
+def mock_config_key_pair() -> KeyPairFixture:
     """
     Key pair generation takes a significant amount of time, and has to be done each time
-    we setup for testing. This mocks out the Configuration.key_pair function to reduce the amount
+    we set up for testing. This mocks out the Configuration.key_pair function to reduce the amount
     of time tests take.
     """
 
+    # Need to import MonkeyPatch directly like this instead of using the monkeypatch fixture,
+    # because this fixture has session scope, and the monkeypatch fixture doesn't.
     from _pytest.monkeypatch import MonkeyPatch
 
+    fixture = get_key_pair_fixture()
+    mock = get_mock_config_key_pair(fixture)
+
     patch = MonkeyPatch()
-    patch.setattr("api.config.Configuration.key_pair", get_mock_config_key_pair())
-    yield
+    patch.setattr("api.config.Configuration.key_pair", mock)
+    yield fixture
     patch.undo()
