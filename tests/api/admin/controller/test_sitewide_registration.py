@@ -172,7 +172,7 @@ class TestSitewideRegistration(SettingsControllerTest):
         )
 
         # A registration document with an encrypted secret
-        shared_secret = binascii.hexlify(os.urandom(24))
+        shared_secret = binascii.hexlify(os.urandom(8))
         encrypted_secret = base64.b64encode(encryptor.encrypt(shared_secret))
         registration = dict(
             id=metadata_wrangler_service.url,

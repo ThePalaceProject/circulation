@@ -9,19 +9,13 @@ def get_mock_config_key_pair():
     # Just a dummy key used for testing.
     key_string = """\
         -----BEGIN RSA PRIVATE KEY-----
-        MIICXAIBAAKBgQCojFeEmXs1QJpR6lKvSEQG3HOmArwP0hu/gcIJybA44uvo7u13
-        olFQtRIE3B2QzpHSWuq7vuo22vu/o+O3O8DMqniQJdzwlYuZABdfy5RNYkgMVyVm
-        QAQy4s6MqpDST9M/V3vby8EOFXSsl1XEZLA0kGp+9f6xYaZAdgvw70vrtwIDAQAB
-        AoGADokr8w+ZhJoxtObUgrFkzIKupp6NwX+JTRbPuTBftkg7uDcC29Jv2NoE185z
-        7k0iXlXg8JgicuCn3Xsw5FiO4/PrFIXvUmYD1C3FFPuz15a77v3KbNLyK8iunhRm
-        rtfk5ZwnGYDTL2B+UfhBMVp++pE954MPGPX65eEvbapa8+ECQQDRvpr/Op5oxS3m
-        zB56CKT5099VlmOwJdyNr2T2nr3JGlupak8bdftzIPPJIZcXJsgBqa+bjw+GzaIj
-        XnV9GJFzAkEAzbfx2ALfP+Dzode4276Znb2nlVVHKkZjnDbx8D4G0kisjiZPRhf4
-        6/0CPu621CJ39i6/uoWNshaWKpQrd5ubrQJAOtlT+9CiqZrJajxTQMI0J7R+sTDk
-        /4NgApD3rwqTDV3L4hjl4TqVNpREUmaOUfybmXvWvbrCDHydxXa3WEYQaQJBAKgV
-        EkHnXtdHimiC5KSO3961dfaavdG5v2uErTsYwuQPwwVGIeFodtcCW1JmIvXCz/dS
-        jQ7uTi7jK4DQnY9VkeUCQGRc7d2gONaHq6pP6JkRSMKVc0eRyhPzPAL43PAXaLpE
-        wv/qnmBP4FOvDvtTLiOPCziqJEg3PSnBAsiRCKstHUc=
+        MIIBOQIBAAJBALFOBYf91uHhGQufTEOCZ9/L/Ge0/Lw4DRDuFBh9p+BpOxQJE9gi
+        4FaJc16Wh53Sg5vQTOZMEGgjjTaP7K6NWgECAwEAAQJAEsR4b2meCjDCbumAsBCo
+        oBa+c9fDfMTOFUGuHN2IHIe5zObxWAKD3xq73AO+mpeEl+KpeLeq2IJNqCZdf1yK
+        MQIhAOGeurU6vgn/yA9gXECzvWYaxiAzHsOeW4RDhb/+14u1AiEAyS3VWo6jPt0i
+        x8oiahujtCqaKLy611rFHQuK+yKNfJ0CIFuQVIuaNGfQc3uyCp6Dk3jtoryMoo6X
+        JOLvmEdMAGQFAiB4D+psiQPT2JWRNokjWitwspweA8ReEcXhd6oSBqT54QIgaVc5
+        wNybPDDs9mU+du+r0U+5iXaZzS5StYZpo9B4KjA=
         -----END RSA PRIVATE KEY-----
     """
 
