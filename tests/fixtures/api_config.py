@@ -6,6 +6,7 @@ from Crypto.PublicKey.RSA import import_key
 
 
 def get_mock_config_key_pair():
+    # Just a dummy key used for testing.
     key_string = """\
         -----BEGIN RSA PRIVATE KEY-----
         MIICXAIBAAKBgQCojFeEmXs1QJpR6lKvSEQG3HOmArwP0hu/gcIJybA44uvo7u13
@@ -52,10 +53,8 @@ def get_mock_config_key_pair():
 def mock_config_key_pair():
     """
     Key pair generation takes a significant amount of time, and has to be done each time
-    we setup for testing. This mocks out the RSA generation function to reduce the amount
+    we setup for testing. This mocks out the Configuration.key_pair function to reduce the amount
     of time tests take.
-
-    The key below is just a dummy key used for testing.
     """
 
     from _pytest.monkeypatch import MonkeyPatch
