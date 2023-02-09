@@ -1,13 +1,12 @@
 import json
 from dataclasses import dataclass
 from textwrap import dedent
-from typing import TYPE_CHECKING, Callable, Tuple
+from typing import Callable, Tuple
 
 import pytest
 from Crypto.PublicKey.RSA import import_key
 
-if TYPE_CHECKING:
-    from core.model import ConfigurationSetting
+from core.model import ConfigurationSetting
 
 
 @dataclass(frozen=True)
