@@ -13,7 +13,7 @@ from lxml import etree
 
 from api.adobe_vendor_id import AuthdataUtility
 from api.circulation import BaseCirculationAPI, CirculationAPI, FulfillmentInfo
-from api.config import Configuration, temp_config
+from api.config import Configuration
 from api.lanes import ContributorLane
 from api.novelist import NoveListAPI
 from api.opds import (
@@ -96,17 +96,6 @@ class TestCirculationManagerAnnotator:
         # explanation of the book's copyright status.
         rights = link_tag.attrib["{http://purl.org/dc/terms/}rights"]
         assert lpdm.rights_status.uri == rights
-
-        # If we have a CDN set up for open-access links, the CDN hostname
-        # replaces the original hostname.
-        with temp_config() as config:
-            config[Configuration.INTEGRATIONS][ExternalIntegration.CDN] = {
-                "foo.com": "https://cdn.com/"
-            }
-            link_tag = circulation_fixture.annotator.open_access_link(pool, lpdm)
-
-        link_url = link_tag.get("href")
-        assert "https://cdn.com/thefile.epub" == link_url
 
         # If the Resource has a Representation, the public URL is used
         # instead of the original Resource URL.

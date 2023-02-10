@@ -25,7 +25,6 @@ from core.analytics import Analytics
 from core.app_server import ApplicationVersionController
 from core.app_server import URNLookupController as CoreURNLookupController
 from core.app_server import (
-    cdn_url_for,
     load_facets_from_request,
     load_pagination_from_request,
     url_for,
@@ -363,41 +362,6 @@ class CirculationManager:
             self.external_search_initialization_exception = e
         return self._external_search
 
-    def cdn_url_for(self, view, *args, **kwargs):
-        """Generate a URL for a view that (probably) passes through a CDN.
-
-        :param view: Name of the view.
-        :param _facets: The faceting object used to generate the document that's calling
-           this method. This may change which function is actually used to generate the
-           URL; in particular, it may disable a CDN that would otherwise be used. This is
-           called _facets just in case there's ever a view that takes 'facets' as a real
-           keyword argument.
-        :param args: Positional arguments to the view function.
-        :param kwargs: Keyword arguments to the view function.
-        """
-        url_for = self._cdn_url_for
-        facets = kwargs.pop("_facets", None)
-        if facets and facets.max_cache_age is CachedFeed.IGNORE_CACHE:
-            # The faceting object in play has disabled cache
-            # checking. A CDN is also a cache, so we should disable
-            # CDN URLs in the feed to make it more likely that the
-            # client continues to see up-to-the-minute feeds as they
-            # click around.
-            url_for = self.url_for
-        return url_for(view, *args, **kwargs)
-
-    def _cdn_url_for(self, *args, **kwargs):
-        """Call the cdn_url_for function.
-
-        Defined solely to be overridden in tests.
-        """
-        return cdn_url_for(*args, **kwargs)
-
-    def url_for(self, view, *args, **kwargs):
-        """Call the url_for function, ensuring that Flask generates an absolute URL."""
-        kwargs["_external"] = True
-        return url_for(view, *args, **kwargs)
-
     def log_lanes(self, lanelist=None, level=0):
         """Output information about the lane layout."""
         lanelist = lanelist or self.top_level_lane.sublanes
@@ -621,7 +585,9 @@ class CirculationManager:
             # itself.
             value = json.loads(value)
             value["_debug"] = dict(
-                url=self.url_for("authentication_document", library_short_name=name),
+                url=url_for(
+                    "authentication_document", library_short_name=name, _external=True
+                ),
                 environ=str(dict(flask.request.environ)),
                 cache=str(self.authentication_for_opds_documents),
             )
@@ -901,8 +867,10 @@ class IndexController(CirculationManagerController):
         library_short_name = flask.request.library.short_name
         if not self.has_root_lanes():
             return redirect(
-                self.cdn_url_for(
-                    "acquisition_groups", library_short_name=library_short_name
+                url_for(
+                    "acquisition_groups",
+                    library_short_name=library_short_name,
+                    _external=True,
                 )
             )
 
@@ -943,17 +911,19 @@ class IndexController(CirculationManagerController):
             return root_lane
         if root_lane is None:
             return redirect(
-                self.cdn_url_for(
+                url_for(
                     "acquisition_groups",
                     library_short_name=library_short_name,
+                    _external=True,
                 )
             )
 
         return redirect(
-            self.cdn_url_for(
+            url_for(
                 "acquisition_groups",
                 library_short_name=library_short_name,
                 lane_identifier=root_lane.id,
+                _external=True,
             )
         )
 
@@ -985,7 +955,7 @@ class OPDSFeedController(CirculationManagerController):
             patron = self.request_patron
             if patron is not None and patron.root_lane:
                 return redirect(
-                    self.cdn_url_for(
+                    url_for(
                         "acquisition_groups",
                         library_short_name=library.short_name,
                         lane_identifier=patron.root_lane.id,
@@ -1019,11 +989,12 @@ class OPDSFeedController(CirculationManagerController):
         if isinstance(search_engine, ProblemDetail):
             return search_engine
 
-        url = self.cdn_url_for(
+        url = url_for(
             "acquisition_groups",
             lane_identifier=lane_identifier,
             library_short_name=library.short_name,
             _facets=facets,
+            _external=True,
         )
 
         annotator = self.manager.annotator(lane, facets)
@@ -1059,11 +1030,12 @@ class OPDSFeedController(CirculationManagerController):
             return search_engine
 
         library_short_name = flask.request.library.short_name
-        url = self.cdn_url_for(
+        url = url_for(
             "feed",
             lane_identifier=lane_identifier,
             library_short_name=library_short_name,
             _facets=facets,
+            _external=True,
         )
 
         annotator = self.manager.annotator(lane, facets=facets)
@@ -1086,10 +1058,11 @@ class OPDSFeedController(CirculationManagerController):
             return lane
         library = flask.request.library
         library_short_name = library.short_name
-        url = self.cdn_url_for(
+        url = url_for(
             "navigation_feed",
             lane_identifier=lane_identifier,
             library_short_name=library_short_name,
+            _external=True,
         )
 
         title = lane.display_name
@@ -1111,9 +1084,10 @@ class OPDSFeedController(CirculationManagerController):
         request library.
         """
         library = flask.request.library
-        url = self.cdn_url_for(
+        url = url_for(
             "crawlable_library_feed",
             library_short_name=library.short_name,
+            _external=True,
         )
         title = library.name
         lane = CrawlableCollectionBasedLane()
@@ -1128,8 +1102,8 @@ class OPDSFeedController(CirculationManagerController):
         if not collection:
             return NO_SUCH_COLLECTION
         title = collection.name
-        url = self.cdn_url_for(
-            "crawlable_collection_feed", collection_name=collection.name
+        url = url_for(
+            "crawlable_collection_feed", collection_name=collection.name, _external=True
         )
         lane = CrawlableCollectionBasedLane()
         lane.initialize([collection])
@@ -1155,10 +1129,11 @@ class OPDSFeedController(CirculationManagerController):
             return NO_SUCH_LIST
         library_short_name = library.short_name
         title = list.name
-        url = self.cdn_url_for(
+        url = url_for(
             "crawlable_list_feed",
             list_name=list.name,
             library_short_name=library_short_name,
+            _external=True,
         )
         lane = CrawlableCustomListBasedLane()
         lane.initialize(library, list)
@@ -1255,10 +1230,11 @@ class OPDSFeedController(CirculationManagerController):
         # request arguments, and another way if there is a query
         # string.
         make_url_kwargs = dict(list(facets.items()))
-        make_url = lambda: self.url_for(
+        make_url = lambda: url_for(
             "lane_search",
             lane_identifier=lane_identifier,
             library_short_name=library_short_name,
+            _external=True,
             **make_url_kwargs,
         )
         if not query:
@@ -1310,9 +1286,8 @@ class OPDSFeedController(CirculationManagerController):
         if isinstance(search_engine, ProblemDetail):
             return search_engine
 
-        url = self.url_for(
-            controller_name,
-            library_short_name=library.short_name,
+        url = url_for(
+            controller_name, library_short_name=library.short_name, _external=True
         )
 
         facets = load_facets_from_request(
@@ -2542,8 +2517,10 @@ class SharedCollectionController(CirculationManagerController):
         if not collection:
             return NO_SUCH_COLLECTION
 
-        register_url = self.url_for(
-            "shared_collection_register", collection_name=collection_name
+        register_url = url_for(
+            "shared_collection_register",
+            collection_name=collection_name,
+            _external=True,
         )
         register_link = dict(href=register_url, rel="register")
         content = json.dumps(dict(links=[register_link]))

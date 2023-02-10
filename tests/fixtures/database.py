@@ -127,11 +127,6 @@ class DatabaseFixture:
         DatabaseFixture._load_core_model_classes()
         engine, connection = DatabaseFixture._get_database_connection()
 
-        # Avoid CannotLoadConfiguration errors related to CDN integrations.
-        Configuration.instance[Configuration.INTEGRATIONS] = Configuration.instance.get(
-            Configuration.INTEGRATIONS, {}
-        )
-        Configuration.instance[Configuration.INTEGRATIONS][ExternalIntegration.CDN] = {}
         return DatabaseFixture(engine, connection)
 
     def close(self):
