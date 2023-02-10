@@ -209,7 +209,7 @@ class CirculationManager:
             self.load_settings()
             self.site_configuration_last_update = last_update
 
-    @log_elapsed_time(log_method=log.debug, message_prefix="load_settings")
+    @log_elapsed_time(log_method=log.info, message_prefix="load_settings")
     def load_settings(self):
         """Load all necessary configuration settings and external
         integrations from the database.

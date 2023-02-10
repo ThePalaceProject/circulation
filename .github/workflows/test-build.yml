@@ -47,6 +47,9 @@ jobs:
         env:
           MODULE: ${{ matrix.module }}
 
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+
   docker-image-build:
     name: Docker build base
     runs-on: ubuntu-latest

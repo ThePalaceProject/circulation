@@ -57,7 +57,6 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
         data_source_name=None,
         identifier_mapping=None,
         http_get=None,
-        metadata_client=None,
         content_modifier=None,
         map_from_collection=None,
         mirrors=None,
@@ -85,9 +84,6 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
         :param identifier_mapping: Dictionary used for mapping external identifiers into a set of internal ones
         :type identifier_mapping: Dict
 
-        :param metadata_client: A SimplifiedOPDSLookup object that is used to fill in missing metadata
-        :type metadata_client: SimplifiedOPDSLookup
-
         :param content_modifier: A function that may modify-in-place representations (such as images and EPUB documents)
             as they come in from the network.
         :type content_modifier: Callable
@@ -105,7 +101,6 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
             data_source_name,
             identifier_mapping,
             http_get,
-            metadata_client,
             content_modifier,
             map_from_collection,
             mirrors,

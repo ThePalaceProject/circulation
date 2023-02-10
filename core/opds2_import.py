@@ -58,7 +58,7 @@ from .model import (
     RightsStatus,
     Subject,
 )
-from .opds_import import OPDSImporter, OPDSImportMonitor, SimplifiedOPDSLookup
+from .opds_import import OPDSImporter, OPDSImportMonitor
 from .util.http import BadResponseException
 from .util.opds_writer import OPDSFeed
 
@@ -159,7 +159,6 @@ class OPDS2Importer(
         data_source_name: str | None = None,
         identifier_mapping: dict | None = None,
         http_get: Callable | None = None,
-        metadata_client: SimplifiedOPDSLookup | None = None,
         content_modifier: Callable | None = None,
         map_from_collection: dict | None = None,
         mirrors: dict[str, MirrorUploader] | None = None,
@@ -178,7 +177,6 @@ class OPDS2Importer(
             NOTE: If `collection` is provided, its .data_source will take precedence over any value provided here.
             This is only for use when you are importing OPDS metadata without any particular Collection in mind.
         :param identifier_mapping: Dictionary used for mapping external identifiers into a set of internal ones
-        :param metadata_client: A SimplifiedOPDSLookup object that is used to fill in missing metadata
         :param content_modifier: A function that may modify-in-place representations (such as images and EPUB documents)
             as they come in from the network.
         :param map_from_collection: Identifier mapping
@@ -190,7 +188,6 @@ class OPDS2Importer(
             data_source_name,
             identifier_mapping,
             http_get,
-            metadata_client,
             content_modifier,
             map_from_collection,
             mirrors,
