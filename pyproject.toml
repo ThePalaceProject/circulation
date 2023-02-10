@@ -188,7 +188,7 @@ tox-docker = "^3.1.0"
 tox-gh-actions = "^2.10.0"
 
 [tool.poetry.group.dev.dependencies]
-boto3-stubs = "^1.26.67"
+boto3-stubs = "^1.26.68"
 botocore-stubs = "^1.29.64"
 freezegun = "~1.2"
 Jinja2 = "2.11.3"
