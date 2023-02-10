@@ -311,8 +311,10 @@ class TestLaneCreation:
         assert 1 == len(audiences)
         assert Classifier.AUDIENCE_CHILDREN == audiences[0]
 
-    def test_create_default_when_more_than_one_large_language_is_configured(self):
-        library = self._default_library
+    def test_create_default_when_more_than_one_large_language_is_configured(
+        self, db: DatabaseTransactionFixture
+    ):
+        library = db.default_library()
         library.setting(Configuration.LARGE_COLLECTION_LANGUAGES).value = json.dumps(
             [
                 "eng",
@@ -323,10 +325,10 @@ class TestLaneCreation:
         library.setting(Configuration.SMALL_COLLECTION_LANGUAGES).value = json.dumps([])
 
         library.setting(Configuration.TINY_COLLECTION_LANGUAGES).value = json.dumps([])
-
-        create_default_lanes(self._db, self._default_library)
+        session = db.session
+        create_default_lanes(session, library)
         lanes = (
-            self._db.query(Lane)
+            session.query(Lane)
             .filter(Lane.library == library)
             .filter(Lane.parent_id == None)
             .all()
@@ -343,20 +345,20 @@ class TestLaneCreation:
         } == {x.display_name for x in lanes}
 
     def test_create_default_when_more_than_one_large_language_is_returned_by_estimation(
-        self,
+        self, db: DatabaseTransactionFixture
     ):
-        library = self._default_library
+        library = db.default_library()
         library.setting(Configuration.LARGE_COLLECTION_LANGUAGES).value = json.dumps([])
         library.setting(Configuration.SMALL_COLLECTION_LANGUAGES).value = json.dumps([])
         library.setting(Configuration.TINY_COLLECTION_LANGUAGES).value = json.dumps([])
-
+        session = db.session
         with patch(
             "api.lanes._lane_configuration_from_collection_sizes"
         ) as mock_lane_config:
             mock_lane_config.return_value = (["eng", "fre"], [], [])
-            create_default_lanes(self._db, self._default_library)
+            create_default_lanes(session, library)
             lanes = (
-                self._db.query(Lane)
+                session.query(Lane)
                 .filter(Lane.library == library)
                 .filter(Lane.parent_id == None)
                 .all()
