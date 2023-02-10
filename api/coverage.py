@@ -1,31 +1,13 @@
 """Base classes for CoverageProviders.
 
 The CoverageProviders themselves are in the file corresponding to the
-service that needs coverage -- overdrive.py, metadata_wrangler.py, and
-so on.
+service that needs coverage -- overdrive.py, and so on.
 """
 
 
 from core.coverage import CollectionCoverageProvider, CoverageFailure
 from core.model import DataSource
 from core.opds_import import OPDSImporter
-
-
-class RegistrarImporter(OPDSImporter):
-    """We are successful whenever the metadata wrangler puts an identifier
-    into the catalog, even if no metadata is immediately available.
-    """
-
-    SUCCESS_STATUS_CODES = [200, 201, 202]
-
-
-class ReaperImporter(OPDSImporter):
-    """We are successful if the metadata wrangler acknowledges that an
-    identifier has been removed, and also if the identifier wasn't in
-    the catalog in the first place.
-    """
-
-    SUCCESS_STATUS_CODES = [200, 404]
 
 
 class OPDSImportCoverageProvider(CollectionCoverageProvider):

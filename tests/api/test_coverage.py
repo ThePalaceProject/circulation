@@ -1,29 +1,13 @@
 import pytest
 
-from api.coverage import (
-    MockOPDSImportCoverageProvider,
-    OPDSImportCoverageProvider,
-    ReaperImporter,
-    RegistrarImporter,
-)
+from api.coverage import MockOPDSImportCoverageProvider, OPDSImportCoverageProvider
 from core.coverage import CoverageFailure
-from core.model import Collection, DataSource, ExternalIntegration, LicensePool
+from core.model import Collection, DataSource, LicensePool
 from core.opds_import import MockSimplifiedOPDSLookup, OPDSImporter
 from core.testing import MockRequestsResponse
 from core.util.http import BadResponseException
 from core.util.opds_writer import OPDSFeed
 from tests.fixtures.database import DatabaseTransactionFixture
-
-
-class TestImporterSubclasses:
-    """Test the subclasses of OPDSImporter."""
-
-    def test_success_status_codes(self):
-        """Validate the status codes that different importers
-        will treat as successes.
-        """
-        assert [200, 201, 202] == RegistrarImporter.SUCCESS_STATUS_CODES
-        assert [200, 404] == ReaperImporter.SUCCESS_STATUS_CODES
 
 
 class TestOPDSImportCoverageProvider:
@@ -67,13 +51,6 @@ class TestOPDSImportCoverageProvider:
 
         # This means we need to mock the lookup client instead.
         lookup = MockSimplifiedOPDSLookup(db.fresh_url())
-
-        # And create an ExternalIntegration for the metadata_client object.
-        db.external_integration(
-            ExternalIntegration.METADATA_WRANGLER,
-            goal=ExternalIntegration.METADATA_GOAL,
-            url=db.fresh_url(),
-        )
 
         db.default_collection().external_integration.set_setting(
             Collection.DATA_SOURCE_NAME_SETTING, DataSource.OA_CONTENT_SERVER

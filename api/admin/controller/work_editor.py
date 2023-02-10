@@ -15,8 +15,6 @@ from PIL import Image, ImageDraw, ImageFont
 from api.admin.opds import AdminAnnotator
 from api.admin.problem_details import *
 from api.admin.validator import Validator
-from api.config import CannotLoadConfiguration
-from api.metadata_wrangler import MetadataWranglerCollectionRegistrar
 from core.classifier import NO_NUMBER, NO_VALUE, SimplifiedGenreClassifier, genres
 from core.lane import Lane
 from core.metadata_layer import LinkData, Metadata, ReplacementPolicy
@@ -413,12 +411,7 @@ class WorkController(AdminCirculationManagerController):
             return work
 
         if not provider and work.license_pools:
-            try:
-                provider = MetadataWranglerCollectionRegistrar(
-                    work.license_pools[0].collection
-                )
-            except CannotLoadConfiguration:
-                return METADATA_REFRESH_FAILURE
+            return METADATA_REFRESH_FAILURE
 
         identifier = work.presentation_edition.primary_identifier
         try:

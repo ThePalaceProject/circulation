@@ -20,6 +20,7 @@ from core.model import (
     get_one_or_create,
 )
 from core.util.string_helpers import base64
+from tests.fixtures.api_config import get_key_pair_fixture, get_mock_config_key_pair
 
 
 class ControllerTest(VendorIDTest):
@@ -33,6 +34,13 @@ class ControllerTest(VendorIDTest):
 
     def setup_method(self):
         super().setup_method()
+        from _pytest.monkeypatch import MonkeyPatch
+
+        self.patch = MonkeyPatch()
+        fixture = get_key_pair_fixture()
+        self.patch.setattr(
+            "api.config.Configuration.key_pair", get_mock_config_key_pair(fixture)
+        )
         self.app = app
 
         if not hasattr(self, "setup_circulation_manager"):
@@ -46,16 +54,16 @@ class ControllerTest(VendorIDTest):
         # were created in the test setup.
         app.config["PRESERVE_CONTEXT_ON_EXCEPTION"] = False
 
-        Configuration.instance[Configuration.INTEGRATIONS][ExternalIntegration.CDN] = {
-            "": "http://cdn"
-        }
-
         if self.setup_circulation_manager:
             # NOTE: Any reference to self._default_library below this
             # point in this method will cause the tests in
             # TestScopedSession to hang.
             self.set_base_url(self._db)
             app.manager = self.circulation_manager_setup(self._db)
+
+    def teardown_method(self):
+        self.patch.undo()
+        super().teardown_method()
 
     def set_base_url(self, _db):
         base_url = ConfigurationSetting.sitewide(_db, Configuration.BASE_URL_KEY)

@@ -10,7 +10,7 @@ from typing import Callable, Dict, List, Optional, Union
 
 import flask
 import jwt
-from flask import Response, redirect
+from flask import Response, redirect, url_for
 from flask_babel import lazy_gettext as _
 from pydantic import BaseModel
 from sqlalchemy.sql import func
@@ -118,9 +118,6 @@ def setup_admin_controllers(manager):
     manager.admin_discovery_service_library_registrations_controller = (
         DiscoveryServiceLibraryRegistrationsController(manager)
     )
-    from api.admin.controller.cdn_services import CDNServicesController
-
-    manager.admin_cdn_services_controller = CDNServicesController(manager)
     from api.admin.controller.analytics_services import AnalyticsServicesController
 
     manager.admin_analytics_services_controller = AnalyticsServicesController(manager)
@@ -214,8 +211,6 @@ class AdminController:
     def __init__(self, manager):
         self.manager = manager
         self._db = self.manager._db
-        self.url_for = self.manager.url_for
-        self.cdn_url_for = self.manager.cdn_url_for
 
     @property
     def admin_auth_providers(self):
@@ -372,7 +367,9 @@ class ViewController(AdminController):
                     redirect_url = redirect_url.replace(
                         quoted_book, quoted_book.replace("/", "%2F")
                     )
-                return redirect(self.url_for("admin_sign_in", redirect=redirect_url))
+                return redirect(
+                    url_for("admin_sign_in", redirect=redirect_url, _external=True)
+                )
 
             if not collection and not book and not path:
                 if self._db.query(Library).count() > 0:
@@ -389,7 +386,9 @@ class ViewController(AdminController):
                             ),
                             200,
                         )
-                    return redirect(self.url_for("admin_view", collection=library_name))
+                    return redirect(
+                        url_for("admin_view", collection=library_name, _external=True)
+                    )
 
             email = admin.email
             for role in admin.roles:
@@ -614,8 +613,10 @@ class SignInController(AdminController):
         flask.session.pop("admin_email", None)
         flask.session.pop("auth_type", None)
 
-        redirect_url = self.url_for(
-            "admin_sign_in", redirect=self.url_for("admin_view"), _external=True
+        redirect_url = url_for(
+            "admin_sign_in",
+            redirect=url_for("admin_view", _external=True),
+            _external=True,
         )
         return redirect(redirect_url)
 
@@ -725,7 +726,7 @@ class FeedController(AdminCirculationManagerController):
     def suppressed(self):
         self.require_librarian(flask.request.library)
 
-        this_url = self.url_for("suppressed")
+        this_url = url_for("suppressed", _external=True)
         annotator = AdminAnnotator(self.circulation, flask.request.library)
         pagination = load_pagination_from_request()
         if isinstance(pagination, ProblemDetail):
@@ -1036,11 +1037,12 @@ class CustomListsController(AdminCirculationManagerController):
                 return pagination
 
             query = CustomList.entries_having_works(self._db, list_id)
-            url = self.url_for(
+            url = url_for(
                 "custom_list_get",
                 list_name=list.name,
                 library_short_name=library.short_name,
                 list_id=list_id,
+                _external=True,
             )
 
             worklist = WorkList()
@@ -2396,162 +2398,6 @@ class SettingsController(AdminCirculationManagerController):
         error = validator.validate(settings, dict(form=form, files=files))
         if error:
             return error
-
-
-class SitewideRegistrationController(SettingsController):
-    """A controller for managing a circulation manager's registrations
-    with external services.
-
-    Currently the only supported site-wide registration is with a
-    metadata wrangler. The protocol for registration with library
-    registries and ODL collections is similar, but those registrations
-    happen on the level of the individual library, not on the level of
-    the circulation manager.
-    """
-
-    def process_sitewide_registration(
-        self, integration, do_get=HTTP.debuggable_get, do_post=HTTP.debuggable_post
-    ):
-        """Performs a sitewide registration for a particular service.
-
-        :return: A ProblemDetail or, if successful, None
-        """
-
-        self.require_system_admin()
-
-        if not integration:
-            return MISSING_SERVICE
-
-        catalog_response = self.get_catalog(do_get, integration.url)
-        if isinstance(catalog_response, ProblemDetail):
-            return catalog_response
-
-        if isinstance(self.check_content_type(catalog_response), ProblemDetail):
-            return self.check_content_type(catalog_response)
-
-        catalog = catalog_response.json()
-        links = catalog.get("links", [])
-
-        register_url = self.get_registration_link(catalog, links)
-        if isinstance(register_url, ProblemDetail):
-            return register_url
-
-        headers = self.update_headers(integration)
-        if isinstance(headers, ProblemDetail):
-            return headers
-
-        response = self.register(register_url, headers, do_post)
-        if isinstance(response, ProblemDetail):
-            return response
-
-        shared_secret = self.get_shared_secret(response)
-        if isinstance(shared_secret, ProblemDetail):
-            return shared_secret
-
-        ignore, private_key = self.manager.sitewide_key_pair
-        decryptor = Configuration.cipher(private_key)
-        shared_secret = decryptor.decrypt(base64.b64decode(shared_secret))
-        integration.password = shared_secret.decode("utf-8")
-
-    def get_catalog(self, do_get, url):
-        """Get the catalog for this service."""
-
-        try:
-            response = do_get(url)
-        except Exception as e:
-            return REMOTE_INTEGRATION_FAILED.detailed(str(e))
-
-        if isinstance(response, ProblemDetail):
-            return response
-        return response
-
-    def check_content_type(self, catalog_response):
-        """Make sure the catalog for the service is in a valid format."""
-
-        content_type = catalog_response.headers.get("Content-Type")
-        if content_type != "application/opds+json":
-            return REMOTE_INTEGRATION_FAILED.detailed(
-                _("The service did not provide a valid catalog.")
-            )
-
-    def get_registration_link(self, catalog, links):
-        """Get the link for registration from the catalog."""
-
-        register_link_filter = lambda l: (
-            l.get("rel") == "register"
-            and l.get("type") == self.METADATA_SERVICE_URI_TYPE
-        )
-
-        register_urls = list(filter(register_link_filter, links))
-        if not register_urls:
-            return REMOTE_INTEGRATION_FAILED.detailed(
-                _("The service did not provide a register link.")
-            )
-
-        # Get the full registration url.
-        register_url = register_urls[0].get("href")
-        if not register_url.startswith("http"):
-            # We have a relative path. Create a full registration url.
-            base_url = catalog.get("id")
-            register_url = urllib.parse.urljoin(base_url, register_url)
-
-        return register_url
-
-    def update_headers(self, integration):
-        """If the integration has an existing shared_secret, use it to access the
-        server and update it."""
-
-        # NOTE: This is no longer technically necessary since we prove
-        # ownership with a signed JWT.
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        if integration.password:
-            token = base64.b64encode(integration.password.encode("utf-8"))
-            headers["Authorization"] = "Bearer " + token
-        return headers
-
-    def register(self, register_url, headers, do_post):
-        """Register this server using the sitewide registration document."""
-
-        try:
-            body = self.sitewide_registration_document()
-            response = do_post(
-                register_url, body, allowed_response_codes=["2xx"], headers=headers
-            )
-        except Exception as e:
-            return REMOTE_INTEGRATION_FAILED.detailed(str(e))
-        return response
-
-    def get_shared_secret(self, response):
-        """Find the shared secret which we need to use in order to register this
-        service, or return an error message if there is no shared secret."""
-
-        registration_info = response.json()
-        shared_secret = registration_info.get("metadata", {}).get("shared_secret")
-        if not shared_secret:
-            return REMOTE_INTEGRATION_FAILED.detailed(
-                _("The service did not provide registration information.")
-            )
-        return shared_secret
-
-    def sitewide_registration_document(self):
-        """Generate the document to be sent as part of a sitewide registration
-        request.
-
-        :return: A dictionary with keys 'url' and 'jwt'. 'url' is the URL to
-            this site's public key document, and 'jwt' is a JSON Web Token
-            proving control over that URL.
-        """
-
-        public_key, private_key = self.manager.sitewide_key_pair
-        # Advertise the public key so that the foreign site can encrypt
-        # things for us.
-        public_key_dict = dict(type="RSA", value=public_key)
-        public_key_url = self.url_for("public_key_document")
-        in_one_minute = utc_now() + timedelta(seconds=60)
-        payload = {"exp": in_one_minute}
-        # Sign a JWT with the private key to prove ownership of the site.
-        token = jwt.encode(payload, private_key, algorithm="RS256")
-        return dict(url=public_key_url, jwt=token)
 
 
 class AdminSearchController(AdminController):

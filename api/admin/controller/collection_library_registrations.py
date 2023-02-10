@@ -1,5 +1,5 @@
 import flask
-from flask import Response
+from flask import Response, url_for
 from flask_babel import lazy_gettext as _
 
 from api.admin.problem_details import *
@@ -90,7 +90,7 @@ class CollectionLibraryRegistrationsController(SettingsController):
         registration = registration_class(registry, library)
         registered = registration.push(
             Registration.PRODUCTION_STAGE,
-            self.url_for,
+            url_for,
             catalog_url=collection.external_account_id,
             do_get=do_get,
             do_post=do_post,

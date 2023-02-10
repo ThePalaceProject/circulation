@@ -30,12 +30,9 @@ def customlist_from_csv_fixture(
     data = CustomListFromCSVFixture()
     data.transaction = db
     data.data_source = DataSource.lookup(db.session, DataSource.LIBRARY_STAFF)
-    data.metadata = DummyMetadataClient()
-    data.metadata.lookups["Octavia Butler"] = "Butler, Octavia"
     data.l = CustomListFromCSV(
         data.data_source.name,
         "Test list",
-        metadata_client=data.metadata,
         display_author_field="author",
         identifier_fields={Identifier.ISBN: "isbn"},
     )
