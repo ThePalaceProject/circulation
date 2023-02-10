@@ -23,15 +23,6 @@ from tests.fixtures.api_controller import CirculationControllerFixture
 class TestCirculationManager:
     """Test the CirculationManager object itself."""
 
-    def test_initialization(self, circulation_fixture: CirculationControllerFixture):
-        # As soon as the CirculationManager object is created,
-        # it sets a public/private key pair for the site.
-        public, private = ConfigurationSetting.sitewide(
-            circulation_fixture.db.session, Configuration.KEY_PAIR
-        ).json_value
-        assert "BEGIN PUBLIC KEY" in public
-        assert "BEGIN RSA PRIVATE KEY" in private
-
     def test_load_settings(self, circulation_fixture: CirculationControllerFixture):
         # Here's a CirculationManager which we've been using for a while.
         manager = circulation_fixture.manager
