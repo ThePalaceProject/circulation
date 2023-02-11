@@ -131,7 +131,6 @@ class Script:
             self._session = _db
 
     def run(self):
-        self.load_configuration()
         DataSource.well_known_sources(self._db)
         start_time = utc_now()
         try:
@@ -145,10 +144,6 @@ class Script:
             stack_trace = traceback.format_exc()
             self.update_timestamp(None, start_time, stack_trace)
             raise
-
-    def load_configuration(self):
-        if not Configuration.cdns_loaded_from_database():
-            Configuration.load(self._db)
 
     def update_timestamp(self, timestamp_data, start_time, exception):
         """By default scripts have no timestamp of their own.

@@ -581,25 +581,6 @@ class TestAdminAnalyticsServices(AdminRouteTest):
         self.assert_supported_methods(url, "DELETE")
 
 
-class TestAdminCDNServices(AdminRouteTest):
-
-    CONTROLLER_NAME = "admin_cdn_services_controller"
-
-    def test_process_cdn_services(self):
-        url = "/admin/cdn_services"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_cdn_services
-        )
-        self.assert_supported_methods(url, "GET", "POST")
-
-    def test_process_delete(self):
-        url = "/admin/cdn_service/<service_id>"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_delete, "<service_id>", http_method="DELETE"
-        )
-        self.assert_supported_methods(url, "DELETE")
-
-
 class TestAdminSearchServices(AdminRouteTest):
 
     CONTROLLER_NAME = "admin_search_services_controller"

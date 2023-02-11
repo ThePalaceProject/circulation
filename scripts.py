@@ -7,8 +7,6 @@ import time
 from datetime import timedelta
 from io import StringIO
 
-from sqlalchemy import or_
-
 from api.adobe_vendor_id import AuthdataUtility
 from api.authenticator import LibraryAuthenticator
 from api.bibliotheca import BibliothecaCirculationSweep
@@ -67,7 +65,6 @@ from core.model import (
 )
 from core.model.configuration import ExternalIntegrationLink
 from core.opds import AcquisitionFeed
-from core.opds_import import MetadataWranglerOPDSLookup, OPDSImporter
 from core.scripts import (
     CollectionType,
     DatabaseMigrationInitializationScript,
@@ -88,82 +85,6 @@ class Script(CoreScript):
     def load_config(self):
         if not Configuration.instance:
             Configuration.load(self._db)
-
-
-class CreateWorksForIdentifiersScript(Script):
-
-    """Do the bare minimum to associate each Identifier with an Edition
-    with title and author, so that we can calculate a permanent work
-    ID.
-    """
-
-    to_check = [Identifier.OVERDRIVE_ID, Identifier.THREEM_ID, Identifier.GUTENBERG_ID]
-    BATCH_SIZE = 100
-    name = "Create works for identifiers"
-
-    def __init__(self, metadata_web_app_url=None):
-        if metadata_web_app_url:
-            self.lookup = MetadataWranglerOPDSLookup(metadata_web_app_url)
-        else:
-            self.lookup = MetadataWranglerOPDSLookup.from_config(_db)
-
-    def run(self):
-
-        # We will try to fill in Editions that are missing
-        # title/author and as such have no permanent work ID.
-        #
-        # We will also try to create Editions for Identifiers that
-        # have no Edition.
-
-        either_title_or_author_missing = or_(
-            Edition.title == None,
-            Edition.sort_author == None,
-        )
-        edition_missing_title_or_author = (
-            self._db.query(Identifier)
-            .join(Identifier.primarily_identifies)
-            .filter(either_title_or_author_missing)
-        )
-
-        no_edition = (
-            self._db.query(Identifier)
-            .filter(Identifier.primarily_identifies == None)
-            .filter(Identifier.type.in_(self.to_check))
-        )
-
-        for q, descr in (
-            (
-                edition_missing_title_or_author,
-                "identifiers whose edition is missing title or author",
-            ),
-            (no_edition, "identifiers with no edition"),
-        ):
-            batch = []
-            self.log.debug("Trying to fix %d %s", q.count(), descr)
-            for i in q:
-                batch.append(i)
-                if len(batch) >= self.BATCH_SIZE:
-                    self.process_batch(batch)
-                    batch = []
-
-    def process_batch(self, batch):
-        response = self.lookup.lookup(batch)
-
-        if response.status_code != 200:
-            raise Exception(response.text)
-
-        content_type = response.headers["content-type"]
-        if content_type != OPDSFeed.ACQUISITION_FEED_TYPE:
-            raise Exception("Wrong media type: %s" % content_type)
-
-        importer = OPDSImporter(
-            self._db,
-            response.text,
-            overwrite_rels=[Hyperlink.DESCRIPTION, Hyperlink.IMAGE],
-        )
-        imported, messages_by_id = importer.import_from_feed()
-        self.log.info("%d successes, %d failures.", len(imported), len(messages_by_id))
-        self._db.commit()
 
 
 class MetadataCalculationScript(Script):

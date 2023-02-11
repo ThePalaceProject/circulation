@@ -165,9 +165,18 @@ class TestCOPPAGate:
         url_for_calls = []
 
         def mock_url_for(controller, library_short_name, **kwargs):
-            """Create a real-looking URL for any random controller."""
+            """
+            Create a real-looking URL for any random controller.
+
+            The URL it creates looks like: http://{library_short_name}/{controller}?{query}
+            Where query is made up of the kwargs passed into the function, just like the normal flask url_for
+            method, minus those that start with _. Since flask defines a number of special parameters to change
+            the url_for behavior.
+            See: https://flask.palletsprojects.com/en/2.0.x/api/#flask.url_for
+            """
             url_for_calls.append((controller, library_short_name, kwargs))
-            query = "&".join([f"{k}={v}" for k, v in sorted(kwargs.items())])
+            filtered_args = {k: v for k, v in kwargs.items() if not k.startswith("_")}
+            query = "&".join([f"{k}={v}" for k, v in sorted(filtered_args.items())])
             return f"http://{library_short_name}/{controller}?{query}"
 
         navigation_entry_calls = []

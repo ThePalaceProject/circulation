@@ -367,7 +367,7 @@ class CustomListEntry(Base):
     first_appearance = Column(DateTime(timezone=True), index=True)
     most_recent_appearance = Column(DateTime(timezone=True), index=True)
 
-    def set_work(self, metadata=None, metadata_client=None, policy=None):
+    def set_work(self, metadata=None, policy=None):
         """If possible, identify a locally known Work that is the same
         title as the title identified by this CustomListEntry.
 
@@ -390,7 +390,7 @@ class CustomListEntry(Base):
 
         # Try to guess based on metadata, if we can get a high-quality
         # guess.
-        potential_license_pools = metadata.guess_license_pools(_db, metadata_client)
+        potential_license_pools = metadata.guess_license_pools(_db)
         for lp, quality in sorted(
             list(potential_license_pools.items()), key=lambda x: -x[1]
         ):

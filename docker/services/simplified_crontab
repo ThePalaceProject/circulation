@@ -23,26 +23,10 @@ HOME=/var/www/circulation
 #
 30 3 * * * root core/bin/run update_nyt_best_seller_lists >> /var/log/cron.log 2>&1
 
-# Add newly discovered identifiers to our Metadata Wrangler collection.
-*/10 * * * * root core/bin/run -d 9 metadata_wrangler_collection_registrar >> /var/log/cron.log 2>&1
-
-# Remove newly removed identifiers from our Metadata Wrangler collection
-22 * * * * root core/bin/run -d 50 metadata_wrangler_collection_reaper >> /var/log/cron.log 2>&1
-
-# Check whether the Metadata Wrangler has ascertained any new
-# information about books in our collection.
-59 * * * * root core/bin/run -d 50 metadata_wrangler_collection_updates >> /var/log/cron.log 2>&1
-
-# If the Metadata Wrangler needs content such as book covers or distributor
-# information that only we can provide, send it over.
-30 21 * * * root core/bin/run -d 60 metadata_upload_coverage >> /var/log/cron.log 2>&1
-0 3 * * 3 root core/bin/run -d 60 metadata_wrangler_auxiliary_metadata >> /var/log/cron.log 2>&1
-
 # If any works are missing presentation editions, add them.
 0 */3 * * * root core/bin/run work_presentation_editions >> /var/log/cron.log 2>&1
 
-# If any works are missing up-to-date classifications, classify them.
-# This also incorporates new data from the metadata wrangler.
+# If any works are missing up-to-date classifications, classify them
 0 */3 * * * root core/bin/run work_classification >> /var/log/cron.log 2>&1
 
 # If any works are classified under unprocessed subjects, reclassify

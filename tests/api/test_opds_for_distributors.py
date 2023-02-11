@@ -540,15 +540,9 @@ class TestOPDSForDistributorsImporter:
             Collection.DATA_SOURCE_NAME_SETTING, data_source.name
         )
 
-        class MockMetadataClient:
-            def canonicalize_author_name(self, identifier, working_display_name):
-                return working_display_name
-
-        metadata_client = MockMetadataClient()
         importer = OPDSForDistributorsImporter(
             opds_dist_api_fixture.db.session,
             collection=collection,
-            metadata_client=metadata_client,
         )
 
         (
@@ -746,7 +740,6 @@ class TestOPDSForDistributorsReaperMonitor:
             opds_dist_api_fixture.db.session,
             collection,
             OPDSForDistributorsImporter,
-            metadata_client=object(),
         )
 
         # There's a license pool in the database that isn't in the feed anymore.

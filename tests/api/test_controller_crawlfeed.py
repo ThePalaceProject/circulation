@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from typing import Any
 
 import feedparser
+from flask import url_for
 
 from api.lanes import (
     CrawlableCollectionBasedLane,
@@ -54,9 +55,10 @@ class TestCrawlableFeed:
         with circulation_fixture.request_context_with_library("/"):
             with self.mock_crawlable_feed(circulation_fixture):
                 response = controller.crawlable_library_feed()
-                expect_url = controller.cdn_url_for(
+                expect_url = url_for(
                     "crawlable_library_feed",
                     library_short_name=library.short_name,
+                    _external=True,
                 )
 
         # The response of the mock _crawlable_feed was returned as-is;
@@ -103,9 +105,10 @@ class TestCrawlableFeed:
                 response = controller.crawlable_collection_feed(
                     collection_name=collection.name
                 )
-                expect_url = controller.cdn_url_for(
+                expect_url = url_for(
                     "crawlable_collection_feed",
                     collection_name=collection.name,
+                    _external=True,
                 )
 
         # The response of the mock _crawlable_feed was returned as-is;
@@ -169,10 +172,11 @@ class TestCrawlableFeed:
         with circulation_fixture.request_context_with_library("/"):
             with self.mock_crawlable_feed(circulation_fixture):
                 response = controller.crawlable_list_feed(customlist.name)
-                expect_url = controller.cdn_url_for(
+                expect_url = url_for(
                     "crawlable_list_feed",
                     list_name=customlist.name,
                     library_short_name=library.short_name,
+                    _external=True,
                 )
 
         # The response of the mock _crawlable_feed was returned as-is;

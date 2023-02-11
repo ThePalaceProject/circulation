@@ -146,12 +146,6 @@ class DatabaseTest:
         cls.tmp_data_dir = tempfile.mkdtemp(dir="/tmp")
         Configuration.instance[Configuration.DATA_DIRECTORY] = cls.tmp_data_dir
 
-        # Avoid CannotLoadConfiguration errors related to CDN integrations.
-        Configuration.instance[Configuration.INTEGRATIONS] = Configuration.instance.get(
-            Configuration.INTEGRATIONS, {}
-        )
-        Configuration.instance[Configuration.INTEGRATIONS][ExternalIntegration.CDN] = {}
-
     @classmethod
     def teardown_class(cls):
         # Destroy the database connection and engine.

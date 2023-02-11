@@ -11,7 +11,6 @@ import sqlalchemy
 from flask_babel import lazy_gettext as _
 
 from core.analytics import Analytics
-from core.cdn import cdnify
 from core.config import CannotLoadConfiguration
 from core.mirror import MirrorUploader
 from core.model import (
@@ -1509,9 +1508,9 @@ class CirculationAPI:
 
         rep = fulfillment.resource.representation
         if rep:
-            content_link = cdnify(rep.public_url)
+            content_link = rep.public_url
         else:
-            content_link = cdnify(fulfillment.resource.url)
+            content_link = fulfillment.resource.url
         media_type = rep.media_type
         return FulfillmentInfo(
             licensepool.collection,
