@@ -1,11 +1,17 @@
+from __future__ import annotations
+
 from datetime import timedelta
+from typing import TYPE_CHECKING
 
 import pytest
 
 from api.admin.dashboard_stats import generate_statistics
-from core.model import Admin, AdminRole, Collection, DataSource, create
+from core.model import Admin, AdminRole, DataSource, create
 from core.util.datetime_helpers import utc_now
-from tests.fixtures.database import DatabaseTransactionFixture
+
+if TYPE_CHECKING:
+    from core.model import Collection
+    from tests.fixtures.database import DatabaseTransactionFixture
 
 
 @pytest.fixture
