@@ -1,11 +1,11 @@
 from unittest.mock import MagicMock, patch
 
-from api.problem_details import DEVICE_TOKEN_NOT_FOUND, DEVICE_TOKEN_TYPE_INVALID
-from core.model.devicetokens import DeviceToken, DeviceTokenTypes
+from palace.api.problem_details import DEVICE_TOKEN_NOT_FOUND, DEVICE_TOKEN_TYPE_INVALID
+from palace.core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from tests.fixtures.api_controller import ControllerFixture
 
 
-@patch("api.controller.flask")
+@patch("palace.api.controller.flask")
 class TestDeviceTokens:
     def test_create_invalid_type(self, flask, controller_fixture: ControllerFixture):
         db = controller_fixture.db

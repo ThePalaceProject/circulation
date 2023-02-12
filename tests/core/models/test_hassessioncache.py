@@ -2,8 +2,8 @@ from unittest.mock import MagicMock, PropertyMock
 
 import pytest
 
-from core.model import ConfigurationSetting
-from core.model.hassessioncache import HasSessionCache
+from palace.core.model import ConfigurationSetting
+from palace.core.model.hassessioncache import HasSessionCache
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

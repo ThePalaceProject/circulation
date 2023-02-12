@@ -4,15 +4,15 @@ from unittest.mock import Mock
 
 import pytest
 
-from core.classifier import Classifier
-from core.external_search import MockExternalSearchIndex, SortKeyPagination
-from core.lane import Facets, Lane, Pagination, SearchFacets
-from core.model.classification import Subject
-from core.model.edition import Edition
-from core.model.identifier import Identifier
-from core.model.resource import Hyperlink
-from core.opds2 import AcquisitonFeedOPDS2, OPDS2Annotator
-from core.util.flask_util import OPDSFeedResponse
+from palace.core.classifier import Classifier
+from palace.core.external_search import MockExternalSearchIndex, SortKeyPagination
+from palace.core.lane import Facets, Lane, Pagination, SearchFacets
+from palace.core.model.classification import Subject
+from palace.core.model.edition import Edition
+from palace.core.model.identifier import Identifier
+from palace.core.model.resource import Hyperlink
+from palace.core.opds2 import AcquisitonFeedOPDS2, OPDS2Annotator
+from palace.core.util.flask_util import OPDSFeedResponse
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

@@ -1,7 +1,7 @@
 import feedparser
 
-from core.model import LinkRelations
-from core.util.opds_writer import OPDSFeed
+from palace.core.model import LinkRelations
+from palace.core.util.opds_writer import OPDSFeed
 from tests.fixtures.api_controller import ControllerFixture
 
 

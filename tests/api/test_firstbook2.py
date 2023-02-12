@@ -3,9 +3,12 @@ import os
 import jwt
 import pytest
 
-from api.circulation_exceptions import RemoteInitiatedServerError
-from api.firstbook2 import FirstBookAuthenticationAPI, MockFirstBookAuthenticationAPI
-from core.model import ExternalIntegration
+from palace.api.circulation_exceptions import RemoteInitiatedServerError
+from palace.api.firstbook2 import (
+    FirstBookAuthenticationAPI,
+    MockFirstBookAuthenticationAPI,
+)
+from palace.core.model import ExternalIntegration
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -111,7 +114,7 @@ class TestFirstBook:
         # We're about to call url_for, so we must create an
         # application context.
         os.environ["AUTOINITIALIZE"] = "False"
-        from api.app import app
+        from palace.api.app import app
 
         self.app = app
         del os.environ["AUTOINITIALIZE"]

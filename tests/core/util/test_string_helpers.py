@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-from core.util.string_helpers import UnicodeAwareBase64, base64, random_string
+from palace.core.util.string_helpers import UnicodeAwareBase64, base64, random_string
 
 
 class TestUnicodeAwareBase64:

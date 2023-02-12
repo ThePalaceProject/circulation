@@ -5,14 +5,14 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 from flask import request
 from parameterized import parameterized
 
-from api.authenticator import Authenticator, PatronData
-from api.saml.auth import SAML_INCORRECT_RESPONSE, SAMLAuthenticationManager
-from api.saml.controller import (
+from palace.api.authenticator import Authenticator, PatronData
+from palace.api.saml.auth import SAML_INCORRECT_RESPONSE, SAMLAuthenticationManager
+from palace.api.saml.controller import (
     SAML_INVALID_REQUEST,
     SAML_INVALID_RESPONSE,
     SAMLController,
 )
-from api.saml.metadata.model import (
+from palace.api.saml.metadata.model import (
     SAMLIdentityProviderMetadata,
     SAMLNameIDFormat,
     SAMLOrganization,
@@ -20,11 +20,14 @@ from api.saml.metadata.model import (
     SAMLServiceProviderMetadata,
     SAMLUIInfo,
 )
-from api.saml.provider import SAML_INVALID_SUBJECT, SAMLWebSSOAuthenticationProvider
-from api.saml.wayfless import SAMLWAYFlessAcquisitionLinkProcessor
-from core.model import Credential, Library
-from core.testing import DatabaseTest
-from core.util.problem_detail import ProblemDetail
+from palace.api.saml.provider import (
+    SAML_INVALID_SUBJECT,
+    SAMLWebSSOAuthenticationProvider,
+)
+from palace.api.saml.wayfless import SAMLWAYFlessAcquisitionLinkProcessor
+from palace.core.model import Credential, Library
+from palace.core.testing import DatabaseTest
+from palace.core.util.problem_detail import ProblemDetail
 from tests.api.saml import fixtures
 from tests.api.saml.controller_test import ControllerTest
 

@@ -5,10 +5,10 @@ from typing import Any, Dict
 import pytest
 from pyld import jsonld
 
-from api.annotations import AnnotationParser, AnnotationWriter
-from api.problem_details import *
-from core.model import Annotation, create
-from core.util.datetime_helpers import utc_now
+from palace.api.annotations import AnnotationParser, AnnotationWriter
+from palace.api.problem_details import *
+from palace.core.model import Annotation, create
+from palace.core.util.datetime_helpers import utc_now
 
 from ..fixtures.api_controller import ControllerFixture
 

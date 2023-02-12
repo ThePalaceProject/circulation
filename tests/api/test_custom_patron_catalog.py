@@ -1,9 +1,13 @@
 import pytest
 
-from api.config import CannotLoadConfiguration
-from api.custom_patron_catalog import COPPAGate, CustomPatronCatalog, CustomRootLane
-from core.model import ConfigurationSetting
-from core.util.opds_writer import OPDSFeed
+from palace.api.config import CannotLoadConfiguration
+from palace.api.custom_patron_catalog import (
+    COPPAGate,
+    CustomPatronCatalog,
+    CustomRootLane,
+)
+from palace.core.model import ConfigurationSetting
+from palace.core.util.opds_writer import OPDSFeed
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

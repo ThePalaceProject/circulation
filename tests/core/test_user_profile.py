@@ -1,6 +1,6 @@
 import json
 
-from core.user_profile import MockProfileStorage, ProfileController
+from palace.core.user_profile import MockProfileStorage, ProfileController
 
 
 class TestProfileController:

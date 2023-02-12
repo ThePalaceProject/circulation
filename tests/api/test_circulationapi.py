@@ -7,9 +7,9 @@ import flask
 import pytest
 from flask import Flask
 
-from api.authenticator import LibraryAuthenticator, PatronData
-from api.bibliotheca import MockBibliothecaAPI
-from api.circulation import (
+from palace.api.authenticator import LibraryAuthenticator, PatronData
+from palace.api.bibliotheca import MockBibliothecaAPI
+from palace.api.circulation import (
     APIAwareFulfillmentInfo,
     BaseCirculationAPI,
     CirculationAPI,
@@ -19,11 +19,11 @@ from api.circulation import (
     HoldInfo,
     LoanInfo,
 )
-from api.circulation_exceptions import *
-from api.testing import MockCirculationAPI
-from core.config import CannotLoadConfiguration
-from core.mock_analytics_provider import MockAnalyticsProvider
-from core.model import (
+from palace.api.circulation_exceptions import *
+from palace.api.testing import MockCirculationAPI
+from palace.core.config import CannotLoadConfiguration
+from palace.core.mock_analytics_provider import MockAnalyticsProvider
+from palace.core.model import (
     CirculationEvent,
     ConfigurationSetting,
     DataSource,
@@ -37,7 +37,7 @@ from core.model import (
     Representation,
     RightsStatus,
 )
-from core.util.datetime_helpers import utc_now
+from palace.core.util.datetime_helpers import utc_now
 
 from ..fixtures.api_bibliotheca_files import BibliothecaFilesFixture
 from ..fixtures.database import DatabaseTransactionFixture

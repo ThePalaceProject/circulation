@@ -7,17 +7,17 @@ import pytest
 from parameterized import parameterized
 from sqlalchemy.exc import IntegrityError
 
-from core.mock_analytics_provider import MockAnalyticsProvider
-from core.model import create
-from core.model.circulationevent import CirculationEvent
-from core.model.collection import CollectionMissing
-from core.model.constants import MediaTypes
-from core.model.contributor import Contributor
-from core.model.datasource import DataSource
-from core.model.edition import Edition
-from core.model.formats import FormatPriorities
-from core.model.identifier import Identifier
-from core.model.licensing import (
+from palace.core.mock_analytics_provider import MockAnalyticsProvider
+from palace.core.model import create
+from palace.core.model.circulationevent import CirculationEvent
+from palace.core.model.collection import CollectionMissing
+from palace.core.model.constants import MediaTypes
+from palace.core.model.contributor import Contributor
+from palace.core.model.datasource import DataSource
+from palace.core.model.edition import Edition
+from palace.core.model.formats import FormatPriorities
+from palace.core.model.identifier import Identifier
+from palace.core.model.licensing import (
     DeliveryMechanism,
     Hold,
     LicensePool,
@@ -26,9 +26,9 @@ from core.model.licensing import (
     Loan,
     RightsStatus,
 )
-from core.model.resource import Hyperlink, Representation
-from core.testing import DatabaseTest
-from core.util.datetime_helpers import utc_now
+from palace.core.model.resource import Hyperlink, Representation
+from palace.core.testing import DatabaseTest
+from palace.core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

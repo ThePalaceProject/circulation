@@ -1,15 +1,15 @@
 import datetime
 import random
 
-from api.monitor import (
+from palace.api.monitor import (
     HoldReaper,
     IdlingAnnotationReaper,
     LoanlikeReaperMonitor,
     LoanReaper,
 )
-from api.odl import ODLAPI, SharedODLAPI
-from core.model import Annotation, DataSource, ExternalIntegration
-from core.util.datetime_helpers import utc_now
+from palace.api.odl import ODLAPI, SharedODLAPI
+from palace.core.model import Annotation, DataSource, ExternalIntegration
+from palace.core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

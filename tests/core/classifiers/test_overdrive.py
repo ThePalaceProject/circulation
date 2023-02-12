@@ -1,5 +1,5 @@
-from core.classifier import *
-from core.classifier.overdrive import OverdriveClassifier as Overdrive
+from palace.core.classifier import *
+from palace.core.classifier.overdrive import OverdriveClassifier as Overdrive
 
 
 class TestOverdriveClassifier:

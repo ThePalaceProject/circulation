@@ -6,14 +6,14 @@ from unittest import mock
 import pytest
 from _pytest.fixtures import FixtureRequest
 
-from core import external_search
-from core.external_search import (
+from palace.core import external_search
+from palace.core.external_search import (
     ExternalSearchIndex,
     MockExternalSearchIndex,
     SearchIndexCoverageProvider,
 )
-from core.model import ExternalIntegration, Work
-from core.testing import SearchClientForTesting
+from palace.core.model import ExternalIntegration, Work
+from palace.core.testing import SearchClientForTesting
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

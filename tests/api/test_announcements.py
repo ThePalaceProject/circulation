@@ -1,8 +1,8 @@
 import json
 
-from api.admin.announcement_list_validator import AnnouncementListValidator
-from api.announcements import Announcement, Announcements
-from core.model.configuration import ConfigurationSetting
+from palace.api.admin.announcement_list_validator import AnnouncementListValidator
+from palace.api.announcements import Announcement, Announcements
+from palace.core.model.configuration import ConfigurationSetting
 from tests.fixtures.announcements import AnnouncementFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 

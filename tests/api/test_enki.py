@@ -3,18 +3,18 @@ import json
 
 import pytest
 
-from api.authenticator import BasicAuthenticationProvider
-from api.circulation import FulfillmentInfo, LoanInfo
-from api.circulation_exceptions import *
-from api.enki import (
+from palace.api.authenticator import BasicAuthenticationProvider
+from palace.api.circulation import FulfillmentInfo, LoanInfo
+from palace.api.circulation_exceptions import *
+from palace.api.enki import (
     BibliographicParser,
     EnkiAPI,
     EnkiCollectionReaper,
     EnkiImport,
     MockEnkiAPI,
 )
-from core.metadata_layer import CirculationData, Metadata, TimestampData
-from core.model import (
+from palace.core.metadata_layer import CirculationData, Metadata, TimestampData
+from palace.core.model import (
     ConfigurationSetting,
     Contributor,
     DataSource,
@@ -28,9 +28,9 @@ from core.model import (
     Subject,
     Work,
 )
-from core.testing import MockRequestsResponse
-from core.util.datetime_helpers import datetime_utc, utc_now
-from core.util.http import RemoteIntegrationException, RequestTimedOut
+from palace.core.testing import MockRequestsResponse
+from palace.core.util.datetime_helpers import datetime_utc, utc_now
+from palace.core.util.http import RemoteIntegrationException, RequestTimedOut
 from tests.fixtures.api_enki_files import EnkiFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -123,7 +123,7 @@ class TestEnkiAPI:
 
         with_default_patron = db.default_library()
         integration = db.external_integration(
-            "api.simple_authentication",
+            "palace.api.simple_authentication",
             ExternalIntegration.PATRON_AUTH_GOAL,
             libraries=[with_default_patron],
         )
@@ -942,7 +942,7 @@ class TestEnkiImport:
         api.queue_response(200, content=json.dumps(circ_data))
         api.queue_response(200, content=json.dumps(bib_data))
 
-        from core.mock_analytics_provider import MockAnalyticsProvider
+        from palace.core.mock_analytics_provider import MockAnalyticsProvider
 
         analytics = MockAnalyticsProvider()
         monitor = EnkiImport(

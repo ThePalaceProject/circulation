@@ -3,8 +3,8 @@ from psycopg2.extras import NumericRange
 from sqlalchemy import not_
 from sqlalchemy.orm.exc import MultipleResultsFound
 
-from core.config import Configuration
-from core.model import (
+from palace.core.config import Configuration
+from palace.core.model import (
     Edition,
     SessionManager,
     Timestamp,

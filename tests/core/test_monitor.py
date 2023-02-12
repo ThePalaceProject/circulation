@@ -2,9 +2,9 @@ import datetime
 
 import pytest
 
-from core.config import Configuration
-from core.metadata_layer import TimestampData
-from core.model import (
+from palace.core.config import Configuration
+from palace.core.metadata_layer import TimestampData
+from palace.core.model import (
     CachedFeed,
     CirculationEvent,
     Collection,
@@ -26,7 +26,7 @@ from core.model import (
     get_one,
     get_one_or_create,
 )
-from core.monitor import (
+from palace.core.monitor import (
     CachedFeedReaper,
     CirculationEventLocationScrubber,
     CollectionMonitor,
@@ -53,11 +53,11 @@ from core.monitor import (
     WorkReaper,
     WorkSweepMonitor,
 )
-from core.testing import (
+from palace.core.testing import (
     AlwaysSuccessfulCoverageProvider,
     NeverSuccessfulCoverageProvider,
 )
-from core.util.datetime_helpers import datetime_utc, utc_now
+from palace.core.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.time import Time
 

@@ -1,11 +1,11 @@
 from unittest import mock
 
-from core.query.customlist import CustomListQueries
+from palace.core.query.customlist import CustomListQueries
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
-@mock.patch("core.query.customlist.ExternalSearchIndex")
-@mock.patch("core.query.customlist.WorkList")
+@mock.patch("palace.core.query.customlist.ExternalSearchIndex")
+@mock.patch("palace.core.query.customlist.WorkList")
 class TestCustomListQueries:
     def test_populate_query_pages_single(
         self, mock_wl, mock_search, db: DatabaseTransactionFixture

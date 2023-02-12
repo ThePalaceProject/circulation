@@ -1,13 +1,13 @@
-from core.model import PresentationCalculationPolicy, get_one_or_create
-from core.model.constants import MediaTypes
-from core.model.contributor import Contributor
-from core.model.coverage import CoverageRecord
-from core.model.datasource import DataSource
-from core.model.edition import Edition
-from core.model.identifier import Identifier
-from core.model.licensing import DeliveryMechanism
-from core.model.resource import Hyperlink, Representation
-from core.util.datetime_helpers import utc_now
+from palace.core.model import PresentationCalculationPolicy, get_one_or_create
+from palace.core.model.constants import MediaTypes
+from palace.core.model.contributor import Contributor
+from palace.core.model.coverage import CoverageRecord
+from palace.core.model.datasource import DataSource
+from palace.core.model.edition import Edition
+from palace.core.model.identifier import Identifier
+from palace.core.model.licensing import DeliveryMechanism
+from palace.core.model.resource import Hyperlink, Representation
+from palace.core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

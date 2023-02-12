@@ -10,8 +10,8 @@ import pytest
 from pymarc import parse_xml_to_array
 from pymarc.record import Record  # type: ignore
 
-from api.authenticator import BasicAuthenticationProvider
-from api.bibliotheca import (
+from palace.api.authenticator import BasicAuthenticationProvider
+from palace.api.bibliotheca import (
     BibliothecaAPI,
     BibliothecaBibliographicCoverageProvider,
     BibliothecaCirculationSweep,
@@ -25,8 +25,8 @@ from api.bibliotheca import (
     MockBibliothecaAPI,
     PatronCirculationParser,
 )
-from api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
-from api.circulation_exceptions import (
+from palace.api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
+from palace.api.circulation_exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
     CannotHold,
@@ -39,10 +39,10 @@ from api.circulation_exceptions import (
     PatronLoanLimitReached,
     RemoteInitiatedServerError,
 )
-from api.web_publication_manifest import FindawayManifest
-from core.metadata_layer import ReplacementPolicy, TimestampData
-from core.mock_analytics_provider import MockAnalyticsProvider
-from core.model import (
+from palace.api.web_publication_manifest import FindawayManifest
+from palace.core.metadata_layer import ReplacementPolicy, TimestampData
+from palace.core.mock_analytics_provider import MockAnalyticsProvider
+from palace.core.model import (
     CirculationEvent,
     Contributor,
     DataSource,
@@ -60,11 +60,11 @@ from core.model import (
     WorkCoverageRecord,
     create,
 )
-from core.scripts import RunCollectionCoverageProviderScript
-from core.util.datetime_helpers import datetime_utc, utc_now
-from core.util.http import BadResponseException
-from core.util.problem_detail import ProblemDetail
-from core.util.web_publication_manifest import AudiobookManifest
+from palace.core.scripts import RunCollectionCoverageProviderScript
+from palace.core.util.datetime_helpers import datetime_utc, utc_now
+from palace.core.util.http import BadResponseException
+from palace.core.util.problem_detail import ProblemDetail
+from palace.core.util.web_publication_manifest import AudiobookManifest
 from tests.fixtures.api_bibliotheca_files import BibliothecaFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.time import Time
@@ -121,7 +121,7 @@ class TestBibliothecaAPI:
 
         with_default_patron = db.default_library()
         integration = db.external_integration(
-            "api.simple_authentication",
+            "palace.api.simple_authentication",
             ExternalIntegration.PATRON_AUTH_GOAL,
             libraries=[with_default_patron],
         )
@@ -342,7 +342,7 @@ class TestBibliothecaAPI:
             db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol="core.local_analytics_provider",
+            protocol="palace.core.local_analytics_provider",
         )
 
         # Create a LicensePool that needs updating.
@@ -722,7 +722,7 @@ class TestBibliothecaCirculationSweep:
             db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol="core.local_analytics_provider",
+            protocol="palace.core.local_analytics_provider",
         )
 
         # We know about an identifier, but nothing else.

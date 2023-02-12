@@ -1,11 +1,11 @@
 import feedparser
 
-from api.admin.opds import AdminAnnotator, AdminFeed
-from api.opds import AcquisitionFeed
-from core.lane import Pagination
-from core.model import DataSource, ExternalIntegration, Measurement
-from core.model.configuration import ExternalIntegrationLink
-from core.testing import DatabaseTest
+from palace.api.admin.opds import AdminAnnotator, AdminFeed
+from palace.api.opds import AcquisitionFeed
+from palace.core.lane import Pagination
+from palace.core.model import DataSource, ExternalIntegration, Measurement
+from palace.core.model.configuration import ExternalIntegrationLink
+from palace.core.testing import DatabaseTest
 
 
 class TestOPDS(DatabaseTest):

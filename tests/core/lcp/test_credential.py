@@ -2,15 +2,15 @@ from unittest.mock import patch
 
 import pytest
 
-from api.lcp.hash import HashingAlgorithm, UniversalHasher
-from core.lcp.credential import (
+from palace.api.lcp.hash import HashingAlgorithm, UniversalHasher
+from palace.core.lcp.credential import (
     LCPCredentialFactory,
     LCPCredentialType,
     LCPHashedPassphrase,
     LCPUnhashedPassphrase,
 )
-from core.lcp.exceptions import LCPError
-from core.model import Credential, DataSource, Patron
+from palace.core.lcp.exceptions import LCPError
+from palace.core.model import Credential, DataSource, Patron
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

@@ -1,5 +1,5 @@
-from core.classifier import *
-from core.classifier.lcc import LCCClassifier as LCC
+from palace.core.classifier import *
+from palace.core.classifier.lcc import LCCClassifier as LCC
 
 
 class TestLCC:

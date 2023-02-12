@@ -1,6 +1,6 @@
-from core import classifier
-from core.classifier import *
-from core.classifier.ddc import DeweyDecimalClassifier as DDC
+from palace.core import classifier
+from palace.core.classifier import *
+from palace.core.classifier.ddc import DeweyDecimalClassifier as DDC
 
 
 class TestDewey:

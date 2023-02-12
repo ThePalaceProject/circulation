@@ -4,7 +4,7 @@ import pytz
 from lxml import etree
 from parameterized import parameterized
 
-from core.util.opds_writer import AtomFeed, OPDSMessage
+from palace.core.util.opds_writer import AtomFeed, OPDSMessage
 
 
 class TestOPDSMessage:

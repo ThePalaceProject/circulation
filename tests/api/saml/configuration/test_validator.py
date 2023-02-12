@@ -1,21 +1,24 @@
 from parameterized import parameterized
 from werkzeug.datastructures import MultiDict
 
-from api.admin.problem_details import INCOMPLETE_CONFIGURATION
-from api.admin.validator import PatronAuthenticationValidatorFactory
-from api.app import initialize_database
-from api.saml.configuration.model import SAMLConfiguration
-from api.saml.configuration.validator import (
+from palace.api.admin.problem_details import INCOMPLETE_CONFIGURATION
+from palace.api.admin.validator import PatronAuthenticationValidatorFactory
+from palace.api.app import initialize_database
+from palace.api.saml.configuration.model import SAMLConfiguration
+from palace.api.saml.configuration.validator import (
     SAML_INCORRECT_METADATA,
     SAML_INCORRECT_PATRON_ID_REGULAR_EXPRESSION,
     SAMLSettingsValidator,
 )
-from api.saml.metadata.filter import SAMLSubjectFilter
-from api.saml.metadata.parser import SAMLMetadataParser
-from api.saml.provider import SAMLWebSSOAuthenticationProvider
-from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvaluator
-from core.python_expression_dsl.parser import DSLParser
-from core.util.problem_detail import ProblemDetail
+from palace.api.saml.metadata.filter import SAMLSubjectFilter
+from palace.api.saml.metadata.parser import SAMLMetadataParser
+from palace.api.saml.provider import SAMLWebSSOAuthenticationProvider
+from palace.core.python_expression_dsl.evaluator import (
+    DSLEvaluationVisitor,
+    DSLEvaluator,
+)
+from palace.core.python_expression_dsl.parser import DSLParser
+from palace.core.util.problem_detail import ProblemDetail
 from tests.api.saml import fixtures
 from tests.api.saml.controller_test import ControllerTest
 
@@ -164,7 +167,9 @@ class TestSAMLSettingsValidator(ControllerTest):
 
 
 class TestSAMLSettingsValidatorFactory:
-    @parameterized.expand([("validator_using_factory_method", "api.saml.provider")])
+    @parameterized.expand(
+        [("validator_using_factory_method", "palace.api.saml.provider")]
+    )
     def test_create_can_create(self, _, protocol):
         # Arrange
         factory = PatronAuthenticationValidatorFactory()

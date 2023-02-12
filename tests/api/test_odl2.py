@@ -10,9 +10,9 @@ from webpub_manifest_parser.odl.semantic import (
     ODL_PUBLICATION_MUST_CONTAIN_EITHER_LICENSES_OR_OA_ACQUISITION_LINK_ERROR,
 )
 
-from api.odl2 import ODL2API, ODL2APIConfiguration, ODL2Importer
-from core.coverage import CoverageFailure
-from core.model import (
+from palace.api.odl2 import ODL2API, ODL2APIConfiguration, ODL2Importer
+from palace.core.coverage import CoverageFailure
+from palace.core.model import (
     Contribution,
     Contributor,
     DeliveryMechanism,
@@ -22,9 +22,9 @@ from core.model import (
     MediaTypes,
     Work,
 )
-from core.model.configuration import ConfigurationFactory, ConfigurationStorage
-from core.model.constants import IdentifierConstants
-from core.model.resource import Hyperlink
+from palace.core.model.configuration import ConfigurationFactory, ConfigurationStorage
+from palace.core.model.constants import IdentifierConstants
+from palace.core.model.resource import Hyperlink
 from tests.api.test_odl import LicenseHelper, LicenseInfoHelper, TestODLImporter
 from tests.fixtures.api_odl2_files import ODL2APIFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture

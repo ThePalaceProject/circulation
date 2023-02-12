@@ -3,12 +3,12 @@ import json
 
 import pytest
 
-from api.config import CannotLoadConfiguration
-from api.novelist import MockNoveListAPI, NoveListAPI
-from core.metadata_layer import Metadata
-from core.model import DataSource, ExternalIntegration, Identifier
-from core.testing import DummyHTTPClient, MockRequestsResponse
-from core.util.http import HTTP
+from palace.api.config import CannotLoadConfiguration
+from palace.api.novelist import MockNoveListAPI, NoveListAPI
+from palace.core.metadata_layer import Metadata
+from palace.core.model import DataSource, ExternalIntegration, Identifier
+from palace.core.testing import DummyHTTPClient, MockRequestsResponse
+from palace.core.util.http import HTTP
 
 from ..fixtures.api_novelist_files import NoveListFilesFixture
 from ..fixtures.database import DatabaseTransactionFixture

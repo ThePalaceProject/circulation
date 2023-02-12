@@ -5,8 +5,8 @@ from typing import Any, Callable, Optional, Tuple
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
-from api.odl import ODLAPI
-from core.model import (
+from palace.api.odl import ODLAPI
+from palace.core.model import (
     Collection,
     IntegrationClient,
     Library,
@@ -18,8 +18,8 @@ from core.model import (
     Work,
     get_one_or_create,
 )
-from core.testing import DatabaseTest, MockRequestsResponse
-from core.util.http import HTTP
+from palace.core.testing import DatabaseTest, MockRequestsResponse
+from palace.core.util.http import HTTP
 from tests.fixtures.api_odl_files import ODLAPIFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 

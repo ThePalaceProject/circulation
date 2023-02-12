@@ -1,6 +1,6 @@
-from core import classifier
-from core.classifier import *
-from core.classifier.bic import BICClassifier as BIC
+from palace.core import classifier
+from palace.core.classifier import *
+from palace.core.classifier.bic import BICClassifier as BIC
 
 
 class TestBIC:

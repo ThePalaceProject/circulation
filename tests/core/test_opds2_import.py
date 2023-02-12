@@ -4,7 +4,7 @@ from typing import List, Union
 import pytest
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
-from core.model import (
+from palace.core.model import (
     ConfigurationSetting,
     Contribution,
     Contributor,
@@ -17,10 +17,10 @@ from core.model import (
     MediaTypes,
     Work,
 )
-from core.model.collection import Collection
-from core.model.configuration import ConfigurationFactory, ConfigurationStorage
-from core.model.constants import IdentifierType
-from core.opds2_import import (
+from palace.core.model.collection import Collection
+from palace.core.model.configuration import ConfigurationFactory, ConfigurationStorage
+from palace.core.model.constants import IdentifierType
+from palace.core.opds2_import import (
     OPDS2Importer,
     OPDS2ImporterConfiguration,
     RWPMManifestParser,

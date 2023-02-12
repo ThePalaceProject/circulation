@@ -4,17 +4,17 @@ from unittest.mock import MagicMock, create_autospec, patch
 
 from freezegun import freeze_time
 
-from api.lcp.collection import LCPAPI, LCPFulfilmentInfo
-from api.lcp.encrypt import LCPEncryptionConfiguration
-from api.lcp.server import LCPServer, LCPServerConfiguration
-from core.model import DataSource, ExternalIntegration
-from core.model.configuration import (
+from palace.api.lcp.collection import LCPAPI, LCPFulfilmentInfo
+from palace.api.lcp.encrypt import LCPEncryptionConfiguration
+from palace.api.lcp.server import LCPServer, LCPServerConfiguration
+from palace.core.model import DataSource, ExternalIntegration
+from palace.core.model.configuration import (
     ConfigurationAttribute,
     ConfigurationFactory,
     ConfigurationStorage,
     HasExternalIntegration,
 )
-from core.util.datetime_helpers import utc_now
+from palace.core.util.datetime_helpers import utc_now
 from tests.api.lcp import fixtures
 from tests.api.lcp.database_test import DatabaseTest
 
@@ -389,7 +389,7 @@ class TestLCPAPI(DatabaseTest):
             self._configuration_storage, self._db, LCPServerConfiguration
         ) as configuration:
 
-            with patch("api.lcp.collection.LCPServer") as lcp_server_constructor:
+            with patch("palace.api.lcp.collection.LCPServer") as lcp_server_constructor:
                 lcp_server_constructor.return_value = lcp_server_mock
 
                 configuration.lcpserver_url = fixtures.LCPSERVER_URL
@@ -449,7 +449,7 @@ class TestLCPAPI(DatabaseTest):
         with self._configuration_factory.create(
             self._configuration_storage, self._db, LCPServerConfiguration
         ) as configuration:
-            with patch("api.lcp.collection.LCPServer") as lcp_server_constructor:
+            with patch("palace.api.lcp.collection.LCPServer") as lcp_server_constructor:
                 lcp_server_constructor.return_value = lcp_server_mock
 
                 configuration.lcpserver_url = fixtures.LCPSERVER_URL
@@ -503,7 +503,7 @@ class TestLCPAPI(DatabaseTest):
         with self._configuration_factory.create(
             self._configuration_storage, self._db, LCPServerConfiguration
         ) as configuration:
-            with patch("api.lcp.collection.LCPServer") as lcp_server_constructor:
+            with patch("palace.api.lcp.collection.LCPServer") as lcp_server_constructor:
                 lcp_server_constructor.return_value = lcp_server_mock
 
                 configuration.lcpserver_url = fixtures.LCPSERVER_URL

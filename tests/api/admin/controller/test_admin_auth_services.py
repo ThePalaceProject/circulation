@@ -4,9 +4,9 @@ import flask
 import pytest
 from werkzeug.datastructures import MultiDict
 
-from api.admin.exceptions import *
-from api.app import initialize_database
-from core.model import (
+from palace.api.admin.exceptions import *
+from palace.api.app import initialize_database
+from palace.core.model import (
     AdminRole,
     ConfigurationSetting,
     ExternalIntegration,

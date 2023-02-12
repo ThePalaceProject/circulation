@@ -2,10 +2,10 @@ import json
 
 import flask
 
-from api.config import Configuration
-from core.lane import Lane
-from core.model import ConfigurationSetting
-from core.util.authentication_for_opds import AuthenticationForOPDSDocument
+from palace.api.config import Configuration
+from palace.core.lane import Lane
+from palace.core.model import ConfigurationSetting
+from palace.core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from tests.fixtures.api_controller import CirculationControllerFixture
 
 

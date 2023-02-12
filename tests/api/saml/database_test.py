@@ -1,6 +1,6 @@
-from api.saml.provider import SAMLWebSSOAuthenticationProvider
-from core.model import ExternalIntegration
-from core.testing import DatabaseTest as BaseDatabaseTest
+from palace.api.saml.provider import SAMLWebSSOAuthenticationProvider
+from palace.core.model import ExternalIntegration
+from palace.core.testing import DatabaseTest as BaseDatabaseTest
 
 
 class DatabaseTest(BaseDatabaseTest):

@@ -9,14 +9,14 @@ from flask_pydantic_spec.flask_backend import Context
 from flask_pydantic_spec.utils import parse_multi_dict
 from parameterized import parameterized
 
-from core.util.datetime_helpers import utc_now
-from core.util.flask_util import (
+from palace.core.util.datetime_helpers import utc_now
+from palace.core.util.flask_util import (
     OPDSEntryResponse,
     OPDSFeedResponse,
     Response,
     boolean_value,
 )
-from core.util.opds_writer import OPDSFeed
+from palace.core.util.opds_writer import OPDSFeed
 
 
 class TestResponse:

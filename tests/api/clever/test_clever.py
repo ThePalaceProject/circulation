@@ -3,18 +3,18 @@ import os
 
 from flask import request, url_for
 
-from api.clever import (
+from palace.api.clever import (
     CLEVER_NOT_ELIGIBLE,
     CLEVER_UNKNOWN_SCHOOL,
     UNSUPPORTED_CLEVER_USER_TYPE,
     CleverAuthenticationAPI,
     external_type_from_clever_grade,
 )
-from api.problem_details import INVALID_CREDENTIALS
-from core.model import ExternalIntegration
-from core.testing import DatabaseTest
-from core.util.datetime_helpers import utc_now
-from core.util.problem_detail import ProblemDetail
+from palace.api.problem_details import INVALID_CREDENTIALS
+from palace.core.model import ExternalIntegration
+from palace.core.testing import DatabaseTest
+from palace.core.util.datetime_helpers import utc_now
+from palace.core.util.problem_detail import ProblemDetail
 
 
 class MockAPI(CleverAuthenticationAPI):
@@ -72,7 +72,7 @@ class TestCleverAuthenticationAPI(DatabaseTest):
         super().setup_method()
         self.api = MockAPI(self._default_library, self.mock_integration)
         os.environ["AUTOINITIALIZE"] = "False"
-        from api.app import app
+        from palace.api.app import app
 
         del os.environ["AUTOINITIALIZE"]
         self.app = app

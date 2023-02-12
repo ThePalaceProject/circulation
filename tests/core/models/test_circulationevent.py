@@ -3,12 +3,12 @@ import datetime
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from core.model import create, get_one_or_create
-from core.model.circulationevent import CirculationEvent
-from core.model.datasource import DataSource
-from core.model.identifier import Identifier
-from core.model.licensing import LicensePool
-from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
+from palace.core.model import create, get_one_or_create
+from palace.core.model.circulationevent import CirculationEvent
+from palace.core.model.datasource import DataSource
+from palace.core.model.identifier import Identifier
+from palace.core.model.licensing import LicensePool
+from palace.core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

@@ -9,22 +9,22 @@ from PIL import Image
 from werkzeug import Response
 from werkzeug.datastructures import MultiDict
 
-from api.admin.announcement_list_validator import AnnouncementListValidator
-from api.admin.controller.library_settings import LibrarySettingsController
-from api.admin.exceptions import *
-from api.admin.geographic_validator import GeographicValidator
-from api.announcements import Announcement, Announcements
-from api.config import Configuration
-from api.testing import AnnouncementTest
-from core.facets import FacetConstants
-from core.model import (
+from palace.api.admin.announcement_list_validator import AnnouncementListValidator
+from palace.api.admin.controller.library_settings import LibrarySettingsController
+from palace.api.admin.exceptions import *
+from palace.api.admin.geographic_validator import GeographicValidator
+from palace.api.announcements import Announcement, Announcements
+from palace.api.config import Configuration
+from palace.api.testing import AnnouncementTest
+from palace.core.facets import FacetConstants
+from palace.core.model import (
     AdminRole,
     ConfigurationSetting,
     Library,
     get_one,
     get_one_or_create,
 )
-from core.util.problem_detail import ProblemDetail
+from palace.core.util.problem_detail import ProblemDetail
 
 from .test_controller import SettingsControllerTest
 

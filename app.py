@@ -1,6 +1,6 @@
 import sys
 
-from api import app
+from palace.api import app
 
 url = None
 if len(sys.argv) > 1:

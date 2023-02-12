@@ -13,12 +13,12 @@ import sqlalchemy
 from sqlalchemy.engine import Connection, Engine, Transaction
 from sqlalchemy.orm import Session
 
-import core.lane
-from core.analytics import Analytics
-from core.classifier import Classifier
-from core.config import Configuration
-from core.log import LogConfiguration
-from core.model import (
+import palace.core.lane
+from palace.core.analytics import Analytics
+from palace.core.classifier import Classifier
+from palace.core.config import Configuration
+from palace.core.log import LogConfiguration
+from palace.core.model import (
     Base,
     Classification,
     Collection,
@@ -48,9 +48,13 @@ from core.model import (
     create,
     get_one_or_create,
 )
-from core.model.devicetokens import DeviceToken
-from core.model.licensing import License, LicensePoolDeliveryMechanism, LicenseStatus
-from core.util.datetime_helpers import utc_now
+from palace.core.model.devicetokens import DeviceToken
+from palace.core.model.licensing import (
+    License,
+    LicensePoolDeliveryMechanism,
+    LicenseStatus,
+)
+from palace.core.util.datetime_helpers import utc_now
 from tests.fixtures.api_config import KeyPairFixture
 
 
@@ -105,20 +109,20 @@ class DatabaseFixture:
         path = path.parent  # tests/fixtures
         path = path.parent  # tests
         path = path.parent  # .
-        path = os.path.join(path, "core", "model")
+        path = path / "src" / "palace" / "core" / "model"
 
         list_modules = os.listdir(path)
         list_modules.remove("__init__.py")
 
         for module_file in list_modules:
             if module_file.split(".")[-1] == "py":
-                module_name = "core.model." + module_file.split(".")[0]
+                module_name = "palace.core.model." + module_file.split(".")[0]
                 imported = importlib.import_module(module_name)
                 logging.info("imported " + imported.__name__)
 
-        importlib.import_module("core.lane")
+        importlib.import_module("palace.core.lane")
 
-        from core.model.customlist import customlist_sharedlibrary
+        from palace.core.model.customlist import customlist_sharedlibrary
 
         customlist_sharedlibrary.name
 
@@ -556,7 +560,7 @@ class DatabaseTransactionFixture:
         library = library or self.default_library()
         lane, is_new = create(
             self.session,
-            core.lane.Lane,
+            palace.core.lane.Lane,
             library=library,
             parent=parent,
             display_name=display_name,

@@ -4,8 +4,8 @@ import flask
 from flask_sqlalchemy_session import current_session
 from sqlalchemy.orm import Session
 
-import api
-from core.model import (
+import palace.api
+from palace.core.model import (
     Collection,
     DataSource,
     ExternalIntegration,
@@ -89,7 +89,7 @@ class TestScopedSession:
     def test_scoped_session(self, controller_fixture_without_cm: ControllerFixture):
         fixture = controller_fixture_without_cm
         fixture.set_base_url()
-        api.app.initialize_database()
+        palace.api.app.initialize_database()
 
         # Create a holder that carries some state for the purposes of testing
         scoped = ScopedHolder()

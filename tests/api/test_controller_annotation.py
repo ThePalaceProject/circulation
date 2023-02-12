@@ -4,9 +4,9 @@ from wsgiref.handlers import format_date_time
 
 import pytest
 
-from api.annotations import AnnotationWriter
-from core.model import Annotation, create
-from core.util.datetime_helpers import utc_now
+from palace.api.annotations import AnnotationWriter
+from palace.core.model import Annotation, create
+from palace.core.util.datetime_helpers import utc_now
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.vendor_id import VendorIDFixture

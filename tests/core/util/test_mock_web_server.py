@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Tuple
 
 import pytest
 
-from core.util.http import HTTP, RequestNetworkException
+from palace.core.util.http import HTTP, RequestNetworkException
 
 
 class MockAPIServerRequest:

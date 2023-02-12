@@ -4,11 +4,11 @@ import flask
 import pytest
 from werkzeug.datastructures import MultiDict
 
-from api.admin.controller.metadata_services import MetadataServicesController
-from api.admin.exceptions import *
-from api.novelist import NoveListAPI
-from api.nyt import NYTBestSellerAPI
-from core.model import AdminRole, ExternalIntegration, Library, create, get_one
+from palace.api.admin.controller.metadata_services import MetadataServicesController
+from palace.api.admin.exceptions import *
+from palace.api.novelist import NoveListAPI
+from palace.api.nyt import NYTBestSellerAPI
+from palace.core.model import AdminRole, ExternalIntegration, Library, create, get_one
 
 from .test_controller import SettingsControllerTest
 

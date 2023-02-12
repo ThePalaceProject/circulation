@@ -5,10 +5,10 @@ from typing import Any
 
 import pytest
 
-from api.authenticator import CirculationPatronProfileStorage
-from core.model import Annotation, Patron
-from core.user_profile import ProfileController, ProfileStorage
-from core.util.problem_detail import ProblemDetail
+from palace.api.authenticator import CirculationPatronProfileStorage
+from palace.core.model import Annotation, Patron
+from palace.core.user_profile import ProfileController, ProfileStorage
+from palace.core.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.vendor_id import VendorIDFixture

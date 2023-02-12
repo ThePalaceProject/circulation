@@ -7,23 +7,23 @@ import pytest
 from requests import Response
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
-from api.app import app
-from api.circulation import FulfillmentInfo
-from api.circulation_exceptions import CannotFulfill
-from api.controller import CirculationManager
-from api.opds2 import (
+from palace.api.app import app
+from palace.api.circulation import FulfillmentInfo
+from palace.api.circulation_exceptions import CannotFulfill
+from palace.api.controller import CirculationManager
+from palace.api.opds2 import (
     OPDS2NavigationsAnnotator,
     OPDS2PublicationsAnnotator,
     TokenAuthenticationFulfillmentProcessor,
 )
-from core.lane import Facets, Pagination
-from core.model.collection import Collection
-from core.model.configuration import ConfigurationSetting, ExternalIntegration
-from core.model.datasource import DataSource
-from core.model.patron import Loan
-from core.model.resource import Hyperlink
-from core.opds2_import import OPDS2Importer, RWPMManifestParser
-from core.problem_details import INVALID_CREDENTIALS
+from palace.core.lane import Facets, Pagination
+from palace.core.model.collection import Collection
+from palace.core.model.configuration import ConfigurationSetting, ExternalIntegration
+from palace.core.model.datasource import DataSource
+from palace.core.model.patron import Loan
+from palace.core.model.resource import Hyperlink
+from palace.core.opds2_import import OPDS2Importer, RWPMManifestParser
+from palace.core.problem_details import INVALID_CREDENTIALS
 from tests.fixtures.api_controller import (
     CirculationControllerFixture,
     ControllerFixture,
@@ -151,7 +151,7 @@ class TestOPDS2NavigationAnnotator:
 
 
 class TestTokenAuthenticationFulfillmentProcessor:
-    @patch("api.opds2.HTTP")
+    @patch("palace.api.opds2.HTTP")
     def test_fulfill(self, mock_http, db: DatabaseTransactionFixture):
         patron = db.patron()
         patron.username = "username"
@@ -237,7 +237,7 @@ class TestTokenAuthenticationFulfillmentProcessor:
         ff_info = processor.fulfill(patron, None, work.license_pools[0], None, ff_info)
         assert ff_info.content_link_redirect == False
 
-    @patch("api.opds2.HTTP")
+    @patch("palace.api.opds2.HTTP")
     def test_get_authentication_token(self, mock_http, db: DatabaseTransactionFixture):
         resp = Response()
         resp.status_code = 200
@@ -250,7 +250,7 @@ class TestTokenAuthenticationFulfillmentProcessor:
         assert token == "plaintext-auth-token"
         assert mock_http.get_with_timeout.call_count == 1
 
-    @patch("api.opds2.HTTP")
+    @patch("palace.api.opds2.HTTP")
     def test_get_authentication_token_errors(
         self, mock_http, db: DatabaseTransactionFixture
     ):

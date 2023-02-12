@@ -6,7 +6,7 @@ from typing import Callable, Tuple
 import pytest
 from Crypto.PublicKey.RSA import import_key
 
-from core.model import ConfigurationSetting
+from palace.core.model import ConfigurationSetting
 
 
 @dataclass(frozen=True)
@@ -76,6 +76,6 @@ def mock_config_key_pair() -> KeyPairFixture:
     mock = get_mock_config_key_pair(fixture)
 
     patch = MonkeyPatch()
-    patch.setattr("api.config.Configuration.key_pair", mock)
+    patch.setattr("palace.api.config.Configuration.key_pair", mock)
     yield fixture
     patch.undo()

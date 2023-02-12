@@ -1,8 +1,8 @@
 import pytest
 from werkzeug.exceptions import NotFound
 
-from api.config import Configuration
-from core.model import ConfigurationSetting
+from palace.api.config import Configuration
+from palace.core.model import ConfigurationSetting
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.api_images_files import ImageFilesFixture
 

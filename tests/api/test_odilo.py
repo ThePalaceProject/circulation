@@ -2,18 +2,18 @@ import json
 
 import pytest
 
-from api.authenticator import BasicAuthenticationProvider
-from api.circulation import CirculationAPI
-from api.circulation_exceptions import *
-from api.odilo import (
+from palace.api.authenticator import BasicAuthenticationProvider
+from palace.api.circulation import CirculationAPI
+from palace.api.circulation_exceptions import *
+from palace.api.odilo import (
     MockOdiloAPI,
     OdiloAPI,
     OdiloBibliographicCoverageProvider,
     OdiloCirculationMonitor,
     OdiloRepresentationExtractor,
 )
-from core.metadata_layer import TimestampData
-from core.model import (
+from palace.core.metadata_layer import TimestampData
+from palace.core.model import (
     Classification,
     Contributor,
     DataSource,
@@ -24,9 +24,9 @@ from core.model import (
     Identifier,
     Representation,
 )
-from core.testing import MockRequestsResponse
-from core.util.datetime_helpers import datetime_utc, utc_now
-from core.util.http import BadResponseException
+from palace.core.testing import MockRequestsResponse
+from palace.core.util.datetime_helpers import datetime_utc, utc_now
+from palace.core.util.http import BadResponseException
 
 from ..fixtures.api_odilo_files import OdiloFilesFixture
 from ..fixtures.database import DatabaseTransactionFixture
@@ -255,7 +255,7 @@ class TestOdiloAPI:
 
         with_default_patron = odilo.db.default_library()
         integration = odilo.db.external_integration(
-            "api.simple_authentication",
+            "palace.api.simple_authentication",
             ExternalIntegration.PATRON_AUTH_GOAL,
             libraries=[with_default_patron],
         )

@@ -4,9 +4,9 @@ import urllib.parse
 import pytest
 from psycopg2.extras import NumericRange
 
-from api.config import CannotLoadConfiguration
-from api.google_analytics_provider import GoogleAnalyticsProvider
-from core.model import (
+from palace.api.config import CannotLoadConfiguration
+from palace.api.google_analytics_provider import GoogleAnalyticsProvider
+from palace.core.model import (
     CirculationEvent,
     ConfigurationSetting,
     DataSource,
@@ -16,7 +16,7 @@ from core.model import (
     create,
     get_one_or_create,
 )
-from core.util.datetime_helpers import utc_now
+from palace.core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -33,7 +33,7 @@ class TestGoogleAnalyticsProvider:
             db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol="api.google_analytics_provider",
+            protocol="palace.api.google_analytics_provider",
         )
 
         with pytest.raises(CannotLoadConfiguration) as excinfo:
@@ -69,7 +69,7 @@ class TestGoogleAnalyticsProvider:
             db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol="api.google_analytics_provider",
+            protocol="palace.api.google_analytics_provider",
         )
         integration.url = db.fresh_str()
         ConfigurationSetting.for_library_and_externalintegration(
@@ -137,7 +137,7 @@ class TestGoogleAnalyticsProvider:
             db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol="api.google_analytics_provider",
+            protocol="palace.api.google_analytics_provider",
         )
         integration.url = db.fresh_str()
         ConfigurationSetting.for_library_and_externalintegration(
@@ -192,7 +192,7 @@ class TestGoogleAnalyticsProvider:
             db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol="api.google_analytics_provider",
+            protocol="palace.api.google_analytics_provider",
         )
         integration.url = db.fresh_str()
         ConfigurationSetting.for_library_and_externalintegration(

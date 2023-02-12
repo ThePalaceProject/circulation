@@ -1,15 +1,11 @@
 #!/usr/bin/env python
 """Update the circulation manager server with new books from
 OPDS import collections."""
-import os
-import sys
 
-bin_dir = os.path.split(__file__)[0]
-package_dir = os.path.join(bin_dir, "..")
-sys.path.append(os.path.abspath(package_dir))
 
 # NOTE: We need to import it explicitly to initialize MirrorUploader.IMPLEMENTATION_REGISTRY
 from core import s3  # noqa: autoflake
-from core.scripts import OPDSImportScript
+
+from palace.core.scripts import OPDSImportScript
 
 OPDSImportScript().run()

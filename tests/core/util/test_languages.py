@@ -1,7 +1,7 @@
 """Test language lookup capabilities."""
 import pytest
 
-from core.util.languages import LanguageCodes, LanguageNames, LookupTable
+from palace.core.util.languages import LanguageCodes, LanguageNames, LookupTable
 
 
 class TestLookupTable:

@@ -4,9 +4,9 @@ import flask
 import pytest
 from werkzeug.datastructures import MultiDict
 
-from api.admin.exceptions import *
-from api.admin.problem_details import *
-from core.model import Admin, AdminRole, create, get_one
+from palace.api.admin.exceptions import *
+from palace.api.admin.problem_details import *
+from palace.core.model import Admin, AdminRole, create, get_one
 
 from .test_controller import SettingsControllerTest
 

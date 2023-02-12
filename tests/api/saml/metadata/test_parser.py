@@ -7,7 +7,7 @@ from onelogin.saml2.auth import OneLogin_Saml2_Auth
 from onelogin.saml2.settings import OneLogin_Saml2_Settings
 from parameterized import parameterized
 
-from api.saml.metadata.model import (
+from palace.api.saml.metadata.model import (
     SAMLAttribute,
     SAMLAttributeStatement,
     SAMLAttributeType,
@@ -21,7 +21,7 @@ from api.saml.metadata.model import (
     SAMLSubject,
     SAMLUIInfo,
 )
-from api.saml.metadata.parser import (
+from palace.api.saml.metadata.parser import (
     SAMLMetadataParser,
     SAMLMetadataParsingError,
     SAMLMetadataParsingResult,

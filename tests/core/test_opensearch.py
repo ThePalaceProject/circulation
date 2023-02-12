@@ -1,6 +1,6 @@
-from core.classifier import Classifier
-from core.model import Genre
-from core.opensearch import OpenSearchDocument
+from palace.core.classifier import Classifier
+from palace.core.model import Genre
+from palace.core.opensearch import OpenSearchDocument
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

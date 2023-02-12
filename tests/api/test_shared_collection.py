@@ -5,12 +5,12 @@ import pytest
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.PublicKey import RSA
 
-from api.circulation import FulfillmentInfo
-from api.circulation_exceptions import *
-from api.odl import ODLAPI
-from api.shared_collection import BaseSharedCollectionAPI, SharedCollectionAPI
-from core.config import CannotLoadConfiguration
-from core.model import (
+from palace.api.circulation import FulfillmentInfo
+from palace.api.circulation_exceptions import *
+from palace.api.odl import ODLAPI
+from palace.api.shared_collection import BaseSharedCollectionAPI, SharedCollectionAPI
+from palace.core.config import CannotLoadConfiguration
+from palace.core.model import (
     ConfigurationSetting,
     Hold,
     IntegrationClient,
@@ -18,7 +18,7 @@ from core.model import (
     create,
     get_one,
 )
-from core.testing import MockRequestsResponse
+from palace.core.testing import MockRequestsResponse
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

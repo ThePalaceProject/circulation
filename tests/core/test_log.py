@@ -4,8 +4,8 @@ import sys
 
 import pytest
 
-from core.config import Configuration
-from core.log import (
+from palace.core.config import Configuration
+from palace.core.log import (
     CannotLoadConfiguration,
     CloudWatchLogHandler,
     CloudwatchLogs,
@@ -16,7 +16,7 @@ from core.log import (
     StringFormatter,
     SysLogger,
 )
-from core.model import ConfigurationSetting, ExternalIntegration
+from palace.core.model import ConfigurationSetting, ExternalIntegration
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

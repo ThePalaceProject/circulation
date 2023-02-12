@@ -9,21 +9,21 @@ import pytest
 from elasticsearch.exceptions import ElasticsearchException
 from sqlalchemy import and_, text
 
-from core.classifier import Classifier
-from core.config import Configuration
-from core.entrypoint import (
+from palace.core.classifier import Classifier
+from palace.core.config import Configuration
+from palace.core.entrypoint import (
     AudiobooksEntryPoint,
     EbooksEntryPoint,
     EntryPoint,
     EverythingEntryPoint,
 )
-from core.external_search import (
+from palace.core.external_search import (
     Filter,
     MockExternalSearchIndex,
     WorkSearchResult,
     mock_search_index,
 )
-from core.lane import (
+from palace.core.lane import (
     DatabaseBackedFacets,
     DatabaseBackedWorkList,
     DefaultSortOrderFacets,
@@ -37,7 +37,7 @@ from core.lane import (
     TopLevelWorkList,
     WorkList,
 )
-from core.model import (
+from palace.core.model import (
     CachedFeed,
     CustomList,
     DataSource,
@@ -50,12 +50,12 @@ from core.model import (
     get_one_or_create,
     tuple_to_numericrange,
 )
-from core.model.collection import Collection
-from core.model.configuration import ConfigurationSetting, ExternalIntegration
-from core.problem_details import INVALID_INPUT
-from core.testing import LogCaptureHandler
-from core.util.datetime_helpers import utc_now
-from core.util.opds_writer import OPDSFeed
+from palace.core.model.collection import Collection
+from palace.core.model.configuration import ConfigurationSetting, ExternalIntegration
+from palace.core.problem_details import INVALID_INPUT
+from palace.core.testing import LogCaptureHandler
+from palace.core.util.datetime_helpers import utc_now
+from palace.core.util.opds_writer import OPDSFeed
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchPatchFixture
 

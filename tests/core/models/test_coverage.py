@@ -3,17 +3,17 @@ from typing import List
 
 import pytest
 
-from core.metadata_layer import TimestampData
-from core.model.coverage import (
+from palace.core.metadata_layer import TimestampData
+from palace.core.model.coverage import (
     BaseCoverageRecord,
     CoverageRecord,
     EquivalencyCoverageRecord,
     Timestamp,
     WorkCoverageRecord,
 )
-from core.model.datasource import DataSource
-from core.model.identifier import Equivalency, Identifier
-from core.util.datetime_helpers import datetime_utc, utc_now
+from palace.core.model.datasource import DataSource
+from palace.core.model.identifier import Equivalency, Identifier
+from palace.core.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

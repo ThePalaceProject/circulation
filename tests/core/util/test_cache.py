@@ -1,8 +1,8 @@
 import time
 from unittest.mock import MagicMock
 
-from core.model.datasource import DataSource
-from core.util.cache import CachedData, _signature, memoize
+from palace.core.model.datasource import DataSource
+from palace.core.util.cache import CachedData, _signature, memoize
 
 
 class TestMemoize:

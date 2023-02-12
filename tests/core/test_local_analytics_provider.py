@@ -1,8 +1,8 @@
 import pytest
 
-from core.local_analytics_provider import LocalAnalyticsProvider
-from core.model import CirculationEvent, ExternalIntegration, create, get_one
-from core.util.datetime_helpers import utc_now
+from palace.core.local_analytics_provider import LocalAnalyticsProvider
+from palace.core.model import CirculationEvent, ExternalIntegration, create, get_one
+from palace.core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -53,7 +53,7 @@ class LocalAnalyticsProviderFixture:
             transaction.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol="core.local_analytics_provider",
+            protocol="palace.core.local_analytics_provider",
         )
         self.la = LocalAnalyticsProvider(
             self.integration, transaction.default_library()

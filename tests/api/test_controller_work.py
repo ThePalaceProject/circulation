@@ -8,8 +8,8 @@ import flask
 import pytest
 from flask import url_for
 
-from api.circulation import FulfillmentInfo, LoanInfo
-from api.lanes import (
+from palace.api.circulation import FulfillmentInfo, LoanInfo
+from palace.api.lanes import (
     ContributorFacets,
     ContributorLane,
     RecommendationLane,
@@ -17,15 +17,15 @@ from api.lanes import (
     SeriesFacets,
     SeriesLane,
 )
-from api.novelist import MockNoveListAPI
-from api.opds import LibraryAnnotator
-from api.problem_details import NO_SUCH_LANE
-from core.classifier import Classifier
-from core.entrypoint import AudiobooksEntryPoint
-from core.external_search import SortKeyPagination, mock_search_index
-from core.lane import Facets, FeaturedFacets
-from core.metadata_layer import ContributorData, Metadata
-from core.model import (
+from palace.api.novelist import MockNoveListAPI
+from palace.api.opds import LibraryAnnotator
+from palace.api.problem_details import NO_SUCH_LANE
+from palace.core.classifier import Classifier
+from palace.core.entrypoint import AudiobooksEntryPoint
+from palace.core.external_search import SortKeyPagination, mock_search_index
+from palace.core.lane import Facets, FeaturedFacets
+from palace.core.metadata_layer import ContributorData, Metadata
+from palace.core.model import (
     CachedFeed,
     DataSource,
     Edition,
@@ -35,12 +35,12 @@ from core.model import (
     Resource,
     tuple_to_numericrange,
 )
-from core.opds import AcquisitionFeed
-from core.problem_details import INVALID_INPUT
-from core.util.datetime_helpers import utc_now
-from core.util.flask_util import Response
-from core.util.opds_writer import OPDSFeed
-from core.util.problem_detail import ProblemDetail
+from palace.core.opds import AcquisitionFeed
+from palace.core.problem_details import INVALID_INPUT
+from palace.core.util.datetime_helpers import utc_now
+from palace.core.util.flask_util import Response
+from palace.core.util.opds_writer import OPDSFeed
+from palace.core.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.vendor_id import VendorIDFixture

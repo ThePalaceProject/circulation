@@ -2,15 +2,17 @@ from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 
-from api.saml.metadata.federations import incommon
-from api.saml.metadata.federations.loader import (
+from palace.api.saml.metadata.federations import incommon
+from palace.api.saml.metadata.federations.loader import (
     SAMLFederatedIdentityProviderLoader,
     SAMLMetadataLoader,
     SAMLMetadataLoadingError,
 )
-from api.saml.metadata.federations.model import SAMLFederation
-from api.saml.metadata.federations.validator import SAMLFederatedMetadataValidator
-from api.saml.metadata.parser import SAMLMetadataParser
+from palace.api.saml.metadata.federations.model import SAMLFederation
+from palace.api.saml.metadata.federations.validator import (
+    SAMLFederatedMetadataValidator,
+)
+from palace.api.saml.metadata.parser import SAMLMetadataParser
 from tests.api.saml import fixtures
 
 

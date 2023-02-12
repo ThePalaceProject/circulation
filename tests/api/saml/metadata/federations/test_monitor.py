@@ -1,11 +1,13 @@
 from unittest.mock import MagicMock, create_autospec
 
-from api.saml.metadata.federations.loader import SAMLFederatedIdentityProviderLoader
-from api.saml.metadata.federations.model import (
+from palace.api.saml.metadata.federations.loader import (
+    SAMLFederatedIdentityProviderLoader,
+)
+from palace.api.saml.metadata.federations.model import (
     SAMLFederatedIdentityProvider,
     SAMLFederation,
 )
-from api.saml.metadata.monitor import SAMLMetadataMonitor
+from palace.api.saml.metadata.monitor import SAMLMetadataMonitor
 from tests.api.saml import fixtures
 from tests.api.saml.database_test import DatabaseTest
 

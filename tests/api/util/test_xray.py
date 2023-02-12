@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, call
 
-import core
-from api.util.xray import PalaceXrayMiddleware
+import palace.core
+from palace.api.util.xray import PalaceXrayMiddleware
 
 
 class TestPalaceXrayMiddleware:
@@ -34,6 +34,6 @@ class TestPalaceXrayMiddleware:
     def test_put_annotations_version(self, monkeypatch):
         # The version number is added as an annotation
         segment = MagicMock()
-        monkeypatch.setattr(core, "__version__", "foo")
+        monkeypatch.setattr(palace.core, "__version__", "foo")
         PalaceXrayMiddleware.put_annotations(segment)
         segment.put_annotation.assert_called_once_with("version", "foo")

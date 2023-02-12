@@ -5,20 +5,20 @@ import pytest
 import pytz
 from psycopg2.extras import NumericRange
 
-from core.classifier import Classifier, Fantasy, Romance, Science_Fiction
-from core.equivalents_coverage import EquivalentIdentifiersCoverageProvider
-from core.external_search import MockExternalSearchIndex
-from core.model import get_one_or_create, tuple_to_numericrange
-from core.model.classification import Genre, Subject
-from core.model.contributor import Contributor
-from core.model.coverage import WorkCoverageRecord
-from core.model.datasource import DataSource
-from core.model.edition import Edition
-from core.model.identifier import Identifier
-from core.model.licensing import LicensePool
-from core.model.resource import Hyperlink, Representation, Resource
-from core.model.work import Work, WorkGenre
-from core.util.datetime_helpers import datetime_utc, from_timestamp, utc_now
+from palace.core.classifier import Classifier, Fantasy, Romance, Science_Fiction
+from palace.core.equivalents_coverage import EquivalentIdentifiersCoverageProvider
+from palace.core.external_search import MockExternalSearchIndex
+from palace.core.model import get_one_or_create, tuple_to_numericrange
+from palace.core.model.classification import Genre, Subject
+from palace.core.model.contributor import Contributor
+from palace.core.model.coverage import WorkCoverageRecord
+from palace.core.model.datasource import DataSource
+from palace.core.model.edition import Edition
+from palace.core.model.identifier import Identifier
+from palace.core.model.licensing import LicensePool
+from palace.core.model.resource import Hyperlink, Representation, Resource
+from palace.core.model.work import Work, WorkGenre
+from palace.core.util.datetime_helpers import datetime_utc, from_timestamp, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.sample_covers import SampleCoversFixture
 

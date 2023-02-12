@@ -2,11 +2,11 @@ from io import BytesIO
 
 import pytest
 
-from api.onix import ONIXExtractor
-from core.classifier import Classifier
-from core.metadata_layer import CirculationData
-from core.model import Classification, Edition, Identifier, LicensePool
-from core.util.datetime_helpers import datetime_utc
+from palace.api.onix import ONIXExtractor
+from palace.core.classifier import Classifier
+from palace.core.metadata_layer import CirculationData
+from palace.core.model import Classification, Edition, Identifier, LicensePool
+from palace.core.util.datetime_helpers import datetime_utc
 
 from ..fixtures.api_onix_files import ONIXFilesFixture
 

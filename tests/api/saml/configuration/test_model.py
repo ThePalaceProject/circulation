@@ -5,19 +5,19 @@ from unittest.mock import MagicMock, PropertyMock, call, create_autospec
 import sqlalchemy
 from parameterized import parameterized
 
-from api.app import initialize_database
-from api.authenticator import BaseSAMLAuthenticationProvider
-from api.saml.configuration.model import (
+from palace.api.app import initialize_database
+from palace.api.authenticator import BaseSAMLAuthenticationProvider
+from palace.api.saml.configuration.model import (
     SAMLConfiguration,
     SAMLConfigurationFactory,
     SAMLOneLoginConfiguration,
 )
-from api.saml.metadata.federations import incommon
-from api.saml.metadata.federations.model import (
+from palace.api.saml.metadata.federations import incommon
+from palace.api.saml.metadata.federations.model import (
     SAMLFederatedIdentityProvider,
     SAMLFederation,
 )
-from api.saml.metadata.model import (
+from palace.api.saml.metadata.model import (
     SAMLIdentityProviderMetadata,
     SAMLNameIDFormat,
     SAMLOrganization,
@@ -25,8 +25,8 @@ from api.saml.metadata.model import (
     SAMLServiceProviderMetadata,
     SAMLUIInfo,
 )
-from api.saml.metadata.parser import SAMLMetadataParser
-from core.model.configuration import (
+from palace.api.saml.metadata.parser import SAMLMetadataParser
+from palace.core.model.configuration import (
     ConfigurationStorage,
     ExternalIntegration,
     HasExternalIntegration,
@@ -75,7 +75,7 @@ class TestSAMLConfiguration(DatabaseTest):
         super().setup_method()
 
         self._saml_provider_integration = self._external_integration(
-            "api.saml.provider", ExternalIntegration.PATRON_AUTH_GOAL
+            "palace.api.saml.provider", ExternalIntegration.PATRON_AUTH_GOAL
         )
         self._saml_integration_association = create_autospec(
             spec=HasExternalIntegration
@@ -350,7 +350,7 @@ class TestSAMLSettings(DatabaseTest):
             fixtures.CORRECT_XML_WITH_IDP_1,
         )
 
-        from api.app import app
+        from palace.api.app import app
 
         app._db.add_all([federation, federated_identity_provider])
 

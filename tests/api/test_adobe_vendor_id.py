@@ -5,7 +5,7 @@ import json
 import pytest
 from jwt import DecodeError, ExpiredSignatureError, InvalidIssuedAtError
 
-from api.adobe_vendor_id import (
+from palace.api.adobe_vendor_id import (
     AdobeAccountInfoRequestParser,
     AdobeSignInRequestParser,
     AdobeVendorIDController,
@@ -14,11 +14,11 @@ from api.adobe_vendor_id import (
     AuthdataUtility,
     DeviceManagementRequestHandler,
 )
-from api.config import Configuration
-from api.registration.constants import RegistrationConstants
-from api.simple_authentication import SimpleAuthenticationProvider
-from core.config import CannotLoadConfiguration
-from core.model import (
+from palace.api.config import Configuration
+from palace.api.registration.constants import RegistrationConstants
+from palace.api.simple_authentication import SimpleAuthenticationProvider
+from palace.core.config import CannotLoadConfiguration
+from palace.core.model import (
     ConfigurationSetting,
     Credential,
     DataSource,
@@ -27,9 +27,9 @@ from core.model import (
     Library,
     Patron,
 )
-from core.problem_details import PAYLOAD_TOO_LARGE
-from core.util.datetime_helpers import datetime_utc, utc_now
-from core.util.problem_detail import ProblemDetail
+from palace.core.problem_details import PAYLOAD_TOO_LARGE
+from palace.core.util.datetime_helpers import datetime_utc, utc_now
+from palace.core.util.problem_detail import ProblemDetail
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.vendor_id import VendorIDFixture
 

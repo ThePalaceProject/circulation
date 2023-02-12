@@ -4,10 +4,10 @@ import flask
 import pytest
 from werkzeug.datastructures import MultiDict
 
-from api.admin.exceptions import *
-from api.google_analytics_provider import GoogleAnalyticsProvider
-from core.local_analytics_provider import LocalAnalyticsProvider
-from core.model import (
+from palace.api.admin.exceptions import *
+from palace.api.google_analytics_provider import GoogleAnalyticsProvider
+from palace.core.local_analytics_provider import LocalAnalyticsProvider
+from palace.core.model import (
     AdminRole,
     ConfigurationSetting,
     ExternalIntegration,
@@ -180,7 +180,7 @@ class TestAnalyticsServices(SettingsControllerTest):
                 [
                     ("name", "Name"),
                     ("id", service.id),
-                    ("protocol", "core.local_analytics_provider"),
+                    ("protocol", "palace.core.local_analytics_provider"),
                     ("url", "http://test"),
                 ]
             )

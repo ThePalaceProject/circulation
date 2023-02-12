@@ -3,14 +3,14 @@ from typing import Any, Generator
 
 import flask
 import pytest
+from api import routes
 from flask import Response
 from werkzeug.exceptions import MethodNotAllowed
 
-from api import routes
-from api.controller import CirculationManager, CirculationManagerController
-from api.routes import exception_handler
-from api.routes import h as error_handler_object
-from core.app_server import ErrorHandler
+from palace.api.controller import CirculationManager, CirculationManagerController
+from palace.api.routes import exception_handler
+from palace.api.routes import h as error_handler_object
+from palace.core.app_server import ErrorHandler
 
 from ..fixtures.api_controller import ControllerFixture
 from ..fixtures.vendor_id import VendorIDFixture

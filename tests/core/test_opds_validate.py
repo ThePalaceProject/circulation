@@ -3,11 +3,11 @@ import json
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
-from api.odl2 import ODL2Importer
-from core.model.configuration import ExternalIntegration
-from core.model.datasource import DataSource
-from core.opds2_import import OPDS2Importer, RWPMManifestParser
-from core.opds_schema import ODL2SchemaValidation, OPDS2SchemaValidation
+from palace.api.odl2 import ODL2Importer
+from palace.core.model.configuration import ExternalIntegration
+from palace.core.model.datasource import DataSource
+from palace.core.opds2_import import OPDS2Importer, RWPMManifestParser
+from palace.core.opds_schema import ODL2SchemaValidation, OPDS2SchemaValidation
 from tests.core.test_opds2_import import OPDS2Test
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.opds_files import OPDSFilesFixture

@@ -7,14 +7,17 @@ from onelogin.saml2.utils import OneLogin_Saml2_Utils, OneLogin_Saml2_XML
 from onelogin.saml2.xmlparser import fromstring
 from parameterized import parameterized
 
-from api.saml.auth import (
+from palace.api.saml.auth import (
     SAML_NO_ACCESS_ERROR,
     SAMLAuthenticationManager,
     SAMLAuthenticationManagerFactory,
 )
-from api.saml.configuration.model import SAMLConfiguration, SAMLOneLoginConfiguration
-from api.saml.metadata.filter import SAMLSubjectFilter
-from api.saml.metadata.model import (
+from palace.api.saml.configuration.model import (
+    SAMLConfiguration,
+    SAMLOneLoginConfiguration,
+)
+from palace.api.saml.metadata.filter import SAMLSubjectFilter
+from palace.api.saml.metadata.model import (
     SAMLAttribute,
     SAMLAttributeStatement,
     SAMLAttributeType,
@@ -27,12 +30,15 @@ from api.saml.metadata.model import (
     SAMLSubject,
     SAMLUIInfo,
 )
-from api.saml.metadata.parser import SAMLSubjectParser
-from core.model.configuration import HasExternalIntegration
-from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvaluator
-from core.python_expression_dsl.parser import DSLParser
-from core.util.datetime_helpers import datetime_utc
-from core.util.string_helpers import base64
+from palace.api.saml.metadata.parser import SAMLSubjectParser
+from palace.core.model.configuration import HasExternalIntegration
+from palace.core.python_expression_dsl.evaluator import (
+    DSLEvaluationVisitor,
+    DSLEvaluator,
+)
+from palace.core.python_expression_dsl.parser import DSLParser
+from palace.core.util.datetime_helpers import datetime_utc
+from palace.core.util.string_helpers import base64
 from tests.api.saml import fixtures
 from tests.api.test_controller import ControllerTest
 

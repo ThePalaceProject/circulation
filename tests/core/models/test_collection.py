@@ -4,28 +4,28 @@ from unittest.mock import MagicMock, create_autospec
 
 import pytest
 
-from core.config import Configuration
-from core.model import create, get_one_or_create
-from core.model.circulationevent import CirculationEvent
-from core.model.collection import (
+from palace.core.config import Configuration
+from palace.core.model import create, get_one_or_create
+from palace.core.model.circulationevent import CirculationEvent
+from palace.core.model.collection import (
     Collection,
     CollectionConfigurationStorage,
     HasExternalIntegrationPerCollection,
 )
-from core.model.configuration import (
+from palace.core.model.configuration import (
     ConfigurationSetting,
     ExternalIntegration,
     ExternalIntegrationLink,
 )
-from core.model.coverage import CoverageRecord, WorkCoverageRecord
-from core.model.customlist import CustomList
-from core.model.datasource import DataSource
-from core.model.edition import Edition
-from core.model.identifier import Identifier
-from core.model.licensing import Hold, License, LicensePool, Loan
-from core.model.work import Work
-from core.util.datetime_helpers import utc_now
-from core.util.string_helpers import base64
+from palace.core.model.coverage import CoverageRecord, WorkCoverageRecord
+from palace.core.model.customlist import CustomList
+from palace.core.model.datasource import DataSource
+from palace.core.model.edition import Edition
+from palace.core.model.identifier import Identifier
+from palace.core.model.licensing import Hold, License, LicensePool, Loan
+from palace.core.model.work import Work
+from palace.core.util.datetime_helpers import utc_now
+from palace.core.util.string_helpers import base64
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

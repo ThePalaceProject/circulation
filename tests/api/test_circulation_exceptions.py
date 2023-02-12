@@ -1,9 +1,9 @@
 from flask_babel import lazy_gettext as _
 
-from api.circulation_exceptions import *
-from api.config import Configuration
-from api.problem_details import *
-from core.util.problem_detail import ProblemDetail
+from palace.api.circulation_exceptions import *
+from palace.api.config import Configuration
+from palace.api.problem_details import *
+from palace.core.util.problem_detail import ProblemDetail
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

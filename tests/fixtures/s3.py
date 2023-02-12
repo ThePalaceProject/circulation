@@ -6,8 +6,8 @@ from urllib.parse import urlsplit
 import boto3
 import pytest
 
-from core.model import ExternalIntegration
-from core.s3 import S3Uploader, S3UploaderConfiguration
+from palace.core.model import ExternalIntegration
+from palace.core.s3 import S3Uploader, S3UploaderConfiguration
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

@@ -4,10 +4,14 @@ import pytest
 import sqlalchemy
 from sqlalchemy import or_
 
-from core.equivalents_coverage import EquivalentIdentifiersCoverageProvider
-from core.model.coverage import EquivalencyCoverageRecord
-from core.model.identifier import Equivalency, Identifier, RecursiveEquivalencyCache
-from core.query.coverage import EquivalencyCoverageQueries
+from palace.core.equivalents_coverage import EquivalentIdentifiersCoverageProvider
+from palace.core.model.coverage import EquivalencyCoverageRecord
+from palace.core.model.identifier import (
+    Equivalency,
+    Identifier,
+    RecursiveEquivalencyCache,
+)
+from palace.core.query.coverage import EquivalencyCoverageQueries
 from tests.core.models.test_coverage import ExampleEquivalencyCoverageRecordFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 

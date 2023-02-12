@@ -8,9 +8,9 @@ from decimal import Decimal
 import pytest
 from money import Money
 
-from core.model import Edition, Identifier
-from core.testing import DatabaseTest
-from core.util import (
+from palace.core.model import Edition, Identifier
+from palace.core.testing import DatabaseTest
+from palace.core.util import (
     Bigrams,
     MetadataSimilarity,
     MoneyUtility,
@@ -19,7 +19,7 @@ from core.util import (
     fast_query_count,
     slugify,
 )
-from core.util.median import median
+from palace.core.util.median import median
 
 
 class DummyAuthor:

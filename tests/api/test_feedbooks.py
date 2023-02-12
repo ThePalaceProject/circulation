@@ -3,19 +3,23 @@ from zipfile import ZipFile
 
 import pytest
 
-from api.feedbooks import FeedbooksImportMonitor, FeedbooksOPDSImporter, RehostingPolicy
-from core.metadata_layer import LinkData, Metadata
-from core.model import (
+from palace.api.feedbooks import (
+    FeedbooksImportMonitor,
+    FeedbooksOPDSImporter,
+    RehostingPolicy,
+)
+from palace.core.metadata_layer import LinkData, Metadata
+from palace.core.model import (
     DataSource,
     ExternalIntegration,
     Hyperlink,
     Representation,
     RightsStatus,
 )
-from core.model.configuration import ExternalIntegrationLink
-from core.opds import OPDSFeed
-from core.s3 import MockS3Uploader
-from core.testing import DummyHTTPClient, DummyMetadataClient
+from palace.core.model.configuration import ExternalIntegrationLink
+from palace.core.opds import OPDSFeed
+from palace.core.s3 import MockS3Uploader
+from palace.core.testing import DummyHTTPClient, DummyMetadataClient
 from tests.fixtures.api_feedbooks_files import FeedbooksFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 

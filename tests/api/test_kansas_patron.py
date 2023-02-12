@@ -3,8 +3,8 @@ from typing import List
 import pytest
 from lxml import etree
 
-from api.kansas_patron import KansasAuthenticationAPI
-from core.model import ExternalIntegration
+from palace.api.kansas_patron import KansasAuthenticationAPI
+from palace.core.model import ExternalIntegration
 
 from ..fixtures.api_kansas_files import KansasPatronFilesFixture
 from ..fixtures.database import DatabaseTransactionFixture

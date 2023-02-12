@@ -5,8 +5,8 @@ import ssl
 
 import pytest
 
-from api.sip.client import MockSIPClient, SIPClient
-from api.sip.dialect import AutoGraphicsVerso, GenericILS
+from palace.api.sip.client import MockSIPClient, SIPClient
+from palace.api.sip.dialect import AutoGraphicsVerso, GenericILS
 
 
 class MockSocket:

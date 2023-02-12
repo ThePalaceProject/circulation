@@ -2,14 +2,14 @@ import os
 
 import pytest
 
-from core.config import Configuration
-from core.model import create
-from core.model.datasource import DataSource
-from core.model.edition import Edition
-from core.model.identifier import Identifier
-from core.model.licensing import RightsStatus
-from core.model.resource import Hyperlink, Representation, Resource
-from core.testing import DummyHTTPClient, MockRequestsResponse
+from palace.core.config import Configuration
+from palace.core.model import create
+from palace.core.model.datasource import DataSource
+from palace.core.model.edition import Edition
+from palace.core.model.identifier import Identifier
+from palace.core.model.licensing import RightsStatus
+from palace.core.model.resource import Hyperlink, Representation, Resource
+from palace.core.testing import DummyHTTPClient, MockRequestsResponse
 from tests.fixtures.database import (
     DatabaseTransactionFixture,
     TemporaryDirectoryConfigurationFixture,

@@ -18,9 +18,9 @@ from flask import url_for
 from flask_babel import lazy_gettext as _
 from money import Money
 
-from api.annotations import AnnotationWriter
-from api.announcements import Announcements
-from api.authenticator import (
+from palace.api.annotations import AnnotationWriter
+from palace.api.announcements import Announcements
+from palace.api.authenticator import (
     AuthenticationProvider,
     Authenticator,
     BasicAuthenticationProvider,
@@ -30,17 +30,17 @@ from api.authenticator import (
     OAuthController,
     PatronData,
 )
-from api.clever import CleverAuthenticationAPI
-from api.config import CannotLoadConfiguration, Configuration
-from api.firstbook import FirstBookAuthenticationAPI
-from api.millenium_patron import MilleniumPatronAPI
-from api.opds import LibraryAnnotator
-from api.problem_details import *
-from api.problem_details import PATRON_OF_ANOTHER_LIBRARY
-from api.simple_authentication import SimpleAuthenticationProvider
-from api.util.patron import PatronUtility
-from core.mock_analytics_provider import MockAnalyticsProvider
-from core.model import (
+from palace.api.clever import CleverAuthenticationAPI
+from palace.api.config import CannotLoadConfiguration, Configuration
+from palace.api.firstbook import FirstBookAuthenticationAPI
+from palace.api.millenium_patron import MilleniumPatronAPI
+from palace.api.opds import LibraryAnnotator
+from palace.api.problem_details import *
+from palace.api.problem_details import PATRON_OF_ANOTHER_LIBRARY
+from palace.api.simple_authentication import SimpleAuthenticationProvider
+from palace.api.util.patron import PatronUtility
+from palace.core.mock_analytics_provider import MockAnalyticsProvider
+from palace.core.model import (
     CirculationEvent,
     ConfigurationSetting,
     Credential,
@@ -51,12 +51,12 @@ from core.model import (
     Session,
     create,
 )
-from core.model.constants import LinkRelations
-from core.opds import OPDSFeed
-from core.user_profile import ProfileController
-from core.util.authentication_for_opds import AuthenticationForOPDSDocument
-from core.util.datetime_helpers import utc_now
-from core.util.http import IntegrationException
+from palace.core.model.constants import LinkRelations
+from palace.core.opds import OPDSFeed
+from palace.core.user_profile import ProfileController
+from palace.core.util.authentication_for_opds import AuthenticationForOPDSDocument
+from palace.core.util.datetime_helpers import utc_now
+from palace.core.util.http import IntegrationException
 
 from ..fixtures.api_controller import ControllerFixture
 from ..fixtures.database import DatabaseTransactionFixture
@@ -563,7 +563,7 @@ class TestAuthenticator:
         # This library uses Millenium Patron.
         l2, ignore = create(db.session, Library, short_name="l2")
         integration = db.external_integration(
-            "api.millenium_patron", goal=ExternalIntegration.PATRON_AUTH_GOAL
+            "palace.api.millenium_patron", goal=ExternalIntegration.PATRON_AUTH_GOAL
         )
         integration.url = "http://url/"
         l2.integrations.append(integration)
@@ -692,7 +692,7 @@ class TestLibraryAuthenticator:
 
         # Only a basic auth provider.
         millenium = db.external_integration(
-            "api.millenium_patron",
+            "palace.api.millenium_patron",
             ExternalIntegration.PATRON_AUTH_GOAL,
             libraries=[db.default_library()],
         )
@@ -711,7 +711,7 @@ class TestLibraryAuthenticator:
         library = db.default_library()
         # A basic auth provider and an oauth provider.
         firstbook = db.external_integration(
-            "api.firstbook",
+            "palace.api.firstbook",
             ExternalIntegration.PATRON_AUTH_GOAL,
         )
         firstbook.url = "http://url/"
@@ -719,7 +719,7 @@ class TestLibraryAuthenticator:
         library.integrations.append(firstbook)
 
         oauth = db.external_integration(
-            "api.clever",
+            "palace.api.clever",
             ExternalIntegration.PATRON_AUTH_GOAL,
         )
         oauth.username = "client_id"
@@ -791,7 +791,7 @@ class TestLibraryAuthenticator:
         db = authenticator_fixture.db
         # Create an integration destined to raise CannotLoadConfiguration..
         misconfigured = db.external_integration(
-            "api.firstbook",
+            "palace.api.firstbook",
             ExternalIntegration.PATRON_AUTH_GOAL,
         )
 
@@ -852,7 +852,7 @@ class TestLibraryAuthenticator:
         db = authenticator_fixture.db
         library = db.default_library()
         integration = db.external_integration(
-            "api.lanes", ExternalIntegration.PATRON_AUTH_GOAL
+            "palace.api.lanes", ExternalIntegration.PATRON_AUTH_GOAL
         )
         library.integrations.append(integration)
         auth = LibraryAuthenticator(_db=db.session, library=library)
@@ -891,7 +891,7 @@ class TestLibraryAuthenticator:
     ):
         db = authenticator_fixture.db
         firstbook = db.external_integration(
-            "api.firstbook",
+            "palace.api.firstbook",
             ExternalIntegration.PATRON_AUTH_GOAL,
         )
         firstbook.url = "http://url/"
@@ -904,7 +904,7 @@ class TestLibraryAuthenticator:
     def test_register_oauth_provider(self, authenticator_fixture: AuthenticatorFixture):
         db = authenticator_fixture.db
         oauth = db.external_integration(
-            "api.clever",
+            "palace.api.clever",
             ExternalIntegration.PATRON_AUTH_GOAL,
         )
         oauth.username = "client_id"
@@ -1307,7 +1307,7 @@ class TestLibraryAuthenticator:
         # We're about to call url_for, so we must create an
         # application context.
         os.environ["AUTOINITIALIZE"] = "False"
-        from api.app import app
+        from palace.api.app import app
 
         self.app = app
         del os.environ["AUTOINITIALIZE"]
@@ -2520,7 +2520,7 @@ class TestBasicAuthenticationProvider:
         # We're about to call url_for, so we must create an
         # application context.
         os.environ["AUTOINITIALIZE"] = "False"
-        from api.app import app
+        from palace.api.app import app
 
         self.app = app
         del os.environ["AUTOINITIALIZE"]
@@ -3057,7 +3057,7 @@ class TestOAuthAuthenticationProvider:
         # We're about to call url_for, so we must create an
         # application context.
         os.environ["AUTOINITIALIZE"] = "False"
-        from api.app import app
+        from palace.api.app import app
 
         self.app = app
         del os.environ["AUTOINITIALIZE"]
@@ -3107,7 +3107,7 @@ class TestOAuthAuthenticationProvider:
         my_api = MockOAuth(db.default_library())
         my_api.client_id = "clientid"
         os.environ["AUTOINITIALIZE"] = "False"
-        from api.app import app
+        from palace.api.app import app
 
         del os.environ["AUTOINITIALIZE"]
 

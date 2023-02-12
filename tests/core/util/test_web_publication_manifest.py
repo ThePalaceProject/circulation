@@ -1,5 +1,9 @@
-from core.testing import DatabaseTest
-from core.util.web_publication_manifest import AudiobookManifest, JSONable, Manifest
+from palace.core.testing import DatabaseTest
+from palace.core.util.web_publication_manifest import (
+    AudiobookManifest,
+    JSONable,
+    Manifest,
+)
 
 
 class TestJSONable:

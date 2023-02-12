@@ -2,9 +2,9 @@ import pytest
 from psycopg2.extras import NumericRange
 from sqlalchemy.exc import IntegrityError
 
-from core.classifier import Classifier
-from core.model import create
-from core.model.classification import Genre, Subject
+from palace.core.classifier import Classifier
+from palace.core.model import create
+from palace.core.model.classification import Genre, Subject
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

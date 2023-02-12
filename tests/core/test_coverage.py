@@ -2,7 +2,7 @@ import datetime
 
 import pytest
 
-from core.coverage import (
+from palace.core.coverage import (
     BaseCoverageProvider,
     CatalogCoverageProvider,
     CoverageFailure,
@@ -14,7 +14,7 @@ from core.coverage import (
     WorkClassificationCoverageProvider,
     WorkPresentationEditionCoverageProvider,
 )
-from core.metadata_layer import (
+from palace.core.metadata_layer import (
     CirculationData,
     ContributorData,
     FormatData,
@@ -24,7 +24,7 @@ from core.metadata_layer import (
     ReplacementPolicy,
     SubjectData,
 )
-from core.model import (
+from palace.core.model import (
     CollectionMissing,
     Contributor,
     CoverageRecord,
@@ -42,9 +42,9 @@ from core.model import (
     Work,
     WorkCoverageRecord,
 )
-from core.model.configuration import ExternalIntegrationLink
-from core.s3 import MockS3Uploader
-from core.testing import (
+from palace.core.model.configuration import ExternalIntegrationLink
+from palace.core.s3 import MockS3Uploader
+from palace.core.testing import (
     AlwaysSuccessfulBibliographicCoverageProvider,
     AlwaysSuccessfulCollectionCoverageProvider,
     AlwaysSuccessfulCoverageProvider,
@@ -57,7 +57,7 @@ from core.testing import (
     TransientFailureCoverageProvider,
     TransientFailureWorkCoverageProvider,
 )
-from core.util.datetime_helpers import datetime_utc, utc_now
+from palace.core.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

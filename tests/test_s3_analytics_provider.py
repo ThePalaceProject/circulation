@@ -4,10 +4,10 @@ from unittest.mock import create_autospec, patch
 
 import pytest
 
-from api.s3_analytics_provider import S3AnalyticsProvider
-from core.classifier import Classifier
-from core.config import CannotLoadConfiguration
-from core.model import (
+from palace.api.s3_analytics_provider import S3AnalyticsProvider
+from palace.core.classifier import Classifier
+from palace.core.config import CannotLoadConfiguration
+from palace.core.model import (
     CirculationEvent,
     DataSource,
     ExternalIntegration,
@@ -15,8 +15,8 @@ from core.model import (
     MediaTypes,
     create,
 )
-from core.s3 import S3Uploader, S3UploaderConfiguration
-from core.testing import DatabaseTest
+from palace.core.s3 import S3Uploader, S3UploaderConfiguration
+from palace.core.testing import DatabaseTest
 
 
 class TestS3AnalyticsProvider(DatabaseTest):

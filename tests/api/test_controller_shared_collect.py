@@ -7,8 +7,8 @@ import flask
 import pytest
 from werkzeug.datastructures import ImmutableMultiDict
 
-from api.circulation import FulfillmentInfo
-from api.circulation_exceptions import (
+from palace.api.circulation import FulfillmentInfo
+from palace.api.circulation_exceptions import (
     AuthorizationFailedException,
     CannotFulfill,
     CannotLoan,
@@ -20,7 +20,7 @@ from api.circulation_exceptions import (
     NotOnHold,
     RemoteInitiatedServerError,
 )
-from api.problem_details import (
+from palace.api.problem_details import (
     BAD_DELIVERY_MECHANISM,
     CANNOT_FULFILL,
     CANNOT_RELEASE_HOLD,
@@ -36,7 +36,7 @@ from api.problem_details import (
     NO_LICENSES,
     NO_SUCH_COLLECTION,
 )
-from core.model import (
+from palace.core.model import (
     Collection,
     Hold,
     IntegrationClient,
@@ -46,11 +46,11 @@ from core.model import (
     Work,
     create,
 )
-from core.problem_details import INTEGRATION_ERROR
-from core.testing import MockRequestsResponse
-from core.util.datetime_helpers import utc_now
-from core.util.http import RemoteIntegrationException
-from core.util.string_helpers import base64
+from palace.core.problem_details import INTEGRATION_ERROR
+from palace.core.testing import MockRequestsResponse
+from palace.core.util.datetime_helpers import utc_now
+from palace.core.util.http import RemoteIntegrationException
+from palace.core.util.string_helpers import base64
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.vendor_id import VendorIDFixture
@@ -67,7 +67,7 @@ class SharedCollectionFixture(ControllerFixture):
         self, db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture
     ):
         super().__init__(db, vendor_id_fixture, setup_cm=False)
-        from api.odl import ODLAPI
+        from palace.api.odl import ODLAPI
 
         self.collection = db.collection(protocol=ODLAPI.NAME)
         db.default_library().collections = [self.collection]

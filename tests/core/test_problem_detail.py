@@ -1,6 +1,6 @@
 import json
 
-from core.util.problem_detail import ProblemDetail
+from palace.core.util.problem_detail import ProblemDetail
 
 
 class TestProblemDetail:

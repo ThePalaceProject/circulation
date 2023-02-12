@@ -16,13 +16,13 @@ from freezegun import freeze_time
 from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm import Session
 
-from core.classifier import Classifier
-from core.config import CannotLoadConfiguration
-from core.external_search import Filter, MockExternalSearchIndex
-from core.lane import Lane, WorkList
-from core.metadata_layer import LinkData, TimestampData
-from core.mirror import MirrorUploader
-from core.model import (
+from palace.core.classifier import Classifier
+from palace.core.config import CannotLoadConfiguration
+from palace.core.external_search import Filter, MockExternalSearchIndex
+from palace.core.lane import Lane, WorkList
+from palace.core.metadata_layer import LinkData, TimestampData
+from palace.core.mirror import MirrorUploader
+from palace.core.model import (
     CachedFeed,
     Collection,
     ConfigurationSetting,
@@ -40,13 +40,13 @@ from core.model import (
     create,
     get_one,
 )
-from core.model.classification import Subject
-from core.model.configuration import ExternalIntegrationLink
-from core.model.customlist import CustomList
-from core.monitor import CollectionMonitor, Monitor, ReaperMonitor
-from core.opds_import import OPDSImportMonitor
-from core.s3 import MinIOUploader, MinIOUploaderConfiguration, S3Uploader
-from core.scripts import (
+from palace.core.model.classification import Subject
+from palace.core.model.configuration import ExternalIntegrationLink
+from palace.core.model.customlist import CustomList
+from palace.core.monitor import CollectionMonitor, Monitor, ReaperMonitor
+from palace.core.opds_import import OPDSImportMonitor
+from palace.core.s3 import MinIOUploader, MinIOUploaderConfiguration, S3Uploader
+from palace.core.scripts import (
     AddClassificationScript,
     CheckContributorNamesInDB,
     CollectionArgumentsScript,
@@ -91,12 +91,12 @@ from core.scripts import (
     WorkClassificationScript,
     WorkProcessingScript,
 )
-from core.testing import (
+from palace.core.testing import (
     AlwaysSuccessfulCollectionCoverageProvider,
     AlwaysSuccessfulWorkCoverageProvider,
 )
-from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
-from core.util.worker_pools import DatabasePool
+from palace.core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
+from palace.core.util.worker_pools import DatabasePool
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchPatchFixture
 
@@ -1207,7 +1207,7 @@ class TestDatabaseMigrationScript:
         for migration_file in all_migrations:
             assert os.path.split(migration_file)[1] in result_migrations
 
-        # Ensure that all the expected migrations from CORE are included in
+        # Ensure that all the expected migrations from palace.core are included in
         # the 'core' directory array in migrations_by_directory.
         assert 2 == len(core_migrations)
         for filename in core_migrations:
@@ -3300,9 +3300,9 @@ class TestUpdateLaneSizeScript:
         # Commit changes to the DB so the lane creation listeners are fired
         db.session.commit()
 
-        with patch("core.lane.site_configuration_has_changed") as lane_changed:
+        with patch("palace.core.lane.site_configuration_has_changed") as lane_changed:
             with patch(
-                "core.scripts.site_configuration_has_changed"
+                "palace.core.scripts.site_configuration_has_changed"
             ) as scripts_changed:
                 UpdateLaneSizeScript(db.session).do_run(cmd_args=[])
 
@@ -3406,7 +3406,7 @@ class TestCustomListUpdateEntriesScript:
         assert custom_list1.auto_update_last_update == frozen_time.time_to_freeze
 
     def test_search_facets(self, end_to_end_search_fixture: EndToEndSearchFixture):
-        with patch("core.query.customlist.ExternalSearchIndex") as mock_index:
+        with patch("palace.core.query.customlist.ExternalSearchIndex") as mock_index:
             fixture = end_to_end_search_fixture
             db, session = (
                 fixture.external_search.db,
@@ -3467,7 +3467,7 @@ class TestCustomListUpdateEntriesScript:
         self,
         end_to_end_search_fixture: EndToEndSearchFixture,
     ):
-        with patch("core.scripts.CustomListQueries") as mock_queries:
+        with patch("palace.core.scripts.CustomListQueries") as mock_queries:
             fixture = end_to_end_search_fixture
             db, session = (
                 fixture.external_search.db,

@@ -1,6 +1,6 @@
 from parameterized import parameterized
 
-from api.lcp.hash import HasherFactory, HashingAlgorithm
+from palace.api.lcp.hash import HasherFactory, HashingAlgorithm
 
 
 class TestHasherFactory:

@@ -3,10 +3,15 @@ import json
 
 import pytest
 
-from api.nyt import NYTAPI, NYTBestSellerAPI, NYTBestSellerList, NYTBestSellerListTitle
-from core.config import CannotLoadConfiguration
-from core.model import Contributor, CustomListEntry, Edition, ExternalIntegration
-from core.util.http import IntegrationException
+from palace.api.nyt import (
+    NYTAPI,
+    NYTBestSellerAPI,
+    NYTBestSellerList,
+    NYTBestSellerListTitle,
+)
+from palace.core.config import CannotLoadConfiguration
+from palace.core.model import Contributor, CustomListEntry, Edition, ExternalIntegration
+from palace.core.util.http import IntegrationException
 from tests.fixtures.api_nyt_files import NYTFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 

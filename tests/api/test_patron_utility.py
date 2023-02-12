@@ -4,13 +4,13 @@ from decimal import Decimal
 import dateutil
 import pytest
 
-from api.authenticator import PatronData
-from api.circulation_exceptions import *
-from api.config import Configuration
-from api.util.patron import PatronUtility
-from core.model import ConfigurationSetting
-from core.util import MoneyUtility
-from core.util.datetime_helpers import utc_now
+from palace.api.authenticator import PatronData
+from palace.api.circulation_exceptions import *
+from palace.api.config import Configuration
+from palace.api.util.patron import PatronUtility
+from palace.core.model import ConfigurationSetting
+from palace.core.util import MoneyUtility
+from palace.core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

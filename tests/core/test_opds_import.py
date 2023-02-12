@@ -7,19 +7,19 @@ import requests_mock
 from lxml import etree
 from psycopg2.extras import NumericRange
 
-from api.circulation import CirculationAPI
-from api.saml.credential import SAMLCredentialManager
-from api.saml.metadata.model import (
+from palace.api.circulation import CirculationAPI
+from palace.api.saml.credential import SAMLCredentialManager
+from palace.api.saml.metadata.model import (
     SAMLAttributeStatement,
     SAMLNameID,
     SAMLNameIDFormat,
     SAMLSubject,
 )
-from api.saml.wayfless import SAMLWAYFlessFulfillmentError
-from core.config import IntegrationException
-from core.coverage import CoverageFailure
-from core.metadata_layer import CirculationData, LinkData, Metadata
-from core.model import (
+from palace.api.saml.wayfless import SAMLWAYFlessFulfillmentError
+from palace.core.config import IntegrationException
+from palace.core.coverage import CoverageFailure
+from palace.core.metadata_layer import CirculationData, LinkData, Metadata
+from palace.core.model import (
     Contributor,
     CoverageRecord,
     DataSource,
@@ -36,24 +36,24 @@ from core.model import (
     Work,
     WorkCoverageRecord,
 )
-from core.model.configuration import (
+from palace.core.model.configuration import (
     ConfigurationFactory,
     ConfigurationStorage,
     ExternalIntegrationLink,
     HasExternalIntegration,
 )
-from core.opds_import import (
+from palace.core.opds_import import (
     OPDSImporter,
     OPDSImporterConfiguration,
     OPDSImportMonitor,
     OPDSXMLParser,
 )
-from core.s3 import MockS3Uploader, S3Uploader, S3UploaderConfiguration
-from core.testing import DummyHTTPClient
-from core.util import first_or_default
-from core.util.datetime_helpers import datetime_utc
-from core.util.http import BadResponseException
-from core.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
+from palace.core.s3 import MockS3Uploader, S3Uploader, S3UploaderConfiguration
+from palace.core.testing import DummyHTTPClient
+from palace.core.util import first_or_default
+from palace.core.util.datetime_helpers import datetime_utc
+from palace.core.util.http import BadResponseException
+from palace.core.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.opds_files import OPDSFilesFixture
 from tests.fixtures.sample_covers import SampleCoversFixture
@@ -952,7 +952,7 @@ class TestOPDSImporter:
         assert "7" == seven.subject.identifier
         assert 100 == seven.weight
         assert Subject.AGE_RANGE == seven.subject.type
-        from core.classifier import Classifier
+        from palace.core.classifier import Classifier
 
         classifier = Classifier.classifiers.get(seven.subject.type, None)
         classifier.classify(seven.subject)
@@ -2834,7 +2834,7 @@ class TestOPDSImportMonitor:
         )
 
         # We mock Retry class to ensure that the correct retry count had been passed.
-        with patch("core.util.http.Retry") as retry_constructor_mock:
+        with patch("palace.core.util.http.Retry") as retry_constructor_mock:
             with requests_mock.Mocker() as request_mock:
                 request_mock.get(
                     feed_url,

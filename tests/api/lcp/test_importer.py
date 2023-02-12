@@ -2,9 +2,9 @@ from unittest.mock import MagicMock, create_autospec
 
 import sqlalchemy
 
-from api.lcp.encrypt import LCPEncryptionResult, LCPEncryptor
-from api.lcp.importer import LCPImporter
-from api.lcp.server import LCPServer
+from palace.api.lcp.encrypt import LCPEncryptionResult, LCPEncryptor
+from palace.api.lcp.importer import LCPImporter
+from palace.api.lcp.server import LCPServer
 
 
 class TestLCPImporter:

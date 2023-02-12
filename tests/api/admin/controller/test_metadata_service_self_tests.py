@@ -1,7 +1,7 @@
-from api.admin.problem_details import *
-from api.nyt import NYTBestSellerAPI
-from core.model import ExternalIntegration, create
-from core.selftest import HasSelfTests
+from palace.api.admin.problem_details import *
+from palace.api.nyt import NYTBestSellerAPI
+from palace.core.model import ExternalIntegration, create
+from palace.core.selftest import HasSelfTests
 
 from .test_controller import SettingsControllerTest
 

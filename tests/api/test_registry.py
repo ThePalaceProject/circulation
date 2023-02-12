@@ -6,19 +6,21 @@ import pytest
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.PublicKey import RSA
 
-from api.adobe_vendor_id import AuthdataUtility
-from api.config import Configuration
-from api.problem_details import *
-from api.registration.registry import (
+from palace.api.adobe_vendor_id import AuthdataUtility
+from palace.api.config import Configuration
+from palace.api.problem_details import *
+from palace.api.registration.registry import (
     LibraryRegistrationScript,
     Registration,
     RemoteRegistry,
 )
-from core.model import ConfigurationSetting, ExternalIntegration
-from core.testing import DummyHTTPClient, MockRequestsResponse
-from core.util.http import HTTP
-from core.util.problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
-from core.util.problem_detail import ProblemDetail
+from palace.core.model import ConfigurationSetting, ExternalIntegration
+from palace.core.testing import DummyHTTPClient, MockRequestsResponse
+from palace.core.util.http import HTTP
+from palace.core.util.problem_detail import (
+    JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE,
+)
+from palace.core.util.problem_detail import ProblemDetail
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

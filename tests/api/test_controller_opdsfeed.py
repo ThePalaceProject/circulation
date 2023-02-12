@@ -7,18 +7,29 @@ from unittest.mock import MagicMock
 import feedparser
 from flask import url_for
 
-from api.controller import CirculationManager
-from api.lanes import HasSeriesFacets, JackpotFacets, JackpotWorkList
-from api.opds import LibraryAnnotator
-from api.problem_details import REMOTE_INTEGRATION_FAILED
-from core.app_server import load_facets_from_request
-from core.entrypoint import AudiobooksEntryPoint, EntryPoint, EverythingEntryPoint
-from core.external_search import SortKeyPagination
-from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
-from core.model import CachedFeed, ConfigurationSetting, Edition
-from core.opds import AcquisitionFeed, NavigationFacets, NavigationFeed
-from core.util.datetime_helpers import utc_now
-from core.util.flask_util import Response
+from palace.api.controller import CirculationManager
+from palace.api.lanes import HasSeriesFacets, JackpotFacets, JackpotWorkList
+from palace.api.opds import LibraryAnnotator
+from palace.api.problem_details import REMOTE_INTEGRATION_FAILED
+from palace.core.app_server import load_facets_from_request
+from palace.core.entrypoint import (
+    AudiobooksEntryPoint,
+    EntryPoint,
+    EverythingEntryPoint,
+)
+from palace.core.external_search import SortKeyPagination
+from palace.core.lane import (
+    Facets,
+    FeaturedFacets,
+    Lane,
+    Pagination,
+    SearchFacets,
+    WorkList,
+)
+from palace.core.model import CachedFeed, ConfigurationSetting, Edition
+from palace.core.opds import AcquisitionFeed, NavigationFacets, NavigationFeed
+from palace.core.util.datetime_helpers import utc_now
+from palace.core.util.flask_util import Response
 from tests.fixtures.api_controller import CirculationControllerFixture, WorkSpec
 
 

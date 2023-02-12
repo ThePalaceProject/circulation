@@ -1,10 +1,14 @@
 import pytest
 
-from core.model import get_one_or_create
-from core.model.coverage import WorkCoverageRecord
-from core.model.customlist import CustomList, CustomListEntry, customlist_sharedlibrary
-from core.model.datasource import DataSource
-from core.util.datetime_helpers import utc_now
+from palace.core.model import get_one_or_create
+from palace.core.model.coverage import WorkCoverageRecord
+from palace.core.model.customlist import (
+    CustomList,
+    CustomListEntry,
+    customlist_sharedlibrary,
+)
+from palace.core.model.datasource import DataSource
+from palace.core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

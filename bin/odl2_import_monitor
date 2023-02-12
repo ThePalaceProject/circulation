@@ -1,21 +1,15 @@
 #!/usr/bin/env python
 """Update the circulation manager server with new books from
 OPDS 2.x + ODL collections."""
-import os
-import sys
 
-bin_dir = os.path.split(__file__)[0]
-package_dir = os.path.join(bin_dir, "..")
-sys.path.append(os.path.abspath(package_dir))
-
-from webpub_manifest_parser.odl import ODLFeedParserFactory
-
-from api.odl2 import ODL2Importer, ODL2ImportMonitor
 
 # NOTE: We need to import it explicitly to initialize MirrorUploader.IMPLEMENTATION_REGISTRY
 from core import s3  # noqa
-from core.opds2_import import RWPMManifestParser
-from core.scripts import RunCollectionMonitorScript
+from webpub_manifest_parser.odl import ODLFeedParserFactory
+
+from palace.api.odl2 import ODL2Importer, ODL2ImportMonitor
+from palace.core.opds2_import import RWPMManifestParser
+from palace.core.scripts import RunCollectionMonitorScript
 
 RunCollectionMonitorScript(
     ODL2ImportMonitor,

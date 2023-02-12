@@ -1,7 +1,7 @@
 import pytest
 
-from core.classifier import BISACClassifier, Classifier
-from core.classifier.bisac import (
+from palace.core.classifier import BISACClassifier, Classifier
+from palace.core.classifier.bisac import (
     RE,
     MatchingRule,
     anything,

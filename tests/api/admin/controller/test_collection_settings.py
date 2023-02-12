@@ -1,8 +1,8 @@
 from unittest.mock import PropertyMock, create_autospec
 
-from api.admin.controller.collection_settings import CollectionSettingsController
-from api.controller import CirculationManager
-from core.testing import DatabaseTest
+from palace.api.admin.controller.collection_settings import CollectionSettingsController
+from palace.api.controller import CirculationManager
+from palace.core.testing import DatabaseTest
 
 
 class TestCollectionSettingsController(DatabaseTest):

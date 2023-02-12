@@ -3,15 +3,15 @@ from contextlib import contextmanager
 
 import flask
 
-from api.adobe_vendor_id import AuthdataUtility
-from api.app import app
-from api.config import Configuration
-from api.controller import CirculationManager, CirculationManagerController
-from api.lanes import create_default_lanes
-from api.simple_authentication import SimpleAuthenticationProvider
-from api.testing import VendorIDTest
-from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EntryPoint
-from core.model import (
+from palace.api.adobe_vendor_id import AuthdataUtility
+from palace.api.app import app
+from palace.api.config import Configuration
+from palace.api.controller import CirculationManager, CirculationManagerController
+from palace.api.lanes import create_default_lanes
+from palace.api.simple_authentication import SimpleAuthenticationProvider
+from palace.api.testing import VendorIDTest
+from palace.core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EntryPoint
+from palace.core.model import (
     ConfigurationSetting,
     ExternalIntegration,
     Patron,
@@ -19,7 +19,7 @@ from core.model import (
     create,
     get_one_or_create,
 )
-from core.util.string_helpers import base64
+from palace.core.util.string_helpers import base64
 from tests.fixtures.api_config import get_key_pair_fixture, get_mock_config_key_pair
 
 
@@ -39,7 +39,8 @@ class ControllerTest(VendorIDTest):
         self.patch = MonkeyPatch()
         fixture = get_key_pair_fixture()
         self.patch.setattr(
-            "api.config.Configuration.key_pair", get_mock_config_key_pair(fixture)
+            "palace.api.config.Configuration.key_pair",
+            get_mock_config_key_pair(fixture),
         )
         self.app = app
 
@@ -156,7 +157,7 @@ class ControllerTest(VendorIDTest):
             integration, ignore = create(
                 _db,
                 ExternalIntegration,
-                protocol="api.simple_authentication",
+                protocol="palace.api.simple_authentication",
                 goal=ExternalIntegration.PATRON_AUTH_GOAL,
             )
             p = SimpleAuthenticationProvider

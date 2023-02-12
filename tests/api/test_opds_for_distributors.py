@@ -5,16 +5,16 @@ from unittest.mock import patch
 
 import pytest
 
-import core.opds_import
-from api.circulation_exceptions import *
-from api.opds_for_distributors import (
+import palace.core.opds_import
+from palace.api.circulation_exceptions import *
+from palace.api.opds_for_distributors import (
     MockOPDSForDistributorsAPI,
     OPDSForDistributorsAPI,
     OPDSForDistributorsImporter,
     OPDSForDistributorsReaperMonitor,
 )
-from core.metadata_layer import CirculationData, LinkData
-from core.model import (
+from palace.core.metadata_layer import CirculationData, LinkData
+from palace.core.model import (
     Collection,
     Credential,
     DataSource,
@@ -27,8 +27,8 @@ from core.model import (
     Representation,
     RightsStatus,
 )
-from core.util.datetime_helpers import utc_now
-from core.util.opds_writer import OPDSFeed
+from palace.core.util.datetime_helpers import utc_now
+from palace.core.util.opds_writer import OPDSFeed
 from tests.fixtures.api_opds_dist_files import OPDSForDistributorsFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -695,7 +695,7 @@ class TestOPDSForDistributorsImporter:
         )
 
         with patch(
-            "core.opds_import.get_one", wraps=core.opds_import.get_one
+            "palace.core.opds_import.get_one", wraps=palace.core.opds_import.get_one
         ) as get_one_mock:
             importer1_lp, _ = importer1.update_work_for_edition(edition)
             importer2_lp, _ = importer2.update_work_for_edition(edition)

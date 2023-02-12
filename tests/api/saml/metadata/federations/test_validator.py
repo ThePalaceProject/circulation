@@ -7,14 +7,14 @@ from freezegun import freeze_time
 from parameterized import parameterized
 
 import tests.api.saml.fixtures as fixtures
-from api.saml.metadata.federations import incommon
-from api.saml.metadata.federations.model import SAMLFederation
-from api.saml.metadata.federations.validator import (
+from palace.api.saml.metadata.federations import incommon
+from palace.api.saml.metadata.federations.model import SAMLFederation
+from palace.api.saml.metadata.federations.validator import (
     SAMLFederatedMetadataExpirationValidator,
     SAMLFederatedMetadataValidationError,
     SAMLMetadataSignatureValidator,
 )
-from core.util.datetime_helpers import datetime_utc, utc_now
+from palace.core.util.datetime_helpers import datetime_utc, utc_now
 
 
 class TestSAMLFederatedMetadataExpirationValidator:

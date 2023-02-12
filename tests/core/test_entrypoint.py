@@ -2,15 +2,15 @@ import json
 
 import pytest
 
-from core.entrypoint import (
+from palace.core.entrypoint import (
     AudiobooksEntryPoint,
     EbooksEntryPoint,
     EntryPoint,
     EverythingEntryPoint,
     MediumEntryPoint,
 )
-from core.external_search import Filter
-from core.model import Edition, Work
+from palace.core.external_search import Filter
+from palace.core.model import Edition, Work
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

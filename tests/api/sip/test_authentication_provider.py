@@ -4,12 +4,12 @@ from decimal import Decimal
 
 import pytest
 
-from api.authenticator import PatronData
-from api.sip import SIP2AuthenticationProvider
-from api.sip.client import MockSIPClient, MockSIPClientFactory
-from core.config import CannotLoadConfiguration
-from core.testing import DatabaseTest
-from core.util.http import RemoteIntegrationException
+from palace.api.authenticator import PatronData
+from palace.api.sip import SIP2AuthenticationProvider
+from palace.api.sip.client import MockSIPClient, MockSIPClientFactory
+from palace.core.config import CannotLoadConfiguration
+from palace.core.testing import DatabaseTest
+from palace.core.util.http import RemoteIntegrationException
 
 
 class TestSIP2AuthenticationProvider(DatabaseTest):

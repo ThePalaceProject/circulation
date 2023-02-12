@@ -3,15 +3,21 @@ from unittest.mock import MagicMock, call
 
 import pytest
 
-from core.classifier import Classifier
-from core.model import create, tuple_to_numericrange
-from core.model.credential import Credential
-from core.model.datasource import DataSource
-from core.model.library import Library
-from core.model.licensing import PolicyException
-from core.model.patron import Annotation, Hold, Loan, Patron, PatronProfileStorage
-from core.testing import DatabaseTest
-from core.util.datetime_helpers import datetime_utc, utc_now
+from palace.core.classifier import Classifier
+from palace.core.model import create, tuple_to_numericrange
+from palace.core.model.credential import Credential
+from palace.core.model.datasource import DataSource
+from palace.core.model.library import Library
+from palace.core.model.licensing import PolicyException
+from palace.core.model.patron import (
+    Annotation,
+    Hold,
+    Loan,
+    Patron,
+    PatronProfileStorage,
+)
+from palace.core.testing import DatabaseTest
+from palace.core.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

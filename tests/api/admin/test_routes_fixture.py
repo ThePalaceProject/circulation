@@ -2,11 +2,11 @@ import logging
 
 import flask
 import pytest
+from api import routes
 from flask import Response
 from werkzeug.exceptions import MethodNotAllowed
 
-from api import routes
-from api.controller import CirculationManager
+from palace.api.controller import CirculationManager
 from tests.api.test_controller import ControllerTest
 
 

@@ -1,10 +1,10 @@
 import flask
 import pytest
 
-from api.problem_details import INVALID_ANALYTICS_EVENT_TYPE
-from core.analytics import Analytics
-from core.local_analytics_provider import LocalAnalyticsProvider
-from core.model import CirculationEvent, ExternalIntegration, create, get_one
+from palace.api.problem_details import INVALID_ANALYTICS_EVENT_TYPE
+from palace.core.analytics import Analytics
+from palace.core.local_analytics_provider import LocalAnalyticsProvider
+from palace.core.model import CirculationEvent, ExternalIntegration, create, get_one
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.vendor_id import VendorIDFixture
@@ -34,7 +34,7 @@ class TestAnalyticsController:
             db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol="core.local_analytics_provider",
+            protocol="palace.core.local_analytics_provider",
         )
         integration.setting(
             LocalAnalyticsProvider.LOCATION_SOURCE

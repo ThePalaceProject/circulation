@@ -1,16 +1,16 @@
 import pytest
 
-from core.config import CannotLoadConfiguration
-from core.mirror import MirrorUploader
-from core.model import ExternalIntegration
-from core.model.configuration import ExternalIntegrationLink
-from core.s3 import (
+from palace.core.config import CannotLoadConfiguration
+from palace.core.mirror import MirrorUploader
+from palace.core.model import ExternalIntegration
+from palace.core.model.configuration import ExternalIntegrationLink
+from palace.core.s3 import (
     MinIOUploader,
     MinIOUploaderConfiguration,
     S3Uploader,
     S3UploaderConfiguration,
 )
-from core.util.datetime_helpers import utc_now
+from palace.core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

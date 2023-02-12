@@ -3,14 +3,14 @@ import datetime
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from core.model import Collection, Patron
-from core.model.credential import (
+from palace.core.model import Collection, Patron
+from palace.core.model.credential import (
     Credential,
     DelegatedPatronIdentifier,
     DRMDeviceIdentifier,
 )
-from core.model.datasource import DataSource
-from core.util.datetime_helpers import utc_now
+from palace.core.model.datasource import DataSource
+from palace.core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

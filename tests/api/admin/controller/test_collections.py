@@ -4,8 +4,8 @@ import flask
 import pytest
 from werkzeug.datastructures import MultiDict
 
-from api.admin.exceptions import *
-from core.model import (
+from palace.api.admin.exceptions import *
+from palace.core.model import (
     Admin,
     AdminRole,
     Collection,
@@ -15,9 +15,9 @@ from core.model import (
     create,
     get_one,
 )
-from core.model.configuration import ExternalIntegrationLink
-from core.s3 import S3UploaderConfiguration
-from core.selftest import HasSelfTests
+from palace.core.model.configuration import ExternalIntegrationLink
+from palace.core.s3 import S3UploaderConfiguration
+from palace.core.selftest import HasSelfTests
 
 from .test_controller import SettingsControllerTest
 

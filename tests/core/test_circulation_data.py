@@ -3,7 +3,7 @@ from copy import deepcopy
 
 import pytest
 
-from core.metadata_layer import (
+from palace.core.metadata_layer import (
     CirculationData,
     ContributorData,
     FormatData,
@@ -14,7 +14,7 @@ from core.metadata_layer import (
     ReplacementPolicy,
     SubjectData,
 )
-from core.model import (
+from palace.core.model import (
     DataSource,
     DeliveryMechanism,
     Hyperlink,
@@ -23,11 +23,11 @@ from core.model import (
     RightsStatus,
     Subject,
 )
-from core.model.configuration import ExternalIntegrationLink
-from core.model.licensing import LicenseStatus
-from core.s3 import MockS3Uploader
-from core.testing import DummyHTTPClient
-from core.util.datetime_helpers import utc_now
+from palace.core.model.configuration import ExternalIntegrationLink
+from palace.core.model.licensing import LicenseStatus
+from palace.core.s3 import MockS3Uploader
+from palace.core.testing import DummyHTTPClient
+from palace.core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

@@ -3,11 +3,11 @@ import pytest
 from flask import url_for
 from werkzeug.datastructures import MultiDict
 
-from api.admin.exceptions import *
-from api.odl import SharedODLAPI
-from api.registration.registry import Registration
-from core.model import AdminRole, ConfigurationSetting, Library, create
-from core.util.http import HTTP
+from palace.api.admin.exceptions import *
+from palace.api.odl import SharedODLAPI
+from palace.api.registration.registry import Registration
+from palace.core.model import AdminRole, ConfigurationSetting, Library, create
+from palace.core.util.http import HTTP
 
 from .test_controller import SettingsControllerTest
 

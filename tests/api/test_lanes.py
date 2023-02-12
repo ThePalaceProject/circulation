@@ -4,8 +4,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from api.config import Configuration
-from api.lanes import (
+from palace.api.config import Configuration
+from palace.api.lanes import (
     ContributorFacets,
     ContributorLane,
     CrawlableCollectionBasedLane,
@@ -27,13 +27,19 @@ from api.lanes import (
     create_lanes_for_large_collection,
     create_world_languages_lane,
 )
-from api.novelist import MockNoveListAPI
-from core.classifier import Classifier
-from core.entrypoint import AudiobooksEntryPoint
-from core.external_search import Filter, MockExternalSearchIndex
-from core.lane import DefaultSortOrderFacets, Facets, FeaturedFacets, Lane, WorkList
-from core.metadata_layer import ContributorData, Metadata
-from core.model import (
+from palace.api.novelist import MockNoveListAPI
+from palace.core.classifier import Classifier
+from palace.core.entrypoint import AudiobooksEntryPoint
+from palace.core.external_search import Filter, MockExternalSearchIndex
+from palace.core.lane import (
+    DefaultSortOrderFacets,
+    Facets,
+    FeaturedFacets,
+    Lane,
+    WorkList,
+)
+from palace.core.metadata_layer import ContributorData, Metadata
+from palace.core.model import (
     CachedFeed,
     Contributor,
     DataSource,

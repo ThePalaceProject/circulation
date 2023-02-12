@@ -8,10 +8,10 @@ from flask_babel import lazy_gettext as _
 from parameterized import parameterized
 from sqlalchemy.exc import IntegrityError
 
-from core.config import CannotLoadConfiguration, Configuration
-from core.model import create, get_one
-from core.model.collection import Collection
-from core.model.configuration import (
+from palace.core.config import CannotLoadConfiguration, Configuration
+from palace.core.model import create, get_one
+from palace.core.model.collection import Collection
+from palace.core.model.configuration import (
     ConfigurationAttribute,
     ConfigurationAttributeType,
     ConfigurationGrouping,
@@ -23,7 +23,7 @@ from core.model.configuration import (
     ExternalIntegrationLink,
     HasExternalIntegration,
 )
-from core.model.datasource import DataSource
+from palace.core.model.datasource import DataSource
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

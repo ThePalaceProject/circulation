@@ -1,11 +1,11 @@
 import pytest
 from flask import url_for
 
-from api.adobe_vendor_id import AuthdataUtility
-from api.config import Configuration, temp_config
-from api.problem_details import INVALID_CREDENTIALS
-from core.model import DataSource
-from core.util.problem_detail import ProblemDetail
+from palace.api.adobe_vendor_id import AuthdataUtility
+from palace.api.config import Configuration, temp_config
+from palace.api.problem_details import INVALID_CREDENTIALS
+from palace.core.model import DataSource
+from palace.core.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.vendor_id import VendorIDFixture

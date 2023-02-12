@@ -1,4 +1,4 @@
-from core.classifier import *
+from palace.core.classifier import *
 
 
 class TestSimplifiedGenreClassifier:

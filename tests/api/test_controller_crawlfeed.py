@@ -5,20 +5,20 @@ from typing import Any
 import feedparser
 from flask import url_for
 
-from api.lanes import (
+from palace.api.lanes import (
     CrawlableCollectionBasedLane,
     CrawlableCustomListBasedLane,
     CrawlableFacets,
     DynamicLane,
 )
-from api.odl import ODLAPI
-from api.opds import CirculationManagerAnnotator, SharedCollectionAnnotator
-from api.problem_details import NO_SUCH_COLLECTION, NO_SUCH_LIST
-from core.external_search import MockSearchResult, SortKeyPagination
-from core.opds import AcquisitionFeed
-from core.problem_details import INVALID_INPUT
-from core.util.flask_util import Response
-from core.util.problem_detail import ProblemDetail
+from palace.api.odl import ODLAPI
+from palace.api.opds import CirculationManagerAnnotator, SharedCollectionAnnotator
+from palace.api.problem_details import NO_SUCH_COLLECTION, NO_SUCH_LIST
+from palace.core.external_search import MockSearchResult, SortKeyPagination
+from palace.core.opds import AcquisitionFeed
+from palace.core.problem_details import INVALID_INPUT
+from palace.core.util.flask_util import Response
+from palace.core.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import CirculationControllerFixture
 
 

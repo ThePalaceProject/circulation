@@ -9,9 +9,9 @@ import pytest
 from flask import Response as FlaskResponse
 from flask import url_for
 
-from api.axis import Axis360FulfillmentInfo
-from api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
-from api.circulation_exceptions import (
+from palace.api.axis import Axis360FulfillmentInfo
+from palace.api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
+from palace.api.circulation_exceptions import (
     AlreadyOnHold,
     CannotFulfill,
     NoAvailableCopies,
@@ -19,8 +19,8 @@ from api.circulation_exceptions import (
     NotFoundOnRemote,
     PatronHoldLimitReached,
 )
-from api.config import Configuration
-from api.problem_details import (
+from palace.api.config import Configuration
+from palace.api.problem_details import (
     BAD_DELIVERY_MECHANISM,
     CANNOT_RELEASE_HOLD,
     HOLD_LIMIT_REACHED,
@@ -28,7 +28,7 @@ from api.problem_details import (
     NOT_FOUND_ON_REMOTE,
     OUTSTANDING_FINES,
 )
-from core.model import (
+from palace.core.model import (
     ConfigurationSetting,
     DataSource,
     DeliveryMechanism,
@@ -44,13 +44,13 @@ from core.model import (
     get_one,
     get_one_or_create,
 )
-from core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
-from core.testing import DummyHTTPClient
-from core.util.datetime_helpers import datetime_utc, utc_now
-from core.util.flask_util import Response
-from core.util.http import RemoteIntegrationException
-from core.util.opds_writer import OPDSFeed
-from core.util.problem_detail import ProblemDetail
+from palace.core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
+from palace.core.testing import DummyHTTPClient
+from palace.core.util.datetime_helpers import datetime_utc, utc_now
+from palace.core.util.flask_util import Response
+from palace.core.util.http import RemoteIntegrationException
+from palace.core.util.opds_writer import OPDSFeed
+from palace.core.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.vendor_id import VendorIDFixture

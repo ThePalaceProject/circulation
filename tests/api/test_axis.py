@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 
-from api.authenticator import BasicAuthenticationProvider
-from api.axis import (
+from palace.api.authenticator import BasicAuthenticationProvider
+from palace.api.axis import (
     AudiobookMetadataParser,
     AvailabilityResponseParser,
     Axis360AcsFulfillmentInfo,
@@ -28,12 +28,12 @@ from api.axis import (
     JSONResponseParser,
     MockAxis360API,
 )
-from api.circulation import FulfillmentInfo, HoldInfo, LoanInfo
-from api.circulation_exceptions import *
-from api.config import Configuration
-from api.web_publication_manifest import FindawayManifest, SpineItem
-from core.coverage import CoverageFailure
-from core.metadata_layer import (
+from palace.api.circulation import FulfillmentInfo, HoldInfo, LoanInfo
+from palace.api.circulation_exceptions import *
+from palace.api.config import Configuration
+from palace.api.web_publication_manifest import FindawayManifest, SpineItem
+from palace.core.coverage import CoverageFailure
+from palace.core.metadata_layer import (
     CirculationData,
     ContributorData,
     IdentifierData,
@@ -41,8 +41,8 @@ from core.metadata_layer import (
     SubjectData,
     TimestampData,
 )
-from core.mock_analytics_provider import MockAnalyticsProvider
-from core.model import (
+from palace.core.mock_analytics_provider import MockAnalyticsProvider
+from palace.core.model import (
     ConfigurationSetting,
     Contributor,
     DataSource,
@@ -57,11 +57,11 @@ from core.model import (
     Subject,
     create,
 )
-from core.scripts import RunCollectionCoverageProviderScript
-from core.util.datetime_helpers import datetime_utc, utc_now
-from core.util.flask_util import Response
-from core.util.http import RemoteIntegrationException
-from core.util.problem_detail import ProblemDetail
+from palace.core.scripts import RunCollectionCoverageProviderScript
+from palace.core.util.datetime_helpers import datetime_utc, utc_now
+from palace.core.util.flask_util import Response
+from palace.core.util.http import RemoteIntegrationException
+from palace.core.util.problem_detail import ProblemDetail
 
 from ..fixtures.api_axis_files import AxisFilesFixture
 from ..fixtures.database import DatabaseTransactionFixture
@@ -161,7 +161,7 @@ class TestAxis360API:
 
         with_default_patron = axis360.db.default_library()
         integration = axis360.db.external_integration(
-            "api.simple_authentication",
+            "palace.api.simple_authentication",
             ExternalIntegration.PATRON_AUTH_GOAL,
             libraries=[with_default_patron],
         )
@@ -814,7 +814,7 @@ class TestCirculationMonitor:
             axis360.db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol="core.local_analytics_provider",
+            protocol="palace.core.local_analytics_provider",
         )
 
         monitor = Axis360CirculationMonitor(

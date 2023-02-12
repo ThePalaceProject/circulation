@@ -7,12 +7,12 @@ from unittest.mock import MagicMock, create_autospec
 import requests_mock
 from parameterized import parameterized
 
-from api.lcp import utils
-from api.lcp.encrypt import LCPEncryptionResult
-from api.lcp.hash import HasherFactory
-from api.lcp.server import LCPServer, LCPServerConfiguration
-from core.lcp.credential import LCPCredentialFactory, LCPUnhashedPassphrase
-from core.model.configuration import (
+from palace.api.lcp import utils
+from palace.api.lcp.encrypt import LCPEncryptionResult
+from palace.api.lcp.hash import HasherFactory
+from palace.api.lcp.server import LCPServer, LCPServerConfiguration
+from palace.core.lcp.credential import LCPCredentialFactory, LCPUnhashedPassphrase
+from palace.core.model.configuration import (
     ConfigurationFactory,
     ConfigurationStorage,
     ExternalIntegration,

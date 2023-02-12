@@ -5,15 +5,18 @@ from unittest.mock import MagicMock, create_autospec, patch
 from freezegun import freeze_time
 from parameterized import parameterized
 
-from api.authenticator import PatronData
-from api.saml.auth import SAMLAuthenticationManager, SAMLAuthenticationManagerFactory
-from api.saml.configuration.model import (
+from palace.api.authenticator import PatronData
+from palace.api.saml.auth import (
+    SAMLAuthenticationManager,
+    SAMLAuthenticationManagerFactory,
+)
+from palace.api.saml.configuration.model import (
     SAMLConfiguration,
     SAMLConfigurationFactory,
     SAMLOneLoginConfiguration,
 )
-from api.saml.metadata.filter import SAMLSubjectFilter
-from api.saml.metadata.model import (
+from palace.api.saml.metadata.filter import SAMLSubjectFilter
+from palace.api.saml.metadata.model import (
     SAMLAttribute,
     SAMLAttributeStatement,
     SAMLAttributeType,
@@ -28,13 +31,19 @@ from api.saml.metadata.model import (
     SAMLSubjectJSONEncoder,
     SAMLUIInfo,
 )
-from api.saml.metadata.parser import SAMLMetadataParser, SAMLSubjectParser
-from api.saml.provider import SAML_INVALID_SUBJECT, SAMLWebSSOAuthenticationProvider
-from core.model.configuration import ConfigurationStorage, HasExternalIntegration
-from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvaluator
-from core.python_expression_dsl.parser import DSLParser
-from core.util.datetime_helpers import datetime_utc, utc_now
-from core.util.problem_detail import ProblemDetail
+from palace.api.saml.metadata.parser import SAMLMetadataParser, SAMLSubjectParser
+from palace.api.saml.provider import (
+    SAML_INVALID_SUBJECT,
+    SAMLWebSSOAuthenticationProvider,
+)
+from palace.core.model.configuration import ConfigurationStorage, HasExternalIntegration
+from palace.core.python_expression_dsl.evaluator import (
+    DSLEvaluationVisitor,
+    DSLEvaluator,
+)
+from palace.core.python_expression_dsl.parser import DSLParser
+from palace.core.util.datetime_helpers import datetime_utc, utc_now
+from palace.core.util.problem_detail import ProblemDetail
 from tests.api.saml import fixtures
 from tests.api.saml.controller_test import ControllerTest
 
@@ -303,9 +312,9 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
         )
 
         with patch(
-            "api.saml.provider.SAMLAuthenticationManagerFactory"
+            "palace.api.saml.provider.SAMLAuthenticationManagerFactory"
         ) as authentication_manager_factory_constructor_mock, patch(
-            "api.saml.provider.SAMLConfigurationFactory"
+            "palace.api.saml.provider.SAMLConfigurationFactory"
         ) as configuration_factory_constructor_mock:
             authentication_manager_factory_constructor_mock.return_value = (
                 authentication_manager_factory

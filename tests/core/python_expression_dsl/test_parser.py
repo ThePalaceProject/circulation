@@ -1,7 +1,7 @@
 import pytest
 from parameterized import parameterized
 
-from core.python_expression_dsl.parser import DSLParseError, DSLParser
+from palace.core.python_expression_dsl.parser import DSLParseError, DSLParser
 
 
 class TestDSLParser:

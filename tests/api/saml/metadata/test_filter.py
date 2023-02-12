@@ -1,15 +1,18 @@
 import pytest
 from parameterized import parameterized
 
-from api.saml.metadata.filter import SAMLSubjectFilter, SAMLSubjectFilterError
-from api.saml.metadata.model import (
+from palace.api.saml.metadata.filter import SAMLSubjectFilter, SAMLSubjectFilterError
+from palace.api.saml.metadata.model import (
     SAMLAttribute,
     SAMLAttributeStatement,
     SAMLAttributeType,
     SAMLSubject,
 )
-from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvaluator
-from core.python_expression_dsl.parser import DSLParser
+from palace.core.python_expression_dsl.evaluator import (
+    DSLEvaluationVisitor,
+    DSLEvaluator,
+)
+from palace.core.python_expression_dsl.parser import DSLParser
 
 
 class TestSAMLSubjectFilter:

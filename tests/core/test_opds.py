@@ -11,18 +11,30 @@ from lxml import etree
 from psycopg2.extras import NumericRange
 from sqlalchemy.orm import Session
 
-from core.classifier import Classifier, Contemporary_Romance, Epic_Fantasy, Fantasy
-from core.entrypoint import (
+from palace.core.classifier import (
+    Classifier,
+    Contemporary_Romance,
+    Epic_Fantasy,
+    Fantasy,
+)
+from palace.core.entrypoint import (
     AudiobooksEntryPoint,
     EbooksEntryPoint,
     EntryPoint,
     EverythingEntryPoint,
     MediumEntryPoint,
 )
-from core.external_search import MockExternalSearchIndex
-from core.facets import FacetConstants
-from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
-from core.model import (
+from palace.core.external_search import MockExternalSearchIndex
+from palace.core.facets import FacetConstants
+from palace.core.lane import (
+    Facets,
+    FeaturedFacets,
+    Lane,
+    Pagination,
+    SearchFacets,
+    WorkList,
+)
+from palace.core.model import (
     CachedFeed,
     Contributor,
     CustomList,
@@ -37,8 +49,8 @@ from core.model import (
     create,
     get_one,
 )
-from core.model.resource import Hyperlink, Resource
-from core.opds import (
+from palace.core.model.resource import Hyperlink, Resource
+from palace.core.opds import (
     AcquisitionFeed,
     Annotator,
     LookupAcquisitionFeed,
@@ -49,10 +61,10 @@ from core.opds import (
     NavigationFeed,
     VerboseAnnotator,
 )
-from core.opds_import import OPDSXMLParser
-from core.util.datetime_helpers import datetime_utc, utc_now
-from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse, Response
-from core.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
+from palace.core.opds_import import OPDSXMLParser
+from palace.core.util.datetime_helpers import datetime_utc, utc_now
+from palace.core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse, Response
+from palace.core.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
 from tests.fixtures.database import DatabaseTransactionFixture, DBStatementCounter
 from tests.fixtures.search import ExternalSearchPatchFixture
 

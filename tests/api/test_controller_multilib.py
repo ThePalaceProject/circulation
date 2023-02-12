@@ -1,4 +1,4 @@
-from core.model import Collection, ExternalIntegration, get_one_or_create
+from palace.core.model import Collection, ExternalIntegration, get_one_or_create
 from tests.fixtures.api_controller import (
     CirculationControllerFixture,
     ControllerFixtureSetupOverrides,

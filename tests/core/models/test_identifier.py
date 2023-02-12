@@ -6,18 +6,18 @@ import pytest
 from lxml import etree
 from parameterized import parameterized
 
-from core.model import PresentationCalculationPolicy
-from core.model.constants import MediaTypes
-from core.model.datasource import DataSource
-from core.model.edition import Edition
-from core.model.identifier import (
+from palace.core.model import PresentationCalculationPolicy
+from palace.core.model.constants import MediaTypes
+from palace.core.model.datasource import DataSource
+from palace.core.model.edition import Edition
+from palace.core.model.identifier import (
     Identifier,
     ProQuestIdentifierParser,
     RecursiveEquivalencyCache,
 )
-from core.model.resource import Hyperlink, Representation
-from core.util.datetime_helpers import utc_now
-from core.util.opds_writer import AtomFeed
+from palace.core.model.resource import Hyperlink, Representation
+from palace.core.util.datetime_helpers import utc_now
+from palace.core.util.opds_writer import AtomFeed
 from tests.core.models.test_coverage import ExampleEquivalencyCoverageRecordFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 

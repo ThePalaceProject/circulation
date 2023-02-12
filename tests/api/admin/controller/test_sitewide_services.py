@@ -1,5 +1,5 @@
-from api.admin.controller.sitewide_services import *
-from core.model import ExternalIntegration
+from palace.api.admin.controller.sitewide_services import *
+from palace.core.model import ExternalIntegration
 
 from .test_controller import SettingsControllerTest
 

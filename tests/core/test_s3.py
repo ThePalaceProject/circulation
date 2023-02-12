@@ -5,8 +5,8 @@ import botocore
 import pytest
 from botocore.exceptions import BotoCoreError, ClientError
 
-from core.mirror import MirrorUploader
-from core.model import (
+from palace.core.mirror import MirrorUploader
+from palace.core.model import (
     DataSource,
     ExternalIntegration,
     Hyperlink,
@@ -14,7 +14,7 @@ from core.model import (
     Representation,
     create,
 )
-from core.s3 import (
+from palace.core.s3 import (
     MinIOUploader,
     MinIOUploaderConfiguration,
     MockS3Client,
@@ -23,7 +23,7 @@ from core.s3 import (
     S3Uploader,
     S3UploaderConfiguration,
 )
-from core.util.datetime_helpers import datetime_utc, utc_now
+from palace.core.util.datetime_helpers import datetime_utc, utc_now
 
 # TODO: we can drop this when we drop support for Python 3.6 and 3.7
 from tests.fixtures.database import DatabaseTransactionFixture

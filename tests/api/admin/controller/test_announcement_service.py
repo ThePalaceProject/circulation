@@ -2,11 +2,11 @@ import json
 
 from werkzeug.datastructures import MultiDict
 
-from api.admin.controller.announcement_service import AnnouncementSettings
-from api.announcements import Announcements
-from api.testing import AnnouncementTest
-from core.model.configuration import ConfigurationSetting
-from core.problem_details import INVALID_INPUT
+from palace.api.admin.controller.announcement_service import AnnouncementSettings
+from palace.api.announcements import Announcements
+from palace.api.testing import AnnouncementTest
+from palace.core.model.configuration import ConfigurationSetting
+from palace.core.problem_details import INVALID_INPUT
 from tests.api.admin.controller.test_controller import AdminControllerTest
 
 

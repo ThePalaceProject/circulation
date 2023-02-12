@@ -1,4 +1,4 @@
-from core.util.xmlparser import XMLParser
+from palace.core.util.xmlparser import XMLParser
 
 
 class MockParser(XMLParser):

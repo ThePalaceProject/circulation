@@ -2,9 +2,9 @@ import flask
 import pytest
 from werkzeug.datastructures import MultiDict
 
-from api.admin.exceptions import *
-from core.external_search import ExternalSearchIndex
-from core.model import AdminRole, ExternalIntegration, create, get_one
+from palace.api.admin.exceptions import *
+from palace.core.external_search import ExternalSearchIndex
+from palace.core.model import AdminRole, ExternalIntegration, create, get_one
 
 from .test_controller import SettingsControllerTest
 

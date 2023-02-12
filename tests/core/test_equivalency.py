@@ -1,4 +1,9 @@
-from core.model import DataSource, Edition, Identifier, PresentationCalculationPolicy
+from palace.core.model import (
+    DataSource,
+    Edition,
+    Identifier,
+    PresentationCalculationPolicy,
+)
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

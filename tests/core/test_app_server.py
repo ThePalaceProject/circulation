@@ -9,9 +9,9 @@ from flask import Flask, make_response
 from flask_babel import Babel
 from flask_babel import lazy_gettext as _
 
-import core
-from api.admin.config import Configuration as AdminUiConfig
-from core.app_server import (
+import palace.core
+from palace.api.admin.config import Configuration as AdminUiConfig
+from palace.core.app_server import (
     ApplicationVersionController,
     ErrorHandler,
     URNLookupController,
@@ -20,14 +20,14 @@ from core.app_server import (
     load_facets_from_request,
     load_pagination_from_request,
 )
-from core.config import Configuration
-from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EntryPoint
-from core.lane import Facets, Pagination, SearchFacets, WorkList
-from core.log import LogConfiguration
-from core.model import ConfigurationSetting, Identifier
-from core.opds import MockAnnotator
-from core.problem_details import INVALID_INPUT, INVALID_URN
-from core.util.opds_writer import OPDSFeed, OPDSMessage
+from palace.core.config import Configuration
+from palace.core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EntryPoint
+from palace.core.lane import Facets, Pagination, SearchFacets, WorkList
+from palace.core.log import LogConfiguration
+from palace.core.model import ConfigurationSetting, Identifier
+from palace.core.opds import MockAnnotator
+from palace.core.problem_details import INVALID_INPUT, INVALID_URN
+from palace.core.util.opds_writer import OPDSFeed, OPDSMessage
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -42,9 +42,9 @@ class TestApplicationVersionController:
         app = Flask(__name__)
 
         # Mock the cm version strings
-        monkeypatch.setattr(core, "__version__", version)
-        monkeypatch.setattr(core, "__commit__", commit)
-        monkeypatch.setattr(core, "__branch__", branch)
+        monkeypatch.setattr(palace.core, "__version__", version)
+        monkeypatch.setattr(palace.core, "__commit__", commit)
+        monkeypatch.setattr(palace.core, "__branch__", branch)
 
         # Mock the admin ui version strings
         monkeypatch.setenv(AdminUiConfig.ENV_ADMIN_UI_PACKAGE_NAME, ui_package)

@@ -1,7 +1,7 @@
-from core.analytics import Analytics
-from core.local_analytics_provider import LocalAnalyticsProvider
-from core.mock_analytics_provider import MockAnalyticsProvider
-from core.model import CirculationEvent, ExternalIntegration, Library, create
+from palace.core.analytics import Analytics
+from palace.core.local_analytics_provider import LocalAnalyticsProvider
+from palace.core.mock_analytics_provider import MockAnalyticsProvider
+from palace.core.model import CirculationEvent, ExternalIntegration, Library, create
 
 # We can't import mock_analytics_provider from within a test,
 # and we can't tell Analytics to do so either. We need to tell

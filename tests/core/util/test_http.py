@@ -4,9 +4,9 @@ from unittest import mock
 import pytest
 import requests
 
-from core.problem_details import INVALID_INPUT
-from core.testing import MockRequestsResponse
-from core.util.http import (
+from palace.core.problem_details import INVALID_INPUT
+from palace.core.testing import MockRequestsResponse
+from palace.core.util.http import (
     HTTP,
     INTEGRATION_ERROR,
     BadResponseException,
@@ -14,7 +14,7 @@ from core.util.http import (
     RequestNetworkException,
     RequestTimedOut,
 )
-from core.util.problem_detail import ProblemDetail
+from palace.core.util.problem_detail import ProblemDetail
 
 
 class TestHTTP:
@@ -41,7 +41,7 @@ class TestHTTP:
         assert "3xx" == m(399)
         assert "5xx" == m(500)
 
-    @mock.patch("core.util.http.core.__version__", "<VERSION>")
+    @mock.patch("palace.core.util.http.core.__version__", "<VERSION>")
     def test_request_with_timeout_success(self, mock_request):
         request = mock_request(MockRequestsResponse(200, content="Success!"))
         response = HTTP._request_with_timeout(
@@ -77,7 +77,7 @@ class TestHTTP:
         )
         assert request.agent == b"Fake Agent"
 
-    @mock.patch("core.util.http.core.__version__", None)
+    @mock.patch("palace.core.util.http.core.__version__", None)
     def test_default_user_agent(self, mock_request):
         request = mock_request()
         assert HTTP._request_with_timeout("/", request.fake_request).status_code == 201

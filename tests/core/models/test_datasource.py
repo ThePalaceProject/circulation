@@ -1,8 +1,8 @@
 import pytest
 from sqlalchemy.orm.exc import NoResultFound
 
-from core.model.datasource import DataSource
-from core.model.identifier import Identifier
+from palace.core.model.datasource import DataSource
+from palace.core.model.identifier import Identifier
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

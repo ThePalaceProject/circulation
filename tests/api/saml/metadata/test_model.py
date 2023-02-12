@@ -1,6 +1,6 @@
 from parameterized import parameterized
 
-from api.saml.metadata.model import (
+from palace.api.saml.metadata.model import (
     SAMLAttribute,
     SAMLAttributeStatement,
     SAMLAttributeType,

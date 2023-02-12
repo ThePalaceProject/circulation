@@ -1,7 +1,7 @@
 import pytest
 from sqlalchemy.exc import InvalidRequestError
 
-from core.model.devicetokens import (
+from palace.core.model.devicetokens import (
     DeviceToken,
     DeviceTokenTypes,
     DuplicateDeviceTokenError,

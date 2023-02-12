@@ -1,4 +1,4 @@
-from core.util.personal_names import display_name_to_sort_name
+from palace.core.util.personal_names import display_name_to_sort_name
 
 
 class TestNameConversions:

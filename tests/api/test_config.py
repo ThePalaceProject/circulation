@@ -4,9 +4,9 @@ from collections import Counter
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.PublicKey import RSA
 
-from api.config import Configuration
-from core.config import Configuration as CoreConfiguration
-from core.model import ConfigurationSetting
+from palace.api.config import Configuration
+from palace.core.config import Configuration as CoreConfiguration
+from palace.core.model import ConfigurationSetting
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

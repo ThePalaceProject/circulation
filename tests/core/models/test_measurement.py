@@ -1,7 +1,7 @@
 import pytest
 
-from core.model import DataSource, Measurement, get_one_or_create
-from core.util.datetime_helpers import datetime_utc
+from palace.core.model import DataSource, Measurement, get_one_or_create
+from palace.core.util.datetime_helpers import datetime_utc
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

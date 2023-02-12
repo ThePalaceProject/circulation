@@ -1,13 +1,13 @@
 from pathlib import Path
 
 import flask
+from api import routes as api_routes
 from flask import Response
 
-from api import routes as api_routes
-from api.admin import routes
-from api.admin.controller import AdminController, setup_admin_controllers
-from api.admin.problem_details import *
-from api.controller import CirculationManager
+from palace.api.admin import routes
+from palace.api.admin.controller import AdminController, setup_admin_controllers
+from palace.api.admin.problem_details import *
+from palace.api.controller import CirculationManager
 
 from ..test_controller import ControllerTest
 from .test_routes_fixture import MockApp, MockController, MockManager, RouteTestFixtures

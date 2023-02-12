@@ -2,14 +2,14 @@ from datetime import datetime
 
 import pytest
 
-from core.external_list import (
+from palace.core.external_list import (
     ClassificationBasedMembershipManager,
     CustomListFromCSV,
     MembershipManager,
 )
-from core.model import CustomList, DataSource, Edition, Identifier, Subject
-from core.testing import DummyMetadataClient
-from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
+from palace.core.model import CustomList, DataSource, Edition, Identifier, Subject
+from palace.core.testing import DummyMetadataClient
+from palace.core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.time import Time
 

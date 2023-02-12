@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from core.model import Collection
-from core.overdrive import MockOverdriveCoreAPI
+from palace.core.model import Collection
+from palace.core.overdrive import MockOverdriveCoreAPI
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

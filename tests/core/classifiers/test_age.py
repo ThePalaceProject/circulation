@@ -1,6 +1,6 @@
-from core.classifier import AgeOrGradeClassifier, Classifier
-from core.classifier import LCSHClassifier as LCSH
-from core.classifier.age import (
+from palace.core.classifier import AgeOrGradeClassifier, Classifier
+from palace.core.classifier import LCSHClassifier as LCSH
+from palace.core.classifier.age import (
     AgeClassifier,
     GradeLevelClassifier,
     InterestLevelClassifier,

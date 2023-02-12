@@ -1,7 +1,7 @@
 import pytest
 
-from core.model.configuration import ConfigurationSetting
-from core.model.library import Library
+from palace.core.model.configuration import ConfigurationSetting
+from palace.core.model.library import Library
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

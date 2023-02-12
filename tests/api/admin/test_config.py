@@ -3,8 +3,8 @@ from typing import Optional
 
 import pytest
 
-from api.admin.config import Configuration as AdminConfig
-from api.admin.config import OperationalMode
+from palace.api.admin.config import Configuration as AdminConfig
+from palace.api.admin.config import OperationalMode
 
 
 class TestAdminUI:

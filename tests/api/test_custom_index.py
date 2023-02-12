@@ -2,10 +2,10 @@ import pytest
 from flask import Response
 from lxml import etree
 
-from api.config import CannotLoadConfiguration
-from api.custom_index import COPPAGate, CustomIndexView
-from core.model import ConfigurationSetting
-from core.util.opds_writer import OPDSFeed
+from palace.api.config import CannotLoadConfiguration
+from palace.api.custom_index import COPPAGate, CustomIndexView
+from palace.core.model import ConfigurationSetting
+from palace.core.util.opds_writer import OPDSFeed
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

@@ -10,11 +10,11 @@ import pytest
 from requests import Response
 from sqlalchemy.orm.exc import StaleDataError
 
-from api.authenticator import BasicAuthenticationProvider
-from api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
-from api.circulation_exceptions import *
-from api.config import Configuration, temp_config
-from api.overdrive import (
+from palace.api.authenticator import BasicAuthenticationProvider
+from palace.api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
+from palace.api.circulation_exceptions import *
+from palace.api.config import Configuration, temp_config
+from palace.api.overdrive import (
     MockOverdriveAPI,
     NewTitlesOverdriveCollectionMonitor,
     OverdriveAPI,
@@ -24,9 +24,9 @@ from api.overdrive import (
     OverdriveManifestFulfillmentInfo,
     RecentOverdriveCollectionMonitor,
 )
-from core.config import CannotLoadConfiguration
-from core.metadata_layer import TimestampData
-from core.model import (
+from palace.core.config import CannotLoadConfiguration
+from palace.core.metadata_layer import TimestampData
+from palace.core.model import (
     ConfigurationSetting,
     DataSource,
     DeliveryMechanism,
@@ -38,9 +38,9 @@ from core.model import (
     Representation,
     RightsStatus,
 )
-from core.overdrive import OverdriveConfiguration
-from core.testing import DummyHTTPClient, MockRequestsResponse
-from core.util.datetime_helpers import datetime_utc, utc_now
+from palace.core.overdrive import OverdriveConfiguration
+from palace.core.testing import DummyHTTPClient, MockRequestsResponse
+from palace.core.util.datetime_helpers import datetime_utc, utc_now
 
 from ..fixtures.api_overdrive_files import OverdriveAPIFilesFixture
 from ..fixtures.database import DatabaseTransactionFixture
@@ -157,7 +157,7 @@ class TestOverdriveAPI:
 
         with_default_patron = db.default_library()
         integration = db.external_integration(
-            "api.simple_authentication",
+            "palace.api.simple_authentication",
             ExternalIntegration.PATRON_AUTH_GOAL,
             libraries=[with_default_patron],
         )
@@ -1796,7 +1796,7 @@ class TestOverdriveAPICredentials:
                 )
                 response = self.mock_access_token_response(token)
 
-                from core.util.http import HTTP
+                from palace.core.util.http import HTTP
 
                 return HTTP._process_response(url, response, **kwargs)
 

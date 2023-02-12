@@ -14,30 +14,30 @@ from attrs import define
 from werkzeug.datastructures import MultiDict
 from werkzeug.http import dump_cookie
 
-from api.admin.controller import (
+from palace.api.admin.controller import (
     AdminAnnotator,
     CustomListsController,
     PatronController,
     SettingsController,
     setup_admin_controllers,
 )
-from api.admin.exceptions import *
-from api.admin.google_oauth_admin_authentication_provider import (
+from palace.api.admin.exceptions import *
+from palace.api.admin.google_oauth_admin_authentication_provider import (
     GoogleOAuthAdminAuthenticationProvider,
 )
-from api.admin.password_admin_authentication_provider import (
+from palace.api.admin.password_admin_authentication_provider import (
     PasswordAdminAuthenticationProvider,
 )
-from api.admin.problem_details import *
-from api.admin.routes import setup_admin
-from api.admin.validator import Validator
-from api.adobe_vendor_id import AdobeVendorIDModel, AuthdataUtility
-from api.authenticator import PatronData
-from api.axis import Axis360API, MockAxis360API
-from api.config import Configuration
-from core.classifier import genres
-from core.lane import Lane
-from core.model import (
+from palace.api.admin.problem_details import *
+from palace.api.admin.routes import setup_admin
+from palace.api.admin.validator import Validator
+from palace.api.adobe_vendor_id import AdobeVendorIDModel, AuthdataUtility
+from palace.api.authenticator import PatronData
+from palace.api.axis import Axis360API, MockAxis360API
+from palace.api.config import Configuration
+from palace.core.classifier import genres
+from palace.core.lane import Lane
+from palace.core.model import (
     Admin,
     AdminRole,
     CirculationEvent,
@@ -55,14 +55,14 @@ from core.model import (
     get_one,
     get_one_or_create,
 )
-from core.model.collection import Collection
-from core.opds_import import OPDSImporter, OPDSImportMonitor
-from core.query.customlist import CustomListQueries
-from core.s3 import S3UploaderConfiguration
-from core.selftest import HasSelfTests
-from core.util.datetime_helpers import utc_now
-from core.util.http import HTTP
-from core.util.problem_detail import ProblemDetail
+from palace.core.model.collection import Collection
+from palace.core.opds_import import OPDSImporter, OPDSImportMonitor
+from palace.core.query.customlist import CustomListQueries
+from palace.core.s3 import S3UploaderConfiguration
+from palace.core.selftest import HasSelfTests
+from palace.core.util.datetime_helpers import utc_now
+from palace.core.util.http import HTTP
+from palace.core.util.problem_detail import ProblemDetail
 from tests.api.test_controller import CirculationControllerTest
 from tests.core.util.test_flask_util import add_request_context
 
@@ -1336,7 +1336,7 @@ class TestCustomListsController(AdminControllerTest):
         # Valid auto update query request
         with self.request_context_with_library_and_admin(
             "/", method="POST"
-        ), mock.patch("api.admin.controller.CustomListQueries") as mock_query:
+        ), mock.patch("palace.api.admin.controller.CustomListQueries") as mock_query:
             form = MultiDict(
                 [
                     ("name", "200List"),

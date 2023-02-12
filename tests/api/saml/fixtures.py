@@ -2,8 +2,8 @@ import re
 
 from onelogin.saml2.utils import OneLogin_Saml2_Utils
 
-from api.saml.metadata.model import SAMLBinding, SAMLNameIDFormat
-from core.util.datetime_helpers import datetime_utc
+from palace.api.saml.metadata.model import SAMLBinding, SAMLNameIDFormat
+from palace.core.util.datetime_helpers import datetime_utc
 
 NAME_ID_FORMAT_1 = "urn:mace:shibboleth:1.0:nameIdentifier"
 NAME_ID_FORMAT_2 = "urn:oasis:names:tc:SAML:2.0:nameid-format:transient"

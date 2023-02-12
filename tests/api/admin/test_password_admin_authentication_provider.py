@@ -1,9 +1,9 @@
-from api.admin.password_admin_authentication_provider import (
+from palace.api.admin.password_admin_authentication_provider import (
     PasswordAdminAuthenticationProvider,
 )
-from api.admin.problem_details import *
-from core.model import Admin, create
-from core.testing import DatabaseTest
+from palace.api.admin.problem_details import *
+from palace.core.model import Admin, create
+from palace.core.testing import DatabaseTest
 
 
 class TestPasswordAdminAuthenticationProvider(DatabaseTest):

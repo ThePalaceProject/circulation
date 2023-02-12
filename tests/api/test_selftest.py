@@ -5,18 +5,18 @@ from unittest import mock
 
 import pytest
 
-from api.authenticator import BasicAuthenticationProvider
-from api.circulation import CirculationAPI
-from api.feedbooks import FeedbooksImportMonitor
-from api.selftest import (
+from palace.api.authenticator import BasicAuthenticationProvider
+from palace.api.circulation import CirculationAPI
+from palace.api.feedbooks import FeedbooksImportMonitor
+from palace.api.selftest import (
     HasCollectionSelfTests,
     HasSelfTests,
     RunSelfTestsScript,
     SelfTestResult,
 )
-from core.model import ExternalIntegration, Patron
-from core.opds_import import OPDSImportMonitor
-from core.util.problem_detail import ProblemDetail
+from palace.core.model import ExternalIntegration, Patron
+from palace.core.opds_import import OPDSImportMonitor
+from palace.core.util.problem_detail import ProblemDetail
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -44,7 +44,7 @@ class TestHasSelfTests:
 
         # Add a patron authentication integration, but don't set the patron.
         integration = db.external_integration(
-            "api.simple_authentication",
+            "palace.api.simple_authentication",
             ExternalIntegration.PATRON_AUTH_GOAL,
             libraries=[db.default_library()],
         )
@@ -134,7 +134,7 @@ class TestHasSelfTests:
 
         # This library has a default patron set up.
         integration = db.external_integration(
-            "api.simple_authentication",
+            "palace.api.simple_authentication",
             ExternalIntegration.PATRON_AUTH_GOAL,
             libraries=[db.default_library()],
         )

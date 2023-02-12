@@ -1,8 +1,8 @@
 import csv
 from datetime import date, datetime, timedelta
 
-from api.local_analytics_exporter import LocalAnalyticsExporter
-from core.model import CirculationEvent, Genre, WorkGenre, get_one_or_create
+from palace.api.local_analytics_exporter import LocalAnalyticsExporter
+from palace.core.model import CirculationEvent, Genre, WorkGenre, get_one_or_create
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

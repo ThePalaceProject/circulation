@@ -2,12 +2,7 @@
 """Updates CustomLists with newly added entries if they are configured for it
 """
 
-import os
-import sys
 
-bin_dir = os.path.split(__file__)[0]
-package_dir = os.path.join(bin_dir, "..")
-sys.path.append(os.path.abspath(package_dir))
-from core.scripts import CustomListUpdateEntriesScript
+from palace.core.scripts import CustomListUpdateEntriesScript
 
 CustomListUpdateEntriesScript().run()

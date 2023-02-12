@@ -4,17 +4,17 @@ import flask
 import pytest
 from werkzeug.datastructures import MultiDict
 
-from api.admin.exceptions import *
-from core.marc import MARCExporter
-from core.model import (
+from palace.api.admin.exceptions import *
+from palace.core.marc import MARCExporter
+from palace.core.model import (
     AdminRole,
     ConfigurationSetting,
     ExternalIntegration,
     create,
     get_one,
 )
-from core.model.configuration import ExternalIntegrationLink
-from core.s3 import S3UploaderConfiguration
+from palace.core.model.configuration import ExternalIntegrationLink
+from palace.core.s3 import S3UploaderConfiguration
 
 from .test_controller import SettingsControllerTest
 

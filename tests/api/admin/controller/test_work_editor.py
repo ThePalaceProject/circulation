@@ -14,11 +14,11 @@ import pytest
 from PIL import Image
 from werkzeug.datastructures import ImmutableMultiDict, MultiDict
 
-from api.admin.controller import CustomListsController
-from api.admin.exceptions import *
-from api.admin.problem_details import *
-from core.classifier import SimplifiedGenreClassifier
-from core.model import (
+from palace.api.admin.controller import CustomListsController
+from palace.api.admin.exceptions import *
+from palace.api.admin.problem_details import *
+from palace.core.classifier import SimplifiedGenreClassifier
+from palace.core.model import (
     AdminRole,
     Classification,
     Contributor,
@@ -34,13 +34,13 @@ from core.model import (
     Subject,
     create,
 )
-from core.model.configuration import ExternalIntegrationLink
-from core.s3 import MockS3Uploader
-from core.testing import (
+from palace.core.model.configuration import ExternalIntegrationLink
+from palace.core.s3 import MockS3Uploader
+from palace.core.testing import (
     AlwaysSuccessfulCoverageProvider,
     NeverSuccessfulCoverageProvider,
 )
-from core.util.datetime_helpers import datetime_utc
+from palace.core.util.datetime_helpers import datetime_utc
 from tests.api.admin.controller.test_controller import AdminControllerTest
 from tests.api.test_controller import CirculationControllerTest
 from tests.core.util.test_flask_util import add_request_context

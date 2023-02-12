@@ -6,9 +6,9 @@ from copy import deepcopy
 import pytest
 from parameterized import parameterized
 
-from core.analytics import Analytics
-from core.classifier import NO_NUMBER, NO_VALUE, Classifier
-from core.metadata_layer import (
+from palace.core.analytics import Analytics
+from palace.core.classifier import NO_NUMBER, NO_VALUE, Classifier
+from palace.core.metadata_layer import (
     CirculationData,
     ContributorData,
     CSVMetadataImporter,
@@ -21,7 +21,7 @@ from core.metadata_layer import (
     SubjectData,
     TimestampData,
 )
-from core.model import (
+from palace.core.model import (
     Contributor,
     CoverageRecord,
     DataSource,
@@ -36,10 +36,10 @@ from core.model import (
     Work,
     WorkCoverageRecord,
 )
-from core.model.configuration import ExternalIntegrationLink
-from core.s3 import MockS3Uploader
-from core.testing import DummyHTTPClient, LogCaptureHandler
-from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
+from palace.core.model.configuration import ExternalIntegrationLink
+from palace.core.s3 import MockS3Uploader
+from palace.core.testing import DummyHTTPClient, LogCaptureHandler
+from palace.core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
 from tests.fixtures.csv_files import CSVFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.marc_files import MARCFilesFixture

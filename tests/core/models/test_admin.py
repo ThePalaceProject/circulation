@@ -1,7 +1,7 @@
 import pytest
 
-from core.model import create
-from core.model.admin import Admin, AdminRole
+from palace.core.model import create
+from palace.core.model.admin import Admin, AdminRole
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

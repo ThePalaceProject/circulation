@@ -4,14 +4,14 @@ import pytest
 from parameterized import parameterized
 from pyfakefs.fake_filesystem_unittest import Patcher
 
-from api.lcp.encrypt import (
+from palace.api.lcp.encrypt import (
     LCPEncryptionConfiguration,
     LCPEncryptionException,
     LCPEncryptionResult,
     LCPEncryptor,
 )
-from core.model import Identifier
-from core.model.configuration import (
+from palace.core.model import Identifier
+from palace.core.model.configuration import (
     ConfigurationFactory,
     ConfigurationStorage,
     HasExternalIntegration,

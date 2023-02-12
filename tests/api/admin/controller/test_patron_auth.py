@@ -4,17 +4,19 @@ import flask
 import pytest
 from werkzeug.datastructures import MultiDict
 
-from api.admin.controller.patron_auth_services import PatronAuthServicesController
-from api.admin.exceptions import *
-from api.authenticator import AuthenticationProvider, BasicAuthenticationProvider
-from api.clever import CleverAuthenticationAPI
-from api.firstbook import FirstBookAuthenticationAPI
-from api.millenium_patron import MilleniumPatronAPI
-from api.problem_details import *
-from api.saml.provider import SAMLWebSSOAuthenticationProvider
-from api.simple_authentication import SimpleAuthenticationProvider
-from api.sip import SIP2AuthenticationProvider
-from core.model import (
+from palace.api.admin.controller.patron_auth_services import (
+    PatronAuthServicesController,
+)
+from palace.api.admin.exceptions import *
+from palace.api.authenticator import AuthenticationProvider, BasicAuthenticationProvider
+from palace.api.clever import CleverAuthenticationAPI
+from palace.api.firstbook import FirstBookAuthenticationAPI
+from palace.api.millenium_patron import MilleniumPatronAPI
+from palace.api.problem_details import *
+from palace.api.saml.provider import SAMLWebSSOAuthenticationProvider
+from palace.api.simple_authentication import SimpleAuthenticationProvider
+from palace.api.sip import SIP2AuthenticationProvider
+from palace.core.model import (
     AdminRole,
     ConfigurationSetting,
     ExternalIntegration,

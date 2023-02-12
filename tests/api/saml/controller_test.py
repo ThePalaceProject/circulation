@@ -1,5 +1,5 @@
-from api.saml.provider import SAMLWebSSOAuthenticationProvider
-from core.model import ExternalIntegration
+from palace.api.saml.provider import SAMLWebSSOAuthenticationProvider
+from palace.core.model import ExternalIntegration
 from tests.api.test_controller import ControllerTest as BaseControllerTest
 
 

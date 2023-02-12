@@ -24,9 +24,9 @@ from elasticsearch_dsl.query import Range, Term, Terms
 from parameterized import parameterized
 from psycopg2.extras import NumericRange
 
-from core.classifier import Classifier
-from core.config import CannotLoadConfiguration, Configuration
-from core.external_search import (
+from palace.core.classifier import Classifier
+from palace.core.config import CannotLoadConfiguration, Configuration
+from palace.core.external_search import (
     CurrentMapping,
     ExternalSearchIndex,
     Filter,
@@ -42,9 +42,9 @@ from core.external_search import (
     WorkSearchResult,
     mock_search_index,
 )
-from core.lane import Facets, FeaturedFacets, Pagination, SearchFacets, WorkList
-from core.metadata_layer import ContributorData, IdentifierData
-from core.model import (
+from palace.core.lane import Facets, FeaturedFacets, Pagination, SearchFacets, WorkList
+from palace.core.metadata_layer import ContributorData, IdentifierData
+from palace.core.model import (
     ConfigurationSetting,
     Contribution,
     Contributor,
@@ -56,10 +56,10 @@ from core.model import (
     WorkCoverageRecord,
     get_one_or_create,
 )
-from core.model.classification import Subject
-from core.model.work import Work
-from core.problem_details import INVALID_INPUT
-from core.util.datetime_helpers import datetime_utc, from_timestamp
+from palace.core.model.classification import Subject
+from palace.core.model.work import Work
+from palace.core.problem_details import INVALID_INPUT
+from palace.core.util.datetime_helpers import datetime_utc, from_timestamp
 from tests.fixtures.database import (
     DatabaseTransactionFixture,
     DBStatementCounter,

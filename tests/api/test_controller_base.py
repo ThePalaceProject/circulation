@@ -5,13 +5,13 @@ from unittest.mock import MagicMock, patch
 
 import flask
 
-from api.circulation_exceptions import RemoteInitiatedServerError
-from api.config import Configuration
-from api.problem_details import *
-from core import model
-from core.classifier import Classifier
-from core.lane import Lane
-from core.model import (
+from palace.api.circulation_exceptions import RemoteInitiatedServerError
+from palace.api.config import Configuration
+from palace.api.problem_details import *
+from palace.core import model
+from palace.core.classifier import Classifier
+from palace.core.lane import Lane
+from palace.core.model import (
     ConfigurationSetting,
     DataSource,
     Library,
@@ -21,8 +21,8 @@ from core.model import (
     create,
     tuple_to_numericrange,
 )
-from core.util.datetime_helpers import datetime_utc, utc_now
-from core.util.problem_detail import ProblemDetail
+from palace.core.util.datetime_helpers import datetime_utc, utc_now
+from palace.core.util.problem_detail import ProblemDetail
 
 # TODO: we can drop this when we drop support for Python 3.6 and 3.7
 from tests.fixtures.api_controller import CirculationControllerFixture
@@ -85,7 +85,7 @@ class TestBaseController:
 
         # No authorization header -> 401 error.
         with patch(
-            "api.base_controller.BaseCirculationManagerController.authorization_header",
+            "palace.api.base_controller.BaseCirculationManagerController.authorization_header",
             lambda x: None,
         ):
             with circulation_fixture.request_context_with_library("/"):
@@ -100,7 +100,7 @@ class TestBaseController:
             raise RemoteInitiatedServerError("argh", "service")
 
         with patch(
-            "api.base_controller.BaseCirculationManagerController.authenticated_patron",
+            "palace.api.base_controller.BaseCirculationManagerController.authenticated_patron",
             remote_failure,
         ):
             with circulation_fixture.request_context_with_library(
@@ -117,7 +117,7 @@ class TestBaseController:
         # Credentials provided but don't identify anyone in particular
         # -> 401 error.
         with patch(
-            "api.base_controller.BaseCirculationManagerController.authenticated_patron",
+            "palace.api.base_controller.BaseCirculationManagerController.authenticated_patron",
             lambda self, x: None,
         ):
             with circulation_fixture.request_context_with_library(
@@ -132,7 +132,7 @@ class TestBaseController:
     def test_authenticated_patron_invalid_credentials(
         self, circulation_fixture: CirculationControllerFixture
     ):
-        from api.problem_details import INVALID_CREDENTIALS
+        from palace.api.problem_details import INVALID_CREDENTIALS
 
         with circulation_fixture.request_context_with_library("/"):
             value = circulation_fixture.controller.authenticated_patron(

@@ -2,12 +2,12 @@ import datetime
 
 import pytest
 
-from core.classifier import Classifier
-from core.lane import Facets, Pagination, WorkList
-from core.model.cachedfeed import CachedFeed
-from core.util.datetime_helpers import utc_now
-from core.util.flask_util import OPDSFeedResponse
-from core.util.opds_writer import OPDSFeed
+from palace.core.classifier import Classifier
+from palace.core.lane import Facets, Pagination, WorkList
+from palace.core.model.cachedfeed import CachedFeed
+from palace.core.util.datetime_helpers import utc_now
+from palace.core.util.flask_util import OPDSFeedResponse
+from palace.core.util.opds_writer import OPDSFeed
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -466,7 +466,7 @@ class TestCachedFeed:
         # has root lanes, `private` is always set to True, even if we
         # asked for the opposite.
 
-        from core.model import Library
+        from palace.core.model import Library
 
         Library._has_root_lane_cache[db.default_library().id] = True
         r = CachedFeed.fetch(

@@ -5,8 +5,8 @@ from collections import Counter
 import pytest
 from psycopg2.extras import NumericRange
 
-from core import classifier
-from core.classifier import (
+from palace.core import classifier
+from palace.core.classifier import (
     Classifier,
     FreeformAudienceClassifier,
     GenreData,
@@ -15,17 +15,17 @@ from core.classifier import (
     fiction_genres,
     nonfiction_genres,
 )
-from core.classifier.age import (
+from palace.core.classifier.age import (
     AgeClassifier,
     GradeLevelClassifier,
     InterestLevelClassifier,
 )
-from core.classifier.ddc import DeweyDecimalClassifier as DDC
-from core.classifier.keyword import FASTClassifier as FAST
-from core.classifier.keyword import LCSHClassifier as LCSH
-from core.classifier.lcc import LCCClassifier as LCC
-from core.classifier.simplified import SimplifiedGenreClassifier
-from core.model import DataSource, Genre, Identifier, Subject, Work
+from palace.core.classifier.ddc import DeweyDecimalClassifier as DDC
+from palace.core.classifier.keyword import FASTClassifier as FAST
+from palace.core.classifier.keyword import LCSHClassifier as LCSH
+from palace.core.classifier.lcc import LCCClassifier as LCC
+from palace.core.classifier.simplified import SimplifiedGenreClassifier
+from palace.core.model import DataSource, Genre, Identifier, Subject, Work
 from tests.fixtures.database import DatabaseTransactionFixture
 
 genres = dict()

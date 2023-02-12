@@ -4,23 +4,36 @@ import json
 from io import StringIO
 
 import pytest
+from scripts import (
+    AdobeAccountIDResetScript,
+    CacheFacetListsPerLane,
+    CacheMARCFiles,
+    CacheOPDSGroupFeedPerLane,
+    CacheRepresentationPerLane,
+    DirectoryImportScript,
+    GenerateShortTokenScript,
+    InstanceInitializationScript,
+    LanguageListScript,
+    LocalAnalyticsExportScript,
+    NovelistSnapshotScript,
+)
 
-from api.adobe_vendor_id import (
+from palace.api.adobe_vendor_id import (
     AdobeVendorIDModel,
     AuthdataUtility,
     ShortClientTokenLibraryConfigurationScript,
 )
-from api.authenticator import BasicAuthenticationProvider
-from api.config import Configuration
-from api.marc import LibraryAnnotator as MARCLibraryAnnotator
-from api.novelist import NoveListAPI
-from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EntryPoint
-from core.external_search import MockExternalSearchIndex, mock_search_index
-from core.lane import Facets, FeaturedFacets, Pagination, WorkList
-from core.marc import MARCExporter
-from core.metadata_layer import IdentifierData, Metadata, ReplacementPolicy
-from core.mirror import MirrorUploader
-from core.model import (
+from palace.api.authenticator import BasicAuthenticationProvider
+from palace.api.config import Configuration
+from palace.api.marc import LibraryAnnotator as MARCLibraryAnnotator
+from palace.api.novelist import NoveListAPI
+from palace.core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EntryPoint
+from palace.core.external_search import MockExternalSearchIndex, mock_search_index
+from palace.core.lane import Facets, FeaturedFacets, Pagination, WorkList
+from palace.core.marc import MARCExporter
+from palace.core.metadata_layer import IdentifierData, Metadata, ReplacementPolicy
+from palace.core.mirror import MirrorUploader
+from palace.core.model import (
     CachedMARCFile,
     ConfigurationSetting,
     Credential,
@@ -37,25 +50,12 @@ from core.model import (
     create,
     get_one,
 )
-from core.model.configuration import ExternalIntegrationLink
-from core.opds import AcquisitionFeed
-from core.s3 import MockS3Uploader
-from core.scripts import CollectionType
-from core.util.datetime_helpers import datetime_utc, utc_now
-from core.util.flask_util import OPDSFeedResponse, Response
-from scripts import (
-    AdobeAccountIDResetScript,
-    CacheFacetListsPerLane,
-    CacheMARCFiles,
-    CacheOPDSGroupFeedPerLane,
-    CacheRepresentationPerLane,
-    DirectoryImportScript,
-    GenerateShortTokenScript,
-    InstanceInitializationScript,
-    LanguageListScript,
-    LocalAnalyticsExportScript,
-    NovelistSnapshotScript,
-)
+from palace.core.model.configuration import ExternalIntegrationLink
+from palace.core.opds import AcquisitionFeed
+from palace.core.s3 import MockS3Uploader
+from palace.core.scripts import CollectionType
+from palace.core.util.datetime_helpers import datetime_utc, utc_now
+from palace.core.util.flask_util import OPDSFeedResponse, Response
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.sample_covers import SampleCoversFixture
 from tests.fixtures.search import ExternalSearchFixture
@@ -1531,7 +1531,8 @@ class TestGenerateShortTokenScript:
         barcode = "12345"
         pin = "abcd"
         integration = db.external_integration(
-            "api.simple_authentication", goal=ExternalIntegration.PATRON_AUTH_GOAL
+            "palace.api.simple_authentication",
+            goal=ExternalIntegration.PATRON_AUTH_GOAL,
         )
         db.default_library().integrations.append(integration)
         integration.setting(BasicAuthenticationProvider.TEST_IDENTIFIER).value = barcode

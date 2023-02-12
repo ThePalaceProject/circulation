@@ -5,11 +5,11 @@ import pytest
 from freezegun import freeze_time
 from pymarc import MARCReader, Record
 
-from core.config import CannotLoadConfiguration
-from core.external_search import Filter, MockExternalSearchIndex
-from core.lane import WorkList
-from core.marc import Annotator, MARCExporter, MARCExporterFacets
-from core.model import (
+from palace.core.config import CannotLoadConfiguration
+from palace.core.external_search import Filter, MockExternalSearchIndex
+from palace.core.lane import WorkList
+from palace.core.marc import Annotator, MARCExporter, MARCExporterFacets
+from palace.core.model import (
     CachedMARCFile,
     Contributor,
     DataSource,
@@ -24,8 +24,8 @@ from core.model import (
     Work,
     get_one,
 )
-from core.s3 import MockS3Uploader
-from core.util.datetime_helpers import datetime_utc, utc_now
+from palace.core.s3 import MockS3Uploader
+from palace.core.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

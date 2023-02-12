@@ -3,10 +3,10 @@ import logging
 
 import pytest
 
-from core.config import CannotLoadConfiguration
-from core.coverage import CoverageFailure
-from core.metadata_layer import LinkData
-from core.model import (
+from palace.core.config import CannotLoadConfiguration
+from palace.core.coverage import CoverageFailure
+from palace.core.metadata_layer import LinkData
+from palace.core.model import (
     Contributor,
     DeliveryMechanism,
     Edition,
@@ -18,7 +18,7 @@ from core.model import (
     Representation,
     Subject,
 )
-from core.overdrive import (
+from palace.core.overdrive import (
     MockOverdriveCoreAPI,
     OverdriveAdvantageAccount,
     OverdriveBibliographicCoverageProvider,
@@ -26,10 +26,10 @@ from core.overdrive import (
     OverdriveCoreAPI,
     OverdriveRepresentationExtractor,
 )
-from core.scripts import RunCollectionCoverageProviderScript
-from core.testing import MockRequestsResponse
-from core.util.http import BadResponseException
-from core.util.string_helpers import base64
+from palace.core.scripts import RunCollectionCoverageProviderScript
+from palace.core.testing import MockRequestsResponse
+from palace.core.util.http import BadResponseException
+from palace.core.util.string_helpers import base64
 from tests.core.util.test_mock_web_server import MockAPIServer, MockAPIServerResponse
 from tests.fixtures.overdrive import OverdriveFixture, OverdriveWithAPIFixture
 

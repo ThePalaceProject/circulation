@@ -1,20 +1,28 @@
 from unittest.mock import MagicMock
 
-from api.adobe_vendor_id import AuthdataUtility, DeviceManagementProtocolController
-from api.authenticator import LibraryAuthenticator, OAuthController
-from api.config import Configuration
-from api.controller import CirculationManager
-from api.custom_index import CustomIndexView
-from api.opds import CirculationManagerAnnotator, LibraryAnnotator
-from api.problem_details import *
-from api.registration.registry import Registration, RegistrationConstants
-from api.shared_collection import SharedCollectionAPI
-from core.config import CannotLoadConfiguration
-from core.external_search import MockExternalSearchIndex
-from core.lane import Facets, WorkList
-from core.model import Admin, CachedFeed, ConfigurationSetting, ExternalIntegration
-from core.problem_details import *
-from core.util.problem_detail import ProblemDetail
+from palace.api.adobe_vendor_id import (
+    AuthdataUtility,
+    DeviceManagementProtocolController,
+)
+from palace.api.authenticator import LibraryAuthenticator, OAuthController
+from palace.api.config import Configuration
+from palace.api.controller import CirculationManager
+from palace.api.custom_index import CustomIndexView
+from palace.api.opds import CirculationManagerAnnotator, LibraryAnnotator
+from palace.api.problem_details import *
+from palace.api.registration.registry import Registration, RegistrationConstants
+from palace.api.shared_collection import SharedCollectionAPI
+from palace.core.config import CannotLoadConfiguration
+from palace.core.external_search import MockExternalSearchIndex
+from palace.core.lane import Facets, WorkList
+from palace.core.model import (
+    Admin,
+    CachedFeed,
+    ConfigurationSetting,
+    ExternalIntegration,
+)
+from palace.core.problem_details import *
+from palace.core.util.problem_detail import ProblemDetail
 
 # TODO: we can drop this when we drop support for Python 3.6 and 3.7
 from tests.fixtures.api_controller import CirculationControllerFixture

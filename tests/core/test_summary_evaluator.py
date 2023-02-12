@@ -3,7 +3,7 @@
 from textblob import TextBlob
 from textblob.exceptions import MissingCorpusError
 
-from core.util.summary import SummaryEvaluator
+from palace.core.util.summary import SummaryEvaluator
 
 
 class TestSummaryEvaluator:

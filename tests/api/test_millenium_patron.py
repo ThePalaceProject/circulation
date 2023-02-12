@@ -6,11 +6,11 @@ from urllib import parse
 
 import pytest
 
-from api.authenticator import PatronData
-from api.config import CannotLoadConfiguration
-from api.millenium_patron import MilleniumPatronAPI
-from core.model import ConfigurationSetting
-from core.util.datetime_helpers import utc_now
+from palace.api.authenticator import PatronData
+from palace.api.config import CannotLoadConfiguration
+from palace.api.millenium_patron import MilleniumPatronAPI
+from palace.core.model import ConfigurationSetting
+from palace.core.util.datetime_helpers import utc_now
 from tests.fixtures.api_millenium_files import MilleniumFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 

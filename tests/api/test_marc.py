@@ -4,11 +4,11 @@ import urllib.request
 
 from pymarc import Record
 
-from api.marc import LibraryAnnotator
-from api.registration.registry import Registration
-from core.config import Configuration
-from core.marc import MARCExporter
-from core.model import ConfigurationSetting, ExternalIntegration
+from palace.api.marc import LibraryAnnotator
+from palace.api.registration.registry import Registration
+from palace.core.config import Configuration
+from palace.core.marc import MARCExporter
+from palace.core.model import ConfigurationSetting, ExternalIntegration
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

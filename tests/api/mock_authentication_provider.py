@@ -1,5 +1,5 @@
-from api.authenticator import BasicAuthenticationProvider
-from core.util.http import RemoteIntegrationException
+from palace.api.authenticator import BasicAuthenticationProvider
+from palace.core.util.http import RemoteIntegrationException
 
 
 class MockExplodingAuthenticationProvider(BasicAuthenticationProvider):

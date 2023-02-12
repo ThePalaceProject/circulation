@@ -2,8 +2,8 @@ import datetime
 
 import pytest
 
-from core.model.integrationclient import IntegrationClient
-from core.util.datetime_helpers import utc_now
+from palace.core.model.integrationclient import IntegrationClient
+from palace.core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

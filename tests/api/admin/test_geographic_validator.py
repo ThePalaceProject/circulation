@@ -6,11 +6,11 @@ import urllib.request
 import pypostalcode
 import uszipcode
 
-from api.admin.geographic_validator import GeographicValidator
-from api.admin.problem_details import *
-from api.registration.registry import RemoteRegistry
-from core.model import ExternalIntegration, create
-from core.testing import MockRequestsResponse
+from palace.api.admin.geographic_validator import GeographicValidator
+from palace.api.admin.problem_details import *
+from palace.api.registration.registry import RemoteRegistry
+from palace.core.model import ExternalIntegration, create
+from palace.core.testing import MockRequestsResponse
 from tests.api.admin.controller.test_controller import SettingsControllerTest
 
 

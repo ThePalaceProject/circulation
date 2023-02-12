@@ -4,10 +4,10 @@ import types
 import flask
 import pytest
 
-from api.odl import ODLAPI
-from api.odl2 import ODL2API
-from api.problem_details import INVALID_LOAN_FOR_ODL_NOTIFICATION, NO_ACTIVE_LOAN
-from core.model import Collection, get_one_or_create
+from palace.api.odl import ODLAPI
+from palace.api.odl2 import ODL2API
+from palace.api.problem_details import INVALID_LOAN_FOR_ODL_NOTIFICATION, NO_ACTIVE_LOAN
+from palace.core.model import Collection, get_one_or_create
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 

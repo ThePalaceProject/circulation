@@ -3,13 +3,13 @@ from unittest.mock import MagicMock, call, create_autospec, patch
 
 from flask import request
 
-from api.controller import CirculationManager
-from api.lcp.collection import LCPAPI
-from api.lcp.controller import LCPController
-from api.lcp.factory import LCPServerFactory
-from api.lcp.server import LCPServer
-from core.lcp.credential import LCPCredentialFactory, LCPUnhashedPassphrase
-from core.model import ExternalIntegration
+from palace.api.controller import CirculationManager
+from palace.api.lcp.collection import LCPAPI
+from palace.api.lcp.controller import LCPController
+from palace.api.lcp.factory import LCPServerFactory
+from palace.api.lcp.server import LCPServer
+from palace.core.lcp.credential import LCPCredentialFactory, LCPUnhashedPassphrase
+from palace.core.model import ExternalIntegration
 from tests.api.lcp import fixtures
 from tests.api.test_controller import ControllerTest
 
@@ -24,7 +24,7 @@ class TestLCPController(ControllerTest):
         )
 
         with patch(
-            "api.lcp.controller.LCPCredentialFactory"
+            "palace.api.lcp.controller.LCPCredentialFactory"
         ) as credential_factory_constructor_mock:
             credential_factory = create_autospec(spec=LCPCredentialFactory)
             credential_factory.get_patron_passphrase = MagicMock(
@@ -70,7 +70,7 @@ class TestLCPController(ControllerTest):
         library.collections.append(lcp_collection)
 
         with patch(
-            "api.lcp.controller.LCPServerFactory"
+            "palace.api.lcp.controller.LCPServerFactory"
         ) as lcp_server_factory_constructor_mock:
             lcp_server_factory = create_autospec(spec=LCPServerFactory)
             lcp_server_factory.create = MagicMock(return_value=lcp_server)
@@ -107,7 +107,7 @@ class TestLCPController(ControllerTest):
         library.collections.append(lcp_collection)
 
         with patch(
-            "api.lcp.controller.LCPServerFactory"
+            "palace.api.lcp.controller.LCPServerFactory"
         ) as lcp_server_factory_constructor_mock:
             lcp_server_factory = create_autospec(spec=LCPServerFactory)
             lcp_server_factory.create = MagicMock(return_value=lcp_server)

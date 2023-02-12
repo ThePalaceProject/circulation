@@ -1,7 +1,7 @@
 import threading
 
-from core.model import Identifier, SessionManager
-from core.util.worker_pools import DatabaseJob, DatabasePool, Pool, Queue, Worker
+from palace.core.model import Identifier, SessionManager
+from palace.core.util.worker_pools import DatabaseJob, DatabasePool, Pool, Queue, Worker
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

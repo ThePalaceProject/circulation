@@ -5,17 +5,17 @@ import pytest
 from flask import url_for
 from werkzeug.datastructures import MultiDict
 
-from api.admin.exceptions import *
-from api.registration.registry import Registration, RemoteRegistry
-from core.model import (
+from palace.api.admin.exceptions import *
+from palace.api.registration.registry import Registration, RemoteRegistry
+from palace.core.model import (
     AdminRole,
     ConfigurationSetting,
     ExternalIntegration,
     Library,
     create,
 )
-from core.testing import DummyHTTPClient
-from core.util.http import HTTP
+from palace.core.testing import DummyHTTPClient
+from palace.core.util.http import HTTP
 
 from .test_controller import SettingsControllerTest
 

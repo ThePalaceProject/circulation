@@ -2,9 +2,9 @@ import json
 
 import pytest
 
-from api.authenticator import PatronData
-from api.config import CannotLoadConfiguration
-from api.simple_authentication import SimpleAuthenticationProvider
+from palace.api.authenticator import PatronData
+from palace.api.config import CannotLoadConfiguration
+from palace.api.simple_authentication import SimpleAuthenticationProvider
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

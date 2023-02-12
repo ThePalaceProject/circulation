@@ -3,17 +3,17 @@ from typing import Any, Iterable
 
 import pytest
 
-from core import lane, model
-from core.config import Configuration
-from core.model import (
+from palace.core import lane, model
+from palace.core.config import Configuration
+from palace.core.model import (
     CachedFeed,
     ConfigurationSetting,
     Timestamp,
     WorkCoverageRecord,
     create,
 )
-from core.model.listeners import site_configuration_has_changed
-from core.util.datetime_helpers import utc_now
+from palace.core.model.listeners import site_configuration_has_changed
+from palace.core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

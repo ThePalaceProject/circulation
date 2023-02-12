@@ -1,6 +1,6 @@
-from core.model.classification import Subject
-from core.model.datasource import DataSource
-from core.model.work import Work
+from palace.core.model.classification import Subject
+from palace.core.model.datasource import DataSource
+from palace.core.model.work import Work
 from tests.api.admin.controller.test_controller import AdminControllerTest
 
 

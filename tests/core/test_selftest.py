@@ -7,9 +7,9 @@ configured, not that the code is correct.
 
 import datetime
 
-from core.selftest import HasSelfTests, SelfTestResult
-from core.util.datetime_helpers import utc_now
-from core.util.http import IntegrationException
+from palace.core.selftest import HasSelfTests, SelfTestResult
+from palace.core.util.datetime_helpers import utc_now
+from palace.core.util.http import IntegrationException
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

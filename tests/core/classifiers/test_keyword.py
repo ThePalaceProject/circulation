@@ -1,7 +1,7 @@
-from core import classifier
-from core.classifier import *
-from core.classifier.keyword import KeywordBasedClassifier as Keyword
-from core.classifier.keyword import LCSHClassifier as LCSH
+from palace.core import classifier
+from palace.core.classifier import *
+from palace.core.classifier.keyword import KeywordBasedClassifier as Keyword
+from palace.core.classifier.keyword import LCSHClassifier as LCSH
 
 
 class TestLCSH:

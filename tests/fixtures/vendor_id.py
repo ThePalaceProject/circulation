@@ -3,10 +3,10 @@ from typing import List
 
 import pytest
 
-from api.adobe_vendor_id import AuthdataUtility
-from api.config import Configuration
-from api.registration.constants import RegistrationConstants
-from core.model import ConfigurationSetting, ExternalIntegration, Library
+from palace.api.adobe_vendor_id import AuthdataUtility
+from palace.api.config import Configuration
+from palace.api.registration.constants import RegistrationConstants
+from palace.core.model import ConfigurationSetting, ExternalIntegration, Library
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

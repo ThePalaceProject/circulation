@@ -11,25 +11,25 @@ import pytest
 from freezegun import freeze_time
 from lxml import etree
 
-from api.adobe_vendor_id import AuthdataUtility
-from api.circulation import BaseCirculationAPI, CirculationAPI, FulfillmentInfo
-from api.config import Configuration
-from api.lanes import ContributorLane
-from api.novelist import NoveListAPI
-from api.opds import (
+from palace.api.adobe_vendor_id import AuthdataUtility
+from palace.api.circulation import BaseCirculationAPI, CirculationAPI, FulfillmentInfo
+from palace.api.config import Configuration
+from palace.api.lanes import ContributorLane
+from palace.api.novelist import NoveListAPI
+from palace.api.opds import (
     CirculationManagerAnnotator,
     LibraryAnnotator,
     LibraryLoanAndHoldAnnotator,
     SharedCollectionAnnotator,
     SharedCollectionLoanAndHoldAnnotator,
 )
-from core.analytics import Analytics
-from core.classifier import Classifier, Fantasy, Urban_Fantasy
-from core.entrypoint import AudiobooksEntryPoint, EverythingEntryPoint
-from core.external_search import MockExternalSearchIndex, WorkSearchResult
-from core.lane import FacetsWithEntryPoint, WorkList
-from core.lcp.credential import LCPCredentialFactory, LCPHashedPassphrase
-from core.model import (
+from palace.core.analytics import Analytics
+from palace.core.classifier import Classifier, Fantasy, Urban_Fantasy
+from palace.core.entrypoint import AudiobooksEntryPoint, EverythingEntryPoint
+from palace.core.external_search import MockExternalSearchIndex, WorkSearchResult
+from palace.core.lane import FacetsWithEntryPoint, WorkList
+from palace.core.lcp.credential import LCPCredentialFactory, LCPHashedPassphrase
+from palace.core.model import (
     CirculationEvent,
     ConfigurationSetting,
     Contributor,
@@ -43,13 +43,13 @@ from core.model import (
     RightsStatus,
     Work,
 )
-from core.model.formats import FormatPriorities
-from core.model.licensing import LicensePool
-from core.opds import AcquisitionFeed, MockAnnotator, UnfulfillableWork
-from core.opds_import import OPDSXMLParser
-from core.util.datetime_helpers import datetime_utc, utc_now
-from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
-from core.util.opds_writer import AtomFeed, OPDSFeed
+from palace.core.model.formats import FormatPriorities
+from palace.core.model.licensing import LicensePool
+from palace.core.opds import AcquisitionFeed, MockAnnotator, UnfulfillableWork
+from palace.core.opds_import import OPDSXMLParser
+from palace.core.util.datetime_helpers import datetime_utc, utc_now
+from palace.core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
+from palace.core.util.opds_writer import AtomFeed, OPDSFeed
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.vendor_id import VendorIDFixture
 

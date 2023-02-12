@@ -1,6 +1,6 @@
-from api.lcp.collection import LCPAPI
-from core.model import ExternalIntegration
-from core.testing import DatabaseTest as BaseDatabaseTest
+from palace.api.lcp.collection import LCPAPI
+from palace.core.model import ExternalIntegration
+from palace.core.testing import DatabaseTest as BaseDatabaseTest
 
 
 class DatabaseTest(BaseDatabaseTest):

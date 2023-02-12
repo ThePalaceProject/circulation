@@ -1,4 +1,4 @@
-from core.model import Work
+from palace.core.model import Work
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

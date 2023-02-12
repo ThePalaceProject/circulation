@@ -1,7 +1,12 @@
 import datetime
 
-from core.model import CachedMARCFile, ExternalIntegration, Representation, create
-from core.util.datetime_helpers import utc_now
+from palace.core.model import (
+    CachedMARCFile,
+    ExternalIntegration,
+    Representation,
+    create,
+)
+from palace.core.util.datetime_helpers import utc_now
 from tests.fixtures.api_controller import CirculationControllerFixture
 
 

@@ -1,9 +1,14 @@
 from unittest.mock import ANY, create_autospec, patch
 
-from api.lcp.importer import LCPImporter
-from api.lcp.mirror import LCPMirror
-from core.model import DataSource, ExternalIntegration, Identifier, Representation
-from core.s3 import MinIOUploaderConfiguration, S3UploaderConfiguration
+from palace.api.lcp.importer import LCPImporter
+from palace.api.lcp.mirror import LCPMirror
+from palace.core.model import (
+    DataSource,
+    ExternalIntegration,
+    Identifier,
+    Representation,
+)
+from palace.core.s3 import MinIOUploaderConfiguration, S3UploaderConfiguration
 from tests.api.lcp.database_test import DatabaseTest
 
 
@@ -44,7 +49,7 @@ class TestLCPMirror(DatabaseTest):
         )
 
         # Act
-        with patch("api.lcp.mirror.LCPImporter") as lcp_importer_constructor:
+        with patch("palace.api.lcp.mirror.LCPImporter") as lcp_importer_constructor:
             lcp_importer_constructor.return_value = lcp_importer
             self._lcp_mirror.mirror_one(
                 representation, mirror_to=mirror_url, collection=self._lcp_collection

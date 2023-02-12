@@ -9,7 +9,7 @@ import pytest
 from freezegun import freeze_time
 from jinja2 import Template
 
-from api.circulation_exceptions import (
+from palace.api.circulation_exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
     CannotFulfill,
@@ -24,7 +24,7 @@ from api.circulation_exceptions import (
     NotCheckedOut,
     NotOnHold,
 )
-from api.odl import (
+from palace.api.odl import (
     MockSharedODLAPI,
     ODLAPIConfiguration,
     ODLHoldReaper,
@@ -32,8 +32,8 @@ from api.odl import (
     SharedODLAPI,
     SharedODLImporter,
 )
-from api.problem_details import NO_LICENSES
-from core.model import (
+from palace.api.problem_details import NO_LICENSES
+from palace.core.model import (
     Collection,
     ConfigurationSetting,
     DataSource,
@@ -47,10 +47,10 @@ from core.model import (
     Representation,
     RightsStatus,
 )
-from core.util import datetime_helpers
-from core.util.datetime_helpers import datetime_utc, utc_now
-from core.util.http import BadResponseException, RemoteIntegrationException
-from core.util.string_helpers import base64
+from palace.core.util import datetime_helpers
+from palace.core.util.datetime_helpers import datetime_utc, utc_now
+from palace.core.util.http import BadResponseException, RemoteIntegrationException
+from palace.core.util.string_helpers import base64
 from tests.fixtures.api_odl_files import ODLAPIFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import APIFilesFixture
