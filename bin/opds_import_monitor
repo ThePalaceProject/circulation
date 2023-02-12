@@ -4,8 +4,7 @@ OPDS import collections."""
 
 
 # NOTE: We need to import it explicitly to initialize MirrorUploader.IMPLEMENTATION_REGISTRY
-from core import s3  # noqa: autoflake
-
+from palace.core import s3  # noqa: autoflake
 from palace.core.scripts import OPDSImportScript
 
 OPDSImportScript().run()

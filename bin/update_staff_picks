@@ -2,6 +2,6 @@
 """Update the staff picks list from a Google Drive spreadsheet."""
 
 
-from scripts import UpdateStaffPicksScript
+from palace.scripts import UpdateStaffPicksScript
 
 UpdateStaffPicksScript().run()

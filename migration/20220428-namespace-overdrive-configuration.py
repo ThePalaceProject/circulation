@@ -1,17 +1,11 @@
 #!/usr/bin/env python
 import logging
-import os
-import sys
 from typing import Optional
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-bin_dir = os.path.split(__file__)[0]
-package_dir = os.path.join(bin_dir, "..")
-sys.path.append(os.path.abspath(package_dir))
-
-from core.model import production_session
+from palace.core.model import production_session
 
 logging.basicConfig()
 logger = logging.getLogger()

@@ -1,17 +1,8 @@
 #!/usr/bin/env python
 """Remove `random` sort options from Circulation Manager."""
 
-import os
-import sys
-
-from contextlib2 import closing
-
-bin_dir = os.path.split(__file__)[0]
-package_dir = os.path.join(bin_dir, "..")
-sys.path.append(os.path.abspath(package_dir))
-
-from core.model import production_session
-from migartion_scripts import RandomSortOptionRemover
+from palace.core.model import production_session
+from palace.migration_scripts import RandomSortOptionRemover
 
 with closing(production_session()) as db:
     remover = RandomSortOptionRemover()

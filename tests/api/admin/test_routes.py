@@ -1,9 +1,9 @@
 from pathlib import Path
 
 import flask
-from api import routes as api_routes
 from flask import Response
 
+from palace.api import routes as api_routes
 from palace.api.admin import routes
 from palace.api.admin.controller import AdminController, setup_admin_controllers
 from palace.api.admin.problem_details import *
@@ -88,7 +88,7 @@ class AdminRouteTest(ControllerTest, RouteTestFixtures):
             self.REAL_CIRCULATION_MANAGER = circ_manager
 
         app = MockAdminApp()
-        # Also mock the api app in order to use functions from api/routes
+        # Also mock the api app in order to use functions from palace.api/routes
         api_app = MockApp()
         self.routes = routes
         self.api_routes = api_routes

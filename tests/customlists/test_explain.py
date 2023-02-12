@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import List
 
-from customlists.customlist_explain import CustomListImportExplainer
+from palace.customlists.customlist_explain import CustomListImportExplainer
 
 
 class TestExplains:

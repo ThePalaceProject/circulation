@@ -3,6 +3,6 @@
 shared ODL collections."""
 
 
-from scripts import SharedODLImportScript
+from palace.scripts import SharedODLImportScript
 
 SharedODLImportScript().run()

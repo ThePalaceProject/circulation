@@ -2,6 +2,6 @@
 """Reset the Adobe account IDs for one or more patrons."""
 
 
-from scripts import AdobeAccountIDResetScript
+from palace.scripts import AdobeAccountIDResetScript
 
 AdobeAccountIDResetScript().run()

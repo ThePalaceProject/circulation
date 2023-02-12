@@ -2,9 +2,8 @@
 """Import books into a collection from local disk storage."""
 
 
-from scripts import DirectoryImportScript
-
 # NOTE: We need to import it explicitly to initialize MirrorUploader.IMPLEMENTATION_REGISTRY
 from palace.api.lcp import mirror  # noqa: autoflake
+from palace.scripts import DirectoryImportScript
 
 DirectoryImportScript().run()

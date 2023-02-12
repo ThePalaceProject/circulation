@@ -2,6 +2,6 @@
 """List languages in the collection sorted by number of non-open access works."""
 
 
-from scripts import LanguageListScript  # noqa: E402
+from palace.scripts import LanguageListScript  # noqa: E402
 
 LanguageListScript().run()

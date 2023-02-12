@@ -3,10 +3,10 @@
 ODL collections."""
 
 
-# NOTE: We need to import it explicitly to initialize MirrorUploader.IMPLEMENTATION_REGISTRY
-from core import s3  # noqa
-
 from palace.api.odl import ODLImporter, ODLImportMonitor
+
+# NOTE: We need to import it explicitly to initialize MirrorUploader.IMPLEMENTATION_REGISTRY
+from palace.core import s3  # noqa
 from palace.core.scripts import RunCollectionMonitorScript
 
 RunCollectionMonitorScript(

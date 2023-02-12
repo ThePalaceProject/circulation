@@ -2,6 +2,6 @@
 """Refresh the top-level OPDS groups."""
 
 
-from scripts import CacheOPDSGroupFeedPerLane
+from palace.scripts import CacheOPDSGroupFeedPerLane
 
 CacheOPDSGroupFeedPerLane().run()

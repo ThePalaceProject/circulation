@@ -2,6 +2,6 @@
 """Initialize an instance of the Circulation Manager"""
 
 
-from scripts import InstanceInitializationScript
+from palace.scripts import InstanceInitializationScript
 
 InstanceInitializationScript().run()

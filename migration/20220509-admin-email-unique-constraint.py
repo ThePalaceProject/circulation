@@ -1,19 +1,13 @@
 #!/usr/bin/env python
 import logging
-import os
-import sys
 
 from contextlib2 import closing
 from sqlalchemy import Index, func
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
-bin_dir = os.path.split(__file__)[0]
-package_dir = os.path.join(bin_dir, "..")
-sys.path.append(os.path.abspath(package_dir))
-
-from core.model import production_session
-from core.model.admin import Admin
+from palace.core.model import production_session
+from palace.core.model.admin import Admin
 
 INDEX_NAME = "ix_admin_upper_email_unique"
 

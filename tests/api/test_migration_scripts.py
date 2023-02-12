@@ -4,12 +4,12 @@ from importlib import import_module
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from migartion_scripts import RandomSortOptionRemover
 from palace.core.facets import FacetConstants
 from palace.core.lane import Facets
 from palace.core.model import Library
 from palace.core.model.admin import Admin
 from palace.core.testing import DatabaseTest
+from palace.migration_scripts import RandomSortOptionRemover
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

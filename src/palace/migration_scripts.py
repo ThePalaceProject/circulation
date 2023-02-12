@@ -3,9 +3,9 @@ import logging
 
 import sqlalchemy.orm
 
-from core.facets import FacetConstants
-from core.lane import Facets
-from core.model import Library
+from palace.core.facets import FacetConstants
+from palace.core.lane import Facets
+from palace.core.model import Library
 
 
 class RandomSortOptionRemover:

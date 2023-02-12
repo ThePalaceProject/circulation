@@ -2,6 +2,6 @@
 """Refresh the OPDS lane facets."""
 
 
-from scripts import CacheFacetListsPerLane
+from palace.scripts import CacheFacetListsPerLane
 
 CacheFacetListsPerLane().run()

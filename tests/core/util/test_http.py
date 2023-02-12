@@ -41,7 +41,7 @@ class TestHTTP:
         assert "3xx" == m(399)
         assert "5xx" == m(500)
 
-    @mock.patch("palace.core.util.http.core.__version__", "<VERSION>")
+    @mock.patch("palace.core.util.http.palace.core.__version__", "<VERSION>")
     def test_request_with_timeout_success(self, mock_request):
         request = mock_request(MockRequestsResponse(200, content="Success!"))
         response = HTTP._request_with_timeout(
@@ -77,7 +77,7 @@ class TestHTTP:
         )
         assert request.agent == b"Fake Agent"
 
-    @mock.patch("palace.core.util.http.core.__version__", None)
+    @mock.patch("palace.core.util.http.palace.core.__version__", None)
     def test_default_user_agent(self, mock_request):
         request = mock_request()
         assert HTTP._request_with_timeout("/", request.fake_request).status_code == 201

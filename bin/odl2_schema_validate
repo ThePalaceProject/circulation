@@ -3,11 +3,12 @@
 OPDS import collections."""
 
 
-# NOTE: We need to import it explicitly to initialize MirrorUploader.IMPLEMENTATION_REGISTRY
-from core import s3  # noqa: autoflake
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 
 from palace.api.odl2 import ODL2Importer
+
+# NOTE: We need to import it explicitly to initialize MirrorUploader.IMPLEMENTATION_REGISTRY
+from palace.core import s3  # noqa: autoflake
 from palace.core.opds2_import import RWPMManifestParser
 from palace.core.opds_schema import ODL2SchemaValidation
 from palace.core.scripts import RunCollectionMonitorScript

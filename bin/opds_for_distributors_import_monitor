@@ -3,6 +3,6 @@
 OPDS import collections that have authentication."""
 
 
-from scripts import OPDSForDistributorsImportScript
+from palace.scripts import OPDSForDistributorsImportScript
 
 OPDSForDistributorsImportScript().run()

@@ -2,6 +2,6 @@
 """Compile translations."""
 
 
-from scripts import CompileTranslationsScript
+from palace.scripts import CompileTranslationsScript
 
 CompileTranslationsScript().run()

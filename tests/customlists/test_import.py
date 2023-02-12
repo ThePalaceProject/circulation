@@ -5,8 +5,11 @@ from typing import List
 
 import pytest
 
-from customlists.customlist_import import CustomListImporter, CustomListImportFailed
-from customlists.customlist_report import (
+from palace.customlists.customlist_import import (
+    CustomListImporter,
+    CustomListImportFailed,
+)
+from palace.customlists.customlist_report import (
     CustomListProblem,
     CustomListReport,
     CustomListsReport,

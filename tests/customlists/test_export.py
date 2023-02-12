@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from customlists.customlist_export import (
+from palace.customlists.customlist_export import (
     CustomListExporter,
     CustomListExportFailed,
     CustomListExports,

@@ -3,7 +3,7 @@
 import logging
 import sys
 
-from customlists.customlist_export import CustomListExporter
+from palace.customlists.customlist_export import CustomListExporter
 
 logging.basicConfig()
 logger = logging.getLogger()
