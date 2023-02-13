@@ -75,7 +75,7 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             "key": Keys.LIBRARY_ID,
             "label": _("Library ID"),
             "description": _(
-                "This can be anything. It is used to identifiy a unique library on the API."
+                "This is used to identify a unique library on the API. This must match what the API expects."
             ),
             "required": True,
         }
