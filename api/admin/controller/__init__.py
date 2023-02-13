@@ -32,7 +32,6 @@ from api.bibliotheca import BibliothecaAPI
 from api.config import CannotLoadConfiguration, Configuration
 from api.controller import CirculationManagerController
 from api.enki import EnkiAPI
-from api.feedbooks import FeedbooksOPDSImporter
 from api.lanes import create_default_lanes
 from api.lcp.collection import LCPAPI
 from api.local_analytics_exporter import LocalAnalyticsExporter
@@ -1693,7 +1692,6 @@ class SettingsController(AdminCirculationManagerController):
         ODLAPI,
         ODL2API,
         SharedODLAPI,
-        FeedbooksOPDSImporter,
         LCPAPI,
     ]
 
