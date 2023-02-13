@@ -142,9 +142,7 @@ def setup_admin_controllers(manager):
     manager.admin_patron_auth_service_self_tests_controller = (
         PatronAuthServiceSelfTestsController(manager)
     )
-    from api.admin.controller.admin_auth_services import AdminAuthServicesController
 
-    manager.admin_auth_services_controller = AdminAuthServicesController(manager)
     from api.admin.controller.collection_settings import CollectionSettingsController
 
     manager.admin_collection_settings_controller = CollectionSettingsController(manager)
@@ -214,16 +212,10 @@ class AdminController:
 
     @property
     def admin_auth_providers(self):
-        auth_providers = []
-        auth_service = ExternalIntegration.admin_authentication(self._db)
-
         if Admin.with_password(self._db).count() != 0:
-            auth_providers.append(
-                PasswordAdminAuthenticationProvider(
-                    auth_service,
-                )
-            )
-        return auth_providers
+            return [PasswordAdminAuthenticationProvider()]
+
+        return []
 
     def admin_auth_provider(self, type):
         # Return an auth provider with the given type.
@@ -246,7 +238,7 @@ class AdminController:
             auth = self.admin_auth_provider(type)
             if not auth:
                 return ADMIN_AUTH_MECHANISM_NOT_CONFIGURED
-            if admin and auth.active_credentials(admin):
+            if admin:
                 flask.request.admin = admin
                 return admin
         flask.request.admin = None
@@ -256,10 +248,7 @@ class AdminController:
         """Creates or updates an admin with the given details"""
 
         admin, is_new = get_one_or_create(self._db, Admin, email=admin_details["email"])
-        admin.update_credentials(
-            self._db,
-            credential=admin_details.get("credentials"),
-        )
+
         if is_new and admin_details.get("roles"):
             for role in admin_details.get("roles"):
                 if role.get("role") in AdminRole.ROLES:

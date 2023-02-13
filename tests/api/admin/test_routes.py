@@ -451,25 +451,6 @@ class TestAdminCollectionLibraryRegistrations(AdminRouteTest):
         self.assert_supported_methods(url, "GET", "POST")
 
 
-class TestAdminAuthServices(AdminRouteTest):
-
-    CONTROLLER_NAME = "admin_auth_services_controller"
-
-    def test_process_admin_auth_services(self):
-        url = "/admin/admin_auth_services"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_admin_auth_services
-        )
-        self.assert_supported_methods(url, "GET", "POST")
-
-    def test_process_delete(self):
-        url = "/admin/admin_auth_service/<protocol>"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_delete, "<protocol>", http_method="DELETE"
-        )
-        self.assert_supported_methods(url, "DELETE")
-
-
 class TestAdminIndividualAdminSettings(AdminRouteTest):
 
     CONTROLLER_NAME = "admin_individual_admin_settings_controller"

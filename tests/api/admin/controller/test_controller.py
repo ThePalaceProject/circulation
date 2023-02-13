@@ -325,18 +325,6 @@ class TestAdminCirculationManagerController(AdminControllerTest):
 class TestSignInController(AdminControllerTest):
     def setup_method(self):
         super().setup_method()
-        self.admin.credential = json.dumps(
-            {
-                "access_token": "abc123",
-                "client_id": "",
-                "client_secret": "",
-                "refresh_token": "",
-                "token_expiry": "",
-                "token_uri": "",
-                "user_agent": "",
-                "invalid": "",
-            }
-        )
         self.admin.password_hashed = None
 
     def test_admin_auth_providers(self):

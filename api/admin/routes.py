@@ -387,22 +387,6 @@ def collection_library_registrations():
     )
 
 
-@app.route("/admin/admin_auth_services", methods=["GET", "POST"])
-@returns_json_or_response_or_problem_detail
-@requires_admin
-@requires_csrf_token
-def admin_auth_services():
-    return app.manager.admin_auth_services_controller.process_admin_auth_services()
-
-
-@app.route("/admin/admin_auth_service/<protocol>", methods=["DELETE"])
-@returns_json_or_response_or_problem_detail
-@requires_admin
-@requires_csrf_token
-def admin_auth_service(protocol):
-    return app.manager.admin_auth_services_controller.process_delete(protocol)
-
-
 @app.route("/admin/individual_admins", methods=["GET", "POST"])
 @returns_json_or_response_or_problem_detail
 @allows_admin_auth_setup
