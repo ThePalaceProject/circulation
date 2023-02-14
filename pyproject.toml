@@ -2,6 +2,12 @@
 build-backend = "poetry.core.masonry.api"
 requires = ["poetry-core>=1.0.0"]
 
+[tool.coverage.report]
+exclude_lines = [
+    "if TYPE_CHECKING:",
+    "pragma: no cover",
+]
+
 [tool.coverage.run]
 branch = true
 relative_files = true
