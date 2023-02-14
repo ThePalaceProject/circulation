@@ -1,10 +1,14 @@
+from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING
 
 from contextlib2 import contextmanager
 from flask_babel import lazy_gettext as _
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
+from api.circulation_exceptions import PatronHoldLimitReached, PatronLoanLimitReached
 from api.odl import ODLAPI, ODLImporter
 from core.metadata_layer import FormatData
 from core.model import Edition, RightsStatus
@@ -21,6 +25,9 @@ from core.opds_import import OPDSImporterConfiguration
 from core.util import first_or_default
 from core.util.datetime_helpers import to_utc
 
+if TYPE_CHECKING:
+    from core.model.patron import Patron
+
 
 class ODL2APIConfiguration(OPDSImporterConfiguration):
     skipped_license_formats = ConfigurationMetadata(
@@ -34,10 +41,67 @@ class ODL2APIConfiguration(OPDSImporterConfiguration):
         default=["text/html"],
     )
 
+    loan_limit = ConfigurationMetadata(
+        key="odl2_loan_limit",
+        label=_("Loan limit per patron"),
+        description=_(
+            "The number of assets a patron can have loaned out at any given time."
+        ),
+        type=ConfigurationAttributeType.NUMBER,
+        required=False,
+        default=None,
+    )
+
+    hold_limit = ConfigurationMetadata(
+        key="odl2_hold_limit",
+        label=_("Hold limit per patron"),
+        description=_(
+            "The number of assets a patron can have on hold at any given time."
+        ),
+        type=ConfigurationAttributeType.NUMBER,
+        required=False,
+        default=None,
+    )
+
 
 class ODL2API(ODLAPI):
     NAME = ExternalIntegration.ODL2
     SETTINGS = ODLAPI.SETTINGS + ODL2APIConfiguration.to_settings()
+
+    def __init__(self, _db, collection):
+        self.loan_limit = collection.external_integration.setting(
+            "odl2_loan_limit"
+        ).int_value
+        self.hold_limit = collection.external_integration.setting(
+            "odl2_hold_limit"
+        ).int_value
+        super().__init__(_db, collection)
+
+    def _checkout(self, patron_or_client: Patron, licensepool, hold=None):
+        # If the loan limit is not None or 0
+        if self.loan_limit:
+            loans = list(
+                filter(
+                    lambda x: x.license_pool.collection.id == self.collection_id,
+                    patron_or_client.loans,
+                )
+            )
+            if len(loans) >= self.loan_limit:
+                raise PatronLoanLimitReached(limit=self.loan_limit)
+        return super()._checkout(patron_or_client, licensepool, hold)
+
+    def _place_hold(self, patron_or_client: Patron, licensepool):
+        # If the hold limit is not None or 0
+        if self.hold_limit:
+            holds = list(
+                filter(
+                    lambda x: x.license_pool.collection.id == self.collection_id,
+                    patron_or_client.holds,
+                )
+            )
+            if len(holds) >= self.hold_limit:
+                raise PatronHoldLimitReached(limit=self.hold_limit)
+        return super()._place_hold(patron_or_client, licensepool)
 
 
 class ODL2Importer(OPDS2Importer, HasExternalIntegration):

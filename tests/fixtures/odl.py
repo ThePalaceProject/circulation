@@ -6,6 +6,7 @@ import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
 from api.odl import ODLAPI
+from api.odl2 import ODL2API
 from core.model import (
     Collection,
     IntegrationClient,
@@ -18,8 +19,10 @@ from core.model import (
     Work,
     get_one_or_create,
 )
+from core.model.configuration import ExternalIntegration
 from core.testing import DatabaseTest, MockRequestsResponse
 from core.util.http import HTTP
+from tests.fixtures.api_odl2_files import ODL2APIFilesFixture
 from tests.fixtures.api_odl_files import ODLAPIFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -259,4 +262,48 @@ def odl_api_test_fixture(odl_test_fixture: ODLTestFixture) -> ODLAPITestFixture:
     client = odl_test_fixture.client()
     return ODLAPITestFixture(
         odl_test_fixture, library, collection, work, license, api, patron, client
+    )
+
+
+class ODL2TestFixture(ODLTestFixture):
+    """An ODL2 test fixture that mirrors the ODL test fixture except for the API class being used"""
+
+    def collection(self, library) -> Collection:
+        collection = super().collection(library)
+        collection.name = "Test ODL2 Collection"
+        collection.external_integration.protocol = ExternalIntegration.ODL2
+        return collection
+
+    def api(self, collection) -> ODL2API:
+        api = ODL2API(self.db.session, collection)
+        api.requests = []
+        api.responses = []
+        return api
+
+
+class ODL2APITestFixture(ODLAPITestFixture):
+    """The ODL2 API fixture has no changes in terms of data, from the ODL API fixture"""
+
+
+@pytest.fixture(scope="function")
+def odl2_test_fixture(
+    db: DatabaseTransactionFixture,
+    api_odl2_files_fixture: ODL2APIFilesFixture,
+    monkey_patch_odl: MonkeyPatchedODLFixture,
+) -> ODL2TestFixture:
+    """The ODL2 API uses the ODL API in the background, so the mockeypatching is the same"""
+    return ODL2TestFixture(db, api_odl2_files_fixture, monkey_patch_odl)
+
+
+@pytest.fixture(scope="function")
+def odl2_api_test_fixture(odl2_test_fixture: ODL2TestFixture) -> ODL2APITestFixture:
+    library = odl2_test_fixture.library()
+    collection = odl2_test_fixture.collection(library)
+    work = odl2_test_fixture.work(collection)
+    license = odl2_test_fixture.license(work)
+    api = odl2_test_fixture.api(collection)
+    patron = odl2_test_fixture.db.patron()
+    client = odl2_test_fixture.client()
+    return ODL2APITestFixture(
+        odl2_test_fixture, library, collection, work, license, api, patron, client
     )
