@@ -89,7 +89,7 @@ class Library(Base, HasSessionCache):
 
     # An Library may have many admin roles.
     adminroles = relationship(
-        "AdminRole", backref="library", cascade="all, delete-orphan"
+        "AdminRole", back_populates="library", cascade="all, delete-orphan"
     )
 
     # A Library may have many CachedFeeds.
