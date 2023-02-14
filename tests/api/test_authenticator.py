@@ -3418,6 +3418,44 @@ class TestSirsiDynixAuthenticationProvider:
         assert patrondata.fines == 50.00
         assert patrondata.block_reason == None
 
+        # Test the defensive code
+        # Test no session token
+        patrondata = sirsi_fixture.api._remote_patron_lookup(
+            SirsiDynixPatronData(permanent_id="xxxx", session_token=None)
+        )
+        assert patrondata == None
+
+        # Test incorrect patrondata type
+        patrondata = sirsi_fixture.api._remote_patron_lookup(
+            PatronData(permanent_id="xxxx")
+        )
+        assert patrondata == None
+
+        # Test bad patron read data
+        bad_patron_resp = {"bad": "yes"}
+        sirsi_fixture.api.api_read_patron_data = MagicMock(return_value=bad_patron_resp)
+        patrondata = sirsi_fixture.api._remote_patron_lookup(
+            SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
+        )
+        assert patrondata == None
+
+        not_approved_patron_resp = {"fields": {"approved": False}}
+        sirsi_fixture.api.api_read_patron_data = MagicMock(
+            return_value=not_approved_patron_resp
+        )
+        patrondata = sirsi_fixture.api._remote_patron_lookup(
+            SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
+        )
+        assert patrondata.block_reason == SirsiBlockReasons.NOT_APPROVED
+
+        # Test bad patron status info
+        sirsi_fixture.api.api_read_patron_data.return_value = ok_patron_resp
+        sirsi_fixture.api.api_patron_status_info.return_value = False
+        patrondata = sirsi_fixture.api._remote_patron_lookup(
+            SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
+        )
+        assert patrondata == None
+
     def test__request(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
         # Leading slash on the path is not allowed, as it overwrites the urljoin prefix
         with pytest.raises(ValueError):
@@ -3481,3 +3519,32 @@ class TestSirsiDynixAuthenticationProvider:
                 SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
             )
             assert data.block_reason == reason
+
+    def test_api_methods(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
+        """The patron data and patron status methods are almost identical in functionality
+        They just hit different APIs, so we only test the difference in endpoints
+        """
+        api_methods = [
+            ("api_read_patron_data", "http://localhost/user/patron/key/patronkey"),
+            (
+                "api_patron_status_info",
+                "http://localhost/user/patronStatusInfo/key/patronkey",
+            ),
+        ]
+        with patch(
+            "api.sirsidynix_authentication_provider.HTTP.request_with_timeout"
+        ) as mock_request:
+            for api_method, uri in api_methods:
+                test_method = getattr(sirsi_fixture.api, api_method)
+
+                mock_request.return_value = MockRequestsResponse(
+                    200, content=dict(success=True)
+                )
+                response = test_method("patronkey", "sessiontoken")
+                args = mock_request.call_args
+                args.args == ("GET", uri)
+                assert response == dict(success=True)
+
+                mock_request.return_value = MockRequestsResponse(400)
+                response = test_method("patronkey", "sessiontoken")
+                assert response == False
