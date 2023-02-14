@@ -6,6 +6,7 @@ import sys
 import time
 from datetime import timedelta
 from io import StringIO
+from pathlib import Path
 
 from alembic import command, config
 from api.adobe_vendor_id import AuthdataUtility
@@ -932,7 +933,7 @@ class InstanceInitializationScript(TimestampScript):
                 pass
 
         # Stamp the most recent migration as the current state of the DB
-        conf = config.Config("alembic.ini")
+        conf = config.Config(str(Path(__file__).parent.absolute() / "alembic.ini"))
         conf.set_main_option("sqlalchemy.url", Configuration.database_url())
         command.stamp(conf, "head")
 
