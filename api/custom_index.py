@@ -8,10 +8,10 @@ OPDS navigation feed it generates.
 from __future__ import annotations
 
 from flask import Response
+from flask import url_for as flask_url_for
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm.session import Session
 
-from core.app_server import cdn_url_for
 from core.lane import Lane
 from core.model import ConfigurationSetting, ExternalIntegration, get_one
 from core.util.datetime_helpers import utc_now
@@ -145,8 +145,10 @@ class COPPAGate(CustomIndexView):
 
     def _navigation_feed(self, library, annotator, url_for=None):
         """Generate an OPDS feed for navigating the COPPA age gate."""
-        url_for = url_for or cdn_url_for
-        base_url = url_for("index", library_short_name=library.short_name)
+        url_for = url_for or flask_url_for
+        base_url = url_for(
+            "index", library_short_name=library.short_name, _external=True
+        )
 
         # An entry for grown-ups.
         feed = OPDSFeed(title=library.name, url=base_url)

@@ -14,7 +14,6 @@ from core.util.problem_detail import ProblemDetail
 
 from .authenticator import LibraryAuthenticator
 from .circulation import CirculationAPI
-from .feedbooks import FeedbooksImportMonitor, FeedbooksOPDSImporter
 
 
 class HasSelfTests(CoreHasSelfTests):
@@ -120,7 +119,6 @@ class RunSelfTestsScript(LibraryInputScript):
         for library in parsed.libraries:
             api_map = CirculationAPI(self._db, library).default_api_map
             api_map[ExternalIntegration.OPDS_IMPORT] = OPDSImportMonitor
-            api_map[ExternalIntegration.FEEDBOOKS] = FeedbooksImportMonitor
             self.out.write("Testing %s\n" % library.name)
             for collection in library.collections:
                 try:
@@ -141,7 +139,6 @@ class RunSelfTestsScript(LibraryInputScript):
         # constructors.
         extra_args = extra_args or {
             OPDSImportMonitor: [OPDSImporter],
-            FeedbooksImportMonitor: [FeedbooksOPDSImporter],
         }
         extra = extra_args.get(tester, [])
         constructor_args = [self._db, collection] + list(extra)

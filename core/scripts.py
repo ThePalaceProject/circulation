@@ -131,7 +131,6 @@ class Script:
             self._session = _db
 
     def run(self):
-        self.load_configuration()
         DataSource.well_known_sources(self._db)
         start_time = utc_now()
         try:
@@ -145,10 +144,6 @@ class Script:
             stack_trace = traceback.format_exc()
             self.update_timestamp(None, start_time, stack_trace)
             raise
-
-    def load_configuration(self):
-        if not Configuration.cdns_loaded_from_database():
-            Configuration.load(self._db)
 
     def update_timestamp(self, timestamp_data, start_time, exception):
         """By default scripts have no timestamp of their own.
@@ -3420,8 +3415,20 @@ class UpdateLaneSizeScript(LaneSweeperScript):
 
     def process_lane(self, lane):
         """Update the estimated size of a Lane."""
+
+        # We supress the configuration changes updates, as each lane is updated
+        # and call the site_configuration_has_changed function once after this
+        # script has finished running.
+        #
+        # This is done because calling site_configuration_has_changed repeatedly
+        # was causing performance problems, when we have lots of lanes to update.
+        lane._suppress_configuration_changes = True
         lane.update_size(self._db)
         self.log.info("%s: %d", lane.full_identifier, lane.size)
+
+    def do_run(self, *args, **kwargs):
+        super().do_run(*args, **kwargs)
+        site_configuration_has_changed(self._db)
 
 
 class UpdateCustomListSizeScript(CustomListSweeperScript):

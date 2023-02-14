@@ -2,7 +2,7 @@ from datetime import timedelta
 from functools import wraps
 
 import flask
-from flask import Response, make_response, redirect
+from flask import Response, make_response, redirect, url_for
 from flask_pydantic_spec import FileResponse as SpecFileResponse
 from flask_pydantic_spec import Request as SpecRequest
 from flask_pydantic_spec import Response as SpecResponse
@@ -518,22 +518,6 @@ def analytics_service(service_id):
     return app.manager.admin_analytics_services_controller.process_delete(service_id)
 
 
-@app.route("/admin/cdn_services", methods=["GET", "POST"])
-@returns_json_or_response_or_problem_detail
-@requires_admin
-@requires_csrf_token
-def cdn_services():
-    return app.manager.admin_cdn_services_controller.process_cdn_services()
-
-
-@app.route("/admin/cdn_service/<service_id>", methods=["DELETE"])
-@returns_json_or_response_or_problem_detail
-@requires_admin
-@requires_csrf_token
-def cdn_service(service_id):
-    return app.manager.admin_cdn_services_controller.process_delete(service_id)
-
-
 @app.route("/admin/search_services", methods=["GET", "POST"])
 @returns_json_or_response_or_problem_detail
 @requires_admin
@@ -835,7 +819,7 @@ def admin_sign_in_again():
         or isinstance(csrf_token, ProblemDetail)
     ):
         redirect_url = flask.request.url
-        return redirect(app.manager.url_for("admin_sign_in", redirect=redirect_url))
+        return redirect(url_for("admin_sign_in", redirect=redirect_url, _external=True))
     return flask.render_template_string(sign_in_again_template)
 
 
@@ -850,7 +834,7 @@ def admin_view(collection=None, book=None, etc=None, **kwargs):
 
 @app.route("/admin/", strict_slashes=False)
 def admin_base(**kwargs):
-    return redirect(app.manager.url_for("admin_view"))
+    return redirect(url_for("admin_view", _external=True))
 
 
 # This path is used only in debug mode to serve frontend assets.

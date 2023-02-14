@@ -2,6 +2,11 @@
 build-backend = "poetry.core.masonry.api"
 requires = ["poetry-core>=1.0.0"]
 
+[tool.coverage.run]
+branch = true
+relative_files = true
+source = ["api", "core"]
+
 [tool.isort]
 known_first_party = ["api", "core", "customlists"]
 profile = "black"
@@ -158,11 +163,11 @@ oauth2client = "4.1.3"  # Deprecated and should be replaced.
 palace-webpub-manifest-parser = "~3.0.0"
 Pillow = "9.4.0"
 py-bcrypt = "0.4"
-pycryptodome = "3.16.0"
+pycryptodome = "3.17"
 pyinstrument = "<4.5"
 PyJWT = "2.4.0"
 PyLD = "2.0.3"
-pymarc = "4.2.1"
+pymarc = "4.2.2"
 pyOpenSSL = "23.0.0"
 pyparsing = "3.0.9"
 pypostalcode = "0.4.1"
@@ -181,7 +186,7 @@ uritemplate = "3.0.1"
 urllib3 = "~1.26.14"
 uszipcode = "0.2.6"
 uWSGI = "~2.0.21"
-watchtower = "3.0.0"  # watchtower is for Cloudwatch logging integration
+watchtower = "3.0.1"  # watchtower is for Cloudwatch logging integration
 wcag-contrast-ratio = "0.9"
 Werkzeug = "1.0.1"
 
@@ -193,8 +198,8 @@ tox-docker = "^3.1.0"
 tox-gh-actions = "^2.10.0"
 
 [tool.poetry.group.dev.dependencies]
-boto3-stubs = "^1.26.30"
-botocore-stubs = "^1.29.42"
+boto3-stubs = "^1.26.67"
+botocore-stubs = "^1.29.68"
 freezegun = "~1.2"
 Jinja2 = "2.11.3"
 markupsafe = "2.0.1"
@@ -202,6 +207,7 @@ mypy = "^0.991"
 parameterized = "0.8.1"
 psycopg2-binary = "~2.9.5"
 pyfakefs = "5.0.0"
+pytest-cov = "^4.0.0"
 pytest-timeout = "*"
 requests-mock = "1.10.0"
 sqlalchemy-stubs = "^0.4"
@@ -209,8 +215,8 @@ types-aws-xray-sdk = "^2.11.0.1"
 types-Flask = "^1.1.6"
 types-Flask-Cors = "^3.0.10"
 types-freezegun = "^1.1.10"
-types-jsonschema = "^4.17.0.2"
-types-Pillow = "^9.3.0"
+types-jsonschema = "^4.17.0.4"
+types-Pillow = "^9.4.0"
 types-psycopg2 = "^2.9.21"
 types-python-dateutil = "^2.8.19"
 types-pytz = "^2022.7.0"
@@ -223,7 +229,11 @@ optional = true
 psycopg2 = "~2.9.5"
 
 [tool.pytest.ini_options]
-addopts = "--strict-markers"
+addopts = [
+    "--cov",
+    "--cov-report=xml",
+    "--strict-markers",
+]
 markers = [
     "elasticsearch: mark test as requiring elasticsearch",
     "minio: mark test as requiring minio",

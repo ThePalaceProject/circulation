@@ -3287,6 +3287,34 @@ class TestUpdateLaneSizeScript:
         worklist = WorkList()
         assert False == script.should_process_lane(worklist)
 
+    def test_site_configuration_has_changed(
+        self,
+        db: DatabaseTransactionFixture,
+        external_search_patch_fixture: ExternalSearchPatchFixture,
+    ):
+        lane1 = db.lane()
+        lane2 = db.lane()
+        lane1.size = 100
+        lane2.size = 50
+
+        # Commit changes to the DB so the lane creation listeners are fired
+        db.session.commit()
+
+        with patch("core.lane.site_configuration_has_changed") as lane_changed:
+            with patch(
+                "core.scripts.site_configuration_has_changed"
+            ) as scripts_changed:
+                UpdateLaneSizeScript(db.session).do_run(cmd_args=[])
+
+        assert 0 == lane1.size
+        assert 0 == lane2.size
+
+        # The listeners in lane.py shouldn't call site_configuration_has_changed
+        lane_changed.assert_not_called()
+
+        # The script should call site_configuration_has_changed once when it is done
+        scripts_changed.assert_called_once()
+
 
 class TestUpdateCustomListSizeScript:
     def test_do_run(self, db: DatabaseTransactionFixture):
