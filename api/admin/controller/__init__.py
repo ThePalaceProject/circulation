@@ -9,7 +9,6 @@ from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Union
 
 import flask
-import jwt
 from flask import Response, redirect, url_for
 from flask_babel import lazy_gettext as _
 from flask_pydantic_spec.flask_backend import Context
@@ -56,7 +55,6 @@ from core.model import (
     Collection,
     ConfigurationSetting,
     CustomList,
-    CustomListEntry,
     DataSource,
     ExternalIntegration,
     Hold,
@@ -81,9 +79,7 @@ from core.query.customlist import CustomListQueries
 from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
 from core.util.cache import memoize
-from core.util.datetime_helpers import utc_now
-from core.util.flask_util import OPDSFeedResponse, boolean_value
-from core.util.http import HTTP
+from core.util.flask_util import OPDSFeedResponse
 from core.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:
