@@ -2220,7 +2220,10 @@ class TestBasicAuthenticationProvider:
         )
 
         provider = ConfigAuthenticationProvider(db.default_library(), integration)
-        assert b.DEFAULT_IDENTIFIER_REGULAR_EXPRESSION == provider.identifier_re
+        assert (
+            re.compile(b.DEFAULT_IDENTIFIER_REGULAR_EXPRESSION)
+            == provider.identifier_re
+        )
         assert None == provider.password_re
 
     def test_testing_patron(self, authenticator_fixture: AuthenticatorFixture):
@@ -2425,10 +2428,7 @@ class TestBasicAuthenticationProvider:
         integration.setting(b.IDENTIFIER_REGULAR_EXPRESSION).value = None
         integration.setting(b.PASSWORD_REGULAR_EXPRESSION).value = None
         provider = b(db.default_library(), integration)
-        assert (
-            b.DEFAULT_IDENTIFIER_REGULAR_EXPRESSION.pattern
-            == provider.identifier_re.pattern
-        )
+        assert b.DEFAULT_IDENTIFIER_REGULAR_EXPRESSION == provider.identifier_re.pattern
         assert None == provider.password_re
         assert True == provider.server_side_validation("food", "barbecue")
         assert True == provider.server_side_validation("a", None)
