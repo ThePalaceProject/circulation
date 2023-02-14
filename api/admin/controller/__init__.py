@@ -31,6 +31,7 @@ from werkzeug.wrappers import Response as werkzeug_response
 
 from api.admin.config import Configuration as AdminClientConfig
 from api.admin.exceptions import *
+from api.admin.model.dashboard_statistics import StatisticsResponse
 from api.admin.opds import AdminAnnotator, AdminFeed
 from api.admin.password_admin_authentication_provider import (
     PasswordAdminAuthenticationProvider,
@@ -1600,13 +1601,10 @@ class LanesController(AdminCirculationManagerController):
 
 
 class DashboardController(AdminCirculationManagerController):
-
-    Statistics = TypeVar("Statistics", bound=Dict[str, Any])
-
     def stats(
-        self, stats_function: Callable[[Admin, Session], Statistics]
-    ) -> Statistics:
-        admin = getattr(flask.request, "admin")
+        self, stats_function: Callable[[Admin, Session], StatisticsResponse]
+    ) -> StatisticsResponse:
+        admin: Admin = getattr(flask.request, "admin")
         return stats_function(admin, self._db)
 
     def circulation_events(self):
