@@ -33,8 +33,8 @@ services:
       - "9000:9000"
       - "9001:9001"
     environment:
-      MINIO_ACCESS_KEY: "palace"
-      MINIO_SECRET_KEY: "test123456789"
+      MINIO_ROOT_USER: "palace"
+      MINIO_ROOT_PASSWORD: "test123456789"
 
   os:
     image: opensearchproject/opensearch:1
