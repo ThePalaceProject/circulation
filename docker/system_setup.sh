@@ -24,7 +24,7 @@ install_clean --no-upgrade \
   pkg-config
 
 # Install Poetry
-curl -sSL https://install.python-poetry.org | POETRY_HOME="/opt/poetry" python3 - --yes --version "1.2.1"
+curl -sSL https://install.python-poetry.org | POETRY_HOME="/opt/poetry" python3 - --yes --version "1.3.2"
 ln -s /opt/poetry/bin/poetry /bin/poetry
 
 # Copy scripts that run at startup.

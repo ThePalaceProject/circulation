@@ -4032,6 +4032,15 @@ class TestLane:
         assert facets == lane.called_with
         Lane._groups_for_lanes = old_value
 
+    def test_suppress(self, db: DatabaseTransactionFixture):
+        lane1 = db.lane()
+        lane2 = db.lane()
+
+        # Updating the flag on one lane does not impact others
+        lane1._suppress_configuration_changes = True
+        assert lane1._suppress_configuration_changes is True
+        assert lane2._suppress_configuration_changes is False
+
 
 class TestWorkListGroupsEndToEndData:
     best_seller_list: CustomList

@@ -1,7 +1,6 @@
 """Implement logic common to more than one of the Simplified applications."""
 
 import gzip
-import json
 import logging
 import sys
 import traceback
@@ -11,11 +10,13 @@ from io import BytesIO
 import flask
 from flask import make_response, url_for
 from flask_babel import lazy_gettext as _
+from flask_pydantic_spec import FlaskPydanticSpec
 from psycopg2 import DatabaseError
 from sqlalchemy.exc import SQLAlchemyError
 
-from .cdn import cdnify
-from .config import Configuration
+import core
+from api.admin.config import Configuration as AdminUiConfig
+
 from .lane import Facets, Pagination
 from .log import LogConfiguration
 from .model import Identifier
@@ -24,11 +25,6 @@ from .problem_details import *
 from .util.flask_util import OPDSFeedResponse
 from .util.opds_writer import OPDSMessage
 from .util.problem_detail import ProblemDetail
-
-
-def cdn_url_for(*args, **kwargs):
-    base_url = url_for(*args, **kwargs)
-    return cdnify(base_url)
 
 
 def load_facets_from_request(
@@ -64,7 +60,7 @@ def load_facets_from_request(
         get_header,
         worklist,
         default_entrypoint,
-        **kwargs
+        **kwargs,
     )
 
 
@@ -85,7 +81,24 @@ def load_pagination_from_request(
     return base_class.from_request(get_arg, default_size, **kwargs)
 
 
+def ensure_pydantic_after_problem_detail(func):
+    """We must ensure the problem_detail decorators are always placed below the
+    `spec.validate` decorator because the `spec.validate` decorator will always expect a
+    tuple or dict-like response, not a ProblemDetail like response.
+    The problem_detail decorators will convert the ProblemDetail before the response gets validated.
+    """
+    spec = getattr(func, "_decorator", None)
+    if spec and isinstance(spec, FlaskPydanticSpec):
+        raise RuntimeError(
+            "FlaskPydanticSpec MUST be decorated above the problem_detail decorator"
+            + ", else problem details will throw errors during response validation"
+            + f": {func}"
+        )
+
+
 def returns_problem_detail(f):
+    ensure_pydantic_after_problem_detail(f)
+
     @wraps(f)
     def decorated(*args, **kwargs):
         v = f(*args, **kwargs)
@@ -253,22 +266,19 @@ class ErrorHandler:
         return response
 
 
-class HeartbeatController:
-
-    HEALTH_CHECK_TYPE = "application/vnd.health+json"
-    VERSION_FILENAME = ".version"
-
-    def heartbeat(self, conf_class=None):
-        health_check_object = dict(status="pass")
-
-        Conf = conf_class or Configuration
-        app_version = Conf.app_version()
-        if app_version and app_version != Conf.NO_APP_VERSION_FOUND:
-            health_check_object["releaseID"] = app_version
-            health_check_object["version"] = app_version.split("-")[0]
-
-        data = json.dumps(health_check_object)
-        return make_response(data, 200, {"Content-Type": self.HEALTH_CHECK_TYPE})
+class ApplicationVersionController:
+    @staticmethod
+    def version():
+        response = {
+            "version": core.__version__,
+            "commit": core.__commit__,
+            "branch": core.__branch__,
+            "admin_ui": {
+                "package": AdminUiConfig.package_name(),
+                "version": AdminUiConfig.package_version(),
+            },
+        }
+        return response
 
 
 class URNLookupController:
@@ -287,7 +297,7 @@ class URNLookupController:
         """Generate an OPDS feed describing works identified by identifier."""
         urns = flask.request.args.getlist("urn")
 
-        this_url = cdn_url_for(route_name, _external=True, urn=urns)
+        this_url = url_for(route_name, _external=True, urn=urns)
         handler = self.process_urns(urns, **process_urn_kwargs)
 
         if isinstance(handler, ProblemDetail):
@@ -325,7 +335,7 @@ class URNLookupController:
         should be possible to remove it.
         """
         handler = URNLookupHandler(self._db)
-        this_url = cdn_url_for(route_name, _external=True, urn=urn)
+        this_url = url_for(route_name, _external=True, urn=urn)
         handler.process_urns([urn])
 
         # A LookupAcquisitionFeed's .works is a list of (identifier,

@@ -1,5 +1,6 @@
 import flask
 import pytest
+from flask import url_for
 from werkzeug.datastructures import MultiDict
 
 from api.admin.exceptions import *
@@ -157,7 +158,7 @@ class TestCollectionRegistration(SettingsControllerTest):
 
             # push() was called with the arguments we would expect.
             args, kwargs = Mock.called_with
-            assert (Registration.PRODUCTION_STAGE, self.manager.url_for) == args
+            assert (Registration.PRODUCTION_STAGE, url_for) == args
 
             # We would have made real HTTP requests.
             assert HTTP.debuggable_post == kwargs.pop("do_post")

@@ -7,14 +7,14 @@ from Crypto.PublicKey import RSA
 from api.config import Configuration
 from core.config import Configuration as CoreConfiguration
 from core.model import ConfigurationSetting
-from core.testing import DatabaseTest
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestConfiguration(DatabaseTest):
-    def test_key_pair(self):
+class TestConfiguration:
+    def test_key_pair(self, db: DatabaseTransactionFixture):
         # Test the ability to create, replace, or look up a
         # public/private key pair in a ConfigurationSetting.
-        setting = ConfigurationSetting.sitewide(self._db, Configuration.KEY_PAIR)
+        setting = ConfigurationSetting.sitewide(db.session, Configuration.KEY_PAIR)
         setting.value = "nonsense"
 
         # If you pass in a ConfigurationSetting that is missing its
@@ -37,7 +37,7 @@ class TestConfiguration(DatabaseTest):
         assert new_public == public_key
         assert new_private == private_key
 
-    def test_cipher(self):
+    def test_cipher(self, db: DatabaseTransactionFixture):
         # Test the cipher() helper method.
 
         # Generate a public/private key pair.
@@ -57,9 +57,11 @@ class TestConfiguration(DatabaseTest):
         decrypted = decryptor.decrypt(encrypted)
         assert b"some text" == decrypted
 
-    def test_collection_language_method_performs_estimate(self):
+    def test_collection_language_method_performs_estimate(
+        self, db: DatabaseTransactionFixture
+    ):
         C = Configuration
-        library = self._default_library
+        library = db.default_library()
 
         # We haven't set any of these values.
         for key in [
@@ -107,9 +109,10 @@ class TestConfiguration(DatabaseTest):
         large_setting.value = '"this is json but it\'s not a list"'
         assert ["eng"] == C.large_collection_languages(library)
 
-    def test_estimate_language_collection_for_library(self):
-
-        library = self._default_library
+    def test_estimate_language_collection_for_library(
+        self, db: DatabaseTransactionFixture
+    ):
+        library = db.default_library()
 
         # We thought we'd have big collections.
         old_settings = {
@@ -144,8 +147,7 @@ class TestConfiguration(DatabaseTest):
             ).json_value
         )
 
-    def test_classify_holdings(self):
-
+    def test_classify_holdings(self, db: DatabaseTransactionFixture):
         m = Configuration.classify_holdings
 
         # If there are no titles in the collection at all, we assume
@@ -165,26 +167,26 @@ class TestConfiguration(DatabaseTest):
         )
         assert [["fre", "jpn"], ["spa", "ukr", "ira"], ["nav"]] == m(different_sizes)
 
-    def test_max_outstanding_fines(self):
+    def test_max_outstanding_fines(self, db: DatabaseTransactionFixture):
         m = Configuration.max_outstanding_fines
 
         # By default, fines are not enforced.
-        assert None == m(self._default_library)
+        assert None == m(db.default_library())
 
         # The maximum fine value is determined by this
         # ConfigurationSetting.
         setting = ConfigurationSetting.for_library(
-            Configuration.MAX_OUTSTANDING_FINES, self._default_library
+            Configuration.MAX_OUTSTANDING_FINES, db.default_library()
         )
 
         # Any amount of fines is too much.
         setting.value = "$0"
-        max_fines = m(self._default_library)
+        max_fines = m(db.default_library())
         assert 0 == max_fines.amount
 
         # A more lenient approach.
         setting.value = "100"
-        max_fines = m(self._default_library)
+        max_fines = m(db.default_library())
         assert 100 == max_fines.amount
 
     def test_default_opds_format(self):

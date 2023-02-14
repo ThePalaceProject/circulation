@@ -6,13 +6,13 @@ import os
 import sys
 import urllib.parse
 from datetime import date, datetime, timedelta
-from http.client import BAD_REQUEST
 from typing import Callable, Dict, List, Optional, Union
 
 import flask
 import jwt
-from flask import Response, redirect
+from flask import Response, redirect, url_for
 from flask_babel import lazy_gettext as _
+from pydantic import BaseModel
 from sqlalchemy.sql import func
 from sqlalchemy.sql.expression import and_, desc, distinct, join, nullslast, select
 
@@ -35,7 +35,6 @@ from api.bibliotheca import BibliothecaAPI
 from api.config import CannotLoadConfiguration, Configuration
 from api.controller import CirculationManagerController
 from api.enki import EnkiAPI
-from api.feedbooks import FeedbooksOPDSImporter
 from api.lanes import create_default_lanes
 from api.lcp.collection import LCPAPI
 from api.local_analytics_exporter import LocalAnalyticsExporter
@@ -44,7 +43,6 @@ from api.odl import ODLAPI, SharedODLAPI
 from api.odl2 import ODL2API
 from api.opds_for_distributors import OPDSForDistributorsAPI
 from api.overdrive import OverdriveAPI
-from api.proquest.importer import ProQuestOPDS2Importer
 from core.app_server import load_pagination_from_request
 from core.classifier import genres
 from core.external_search import ExternalSearchIndex
@@ -72,13 +70,16 @@ from core.model import (
     get_one,
     get_one_or_create,
 )
+from core.model.classification import Classification, Genre, Subject
 from core.model.configuration import ExternalIntegrationLink
+from core.model.edition import Edition
 from core.opds import AcquisitionFeed
 from core.opds2_import import OPDS2Importer
 from core.opds_import import OPDSImporter, OPDSImportMonitor
 from core.query.customlist import CustomListQueries
 from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
+from core.util.cache import memoize
 from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSFeedResponse, boolean_value
 from core.util.http import HTTP
@@ -119,9 +120,6 @@ def setup_admin_controllers(manager):
     manager.admin_discovery_service_library_registrations_controller = (
         DiscoveryServiceLibraryRegistrationsController(manager)
     )
-    from api.admin.controller.cdn_services import CDNServicesController
-
-    manager.admin_cdn_services_controller = CDNServicesController(manager)
     from api.admin.controller.analytics_services import AnalyticsServicesController
 
     manager.admin_analytics_services_controller = AnalyticsServicesController(manager)
@@ -208,13 +206,13 @@ def setup_admin_controllers(manager):
 
     manager.admin_announcement_service = AnnouncementSettings(manager)
 
+    manager.admin_search_controller = AdminSearchController(manager)
+
 
 class AdminController:
     def __init__(self, manager):
         self.manager = manager
         self._db = self.manager._db
-        self.url_for = self.manager.url_for
-        self.cdn_url_for = self.manager.cdn_url_for
 
     @property
     def admin_auth_providers(self):
@@ -224,7 +222,7 @@ class AdminController:
             auth_providers.append(
                 GoogleOAuthAdminAuthenticationProvider(
                     auth_service,
-                    self.url_for("google_auth_callback"),
+                    url_for("google_auth_callback", _external=True),
                     test_mode=self.manager.testing,
                 )
             )
@@ -378,7 +376,9 @@ class ViewController(AdminController):
                     redirect_url = redirect_url.replace(
                         quoted_book, quoted_book.replace("/", "%2F")
                     )
-                return redirect(self.url_for("admin_sign_in", redirect=redirect_url))
+                return redirect(
+                    url_for("admin_sign_in", redirect=redirect_url, _external=True)
+                )
 
             if not collection and not book and not path:
                 if self._db.query(Library).count() > 0:
@@ -395,7 +395,9 @@ class ViewController(AdminController):
                             ),
                             200,
                         )
-                    return redirect(self.url_for("admin_view", collection=library_name))
+                    return redirect(
+                        url_for("admin_view", collection=library_name, _external=True)
+                    )
 
             email = admin.email
             for role in admin.roles:
@@ -637,8 +639,10 @@ class SignInController(AdminController):
         flask.session.pop("admin_email", None)
         flask.session.pop("auth_type", None)
 
-        redirect_url = self.url_for(
-            "admin_sign_in", redirect=self.url_for("admin_view"), _external=True
+        redirect_url = url_for(
+            "admin_sign_in",
+            redirect=url_for("admin_view", _external=True),
+            _external=True,
         )
         return redirect(redirect_url)
 
@@ -748,7 +752,7 @@ class FeedController(AdminCirculationManagerController):
     def suppressed(self):
         self.require_librarian(flask.request.library)
 
-        this_url = self.url_for("suppressed")
+        this_url = url_for("suppressed", _external=True)
         annotator = AdminAnnotator(self.circulation, flask.request.library)
         pagination = load_pagination_from_request()
         if isinstance(pagination, ProblemDetail):
@@ -777,6 +781,21 @@ class FeedController(AdminCirculationManagerController):
 
 
 class CustomListsController(AdminCirculationManagerController):
+    class CustomListSharePostResponse(BaseModel):
+        successes: int = 0
+        failures: int = 0
+
+    class CustomListPostRequest(BaseModel):
+        name: str
+        id: Optional[int] = None
+        entries: List[dict] = []
+        collections: List[int] = []
+        deletedEntries: List[dict] = []
+        # For auto updating lists
+        auto_update: bool = False
+        auto_update_query: Optional[dict] = None
+        auto_update_facets: Optional[dict] = None
+
     def _list_as_json(self, list: CustomList, is_owner=True) -> Dict:
         """Transform a CustomList object into a response ready dict"""
         collections = []
@@ -816,27 +835,16 @@ class CustomListsController(AdminCirculationManagerController):
             return dict(custom_lists=custom_lists)
 
         if flask.request.method == "POST":
-            id = flask.request.form.get("id")
-            name = flask.request.form.get("name")
-            entries = self._getJSONFromRequest(flask.request.form.get("entries"))
-            collections = self._getJSONFromRequest(
-                flask.request.form.get("collections")
-            )
-            # For auto updating lists
-            auto_update = flask.request.form.get(
-                "auto_update", False, type=boolean_value
-            )
-            auto_update_query = flask.request.form.get("auto_update_query")
-            auto_update_facets = flask.request.form.get("auto_update_facets")
+            ctx = flask.request.context.body
             return self._create_or_update_list(
                 library,
-                name,
-                entries,
-                collections,
-                id=id,
-                auto_update=auto_update,
-                auto_update_facets=auto_update_facets,
-                auto_update_query=auto_update_query,
+                ctx.name,
+                ctx.entries,
+                ctx.collections,
+                id=ctx.id,
+                auto_update=ctx.auto_update,
+                auto_update_facets=ctx.auto_update_facets,
+                auto_update_query=ctx.auto_update_query,
             )
 
     def _getJSONFromRequest(self, values: Optional[str]) -> Union[Dict, List]:
@@ -896,10 +904,11 @@ class CustomListsController(AdminCirculationManagerController):
 
         # Test JSON viability of auto update data
         try:
-            auto_update_query_dict = None
-            if auto_update_query:
+            auto_update_query_str = None
+            auto_update_facets_str = None
+            if auto_update_query is not None:
                 try:
-                    auto_update_query_dict = json.loads(auto_update_query)
+                    auto_update_query_str = json.dumps(auto_update_query)
                 except json.JSONDecodeError:
                     raise Exception(
                         INVALID_INPUT.detailed(
@@ -912,9 +921,9 @@ class CustomListsController(AdminCirculationManagerController):
                 if deleted_entries and len(deleted_entries) > 0:
                     raise Exception(AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES)
 
-            if auto_update_facets:
+            if auto_update_facets is not None:
                 try:
-                    json.loads(auto_update_facets)
+                    auto_update_facets_str = json.dumps(auto_update_facets)
                 except json.JSONDecodeError:
                     raise Exception(
                         INVALID_INPUT.detailed(
@@ -946,9 +955,9 @@ class CustomListsController(AdminCirculationManagerController):
         if auto_update is not None:
             list.auto_update_enabled = auto_update
         if auto_update_query is not None:
-            list.auto_update_query = auto_update_query
+            list.auto_update_query = auto_update_query_str
         if auto_update_facets is not None:
-            list.auto_update_facets = auto_update_facets
+            list.auto_update_facets = auto_update_facets_str
 
         # In case this is a new list with no entries, populate the first page
         if (
@@ -960,7 +969,7 @@ class CustomListsController(AdminCirculationManagerController):
         elif (
             not is_new
             and list.auto_update_enabled
-            and auto_update_query_dict
+            and auto_update_query
             and previous_auto_update_query
         ):
             # In case this is a previous auto update list, we must check if the
@@ -968,7 +977,7 @@ class CustomListsController(AdminCirculationManagerController):
             # JSON maps are unordered by definition, so we must deserialize and compare dicts
             try:
                 prev_query_dict = json.loads(previous_auto_update_query)
-                if prev_query_dict != auto_update_query_dict:
+                if prev_query_dict != auto_update_query:
                     list.auto_update_status = CustomList.REPOPULATE
             except json.JSONDecodeError:
                 # Do nothing if the previous query was not valid
@@ -1029,7 +1038,7 @@ class CustomListsController(AdminCirculationManagerController):
     ) -> Callable[[int], str]:
         def url_fn(after):
             return self.url_for(
-                "custom_list",
+                "custom_list_get",
                 after=after,
                 library_short_name=library.short_name,
                 list_id=list.id,
@@ -1054,11 +1063,12 @@ class CustomListsController(AdminCirculationManagerController):
                 return pagination
 
             query = CustomList.entries_having_works(self._db, list_id)
-            url = self.url_for(
-                "custom_list",
+            url = url_for(
+                "custom_list_get",
                 list_name=list.name,
                 library_short_name=library.short_name,
                 list_id=list_id,
+                _external=True,
             )
 
             worklist = WorkList()
@@ -1074,32 +1084,17 @@ class CustomListsController(AdminCirculationManagerController):
             return OPDSFeedResponse(str(feed), max_age=0)
 
         elif flask.request.method == "POST":
-            name = flask.request.form.get("name")
-            entries = self._getJSONFromRequest(flask.request.form.get("entries"))
-            collections = self._getJSONFromRequest(
-                flask.request.form.get("collections")
-            )
-            deleted_entries = self._getJSONFromRequest(
-                flask.request.form.get("deletedEntries")
-            )
-
-            # For auto updating lists
-            auto_update = flask.request.form.get(
-                "auto_update", False, type=boolean_value
-            )
-            auto_update_query = flask.request.form.get("auto_update_query")
-            auto_update_facets = flask.request.form.get("auto_update_facets")
-
+            ctx = flask.request.context.body
             return self._create_or_update_list(
                 library,
-                name,
-                entries,
-                collections,
-                deleted_entries=deleted_entries,
+                ctx.name,
+                ctx.entries,
+                ctx.collections,
+                deleted_entries=ctx.deletedEntries,
                 id=list_id,
-                auto_update=auto_update,
-                auto_update_query=auto_update_query,
-                auto_update_facets=auto_update_facets,
+                auto_update=ctx.auto_update,
+                auto_update_query=ctx.auto_update_query,
+                auto_update_facets=ctx.auto_update_facets,
             )
 
         elif flask.request.method == "DELETE":
@@ -1135,8 +1130,22 @@ class CustomListsController(AdminCirculationManagerController):
         """Share this customlist with all libraries on this local CM"""
         if not customlist_id:
             return INVALID_INPUT
-
         customlist: CustomList = get_one(self._db, CustomList, id=customlist_id)
+        if customlist.library != flask.request.library:
+            return ADMIN_NOT_AUTHORIZED.detailed(
+                _("This library does not have permissions on this customlist.")
+            )
+
+        if flask.request.method == "POST":
+            return self.share_locally_POST(customlist)
+        elif flask.request.method == "DELETE":
+            return self.share_locally_DELETE(customlist)
+        else:
+            return METHOD_NOT_ALLOWED
+
+    def share_locally_POST(
+        self, customlist: CustomList
+    ) -> Union[ProblemDetail, Response]:
         library: Library = None
         successes = []
         failures = []
@@ -1160,7 +1169,40 @@ class CustomListsController(AdminCirculationManagerController):
                 successes.append(library)
 
         self._db.commit()
-        return dict(successes=len(successes), failures=len(failures))
+        return self.CustomListSharePostResponse(
+            successes=len(successes), failures=len(failures)
+        ).dict()
+
+    def share_locally_DELETE(
+        self, customlist: CustomList
+    ) -> Union[ProblemDetail, Response]:
+        """Delete the shared status of a custom list
+        If a customlist is actively in use by another library, then disallow the unshare
+        """
+        if not customlist.shared_locally_with_libraries:
+            return Response("", 204)
+
+        shared_list_lanes = (
+            self._db.query(Lane)
+            .filter(
+                Lane.customlists.contains(customlist),
+                Lane.library_id != customlist.library_id,
+            )
+            .count()
+        )
+
+        if shared_list_lanes > 0:
+            return CUSTOMLIST_CANNOT_DELETE_SHARE.detailed(
+                _(
+                    "This list cannot be unshared because it is currently being used by one or more libraries on this Palace Manager."
+                )
+            )
+
+        # This list is not in use by any other libraries, we can delete the share
+        # by simply emptying the list of shared libraries
+        customlist.shared_locally_with_libraries = []
+
+        return Response("", status=204)
 
 
 class LanesController(AdminCirculationManagerController):
@@ -1680,7 +1722,6 @@ class SettingsController(AdminCirculationManagerController):
         OPDSImporter,
         OPDSForDistributorsAPI,
         OPDS2Importer,
-        ProQuestOPDS2Importer,
         OverdriveAPI,
         OdiloAPI,
         BibliothecaAPI,
@@ -1689,7 +1730,6 @@ class SettingsController(AdminCirculationManagerController):
         ODLAPI,
         ODL2API,
         SharedODLAPI,
-        FeedbooksOPDSImporter,
         LCPAPI,
     ]
 
@@ -2385,157 +2425,95 @@ class SettingsController(AdminCirculationManagerController):
             return error
 
 
-class SitewideRegistrationController(SettingsController):
-    """A controller for managing a circulation manager's registrations
-    with external services.
-
-    Currently the only supported site-wide registration is with a
-    metadata wrangler. The protocol for registration with library
-    registries and ODL collections is similar, but those registrations
-    happen on the level of the individual library, not on the level of
-    the circulation manager.
+class AdminSearchController(AdminController):
+    """APIs for the admin search pages
+    Eg. Lists Creation
     """
 
-    def process_sitewide_registration(
-        self, integration, do_get=HTTP.debuggable_get, do_post=HTTP.debuggable_post
-    ):
-        """Performs a sitewide registration for a particular service.
-
-        :return: A ProblemDetail or, if successful, None
+    def search_field_values(self) -> dict:
+        """Enumerate the possible values for the search fields with counts
+        - Audience
+        - Distributor
+        - Genre
+        - Language
+        - Publisher
+        - Subject
         """
+        library = flask.request.library
+        collection_ids = [coll.id for coll in library.collections]
+        return self._search_field_values_cached(collection_ids)
 
-        self.require_system_admin()
+    # 1 hour in-memory cache
+    @memoize(ttls=3600)
+    def _search_field_values_cached(self, collection_ids: List[int]) -> dict:
+        def _unzip(values: List[tuple]) -> dict:
+            """Covert a list of tuples to a {value0: value1} dictionary"""
+            return {a[0]: a[1] for a in values if type(a[0]) is str}
 
-        if not integration:
-            return MISSING_SERVICE
-
-        catalog_response = self.get_catalog(do_get, integration.url)
-        if isinstance(catalog_response, ProblemDetail):
-            return catalog_response
-
-        if isinstance(self.check_content_type(catalog_response), ProblemDetail):
-            return self.check_content_type(catalog_response)
-
-        catalog = catalog_response.json()
-        links = catalog.get("links", [])
-
-        register_url = self.get_registration_link(catalog, links)
-        if isinstance(register_url, ProblemDetail):
-            return register_url
-
-        headers = self.update_headers(integration)
-        if isinstance(headers, ProblemDetail):
-            return headers
-
-        response = self.register(register_url, headers, do_post)
-        if isinstance(response, ProblemDetail):
-            return response
-
-        shared_secret = self.get_shared_secret(response)
-        if isinstance(shared_secret, ProblemDetail):
-            return shared_secret
-
-        ignore, private_key = self.manager.sitewide_key_pair
-        decryptor = Configuration.cipher(private_key)
-        shared_secret = decryptor.decrypt(base64.b64decode(shared_secret))
-        integration.password = shared_secret.decode("utf-8")
-
-    def get_catalog(self, do_get, url):
-        """Get the catalog for this service."""
-
-        try:
-            response = do_get(url)
-        except Exception as e:
-            return REMOTE_INTEGRATION_FAILED.detailed(str(e))
-
-        if isinstance(response, ProblemDetail):
-            return response
-        return response
-
-    def check_content_type(self, catalog_response):
-        """Make sure the catalog for the service is in a valid format."""
-
-        content_type = catalog_response.headers.get("Content-Type")
-        if content_type != "application/opds+json":
-            return REMOTE_INTEGRATION_FAILED.detailed(
-                _("The service did not provide a valid catalog.")
+        # Reusable queries
+        classification_query = (
+            self._db.query(Classification)
+            .join(Classification.subject)
+            .join(
+                LicensePool, LicensePool.identifier_id == Classification.identifier_id
             )
-
-    def get_registration_link(self, catalog, links):
-        """Get the link for registration from the catalog."""
-
-        register_link_filter = lambda l: (
-            l.get("rel") == "register"
-            and l.get("type") == self.METADATA_SERVICE_URI_TYPE
+            .filter(LicensePool.collection_id.in_(collection_ids))
         )
 
-        register_urls = list(filter(register_link_filter, links))
-        if not register_urls:
-            return REMOTE_INTEGRATION_FAILED.detailed(
-                _("The service did not provide a register link.")
+        editions_query = (
+            self._db.query(LicensePool)
+            .join(LicensePool.presentation_edition)
+            .filter(LicensePool.collection_id.in_(collection_ids))
+        )
+
+        # Concrete values
+        subjects = list(
+            classification_query.group_by(Subject.name).values(
+                func.distinct(Subject.name), func.count(Subject.name)
             )
+        )
+        subjects = _unzip(subjects)
 
-        # Get the full registration url.
-        register_url = register_urls[0].get("href")
-        if not register_url.startswith("http"):
-            # We have a relative path. Create a full registration url.
-            base_url = catalog.get("id")
-            register_url = urllib.parse.urljoin(base_url, register_url)
-
-        return register_url
-
-    def update_headers(self, integration):
-        """If the integration has an existing shared_secret, use it to access the
-        server and update it."""
-
-        # NOTE: This is no longer technically necessary since we prove
-        # ownership with a signed JWT.
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        if integration.password:
-            token = base64.b64encode(integration.password.encode("utf-8"))
-            headers["Authorization"] = "Bearer " + token
-        return headers
-
-    def register(self, register_url, headers, do_post):
-        """Register this server using the sitewide registration document."""
-
-        try:
-            body = self.sitewide_registration_document()
-            response = do_post(
-                register_url, body, allowed_response_codes=["2xx"], headers=headers
+        audiences = list(
+            classification_query.group_by(Subject.audience).values(
+                func.distinct(Subject.audience), func.count(Subject.audience)
             )
-        except Exception as e:
-            return REMOTE_INTEGRATION_FAILED.detailed(str(e))
-        return response
+        )
+        audiences = _unzip(audiences)
 
-    def get_shared_secret(self, response):
-        """Find the shared secret which we need to use in order to register this
-        service, or return an error message if there is no shared secret."""
+        genres = list(
+            classification_query.join(Subject.genre)
+            .group_by(Genre.name)
+            .values(func.distinct(Genre.name), func.count(Genre.name))
+        )
+        genres = _unzip(genres)
 
-        registration_info = response.json()
-        shared_secret = registration_info.get("metadata", {}).get("shared_secret")
-        if not shared_secret:
-            return REMOTE_INTEGRATION_FAILED.detailed(
-                _("The service did not provide registration information.")
+        distributors = list(
+            editions_query.join(Edition.data_source)
+            .group_by(DataSource.name)
+            .values(func.distinct(DataSource.name), func.count(DataSource.name))
+        )
+        distributors = _unzip(distributors)
+
+        languages = list(
+            editions_query.group_by(Edition.language).values(
+                func.distinct(Edition.language), func.count(Edition.language)
             )
-        return shared_secret
+        )
+        languages = _unzip(languages)
 
-    def sitewide_registration_document(self):
-        """Generate the document to be sent as part of a sitewide registration
-        request.
+        publishers = list(
+            editions_query.group_by(Edition.publisher).values(
+                func.distinct(Edition.publisher), func.count(Edition.publisher)
+            )
+        )
+        publishers = _unzip(publishers)
 
-        :return: A dictionary with keys 'url' and 'jwt'. 'url' is the URL to
-            this site's public key document, and 'jwt' is a JSON Web Token
-            proving control over that URL.
-        """
-
-        public_key, private_key = self.manager.sitewide_key_pair
-        # Advertise the public key so that the foreign site can encrypt
-        # things for us.
-        public_key_dict = dict(type="RSA", value=public_key)
-        public_key_url = self.url_for("public_key_document")
-        in_one_minute = utc_now() + timedelta(seconds=60)
-        payload = {"exp": in_one_minute}
-        # Sign a JWT with the private key to prove ownership of the site.
-        token = jwt.encode(payload, private_key, algorithm="RS256")
-        return dict(url=public_key_url, jwt=token)
+        return {
+            "subjects": subjects,
+            "audiences": audiences,
+            "genres": genres,
+            "distributors": distributors,
+            "languages": languages,
+            "publishers": publishers,
+        }

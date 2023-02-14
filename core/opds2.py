@@ -1,6 +1,6 @@
 import json
-import math
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlencode
 
 from core.external_search import ExternalSearchIndex
 from core.lane import Facets, Pagination, WorkList
@@ -176,14 +176,20 @@ class OPDS2Annotator:
 
     def feed_links(self):
         """Create links for a publication feed"""
-        next_query_string = (
-            f"{self.pagination.next_page.query_string}&{self.facets.query_string}"
-        )
-        next_url = self.url.split("?", 1)[0] + "?" + next_query_string
         links = [
             {"href": self.url, "rel": "self", "type": self.OPDS2_TYPE},
-            {"href": next_url, "rel": "next", "type": self.OPDS2_TYPE},
         ]
+        # If another page is present, then add the next link
+        if self.pagination.has_next_page:
+            next_query_string = urlencode(
+                {
+                    **dict(self.pagination.next_page.items()),
+                    **dict(self.facets.items()),
+                },
+                doseq=True,
+            )
+            next_url = self.url.split("?", 1)[0] + "?" + next_query_string
+            links.append({"href": next_url, "rel": "next", "type": self.OPDS2_TYPE})
 
         return links
 
@@ -192,8 +198,6 @@ class OPDS2Annotator:
         return {
             "title": self.title,
             "itemsPerPage": self.pagination.size,
-            "currentPage": math.ceil(self.pagination.offset / self.pagination.size)
-            + 1,  # start from 1
         }
 
 

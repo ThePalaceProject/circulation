@@ -25,8 +25,8 @@ else
 fi
 
 # Also make sure the app server is running.
-feed_type=$(docker exec "$container" curl --write-out "%{content_type}" --silent --output /dev/null http://localhost/heartbeat)
-if ! [[ ${feed_type} == "application/vnd.health+json" ]]; then
+feed_type=$(docker exec "$container" curl --write-out "%{content_type}" --silent --output /dev/null http://localhost/version.json)
+if ! [[ ${feed_type} == "application/json" ]]; then
   exit 1
 else
   echo "  OK"

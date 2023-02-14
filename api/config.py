@@ -412,7 +412,7 @@ class Configuration(CoreConfiguration):
                 f"{LOGO_MAX_DIMENSION}x{LOGO_MAX_DIMENSION} pixels, "
                 "and look good on a light or dark mode background. "
                 "Larger images will be accepted, but scaled down (maintaining aspect ratio) such that "
-                f"the longest dimension does not excede {LOGO_MAX_DIMENSION} pixels."
+                f"the longest dimension does not exceed {LOGO_MAX_DIMENSION} pixels."
             ),
             "category": "Client Interface Customization",
             "level": CoreConfiguration.ALL_ACCESS,
@@ -773,7 +773,6 @@ class Configuration(CoreConfiguration):
 
         if not public or not private:
             key = RSA.generate(2048)
-            encryptor = PKCS1_OAEP.new(key)
             public = key.publickey().exportKey().decode("utf8")
             private = key.exportKey().decode("utf8")
             setting.value = json.dumps([public, private])

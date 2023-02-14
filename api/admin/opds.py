@@ -1,7 +1,5 @@
 from sqlalchemy import and_
 
-from api.config import CannotLoadConfiguration
-from api.metadata_wrangler import MetadataWranglerCollectionRegistrar
 from api.opds import LibraryAnnotator
 from core.lane import Pagination
 from core.mirror import MirrorUploader
@@ -33,23 +31,6 @@ class AdminAnnotator(LibraryAnnotator):
                 entry.append(
                     self.rating_tag(measurement.quantity_measured, measurement.value)
                 )
-
-        try:
-            MetadataWranglerCollectionRegistrar(work.license_pools[0].collection)
-            feed.add_link_to_entry(
-                entry,
-                rel="http://librarysimplified.org/terms/rel/refresh",
-                href=self.url_for(
-                    "refresh",
-                    identifier_type=identifier.type,
-                    identifier=identifier.identifier,
-                    _external=True,
-                ),
-            )
-        except CannotLoadConfiguration:
-            # Leave out the refresh link if there's no metadata wrangler
-            # configured.
-            pass
 
         if active_license_pool and active_license_pool.suppressed:
             feed.add_link_to_entry(

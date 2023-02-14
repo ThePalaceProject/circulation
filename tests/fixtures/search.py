@@ -4,7 +4,6 @@ from typing import Any, Iterable, List, Optional
 from unittest import mock
 
 import pytest
-import requests
 from _pytest.fixtures import FixtureRequest
 
 from core import external_search
@@ -103,16 +102,6 @@ class ExternalSearchFixture:
         work.set_presentation_ready()
         return work
 
-    def refresh_and_wait(self):
-        target = self.url + "/_refresh"
-        logging.info("sending request to " + target)
-        response = requests.get(target)
-        if response.status_code >= 400:
-            raise RuntimeError(
-                "Attempting to refresh Elasticsearch index resulted in status "
-                + str(response.status_code)
-            )
-
 
 @pytest.fixture(
     scope="function",
@@ -160,7 +149,7 @@ class EndToEndSearchFixture:
             self.external_search.db.session,
             search_index_client=self.external_search.search,
         ).run_once_and_update_timestamp()
-        self.external_search.refresh_and_wait()
+        self.external_search.search.indices.refresh()
 
     @staticmethod
     def assert_works(description, expect, actual, should_be_ordered=True):

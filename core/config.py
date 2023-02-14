@@ -86,11 +86,6 @@ class Configuration(ConfigurationConstants):
     OD_FULFILLMENT_CLIENT_KEY_SUFFIX = "OVERDRIVE_FULFILLMENT_CLIENT_KEY"
     OD_FULFILLMENT_CLIENT_SECRET_SUFFIX = "OVERDRIVE_FULFILLMENT_CLIENT_SECRET"
 
-    # The version of the app.
-    APP_VERSION = "app_version"
-    VERSION_FILENAME = ".version"
-    NO_APP_VERSION_FOUND = object()
-
     # Logging stuff
     LOGGING_LEVEL = "level"
     LOGGING_FORMAT = "format"
@@ -138,9 +133,6 @@ class Configuration(ConfigurationConstants):
     OVERDRIVE_INTEGRATION = "Overdrive"
     THREEM_INTEGRATION = "3M"
 
-    # ConfigurationSetting key for a CDN's mirror domain
-    CDN_MIRRORED_DOMAIN_KEY = "mirrored_domain"
-
     # The name of the per-library configuration policy that controls whether
     # books may be put on hold.
     ALLOW_HOLDS = "allow_holds"
@@ -184,10 +176,6 @@ class Configuration(ConfigurationConstants):
     ]
 
     EXCLUDED_AUDIO_DATA_SOURCES = "excluded_audio_data_sources"
-
-    # In case an app version is not present, we can use this version as a fallback
-    # for all outgoing http requests without a custom user-agent
-    DEFAULT_USER_AGENT_VERSION = "1.x.x"
 
     SITEWIDE_SETTINGS = [
         {
@@ -369,29 +357,15 @@ class Configuration(ConfigurationConstants):
         ]
     )
 
-    # This is set once CDN data is loaded from the database and
-    # inserted into the Configuration object.
-    CDNS_LOADED_FROM_DATABASE = "loaded_from_database"
-
     @classmethod
     def load(cls, _db=None):
         """Load configuration information from the filesystem, and
         (optionally) from the database.
         """
         cls.instance = cls.load_from_file()
-        if _db:
-            # Only do the database portion of the work if
-            # a database connection was provided.
-            cls.load_cdns(_db)
-        cls.app_version()
         for parent in cls.__bases__:
             if parent.__name__.endswith("Configuration"):
                 parent.load(_db)
-
-    @classmethod
-    def cdns_loaded_from_database(cls):
-        """Has the site configuration been loaded from the database yet?"""
-        return cls.instance and cls.instance.get(cls.CDNS_LOADED_FROM_DATABASE, False)
 
     # General getters
 
@@ -433,25 +407,6 @@ class Configuration(ConfigurationConstants):
         if not v and required:
             raise ValueError("Integration '%s' did not define a required 'url'!" % name)
         return v
-
-    @classmethod
-    def cdns(cls):
-        """Get CDN configuration, loading it from the database
-        if necessary.
-        """
-        if not cls.cdns_loaded_from_database():
-            # The CDNs were never initialized from the database.
-            # Create a new database connection and find that
-            # information now.
-            from .model import SessionManager
-
-            url = cls.database_url()
-            _db = SessionManager.session(url)
-            cls.load_cdns(_db)
-
-        from .model import ExternalIntegration
-
-        return cls.integration(ExternalIntegration.CDN)
 
     @classmethod
     def policy(cls, name, default=None, required=False):
@@ -523,42 +478,8 @@ class Configuration(ConfigurationConstants):
         return {"key": key, "secret": secret}
 
     @classmethod
-    def app_version(cls):
-        """Returns the git version of the app, if a .version file exists."""
-        version = cls.get(cls.APP_VERSION, None)
-        if version:
-            # The version has been set in Configuration before.
-            return version
-
-        # Look in the parent directory, e.g. circulation/ or metadata/
-        root_dir = os.path.join(os.path.split(__file__)[0], "..")
-        version_file = os.path.join(root_dir, cls.VERSION_FILENAME)
-
-        version = cls.NO_APP_VERSION_FOUND
-        if os.path.exists(version_file):
-            with open(version_file) as f:
-                version = f.readline().strip() or version
-
-        cls.instance[cls.APP_VERSION] = version
-        return version
-
-    @classmethod
     def data_directory(cls):
         return cls.get(cls.DATA_DIRECTORY)
-
-    @classmethod
-    def load_cdns(cls, _db, config_instance=None):
-        from .model import ExternalIntegration as EI
-
-        cdns = _db.query(EI).filter(EI.goal == EI.CDN_GOAL).all()
-        cdn_integration = dict()
-        for cdn in cdns:
-            cdn_integration[cdn.setting(cls.CDN_MIRRORED_DOMAIN_KEY).value] = cdn.url
-
-        config_instance = config_instance or cls.instance
-        integrations = config_instance.setdefault(cls.INTEGRATIONS, {})
-        integrations[EI.CDN] = cdn_integration
-        config_instance[cls.CDNS_LOADED_FROM_DATABASE] = True
 
     @classmethod
     def localization_languages(cls):
