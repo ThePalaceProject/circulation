@@ -45,7 +45,7 @@ class ODL2APIConfiguration(OPDSImporterConfiguration):
         key="odl2_loan_limit",
         label=_("Loan limit per patron"),
         description=_(
-            "The number of assets a patron can have loaned out at any given time."
+            "The maximum number of books a patron can have loaned out at any given time."
         ),
         type=ConfigurationAttributeType.NUMBER,
         required=False,
@@ -56,7 +56,7 @@ class ODL2APIConfiguration(OPDSImporterConfiguration):
         key="odl2_hold_limit",
         label=_("Hold limit per patron"),
         description=_(
-            "The number of assets a patron can have on hold at any given time."
+            "The maximum number of books a patron can have on hold at any given time."
         ),
         type=ConfigurationAttributeType.NUMBER,
         required=False,
