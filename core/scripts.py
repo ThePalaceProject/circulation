@@ -15,6 +15,8 @@ from sqlalchemy import and_, exists, tuple_
 from sqlalchemy.orm import Query, Session, defer
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 
+from alembic.command import downgrade, upgrade
+from alembic.config import Config as AlembicConfig
 from core.model.classification import Classification
 from core.query.customlist import CustomListQueries
 
@@ -2893,6 +2895,39 @@ class CustomListUpdateEntriesScript(CustomListSweeperScript):
             self._db, custom_list, json_query=json_query, start_page=start_page
         )
         custom_list.auto_update_status = CustomList.UPDATED
+
+
+class AlembicMigrateVersion(Script):
+    @classmethod
+    def arg_parser(cls):
+        parser = argparse.ArgumentParser(
+            prog="Alembic Database Migration",
+            description="By default, running this script without any arguments "
+            "will run an 'upgrade head' command from alembic",
+        )
+        parser.add_argument(
+            "-d",
+            "--downgrade",
+            help="Downgrade to a specific version.",
+            required=False,
+            default=None,
+        )
+        parser.add_argument(
+            "-u",
+            "--upgrade",
+            help="Upgrade to a specific version.",
+            required=False,
+            default="head",
+        )
+        return parser
+
+    def do_run(self):
+        args = self.parse_command_line()
+        config = AlembicConfig("alembic.ini")
+        if args.downgrade is not None:
+            downgrade(config, args.downgrade)
+        elif args.upgrade is not None:
+            upgrade(config, args.upgrade)
 
 
 class MockStdin:

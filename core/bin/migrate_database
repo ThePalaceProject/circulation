@@ -1,51 +1,8 @@
-#!/usr/bin/env sh
+#!/usr/bin/env python
 # Run any new migrations from the database
 
-TARGET="head"
-DIRECTION="upgrade"
+import startup  # noqa: autoflake
 
-# Attempt to find the alembic.ini file
-# Ansible generally runs from within the <root>/bin directory
-INI_FILE="alembic.ini"
-SRC_DIR="."
-FOUND_INI=0
-for i in 1 2 3; do
-    if [ -f "$INI_FILE" ]; then
-        FOUND_INI=1
-        break
-    else
-        # Go up one directory to try and find the ini
-        INI_FILE="../${INI_FILE}"
-        SRC_DIR="../${SRC_DIR}"
-    fi
-done
+from core.scripts import AlembicMigrateVersion
 
-if [ $FOUND_INI -eq "0" ]; then
-    echo "Could not find an alembic.ini file! Quitting the migration."
-    exit 1;
-fi
-
-while getopts "hu:d:" opt; do
-    case $opt in
-        h)      echo "Database migration script"
-                echo "Options"
-                echo "  -h     This help text."
-                echo "  -u     Run an 'alembic upgrade'. An additional target migration must be provided."
-                echo "  -d     Run an 'alembic downgrade'. An additional target migration must be provided."
-                echo ""
-                echo "Example: migrate_database -u 87c65"
-                echo "By default if no -u or -d options are provided an 'alembic upgrade head' is run."
-            exit 0
-        ;;
-        u) DIRECTION="upgrade"; TARGET="$OPTARG"
-        ;;
-        d) DIRECTION="downgrade"; TARGET="$OPTARG"
-        ;;
-        *) exit 1
-        ;;
-    esac
-
-done
-
-echo "Running 'alembic ${DIRECTION} ${TARGET}'"
-cd ${SRC_DIR} && alembic ${DIRECTION} ${TARGET}
+AlembicMigrateVersion().run()
