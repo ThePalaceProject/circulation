@@ -704,8 +704,6 @@ class TestInstanceInitializationScript:
         script.run()
         assert script.was_run is True
 
-    # Skip this test until we have an alembic migration
-    @pytest.mark.skip
     def test_alembic_state(self, db: DatabaseTransactionFixture):
         # Delete the table data, we should run the script
         # using a session that is not locked into the current transaction (as the script does)
