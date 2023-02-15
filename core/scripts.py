@@ -2930,6 +2930,31 @@ class AlembicMigrateVersion(Script):
             upgrade(config, args.upgrade)
 
 
+class DeleteInvisibleLanesScript(LibraryInputScript):
+    """Delete lanes that are flagged as invisible"""
+
+    def process_library(self, library):
+
+        try:
+            for lane in self._db.query(Lane).filter(Lane.library_id == library.id):
+                if not lane.visible:
+                    self._db.delete(lane)
+            self._db.commit()
+            logging.info(f"Completed hidden lane deletion for {library.short_name}")
+        except Exception as e:
+            try:
+                logging.exception(
+                    f"hidden lane deletion failed for {library.short_name}. "
+                    f"Attempting to rollback updates",
+                    e,
+                )
+                self._db.rollback()
+            except Exception as e:
+                logging.exception(
+                    f"hidden lane deletion rollback for {library.short_name} failed", e
+                )
+
+
 class MockStdin:
     """Mock a list of identifiers passed in on standard input."""
 
