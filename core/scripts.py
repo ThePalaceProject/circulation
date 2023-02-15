@@ -2923,8 +2923,8 @@ class AlembicMigrateVersion(Script):
         )
         return parser
 
-    def do_run(self):
-        args = self.parse_command_line()
+    def do_run(self, cmd_args=None):
+        args = self.parse_command_line(cmd_args=cmd_args)
         Path(__file__).parent.parent.absolute()
         config = AlembicConfig(
             str(Path(__file__).parent.parent.absolute() / "alembic.ini")

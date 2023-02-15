@@ -4,6 +4,7 @@ import json
 import logging
 from functools import partial
 from io import StringIO
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -756,6 +757,16 @@ class TestInstanceInitializationScript:
         assert secret_keys.one().value == ConfigurationSetting.sitewide_secret(
             db.session, Configuration.SECRET_KEY
         )
+
+    def test_find_alembic_ini(self, db: DatabaseTransactionFixture):
+        # Make sure we find alembic.ini for script command
+        with patch("scripts.command") as command:
+            script = InstanceInitializationScript(_db=db.session)
+            script.do_run(ignore_search=True)
+
+        command.stamp.assert_called()
+        filename = command.stamp.call_args.args[0].config_file_name
+        assert Path(filename).exists()
 
 
 class TestLanguageListScript:
