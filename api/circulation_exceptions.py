@@ -148,10 +148,12 @@ class LimitReached(CirculationException):
     SETTING_NAME = None
     MESSAGE_WITH_LIMIT = None
 
-    def __init__(self, message=None, debug_info=None, library=None):
+    def __init__(self, message=None, debug_info=None, library=None, limit=None):
         super().__init__(message=message, debug_info=debug_info)
         if library:
             self.limit = library.setting(self.SETTING_NAME).int_value
+        elif limit:
+            self.limit = limit
         else:
             self.limit = None
 
