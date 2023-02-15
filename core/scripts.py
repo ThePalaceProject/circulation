@@ -18,6 +18,7 @@ from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 
 from alembic.command import downgrade, upgrade
 from alembic.config import Config as AlembicConfig
+from alembic.util import CommandError
 from core.model.classification import Classification
 from core.query.customlist import CustomListQueries
 
@@ -2928,10 +2929,13 @@ class AlembicMigrateVersion(Script):
         config = AlembicConfig(
             str(Path(__file__).parent.parent.absolute() / "alembic.ini")
         )
-        if args.downgrade is not None:
-            downgrade(config, args.downgrade)
-        elif args.upgrade is not None:
-            upgrade(config, args.upgrade)
+        try:
+            if args.downgrade is not None:
+                downgrade(config, args.downgrade)
+            elif args.upgrade is not None:
+                upgrade(config, args.upgrade)
+        except CommandError as e:
+            print(f"Error: {e}. No migrations performed.")
 
 
 class DeleteInvisibleLanesScript(LibraryInputScript):
