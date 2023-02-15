@@ -152,8 +152,8 @@ class Patron(Base):
     # be an explicit decision of the ILS integration code.
     cached_neighborhood = Column(Unicode, default=None, index=True)
 
-    loans = relationship("Loan", backref="patron", cascade="delete")
-    holds = relationship("Hold", backref="patron", cascade="delete")
+    loans = relationship("Loan", backref="patron", cascade="delete", uselist=True)
+    holds = relationship("Hold", backref="patron", cascade="delete", uselist=True)
 
     annotations = relationship(
         "Annotation",
@@ -559,6 +559,7 @@ class Hold(Base, LoanAndHoldMixin):
         Integer, ForeignKey("integrationclients.id"), index=True
     )
     license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
+    license_pool = relationship("LicensePool", back_populates="holds")
     start = Column(DateTime(timezone=True), index=True)
     end = Column(DateTime(timezone=True), index=True)
     position = Column(Integer, index=True)

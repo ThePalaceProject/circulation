@@ -216,7 +216,9 @@ class LicensePool(Base):
     )
 
     # One LicensePool can have many Holds.
-    holds = relationship("Hold", backref="license_pool", cascade="all, delete-orphan")
+    holds = relationship(
+        "Hold", back_populates="license_pool", cascade="all, delete-orphan"
+    )
 
     # One LicensePool can have many CirculationEvents
     circulation_events = relationship(
