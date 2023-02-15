@@ -105,8 +105,8 @@ class TestSearchServices(SettingsControllerTest):
         service, ignore = create(
             self._db,
             ExternalIntegration,
-            protocol=ExternalIntegration.CDN,
-            goal=ExternalIntegration.CDN_GOAL,
+            protocol=ExternalIntegration.OPDS_REGISTRATION,
+            goal=ExternalIntegration.DISCOVERY_GOAL,
             name="name",
         )
 

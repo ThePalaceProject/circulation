@@ -3,6 +3,7 @@ import json
 import logging
 
 import feedparser
+from flask import url_for
 from flask_babel import lazy_gettext as _
 from html_sanitizer import Sanitizer
 from sqlalchemy.orm.exc import NoResultFound
@@ -408,7 +409,9 @@ class Registration(RegistrationConstants):
         :return: A dictionary suitable for passing into requests.post.
         """
         auth_document_url = url_for(
-            "authentication_document", library_short_name=self.library.short_name
+            "authentication_document",
+            library_short_name=self.library.short_name,
+            _external=True,
         )
         payload = dict(url=auth_document_url, stage=stage)
 
@@ -584,7 +587,7 @@ class LibraryRegistrationScript(LibraryInputScript):
         for library in parsed.libraries:
             registration = Registration(registry, library)
             library_stage = stage or registration.stage_field.value
-            self.process_library(registration, library_stage, app.manager.url_for)
+            self.process_library(registration, library_stage, url_for)
         ctx.pop()
 
         # For testing purposes, return the application object that was

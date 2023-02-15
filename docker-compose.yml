@@ -1,0 +1,43 @@
+version: "3.9"
+services:
+  # example docker compose configuration for testing and development
+
+  webapp:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: webapp
+    ports:
+      - "6500:80"
+    environment:
+      SIMPLIFIED_PRODUCTION_DATABASE: "postgres://palace:test@pg:5432/circ"
+
+  scripts:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: scripts
+    environment:
+      SIMPLIFIED_PRODUCTION_DATABASE: "postgres://palace:test@pg:5432/circ"
+
+  pg:
+    image: "postgres:12"
+    environment:
+      POSTGRES_USER: palace
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: circ
+
+  minio:
+    image: "bitnami/minio:2022.3.3"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: "palace"
+      MINIO_ROOT_PASSWORD: "test123456789"
+
+  os:
+    image: opensearchproject/opensearch:1
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: true

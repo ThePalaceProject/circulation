@@ -44,6 +44,6 @@ class TestMultipleLibraries:
                 assert library == patron.library
                 response = controller_fixture.manager.index_controller()
                 assert (
-                    "http://cdn/%s/groups/" % library.short_name
+                    "http://localhost/%s/groups/" % library.short_name
                     == response.headers["location"]
                 )
