@@ -36,6 +36,15 @@ from api.saml.metadata.federations.model import (  # noqa: autoflake
 )
 from core.lane import Lane, LaneGenre  # noqa: autoflake
 
+# Skip these tables from any kind of migration
+SKIP_TABLES = ["complaints", "libraryalias"]
+
+
+def include_name(name, type_, parent_names):
+    if type_ == "table":
+        return name not in SKIP_TABLES
+    return True
+
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
@@ -54,6 +63,7 @@ def run_migrations_offline() -> None:
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
+        include_name=include_name,
         dialect_opts={"paramstyle": "named"},
     )
 
@@ -76,7 +86,11 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            include_name=include_name,
+        )
 
         with context.begin_transaction():
             # Acquire an application lock to ensure multiple migrations are queued and not concurrent
