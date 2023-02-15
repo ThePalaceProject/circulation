@@ -9,6 +9,7 @@ import traceback
 import unicodedata
 import uuid
 from enum import Enum
+from pathlib import Path
 from typing import Generator, Optional
 
 from sqlalchemy import and_, exists, tuple_
@@ -2923,7 +2924,10 @@ class AlembicMigrateVersion(Script):
 
     def do_run(self):
         args = self.parse_command_line()
-        config = AlembicConfig("alembic.ini")
+        Path(__file__).parent.parent.absolute()
+        config = AlembicConfig(
+            str(Path(__file__).parent.parent.absolute() / "alembic.ini")
+        )
         if args.downgrade is not None:
             downgrade(config, args.downgrade)
         elif args.upgrade is not None:

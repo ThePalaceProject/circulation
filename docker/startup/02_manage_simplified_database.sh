@@ -20,8 +20,6 @@ if ! [[ $SIMPLIFIED_DB_TASK == "ignore" ]]; then
 
   # Enter the virtual environment for the application.
   source $WORKDIR/env/bin/activate;
-  # Enter the working directory so alembic.ini can be found
-  cd $WORKDIR;
 
   if [[ $SIMPLIFIED_DB_TASK == "auto" ]] && [[ -f ${initialization_task} ]] \
       && [[ -f ${migration_task} ]]; then
