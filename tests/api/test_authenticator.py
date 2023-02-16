@@ -3470,6 +3470,19 @@ class TestSirsiDynixAuthenticationProvider:
         )
         assert patrondata.block_reason == SirsiBlockReasons.INCORRECT_LOCATION
 
+        # Test blocked patron types
+        bad_prefix_patron_resp = {
+            "fields": {"approved": True, "patronType": {"key": "testblocked"}}
+        }
+        sirsi_fixture.api.sirsi_disallowed_prefixes = ["blocked"]
+        sirsi_fixture.api.api_read_patron_data = MagicMock(
+            return_value=bad_prefix_patron_resp
+        )
+        patrondata = sirsi_fixture.api._remote_patron_lookup(
+            SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
+        )
+        assert patrondata.block_reason == SirsiBlockReasons.PATRON_BLOCKED
+
         # Test bad patron status info
         sirsi_fixture.api.api_read_patron_data.return_value = ok_patron_resp
         sirsi_fixture.api.api_patron_status_info.return_value = False
