@@ -175,6 +175,8 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
         patrondata.personal_name = fields.get("displayName")
         patron_type: str = fields["patronType"].get("key", "")
 
+        patrondata.external_type = patron_type
+
         # Basic block reasons
 
         # Does the patron type start with the library prefix
@@ -225,6 +227,8 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
         elif status_fields.get("expired"):
             patrondata.block_reason = SirsiBlockReasons.EXPIRED
 
+        # If previously, the patron was blocked this should unset the value in the DB
+        patrondata.block_reason = PatronData.NO_VALUE
         patrondata.complete = True
         return patrondata
 
