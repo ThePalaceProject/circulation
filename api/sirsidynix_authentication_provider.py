@@ -228,7 +228,8 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             patrondata.block_reason = SirsiBlockReasons.EXPIRED
 
         # If previously, the patron was blocked this should unset the value in the DB
-        patrondata.block_reason = PatronData.NO_VALUE
+        if patrondata.block_reason is None:
+            patrondata.block_reason = PatronData.NO_VALUE
         patrondata.complete = True
         return patrondata
 

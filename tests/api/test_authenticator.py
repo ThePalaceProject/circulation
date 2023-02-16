@@ -3425,7 +3425,7 @@ class TestSirsiDynixAuthenticationProvider:
         assert sirsi_fixture.api.api_patron_status_info.call_count == 1
         assert patrondata.personal_name == "Test User"
         assert patrondata.fines == 50.00
-        assert patrondata.block_reason == None
+        assert patrondata.block_reason == PatronData.NO_VALUE
 
         # Test the defensive code
         # Test no session token
@@ -3537,6 +3537,7 @@ class TestSirsiDynixAuthenticationProvider:
             ({"hasMaxOverdueItem": True}, PatronData.TOO_MANY_OVERDUE),
             ({"hasMaxItemsCheckedOut": True}, PatronData.TOO_MANY_LOANS),
             ({"expired": True}, SirsiBlockReasons.EXPIRED),
+            ({}, PatronData.NO_VALUE),  # No bad data = not blocked
         ]
         ok_patron_resp = {
             "fields": {
