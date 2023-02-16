@@ -65,7 +65,7 @@ exclude = [
     'tests/core/models/test_coverage\.py',
     'tests/core/models/test_credential\.py',
     'tests/core/models/test_datasource\.py',
-    'tests/core/models/test_devicetoken.py',
+    'tests/core/models/test_devicetoken\.py',
     'tests/core/models/test_hassessioncache\.py',
     'tests/core/models/test_identifier\.py',
     'tests/core/models/test_library\.py',
