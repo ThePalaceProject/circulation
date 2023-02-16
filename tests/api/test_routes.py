@@ -308,10 +308,6 @@ class TestIndex:
         url = "/authentication_document"
         fixture.assert_request_calls(url, fixture.controller.authentication_document)
 
-    def test_public_key_document(self, fixture: RouteTestFixture):
-        url = "/public_key_document"
-        fixture.assert_request_calls(url, fixture.controller.public_key_document)
-
 
 class TestOPDSFeed:
 
