@@ -118,14 +118,14 @@ crt = ["botocore[crt] (>=1.21.0,<2.0a0)"]
 
 [[package]]
 name = "boto3-stubs"
-version = "1.26.67"
-description = "Type annotations for boto3 1.26.67 generated with mypy-boto3-builder 7.12.3"
+version = "1.26.71"
+description = "Type annotations for boto3 1.26.71 generated with mypy-boto3-builder 7.12.3"
 category = "dev"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "boto3-stubs-1.26.67.tar.gz", hash = "sha256:cae4142b1fd263d37d7b5c5cc4052fad3ab0f39edde546f3b31f260cee030ce9"},
-    {file = "boto3_stubs-1.26.67-py3-none-any.whl", hash = "sha256:3d030b3a14558917341e52a41f6d570169927f8d999786333bd0eb2a150e4f71"},
+    {file = "boto3-stubs-1.26.71.tar.gz", hash = "sha256:b6a3dce58113851492dab221897c1e9872340eab8773c02b73db3767761595a3"},
+    {file = "boto3_stubs-1.26.71-py3-none-any.whl", hash = "sha256:7b7ebe0feee4ab0269a499ff52a3c7ccd7f9bf66d724f260eefa39469977aa5c"},
 ]
 
 [package.dependencies]
@@ -168,7 +168,7 @@ backup-gateway = ["mypy-boto3-backup-gateway (>=1.26.0,<1.27.0)"]
 backupstorage = ["mypy-boto3-backupstorage (>=1.26.0,<1.27.0)"]
 batch = ["mypy-boto3-batch (>=1.26.0,<1.27.0)"]
 billingconductor = ["mypy-boto3-billingconductor (>=1.26.0,<1.27.0)"]
-boto3 = ["boto3 (==1.26.67)", "botocore (==1.29.67)"]
+boto3 = ["boto3 (==1.26.71)", "botocore (==1.29.71)"]
 braket = ["mypy-boto3-braket (>=1.26.0,<1.27.0)"]
 budgets = ["mypy-boto3-budgets (>=1.26.0,<1.27.0)"]
 ce = ["mypy-boto3-ce (>=1.26.0,<1.27.0)"]
@@ -499,14 +499,14 @@ crt = ["awscrt (==0.12.5)"]
 
 [[package]]
 name = "botocore-stubs"
-version = "1.29.68"
+version = "1.29.71"
 description = "Type annotations and code completion for botocore"
 category = "dev"
 optional = false
 python-versions = ">=3.7,<4.0"
 files = [
-    {file = "botocore_stubs-1.29.68-py3-none-any.whl", hash = "sha256:fb0ea1929f93372718087dc7a10ca81864356fd133582895e1bbc60717f81d62"},
-    {file = "botocore_stubs-1.29.68.tar.gz", hash = "sha256:7e80b64329ac08891b68ab393072386e19010733b9d41a01f447c1534fec9b16"},
+    {file = "botocore_stubs-1.29.71-py3-none-any.whl", hash = "sha256:1a3628b68961e35df39d3274a3a8ae59dd9830f0980b70db2710c9bc7d236330"},
+    {file = "botocore_stubs-1.29.71.tar.gz", hash = "sha256:146a5292aac76c740205a8b35405835f3d98326b0533d43ac800024bb3f9d4fc"},
 ]
 
 [package.dependencies]
@@ -3407,14 +3407,14 @@ types-MarkupSafe = "*"
 
 [[package]]
 name = "types-jsonschema"
-version = "4.17.0.4"
+version = "4.17.0.5"
 description = "Typing stubs for jsonschema"
 category = "dev"
 optional = false
 python-versions = "*"
 files = [
-    {file = "types-jsonschema-4.17.0.4.tar.gz", hash = "sha256:f8e82ef9b618c7183ddbf604684b7a656119f388deea8fe8d4238a388bd919c2"},
-    {file = "types_jsonschema-4.17.0.4-py3-none-any.whl", hash = "sha256:2f5e7848c8f210a92973a92c08f661cbfe7d1b33ea4cbc5d4c34a49b4adc8cd7"},
+    {file = "types-jsonschema-4.17.0.5.tar.gz", hash = "sha256:7adc7bfca4afe291de0c93eca9367aa72a4fbe8ce87fe15642c600ad97d45dd6"},
+    {file = "types_jsonschema-4.17.0.5-py3-none-any.whl", hash = "sha256:79ac8a7763fe728947af90a24168b91621edf7e8425bf3670abd4ea0d4758fba"},
 ]
 
 [[package]]
@@ -3431,14 +3431,14 @@ files = [
 
 [[package]]
 name = "types-pillow"
-version = "9.4.0.10"
+version = "9.4.0.12"
 description = "Typing stubs for Pillow"
 category = "dev"
 optional = false
 python-versions = "*"
 files = [
-    {file = "types-Pillow-9.4.0.10.tar.gz", hash = "sha256:341c2345610bba452d1724757c7b997a60f593cf003c101ba239db003a0ae389"},
-    {file = "types_Pillow-9.4.0.10-py3-none-any.whl", hash = "sha256:302ce81cfb61aacc8983a3a2ec682cbef66522a2fe8e640f648ac2e3d6f6af53"},
+    {file = "types-Pillow-9.4.0.12.tar.gz", hash = "sha256:e0074149d5f06d3593c118acc83e353f8542bcc73576ffefb6568eaab5671348"},
+    {file = "types_Pillow-9.4.0.12-py3-none-any.whl", hash = "sha256:b4aaa86b43f53e4d552d2c0381068015121e8990b0369df7c5e3b36fa6266984"},
 ]
 
 [[package]]
@@ -3814,4 +3814,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "8ee79336c71ba4e227608cc4d332ceca0efd3e270255dcedd7940822d5d2d4ea"
+content-hash = "95c0fafe7d28863ad00d667f3d0a601e10fadbc20b79e09a9439f0d6815152b0"
