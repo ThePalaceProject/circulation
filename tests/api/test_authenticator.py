@@ -3417,7 +3417,7 @@ class TestSirsiDynixAuthenticationProvider:
         sirsi_fixture.api.api_patron_status_info = MagicMock(
             return_value=patron_status_resp
         )
-        patrondata = sirsi_fixture.api._remote_patron_lookup(
+        patrondata = sirsi_fixture.api.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
 
@@ -3429,13 +3429,13 @@ class TestSirsiDynixAuthenticationProvider:
 
         # Test the defensive code
         # Test no session token
-        patrondata = sirsi_fixture.api._remote_patron_lookup(
+        patrondata = sirsi_fixture.api.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token=None)
         )
         assert patrondata == None
 
         # Test incorrect patrondata type
-        patrondata = sirsi_fixture.api._remote_patron_lookup(
+        patrondata = sirsi_fixture.api.remote_patron_lookup(
             PatronData(permanent_id="xxxx")
         )
         assert patrondata == None
@@ -3443,7 +3443,7 @@ class TestSirsiDynixAuthenticationProvider:
         # Test bad patron read data
         bad_patron_resp = {"bad": "yes"}
         sirsi_fixture.api.api_read_patron_data = MagicMock(return_value=bad_patron_resp)
-        patrondata = sirsi_fixture.api._remote_patron_lookup(
+        patrondata = sirsi_fixture.api.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
         assert patrondata == None
@@ -3454,7 +3454,7 @@ class TestSirsiDynixAuthenticationProvider:
         sirsi_fixture.api.api_read_patron_data = MagicMock(
             return_value=not_approved_patron_resp
         )
-        patrondata = sirsi_fixture.api._remote_patron_lookup(
+        patrondata = sirsi_fixture.api.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
         assert patrondata.block_reason == SirsiBlockReasons.NOT_APPROVED
@@ -3466,7 +3466,7 @@ class TestSirsiDynixAuthenticationProvider:
         sirsi_fixture.api.api_read_patron_data = MagicMock(
             return_value=bad_prefix_patron_resp
         )
-        patrondata = sirsi_fixture.api._remote_patron_lookup(
+        patrondata = sirsi_fixture.api.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
         assert patrondata.block_reason == SirsiBlockReasons.INCORRECT_LOCATION
@@ -3479,7 +3479,7 @@ class TestSirsiDynixAuthenticationProvider:
         sirsi_fixture.api.api_read_patron_data = MagicMock(
             return_value=bad_prefix_patron_resp
         )
-        patrondata = sirsi_fixture.api._remote_patron_lookup(
+        patrondata = sirsi_fixture.api.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
         assert patrondata.block_reason == SirsiBlockReasons.PATRON_BLOCKED
@@ -3487,7 +3487,7 @@ class TestSirsiDynixAuthenticationProvider:
         # Test bad patron status info
         sirsi_fixture.api.api_read_patron_data.return_value = ok_patron_resp
         sirsi_fixture.api.api_patron_status_info.return_value = False
-        patrondata = sirsi_fixture.api._remote_patron_lookup(
+        patrondata = sirsi_fixture.api.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
         assert patrondata == None

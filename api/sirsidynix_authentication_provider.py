@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from gettext import gettext as _
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from urllib.parse import urljoin
 
 from sqlalchemy.orm import object_session
@@ -149,7 +149,7 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             complete=False,
         )
 
-    def _remote_patron_lookup(
+    def remote_patron_lookup(
         self, patron_or_patrondata: Patron | SirsiDynixPatronData
     ) -> None | SirsiDynixPatronData:
         """Do a remote patron lookup, this method can only lookup a patron with a patrondata object
@@ -171,9 +171,9 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
         if not data or "fields" not in data:
             return None
 
-        data = data["fields"]
-        patrondata.personal_name = data.get("displayName")
-        patron_type: str = data["patronType"].get("key", "")
+        fields: dict = data["fields"]
+        patrondata.personal_name = fields.get("displayName")
+        patron_type: str = fields["patronType"].get("key", "")
 
         # Basic block reasons
 
@@ -184,7 +184,7 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             patrondata.block_reason = SirsiBlockReasons.INCORRECT_LOCATION
             return patrondata
 
-        if not data.get("approved", False):
+        if not fields.get("approved", False):
             patrondata.block_reason = SirsiBlockReasons.NOT_APPROVED
             return patrondata
 
@@ -205,22 +205,24 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
         if not status or "fields" not in status:
             return None
 
-        status = status["fields"]
-        fines = status.get("estimatedFines")
+        status_fields: dict = status["fields"]
+        fines = status_fields.get("estimatedFines")
         if fines is not None:
             # We ignore currency for now, and assume USD
             patrondata.fines = float(fines.get("amount", 0))
 
         # Blockable statuses
-        if status.get("hasMaxDaysWithFines") or status.get("hasMaxFines"):
+        if status_fields.get("hasMaxDaysWithFines") or status_fields.get("hasMaxFines"):
             patrondata.block_reason = PatronData.EXCESSIVE_FINES
-        elif status.get("hasMaxLostItem"):
+        elif status_fields.get("hasMaxLostItem"):
             patrondata.block_reason = PatronData.TOO_MANY_LOST
-        elif status.get("hasMaxOverdueDays") or status.get("hasMaxOverdueItem"):
+        elif status_fields.get("hasMaxOverdueDays") or status_fields.get(
+            "hasMaxOverdueItem"
+        ):
             patrondata.block_reason = PatronData.TOO_MANY_OVERDUE
-        elif status.get("hasMaxItemsCheckedOut"):
+        elif status_fields.get("hasMaxItemsCheckedOut"):
             patrondata.block_reason = PatronData.TOO_MANY_LOANS
-        elif status.get("expired"):
+        elif status_fields.get("expired"):
             patrondata.block_reason = SirsiBlockReasons.EXPIRED
 
         patrondata.complete = True
@@ -257,7 +259,7 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             method, url, headers=headers, json=json, timeout=120
         )
 
-    def api_patron_login(self, username: str, password: str) -> bool | dict:
+    def api_patron_login(self, username: str, password: str) -> Literal[False] | dict:
         """API request to verify credentials of a user.
 
         :param username: The login username
@@ -273,7 +275,9 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             return False
         return response.json()
 
-    def api_read_patron_data(self, patron_key: str, session_token: str) -> bool | dict:
+    def api_read_patron_data(
+        self, patron_key: str, session_token: str
+    ) -> Literal[False] | dict:
         """API request to pull basic patron information
 
         :param patron_key: The permanent external identifier for a patron
@@ -291,7 +295,7 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
 
     def api_patron_status_info(
         self, patron_key: str, session_token: str
-    ) -> bool | dict:
+    ) -> Literal[False] | dict:
         """API request to pull patron status information, like fines
 
         :param patron_key: The permanent external identifier for a patron
