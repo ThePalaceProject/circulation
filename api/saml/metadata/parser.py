@@ -487,13 +487,7 @@ class SAMLMetadataParser:
         certificates = self._parse_certificates(certificate_nodes)
 
         if len(certificates) > 1:
-            raise SAMLMetadataParsingError(
-                _(
-                    "There are more than 1 SP certificates".format(
-                        required_acs_binding.value
-                    )
-                )
-            )
+            raise SAMLMetadataParsingError(_("There are more than 1 SP certificates"))
 
         certificate = next(iter(certificates)) if certificates else None
 

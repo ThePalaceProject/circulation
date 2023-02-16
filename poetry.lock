@@ -3376,6 +3376,18 @@ slack = ["slack-sdk"]
 telegram = ["requests"]
 
 [[package]]
+name = "types-aws-xray-sdk"
+version = "2.11.0.11"
+description = "Typing stubs for aws-xray-sdk"
+category = "dev"
+optional = false
+python-versions = "*"
+files = [
+    {file = "types-aws-xray-sdk-2.11.0.11.tar.gz", hash = "sha256:93d05deac50db58fda93b65433f52cfb6c95dab2214569a3ac8101197f59a583"},
+    {file = "types_aws_xray_sdk-2.11.0.11-py3-none-any.whl", hash = "sha256:154cd12ea7d1e3ae2d8afddd24c0e4c57916fe40295b6431d414253fa40dfd36"},
+]
+
+[[package]]
 name = "types-awscrt"
 version = "0.14.6"
 description = "Type annotations and code completion for awscrt"
@@ -3415,6 +3427,18 @@ files = [
 types-click = "*"
 types-Jinja2 = "*"
 types-Werkzeug = "*"
+
+[[package]]
+name = "types-flask-cors"
+version = "3.0.10"
+description = "Typing stubs for Flask-Cors"
+category = "dev"
+optional = false
+python-versions = "*"
+files = [
+    {file = "types-Flask-Cors-3.0.10.tar.gz", hash = "sha256:8d2dad18f3f5d2b3a22bc4235c97629b701b784fd428e671564093ca293ae91d"},
+    {file = "types_Flask_Cors-3.0.10-py3-none-any.whl", hash = "sha256:17ba57b32a97dde31d136e2b312f06714533d1e828bf5328adde64b49c9cdbd8"},
+]
 
 [[package]]
 name = "types-freezegun"
@@ -3852,4 +3876,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "455a4f3bf0b8f48b21d9cd92bd3c8a0d24f5e1705e3d8a654dcb558166cd26c3"
+content-hash = "b2cbd89cda70e8c44fcd393bbb4895810da7f5fe058d27de79f0d79bcb000194"

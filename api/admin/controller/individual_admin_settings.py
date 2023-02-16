@@ -4,6 +4,7 @@ from typing import Optional
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
+from sqlalchemy.exc import ProgrammingError
 
 from api.admin.exceptions import *
 from api.admin.problem_details import *
@@ -21,7 +22,7 @@ class IndividualAdminSettingsController(SettingsController):
             return self.process_post()
 
     def _highest_authorized_role(self) -> Optional[AdminRole]:
-        highest_role = None
+        highest_role: Optional[AdminRole] = None
         has_auth = False
 
         admin = getattr(flask.request, "admin", None)
@@ -268,7 +269,7 @@ class IndividualAdminSettingsController(SettingsController):
             # There are no admins yet; the user and the new system admin are the same person.
             user = admin
         else:
-            user = flask.request.admin
+            user: Admin = flask.request.admin  # type: ignore
 
         if password:
             # If the admin we're editing has a sitewide manager role, we've already verified

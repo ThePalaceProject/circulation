@@ -261,7 +261,7 @@ class TestIdentifier:
         )
 
         # Pass in None and you get None.
-        assert None == Identifier.parse_urn(db.session, None)
+        assert (None, None) == Identifier.parse_urn(db.session, None)
 
     def parse_urn_must_support_license_pools(self, db: DatabaseTransactionFixture):
         # We have no way of associating ISBNs with license pools.

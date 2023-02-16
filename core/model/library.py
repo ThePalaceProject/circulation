@@ -23,6 +23,7 @@ from ..config import Configuration
 from ..entrypoint import EntryPoint
 from ..facets import FacetConstants
 from . import Base, get_one
+from .customlist import customlist_sharedlibrary
 from .edition import Edition
 from .hassessioncache import HasSessionCache
 from .licensing import LicensePool
@@ -82,11 +83,13 @@ class Library(Base, HasSessionCache):
     library_registry_shared_secret = Column(Unicode, unique=True)
 
     # A library may have many Patrons.
-    patrons = relationship("Patron", backref="library", cascade="all, delete-orphan")
+    patrons = relationship(
+        "Patron", back_populates="library", cascade="all, delete-orphan"
+    )
 
     # An Library may have many admin roles.
     adminroles = relationship(
-        "AdminRole", backref="library", cascade="all, delete-orphan"
+        "AdminRole", back_populates="library", cascade="all, delete-orphan"
     )
 
     # A Library may have many CachedFeeds.
@@ -105,18 +108,23 @@ class Library(Base, HasSessionCache):
 
     # A Library may have many CustomLists.
     custom_lists = relationship(
-        "CustomList",
-        backref="library",
-        lazy="joined",
+        "CustomList", backref="library", lazy="joined", uselist=True
     )
+
     # Lists shared with this library
-    shared_custom_lists: "CustomList"
+    # shared_custom_lists: "CustomList"
+    shared_custom_lists = relationship(
+        "CustomList",
+        secondary=lambda: customlist_sharedlibrary,
+        back_populates="shared_locally_with_libraries",
+        uselist=True,
+    )
 
     # A Library may have many ExternalIntegrations.
     integrations = relationship(
         "ExternalIntegration",
-        secondary=lambda: externalintegrations_libraries,  # type: ignore
-        backref="libraries",
+        secondary=lambda: externalintegrations_libraries,
+        back_populates="libraries",
     )
 
     # Any additional configuration information is stored as
@@ -481,7 +489,7 @@ class Library(Base, HasSessionCache):
                 library._is_default = False
 
 
-externalintegrations_libraries = Table(
+externalintegrations_libraries: Table = Table(
     "externalintegrations_libraries",
     Base.metadata,
     Column(

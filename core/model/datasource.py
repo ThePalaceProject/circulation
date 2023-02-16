@@ -66,9 +66,7 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
     id_equivalencies = relationship("Equivalency", backref="data_source")
 
     # One DataSource can grant access to many LicensePools.
-    license_pools = relationship(
-        "LicensePool", backref=backref("data_source", lazy="joined")
-    )
+    license_pools = relationship("LicensePool", back_populates="data_source")
 
     # One DataSource can provide many Hyperlinks.
     links = relationship("Hyperlink", backref="data_source")

@@ -2,6 +2,12 @@
 build-backend = "poetry.core.masonry.api"
 requires = ["poetry-core>=1.0.0"]
 
+[tool.coverage.report]
+exclude_lines = [
+    "if TYPE_CHECKING:",
+    "pragma: no cover",
+]
+
 [tool.coverage.run]
 branch = true
 relative_files = true
@@ -13,7 +19,7 @@ profile = "black"
 
 [tool.mypy]
 exclude = [
-    'core/bin',
+    'core/bin/repair/startup.py',
     'core/classifier',
     'core/model/listeners.py',
     # TODO: Post test-suite refactoring.
@@ -58,8 +64,10 @@ exclude = [
     'tests/fixtures/database\.py',
 ]
 files = [
+    "api",
     "core",
     "customlists",
+    "scripts.py",
     "tests/core",
 ]
 plugins = ["sqlmypy"]
@@ -71,6 +79,7 @@ warn_unused_ignores = true
 [[tool.mypy.overrides]]
 ignore_missing_imports = true
 module = [
+    "aws_xray_sdk.ext.*",
     "bcrypt",
     # This is ignored because the file is created when building a container
     # so it typically doesn't exist when running mypy, but since it only
@@ -84,25 +93,33 @@ module = [
     "flask_pydantic_spec.*",
     "flask_sqlalchemy_session",
     "fuzzywuzzy",
+    "html_sanitizer",
     "isbnlib",
     "loggly.*",
     "lxml.*",
     "money",
     "multipledispatch",
     "nameparser",
+    "oauth2client",
+    "onelogin.saml2.*",
     "parameterized",
+    "pyld",
     "pymarc",
     "pyparsing",
+    "pypostalcode",
     "spellchecker",
     "textblob.*",
+    "unicodecsv",
+    "uritemplate",
+    "uszipcode",
     "watchtower",
+    "wcag_contrast_ratio",
     "webpub_manifest_parser.*",
 ]
 
 [[tool.mypy.overrides]]
 follow_imports = "skip"
 module = [
-    "api.*",
     "core.classifier.*",
     "tests.fixtures.database",
 ]
@@ -110,7 +127,6 @@ module = [
 [[tool.mypy.overrides]]
 follow_imports = "silent"
 module = [
-    "core.configuration.ignored_identifier",
     "core.model.listeners",
 ]
 
@@ -202,7 +218,9 @@ pytest-cov = "^4.0.0"
 pytest-timeout = "*"
 requests-mock = "1.10.0"
 sqlalchemy-stubs = "^0.4"
+types-aws-xray-sdk = "^2.11.0.1"
 types-Flask = "^1.1.6"
+types-Flask-Cors = "^3.0.10"
 types-freezegun = "^1.1.10"
 types-jsonschema = "^4.17.0.5"
 types-Pillow = "^9.4.0"

@@ -139,7 +139,7 @@ class Subject(Base):
     checked = Column(Boolean, default=False, index=True)
 
     # One Subject may participate in many Classifications.
-    classifications = relationship("Classification", backref="subject")
+    classifications = relationship("Classification", back_populates="subject")
 
     # Type + identifier must be unique.
     __table_args__ = (UniqueConstraint("type", "identifier"),)
@@ -342,6 +342,7 @@ class Classification(Base):
     id = Column(Integer, primary_key=True)
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
     subject_id = Column(Integer, ForeignKey("subjects.id"), index=True)
+    subject = relationship("Subject", back_populates="classifications")
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
 
     # How much weight the data source gives to this classification.

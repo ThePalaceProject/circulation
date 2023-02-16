@@ -20,7 +20,7 @@ class PalaceProfiler:
         if not cls.enabled():
             return None
 
-        profile_dir = Path(os.environ.get(cls.ENVIRONMENT_VARIABLE))
+        profile_dir = Path(os.environ.get(cls.ENVIRONMENT_VARIABLE, ""))
         if not profile_dir.exists():
             profile_dir.mkdir(parents=True)
 
@@ -83,7 +83,7 @@ class PalaceCProfileProfiler(PalaceProfiler):
 
         filename = cls.FILENAME_TEMPLATE + ".prof"
         app.config["PROFILE"] = True
-        app.wsgi_app = ProfilerMiddleware(
+        app.wsgi_app = ProfilerMiddleware(  # type: ignore
             app.wsgi_app, profile_dir=str(profile_dir), filename_format=filename
         )
 

@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 import core.classifier as genres
 from core import classifier
@@ -957,8 +958,8 @@ class DatabaseExclusiveWorkList(DatabaseBackedWorkList):
 class WorkBasedLane(DynamicLane):
     """A lane that shows works related to one particular Work."""
 
-    DISPLAY_NAME = None
-    ROUTE = None
+    DISPLAY_NAME: Optional[str] = None
+    ROUTE: Optional[str] = None
 
     def __init__(self, library, work, display_name=None, children=None, **kwargs):
         self.work = work
