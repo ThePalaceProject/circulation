@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 class SirsiBlockReasons:
     NOT_APPROVED = _("Patron has not yet been approved")
     EXPIRED = _("Patron membership has expired")
+    INCORRECT_LOCATION = _("Patron is not a member of this library location")
 
 
 class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
@@ -42,6 +43,7 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
 
         CLIENT_ID = "CLIENT_ID"
         LIBRARY_ID = "LIBRARY_ID"
+        LIBRARY_PREFIX = "LIBRARY PREFIX"
 
     SETTINGS = [
         {
@@ -78,7 +80,16 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
                 "This is used to identify a unique library on the API. This must match what the API expects."
             ),
             "required": True,
-        }
+        },
+        {
+            "key": Keys.LIBRARY_PREFIX,
+            "label": _("Library Prefix"),
+            "description": _(
+                "This is used to match a member of the Library to their member branch location."
+                " Should be a prefix letter, eg. 'p' or 'co' etc..."
+            ),
+            "required": True,
+        },
     ]
 
     def __init__(self, library, integration: ExternalIntegration, analytics=None):
@@ -96,6 +107,11 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
         self.sirsi_library_id = (
             ConfigurationSetting.for_library_and_externalintegration(
                 object_session(library), self.Keys.LIBRARY_ID, library, integration
+            ).value
+        )
+        self.sirsi_library_prefix = (
+            ConfigurationSetting.for_library_and_externalintegration(
+                object_session(library), self.Keys.LIBRARY_PREFIX, library, integration
             ).value
         )
 
@@ -135,6 +151,11 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
 
         data = data["fields"]
         patrondata.personal_name = data.get("displayName")
+        patron_type: str = data["patronType"].get("key", "")
+
+        if not patron_type.startswith(self.sirsi_library_prefix):
+            patrondata.block_reason = SirsiBlockReasons.INCORRECT_LOCATION
+            return patrondata
 
         if not data.get("approved", False):
             patrondata.block_reason = SirsiBlockReasons.NOT_APPROVED

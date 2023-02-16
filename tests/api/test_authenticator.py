@@ -3327,6 +3327,7 @@ class SirsiDynixAuthenticatorFixture:
                 ExternalIntegration.URL: "http://example.org/sirsi",
                 SirsiDynixHorizonAuthenticationProvider.Keys.CLIENT_ID: "clientid",
                 SirsiDynixHorizonAuthenticationProvider.Keys.LIBRARY_ID: "libraryid",
+                SirsiDynixHorizonAuthenticationProvider.Keys.LIBRARY_PREFIX: "test",
             },
         )
 
@@ -3355,6 +3356,7 @@ class TestSirsiDynixAuthenticationProvider:
         assert sirsi_fixture.api.sirsi_client_id == "clientid"
         assert sirsi_fixture.api.sirsi_app_id == "UNITTEST"
         assert sirsi_fixture.api.sirsi_library_id == "libraryid"
+        assert sirsi_fixture.api.sirsi_library_prefix == "test"
 
     def test_api_patron_login(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
         response_dict = {"sessionToken": "xxxx", "patronKey": "test"}
@@ -3395,7 +3397,13 @@ class TestSirsiDynixAuthenticationProvider:
 
     def test_remote_patron_lookup(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
         # Test the happy path, patron OK, some fines
-        ok_patron_resp = {"fields": {"displayName": "Test User", "approved": True}}
+        ok_patron_resp = {
+            "fields": {
+                "displayName": "Test User",
+                "approved": True,
+                "patronType": {"key": "testtype"},
+            }
+        }
         patron_status_resp = {
             "fields": {
                 "estimatedFines": {
@@ -3439,7 +3447,9 @@ class TestSirsiDynixAuthenticationProvider:
         )
         assert patrondata == None
 
-        not_approved_patron_resp = {"fields": {"approved": False}}
+        not_approved_patron_resp = {
+            "fields": {"approved": False, "patronType": {"key": "testtype"}}
+        }
         sirsi_fixture.api.api_read_patron_data = MagicMock(
             return_value=not_approved_patron_resp
         )
@@ -3447,6 +3457,18 @@ class TestSirsiDynixAuthenticationProvider:
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
         assert patrondata.block_reason == SirsiBlockReasons.NOT_APPROVED
+
+        # Test bad patronType prefix
+        bad_prefix_patron_resp = {
+            "fields": {"approved": True, "patronType": {"key": "nottesttype"}}
+        }
+        sirsi_fixture.api.api_read_patron_data = MagicMock(
+            return_value=bad_prefix_patron_resp
+        )
+        patrondata = sirsi_fixture.api._remote_patron_lookup(
+            SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
+        )
+        assert patrondata.block_reason == SirsiBlockReasons.INCORRECT_LOCATION
 
         # Test bad patron status info
         sirsi_fixture.api.api_read_patron_data.return_value = ok_patron_resp
@@ -3502,7 +3524,13 @@ class TestSirsiDynixAuthenticationProvider:
             ({"hasMaxItemsCheckedOut": True}, PatronData.TOO_MANY_LOANS),
             ({"expired": True}, SirsiBlockReasons.EXPIRED),
         ]
-        ok_patron_resp = {"fields": {"displayName": "Test User", "approved": True}}
+        ok_patron_resp = {
+            "fields": {
+                "displayName": "Test User",
+                "approved": True,
+                "patronType": {"key": "testtype"},
+            }
+        }
 
         for status, reason in statuses:
             info_copy = deepcopy(patron_info)
