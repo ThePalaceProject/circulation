@@ -6,7 +6,9 @@ import sys
 import time
 from datetime import timedelta
 from io import StringIO
+from pathlib import Path
 
+from alembic import command, config
 from api.adobe_vendor_id import AuthdataUtility
 from api.authenticator import LibraryAuthenticator
 from api.bibliotheca import BibliothecaCirculationSweep
@@ -60,14 +62,12 @@ from core.model import (
     RightsStatus,
     SessionManager,
     Subject,
-    Timestamp,
     get_one,
 )
 from core.model.configuration import ExternalIntegrationLink
 from core.opds import AcquisitionFeed
 from core.scripts import (
     CollectionType,
-    DatabaseMigrationInitializationScript,
     IdentifierInputScript,
     LaneSweeperScript,
     LibraryInputScript,
@@ -884,7 +884,7 @@ class InstanceInitializationScript(TimestampScript):
 
     name = "Instance initialization"
 
-    TEST_SQL = "select * from timestamps limit 1"
+    TEST_SQL = "SELECT * FROM pg_catalog.pg_tables where tablename='libraries';"
 
     def run(self, *args, **kwargs):
         # Create a special database session that doesn't initialize
@@ -898,7 +898,7 @@ class InstanceInitializationScript(TimestampScript):
             url, initialize_data=False, initialize_schema=False
         )
 
-        results = None
+        result = None
         try:
             # We need to check for the existence of a known table --
             # this will demonstrate that this script has been run before --
@@ -907,7 +907,7 @@ class InstanceInitializationScript(TimestampScript):
             #
             # Basically, if this succeeds, we can bail out and not run
             # the rest of the script.
-            results = list(_db.execute(self.TEST_SQL))
+            result = _db.execute(self.TEST_SQL).first()
         except Exception as e:
             # This did _not_ succeed, so the schema is probably not
             # initialized and we do need to run this script.. This
@@ -916,7 +916,7 @@ class InstanceInitializationScript(TimestampScript):
             # work.
             _db.close()
 
-        if results is None:
+        if result is None:
             super().run(*args, **kwargs)
         else:
             self.log.error(
@@ -932,18 +932,10 @@ class InstanceInitializationScript(TimestampScript):
                 # Elasticsearch isn't configured, so do nothing.
                 pass
 
-        # Set a timestamp that represents the new database's version.
-        db_init_script = DatabaseMigrationInitializationScript(_db=self._db)
-        existing = get_one(
-            self._db,
-            Timestamp,
-            service=db_init_script.name,
-            service_type=Timestamp.SCRIPT_TYPE,
-        )
-        if existing:
-            # No need to run the script. We already have a timestamp.
-            return
-        db_init_script.run()
+        # Stamp the most recent migration as the current state of the DB
+        conf = config.Config(str(Path(__file__).parent.absolute() / "alembic.ini"))
+        conf.set_main_option("sqlalchemy.url", Configuration.database_url())
+        command.stamp(conf, "head")
 
         # Create a secret key if one doesn't already exist.
         ConfigurationSetting.sitewide_secret(self._db, Configuration.SECRET_KEY)

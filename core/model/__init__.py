@@ -530,6 +530,7 @@ from .coverage import BaseCoverageRecord, CoverageRecord, Timestamp, WorkCoverag
 from .credential import Credential, DelegatedPatronIdentifier, DRMDeviceIdentifier
 from .customlist import CustomList, CustomListEntry
 from .datasource import DataSource
+from .devicetokens import DeviceToken
 from .edition import Edition
 from .hassessioncache import HasSessionCache
 from .identifier import Equivalency, Identifier

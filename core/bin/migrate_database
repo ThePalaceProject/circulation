@@ -1,7 +1,8 @@
 #!/usr/bin/env python
-"""Run any new migrations from the database"""
+# Run any new migrations from the database
+
 import startup  # noqa: autoflake
 
-from core.scripts import DatabaseMigrationScript
+from core.scripts import AlembicMigrateVersion
 
-DatabaseMigrationScript().run()
+AlembicMigrateVersion().run()
