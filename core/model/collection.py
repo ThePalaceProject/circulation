@@ -98,7 +98,10 @@ class Collection(Base, HasSessionCache):
 
     # A Collection can provide books to many Libraries.
     libraries = relationship(
-        "Library", secondary=lambda: collections_libraries, backref="collections"  # type: ignore
+        "Library",
+        secondary=lambda: collections_libraries,
+        backref="collections",
+        uselist=True,
     )
 
     # A Collection can include many LicensePools.
@@ -117,7 +120,7 @@ class Collection(Base, HasSessionCache):
     timestamps = relationship("Timestamp", backref="collection")
 
     catalog = relationship(
-        "Identifier", secondary=lambda: collections_identifiers, backref="collections"  # type: ignore
+        "Identifier", secondary=lambda: collections_identifiers, backref="collections"
     )
 
     # A Collection can be associated with multiple CoverageRecords
@@ -132,7 +135,7 @@ class Collection(Base, HasSessionCache):
     # the list and they won't be added back, so the list doesn't
     # necessarily match the collection.
     customlists = relationship(
-        "CustomList", secondary=lambda: collections_customlists, backref="collections"  # type: ignore
+        "CustomList", secondary=lambda: collections_customlists, backref="collections"
     )
 
     # Most data sources offer different catalogs to different
@@ -867,7 +870,7 @@ class Collection(Base, HasSessionCache):
         _db.commit()
 
 
-collections_libraries = Table(
+collections_libraries: Table = Table(
     "collections_libraries",
     Base.metadata,
     Column(
@@ -884,7 +887,7 @@ collections_libraries = Table(
 )
 
 
-collections_identifiers = Table(
+collections_identifiers: Table = Table(
     "collections_identifiers",
     Base.metadata,
     Column(
@@ -925,7 +928,7 @@ mapper(
     ),
 )
 
-collections_customlists = Table(
+collections_customlists: Table = Table(
     "collections_customlists",
     Base.metadata,
     Column(

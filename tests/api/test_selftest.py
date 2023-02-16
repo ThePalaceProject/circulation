@@ -7,7 +7,6 @@ import pytest
 
 from api.authenticator import BasicAuthenticationProvider
 from api.circulation import CirculationAPI
-from api.feedbooks import FeedbooksImportMonitor
 from api.selftest import (
     HasCollectionSelfTests,
     HasSelfTests,
@@ -212,10 +211,9 @@ class TestRunSelfTestsScript:
         for k, v in list(default_api_map.items()):
             assert api_map[k] == v
 
-        # But a couple things were added to the map that are not in
+        # But a couple of things were added to the map that are not in
         # CirculationAPI.
         assert api_map[ExternalIntegration.OPDS_IMPORT] == OPDSImportMonitor
-        assert api_map[ExternalIntegration.FEEDBOOKS] == FeedbooksImportMonitor
 
         # If test_collection raises an exception, the exception is recorded,
         # and we move on.

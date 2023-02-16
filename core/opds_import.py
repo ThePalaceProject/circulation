@@ -300,7 +300,7 @@ class OPDSImporter:
     # Subclasses of OPDSImporter may define a list of status codes
     # that should be treated as indicating success, rather than failure,
     # when they show up in <simplified:message> tags.
-    SUCCESS_STATUS_CODES = None
+    SUCCESS_STATUS_CODES: list[int] | None = None
 
     def __init__(
         self,

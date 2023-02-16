@@ -2,13 +2,9 @@ from __future__ import annotations
 
 import datetime
 import json
-import os
 import random
-import stat
-import tempfile
 from io import StringIO
 from pathlib import Path
-from typing import Iterable
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -16,6 +12,7 @@ from freezegun import freeze_time
 from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm import Session
 
+from api.lanes import create_default_lanes
 from core.classifier import Classifier
 from core.config import CannotLoadConfiguration
 from core.external_search import Filter, MockExternalSearchIndex
@@ -48,6 +45,7 @@ from core.opds_import import OPDSImportMonitor
 from core.s3 import MinIOUploader, MinIOUploaderConfiguration, S3Uploader
 from core.scripts import (
     AddClassificationScript,
+    AlembicMigrateVersion,
     CheckContributorNamesInDB,
     CollectionArgumentsScript,
     CollectionInputScript,
@@ -58,8 +56,7 @@ from core.scripts import (
     ConfigureLibraryScript,
     ConfigureSiteScript,
     CustomListUpdateEntriesScript,
-    DatabaseMigrationInitializationScript,
-    DatabaseMigrationScript,
+    DeleteInvisibleLanesScript,
     Explain,
     IdentifierInputScript,
     LaneSweeperScript,
@@ -95,7 +92,7 @@ from core.testing import (
     AlwaysSuccessfulCollectionCoverageProvider,
     AlwaysSuccessfulWorkCoverageProvider,
 )
-from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
+from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.worker_pools import DatabasePool
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchPatchFixture
@@ -847,835 +844,6 @@ class TestWorkProcessingScript:
             db.session, Identifier.URI, [], DataSource.STANDARD_EBOOKS
         )
         assert [standard_ebooks] == one_standard_ebook.all()
-
-
-class TestTimestampInfo:
-
-    TimestampInfo = DatabaseMigrationScript.TimestampInfo
-
-    def test_find(self, db: DatabaseTransactionFixture):
-        class Empty:
-            _db: Session
-
-        empty = Empty()
-        empty._db = db.session
-
-        # If there isn't a timestamp for the given service,
-        # nothing is returned.
-        result = self.TimestampInfo.find(empty, "test")
-        assert None == result
-
-        # But an empty Timestamp has been placed into the database.
-        timestamp = (
-            db.session.query(Timestamp).filter(Timestamp.service == "test").one()
-        )
-        assert None == timestamp.start
-        assert None == timestamp.finish
-        assert None == timestamp.counter
-
-        # A repeat search for the empty Timestamp also results in None.
-        script = DatabaseMigrationScript(db.session)
-        assert None == self.TimestampInfo.find(script, "test")
-
-        # If the Timestamp is stamped, it is returned.
-        timestamp.finish = utc_now()
-        timestamp.counter = 1
-        db.session.flush()
-
-        result = self.TimestampInfo.find(script, "test")
-        assert timestamp.finish == result.finish
-        assert 1 == result.counter
-
-    def test_update(self, db: DatabaseTransactionFixture):
-        # Create a Timestamp to be updated.
-        past = strptime_utc("19980101", "%Y%m%d")
-        stamp = Timestamp.stamp(
-            db.session, "test", Timestamp.SCRIPT_TYPE, None, start=past, finish=past
-        )
-        script = DatabaseMigrationScript(db.session)
-        timestamp_info = self.TimestampInfo.find(script, "test")
-
-        now = utc_now()
-        timestamp_info.update(db.session, now, 2)
-
-        # When we refresh the Timestamp object, it's been updated.
-        db.session.refresh(stamp)
-        assert now == stamp.start
-        assert now == stamp.finish
-        assert 2 == stamp.counter
-
-    def save(self, db: DatabaseTransactionFixture):
-        # The Timestamp doesn't exist.
-        timestamp_qu = db.session.query(Timestamp).filter(Timestamp.service == "test")
-        assert False == timestamp_qu.exists()
-
-        now = utc_now()
-        timestamp_info = self.TimestampInfo("test", now, 47)
-        timestamp_info.save(db.session)
-
-        # The Timestamp exists now.
-        timestamp = timestamp_qu.one()
-        assert now == timestamp.finish
-        assert 47 == timestamp.counter
-
-
-@pytest.fixture
-def migration_dirs(tmp_path):
-    # create migration file structure
-    server = tmp_path / "migration"
-    core = tmp_path / "server_core" / "migation"
-    server.mkdir()
-    core.mkdir(parents=True)
-
-    # return fixture
-    yield [str(core), str(server)]
-
-    # cleanup files
-    def recursive_delete(path):
-        for file in path.iterdir():
-            if file.is_file():
-                file.unlink()
-            if file.is_dir():
-                recursive_delete(file)
-                file.rmdir()
-
-    recursive_delete(tmp_path)
-
-
-@pytest.fixture()
-def migration_file(tmp_path):
-    def create_migration_file(
-        directory, unique_string, migration_type, migration_date=None
-    ):
-        suffix = "." + migration_type
-
-        if migration_type == "sql":
-            # Create unique, innocuous content for a SQL file.
-            # This SQL inserts a timestamp into the test database.
-            service = "Test Database Migration Script - %s" % unique_string
-            content = (
-                "insert into timestamps(service, finish)" " values ('%s', '%s');"
-            ) % (service, "1970-01-01")
-        elif migration_type == "py":
-            # Create unique, innocuous content for a Python file.
-            content = (
-                "#!/usr/bin/env python\n\n"
-                + "import tempfile\nimport os\n\n"
-                + "file_info = tempfile.mkstemp(prefix='"
-                + unique_string
-                + "-', suffix='.py', dir='"
-                + str(tmp_path)
-                + "')\n\n"
-                + "# Close file descriptor\n"
-                + "os.close(file_info[0])\n"
-            )
-        else:
-            content = ""
-
-        if not migration_date:
-            # Default date is just after self.timestamp.
-            migration_date = "20260811"
-        prefix = migration_date + "-"
-
-        fd, migration_file = tempfile.mkstemp(
-            prefix=prefix, suffix=suffix, dir=directory, text=True
-        )
-        os.write(fd, content.encode("utf-8"))
-
-        # If it's a python migration, make it executable.
-        if migration_file.endswith("py"):
-            original_mode = os.stat(migration_file).st_mode
-            mode = original_mode | (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-            os.chmod(migration_file, mode)
-
-        # Close the file descriptor.
-        os.close(fd)
-
-        # return the filename
-        return migration_file
-
-    return create_migration_file
-
-
-@pytest.fixture()
-def migrations(migration_file, migration_dirs):
-    # Put a file of each migration type in each temporary migration directory.
-    core_migration_files = []
-    server_migration_files = []
-    [core_dir, server_dir] = migration_dirs
-    core_migration_files.append(migration_file(core_dir, "CORE", "sql"))
-    core_migration_files.append(migration_file(core_dir, "CORE", "py"))
-    server_migration_files.append(migration_file(server_dir, "SERVER", "sql"))
-    server_migration_files.append(migration_file(server_dir, "SERVER", "py"))
-    return core_migration_files, server_migration_files
-
-
-class DatabaseMigrationScriptFixture:
-    """A fixture used for database migration scripts. Ensures the use of custom migration directories,
-    and cleans up the database afterwards."""
-
-    db: DatabaseTransactionFixture
-    script: DatabaseMigrationScript
-    migration_dirs: list[str]
-    migrations: tuple[list[str], list[str]]
-
-    def close(self):
-        self.db.session.query(Timestamp).filter(
-            Timestamp.service.like("%Database Migration%")
-        ).delete(synchronize_session=False)
-
-
-class DatabaseMigrationInitializationScriptFixture:
-    """A fixture used for database migration scripts. Ensures the use of custom migration directories,
-    and cleans up the database afterwards."""
-
-    db: DatabaseTransactionFixture
-    script: DatabaseMigrationScript
-    migration_dirs: list[str]
-    migrations: tuple[list[str], list[str]]
-
-    def close(self):
-        self.db.session.query(Timestamp).filter(
-            Timestamp.service.like("%Database Migration%")
-        ).delete(synchronize_session=False)
-
-
-@pytest.fixture()
-def database_migration_script_fixture(
-    db: DatabaseTransactionFixture,
-    monkeypatch,
-    migrations: tuple[list[str], list[str]],
-    migration_dirs: list[str],
-) -> Iterable[DatabaseMigrationScriptFixture]:
-    # Patch DatabaseMigrationScript to use test directories for migrations
-    monkeypatch.setattr(
-        DatabaseMigrationScript, "directories_by_priority", migration_dirs
-    )
-
-    fixture = DatabaseMigrationScriptFixture()
-    fixture.migration_dirs = migration_dirs
-    fixture.migrations = migrations
-    fixture.script = DatabaseMigrationScript(db.session)
-    fixture.db = db
-    yield fixture
-    fixture.close()
-
-
-@pytest.fixture()
-def database_migration_initialization_script_fixture(
-    db: DatabaseTransactionFixture,
-    monkeypatch,
-    migrations: tuple[list[str], list[str]],
-    migration_dirs: list[str],
-) -> Iterable[DatabaseMigrationInitializationScriptFixture]:
-    # Patch DatabaseMigrationInitializationScript to use test directories for migrations
-    monkeypatch.setattr(
-        DatabaseMigrationInitializationScript, "directories_by_priority", migration_dirs
-    )
-
-    fixture = DatabaseMigrationInitializationScriptFixture()
-    fixture.migration_dirs = migration_dirs
-    fixture.migrations = migrations
-    fixture.script = DatabaseMigrationInitializationScript(db.session)
-    fixture.db = db
-    yield fixture
-    fixture.close()
-
-
-class TestDatabaseMigrationScript:
-    @pytest.fixture()
-    def timestamp(
-        self, database_migration_script_fixture: DatabaseMigrationScriptFixture
-    ):
-        fixture = database_migration_script_fixture
-        session = fixture.db.session
-        script = fixture.script
-
-        stamp = strptime_utc("20260810", "%Y%m%d")
-        timestamp = Timestamp(service=script.name, start=stamp, finish=stamp)
-        python_timestamp = Timestamp(
-            service=script.PY_TIMESTAMP_SERVICE_NAME, start=stamp, finish=stamp
-        )
-        session.add_all([timestamp, python_timestamp])
-        session.flush()
-
-        timestamp_info = script.TimestampInfo(timestamp.service, timestamp.start)
-        return timestamp, python_timestamp, timestamp_info
-
-    def test_name(
-        self, database_migration_script_fixture: DatabaseMigrationScriptFixture
-    ):
-        """DatabaseMigrationScript.name returns an appropriate timestamp service
-        name, depending on whether it is running only Python migrations or not.
-        """
-
-        script = database_migration_script_fixture.script
-        # The default script returns the default timestamp name.
-        assert "Database Migration" == script.name
-
-        # A python-only script returns a Python-specific timestamp name.
-        script.python_only = True
-        assert "Database Migration - Python" == script.name
-
-    def test_timestamp_properties(
-        self, database_migration_script_fixture: DatabaseMigrationScriptFixture
-    ):
-        """DatabaseMigrationScript provides the appropriate TimestampInfo
-        objects as properties.
-        """
-        script = database_migration_script_fixture.script
-        transaction, session = (
-            database_migration_script_fixture.db,
-            database_migration_script_fixture.db.session,
-        )
-
-        # If there aren't any Database Migrations in the database, no
-        # timestamps are returned.
-        timestamps = session.query(Timestamp).filter(
-            Timestamp.service.like("Database Migration%")
-        )
-        for timestamp in timestamps:
-            session.delete(timestamp)
-        session.commit()
-
-        script._session = session
-        assert None == script.python_timestamp
-        assert None == script.overall_timestamp
-
-        # If the Timestamps exist in the database, but they don't have
-        # a timestamp, nothing is returned. Timestamps must be initialized.
-        overall = (
-            session.query(Timestamp)
-            .filter(Timestamp.service == script.SERVICE_NAME)
-            .one()
-        )
-        python = (
-            session.query(Timestamp)
-            .filter(Timestamp.service == script.PY_TIMESTAMP_SERVICE_NAME)
-            .one()
-        )
-
-        # Neither Timestamp object has a timestamp.
-        assert (None, None) == (python.finish, overall.finish)
-        # So neither timestamp is returned as a property.
-        assert None == script.python_timestamp
-        assert None == script.overall_timestamp
-
-        # If you give the Timestamps data, suddenly they show up.
-        overall.finish = script.parse_time("1998-08-25")
-        python.finish = script.parse_time("1993-06-11")
-        python.counter = 2
-        session.flush()
-
-        overall_timestamp_info = script.overall_timestamp
-        assert isinstance(overall_timestamp_info, script.TimestampInfo)
-        assert overall.finish == overall_timestamp_info.finish
-
-        python_timestamp_info = script.python_timestamp
-        assert isinstance(python_timestamp_info, script.TimestampInfo)
-        assert python.finish == python_timestamp_info.finish
-        assert 2 == script.python_timestamp.counter
-
-    def test_directories_by_priority(self):
-        root = Path(__file__).parent.parent.parent
-        expected_core = root / "core" / "migration"
-        expected_parent = root / "migration"
-
-        # This is the only place we're testing the real script.
-        # Everywhere else should use the mock.
-        script = DatabaseMigrationScript()
-        assert [
-            str(expected_core),
-            str(expected_parent),
-        ] == script.directories_by_priority
-
-    def test_fetch_migration_files(
-        self, database_migration_script_fixture: DatabaseMigrationScriptFixture
-    ):
-        script = database_migration_script_fixture.script
-        migration_dirs = database_migration_script_fixture.migration_dirs
-        migrations = database_migration_script_fixture.migrations
-
-        result = script.fetch_migration_files()
-        result_migrations, result_migrations_by_dir = result
-        core_migrations, server_migrations = migrations
-        all_migrations = []
-        all_migrations.extend(core_migrations)
-        all_migrations.extend(server_migrations)
-        [core_migration_dir, server_migration_dir] = migration_dirs
-
-        for migration_file in all_migrations:
-            assert os.path.split(migration_file)[1] in result_migrations
-
-        # Ensure that all the expected migrations from CORE are included in
-        # the 'core' directory array in migrations_by_directory.
-        assert 2 == len(core_migrations)
-        for filename in core_migrations:
-            assert (
-                os.path.split(filename)[1]
-                in result_migrations_by_dir[core_migration_dir]
-            )
-
-        # Ensure that all the expected migrations from the parent server
-        # are included in the appropriate array in migrations_by_directory.
-        assert 2 == len(server_migrations)
-        for filename in server_migrations:
-            assert (
-                os.path.split(filename)[1]
-                in result_migrations_by_dir[server_migration_dir]
-            )
-
-        # When the script is python_only, only python migrations are returned.
-        script.python_only = True
-        result_migrations, result_migrations_by_dir = script.fetch_migration_files()
-
-        py_migration_files = [m for m in all_migrations if m.endswith(".py")]
-        py_migration_filenames = [os.path.split(f)[1] for f in py_migration_files]
-        assert sorted(py_migration_filenames) == sorted(result_migrations)
-
-        core_migration_files = [
-            os.path.split(m)[1] for m in core_migrations if m.endswith(".py")
-        ]
-        assert 1 == len(core_migration_files)
-        assert result_migrations_by_dir[core_migration_dir] == core_migration_files
-
-        server_migration_files = [
-            os.path.split(m)[1] for m in server_migrations if m.endswith(".py")
-        ]
-        assert 1 == len(server_migration_files)
-        assert result_migrations_by_dir[server_migration_dir] == server_migration_files
-
-    def test_migratable_files(
-        self, database_migration_script_fixture: DatabaseMigrationScriptFixture
-    ):
-        """Returns migrations that end with particular extensions."""
-        script = database_migration_script_fixture.script
-
-        migrations = [
-            ".gitkeep",
-            "20250521-make-bananas.sql",
-            "20260810-do-a-thing.py",
-            "20260802-did-a-thing.pyc",
-            "why-am-i-here.rb",
-        ]
-
-        result = script.migratable_files(migrations, [".sql", ".py"])
-        assert 2 == len(result)
-        assert ["20250521-make-bananas.sql", "20260810-do-a-thing.py"] == result
-
-        result = script.migratable_files(migrations, [".rb"])
-        assert 1 == len(result)
-        assert ["why-am-i-here.rb"] == result
-
-        result = script.migratable_files(migrations, ["banana"])
-        assert [] == result
-
-    def test_get_new_migrations(
-        self,
-        database_migration_script_fixture: DatabaseMigrationScriptFixture,
-        timestamp,
-    ):
-        """Filters out migrations that were run on or before a given timestamp"""
-        script = database_migration_script_fixture.script
-        timestamp, python_timestamp, timestamp_info = timestamp
-
-        migrations = [
-            "20271204-far-future-migration-funtime.sql",
-            "20271202-future-migration-funtime.sql",
-            "20271203-do-another-thing.py",
-            "20250521-make-bananas.sql",
-            "20260810-last-timestamp",
-            "20260811-do-a-thing.py",
-            "20260809-already-done.sql",
-        ]
-
-        result = script.get_new_migrations(timestamp_info, migrations)
-        # Expected migrations will be sorted by timestamp. Python migrations
-        # will be sorted after SQL migrations.
-        expected = [
-            "20271202-future-migration-funtime.sql",
-            "20271204-far-future-migration-funtime.sql",
-            "20260811-do-a-thing.py",
-            "20271203-do-another-thing.py",
-        ]
-
-        assert 4 == len(result)
-        assert expected == result
-
-        # If the timestamp has a counter, the filter only finds new migrations
-        # past the counter.
-        migrations = [
-            "20260810-last-timestamp.sql",
-            "20260810-1-do-a-thing.sql",
-            "20271202-future-migration-funtime.sql",
-            "20260810-2-do-all-the-things.sql",
-            "20260809-already-done.sql",
-        ]
-        timestamp_info.counter = 1
-        result = script.get_new_migrations(timestamp_info, migrations)
-        expected = [
-            "20260810-2-do-all-the-things.sql",
-            "20271202-future-migration-funtime.sql",
-        ]
-
-        assert 2 == len(result)
-        assert expected == result
-
-        # If the timestamp has a (unlikely) mix of counter and non-counter
-        # migrations with the same datetime, migrations with counters are
-        # sorted after migrations without them.
-        migrations = [
-            "20260810-do-a-thing.sql",
-            "20271202-1-more-future-migration-funtime.sql",
-            "20260810-1-do-all-the-things.sql",
-            "20260809-already-done.sql",
-            "20271202-future-migration-funtime.sql",
-        ]
-        timestamp_info.counter = None
-
-        result = script.get_new_migrations(timestamp_info, migrations)
-        expected = [
-            "20260810-1-do-all-the-things.sql",
-            "20271202-future-migration-funtime.sql",
-            "20271202-1-more-future-migration-funtime.sql",
-        ]
-        assert 3 == len(result)
-        assert expected == result
-
-    def test_update_timestamps(
-        self,
-        database_migration_script_fixture: DatabaseMigrationScriptFixture,
-        timestamp,
-    ):
-        """Resets a timestamp according to the date of a migration file"""
-        fixture = database_migration_script_fixture
-        script = fixture.script
-        migration_dirs = fixture.migration_dirs
-        transaction, session = fixture.db, fixture.db.session
-        timestamp, python_timestamp, timestamp_info = timestamp
-
-        migration = "20271202-future-migration-funtime.sql"
-        py_last_run_time = python_timestamp.finish
-
-        def assert_unchanged_python_timestamp():
-            assert py_last_run_time == python_timestamp.finish
-
-        def assert_timestamp_matches_migration(timestamp, migration, counter=None):
-            session.refresh(timestamp)
-            timestamp_str = timestamp.finish.strftime("%Y%m%d")
-            assert migration[0:8] == timestamp_str
-            assert counter == timestamp.counter
-
-        assert timestamp_info.finish.strftime("%Y%m%d") != migration[0:8]
-        script.update_timestamps(migration)
-        assert_timestamp_matches_migration(timestamp, migration)
-        assert_unchanged_python_timestamp()
-
-        # It also takes care of counter digits when multiple migrations
-        # exist for the same date.
-        migration = "20280810-2-do-all-the-things.sql"
-        script.update_timestamps(migration)
-        assert_timestamp_matches_migration(timestamp, migration, counter=2)
-        assert_unchanged_python_timestamp()
-
-        # And removes those counter digits when the timestamp is updated.
-        migration = "20280901-what-it-do.sql"
-        script.update_timestamps(migration)
-        assert_timestamp_matches_migration(timestamp, migration)
-        assert_unchanged_python_timestamp()
-
-        # If the migration is earlier than the existing timestamp,
-        # the timestamp is not updated.
-        migration = "20280801-before-the-existing-timestamp.sql"
-        script.update_timestamps(migration)
-        assert timestamp.finish.strftime("%Y%m%d") == "20280901"
-
-        # Python migrations update both timestamps.
-        migration = "20281001-new-task.py"
-        script.update_timestamps(migration)
-        assert_timestamp_matches_migration(timestamp, migration)
-        assert_timestamp_matches_migration(python_timestamp, migration)
-
-    def test_running_a_migration_updates_the_timestamps(
-        self,
-        database_migration_script_fixture: DatabaseMigrationScriptFixture,
-        timestamp,
-        migration_file,
-    ):
-        fixture = database_migration_script_fixture
-        script = fixture.script
-
-        timestamp, python_timestamp, timestamp_info = timestamp
-        future_time = strptime_utc("20261030", "%Y%m%d")
-        timestamp_info.finish = future_time
-        [core_dir, server_dir] = fixture.migration_dirs
-
-        # Create a test migration after that point and grab relevant info about it.
-        migration_filepath = migration_file(
-            core_dir, "SINGLE", "sql", migration_date="20261202"
-        )
-
-        # Run the migration with the relevant information.
-        migration_filename = os.path.split(migration_filepath)[1]
-        migrations_by_dir = {core_dir: [migration_filename], server_dir: []}
-
-        # Running the migration updates the timestamps
-        script.run_migrations([migration_filename], migrations_by_dir, timestamp_info)
-        assert timestamp.finish.strftime("%Y%m%d") == "20261202"
-
-        # Even when there are counters.
-        migration_filepath = migration_file(
-            core_dir, "COUNTER", "sql", migration_date="20261203-3"
-        )
-        migration_filename = os.path.split(migration_filepath)[1]
-        migrations_by_dir[core_dir] = [migration_filename]
-        script.run_migrations([migration_filename], migrations_by_dir, timestamp_info)
-        assert timestamp.finish.strftime("%Y%m%d") == "20261203"
-        assert timestamp.counter == 3
-
-    def test_all_migration_files_are_run(
-        self,
-        database_migration_script_fixture: DatabaseMigrationScriptFixture,
-        timestamp,
-        tmp_path,
-    ):
-        fixture = database_migration_script_fixture
-        script = fixture.script
-        transaction, session = fixture.db, fixture.db.session
-
-        script.run(
-            test_db=session, test=True, cmd_args=["--last-run-date", "2010-01-01"]
-        )
-
-        # There are two test timestamps in the database, confirming that
-        # the test SQL files created by the migrations fixture
-        # have been run.
-        timestamps = (
-            session.query(Timestamp)
-            .filter(Timestamp.service.like("Test Database Migration Script - %"))
-            .order_by(Timestamp.service)
-            .all()
-        )
-        assert 2 == len(timestamps)
-
-        # A timestamp has been generated from each migration directory.
-        assert True == timestamps[0].service.endswith("CORE")
-        assert True == timestamps[1].service.endswith("SERVER")
-
-        for timestamp in timestamps:
-            session.delete(timestamp)
-
-        # There are two temporary files created in tmp_path,
-        # confirming that the test Python files created by
-        # migrations fixture have been run.
-        test_generated_files = sorted(
-            f.name
-            for f in tmp_path.iterdir()
-            if f.name.startswith(("CORE", "SERVER")) and f.is_file()
-        )
-        assert 2 == len(test_generated_files)
-
-        # A file has been generated from each migration directory.
-        assert "CORE" in test_generated_files[0]
-        assert "SERVER" in test_generated_files[1]
-
-    def test_python_migration_files_can_be_run_independently(
-        self,
-        database_migration_script_fixture: DatabaseMigrationScriptFixture,
-        timestamp,
-        tmp_path,
-    ):
-        fixture = database_migration_script_fixture
-        script = fixture.script
-        transaction, session = fixture.db, fixture.db.session
-
-        script.run(
-            test_db=session,
-            test=True,
-            cmd_args=["--last-run-date", "2010-01-01", "--python-only"],
-        )
-
-        # There are no test timestamps in the database, confirming that
-        # no test SQL files created by the migrations fixture
-        # have been run.
-        timestamps = (
-            session.query(Timestamp)
-            .filter(Timestamp.service.like("Test Database Migration Script - %"))
-            .order_by(Timestamp.service)
-            .all()
-        )
-        assert [] == timestamps
-
-        # There are two temporary files in tmp_path, confirming that the test
-        # Python files created by the migrations fixture were run.
-        test_dir = os.path.split(__file__)[0]
-        all_files = os.listdir(test_dir)
-        test_generated_files = sorted(
-            f.name
-            for f in tmp_path.iterdir()
-            if f.name.startswith(("CORE", "SERVER")) and f.is_file()
-        )
-
-        assert 2 == len(test_generated_files)
-
-        # A file has been generated from each migration directory.
-        assert "CORE" in test_generated_files[0]
-        assert "SERVER" in test_generated_files[1]
-
-
-class TestDatabaseMigrationInitializationScript:
-    def assert_matches_latest_python_migration(
-        self,
-        timestamp,
-        database_migration_initialization_script_fixture: DatabaseMigrationInitializationScriptFixture,
-    ):
-        script = database_migration_initialization_script_fixture.script
-        migrations = script.fetch_migration_files()[0]
-        migrations_sorted = script.sort_migrations(migrations)
-        last_migration_date = [x for x in migrations_sorted if x.endswith(".py")][-1][
-            0:8
-        ]
-        self.assert_matches_timestamp(timestamp, last_migration_date)
-
-    def assert_matches_latest_migration(
-        self,
-        timestamp,
-        database_migration_initialization_script_fixture: DatabaseMigrationInitializationScriptFixture,
-    ):
-        script = database_migration_initialization_script_fixture.script
-        migrations = script.fetch_migration_files()[0]
-        migrations_sorted = script.sort_migrations(migrations)
-        py_migration = [x for x in migrations_sorted if x.endswith(".py")][-1][0:8]
-        sql_migration = [x for x in migrations_sorted if x.endswith(".sql")][-1][0:8]
-        last_migration_date = (
-            py_migration if int(py_migration) > int(sql_migration) else sql_migration
-        )
-        self.assert_matches_timestamp(timestamp, last_migration_date)
-
-    @staticmethod
-    def assert_matches_timestamp(timestamp, migration_date):
-        assert timestamp.finish.strftime("%Y%m%d") == migration_date
-
-    def test_accurate_timestamps_created(
-        self,
-        database_migration_initialization_script_fixture: DatabaseMigrationInitializationScriptFixture,
-    ):
-        fixture = database_migration_initialization_script_fixture
-        script = fixture.script
-        db, session = fixture.db, fixture.db.session
-
-        assert None == Timestamp.value(
-            session, script.name, Timestamp.SCRIPT_TYPE, collection=None
-        )
-        script.run()
-        self.assert_matches_latest_migration(script.overall_timestamp, fixture)
-        self.assert_matches_latest_python_migration(script.python_timestamp, fixture)
-
-    def test_accurate_python_timestamp_created_python_later(
-        self,
-        database_migration_initialization_script_fixture: DatabaseMigrationInitializationScriptFixture,
-        migration_file,
-    ):
-        fixture = database_migration_initialization_script_fixture
-        script = fixture.script
-        db, session = fixture.db, fixture.db.session
-
-        [core_migration_dir, server_migration_dir] = fixture.migration_dirs
-        assert None == Timestamp.value(
-            session, script.name, Timestamp.SCRIPT_TYPE, collection=None
-        )
-
-        # If the last python migration and the last SQL migration have
-        # different timestamps, they're set accordingly.
-        migration_file(core_migration_dir, "CORE", "sql", "20310101")
-        migration_file(server_migration_dir, "SERVER", "py", "20300101")
-
-        script.run()
-        self.assert_matches_timestamp(script.overall_timestamp, "20310101")
-        self.assert_matches_timestamp(script.python_timestamp, "20300101")
-
-    def test_accurate_python_timestamp_created_python_earlier(
-        self,
-        database_migration_initialization_script_fixture: DatabaseMigrationInitializationScriptFixture,
-        migration_file,
-    ):
-        fixture = database_migration_initialization_script_fixture
-        script, migration_dirs = fixture.script, fixture.migration_dirs
-        db, session = fixture.db, fixture.db.session
-
-        [core_migration_dir, server_migration_dir] = migration_dirs
-        assert None == Timestamp.value(
-            session, script.name, Timestamp.SCRIPT_TYPE, collection=None
-        )
-
-        # If the last python migration and the last SQL migration have
-        # different timestamps, they're set accordingly.
-        migration_file(core_migration_dir, "CORE", "sql", "20310101")
-        migration_file(server_migration_dir, "SERVER", "py", "20350101")
-
-        script.run()
-        self.assert_matches_timestamp(script.overall_timestamp, "20350101")
-        self.assert_matches_timestamp(script.python_timestamp, "20350101")
-
-    def test_error_raised_when_timestamp_exists(self, db: DatabaseTransactionFixture):
-        session = db.session
-
-        script = DatabaseMigrationInitializationScript(session)
-        Timestamp.stamp(session, script.name, Timestamp.SCRIPT_TYPE, None)
-        pytest.raises(RuntimeError, script.run)
-
-    def test_error_not_raised_when_timestamp_forced(
-        self,
-        database_migration_initialization_script_fixture: DatabaseMigrationInitializationScriptFixture,
-    ):
-        fixture = database_migration_initialization_script_fixture
-        script, migration_dirs = fixture.script, fixture.migration_dirs
-        db, session = fixture.db, fixture.db.session
-
-        past = script.parse_time("19951127")
-        Timestamp.stamp(session, script.name, Timestamp.SCRIPT_TYPE, None, finish=past)
-        script.run(["-f"])
-        self.assert_matches_latest_migration(script.overall_timestamp, fixture)
-        self.assert_matches_latest_python_migration(script.python_timestamp, fixture)
-
-    def test_accepts_last_run_date(
-        self,
-        database_migration_initialization_script_fixture: DatabaseMigrationInitializationScriptFixture,
-    ):
-        script = database_migration_initialization_script_fixture.script
-        # A timestamp can be passed via the command line.
-        script.run(["--last-run-date", "20101010"])
-        expected_stamp = strptime_utc("20101010", "%Y%m%d")
-        assert expected_stamp == script.overall_timestamp.finish
-
-        # It will override an existing timestamp if forced.
-        script.run(["--last-run-date", "20111111", "--force"])
-        expected_stamp = strptime_utc("20111111", "%Y%m%d")
-        assert expected_stamp == script.overall_timestamp.finish
-        assert expected_stamp == script.python_timestamp.finish
-
-    def test_accepts_last_run_counter(
-        self,
-        database_migration_initialization_script_fixture: DatabaseMigrationInitializationScriptFixture,
-    ):
-        script = database_migration_initialization_script_fixture.script
-        # If a counter is passed without a date, an error is raised.
-        pytest.raises(ValueError, script.run, ["--last-run-counter", "7"])
-
-        # With a date, the counter can be set.
-        script.run(["--last-run-date", "20101010", "--last-run-counter", "7"])
-        expected_stamp = strptime_utc("20101010", "%Y%m%d")
-        assert expected_stamp == script.overall_timestamp.finish
-        assert 7 == script.overall_timestamp.counter
-
-        # When forced, the counter can be reset on an existing timestamp.
-        previous_timestamp = script.overall_timestamp.finish
-        script.run(["--last-run-date", "20121212", "--last-run-counter", "2", "-f"])
-        expected_stamp = strptime_utc("20121212", "%Y%m%d")
-        assert expected_stamp == script.overall_timestamp.finish
-        assert expected_stamp == script.python_timestamp.finish
-        assert 2 == script.overall_timestamp.counter
-        assert 2 == script.python_timestamp.counter
 
 
 class TestAddClassificationScript:
@@ -3325,6 +2493,70 @@ class TestUpdateCustomListSizeScript:
         assert 1 == customlist.size
 
 
+class TestDeleteInvisibleLanesScript:
+    def test_do_run(self, db: DatabaseTransactionFixture):
+        """Test that invisible lanes and their visible children are deleted."""
+        # create a library
+        short_name = "TESTLIB"
+        l1 = db.library("test library", short_name=short_name)
+        # with a set of default lanes
+        create_default_lanes(db.session, l1)
+
+        # verify there is a top level visible Fiction lane
+        top_level_fiction_lane: Lane = (
+            db.session.query(Lane)
+            .filter(Lane.library == l1)
+            .filter(Lane.parent == None)
+            .filter(Lane.display_name == "Fiction")
+            .order_by(Lane.priority)
+            .one()
+        )
+
+        first_child_id = top_level_fiction_lane.children[0].id
+
+        assert top_level_fiction_lane is not None
+        assert top_level_fiction_lane.visible == True
+        assert first_child_id is not None
+
+        # run script and verify that it had no effect:
+        DeleteInvisibleLanesScript(_db=db.session).do_run([short_name])
+        top_level_fiction_lane: Lane = (
+            db.session.query(Lane)
+            .filter(Lane.library == l1)
+            .filter(Lane.parent == None)
+            .filter(Lane.display_name == "Fiction")
+            .order_by(Lane.priority)
+            .one()
+        )
+        assert top_level_fiction_lane is not None
+
+        # flag as deleted
+        top_level_fiction_lane.visible = False
+
+        # and now run script.
+        DeleteInvisibleLanesScript(_db=db.session).do_run([short_name])
+
+        # verify the lane has now been deleted.
+        deleted_lane = (
+            db.session.query(Lane)
+            .filter(Lane.library == l1)
+            .filter(Lane.parent == None)
+            .filter(Lane.display_name == "Fiction")
+            .order_by(Lane.priority)
+            .all()
+        )
+
+        assert deleted_lane == []
+
+        # verify the first child was also deleted:
+
+        first_child_lane = (
+            db.session.query(Lane).filter(Lane.id == first_child_id).all()
+        )
+
+        assert first_child_lane == []
+
+
 class TestCustomListUpdateEntriesScriptData:
     populated_books: list[Work]
     unpopular_books: list[Work]
@@ -3531,6 +2763,38 @@ class TestCustomListUpdateEntriesScript:
             session.refresh(prev_entry)
         assert custom_list.auto_update_status == CustomList.UPDATED
         assert custom_list.size == len(data.populated_books)
+
+
+class TestAlembicMigrateVersionScript:
+    def test_find_alembic_ini(self, db: DatabaseTransactionFixture):
+        # Make sure we get the correct path to alembic.ini
+        with patch("core.scripts.upgrade") as mock:
+            AlembicMigrateVersion().run()
+            mock.assert_called_once()
+            filename = mock.call_args.args[0].config_file_name
+
+        assert "alembic.ini" in filename
+        assert Path(filename).exists()
+
+    @pytest.mark.parametrize(
+        "args", [([]), (["--upgrade", "fakerevision"]), (["-u", "fakerevision"])]
+    )
+    def test_upgrade(self, db: DatabaseTransactionFixture, args):
+        with patch("core.scripts.upgrade") as upgrade:
+            with patch("core.scripts.downgrade") as downgrade:
+                AlembicMigrateVersion().do_run(args)
+                upgrade.assert_called_once()
+                downgrade.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "args", [(["--downgrade", "fakerevision"]), (["-d", "fakerevision"])]
+    )
+    def test_downgrade(self, db: DatabaseTransactionFixture, args):
+        with patch("core.scripts.upgrade") as upgrade:
+            with patch("core.scripts.downgrade") as downgrade:
+                AlembicMigrateVersion().do_run(args)
+                downgrade.assert_called_once()
+                upgrade.assert_not_called()
 
 
 class TestWorkConsolidationScript:

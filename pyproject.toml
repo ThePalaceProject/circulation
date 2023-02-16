@@ -2,6 +2,12 @@
 build-backend = "poetry.core.masonry.api"
 requires = ["poetry-core>=1.0.0"]
 
+[tool.coverage.report]
+exclude_lines = [
+    "if TYPE_CHECKING:",
+    "pragma: no cover",
+]
+
 [tool.coverage.run]
 branch = true
 relative_files = true
@@ -12,12 +18,53 @@ known_first_party = ["api", "core", "customlists"]
 profile = "black"
 
 [tool.mypy]
+# TODO: Enable the the check_untyped_defs option
+# This will get rid of the warnings that we get when running mypy
+# > note: By default the bodies of untyped functions are not checked
+# However this currently causes a number of errors to surface that will
+# need to be cleaned up before we can enable the option.
+# check_untyped_defs = true
 exclude = [
-    'core/bin',
+    'core/bin/repair/startup\.py',
     'core/classifier',
-    'core/model/listeners.py',
+    'core/model/listeners\.py',
+    'integration_tests/',
     # TODO: Post test-suite refactoring.
-    'core/opds_schema\.py',
+    'tests/api/admin/controller/',
+    'tests/api/saml/metadata',
+    'tests/api/saml/test_auth\.py',
+    'tests/api/saml/test_provider\.py',
+    'tests/api/test_adobe_vendor_id\.py',
+    'tests/api/test_announcements\.py',
+    'tests/api/test_authenticator\.py',
+    'tests/api/test_axis\.py',
+    'tests/api/test_bibliotheca\.py',
+    'tests/api/test_circulationapi\.py',
+    'tests/api/test_controller_annotation\.py',
+    'tests/api/test_controller_base\.py',
+    'tests/api/test_controller_cm\.py',
+    'tests/api/test_controller_device_manage\.py',
+    'tests/api/test_controller_index\.py',
+    'tests/api/test_controller_loan\.py',
+    'tests/api/test_controller_odl_notify\.py',
+    'tests/api/test_controller_scopedsession\.py',
+    'tests/api/test_controller_work\.py',
+    'tests/api/test_coverage\.py',
+    'tests/api/test_lanes\.py',
+    'tests/api/test_local_analytics_exporter\.py',
+    'tests/api/test_monitor\.py',
+    'tests/api/test_novelist\.py',
+    'tests/api/test_odilo\.py',
+    'tests/api/test_odl2\.py',
+    'tests/api/test_odl\.py',
+    'tests/api/test_opds2\.py',
+    'tests/api/test_opds\.py',
+    'tests/api/test_overdrive\.py',
+    'tests/api/test_patron_utility\.py',
+    'tests/api/test_registry\.py',
+    'tests/api/test_routes\.py',
+    'tests/api/test_scripts\.py',
+    'tests/api/test_selftest\.py',
     'tests/core/models/test_admin\.py',
     'tests/core/models/test_cachedfeed\.py',
     'tests/core/models/test_collection\.py',
@@ -37,7 +84,6 @@ exclude = [
     'tests/core/test_analytics\.py',
     'tests/core/test_app_server\.py',
     'tests/core/test_circulation_data\.py',
-    'tests/core/test_config\.py',
     'tests/core/test_coverage\.py',
     'tests/core/test_equivalent_coverage\.py',
     'tests/core/test_external_list\.py',
@@ -48,20 +94,18 @@ exclude = [
     'tests/core/test_metadata\.py',
     'tests/core/test_monitor\.py',
     'tests/core/test_opds2\.py',
-    'tests/core/test_opds2_import\.py',
     'tests/core/test_opds\.py',
     'tests/core/test_opds_import\.py',
     'tests/core/test_overdrive\.py',
     'tests/core/test_s3\.py',
     'tests/core/test_scripts\.py',
     'tests/core/test_selftest\.py',
+    'tests/fixtures/api_config\.py',
+    'tests/fixtures/api_controller\.py',
     'tests/fixtures/database\.py',
+    'tests/fixtures/odl\.py',
 ]
-files = [
-    "core",
-    "customlists",
-    "tests/core",
-]
+files = ["."]
 plugins = ["sqlmypy"]
 warn_redundant_casts = true
 warn_unreachable = true
@@ -71,6 +115,7 @@ warn_unused_ignores = true
 [[tool.mypy.overrides]]
 ignore_missing_imports = true
 module = [
+    "aws_xray_sdk.ext.*",
     "bcrypt",
     # This is ignored because the file is created when building a container
     # so it typically doesn't exist when running mypy, but since it only
@@ -84,33 +129,43 @@ module = [
     "flask_pydantic_spec.*",
     "flask_sqlalchemy_session",
     "fuzzywuzzy",
+    "html_sanitizer",
     "isbnlib",
     "loggly.*",
     "lxml.*",
     "money",
     "multipledispatch",
     "nameparser",
+    "oauth2client",
+    "onelogin",
+    "onelogin.saml2.*",
     "parameterized",
+    "pyfakefs.*",
+    "pyld",
     "pymarc",
     "pyparsing",
+    "pypostalcode",
     "spellchecker",
     "textblob.*",
+    "unicodecsv",
+    "uritemplate",
+    "uszipcode",
     "watchtower",
+    "wcag_contrast_ratio",
     "webpub_manifest_parser.*",
 ]
 
 [[tool.mypy.overrides]]
 follow_imports = "skip"
 module = [
-    "api.*",
     "core.classifier.*",
-    "tests.fixtures.database",
+    "tests.api.admin.controller.*",
+    "tests.fixtures.*",
 ]
 
 [[tool.mypy.overrides]]
 follow_imports = "silent"
 module = [
-    "core.configuration.ignored_identifier",
     "core.model.listeners",
 ]
 
@@ -125,6 +180,7 @@ repository = "https://github.com/ThePalaceProject/circulation"
 version = "0"  # Version number is managed with tags in git
 
 [tool.poetry.dependencies]
+alembic = {extras = ["tz"], version = "^1.8.1"}
 aws-xray-sdk = "~2.11"
 boto3 = "~1.18"
 botocore = "~1.21"
@@ -188,8 +244,8 @@ tox-docker = "^3.1.0"
 tox-gh-actions = "^2.10.0"
 
 [tool.poetry.group.dev.dependencies]
-boto3-stubs = "^1.26.67"
-botocore-stubs = "^1.29.64"
+boto3-stubs = "^1.26.71"
+botocore-stubs = "^1.29.71"
 freezegun = "~1.2"
 Jinja2 = "2.11.3"
 markupsafe = "2.0.1"
@@ -201,9 +257,11 @@ pytest-cov = "^4.0.0"
 pytest-timeout = "*"
 requests-mock = "1.10.0"
 sqlalchemy-stubs = "^0.4"
+types-aws-xray-sdk = "^2.11.0.1"
 types-Flask = "^1.1.6"
+types-Flask-Cors = "^3.0.10"
 types-freezegun = "^1.1.10"
-types-jsonschema = "^4.17.0.4"
+types-jsonschema = "^4.17.0.5"
 types-Pillow = "^9.4.0"
 types-psycopg2 = "^2.9.21"
 types-python-dateutil = "^2.8.19"

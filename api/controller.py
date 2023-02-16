@@ -242,9 +242,6 @@ class CirculationManager:
         # Potentially load a CustomIndexView for each library
         new_custom_index_views = {}
 
-        # Make sure there's a site-wide public/private key pair.
-        self.sitewide_key_pair
-
         with elapsed_time_logging(
             log_method=self.log.debug,
             message_prefix="load_settings - per-library lanes, custom indexes, api",
@@ -586,24 +583,6 @@ class CirculationManager:
             value = json.dumps(value)
         return value
 
-    @property
-    def sitewide_key_pair(self):
-        """Look up or create the sitewide public/private key pair."""
-        setting = ConfigurationSetting.sitewide(self._db, Configuration.KEY_PAIR)
-        return Configuration.key_pair(setting)
-
-    @property
-    def public_key_integration_document(self):
-        """Serve a document with the sitewide public key."""
-        site_id = ConfigurationSetting.sitewide(
-            self._db, Configuration.BASE_URL_KEY
-        ).value
-        document = dict(id=site_id)
-
-        public, private = self.sitewide_key_pair
-        document["public_key"] = dict(type="RSA", value=public)
-        return json.dumps(document)
-
 
 class CirculationManagerController(BaseCirculationManagerController):
     def get_patron_circ_objects(self, object_class, patron, license_pools):
@@ -917,14 +896,6 @@ class IndexController(CirculationManagerController):
                 lane_identifier=root_lane.id,
                 _external=True,
             )
-        )
-
-    def public_key_document(self):
-        """Serves a sitewide public key document"""
-        return Response(
-            self.manager.public_key_integration_document,
-            200,
-            {"Content-Type": "application/opds+json"},
         )
 
 

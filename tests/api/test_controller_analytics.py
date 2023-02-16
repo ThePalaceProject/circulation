@@ -16,7 +16,7 @@ class AnalyticsFixture(CirculationControllerFixture):
     ):
         super().__init__(db, vendor_id_fixture)
         [self.lp] = self.english_1.license_pools
-        self.identifier = self.lp.identifier  # type: ignore
+        self.identifier = self.lp.identifier
 
 
 @pytest.fixture(scope="function")

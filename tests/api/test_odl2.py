@@ -10,6 +10,7 @@ from webpub_manifest_parser.odl.semantic import (
     ODL_PUBLICATION_MUST_CONTAIN_EITHER_LICENSES_OR_OA_ACQUISITION_LINK_ERROR,
 )
 
+from api.circulation_exceptions import PatronHoldLimitReached, PatronLoanLimitReached
 from api.odl2 import ODL2API, ODL2APIConfiguration, ODL2Importer
 from core.coverage import CoverageFailure
 from core.model import (
@@ -28,7 +29,7 @@ from core.model.resource import Hyperlink
 from tests.api.test_odl import LicenseHelper, LicenseInfoHelper, TestODLImporter
 from tests.fixtures.api_odl2_files import ODL2APIFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.odl import ODLTestFixture
+from tests.fixtures.odl import ODL2APITestFixture, ODLTestFixture
 
 
 class TestODL2Importer(TestODLImporter):
@@ -377,3 +378,66 @@ class TestODL2Importer(TestODLImporter):
             )
         )
         assert lcp_delivery_mechanism is not None
+
+
+class TestODL2API:
+    def test_loan_limit(self, odl2_api_test_fixture: ODL2APITestFixture):
+        """Test the loan limit collection setting"""
+        odl2api = odl2_api_test_fixture
+        # Set the loan limit
+        odl2api.api.loan_limit = 1
+
+        response = odl2api.checkout(
+            patron=odl2api.patron, pool=odl2api.work.active_license_pool()
+        )
+        # Did the loan take place correctly?
+        assert (
+            response[0].identifier
+            == odl2api.work.presentation_edition.primary_identifier.identifier
+        )
+
+        # Second loan for the patron should fail due to the loan limit
+        work2: Work = odl2api.fixture.work(odl2api.collection)
+        with pytest.raises(PatronLoanLimitReached) as exc:
+            odl2api.checkout(patron=odl2api.patron, pool=work2.active_license_pool())
+        assert exc.value.limit == 1
+
+    def test_hold_limit(
+        self, db: DatabaseTransactionFixture, odl2_api_test_fixture: ODL2APITestFixture
+    ):
+        """Test the hold limit collection setting"""
+        odl2api = odl2_api_test_fixture
+        # Set the hold limit
+        odl2api.api.hold_limit = 1
+
+        patron1 = db.patron()
+
+        # First checkout with patron1, then place a hold with the test patron
+        pool = odl2api.work.active_license_pool()
+        response = odl2api.checkout(patron=patron1, pool=pool)
+        assert (
+            response[0].identifier
+            == odl2api.work.presentation_edition.primary_identifier.identifier
+        )
+
+        response = odl2api.api.place_hold(odl2api.patron, "pin", pool, "")
+        # Hold was successful
+        assert response.hold_position == 1
+
+        # Second work should fail for the test patron due to the hold limit
+        work2: Work = odl2api.fixture.work(odl2api.collection)
+        # Generate a license
+        odl2api.fixture.license(work2)
+
+        # Do the same, patron1 checkout and test patron hold
+        pool = work2.active_license_pool()
+        response = odl2api.checkout(patron=patron1, pool=pool)
+        assert (
+            response[0].identifier
+            == work2.presentation_edition.primary_identifier.identifier
+        )
+
+        # Hold should fail
+        with pytest.raises(PatronHoldLimitReached) as exc:
+            odl2api.api.place_hold(odl2api.patron, "pin", pool, "")
+        assert exc.value.limit == 1

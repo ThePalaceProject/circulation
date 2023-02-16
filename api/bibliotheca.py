@@ -9,6 +9,7 @@ import time
 import urllib.parse
 from datetime import datetime, timedelta
 from io import BytesIO, StringIO
+from typing import Dict
 
 import dateutil.parser
 from flask_babel import lazy_gettext as _
@@ -679,7 +680,7 @@ class ItemListParser(XMLParser):
     DATE_FORMAT = "%Y-%m-%d"
     YEAR_FORMAT = "%Y"
 
-    NAMESPACES = {}
+    NAMESPACES: Dict[str, str] = {}
 
     unescape_entity_references = html.unescape
 
@@ -1113,8 +1114,8 @@ class PatronCirculationParser(BibliothecaParser):
 class DateResponseParser(BibliothecaParser):
     """Extract a date from a response."""
 
-    RESULT_TAG_NAME = None
-    DATE_TAG_NAME = None
+    RESULT_TAG_NAME: Optional[str] = None
+    DATE_TAG_NAME: Optional[str] = None
 
     def process_all(self, string):
         parser = etree.XMLParser()

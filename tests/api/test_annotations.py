@@ -420,7 +420,7 @@ class TestAnnotationParser:
             "not json",
             annotation_parser_fixture.patron_value,
         )
-        assert INVALID_ANNOTATION_FORMAT == annotation  # type: ignore
+        assert INVALID_ANNOTATION_FORMAT == annotation
 
     def test_invalid_identifier(
         self, annotation_parser_fixture: AnnotationParserFixture
@@ -434,7 +434,7 @@ class TestAnnotationParser:
             json.dumps(data),
             annotation_parser_fixture.patron_value,
         )
-        assert INVALID_ANNOTATION_TARGET == annotation  # type: ignore
+        assert INVALID_ANNOTATION_TARGET == annotation
 
     def test_null_id(self, annotation_parser_fixture: AnnotationParserFixture):
         # A JSON-LD document can have its @id set to null -- it's the
@@ -638,7 +638,7 @@ class TestAnnotationParser:
             annotation_parser_fixture.patron_value,
         )
 
-        assert INVALID_ANNOTATION_MOTIVATION == annotation  # type: ignore
+        assert INVALID_ANNOTATION_MOTIVATION == annotation
 
     def test_parse_jsonld_with_no_loan(
         self, annotation_parser_fixture: AnnotationParserFixture
@@ -652,7 +652,7 @@ class TestAnnotationParser:
             annotation_parser_fixture.patron_value,
         )
 
-        assert INVALID_ANNOTATION_TARGET == annotation  # type: ignore
+        assert INVALID_ANNOTATION_TARGET == annotation
 
     def test_parse_jsonld_with_no_target(
         self, annotation_parser_fixture: AnnotationParserFixture
@@ -667,7 +667,7 @@ class TestAnnotationParser:
             annotation_parser_fixture.patron_value,
         )
 
-        assert INVALID_ANNOTATION_TARGET == annotation  # type: ignore
+        assert INVALID_ANNOTATION_TARGET == annotation
 
     def test_parse_updates_existing_annotation(
         self, annotation_parser_fixture: AnnotationParserFixture
@@ -748,4 +748,4 @@ class TestAnnotationParser:
             data_json,
             annotation_parser_fixture.patron_value,
         )
-        assert PATRON_NOT_OPTED_IN_TO_ANNOTATION_SYNC == annotation  # type: ignore
+        assert PATRON_NOT_OPTED_IN_TO_ANNOTATION_SYNC == annotation

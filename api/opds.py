@@ -4,7 +4,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from flask import url_for
 
@@ -178,7 +178,7 @@ class CirculationManagerAnnotator(Annotator):
     @staticmethod
     def _prioritized_formats_for_pool(
         licensepool: LicensePool,
-    ) -> (List[str], List[str]):
+    ) -> Tuple[List[str], List[str]]:
         collection: Collection = licensepool.collection
         external: ExternalIntegration = collection.external_integration
 
