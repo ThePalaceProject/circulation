@@ -458,11 +458,11 @@ class TestOPDSFeedController:
         the_future = now + datetime.timedelta(hours=1)
         the_past = now - datetime.timedelta(hours=1)
 
-        assert circulation_fixture.english_2 is WorkSpec  # type: ignore
-        assert circulation_fixture.french_1 is WorkSpec  # type: ignore
+        assert circulation_fixture.english_2 is WorkSpec
+        assert circulation_fixture.french_1 is WorkSpec
 
-        _set(circulation_fixture.english_2, now + datetime.timedelta(hours=2))  # type: ignore
-        _set(circulation_fixture.french_1, now + datetime.timedelta(hours=1))  # type: ignore
+        _set(circulation_fixture.english_2, now + datetime.timedelta(hours=2))
+        _set(circulation_fixture.french_1, now + datetime.timedelta(hours=1))
         _set(circulation_fixture.english_1, now - datetime.timedelta(hours=1))
         circulation_fixture.db.session.commit()
 

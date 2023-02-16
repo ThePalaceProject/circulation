@@ -42,7 +42,7 @@ class TestLimitReached:
         pd = ProblemDetail("http://uri/", 403, _("Limit exceeded."), generic_message)
         setting = "some setting"
 
-        class Mock(LimitReached):  # type: ignore
+        class Mock(LimitReached):
             BASE_DOC = pd
             SETTING_NAME = setting
             MESSAGE_WITH_LIMIT = _("The limit was %(limit)d.")
@@ -72,14 +72,14 @@ class TestLimitReached:
         library = db.default_library()
 
         library.setting(Configuration.LOAN_LIMIT).value = 2
-        pd = PatronLoanLimitReached(library=library).as_problem_detail_document()  # type: ignore
+        pd = PatronLoanLimitReached(library=library).as_problem_detail_document()
         assert (
             "You have reached your loan limit of 2. You cannot borrow anything further until you return something."
             == pd.detail
         )
 
         library.setting(Configuration.HOLD_LIMIT).value = 3
-        pd = PatronHoldLimitReached(library=library).as_problem_detail_document()  # type: ignore
+        pd = PatronHoldLimitReached(library=library).as_problem_detail_document()
         assert (
             "You have reached your hold limit of 3. You cannot place another item on hold until you borrow something or remove a hold."
             == pd.detail
