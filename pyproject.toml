@@ -28,6 +28,7 @@ exclude = [
     'core/bin/repair/startup\.py',
     'core/classifier',
     'core/model/listeners\.py',
+    'integration_tests/',
     # TODO: Post test-suite refactoring.
     'tests/api/admin/controller/',
     'tests/api/saml/metadata',
@@ -104,13 +105,7 @@ exclude = [
     'tests/fixtures/database\.py',
     'tests/fixtures/odl\.py',
 ]
-files = [
-    "api",
-    "core",
-    "customlists",
-    "scripts.py",
-    "tests",
-]
+files = ["."]
 plugins = ["sqlmypy"]
 warn_redundant_casts = true
 warn_unreachable = true
