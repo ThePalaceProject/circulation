@@ -18,6 +18,12 @@ known_first_party = ["api", "core", "customlists"]
 profile = "black"
 
 [tool.mypy]
+# TODO: Enable the the check_untyped_defs option
+# This will get rid of the warnings that we get when running mypy
+# > note: By default the bodies of untyped functions are not checked
+# However this currently causes a number of errors to surface that will
+# need to be cleaned up before we can enable the option.
+# check_untyped_defs = true
 exclude = [
     'core/bin/repair/startup\.py',
     'core/classifier',
