@@ -25,7 +25,12 @@ from .patron import Hold, Loan, Patron
 
 if TYPE_CHECKING:
     # Only import for type checking, since it creates an import cycle
-    from core.model import Collection, Resource  # noqa: autoflake
+    from core.model import (  # noqa: autoflake
+        Collection,
+        DataSource,
+        Identifier,
+        Resource,
+    )
 
     from ..analytics import Analytics
 
@@ -53,7 +58,7 @@ class LicenseFunctions:
     checkouts_left: Column[int | None]
     checkouts_available: Column[int | None]
     terms_concurrency: Column[int | None]
-    content_types: Column[str | None]
+    content_types: Column[list[str] | None]
 
     @property
     def is_perpetual(self) -> bool:
@@ -179,7 +184,14 @@ class LicensePool(Base):
     # Each LicensePool is associated with one DataSource and one
     # Identifier.
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
+    data_source = relationship(
+        "DataSource", back_populates="license_pools", lazy="joined"
+    )
+
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
+    identifier = relationship(
+        "Identifier", back_populates="licensed_through", lazy="joined"
+    )
 
     # Each LicensePool belongs to one Collection.
     collection_id = Column(
@@ -199,10 +211,14 @@ class LicensePool(Base):
     )
 
     # One LicensePool can have many Loans.
-    loans = relationship("Loan", backref="license_pool", cascade="all, delete-orphan")
+    loans = relationship(
+        "Loan", back_populates="license_pool", cascade="all, delete-orphan"
+    )
 
     # One LicensePool can have many Holds.
-    holds = relationship("Hold", backref="license_pool", cascade="all, delete-orphan")
+    holds = relationship(
+        "Hold", back_populates="license_pool", cascade="all, delete-orphan"
+    )
 
     # One LicensePool can have many CirculationEvents
     circulation_events = relationship(

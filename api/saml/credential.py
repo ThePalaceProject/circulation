@@ -74,7 +74,9 @@ class SAMLCredentialManager:
         """
         self._logger.debug(f"Started deserializing SAML token {credential}")
 
-        subject = json.loads(credential.credential, cls=SAMLSubjectJSONDecoder)
+        credential_value = credential.credential if credential.credential else "{}"
+
+        subject = json.loads(credential_value, cls=SAMLSubjectJSONDecoder)
 
         self._logger.debug(f"Finished deserializing SAML token {credential}: {subject}")
 

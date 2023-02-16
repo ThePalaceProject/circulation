@@ -245,7 +245,7 @@ class OverdriveAPI(
             return response
 
     def get_patron_credential(
-        self, patron: Patron, pin: str, is_fulfillment=False
+        self, patron: Patron, pin: Optional[str], is_fulfillment=False
     ) -> Credential:
         """Create an OAuth token for the given patron.
 
@@ -673,10 +673,7 @@ class OverdriveAPI(
             )
 
         raise CannotFulfill(
-            "Cannot obtain a download link for patron[%r], overdrive_id[%s], format_type[%s].",
-            patron,
-            overdrive_id,
-            format_type,
+            f"Cannot obtain a download link for patron {patron!r}, overdrive_id {overdrive_id}, format_type {format_type}"
         )
 
     def get_fulfillment_link_from_download_link(

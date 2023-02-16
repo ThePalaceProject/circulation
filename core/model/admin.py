@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import bcrypt
 from sqlalchemy import (
     Column,
@@ -21,6 +23,9 @@ from core.model.hybrid import hybrid_property
 from . import Base, get_one, get_one_or_create
 from .hassessioncache import HasSessionCache
 
+if TYPE_CHECKING:
+    from core.model.library import Library  # noqa: autoflake
+
 
 class Admin(Base, HasSessionCache):
 
@@ -36,7 +41,9 @@ class Admin(Base, HasSessionCache):
     password_hashed = Column(Unicode, index=True)
 
     # An Admin may have many roles.
-    roles = relationship("AdminRole", backref="admin", cascade="all, delete-orphan")
+    roles = relationship(
+        "AdminRole", backref="admin", cascade="all, delete-orphan", uselist=True
+    )
 
     def cache_key(self):
         return self.email
@@ -230,6 +237,7 @@ class AdminRole(Base, HasSessionCache):
     id = Column(Integer, primary_key=True)
     admin_id = Column(Integer, ForeignKey("admins.id"), nullable=False, index=True)
     library_id = Column(Integer, ForeignKey("libraries.id"), nullable=True, index=True)
+    library = relationship("Library", back_populates="adminroles")
     role = Column(Unicode, nullable=False, index=True)
 
     __table_args__ = (UniqueConstraint("admin_id", "library_id", "role"),)

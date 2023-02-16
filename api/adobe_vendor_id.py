@@ -913,7 +913,7 @@ class AuthdataUtility:
             raise jwt.exceptions.DecodeError("Unknown library: %s" % library_uri)
 
         # We know the secret for this library, so we can re-decode the
-        # secret and require signature valudation this time.
+        # secret and require signature validation this time.
         secret = self.secrets_by_library_uri[library_uri]
         decoded = jwt.decode(authdata, secret, algorithms=[self.ALGORITHM])
         if not "sub" in decoded:

@@ -12,7 +12,7 @@ import unicodedata
 import uuid
 from collections import defaultdict
 from enum import Enum
-from typing import Generator, Optional
+from typing import Generator, Optional, Type
 
 from sqlalchemy import and_, exists, text, tuple_
 from sqlalchemy.exc import ProgrammingError
@@ -1937,7 +1937,7 @@ class OPDSImportScript(CollectionInputScript):
     name = "Import all books from the OPDS feed associated with a collection."
 
     IMPORTER_CLASS = OPDSImporter
-    MONITOR_CLASS = OPDSImportMonitor
+    MONITOR_CLASS: Type[OPDSImportMonitor] = OPDSImportMonitor
     PROTOCOL = ExternalIntegration.OPDS_IMPORT
 
     def __init__(
@@ -3568,6 +3568,31 @@ class CustomListUpdateEntriesScript(CustomListSweeperScript):
             self._db, custom_list, json_query=json_query, start_page=start_page
         )
         custom_list.auto_update_status = CustomList.UPDATED
+
+
+class DeleteInvisibleLanesScript(LibraryInputScript):
+    """Delete lanes that are flagged as invisible"""
+
+    def process_library(self, library):
+
+        try:
+            for lane in self._db.query(Lane).filter(Lane.library_id == library.id):
+                if not lane.visible:
+                    self._db.delete(lane)
+            self._db.commit()
+            logging.info(f"Completed hidden lane deletion for {library.short_name}")
+        except Exception as e:
+            try:
+                logging.exception(
+                    f"hidden lane deletion failed for {library.short_name}. "
+                    f"Attempting to rollback updates",
+                    e,
+                )
+                self._db.rollback()
+            except Exception as e:
+                logging.exception(
+                    f"hidden lane deletion rollback for {library.short_name} failed", e
+                )
 
 
 class MockStdin:

@@ -36,6 +36,18 @@ absolutely necessary.
 
 ## Set Up
 
+### Docker Compose
+
+In order to help quickly set up a development environment, we include a [docker-compose.yml](./docker-compose.yml)
+file. This docker-compose file, will build the webapp and scripts containers from your local repository, and start
+those containers as well as all the necessary service containers.
+
+You can give this a try by running the following command:
+
+```shell
+docker-compose up --build
+```
+
 ### Python Set Up
 
 #### Homebrew (OSX)

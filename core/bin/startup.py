@@ -1,4 +1,5 @@
-from os import path, sys
+import sys
+from os import path
 
 # Good overview of what is going on here:
 # https://stackoverflow.com/questions/11536764/how-to-fix-attempted-relative-import-in-non-package-even-with-init-py

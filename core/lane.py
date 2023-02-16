@@ -1285,7 +1285,7 @@ class WorkList:
     # If a certain type of Worklist should always have its OPDS feeds
     # cached under a specific type, define that type as
     # CACHED_FEED_TYPE.
-    CACHED_FEED_TYPE = None
+    CACHED_FEED_TYPE: Optional[str] = None
 
     # By default, a WorkList is always visible.
     @property

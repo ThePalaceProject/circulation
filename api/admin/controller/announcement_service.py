@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Callable
 
 import flask
 
-from api.admin.announcement_list_validator import AnnouncementListValidator
 from api.announcements import Announcements
 from api.config import Configuration
 from core.model.configuration import ConfigurationSetting
@@ -41,7 +40,6 @@ class AnnouncementSettings(SettingsController):
 
     def post(self) -> dict | ProblemDetail:
         """POST multiple announcements to the global namespace, all announcements are overwritten"""
-        announcements = AnnouncementListValidator()
         try:
             announcements = Announcements(flask.request.form["announcements"])
             if announcements.problem:
