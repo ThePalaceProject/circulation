@@ -153,7 +153,9 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
         self, patron_or_patrondata: Patron | SirsiDynixPatronData
     ) -> None | SirsiDynixPatronData:
         """Do a remote patron lookup, this method can only lookup a patron with a patrondata object
-        with a session_token already setup within it."""
+        with a session_token already setup within it.
+        This method also checks all the reasons that a patron may be blocked for.
+        """
         # We cannot do a remote lookup without a session token
         if not isinstance(patron_or_patrondata, SirsiDynixPatronData):
             return None
@@ -174,6 +176,10 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
         patron_type: str = data["patronType"].get("key", "")
 
         # Basic block reasons
+
+        # Does the patron type start with the library prefix
+        # This ensures the patron is a member of the library
+        # they are interacting with
         if not patron_type.startswith(self.sirsi_library_prefix):
             patrondata.block_reason = SirsiBlockReasons.INCORRECT_LOCATION
             return patrondata
@@ -182,6 +188,9 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             patrondata.block_reason = SirsiBlockReasons.NOT_APPROVED
             return patrondata
 
+        # Remove the library prefix from the patron type
+        # we are left with the patron "suffix"
+        # This suffix can be part of the blocked patron types list
         patron_suffix = patron_type[len(self.sirsi_library_prefix) :]
         if patron_suffix in self.sirsi_disallowed_prefixes:
             patrondata.block_reason = SirsiBlockReasons.PATRON_BLOCKED
