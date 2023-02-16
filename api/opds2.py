@@ -53,7 +53,7 @@ class OPDS2PublicationsAnnotator(OPDS2Annotator):
 class OPDS2NavigationsAnnotator(OPDS2Annotator):
     """API level implementation for the navigation feed OPDS2 annotator"""
 
-    def navigation_collection(self) -> dict:
+    def navigation_collection(self) -> list[dict]:
         """The OPDS2 navigation collection, currently only serves the publications link"""
         return [
             {
@@ -122,7 +122,7 @@ class TokenAuthenticationFulfillmentProcessor(CirculationFulfillmentPostProcesso
         response = HTTP.get_with_timeout(url)
         if response.status_code != 200:
             log.error(
-                f"Could not authenticate the patron({patron.username}): {response.content}"
+                f"Could not authenticate the patron({patron.username}): {str(response.content)}"
             )
             return INVALID_CREDENTIALS
 
@@ -130,7 +130,7 @@ class TokenAuthenticationFulfillmentProcessor(CirculationFulfillmentPostProcesso
         token = response.text
         if not token:
             log.error(
-                f"Could not authenticate the patron({patron.username}): {response.content}"
+                f"Could not authenticate the patron({patron.username}): {str(response.content)}"
             )
             return INVALID_CREDENTIALS
 

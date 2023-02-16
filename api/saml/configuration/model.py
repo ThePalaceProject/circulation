@@ -1,7 +1,7 @@
-import cgi
 import html
 from datetime import datetime
 from threading import Lock
+from typing import List
 
 from contextlib2 import contextmanager
 from flask_babel import lazy_gettext as _
@@ -22,8 +22,6 @@ from core.model.configuration import (
     ConfigurationMetadata,
     ConfigurationOption,
 )
-
-cgi.escape = html.escape
 
 
 class SAMLConfigurationError(BaseError):
@@ -125,7 +123,7 @@ class SAMLConfiguration(ConfigurationGrouping):
             "</pre>"
             "The expression will extract the <b>patron_id</b> from the first SAML attribute that matches "
             "or NameID if it matches the expression."
-        ).format(the_regex_pattern=cgi.escape(r"(?P<patron_id>.+)@university\.org")),
+        ).format(the_regex_pattern=html.escape(r"(?P<patron_id>.+)@university\.org")),
         type=ConfigurationAttributeType.TEXT,
         required=False,
     )
@@ -365,11 +363,10 @@ class SAMLSettings(dict):
     _mutex = Lock()
     _last_updated_at = datetime.now()
 
-    def __get__(self, instance, owner):
+    def __get__(self, instance, owner) -> List[dict]:
         """Return a SETTINGS-compatible dictionary.
 
         :return: SETTINGS-compatible dictionary
-        :rtype: Dict
         """
         with self._mutex:
             fetch = False

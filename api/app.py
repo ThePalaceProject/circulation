@@ -62,7 +62,7 @@ def initialize_database(autoinitialize=True):
 
 
 from . import routes  # noqa
-from .admin import routes  # noqa
+from .admin import routes as admin_routes  # noqa
 
 
 def run(url=None):

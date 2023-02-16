@@ -6,7 +6,7 @@ class Dialect:
     AG_VERSO = "AutoGraphicsVerso"
 
     # Settings defined in each class
-    sendEndSession = None
+    sendEndSession: bool = False
 
     # Map a string to the correct class
     @staticmethod

@@ -1,8 +1,11 @@
+from typing import Optional
+
 from flask_babel import lazy_gettext as _
 
 from api.config import Configuration
 from core.config import IntegrationException
 from core.problem_details import INTEGRATION_ERROR, INTERNAL_SERVER_ERROR
+from core.util.problem_detail import ProblemDetail
 
 from .problem_details import *
 
@@ -144,8 +147,8 @@ class LimitReached(CirculationException):
     """
 
     status_code = 403
-    BASE_DOC = None
-    SETTING_NAME = None
+    BASE_DOC: Optional[ProblemDetail] = None
+    SETTING_NAME: Optional[str] = None
     MESSAGE_WITH_LIMIT = None
 
     def __init__(self, message=None, debug_info=None, library=None, limit=None):

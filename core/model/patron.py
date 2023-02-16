@@ -3,6 +3,7 @@
 import datetime
 import logging
 import uuid
+from typing import TYPE_CHECKING
 
 from psycopg2.extras import NumericRange
 from sqlalchemy import (
@@ -27,6 +28,10 @@ from ..user_profile import ProfileStorage
 from ..util.datetime_helpers import utc_now
 from . import Base, get_one_or_create, numericrange_to_tuple
 from .credential import Credential
+
+if TYPE_CHECKING:
+    from core.model.library import Library  # noqa: autoflake
+    from core.model.licensing import LicensePool  # noqa: autoflake
 
 
 class LoanAndHoldMixin:
@@ -60,6 +65,7 @@ class Patron(Base):
     # individual human being may patronize multiple libraries, but
     # they will have a different patron account at each one.
     library_id = Column(Integer, ForeignKey("libraries.id"), index=True, nullable=False)
+    library = relationship("Library", back_populates="patrons")
 
     # The patron's permanent unique identifier in an external library
     # system, probably never seen by the patron.
@@ -146,8 +152,8 @@ class Patron(Base):
     # be an explicit decision of the ILS integration code.
     cached_neighborhood = Column(Unicode, default=None, index=True)
 
-    loans = relationship("Loan", backref="patron", cascade="delete")
-    holds = relationship("Hold", backref="patron", cascade="delete")
+    loans = relationship("Loan", backref="patron", cascade="delete", uselist=True)
+    holds = relationship("Hold", backref="patron", cascade="delete", uselist=True)
 
     annotations = relationship(
         "Annotation",
@@ -514,6 +520,7 @@ class Loan(Base, LoanAndHoldMixin):
 
     # A Loan is always associated with a LicensePool.
     license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
+    license_pool = relationship("LicensePool", back_populates="loans")
 
     # It may also be associated with an individual License if the source
     # provides information about individual licenses.
@@ -552,6 +559,7 @@ class Hold(Base, LoanAndHoldMixin):
         Integer, ForeignKey("integrationclients.id"), index=True
     )
     license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
+    license_pool = relationship("LicensePool", back_populates="holds")
     start = Column(DateTime(timezone=True), index=True)
     end = Column(DateTime(timezone=True), index=True)
     position = Column(Integer, index=True)
