@@ -1,4 +1,3 @@
-import contextlib
 import json
 
 from Crypto.Cipher import PKCS1_OAEP
@@ -8,8 +7,6 @@ from flask_babel import lazy_gettext as _
 from core.config import CannotLoadConfiguration  # noqa: autoflake
 from core.config import IntegrationException  # noqa: autoflake
 from core.config import Configuration as CoreConfiguration
-from core.config import empty_config as core_empty_config
-from core.config import temp_config as core_temp_config
 from core.model import ConfigurationSetting
 from core.model.constants import LinkRelations
 from core.util import MoneyUtility
@@ -18,8 +15,6 @@ from .announcements import Announcements
 
 
 class Configuration(CoreConfiguration):
-
-    LENDING_POLICY = "lending"
 
     DEFAULT_OPDS_FORMAT = "simple_opds_entry"
 
@@ -588,10 +583,6 @@ class Configuration(CoreConfiguration):
     ]
 
     @classmethod
-    def lending_policy(cls):
-        return cls.policy(cls.LENDING_POLICY)
-
-    @classmethod
     def _collection_languages(cls, library, key):
         """Look up a list of languages in a library configuration.
 
@@ -631,12 +622,6 @@ class Configuration(CoreConfiguration):
         if max_fines.value is None:
             return None
         return MoneyUtility.parse(max_fines.value)
-
-    @classmethod
-    def load(cls, _db=None):
-        CoreConfiguration.load(_db)
-        cls.instance = CoreConfiguration.instance
-        return cls.instance
 
     @classmethod
     def estimate_language_collections_for_library(cls, library):
@@ -801,18 +786,3 @@ class Configuration(CoreConfiguration):
 # involving a registry of Configuration objects that returns the
 # appropriate one in any situation. This is a source of subtle bugs.
 CoreConfiguration.DEFAULT_OPDS_FORMAT = Configuration.DEFAULT_OPDS_FORMAT
-
-
-@contextlib.contextmanager
-def empty_config():
-    with core_empty_config({}, [CoreConfiguration, Configuration]) as i:
-        yield i
-
-
-@contextlib.contextmanager
-def temp_config(new_config=None, replacement_classes=None):
-    all_replacement_classes = [CoreConfiguration, Configuration]
-    if replacement_classes:
-        all_replacement_classes.extend(replacement_classes)
-    with core_temp_config(new_config, all_replacement_classes) as i:
-        yield i
