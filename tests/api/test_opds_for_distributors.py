@@ -298,7 +298,7 @@ class TestOPDSForDistributorsAPI:
     ):
         no_auth_document = "<feed></feed>"
         opds_dist_api_fixture.api.queue_response(200, content=no_auth_document)
-        with pytest.raises(LibraryAuthorizationFailedException) as excinfo:  # type: ignore
+        with pytest.raises(LibraryAuthorizationFailedException) as excinfo:
             opds_dist_api_fixture.api._get_token(opds_dist_api_fixture.db.session)
         assert "No authentication document link found in http://opds" in str(
             excinfo.value
@@ -310,7 +310,7 @@ class TestOPDSForDistributorsAPI:
         opds_dist_api_fixture.api.queue_response(
             200, content=auth_doc_without_client_credentials
         )
-        with pytest.raises(LibraryAuthorizationFailedException) as excinfo:  # type: ignore
+        with pytest.raises(LibraryAuthorizationFailedException) as excinfo:
             opds_dist_api_fixture.api._get_token(opds_dist_api_fixture.db.session)
         assert (
             "Could not find any credential-based authentication mechanisms in http://authdoc"
@@ -323,7 +323,7 @@ class TestOPDSForDistributorsAPI:
         opds_dist_api_fixture.api.queue_response(
             200, content=authentication_document(without_links=True)
         )
-        with pytest.raises(LibraryAuthorizationFailedException) as excinfo:  # type: ignore
+        with pytest.raises(LibraryAuthorizationFailedException) as excinfo:
             opds_dist_api_fixture.api._get_token(opds_dist_api_fixture.db.session)
         assert "Could not find any authentication links in http://authdoc" in str(
             excinfo.value
@@ -333,7 +333,7 @@ class TestOPDSForDistributorsAPI:
         opds_dist_api_fixture.api.queue_response(200, content=authentication_document())
         token_response = json.dumps({"error": "unexpected error"})
         opds_dist_api_fixture.api.queue_response(200, content=token_response)
-        with pytest.raises(LibraryAuthorizationFailedException) as excinfo:  # type: ignore
+        with pytest.raises(LibraryAuthorizationFailedException) as excinfo:
             opds_dist_api_fixture.api._get_token(opds_dist_api_fixture.db.session)
         assert (
             'Document retrieved from http://authenticate is not a bearer token: {"error": "unexpected error"}'
@@ -420,7 +420,7 @@ class TestOPDSForDistributorsAPI:
         # This pool doesn't have an acquisition link, so
         # we can't fulfill it yet.
         pytest.raises(
-            CannotFulfill,  # type: ignore
+            CannotFulfill,
             opds_dist_api_fixture.api.fulfill,
             patron,
             "1234",

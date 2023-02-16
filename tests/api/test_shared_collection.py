@@ -114,7 +114,7 @@ class TestSharedCollectionAPI:
         shared_collection = SharedCollectionAPI(db.session)
         # The collection isn't a shared collection, so looking up its API
         # raises an exception.
-        pytest.raises(CirculationException, shared_collection.api, collection)  # type: ignore
+        pytest.raises(CirculationException, shared_collection.api, collection)
 
         collection.protocol = ODLAPI.NAME
         shared_collection = SharedCollectionAPI(db.session)
@@ -125,7 +125,7 @@ class TestSharedCollectionAPI:
 
         # An auth document URL is required to register.
         pytest.raises(
-            InvalidInputException,  # type: ignore
+            InvalidInputException,
             shared_collection_fixture.shared_collection.register,
             shared_collection_fixture.collection,
             None,
@@ -138,7 +138,7 @@ class TestSharedCollectionAPI:
             return MockRequestsResponse(200, content=auth_response)
 
         pytest.raises(
-            RemoteInitiatedServerError,  # type: ignore
+            RemoteInitiatedServerError,
             shared_collection_fixture.shared_collection.register,
             shared_collection_fixture.collection,
             "http://library.org/auth",
@@ -148,7 +148,7 @@ class TestSharedCollectionAPI:
         # The auth document also must have a link to the library's catalog.
         auth_response = json.dumps({"links": []})
         pytest.raises(
-            RemoteInitiatedServerError,  # type: ignore
+            RemoteInitiatedServerError,
             shared_collection_fixture.shared_collection.register,
             shared_collection_fixture.collection,
             "http://library.org/auth",
@@ -164,7 +164,7 @@ class TestSharedCollectionAPI:
             shared_collection_fixture.collection.external_integration,
         ).value = None
         pytest.raises(
-            AuthorizationFailedException,  # type: ignore
+            AuthorizationFailedException,
             shared_collection_fixture.shared_collection.register,
             shared_collection_fixture.collection,
             "http://library.org/auth",
@@ -180,7 +180,7 @@ class TestSharedCollectionAPI:
             shared_collection_fixture.collection.external_integration,
         ).value = json.dumps(["http://library.org"])
         pytest.raises(
-            AuthorizationFailedException,  # type: ignore
+            AuthorizationFailedException,
             shared_collection_fixture.shared_collection.register,
             shared_collection_fixture.collection,
             "http://differentlibrary.org/auth",
@@ -192,7 +192,7 @@ class TestSharedCollectionAPI:
             {"links": [{"href": "http://library.org", "rel": "start"}]}
         )
         pytest.raises(
-            RemoteInitiatedServerError,  # type: ignore
+            RemoteInitiatedServerError,
             shared_collection_fixture.shared_collection.register,
             shared_collection_fixture.collection,
             "http://library.org/auth",
@@ -206,7 +206,7 @@ class TestSharedCollectionAPI:
             }
         )
         pytest.raises(
-            RemoteInitiatedServerError,  # type: ignore
+            RemoteInitiatedServerError,
             shared_collection_fixture.shared_collection.register,
             shared_collection_fixture.collection,
             "http://library.org/auth",
@@ -220,7 +220,7 @@ class TestSharedCollectionAPI:
             }
         )
         pytest.raises(
-            RemoteInitiatedServerError,  # type: ignore
+            RemoteInitiatedServerError,
             shared_collection_fixture.shared_collection.register,
             shared_collection_fixture.collection,
             "http://library.org/auth",
@@ -265,7 +265,7 @@ class TestSharedCollectionAPI:
 
         # Trying to borrow raises an exception.
         pytest.raises(
-            AuthorizationFailedException,  # type: ignore
+            AuthorizationFailedException,
             shared_collection_fixture.shared_collection.borrow,
             shared_collection_fixture.collection,
             other_client,
@@ -290,7 +290,7 @@ class TestSharedCollectionAPI:
             license_pool=shared_collection_fixture.pool,
         )
         pytest.raises(
-            CannotLoan,  # type: ignore
+            CannotLoan,
             shared_collection_fixture.shared_collection.borrow,
             shared_collection_fixture.collection,
             shared_collection_fixture.client,
@@ -322,7 +322,7 @@ class TestSharedCollectionAPI:
             license_pool=shared_collection_fixture.pool,
         )
         pytest.raises(
-            NotCheckedOut,  # type: ignore
+            NotCheckedOut,
             shared_collection_fixture.shared_collection.revoke_loan,
             shared_collection_fixture.collection,
             shared_collection_fixture.client,
@@ -350,7 +350,7 @@ class TestSharedCollectionAPI:
             license_pool=shared_collection_fixture.pool,
         )
         pytest.raises(
-            CannotFulfill,  # type: ignore
+            CannotFulfill,
             shared_collection_fixture.shared_collection.fulfill,
             shared_collection_fixture.collection,
             shared_collection_fixture.client,
@@ -362,7 +362,7 @@ class TestSharedCollectionAPI:
 
         # If the API does not return content or a content link, the loan can't be fulfilled.
         pytest.raises(
-            CannotFulfill,  # type: ignore
+            CannotFulfill,
             shared_collection_fixture.shared_collection.fulfill,
             shared_collection_fixture.collection,
             shared_collection_fixture.client,
@@ -416,7 +416,7 @@ class TestSharedCollectionAPI:
         )
 
         pytest.raises(
-            CannotReleaseHold,  # type: ignore
+            CannotReleaseHold,
             shared_collection_fixture.shared_collection.revoke_hold,
             shared_collection_fixture.collection,
             shared_collection_fixture.client,

@@ -312,8 +312,8 @@ class TestSharedCollectionController:
             api.queue_borrow(AuthorizationFailedException())
             response = shared_fixture.manager.shared_collection_controller.borrow(
                 shared_fixture.collection.name,
-                shared_fixture.pool.identifier.type,  # type: ignore
-                shared_fixture.pool.identifier.identifier,  # type: ignore
+                shared_fixture.pool.identifier.type,
+                shared_fixture.pool.identifier.identifier,
                 None,
             )
             assert INVALID_CREDENTIALS.uri == response.uri
@@ -321,8 +321,8 @@ class TestSharedCollectionController:
             api.queue_borrow(CannotLoan())
             response = shared_fixture.manager.shared_collection_controller.borrow(
                 shared_fixture.collection.name,
-                shared_fixture.pool.identifier.type,  # type: ignore
-                shared_fixture.pool.identifier.identifier,  # type: ignore
+                shared_fixture.pool.identifier.type,
+                shared_fixture.pool.identifier.identifier,
                 None,
             )
             assert CHECKOUT_FAILED.uri == response.uri
@@ -330,8 +330,8 @@ class TestSharedCollectionController:
             api.queue_borrow(NoAvailableCopies())
             response = shared_fixture.manager.shared_collection_controller.borrow(
                 shared_fixture.collection.name,
-                shared_fixture.pool.identifier.type,  # type: ignore
-                shared_fixture.pool.identifier.identifier,  # type: ignore
+                shared_fixture.pool.identifier.type,
+                shared_fixture.pool.identifier.identifier,
                 None,
             )
             assert NO_AVAILABLE_LICENSE.uri == response.uri
@@ -339,8 +339,8 @@ class TestSharedCollectionController:
             api.queue_borrow(RemoteIntegrationException("error!", "service"))
             response = shared_fixture.manager.shared_collection_controller.borrow(
                 shared_fixture.collection.name,
-                shared_fixture.pool.identifier.type,  # type: ignore
-                shared_fixture.pool.identifier.identifier,  # type: ignore
+                shared_fixture.pool.identifier.type,
+                shared_fixture.pool.identifier.identifier,
                 None,
             )
             assert INTEGRATION_ERROR.uri == response.uri
@@ -348,8 +348,8 @@ class TestSharedCollectionController:
             api.queue_borrow(loan)
             response = shared_fixture.manager.shared_collection_controller.borrow(
                 shared_fixture.collection.name,
-                shared_fixture.pool.identifier.type,  # type: ignore
-                shared_fixture.pool.identifier.identifier,  # type: ignore
+                shared_fixture.pool.identifier.type,
+                shared_fixture.pool.identifier.identifier,
                 None,
             )
             assert 201 == response.status_code
@@ -397,8 +397,8 @@ class TestSharedCollectionController:
             api.queue_borrow(AuthorizationFailedException())
             response = shared_fixture.manager.shared_collection_controller.borrow(
                 shared_fixture.collection.name,
-                shared_fixture.pool.identifier.type,  # type: ignore
-                shared_fixture.pool.identifier.identifier,  # type: ignore
+                shared_fixture.pool.identifier.type,
+                shared_fixture.pool.identifier.identifier,
                 hold.id,
             )
             assert INVALID_CREDENTIALS.uri == response.uri
@@ -470,8 +470,8 @@ class TestSharedCollectionController:
             api.queue_borrow(hold)
             response = shared_fixture.manager.shared_collection_controller.borrow(
                 shared_fixture.collection.name,
-                shared_fixture.pool.identifier.type,  # type: ignore
-                shared_fixture.pool.identifier.identifier,  # type: ignore
+                shared_fixture.pool.identifier.type,
+                shared_fixture.pool.identifier.identifier,
                 None,
             )
             assert 201 == response.status_code
@@ -635,9 +635,9 @@ class TestSharedCollectionController:
 
             fulfillment_info = FulfillmentInfo(
                 shared_fixture.collection,
-                shared_fixture.pool.data_source.name,  # type: ignore
-                shared_fixture.pool.identifier.type,  # type: ignore
-                shared_fixture.pool.identifier.identifier,  # type: ignore
+                shared_fixture.pool.data_source.name,
+                shared_fixture.pool.identifier.type,
+                shared_fixture.pool.identifier.identifier,
                 "http://content",
                 "text/html",
                 None,

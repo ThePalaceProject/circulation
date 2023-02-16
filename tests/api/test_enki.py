@@ -442,7 +442,7 @@ class TestEnkiAPI:
     def test_checkout_bad_authorization(self, enki_test_fixture: EnkiTestFixure):
         """Test that the correct exception is thrown upon an unsuccessful login."""
         db = enki_test_fixture.db
-        with pytest.raises(AuthorizationFailedException):  # type: ignore
+        with pytest.raises(AuthorizationFailedException):
             data = enki_test_fixture.files.sample_data("login_unsuccessful.json")
             enki_test_fixture.api.queue_response(200, content=data)
             result = json.loads(data)
@@ -461,7 +461,7 @@ class TestEnkiAPI:
     def test_checkout_not_available(self, enki_test_fixture: EnkiTestFixure):
         """Test that the correct exception is thrown upon an unsuccessful login."""
         db = enki_test_fixture.db
-        with pytest.raises(NoAvailableCopies):  # type: ignore
+        with pytest.raises(NoAvailableCopies):
             data = enki_test_fixture.files.sample_data("no_copies.json")
             enki_test_fixture.api.queue_response(200, content=data)
             result = json.loads(data)
@@ -581,15 +581,15 @@ class TestEnkiAPI:
         patron = db.patron()
         enki_test_fixture.api.queue_response(404, "No such patron")
         collect = lambda: list(enki_test_fixture.api.patron_activity(patron, "pin"))
-        pytest.raises(PatronNotFoundOnRemote, collect)  # type: ignore
+        pytest.raises(PatronNotFoundOnRemote, collect)
 
         msg = dict(result=dict(message="Login unsuccessful."))
         enki_test_fixture.api.queue_response(200, content=json.dumps(msg))
-        pytest.raises(AuthorizationFailedException, collect)  # type: ignore
+        pytest.raises(AuthorizationFailedException, collect)
 
         msg = dict(result=dict(message="Some other error."))
         enki_test_fixture.api.queue_response(200, content=json.dumps(msg))
-        pytest.raises(CirculationException, collect)  # type: ignore
+        pytest.raises(CirculationException, collect)
 
 
 class TestBibliographicParser:

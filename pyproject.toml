@@ -18,12 +18,53 @@ known_first_party = ["api", "core", "customlists"]
 profile = "black"
 
 [tool.mypy]
+# TODO: Enable the the check_untyped_defs option
+# This will get rid of the warnings that we get when running mypy
+# > note: By default the bodies of untyped functions are not checked
+# However this currently causes a number of errors to surface that will
+# need to be cleaned up before we can enable the option.
+# check_untyped_defs = true
 exclude = [
-    'core/bin/repair/startup.py',
+    'core/bin/repair/startup\.py',
     'core/classifier',
-    'core/model/listeners.py',
+    'core/model/listeners\.py',
+    'integration_tests/',
     # TODO: Post test-suite refactoring.
-    'core/opds_schema\.py',
+    'tests/api/admin/controller/',
+    'tests/api/saml/metadata',
+    'tests/api/saml/test_auth\.py',
+    'tests/api/saml/test_provider\.py',
+    'tests/api/test_adobe_vendor_id\.py',
+    'tests/api/test_announcements\.py',
+    'tests/api/test_authenticator\.py',
+    'tests/api/test_axis\.py',
+    'tests/api/test_bibliotheca\.py',
+    'tests/api/test_circulationapi\.py',
+    'tests/api/test_controller_annotation\.py',
+    'tests/api/test_controller_base\.py',
+    'tests/api/test_controller_cm\.py',
+    'tests/api/test_controller_device_manage\.py',
+    'tests/api/test_controller_index\.py',
+    'tests/api/test_controller_loan\.py',
+    'tests/api/test_controller_odl_notify\.py',
+    'tests/api/test_controller_scopedsession\.py',
+    'tests/api/test_controller_work\.py',
+    'tests/api/test_coverage\.py',
+    'tests/api/test_lanes\.py',
+    'tests/api/test_local_analytics_exporter\.py',
+    'tests/api/test_monitor\.py',
+    'tests/api/test_novelist\.py',
+    'tests/api/test_odilo\.py',
+    'tests/api/test_odl2\.py',
+    'tests/api/test_odl\.py',
+    'tests/api/test_opds2\.py',
+    'tests/api/test_opds\.py',
+    'tests/api/test_overdrive\.py',
+    'tests/api/test_patron_utility\.py',
+    'tests/api/test_registry\.py',
+    'tests/api/test_routes\.py',
+    'tests/api/test_scripts\.py',
+    'tests/api/test_selftest\.py',
     'tests/core/models/test_admin\.py',
     'tests/core/models/test_cachedfeed\.py',
     'tests/core/models/test_collection\.py',
@@ -43,7 +84,6 @@ exclude = [
     'tests/core/test_analytics\.py',
     'tests/core/test_app_server\.py',
     'tests/core/test_circulation_data\.py',
-    'tests/core/test_config\.py',
     'tests/core/test_coverage\.py',
     'tests/core/test_equivalent_coverage\.py',
     'tests/core/test_external_list\.py',
@@ -54,22 +94,18 @@ exclude = [
     'tests/core/test_metadata\.py',
     'tests/core/test_monitor\.py',
     'tests/core/test_opds2\.py',
-    'tests/core/test_opds2_import\.py',
     'tests/core/test_opds\.py',
     'tests/core/test_opds_import\.py',
     'tests/core/test_overdrive\.py',
     'tests/core/test_s3\.py',
     'tests/core/test_scripts\.py',
     'tests/core/test_selftest\.py',
+    'tests/fixtures/api_config\.py',
+    'tests/fixtures/api_controller\.py',
     'tests/fixtures/database\.py',
+    'tests/fixtures/odl\.py',
 ]
-files = [
-    "api",
-    "core",
-    "customlists",
-    "scripts.py",
-    "tests/core",
-]
+files = ["."]
 plugins = ["sqlmypy"]
 warn_redundant_casts = true
 warn_unreachable = true
@@ -101,8 +137,10 @@ module = [
     "multipledispatch",
     "nameparser",
     "oauth2client",
+    "onelogin",
     "onelogin.saml2.*",
     "parameterized",
+    "pyfakefs.*",
     "pyld",
     "pymarc",
     "pyparsing",
@@ -121,7 +159,8 @@ module = [
 follow_imports = "skip"
 module = [
     "core.classifier.*",
-    "tests.fixtures.database",
+    "tests.api.admin.controller.*",
+    "tests.fixtures.*",
 ]
 
 [[tool.mypy.overrides]]
