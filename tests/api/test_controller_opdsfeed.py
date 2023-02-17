@@ -415,7 +415,7 @@ class TestOPDSFeedController:
         # into it.
         old_navigation = NavigationFeed.navigation
 
-        def mock_navigation(cls, *args, **kwargs):
+        def mock_navigation(*args, **kwargs):
             self.called_with = (args, kwargs)
             return old_navigation(*args, **kwargs)
 

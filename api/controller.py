@@ -1037,7 +1037,12 @@ class OPDSFeedController(CirculationManagerController):
         )
         annotator = self.manager.annotator(lane, facets)
         return NavigationFeed.navigation(
-            self._db, title, url, lane, annotator, facets=facets
+            _db=self._db,
+            title=title,
+            url=url,
+            worklist=lane,
+            annotator=annotator,
+            facets=facets
         )
 
     def crawlable_library_feed(self):
