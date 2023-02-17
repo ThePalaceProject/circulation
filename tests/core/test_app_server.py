@@ -47,12 +47,15 @@ class TestApplicationVersionController:
         monkeypatch.setattr(core, "__branch__", branch)
 
         # Mock the admin ui version strings
-        monkeypatch.setenv(
-            AdminUiConfig.ENV_ADMIN_UI_PACKAGE_NAME, ui_package if ui_package else ""
-        )
-        monkeypatch.setenv(
-            AdminUiConfig.ENV_ADMIN_UI_PACKAGE_VERSION, ui_version if ui_version else ""
-        )
+        if ui_package is not None:
+            monkeypatch.setenv(AdminUiConfig.ENV_ADMIN_UI_PACKAGE_NAME, ui_package)
+        else:
+            monkeypatch.delenv(AdminUiConfig.ENV_ADMIN_UI_PACKAGE_NAME)
+
+        if ui_version is not None:
+            monkeypatch.setenv(AdminUiConfig.ENV_ADMIN_UI_PACKAGE_VERSION, ui_version)
+        else:
+            monkeypatch.delenv(AdminUiConfig.ENV_ADMIN_UI_PACKAGE_VERSION)
 
         controller = ApplicationVersionController()
         with app.test_request_context("/"):
