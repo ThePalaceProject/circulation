@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import datetime
 import os
+from typing import Iterable
 
 import pytest
 from flask import request, url_for
@@ -72,16 +75,22 @@ class CleverAuthenticationFixture:
     db: DatabaseTransactionFixture
     api: MockAPI
 
-    def __init__(self, db: DatabaseTransactionFixture):
-        self.db = db
-        self.api = MockAPI(db.default_library(), self.mock_integration)
+    @classmethod
+    def create(cls, db: DatabaseTransactionFixture) -> CleverAuthenticationFixture:
+        fixture = CleverAuthenticationFixture()
+        fixture.db = db
+        fixture.api = MockAPI(db.default_library(), fixture.mock_integration())
+
         os.environ["AUTOINITIALIZE"] = "False"
         from api.app import app
 
-        del os.environ["AUTOINITIALIZE"]
-        self.app = app
+        fixture.app = app
 
-    @property
+        return fixture
+
+    def close(self):
+        del os.environ["AUTOINITIALIZE"]
+
     def mock_integration(self):
         """Make a fake ExternalIntegration that can be used to configure a CleverAuthenticationAPI"""
         integration = self.db.external_integration(
@@ -95,8 +104,12 @@ class CleverAuthenticationFixture:
 
 
 @pytest.fixture(scope="function")
-def clever_fixture(db: DatabaseTransactionFixture) -> CleverAuthenticationFixture:
-    return CleverAuthenticationFixture(db)
+def clever_fixture(
+    db: DatabaseTransactionFixture,
+) -> Iterable[CleverAuthenticationFixture]:
+    fixture = CleverAuthenticationFixture.create(db)
+    yield fixture
+    fixture.close()
 
 
 class TestCleverAuthenticationAPI:
@@ -365,7 +378,7 @@ class TestCleverAuthenticationAPI:
         """Verify that external_authenticate_url is generated properly"""
         # We're about to call url_for, so we must create an application context.
         my_api = CleverAuthenticationAPI(
-            clever_fixture.db.default_library(), clever_fixture.mock_integration
+            clever_fixture.db.default_library(), clever_fixture.mock_integration()
         )
 
         with clever_fixture.app.test_request_context("/"):
