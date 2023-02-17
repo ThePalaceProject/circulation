@@ -1042,7 +1042,7 @@ class OPDSFeedController(CirculationManagerController):
             url=url,
             worklist=lane,
             annotator=annotator,
-            facets=facets
+            facets=facets,
         )
 
     def crawlable_library_feed(self):
