@@ -193,7 +193,7 @@ class TestOPDSFeedController:
                 "feed",
                 lane_identifier=lane_id,
                 library_short_name=circulation_fixture.db.default_library().short_name,
-                _facets=load_facets_from_request(),
+                _external=True,
             )
 
         assert isinstance(response, Response)
@@ -333,7 +333,7 @@ class TestOPDSFeedController:
                 "acquisition_groups",
                 lane_identifier=None,
                 library_short_name=library.short_name,
-                _facets=load_facets_from_request(),
+                _external=True,
             )
 
         kwargs = self.groups_called_with
@@ -372,7 +372,7 @@ class TestOPDSFeedController:
                 "feed",
                 lane_identifier=circulation_fixture.english_adult_fiction.id,
                 library_short_name=library.short_name,
-                _facets=load_facets_from_request(),
+                _external=True,
             )
 
         assert circulation_fixture.english_adult_fiction == self.page_called_with.pop(
@@ -458,11 +458,11 @@ class TestOPDSFeedController:
         the_future = now + datetime.timedelta(hours=1)
         the_past = now - datetime.timedelta(hours=1)
 
-        assert circulation_fixture.english_2 is WorkSpec  # type: ignore
-        assert circulation_fixture.french_1 is WorkSpec  # type: ignore
+        assert circulation_fixture.english_2 is WorkSpec
+        assert circulation_fixture.french_1 is WorkSpec
 
-        _set(circulation_fixture.english_2, now + datetime.timedelta(hours=2))  # type: ignore
-        _set(circulation_fixture.french_1, now + datetime.timedelta(hours=1))  # type: ignore
+        _set(circulation_fixture.english_2, now + datetime.timedelta(hours=2))
+        _set(circulation_fixture.french_1, now + datetime.timedelta(hours=1))
         _set(circulation_fixture.english_1, now - datetime.timedelta(hours=1))
         circulation_fixture.db.session.commit()
 

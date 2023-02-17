@@ -4,132 +4,16 @@ from collections import defaultdict
 from sqlalchemy import or_
 from sqlalchemy.orm.session import Session
 
-from .metadata_layer import CSVMetadataImporter, ReplacementPolicy
+from .metadata_layer import ReplacementPolicy
 from .model import (
     Classification,
-    CustomList,
     CustomListEntry,
-    DataSource,
     Edition,
     Identifier,
     Subject,
-    Work,
     get_one_or_create,
 )
 from .util.datetime_helpers import utc_now
-
-
-class CustomListFromCSV(CSVMetadataImporter):
-    """Create a CustomList, with entries, from a CSV file."""
-
-    def __init__(
-        self,
-        data_source_name,
-        list_name,
-        overwrite_old_data=False,
-        annotation_field="text",
-        annotation_author_name_field="name",
-        annotation_author_affiliation_field="location",
-        first_appearance_field="timestamp",
-        **kwargs
-    ):
-        super().__init__(data_source_name, **kwargs)
-        self.foreign_identifier = list_name
-        self.list_name = list_name
-        self.overwrite_old_data = overwrite_old_data
-
-        self.annotation_field = annotation_field
-        self.annotation_author_name_field = annotation_author_name_field
-        self.annotation_author_affiliation_field = annotation_author_affiliation_field
-        self.first_appearance_field = first_appearance_field
-
-    def to_customlist(self, _db, dictreader):
-        """Turn the CSV file in `dictreader` into a CustomList.
-
-        TODO: Keep track of the list's current members. If any item
-        was on the list but is no longer on the list, set its
-        last_appeared date to its most recent appearance.
-        """
-        data_source = DataSource.lookup(_db, self.data_source_name)
-        now = utc_now()
-
-        # Find or create the CustomList object itself.
-        custom_list, was_new = get_one_or_create(
-            _db,
-            CustomList,
-            data_source=data_source,
-            foreign_identifier=self.foreign_identifier,
-            create_method_kwargs=dict(
-                created=now,
-            ),
-        )
-        custom_list.updated = now
-
-        # Turn the rows of the CSV file into a sequence of Metadata
-        # objects, then turn each Metadata into a CustomListEntry object.
-        for metadata in self.to_metadata(dictreader):
-            entry = self.metadata_to_list_entry(custom_list, data_source, now, metadata)
-
-    def metadata_to_list_entry(self, custom_list, data_source, now, metadata):
-        """Convert a Metadata object to a CustomListEntry."""
-        _db = Session.object_session(data_source)
-
-        title_from_external_list = self.metadata_to_title(now, metadata)
-        list_entry, was_new = title_from_external_list.to_custom_list_entry(
-            custom_list, self.overwrite_old_data
-        )
-        e = list_entry.edition
-
-        if not e:
-            # We couldn't create an Edition, probably because we
-            # couldn't find a useful Identifier.
-            self.log.info("Could not create edition for %s", metadata.title)
-        else:
-            q = (
-                _db.query(Work)
-                .join(Work.presentation_edition)
-                .filter(Edition.permanent_work_id == e.permanent_work_id)
-            )
-            if q.count() > 0:
-                self.log.info(
-                    "Found matching work in collection for %s", metadata.title
-                )
-            else:
-                self.log.info("No matching work found for %s", metadata.title)
-        return list_entry
-
-    def metadata_to_title(self, now, metadata):
-        """Convert a Metadata object to a TitleFromExternalList object."""
-        row = metadata.csv_row
-        first_appearance = self._date_field(row, self.first_appearance_field)
-        annotation = self._field(row, self.annotation_field)
-        annotation_citation = self.annotation_citation(row)
-        if annotation_citation:
-            annotation = annotation + annotation_citation
-
-        return TitleFromExternalList(
-            metadata=metadata,
-            first_appearance=first_appearance,
-            most_recent_appearance=now,
-            annotation=annotation,
-        )
-
-    def annotation_citation(self, row):
-        """Extract a citation for an annotation from a row of a CSV file."""
-        annotation_author = self._field(row, self.annotation_author_name_field)
-        annotation_author_affiliation = self._field(
-            row, self.annotation_author_affiliation_field
-        )
-        if annotation_author_affiliation == annotation_author:
-            annotation_author_affiliation = None
-        annotation_extra = ""
-        if annotation_author:
-            annotation_extra = annotation_author
-            if annotation_author_affiliation:
-                annotation_extra += ", " + annotation_author_affiliation
-        if annotation_extra:
-            return " —" + annotation_extra
-        return None
 
 
 class TitleFromExternalList:
