@@ -50,12 +50,14 @@ class TestApplicationVersionController:
         if ui_package is not None:
             monkeypatch.setenv(AdminUiConfig.ENV_ADMIN_UI_PACKAGE_NAME, ui_package)
         else:
-            monkeypatch.delenv(AdminUiConfig.ENV_ADMIN_UI_PACKAGE_NAME)
+            monkeypatch.delenv(AdminUiConfig.ENV_ADMIN_UI_PACKAGE_NAME, raising=False)
 
         if ui_version is not None:
             monkeypatch.setenv(AdminUiConfig.ENV_ADMIN_UI_PACKAGE_VERSION, ui_version)
         else:
-            monkeypatch.delenv(AdminUiConfig.ENV_ADMIN_UI_PACKAGE_VERSION)
+            monkeypatch.delenv(
+                AdminUiConfig.ENV_ADMIN_UI_PACKAGE_VERSION, raising=False
+            )
 
         controller = ApplicationVersionController()
         with app.test_request_context("/"):
