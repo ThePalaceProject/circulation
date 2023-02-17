@@ -188,7 +188,7 @@ class TestOPDSFeedController:
                 "feed",
                 lane_identifier=lane_id,
                 library_short_name=circulation_fixture.db.default_library().short_name,
-                _facets=load_facets_from_request(),
+                _external=True,
             )
 
         assert isinstance(response, Response)
@@ -328,7 +328,7 @@ class TestOPDSFeedController:
                 "acquisition_groups",
                 lane_identifier=None,
                 library_short_name=library.short_name,
-                _facets=load_facets_from_request(),
+                _external=True,
             )
 
         kwargs = self.groups_called_with
@@ -367,7 +367,7 @@ class TestOPDSFeedController:
                 "feed",
                 lane_identifier=circulation_fixture.english_adult_fiction.id,
                 library_short_name=library.short_name,
-                _facets=load_facets_from_request(),
+                _external=True,
             )
 
         assert circulation_fixture.english_adult_fiction == self.page_called_with.pop(

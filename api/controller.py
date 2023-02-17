@@ -2,7 +2,6 @@ import email
 import json
 import logging
 import os
-import sys
 import urllib.parse
 from collections import defaultdict
 from time import mktime
@@ -137,13 +136,6 @@ class CirculationManager:
 
     def __init__(self, _db, testing=False):
         self._db = _db
-
-        if not testing:
-            try:
-                self.config = Configuration.load(_db)
-            except CannotLoadConfiguration as exception:
-                self.log.exception(f"Could not load configuration file: {exception}")
-                sys.exit()
 
         self.testing = testing
         self.site_configuration_last_update = (
@@ -964,7 +956,6 @@ class OPDSFeedController(CirculationManagerController):
             "acquisition_groups",
             lane_identifier=lane_identifier,
             library_short_name=library.short_name,
-            _facets=facets,
             _external=True,
         )
 
@@ -1005,7 +996,6 @@ class OPDSFeedController(CirculationManagerController):
             "feed",
             lane_identifier=lane_identifier,
             library_short_name=library_short_name,
-            _facets=facets,
             _external=True,
         )
 

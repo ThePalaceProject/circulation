@@ -93,10 +93,6 @@ class Script:
             self._log = logging.getLogger(self.script_name)
         return self._log
 
-    @property
-    def data_directory(self):
-        return Configuration.data_directory()
-
     @classmethod
     def parse_command_line(cls, _db=None, cmd_args=None):
         parser = cls.arg_parser()

@@ -2,7 +2,6 @@ import os
 
 import pytest
 
-from core.config import Configuration
 from core.model import create
 from core.model.datasource import DataSource
 from core.model.edition import Edition
@@ -301,10 +300,8 @@ class TestRepresentation:
         path = os.path.join(tmp.directory(), filename)
         open(path, "wb").write(b"some text")
 
-        assert isinstance(Configuration.data_directory(), str)
-
         representation, ignore = db.representation(db.fresh_url(), "text/plain")
-        representation.set_fetched_content(None, filename)
+        representation.set_fetched_content(None, path)
         fh = representation.content_fh()
         assert b"some text" == fh.read()
 
