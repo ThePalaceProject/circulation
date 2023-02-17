@@ -964,7 +964,6 @@ class OPDSFeedController(CirculationManagerController):
             "acquisition_groups",
             lane_identifier=lane_identifier,
             library_short_name=library.short_name,
-            _facets=facets,
             _external=True,
         )
 
@@ -1005,7 +1004,6 @@ class OPDSFeedController(CirculationManagerController):
             "feed",
             lane_identifier=lane_identifier,
             library_short_name=library_short_name,
-            _facets=facets,
             _external=True,
         )
 
