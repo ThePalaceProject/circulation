@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import datetime
 import os
-from typing import Iterable
+from typing import TYPE_CHECKING, Iterable
 
 import pytest
-from flask import request, url_for
+from flask import Flask, request, url_for
 
 from api.clever import (
     CLEVER_NOT_ELIGIBLE,
@@ -19,6 +19,9 @@ from core.model import ExternalIntegration
 from core.util.datetime_helpers import utc_now
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.database import DatabaseTransactionFixture
+
+if TYPE_CHECKING:
+    from core.model.library import Library
 
 
 class MockAPI(CleverAuthenticationAPI):
@@ -74,6 +77,7 @@ class TestClever:
 class CleverAuthenticationFixture:
     db: DatabaseTransactionFixture
     api: MockAPI
+    app: Flask
 
     @classmethod
     def create(cls, db: DatabaseTransactionFixture) -> CleverAuthenticationFixture:
@@ -382,7 +386,7 @@ class TestCleverAuthenticationAPI:
         )
 
         with clever_fixture.app.test_request_context("/"):
-            request.library = clever_fixture.db.default_library()
+            request.library: Library = clever_fixture.db.default_library()  # type: ignore
             params = my_api.external_authenticate_url(
                 "state", clever_fixture.db.session
             )
