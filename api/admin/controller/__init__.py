@@ -1446,7 +1446,8 @@ class DashboardController(AdminCirculationManagerController):
     def stats(
         self, stats_function: Callable[[Admin, Session], Statistics]
     ) -> Statistics:
-        return stats_function(flask.request.admin, self._db)
+        admin = getattr(flask.request, "admin")
+        return stats_function(admin, self._db)
 
     def circulation_events(self):
         annotator = AdminAnnotator(self.circulation, flask.request.library)

@@ -4,7 +4,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
-from sqlalchemy.sql.expression import and_, distinct, join, select
+from sqlalchemy.sql.expression import and_, distinct
 
 from core.model import Admin, Collection, Hold, Library, LicensePool, Loan, Patron
 
@@ -91,56 +91,35 @@ def generate_statistics(admin: Admin, _db: Session):
             .count()
         )
 
-        active_patrons = (
-            select([Patron.id])
-            .select_from(
-                join(
-                    Loan,
-                    Patron,
+        active_loans_or_holds_patron_count = (
+            (
+                _db.query(Patron.id.label("id"))
+                .join(Loan)
+                .filter(
                     and_(
-                        Patron.id == Loan.patron_id,
                         Patron.library_id == library.id,
-                        Loan.id != None,
                         Loan.end >= datetime.now(),
-                    ),
-                )
-            )
-            .union(
-                select([Patron.id]).select_from(
-                    join(
-                        Hold,
-                        Patron,
-                        and_(
-                            Patron.id == Hold.patron_id,
-                            Patron.library_id == library.id,
-                            Hold.id != None,
-                        ),
                     )
                 )
             )
-            .alias()
+            .union(
+                _db.query(Patron.id.label("id"))
+                .join(Hold)
+                .filter(Patron.library_id == library.id)
+            )
+            .count()
         )
-
-        active_loans_or_holds_patron_count_query = select(
-            [func.count(distinct(active_patrons.c.id))]
-        ).select_from(active_patrons)
-
-        result = _db.execute(active_loans_or_holds_patron_count_query)
-        active_loans_or_holds_patron_count = [r[0] for r in result][0]
 
         loan_count = (
             _db.query(Loan)
-            .join(Loan.patron)
+            .join(Patron)
             .filter(Patron.library_id == library.id)
             .filter(Loan.end >= datetime.now())
             .count()
         )
 
         hold_count = (
-            _db.query(Hold)
-            .join(Hold.patron)
-            .filter(Patron.library_id == library.id)
-            .count()
+            _db.query(Hold).join(Patron).filter(Patron.library_id == library.id).count()
         )
 
         title_count = 0
