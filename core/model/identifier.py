@@ -269,7 +269,7 @@ class Identifier(Base, IdentifierConstants):
     # LicensePools, through different Collections.
     licensed_through = relationship(
         "LicensePool",
-        backref="identifier",
+        back_populates="identifier",
         lazy="joined",
     )
 
@@ -550,9 +550,9 @@ class Identifier(Base, IdentifierConstants):
     def parse_urn(
         cls,
         _db: Session,
-        identifier_string: str,
+        identifier_string: str | None,
         must_support_license_pools: bool = False,
-    ) -> tuple[Identifier, bool] | None:
+    ) -> tuple[Identifier | None, bool | None]:
         """Parse identifier string.
 
         :param _db: Database session
@@ -566,8 +566,8 @@ class Identifier(Base, IdentifierConstants):
         # I've assumed there was a reason that the test_identifier.test_parse_urn
         # tests for this case and thus ensure that it remains valid here.
         # test
-        if identifier_string == None:
-            return None
+        if identifier_string is None:
+            return None, None
 
         identifier_type, identifier_string = cls.type_and_identifier_for_urn(
             identifier_string

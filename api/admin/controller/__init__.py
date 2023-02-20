@@ -6,13 +6,14 @@ import os
 import sys
 import urllib.parse
 from datetime import date, datetime, timedelta
-from typing import Callable, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, TypeVar, Union
 
 import flask
-import jwt
 from flask import Response, redirect, url_for
 from flask_babel import lazy_gettext as _
+from flask_pydantic_spec.flask_backend import Context
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from sqlalchemy.sql.expression import and_, desc, distinct, join, nullslast, select
 
@@ -52,7 +53,6 @@ from core.model import (
     Collection,
     ConfigurationSetting,
     CustomList,
-    CustomListEntry,
     DataSource,
     ExternalIntegration,
     Hold,
@@ -77,21 +77,32 @@ from core.query.customlist import CustomListQueries
 from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
 from core.util.cache import memoize
-from core.util.datetime_helpers import utc_now
-from core.util.flask_util import OPDSFeedResponse, boolean_value
-from core.util.http import HTTP
+from core.util.flask_util import OPDSFeedResponse
 from core.util.problem_detail import ProblemDetail
+
+if TYPE_CHECKING:
+    from api.admin.problem_details import (
+        AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES,
+        CANNOT_CHANGE_LIBRARY_FOR_CUSTOM_LIST,
+        CANNOT_DELETE_SHARED_LIST,
+        COLLECTION_NOT_ASSOCIATED_WITH_LIBRARY,
+        CUSTOM_LIST_NAME_ALREADY_IN_USE,
+        INVALID_INPUT,
+        MISSING_COLLECTION,
+        MISSING_CUSTOM_LIST,
+        MISSING_INTEGRATION,
+    )
+    from api.admin.template_styles import (
+        body_style,
+        error_style,
+        hr_style,
+        logo_style,
+        small_link_style,
+    )
 
 
 def setup_admin_controllers(manager):
     """Set up all the controllers that will be used by the admin parts of the web app."""
-    if not manager.testing:
-        try:
-            manager.config = Configuration.load(manager._db)
-        except CannotLoadConfiguration as e:
-            logging.error("Could not load configuration file: %s", e)
-            sys.exit()
-
     manager.admin_view_controller = ViewController(manager)
     manager.admin_sign_in_controller = SignInController(manager)
     manager.timestamps_controller = TimestampsController(manager)
@@ -782,8 +793,8 @@ class CustomListsController(AdminCirculationManagerController):
             is_shared=len(list.shared_locally_with_libraries) > 0,
         )
 
-    def custom_lists(self) -> Dict:
-        library = flask.request.library
+    def custom_lists(self) -> Union[Dict, ProblemDetail, Response, None]:
+        library: Library = flask.request.library  # type: ignore  # "Request" has no attribute "library"
         self.require_librarian(library)
 
         if flask.request.method == "GET":
@@ -797,7 +808,7 @@ class CustomListsController(AdminCirculationManagerController):
             return dict(custom_lists=custom_lists)
 
         if flask.request.method == "POST":
-            ctx = flask.request.context.body
+            ctx: Context = flask.request.context.body  # type: ignore
             return self._create_or_update_list(
                 library,
                 ctx.name,
@@ -809,16 +820,24 @@ class CustomListsController(AdminCirculationManagerController):
                 auto_update_query=ctx.auto_update_query,
             )
 
-    def _getJSONFromRequest(self, values: Optional[str]) -> Union[Dict, List]:
+        return None
+
+    def _getJSONFromRequest(self, values: Optional[str]) -> list:
         if values:
-            values = json.loads(values)
+            return_values = json.loads(values)
         else:
-            values = []
+            return_values = []
 
-        return values
+        return return_values
 
-    def _get_work_from_urn(self, library: Library, urn: str) -> Work:
+    def _get_work_from_urn(
+        self, library: Library, urn: Optional[str]
+    ) -> Optional[Work]:
         identifier, ignore = Identifier.parse_urn(self._db, urn)
+
+        if identifier is None:
+            return None
+
         query = (
             self._db.query(Work)
             .join(LicensePool, LicensePool.work_id == Work.id)
@@ -1008,8 +1027,10 @@ class CustomListsController(AdminCirculationManagerController):
 
         return url_fn
 
-    def custom_list(self, list_id: int) -> Union[Response, Dict, ProblemDetail]:
-        library = flask.request.library
+    def custom_list(
+        self, list_id: int
+    ) -> Optional[Union[Response, Dict, ProblemDetail]]:
+        library: Library = flask.request.library  # type: ignore
         self.require_librarian(library)
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
 
@@ -1046,7 +1067,7 @@ class CustomListsController(AdminCirculationManagerController):
             return OPDSFeedResponse(str(feed), max_age=0)
 
         elif flask.request.method == "POST":
-            ctx = flask.request.context.body
+            ctx: Context = flask.request.context.body  # type: ignore
             return self._create_or_update_list(
                 library,
                 ctx.name,
@@ -1061,7 +1082,7 @@ class CustomListsController(AdminCirculationManagerController):
 
         elif flask.request.method == "DELETE":
             # Deleting requires a library manager.
-            self.require_library_manager(flask.request.library)
+            self.require_library_manager(flask.request.library)  # type: ignore
 
             if len(list.shared_locally_with_libraries) > 0:
                 return CANNOT_DELETE_SHARED_LIST
@@ -1088,12 +1109,16 @@ class CustomListsController(AdminCirculationManagerController):
                 lane.update_size(self._db, self.search_engine)
             return Response(str(_("Deleted")), 200)
 
-    def share_locally(self, customlist_id: int) -> Union[ProblemDetail, Response]:
+        return None
+
+    def share_locally(
+        self, customlist_id: int
+    ) -> Union[ProblemDetail, Dict[str, int], Response]:
         """Share this customlist with all libraries on this local CM"""
         if not customlist_id:
             return INVALID_INPUT
         customlist: CustomList = get_one(self._db, CustomList, id=customlist_id)
-        if customlist.library != flask.request.library:
+        if customlist.library != flask.request.library:  # type: ignore
             return ADMIN_NOT_AUTHORIZED.detailed(
                 _("This library does not have permissions on this customlist.")
             )
@@ -1107,8 +1132,7 @@ class CustomListsController(AdminCirculationManagerController):
 
     def share_locally_POST(
         self, customlist: CustomList
-    ) -> Union[ProblemDetail, Response]:
-        library: Library = None
+    ) -> Union[ProblemDetail, Dict[str, int]]:
         successes = []
         failures = []
         for library in self._db.query(Library).all():
@@ -1378,220 +1402,14 @@ class LanesController(AdminCirculationManagerController):
 
 
 class DashboardController(AdminCirculationManagerController):
-    def stats(self):
-        library_stats = {}
 
-        total_title_count = 0
-        total_license_count = 0
-        total_available_license_count = 0
+    Statistics = TypeVar("Statistics", bound=Dict[str, Any])
 
-        collection_counts = dict()
-        for collection in self._db.query(Collection):
-            if not flask.request.admin or not flask.request.admin.can_see_collection(
-                collection
-            ):
-                continue
-
-            licensed_title_count = (
-                self._db.query(LicensePool)
-                .filter(LicensePool.collection_id == collection.id)
-                .filter(
-                    and_(
-                        LicensePool.licenses_owned > 0,
-                        LicensePool.open_access == False,
-                    )
-                )
-                .count()
-            )
-
-            open_title_count = (
-                self._db.query(LicensePool)
-                .filter(LicensePool.collection_id == collection.id)
-                .filter(LicensePool.open_access == True)
-                .count()
-            )
-
-            # The sum queries return None instead of 0 if there are
-            # no license pools in the db.
-
-            license_count = (
-                self._db.query(func.sum(LicensePool.licenses_owned))
-                .filter(LicensePool.collection_id == collection.id)
-                .filter(
-                    LicensePool.open_access == False,
-                )
-                .all()[0][0]
-                or 0
-            )
-
-            available_license_count = (
-                self._db.query(func.sum(LicensePool.licenses_available))
-                .filter(LicensePool.collection_id == collection.id)
-                .filter(
-                    LicensePool.open_access == False,
-                )
-                .all()[0][0]
-                or 0
-            )
-
-            total_title_count += licensed_title_count + open_title_count
-            total_license_count += license_count
-            total_available_license_count += available_license_count
-
-            collection_counts[collection.name] = dict(
-                licensed_titles=licensed_title_count,
-                open_access_titles=open_title_count,
-                licenses=license_count,
-                available_licenses=available_license_count,
-            )
-
-        for library in self._db.query(Library):
-            # Only include libraries this admin has librarian access to.
-            if not flask.request.admin or not flask.request.admin.is_librarian(library):
-                continue
-
-            patron_count = (
-                self._db.query(Patron).filter(Patron.library_id == library.id).count()
-            )
-
-            active_loans_patron_count = (
-                self._db.query(distinct(Patron.id))
-                .join(Patron.loans)
-                .filter(
-                    Loan.end >= datetime.now(),
-                )
-                .filter(Patron.library_id == library.id)
-                .count()
-            )
-
-            active_patrons = (
-                select([Patron.id])
-                .select_from(
-                    join(
-                        Loan,
-                        Patron,
-                        and_(
-                            Patron.id == Loan.patron_id,
-                            Patron.library_id == library.id,
-                            Loan.id != None,
-                            Loan.end >= datetime.now(),
-                        ),
-                    )
-                )
-                .union(
-                    select([Patron.id]).select_from(
-                        join(
-                            Hold,
-                            Patron,
-                            and_(
-                                Patron.id == Hold.patron_id,
-                                Patron.library_id == library.id,
-                                Hold.id != None,
-                            ),
-                        )
-                    )
-                )
-                .alias()
-            )
-
-            active_loans_or_holds_patron_count_query = select(
-                [func.count(distinct(active_patrons.c.id))]
-            ).select_from(active_patrons)
-
-            result = self._db.execute(active_loans_or_holds_patron_count_query)
-            active_loans_or_holds_patron_count = [r[0] for r in result][0]
-
-            loan_count = (
-                self._db.query(Loan)
-                .join(Loan.patron)
-                .filter(Patron.library_id == library.id)
-                .filter(Loan.end >= datetime.now())
-                .count()
-            )
-
-            hold_count = (
-                self._db.query(Hold)
-                .join(Hold.patron)
-                .filter(Patron.library_id == library.id)
-                .count()
-            )
-
-            title_count = 0
-            license_count = 0
-            available_license_count = 0
-
-            library_collection_counts = dict()
-            for collection in library.all_collections:
-                # sometimes a parent collection may be dissociated from a library
-                # in this case we may not have access to the collection as a library staff member
-                if collection.name not in collection_counts:
-                    continue
-
-                counts = collection_counts[collection.name]
-                library_collection_counts[collection.name] = counts
-                title_count += counts.get("licensed_titles", 0) + counts.get(
-                    "open_access_titles", 0
-                )
-                license_count += counts.get("licenses", 0)
-                available_license_count += counts.get("available_licenses", 0)
-
-            library_stats[library.short_name] = dict(
-                patrons=dict(
-                    total=patron_count,
-                    with_active_loans=active_loans_patron_count,
-                    with_active_loans_or_holds=active_loans_or_holds_patron_count,
-                    loans=loan_count,
-                    holds=hold_count,
-                ),
-                inventory=dict(
-                    titles=title_count,
-                    licenses=license_count,
-                    available_licenses=available_license_count,
-                ),
-                collections=library_collection_counts,
-            )
-
-        total_patrons = sum(
-            stats.get("patrons", {}).get("total", 0)
-            for stats in list(library_stats.values())
-        )
-        total_with_active_loans = sum(
-            stats.get("patrons", {}).get("with_active_loans", 0)
-            for stats in list(library_stats.values())
-        )
-        total_with_active_loans_or_holds = sum(
-            stats.get("patrons", {}).get("with_active_loans_or_holds", 0)
-            for stats in list(library_stats.values())
-        )
-
-        # TODO: show shared collection loans and holds for libraries outside this
-        # circ manager?
-        total_loans = sum(
-            stats.get("patrons", {}).get("loans", 0)
-            for stats in list(library_stats.values())
-        )
-        total_holds = sum(
-            stats.get("patrons", {}).get("holds", 0)
-            for stats in list(library_stats.values())
-        )
-
-        library_stats["total"] = dict(
-            patrons=dict(
-                total=total_patrons,
-                with_active_loans=total_with_active_loans,
-                with_active_loans_or_holds=total_with_active_loans_or_holds,
-                loans=total_loans,
-                holds=total_holds,
-            ),
-            inventory=dict(
-                titles=total_title_count,
-                licenses=total_license_count,
-                available_licenses=total_available_license_count,
-            ),
-            collections=collection_counts,
-        )
-
-        return library_stats
+    def stats(
+        self, stats_function: Callable[[Admin, Session], Statistics]
+    ) -> Statistics:
+        admin = getattr(flask.request, "admin")
+        return stats_function(admin, self._db)
 
     def circulation_events(self):
         annotator = AdminAnnotator(self.circulation, flask.request.library)
@@ -1713,7 +1531,7 @@ class SettingsController(AdminCirculationManagerController):
         mirror_integration_id = flask.request.form.get("mirror_integration_id")
 
         if not mirror_integration_id:
-            return
+            return None
 
         # If no storage integration was selected, then delete the existing
         # external integration link.
@@ -1751,6 +1569,8 @@ class SettingsController(AdminCirculationManagerController):
             )
 
             current_integration_link.other_integration_id = storage_integration.id
+
+        return None
 
     @classmethod
     def _get_integration_protocols(cls, provider_apis, protocol_name_attr="__module__"):
@@ -2401,7 +2221,7 @@ class AdminSearchController(AdminController):
         - Publisher
         - Subject
         """
-        library = flask.request.library
+        library: Library = flask.request.library  # type: ignore
         collection_ids = [coll.id for coll in library.collections]
         return self._search_field_values_cached(collection_ids)
 
@@ -2429,47 +2249,47 @@ class AdminSearchController(AdminController):
         )
 
         # Concrete values
-        subjects = list(
+        subjects_list = list(
             classification_query.group_by(Subject.name).values(
                 func.distinct(Subject.name), func.count(Subject.name)
             )
         )
-        subjects = _unzip(subjects)
+        subjects = _unzip(subjects_list)
 
-        audiences = list(
+        audiences_list = list(
             classification_query.group_by(Subject.audience).values(
                 func.distinct(Subject.audience), func.count(Subject.audience)
             )
         )
-        audiences = _unzip(audiences)
+        audiences = _unzip(audiences_list)
 
-        genres = list(
+        genres_list = list(
             classification_query.join(Subject.genre)
             .group_by(Genre.name)
             .values(func.distinct(Genre.name), func.count(Genre.name))
         )
-        genres = _unzip(genres)
+        genres = _unzip(genres_list)
 
-        distributors = list(
+        distributors_list = list(
             editions_query.join(Edition.data_source)
             .group_by(DataSource.name)
             .values(func.distinct(DataSource.name), func.count(DataSource.name))
         )
-        distributors = _unzip(distributors)
+        distributors = _unzip(distributors_list)
 
-        languages = list(
+        languages_list = list(
             editions_query.group_by(Edition.language).values(
                 func.distinct(Edition.language), func.count(Edition.language)
             )
         )
-        languages = _unzip(languages)
+        languages = _unzip(languages_list)
 
-        publishers = list(
+        publishers_list = list(
             editions_query.group_by(Edition.publisher).values(
                 func.distinct(Edition.publisher), func.count(Edition.publisher)
             )
         )
-        publishers = _unzip(publishers)
+        publishers = _unzip(publishers_list)
 
         return {
             "subjects": subjects,

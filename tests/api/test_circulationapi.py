@@ -1587,7 +1587,9 @@ class TestCirculationAPI:
         circulation = CirculationAPI(
             circulation_api.db.session, circulation_api.db.default_library()
         )
-        circulation.api_for_collection[pool.collection.id] = Mock()
+        circulation.api_for_collection[pool.collection.id] = Mock(
+            circulation_api.db.session, circulation_api.db.default_library()
+        )
         assert "yep" == circulation.can_fulfill_without_loan(None, pool, object())
 
         # If format data is missing or the BaseCirculationAPI cannot
@@ -1620,7 +1622,7 @@ class TestBaseCirculationAPI:
         """By default, there is a blanket prohibition on fulfilling a title
         when there is no active loan.
         """
-        api = BaseCirculationAPI()
+        api = BaseCirculationAPI(db.session, db.default_library)
         assert False == api.can_fulfill_without_loan(object(), object(), object())
 
     def test_patron_email_address(self, db: DatabaseTransactionFixture):
@@ -1634,7 +1636,7 @@ class TestBaseCirculationAPI:
                 self._library_authenticator_returned = value
                 return value
 
-        api = Mock()
+        api = Mock(db.session, db.default_library())
         patron = db.patron()
         library = patron.library
 
@@ -1652,7 +1654,7 @@ class TestBaseCirculationAPI:
         # Now we're going to pass in our own LibraryAuthenticator,
         # which we've populated with mock authentication providers,
         # into a real BaseCirculationAPI.
-        api = BaseCirculationAPI()
+        api = BaseCirculationAPI(db.session, db.default_library())
         authenticator = LibraryAuthenticator(_db=db.session, library=library)
 
         # This OAuth authentication provider doesn't implement

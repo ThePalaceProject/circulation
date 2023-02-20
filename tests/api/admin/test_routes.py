@@ -6,6 +6,7 @@ from flask import Response
 from api import routes as api_routes
 from api.admin import routes
 from api.admin.controller import AdminController, setup_admin_controllers
+from api.admin.dashboard_stats import generate_statistics
 from api.admin.problem_details import *
 from api.controller import CirculationManager
 
@@ -389,7 +390,9 @@ class TestAdminDashboard(AdminRouteTest):
 
     def test_stats(self):
         url = "/admin/stats"
-        self.assert_authenticated_request_calls(url, self.controller.stats)
+        self.assert_authenticated_request_calls(
+            url, self.controller.stats, stats_function=generate_statistics
+        )
 
 
 class TestAdminLibrarySettings(AdminRouteTest):
