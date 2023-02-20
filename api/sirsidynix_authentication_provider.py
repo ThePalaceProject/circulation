@@ -148,7 +148,9 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             complete=False,
         )
 
-    def _remote_patron_lookup(
+    # Because of the odd way in which this method is written in AuthenticationProvider
+    # we have to exclude it from type checking, because mypy gets confused with the inheritance
+    def _remote_patron_lookup(  # type: ignore
         self, patron_or_patrondata: Patron | SirsiDynixPatronData
     ) -> None | SirsiDynixPatronData:
         """Do a remote patron lookup, this method can only lookup a patron with a patrondata object
