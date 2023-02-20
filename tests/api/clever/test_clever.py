@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import datetime
-import os
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING
 
 import pytest
 from flask import Flask, request, url_for
@@ -79,21 +78,13 @@ class CleverAuthenticationFixture:
     api: MockAPI
     app: Flask
 
-    @classmethod
-    def create(cls, db: DatabaseTransactionFixture) -> CleverAuthenticationFixture:
-        fixture = CleverAuthenticationFixture()
-        fixture.db = db
-        fixture.api = MockAPI(db.default_library(), fixture.mock_integration())
+    def __init__(self, db: DatabaseTransactionFixture):
+        self.db = db
+        self.api = MockAPI(db.default_library(), self.mock_integration())
 
-        os.environ["AUTOINITIALIZE"] = "False"
         from api.app import app
 
-        fixture.app = app
-
-        return fixture
-
-    def close(self):
-        del os.environ["AUTOINITIALIZE"]
+        self.app = app
 
     def mock_integration(self):
         """Make a fake ExternalIntegration that can be used to configure a CleverAuthenticationAPI"""
@@ -109,11 +100,11 @@ class CleverAuthenticationFixture:
 
 @pytest.fixture(scope="function")
 def clever_fixture(
-    db: DatabaseTransactionFixture,
-) -> Iterable[CleverAuthenticationFixture]:
-    fixture = CleverAuthenticationFixture.create(db)
-    yield fixture
-    fixture.close()
+    db: DatabaseTransactionFixture, monkeypatch: pytest.MonkeyPatch
+) -> CleverAuthenticationFixture:
+    monkeypatch.setenv("AUTOINITIALIZE", "False")
+
+    return CleverAuthenticationFixture(db)
 
 
 class TestCleverAuthenticationAPI:
