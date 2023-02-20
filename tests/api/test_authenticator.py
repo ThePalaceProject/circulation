@@ -3373,7 +3373,6 @@ class TestSirsiDynixAuthenticationProvider:
                 "http://example.org/sirsi/user/patron/login",
                 json=dict(login="username", password="pwd"),
                 headers=self._headers(sirsi_fixture.api),
-                timeout=120,
             )
             assert response == response_dict
 

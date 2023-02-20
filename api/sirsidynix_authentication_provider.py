@@ -263,9 +263,7 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
 
         url = urljoin(self.server_url, path)
         # Adding a long timeout because /patronStatusInfo would fail often
-        return HTTP.request_with_timeout(
-            method, url, headers=headers, json=json, timeout=120
-        )
+        return HTTP.request_with_timeout(method, url, headers=headers, json=json)
 
     def api_patron_login(self, username: str, password: str) -> Literal[False] | dict:
         """API request to verify credentials of a user.
