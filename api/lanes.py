@@ -94,13 +94,12 @@ def _lane_configuration_from_collection_sizes(estimates):
 def create_default_lanes(_db, library):
     """Reset the lanes for the given library to the default.
 
-    The database will have the following top-level lanes for
-    each large-collection:
-    'Adult Fiction', 'Adult Nonfiction', 'Young Adult Fiction',
-    'Young Adult Nonfiction', and 'Children'.
-    Each lane contains additional sublanes.
-    If an NYT integration is configured, there will also be a
-    'Best Sellers' top-level lane.
+    This method will create a set of default lanes  for the first
+    major language specified in the UI or if no language is specified
+    then the most represented language in the catalogue.  If more than
+    one major language is specified, all but the first will be ignored
+    in terms of default lane creation. In other words, don't specify
+    multiple top level languages.
 
     If there are any small- or tiny-collection languages, the database
     will also have a top-level lane called 'World Languages'. The
@@ -133,7 +132,9 @@ def create_default_lanes(_db, library):
         estimates = library.estimated_holdings_by_language()
         large, small, tiny = _lane_configuration_from_collection_sizes(estimates)
     priority = 0
-    for language in large:
+
+    if large and len(large) > 0:
+        language = large[0]
         priority = create_lanes_for_large_collection(
             _db, library, language, priority=priority
         )
