@@ -219,10 +219,10 @@ class TestLCPServer:
             configuration.max_printable_pages = max_printable_pages
             configuration.max_copiable_pages = max_copiable_pages
 
-            lcp_server_fixture.credential_factory.get_patron_id = MagicMock(
+            lcp_server_fixture.credential_factory.get_patron_id = MagicMock(  # type: ignore
                 return_value=expected_patron_id
             )
-            lcp_server_fixture.credential_factory.get_patron_passphrase = MagicMock(
+            lcp_server_fixture.credential_factory.get_patron_passphrase = MagicMock(  # type: ignore
                 return_value=expected_patron_passphrase
             )
 

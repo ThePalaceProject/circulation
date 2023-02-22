@@ -10,6 +10,7 @@ from api.lcp.factory import LCPServerFactory
 from api.lcp.server import LCPServer
 from core.lcp.credential import LCPCredentialFactory, LCPUnhashedPassphrase
 from core.model import ExternalIntegration
+from core.model.library import Library
 from tests.api.lcp import lcp_strings
 from tests.fixtures.api_controller import ControllerFixture
 
@@ -35,14 +36,14 @@ class TestLCPController:
             patron = controller_fixture.default_patron
             manager = CirculationManager(controller_fixture.db.session, testing=True)
             controller = LCPController(manager)
-            controller.authenticated_patron_from_request = MagicMock(
+            controller.authenticated_patron_from_request = MagicMock(  # type: ignore
                 return_value=patron
             )
 
             url = "http://circulationmanager.org/lcp/hint"
 
             with controller_fixture.app.test_request_context(url):
-                request.library = controller_fixture.db.default_library()
+                request.library: Library = controller_fixture.db.default_library()  # type: ignore
 
                 # Act
                 result1 = controller.get_lcp_passphrase()
