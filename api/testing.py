@@ -108,12 +108,12 @@ class AnnouncementTest:
 
     # Create raw data to be used in tests.
     format = "%Y-%m-%d"
-    today = datetime.date.today()
-    yesterday = (today - datetime.timedelta(days=1)).strftime(format)
-    tomorrow = (today + datetime.timedelta(days=1)).strftime(format)
-    a_week_ago = (today - datetime.timedelta(days=7)).strftime(format)
-    in_a_week = (today + datetime.timedelta(days=7)).strftime(format)
-    today = today.strftime(format)
+    today_date = datetime.date.today()
+    yesterday = (today_date - datetime.timedelta(days=1)).strftime(format)
+    tomorrow = (today_date + datetime.timedelta(days=1)).strftime(format)
+    a_week_ago = (today_date - datetime.timedelta(days=7)).strftime(format)
+    in_a_week = (today_date + datetime.timedelta(days=7)).strftime(format)
+    today = today_date.strftime(format)
 
     # This announcement is active.
     active = dict(

@@ -16,8 +16,7 @@ from api.opds2 import (
     OPDS2PublicationsAnnotator,
     TokenAuthenticationFulfillmentProcessor,
 )
-from core.external_search import SortKeyPagination
-from core.lane import Facets
+from core.lane import Facets, Pagination
 from core.model.collection import Collection
 from core.model.configuration import ConfigurationSetting, ExternalIntegration
 from core.model.datasource import DataSource
@@ -25,24 +24,39 @@ from core.model.patron import Loan
 from core.model.resource import Hyperlink
 from core.opds2_import import OPDS2Importer, RWPMManifestParser
 from core.problem_details import INVALID_CREDENTIALS
-from core.testing import DatabaseTest
-from tests.api.test_controller import CirculationControllerTest, ControllerTest
+from tests.fixtures.api_controller import (
+    CirculationControllerFixture,
+    ControllerFixture,
+)
+from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.opds2_files import OPDS2FilesFixture
 
 
-class TestOPDS2FeedController(CirculationControllerTest):
-    def setup_method(self):
-        super().setup_method()
+class OPDS2FeedControllerFixture:
+    def __init__(self, circulation_fixture: CirculationControllerFixture):
+        self.db = circulation_fixture.db
+        self.circulation_fixture = circulation_fixture
         self.annotator = OPDS2PublicationsAnnotator(
             "https://example.org/opds2",
-            Facets.default(self._default_library),
-            SortKeyPagination(),
-            self._default_library,
+            Facets.default(self.db.default_library()),
+            Pagination.default(),
+            self.db.default_library(),
         )
-        self.controller = self.manager.opds2_feeds
+        self.controller = self.circulation_fixture.manager.opds2_feeds
 
-    def test_publications_feed(self):
-        with self.request_context_with_library("/"):
-            response = self.controller.publications()
+
+@pytest.fixture(scope="function")
+def opds2_feed_controller(
+    circulation_fixture: CirculationControllerFixture,
+) -> OPDS2FeedControllerFixture:
+    return OPDS2FeedControllerFixture(circulation_fixture)
+
+
+class TestOPDS2FeedController:
+    def test_publications_feed(self, opds2_feed_controller: OPDS2FeedControllerFixture):
+        circ = opds2_feed_controller.circulation_fixture
+        with circ.request_context_with_library("/"):
+            response = opds2_feed_controller.controller.publications()
             assert response.status_code == 200
             feed = json.loads(response.data)
             assert "metadata" in feed
@@ -50,73 +64,101 @@ class TestOPDS2FeedController(CirculationControllerTest):
             assert "publications" in feed
 
 
-class TestOPDS2PublicationAnnotator(DatabaseTest):
-    def setup_method(self):
-        super().setup_method()
+class OPDS2PublicationAnnotatorFixture:
+    def __init__(self, db: DatabaseTransactionFixture):
+        self.db = db
         self.annotator = OPDS2PublicationsAnnotator(
             "https://example.org/opds2",
-            Facets.default(self._default_library),
-            SortKeyPagination(),
-            self._default_library,
+            Facets.default(db.default_library()),
+            Pagination.default(),
+            db.default_library(),
         )
 
-    def test_loan_link(self):
-        work = self._work()
+
+@pytest.fixture(scope="function")
+def opds2_publication_annotator(
+    db: DatabaseTransactionFixture,
+) -> OPDS2PublicationAnnotatorFixture:
+    return OPDS2PublicationAnnotatorFixture(db)
+
+
+class TestOPDS2PublicationAnnotator:
+    def test_loan_link(
+        self, opds2_publication_annotator: OPDS2PublicationAnnotatorFixture
+    ):
+        work = opds2_publication_annotator.db.work()
         idn = work.presentation_edition.primary_identifier
         with app.test_request_context("/"):
-            link = self.annotator.loan_link(work.presentation_edition)
+            link = opds2_publication_annotator.annotator.loan_link(
+                work.presentation_edition
+            )
             assert Hyperlink.BORROW == link["rel"]
             assert (
                 quote(
-                    f"/{self._default_library.short_name}/works/{idn.type}/{idn.identifier}/borrow"
+                    f"/{opds2_publication_annotator.db.default_library().short_name}/works/{idn.type}/{idn.identifier}/borrow"
                 )
                 == link["href"]
             )
 
-    def test_self_link(self):
-        work = self._work()
+    def test_self_link(
+        self, opds2_publication_annotator: OPDS2PublicationAnnotatorFixture
+    ):
+        work = opds2_publication_annotator.db.work()
         idn = work.presentation_edition.primary_identifier
         with app.test_request_context("/"):
-            link = self.annotator.self_link(work.presentation_edition)
+            link = opds2_publication_annotator.annotator.self_link(
+                work.presentation_edition
+            )
             assert link["rel"] == "self"
             assert (
                 quote(
-                    f"/{self._default_library.short_name}/works/{idn.type}/{idn.identifier}"
+                    f"/{opds2_publication_annotator.db.default_library().short_name}/works/{idn.type}/{idn.identifier}"
                 )
                 == link["href"]
             )
 
 
-class TestOPDS2NavigationAnnotator(DatabaseTest):
-    def setup_method(self):
-        super().setup_method()
+class OPDS2NavigationAnnotatorFixture:
+    def __init__(self, db: DatabaseTransactionFixture):
+        self.db = db
         self.annotator = OPDS2NavigationsAnnotator(
             "/",
-            Facets.default(self._default_library),
-            SortKeyPagination(),
-            self._default_library,
+            Facets.default(db.default_library()),
+            Pagination.default(),
+            db.default_library(),
             title="Navigation",
         )
 
-    def test_navigation(self):
+
+@pytest.fixture(scope="function")
+def opds2_navigation_annotator(
+    db: DatabaseTransactionFixture,
+) -> OPDS2NavigationAnnotatorFixture:
+    return OPDS2NavigationAnnotatorFixture(db)
+
+
+class TestOPDS2NavigationAnnotator:
+    def test_navigation(
+        self, opds2_navigation_annotator: OPDS2NavigationAnnotatorFixture
+    ):
         with app.test_request_context("/"):
-            navigation = self.annotator.navigation_collection()
+            navigation = opds2_navigation_annotator.annotator.navigation_collection()
         assert len(navigation) == 1
         assert (
             navigation[0]["href"]
-            == f"/{self._default_library.short_name}/opds2/publications"
+            == f"/{opds2_navigation_annotator.db.default_library().short_name}/opds2/publications"
         )
 
 
-class TestTokenAuthenticationFulfillmentProcessor(DatabaseTest):
+class TestTokenAuthenticationFulfillmentProcessor:
     @patch("api.opds2.HTTP")
-    def test_fulfill(self, mock_http):
-        patron = self._patron()
+    def test_fulfill(self, mock_http, db: DatabaseTransactionFixture):
+        patron = db.patron()
         patron.username = "username"
-        collection: Collection = self._collection(
+        collection: Collection = db.collection(
             protocol=ExternalIntegration.OPDS2_IMPORT
         )
-        work = self._work(with_license_pool=True, collection=collection)
+        work = db.work(with_license_pool=True, collection=collection)
         integration: ExternalIntegration = collection.create_external_integration(
             ExternalIntegration.OPDS2_IMPORT
         )
@@ -196,58 +238,66 @@ class TestTokenAuthenticationFulfillmentProcessor(DatabaseTest):
         assert ff_info.content_link_redirect == False
 
     @patch("api.opds2.HTTP")
-    def test_get_authentication_token(self, mock_http):
+    def test_get_authentication_token(self, mock_http, db: DatabaseTransactionFixture):
         resp = Response()
         resp.status_code = 200
         resp.raw = io.BytesIO(b"plaintext-auth-token")
         mock_http.get_with_timeout.return_value = resp
         token = TokenAuthenticationFulfillmentProcessor.get_authentication_token(
-            self._patron(), "http://example.org/token"
+            db.patron(), "http://example.org/token"
         )
 
         assert token == "plaintext-auth-token"
         assert mock_http.get_with_timeout.call_count == 1
 
     @patch("api.opds2.HTTP")
-    def test_get_authentication_token_errors(self, mock_http):
+    def test_get_authentication_token_errors(
+        self, mock_http, db: DatabaseTransactionFixture
+    ):
         resp = Response()
         resp.status_code = 400
         mock_http.get_with_timeout.return_value = resp
 
         token = TokenAuthenticationFulfillmentProcessor.get_authentication_token(
-            self._patron(), "http://example.org/token"
+            db.patron(), "http://example.org/token"
         )
 
         assert token == INVALID_CREDENTIALS
 
 
-class TestOPDS2WithTokens(ControllerTest):
-    def test_opds2_with_authentication_tokens(self):
+class TestOPDS2WithTokens:
+    def test_opds2_with_authentication_tokens(
+        self,
+        controller_fixture: ControllerFixture,
+        opds2_files_fixture: OPDS2FilesFixture,
+    ):
         """Test the end to end workflow from importing the feed to a fulfill"""
-        collection = self._collection(
+        collection = controller_fixture.db.collection(
             protocol=ExternalIntegration.OPDS2_IMPORT,
             data_source_name=DataSource.PROQUEST,
         )
-        self._default_library.collections.append(collection)
+        controller_fixture.db.default_library().collections.append(collection)
         # Import the test feed first
         importer: OPDS2Importer = OPDS2Importer(
-            self._db, collection, RWPMManifestParser(OPDS2FeedParserFactory())
+            controller_fixture.db.session,
+            collection,
+            RWPMManifestParser(OPDS2FeedParserFactory()),
         )
-        with open("tests/core/files/opds2/auth_token_feed.json") as fp:
+        with opds2_files_fixture.sample_fd("auth_token_feed.json") as fp:
             editions, pools, works, failures = importer.import_from_feed(fp.read())
 
         work = works[0]
         identifier = work.presentation_edition.primary_identifier
 
-        manager = CirculationManager(self._db)
-        patron = self._patron()
+        manager = CirculationManager(controller_fixture.db.session)
+        patron = controller_fixture.db.patron()
 
         # Borrow the book from the library
-        with self.request_context_with_library("/") as ctx:
+        with controller_fixture.request_context_with_library("/") as ctx:
             ctx.request.patron = patron
             manager.loans.borrow(identifier.type, identifier.identifier)
 
-        loans = self._db.query(Loan).filter(Loan.patron == patron)
+        loans = controller_fixture.db.session.query(Loan).filter(Loan.patron == patron)  # type: ignore
         assert loans.count() == 1
 
         loan = loans.first()
@@ -255,7 +305,7 @@ class TestOPDS2WithTokens(ControllerTest):
         manager.loans.authenticated_patron_from_request = lambda: patron
 
         # Fulfill (Download) the book, should redirect to an authenticated URL
-        with self.request_context_with_library("/") as ctx, patch.object(
+        with controller_fixture.request_context_with_library("/") as ctx, patch.object(
             TokenAuthenticationFulfillmentProcessor, "get_authentication_token"
         ) as mock_auth:
             ctx.request.patron = patron

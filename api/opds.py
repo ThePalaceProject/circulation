@@ -4,14 +4,12 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from flask import url_for
 
 from api.lanes import DynamicLane
 from core.analytics import Analytics
-from core.app_server import cdn_url_for
-from core.cdn import cdnify
 from core.classifier import Classifier
 from core.entrypoint import EverythingEntryPoint
 from core.external_search import WorkSearchResult
@@ -113,12 +111,6 @@ class CirculationManagerAnnotator(Annotator):
         else:
             return url_for(*args, **kwargs)
 
-    def cdn_url_for(self, *args, **kwargs):
-        if self.test_mode:
-            return self.test_url_for(True, *args, **kwargs)
-        else:
-            return cdn_url_for(*args, **kwargs)
-
     def test_url_for(self, cdn=False, *args, **kwargs):
         # Generate a plausible-looking URL that doesn't depend on Flask
         # being set up.
@@ -160,10 +152,10 @@ class CirculationManagerAnnotator(Annotator):
             kwargs.update(dict(list(pagination.items())))
         if extra_kwargs:
             kwargs.update(extra_kwargs)
-        return self.cdn_url_for(route, _external=True, **kwargs)
+        return self.url_for(route, _external=True, **kwargs)
 
     def navigation_url(self, lane):
-        return self.cdn_url_for(
+        return self.url_for(
             "navigation_feed",
             lane_identifier=self._lane_identifier(lane),
             library_short_name=lane.library.short_name,
@@ -186,7 +178,7 @@ class CirculationManagerAnnotator(Annotator):
     @staticmethod
     def _prioritized_formats_for_pool(
         licensepool: LicensePool,
-    ) -> (List[str], List[str]):
+    ) -> Tuple[List[str], List[str]]:
         collection: Collection = licensepool.collection
         external: ExternalIntegration = collection.external_integration
 
@@ -502,7 +494,6 @@ class CirculationManagerAnnotator(Annotator):
 
     def open_access_link(self, pool, lpdm):
         _db = Session.object_session(lpdm)
-        url = cdnify(lpdm.resource.url)
         kw = dict(rel=OPDSFeed.OPEN_ACCESS_REL, type="")
 
         # Start off assuming that the URL associated with the
@@ -516,7 +507,7 @@ class CirculationManagerAnnotator(Annotator):
             if rep.media_type:
                 kw["type"] = rep.media_type
             href = rep.public_url
-        kw["href"] = cdnify(href)
+        kw["href"] = href
         link_tag = AcquisitionFeed.link(**kw)
         link_tag.attrib.update(self.rights_attributes(lpdm))
         always_available = OPDSFeed.makeelement(
@@ -686,7 +677,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         else:
             kwargs = {}
 
-        return self.cdn_url_for(
+        return self.url_for(
             "acquisition_groups",
             lane_identifier=lane_identifier,
             library_short_name=self.library.short_name,
@@ -726,7 +717,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         if not lanes:
             # I don't think this should ever happen?
             lane_name = None
-            url = self.cdn_url_for(
+            url = self.url_for(
                 "acquisition_groups",
                 lane_identifier=None,
                 library_short_name=self.library.short_name,

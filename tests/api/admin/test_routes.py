@@ -6,11 +6,12 @@ from flask import Response
 from api import routes as api_routes
 from api.admin import routes
 from api.admin.controller import AdminController, setup_admin_controllers
+from api.admin.dashboard_stats import generate_statistics
 from api.admin.problem_details import *
 from api.controller import CirculationManager
 
 from ..test_controller import ControllerTest
-from ..test_routes import MockApp, MockController, MockManager, RouteTestFixtures
+from .test_routes_fixture import MockApp, MockController, MockManager, RouteTestFixtures
 
 
 class MockAdminApp:
@@ -393,7 +394,9 @@ class TestAdminDashboard(AdminRouteTest):
 
     def test_stats(self):
         url = "/admin/stats"
-        self.assert_authenticated_request_calls(url, self.controller.stats)
+        self.assert_authenticated_request_calls(
+            url, self.controller.stats, stats_function=generate_statistics
+        )
 
 
 class TestAdminLibrarySettings(AdminRouteTest):
@@ -575,25 +578,6 @@ class TestAdminAnalyticsServices(AdminRouteTest):
 
     def test_process_delete(self):
         url = "/admin/analytics_service/<service_id>"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_delete, "<service_id>", http_method="DELETE"
-        )
-        self.assert_supported_methods(url, "DELETE")
-
-
-class TestAdminCDNServices(AdminRouteTest):
-
-    CONTROLLER_NAME = "admin_cdn_services_controller"
-
-    def test_process_cdn_services(self):
-        url = "/admin/cdn_services"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_cdn_services
-        )
-        self.assert_supported_methods(url, "GET", "POST")
-
-    def test_process_delete(self):
-        url = "/admin/cdn_service/<service_id>"
         self.assert_authenticated_request_calls(
             url, self.controller.process_delete, "<service_id>", http_method="DELETE"
         )

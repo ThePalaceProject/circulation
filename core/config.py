@@ -1,6 +1,3 @@
-import contextlib
-import copy
-import json
 import logging
 import os
 from typing import Dict
@@ -30,27 +27,6 @@ class CannotLoadConfiguration(IntegrationException):
     """
 
 
-@contextlib.contextmanager
-def temp_config(new_config=None, replacement_classes=None):
-    old_config = Configuration.instance
-    replacement_classes = replacement_classes or [Configuration]
-    if new_config is None:
-        new_config = copy.deepcopy(old_config)
-    try:
-        for c in replacement_classes:
-            c.instance = new_config
-        yield new_config
-    finally:
-        for c in replacement_classes:
-            c.instance = old_config
-
-
-@contextlib.contextmanager
-def empty_config(replacement_classes=None):
-    with temp_config({}, replacement_classes) as i:
-        yield i
-
-
 class ConfigurationConstants:
 
     # Each facet group has two associated per-library keys: one
@@ -71,11 +47,6 @@ class Configuration(ConfigurationConstants):
 
     log = logging.getLogger("Configuration file loader")
 
-    # This is a dictionary containing information loaded from the
-    # configuration file. It will be populated immediately after
-    # this class is defined.
-    instance = None
-
     # Environment variables that contain URLs to the database
     DATABASE_TEST_ENVIRONMENT_VARIABLE = "SIMPLIFIED_TEST_DATABASE"
     DATABASE_PRODUCTION_ENVIRONMENT_VARIABLE = "SIMPLIFIED_PRODUCTION_DATABASE"
@@ -86,55 +57,18 @@ class Configuration(ConfigurationConstants):
     OD_FULFILLMENT_CLIENT_KEY_SUFFIX = "OVERDRIVE_FULFILLMENT_CLIENT_KEY"
     OD_FULFILLMENT_CLIENT_SECRET_SUFFIX = "OVERDRIVE_FULFILLMENT_CLIENT_SECRET"
 
-    # Logging stuff
-    LOGGING_LEVEL = "level"
-    LOGGING_FORMAT = "format"
-    LOG_FORMAT_TEXT = "text"
-    LOG_FORMAT_JSON = "json"
-
-    # Logging
-    LOGGING = "logging"
-    LOG_LEVEL = "level"
-    DATABASE_LOG_LEVEL = "database_level"
-    LOG_OUTPUT_TYPE = "output"
-    LOG_DATA_FORMAT = "format"
-
-    DATA_DIRECTORY = "data_directory"
-
     # ConfigurationSetting key for the base url of the app.
     BASE_URL_KEY = "base_url"
 
     # ConfigurationSetting to enable the MeasurementReaper script
     MEASUREMENT_REAPER = "measurement_reaper_enabled"
 
-    # Policies, mostly circulation specific
-    POLICIES = "policies"
-    LANES_POLICY = "lanes"
-
     # Lane policies
     DEFAULT_OPDS_FORMAT = "verbose_opds_entry"
 
-    ANALYTICS_POLICY = "analytics"
-
-    LOCALIZATION_LANGUAGES = "localization_languages"
-
     # Integrations
     URL = "url"
-    NAME = "name"
-    TYPE = "type"
     INTEGRATIONS = "integrations"
-    DATABASE_INTEGRATION = "Postgres"
-    DATABASE_PRODUCTION_URL = "production_url"
-    DATABASE_TEST_URL = "test_url"
-
-    CONTENT_SERVER_INTEGRATION = "Content Server"
-
-    AXIS_INTEGRATION = "Axis 360"
-    OVERDRIVE_INTEGRATION = "Overdrive"
-    THREEM_INTEGRATION = "3M"
-
-    # ConfigurationSetting key for a CDN's mirror domain
-    CDN_MIRRORED_DOMAIN_KEY = "mirrored_domain"
 
     # The name of the per-library configuration policy that controls whether
     # books may be put on hold.
@@ -148,11 +82,6 @@ class Configuration(ConfigurationConstants):
     # Each library may configure the maximum number of books in the
     # 'featured' lanes.
     FEATURED_LANE_SIZE = "featured_lane_size"
-
-    # The name of the per-library per-patron authentication integration
-    # regular expression used to derive a patron's external_type from
-    # their authorization_identifier.
-    EXTERNAL_TYPE_REGULAR_EXPRESSION = "external_type_regular_expression"
 
     WEBSITE_URL = "website"
     NAME = "name"
@@ -360,99 +289,6 @@ class Configuration(ConfigurationConstants):
         ]
     )
 
-    # This is set once CDN data is loaded from the database and
-    # inserted into the Configuration object.
-    CDNS_LOADED_FROM_DATABASE = "loaded_from_database"
-
-    @classmethod
-    def load(cls, _db=None):
-        """Load configuration information from the filesystem, and
-        (optionally) from the database.
-        """
-        cls.instance = cls.load_from_file()
-        if _db:
-            # Only do the database portion of the work if
-            # a database connection was provided.
-            cls.load_cdns(_db)
-        for parent in cls.__bases__:
-            if parent.__name__.endswith("Configuration"):
-                parent.load(_db)
-
-    @classmethod
-    def cdns_loaded_from_database(cls):
-        """Has the site configuration been loaded from the database yet?"""
-        return cls.instance and cls.instance.get(cls.CDNS_LOADED_FROM_DATABASE, False)
-
-    # General getters
-
-    @classmethod
-    def get(cls, key, default=None):
-        if cls.instance is None:
-            raise ValueError("No configuration object loaded!")
-        return cls.instance.get(key, default)
-
-    @classmethod
-    def required(cls, key):
-        if cls.instance is not None:
-            value = cls.get(key)
-            if value is not None:
-                return value
-
-        value = cls.get(key)
-        if value is not None:
-            return value
-        raise ValueError("Required configuration variable %s was not defined!" % key)
-
-    @classmethod
-    def integration(cls, name, required=False):
-        """Find an integration configuration by name."""
-        integrations = cls.get(cls.INTEGRATIONS, {})
-        v = integrations.get(name, {})
-        if not v and required:
-            raise ValueError(
-                "Required integration '%s' was not defined! I see: %r"
-                % (name, ", ".join(sorted(integrations.keys())))
-            )
-        return v
-
-    @classmethod
-    def integration_url(cls, name, required=False):
-        """Find the URL to an integration."""
-        integration = cls.integration(name, required=required)
-        v = integration.get(cls.URL, None)
-        if not v and required:
-            raise ValueError("Integration '%s' did not define a required 'url'!" % name)
-        return v
-
-    @classmethod
-    def cdns(cls):
-        """Get CDN configuration, loading it from the database
-        if necessary.
-        """
-        if not cls.cdns_loaded_from_database():
-            # The CDNs were never initialized from the database.
-            # Create a new database connection and find that
-            # information now.
-            from .model import SessionManager
-
-            url = cls.database_url()
-            _db = SessionManager.session(url)
-            cls.load_cdns(_db)
-
-        from .model import ExternalIntegration
-
-        return cls.integration(ExternalIntegration.CDN)
-
-    @classmethod
-    def policy(cls, name, default=None, required=False):
-        """Find a policy configuration by name."""
-        v = cls.get(cls.POLICIES, {}).get(name, default)
-        if not v and required:
-            raise ValueError("Required policy %s was not defined!" % name)
-        return v
-
-    # More specific getters.
-
     @classmethod
     def database_url(cls):
         """Find the database URL configured for this site.
@@ -471,10 +307,8 @@ class Configuration(ConfigurationConstants):
         # tests/__init__.py.
         test = os.environ.get("TESTING", False)
         if test:
-            config_key = cls.DATABASE_TEST_URL
             environment_variable = cls.DATABASE_TEST_ENVIRONMENT_VARIABLE
         else:
-            config_key = cls.DATABASE_PRODUCTION_URL
             environment_variable = cls.DATABASE_PRODUCTION_ENVIRONMENT_VARIABLE
 
         url = os.environ.get(environment_variable)
@@ -513,36 +347,15 @@ class Configuration(ConfigurationConstants):
         return {"key": key, "secret": secret}
 
     @classmethod
-    def data_directory(cls):
-        return cls.get(cls.DATA_DIRECTORY)
-
-    @classmethod
-    def load_cdns(cls, _db, config_instance=None):
-        from .model import ExternalIntegration as EI
-
-        cdns = _db.query(EI).filter(EI.goal == EI.CDN_GOAL).all()
-        cdn_integration = dict()
-        for cdn in cdns:
-            cdn_integration[cdn.setting(cls.CDN_MIRRORED_DOMAIN_KEY).value] = cdn.url
-
-        config_instance = config_instance or cls.instance
-        integrations = config_instance.setdefault(cls.INTEGRATIONS, {})
-        integrations[EI.CDN] = cdn_integration
-        config_instance[cls.CDNS_LOADED_FROM_DATABASE] = True
-
-    @classmethod
     def localization_languages(cls):
-        languages = cls.policy(cls.LOCALIZATION_LANGUAGES, default=["eng"])
-        return [LanguageCodes.three_to_two[l] for l in languages]
+        return [LanguageCodes.three_to_two["eng"]]
 
     # The last time the database configuration is known to have changed.
-    SITE_CONFIGURATION_LAST_UPDATE = "site_configuration_last_update"
+    SITE_CONFIGURATION_LAST_UPDATE = None
 
     # The last time we *checked* whether the database configuration had
     # changed.
-    LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE = (
-        "last_checked_for_site_configuration_update"
-    )
+    LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE = None
 
     # A sitewide configuration setting controlling *how often* to check
     # whether the database configuration has changed.
@@ -561,7 +374,7 @@ class Configuration(ConfigurationConstants):
         """When was the last time we actually checked when the database
         was updated?
         """
-        return cls.instance.get(cls.LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE, None)
+        return cls.LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE
 
     @classmethod
     def site_configuration_last_update(cls, _db, known_value=None, timeout=0):
@@ -603,7 +416,7 @@ class Configuration(ConfigurationConstants):
             # None.
             timeout = 60
 
-        last_check = cls.instance.get(cls.LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE)
+        last_check = cls.LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE
 
         if (
             not known_value
@@ -631,11 +444,11 @@ class Configuration(ConfigurationConstants):
             last_update = known_value
 
         # Update the Configuration object's record of the last update time.
-        cls.instance[cls.SITE_CONFIGURATION_LAST_UPDATE] = last_update
+        cls.SITE_CONFIGURATION_LAST_UPDATE = last_update
 
         # Whether that record changed or not, the time at which we
         # _checked_ is going to be set to the current time.
-        cls.instance[cls.LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE] = now
+        cls.LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE = now
         return last_update
 
     @classmethod
@@ -643,45 +456,10 @@ class Configuration(ConfigurationConstants):
         """Get the raw SITE_CONFIGURATION_LAST_UPDATE value,
         without any attempt to find a fresher value from the database.
         """
-        last_update = cls.instance.get(cls.SITE_CONFIGURATION_LAST_UPDATE, None)
+        last_update = cls.SITE_CONFIGURATION_LAST_UPDATE
         if last_update:
             last_update = to_utc(last_update)
         return last_update
-
-    @classmethod
-    def load_from_file(cls):
-        """Load additional site configuration from a config file.
-
-        This is being phased out in favor of taking all configuration from a
-        database.
-        """
-        cfv = "SIMPLIFIED_CONFIGURATION_FILE"
-        config_path = os.environ.get(cfv)
-        if config_path:
-            try:
-                cls.log.info("Loading configuration from %s", config_path)
-                configuration = cls._load(open(config_path).read())
-            except Exception as e:
-                raise CannotLoadConfiguration(
-                    f"Error loading configuration file {config_path}: {e}"
-                )
-        else:
-            configuration = cls._load("{}")
-
-        return configuration
-
-    @classmethod
-    def _load(cls, str):
-        lines = [
-            x
-            for x in str.split("\n")
-            if not (x.strip().startswith("#") or x.strip().startswith("//"))
-        ]
-        return json.loads("\n".join(lines))
-
-
-# Immediately load the configuration file (if any).
-Configuration.instance = Configuration.load_from_file()
 
 
 class ConfigurationTrait:

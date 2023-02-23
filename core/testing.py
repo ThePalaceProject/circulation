@@ -1,8 +1,6 @@
 import json
 import logging
 import os
-import shutil
-import tempfile
 import time
 import uuid
 from datetime import timedelta
@@ -142,33 +140,12 @@ class DatabaseTest:
     def setup_class(cls):
         # Initialize a temporary data directory.
         cls.engine, cls.connection = cls.get_database_connection()
-        cls.old_data_dir = Configuration.data_directory
-        cls.tmp_data_dir = tempfile.mkdtemp(dir="/tmp")
-        Configuration.instance[Configuration.DATA_DIRECTORY] = cls.tmp_data_dir
-
-        # Avoid CannotLoadConfiguration errors related to CDN integrations.
-        Configuration.instance[Configuration.INTEGRATIONS] = Configuration.instance.get(
-            Configuration.INTEGRATIONS, {}
-        )
-        Configuration.instance[Configuration.INTEGRATIONS][ExternalIntegration.CDN] = {}
 
     @classmethod
     def teardown_class(cls):
         # Destroy the database connection and engine.
         cls.connection.close()
         cls.engine.dispose()
-
-        if cls.tmp_data_dir.startswith("/tmp"):
-            logging.debug("Removing temporary directory %s" % cls.tmp_data_dir)
-            shutil.rmtree(cls.tmp_data_dir)
-
-        else:
-            logging.warning(
-                "Cowardly refusing to remove 'temporary' directory %s"
-                % cls.tmp_data_dir
-            )
-
-        Configuration.instance[Configuration.DATA_DIRECTORY] = cls.old_data_dir
 
     @pytest.fixture(autouse=True)
     def search_mock(self, request):
@@ -214,14 +191,8 @@ class DatabaseTest:
         # Reset the Analytics singleton between tests.
         Analytics._reset_singleton_instance()
 
-        # Also roll back any record of those changes in the
-        # Configuration instance.
-        for key in [
-            Configuration.SITE_CONFIGURATION_LAST_UPDATE,
-            Configuration.LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE,
-        ]:
-            if key in Configuration.instance:
-                del Configuration.instance[key]
+        Configuration.SITE_CONFIGURATION_LAST_UPDATE = None
+        Configuration.LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE = None
 
     def time_eq(self, a, b):
         "Assert that two times are *approximately* the same -- within 2 seconds."

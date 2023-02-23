@@ -4,6 +4,7 @@ from typing import Optional
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
+from sqlalchemy.exc import ProgrammingError
 
 from api.admin.exceptions import *
 from api.admin.problem_details import *
@@ -21,7 +22,7 @@ class IndividualAdminSettingsController(SettingsController):
             return self.process_post()
 
     def _highest_authorized_role(self) -> Optional[AdminRole]:
-        highest_role = None
+        highest_role: Optional[AdminRole] = None
         has_auth = False
 
         admin = getattr(flask.request, "admin", None)
@@ -98,6 +99,14 @@ class IndividualAdminSettingsController(SettingsController):
         )
 
     def process_post(self):
+        # There are three possible paths through this method:
+        #
+        # 1. The admin being edited is the first admin to be created. In this case,
+        #    a password is required and pretty much everything is permitted.
+        # 2. The admin being edited doesn't exist, but is not the first admin in
+        #    the system. In this case, a password is required.
+        # 3. The admin being edited exists. In this case, a password is only required
+        #    if the intention is to change the password of the admin.
 
         email = flask.request.form.get("email")
 
@@ -107,16 +116,18 @@ class IndividualAdminSettingsController(SettingsController):
 
         # If there are no admins yet, anyone can create the first system admin.
         settingUp = self._db.query(Admin).count() == 0
-        if settingUp and not flask.request.form.get("password"):
-            return INCOMPLETE_CONFIGURATION.detailed(
-                _("The password field cannot be blank.")
-            )
 
         highest_role = self._highest_authorized_role()
         if not settingUp and not highest_role:
             raise AdminNotAuthorized()
 
+        password = flask.request.form.get("password")
         admin, is_new = get_one_or_create(self._db, Admin, email=email)
+        if settingUp or is_new:
+            if not password:
+                return INCOMPLETE_CONFIGURATION.detailed(
+                    _("The password field cannot be blank.")
+                )
 
         self.check_permissions(admin, settingUp)
 
@@ -130,8 +141,8 @@ class IndividualAdminSettingsController(SettingsController):
         if roles_error:
             return roles_error
 
-        password = flask.request.form.get("password")
-        self.handle_password(password, admin, is_new, settingUp)
+        if password:
+            self.handle_password(password, admin, is_new, settingUp)
 
         return self.response(admin, is_new)
 
@@ -164,10 +175,13 @@ class IndividualAdminSettingsController(SettingsController):
                 raise AdminNotAuthorized()
 
     def validate_form_fields(self, email):
-        """Check that 1) the user has entered something into the required email field,
+        """Check that 1) the user has entered something into the required fields,
         and 2) if so, the input is formatted as a valid email address."""
         if not email:
-            return INCOMPLETE_CONFIGURATION
+            return INCOMPLETE_CONFIGURATION.detailed(
+                _("The email field cannot be blank.")
+            )
+
         email_error = self.validate_formats(email)
         if email_error:
             return email_error
@@ -247,7 +261,7 @@ class IndividualAdminSettingsController(SettingsController):
                     # including this library's roles. Leave the non-visible roles alone.
                     continue
 
-    def handle_password(self, password, admin, is_new, settingUp):
+    def handle_password(self, password, admin: Admin, is_new, settingUp):
         """Check that the user has permission to change this type of admin's password"""
 
         # User = person submitting the form; admin = person who the form is about
@@ -255,7 +269,7 @@ class IndividualAdminSettingsController(SettingsController):
             # There are no admins yet; the user and the new system admin are the same person.
             user = admin
         else:
-            user = flask.request.admin
+            user: Admin = flask.request.admin  # type: ignore
 
         if password:
             # If the admin we're editing has a sitewide manager role, we've already verified

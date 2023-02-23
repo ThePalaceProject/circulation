@@ -1285,7 +1285,7 @@ class WorkList:
     # If a certain type of Worklist should always have its OPDS feeds
     # cached under a specific type, define that type as
     # CACHED_FEED_TYPE.
-    CACHED_FEED_TYPE = None
+    CACHED_FEED_TYPE: Optional[str] = None
 
     # By default, a WorkList is always visible.
     @property
@@ -2698,6 +2698,17 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
 
     __table_args__ = (UniqueConstraint("parent_id", "display_name"),)
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # We add this property to the class, so that we can disable the sqlalchemy
+        # listener that calls site_configuration_has_changed. Calling this repeatedly
+        # when updating lanes can cause performance issues. The plan is for this to
+        # be a temporary fix while we replace the need for the site_configuration_has_changed
+        # and listeners at all.
+        # TODO: we should remove this, once we remove the site_configuration_has_changed listeners
+        self._suppress_configuration_changes = False
+
     def get_library(self, _db):
         """For compatibility with WorkList.get_library()."""
         return self.library
@@ -3236,7 +3247,8 @@ def configuration_relevant_lifecycle_event(mapper, connection, target):
 @event.listens_for(Lane, "after_update")
 @event.listens_for(LaneGenre, "after_update")
 def configuration_relevant_update(mapper, connection, target):
-    if directly_modified(target):
+    suppressed = getattr(target, "_suppress_configuration_changes", False)
+    if directly_modified(target) and not suppressed:
         site_configuration_has_changed(target)
 
 

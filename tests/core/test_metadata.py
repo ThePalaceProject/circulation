@@ -38,9 +38,8 @@ from core.model import (
 )
 from core.model.configuration import ExternalIntegrationLink
 from core.s3 import MockS3Uploader
-from core.testing import DummyHTTPClient, DummyMetadataClient, LogCaptureHandler
+from core.testing import DummyHTTPClient, LogCaptureHandler
 from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
-from core.util.http import RemoteIntegrationException
 from tests.fixtures.csv_files import CSVFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.marc_files import MARCFilesFixture
@@ -1104,8 +1103,6 @@ class TestContributorData:
         )
 
     def test_find_sort_name(self, db: DatabaseTransactionFixture):
-        metadata_client = DummyMetadataClient()
-        metadata_client.lookups["Metadata Client Author"] = "Author, M. C."
         existing_contributor, ignore = db.contributor(
             sort_name="Author, E.", display_name="Existing Author"
         )
@@ -1113,72 +1110,32 @@ class TestContributorData:
 
         # If there's already a sort name, keep it.
         contributor_data.sort_name = "Sort Name"
-        assert True == contributor_data.find_sort_name(db.session, [], metadata_client)
+        assert True == contributor_data.find_sort_name(db.session)
         assert "Sort Name" == contributor_data.sort_name
 
         contributor_data.sort_name = "Sort Name"
         contributor_data.display_name = "Existing Author"
-        assert True == contributor_data.find_sort_name(db.session, [], metadata_client)
+        assert True == contributor_data.find_sort_name(db.session)
         assert "Sort Name" == contributor_data.sort_name
 
         contributor_data.sort_name = "Sort Name"
         contributor_data.display_name = "Metadata Client Author"
-        assert True == contributor_data.find_sort_name(db.session, [], metadata_client)
+        assert True == contributor_data.find_sort_name(db.session)
         assert "Sort Name" == contributor_data.sort_name
 
         # If there's no sort name but there's already an author with the same display name,
         # use that author's sort name.
         contributor_data.sort_name = None
         contributor_data.display_name = "Existing Author"
-        assert True == contributor_data.find_sort_name(db.session, [], metadata_client)
+        assert True == contributor_data.find_sort_name(db.session)
         assert "Author, E." == contributor_data.sort_name
-
-        # If there's no sort name and no existing author, check the metadata wrangler
-        # for a sort name.
-        contributor_data.sort_name = None
-        contributor_data.display_name = "Metadata Client Author"
-        assert True == contributor_data.find_sort_name(db.session, [], metadata_client)
-        assert "Author, M. C." == contributor_data.sort_name
 
         # If there's no sort name, no existing author, and nothing from the metadata
         # wrangler, guess the sort name based on the display name.
         contributor_data.sort_name = None
         contributor_data.display_name = "New Author"
-        assert True == contributor_data.find_sort_name(db.session, [], metadata_client)
+        assert True == contributor_data.find_sort_name(db.session)
         assert "Author, New" == contributor_data.sort_name
-
-    def test_find_sort_name_survives_metadata_client_exception(
-        self, db: DatabaseTransactionFixture
-    ):
-        class Mock(ContributorData):
-            # Simulate an integration error from the metadata wrangler side.
-            def display_name_to_sort_name_through_canonicalizer(
-                self, _db, identifiers, metadata_client
-            ):
-                self.called_with = (_db, identifiers, metadata_client)
-                raise RemoteIntegrationException(
-                    "http://url/", "Metadata wrangler failure!"
-                )
-
-        # Here's a ContributorData that's going to run into an error.
-        contributor_data = Mock()
-        contributor_data.display_name = "Iain M. Banks"
-        identifiers = []
-        metadata_client = object()
-        contributor_data.find_sort_name(db.session, identifiers, metadata_client)
-
-        # display_name_to_sort_name_through_canonicalizer was called
-        # with the arguments we expect.
-        assert (
-            (db.session),
-            identifiers,
-            metadata_client,
-        ) == contributor_data.called_with
-
-        # Although that method raised an exception, we were able to
-        # keep going and use the default display name -> sort name
-        # algorithm to guess at the author name.
-        assert "Banks, Iain M." == contributor_data.sort_name
 
 
 class TestLinkData:

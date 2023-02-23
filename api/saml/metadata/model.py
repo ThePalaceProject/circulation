@@ -3,7 +3,7 @@ import logging
 import re
 from enum import Enum
 from json import JSONDecoder, JSONEncoder
-from json.decoder import WHITESPACE
+from json.decoder import WHITESPACE  # type: ignore
 from typing import Any, Optional, Union
 
 from onelogin.saml2.constants import OneLogin_Saml2_Constants
@@ -833,7 +833,7 @@ class SAMLNameID:
         )
 
     @property
-    def name_format(self) -> SAMLNameIDFormat:
+    def name_format(self) -> str:
         """Returns name ID's format
 
         :return: Name ID's format
@@ -1048,7 +1048,7 @@ class SAMLSubject:
         idp: str,
         name_id: SAMLNameID,
         attribute_statement: SAMLAttributeStatement,
-        valid_till: Optional[Union[datetime.datetime, datetime.timedelta]] = None,
+        valid_till: Optional[Union[datetime.datetime, datetime.timedelta, int]] = None,
     ):
         """Initializes a new instance of Subject class
 
@@ -1061,7 +1061,7 @@ class SAMLSubject:
             - https://wiki.shibboleth.net/confluence/display/IDP30/SessionConfiguration
         """
         self._idp = idp
-        self._name_id = name_id
+        self._name_id: Optional[SAMLNameID] = name_id
         self._attribute_statement = attribute_statement
         self._valid_till = valid_till
 
@@ -1113,7 +1113,7 @@ class SAMLSubject:
         return self._idp
 
     @property
-    def name_id(self) -> SAMLNameID:
+    def name_id(self) -> Optional[SAMLNameID]:
         """Return the name ID.
 
         :return: Name ID

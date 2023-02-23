@@ -2,7 +2,6 @@ import email
 import json
 import logging
 import os
-import sys
 import urllib.parse
 from collections import defaultdict
 from time import mktime
@@ -25,7 +24,6 @@ from core.analytics import Analytics
 from core.app_server import ApplicationVersionController
 from core.app_server import URNLookupController as CoreURNLookupController
 from core.app_server import (
-    cdn_url_for,
     load_facets_from_request,
     load_pagination_from_request,
     url_for,
@@ -139,13 +137,6 @@ class CirculationManager:
     def __init__(self, _db, testing=False):
         self._db = _db
 
-        if not testing:
-            try:
-                self.config = Configuration.load(_db)
-            except CannotLoadConfiguration as exception:
-                self.log.exception(f"Could not load configuration file: {exception}")
-                sys.exit()
-
         self.testing = testing
         self.site_configuration_last_update = (
             Configuration.site_configuration_last_update(self._db, timeout=0)
@@ -210,7 +201,7 @@ class CirculationManager:
             self.load_settings()
             self.site_configuration_last_update = last_update
 
-    @log_elapsed_time(log_method=log.debug, message_prefix="load_settings")
+    @log_elapsed_time(log_method=log.info, message_prefix="load_settings")
     def load_settings(self):
         """Load all necessary configuration settings and external
         integrations from the database.
@@ -250,9 +241,6 @@ class CirculationManager:
         new_circulation_apis = {}
         # Potentially load a CustomIndexView for each library
         new_custom_index_views = {}
-
-        # Make sure there's a site-wide public/private key pair.
-        self.sitewide_key_pair
 
         with elapsed_time_logging(
             log_method=self.log.debug,
@@ -362,41 +350,6 @@ class CirculationManager:
             self._external_search = None
             self.external_search_initialization_exception = e
         return self._external_search
-
-    def cdn_url_for(self, view, *args, **kwargs):
-        """Generate a URL for a view that (probably) passes through a CDN.
-
-        :param view: Name of the view.
-        :param _facets: The faceting object used to generate the document that's calling
-           this method. This may change which function is actually used to generate the
-           URL; in particular, it may disable a CDN that would otherwise be used. This is
-           called _facets just in case there's ever a view that takes 'facets' as a real
-           keyword argument.
-        :param args: Positional arguments to the view function.
-        :param kwargs: Keyword arguments to the view function.
-        """
-        url_for = self._cdn_url_for
-        facets = kwargs.pop("_facets", None)
-        if facets and facets.max_cache_age is CachedFeed.IGNORE_CACHE:
-            # The faceting object in play has disabled cache
-            # checking. A CDN is also a cache, so we should disable
-            # CDN URLs in the feed to make it more likely that the
-            # client continues to see up-to-the-minute feeds as they
-            # click around.
-            url_for = self.url_for
-        return url_for(view, *args, **kwargs)
-
-    def _cdn_url_for(self, *args, **kwargs):
-        """Call the cdn_url_for function.
-
-        Defined solely to be overridden in tests.
-        """
-        return cdn_url_for(*args, **kwargs)
-
-    def url_for(self, view, *args, **kwargs):
-        """Call the url_for function, ensuring that Flask generates an absolute URL."""
-        kwargs["_external"] = True
-        return url_for(view, *args, **kwargs)
 
     def log_lanes(self, lanelist=None, level=0):
         """Output information about the lane layout."""
@@ -621,30 +574,14 @@ class CirculationManager:
             # itself.
             value = json.loads(value)
             value["_debug"] = dict(
-                url=self.url_for("authentication_document", library_short_name=name),
+                url=url_for(
+                    "authentication_document", library_short_name=name, _external=True
+                ),
                 environ=str(dict(flask.request.environ)),
                 cache=str(self.authentication_for_opds_documents),
             )
             value = json.dumps(value)
         return value
-
-    @property
-    def sitewide_key_pair(self):
-        """Look up or create the sitewide public/private key pair."""
-        setting = ConfigurationSetting.sitewide(self._db, Configuration.KEY_PAIR)
-        return Configuration.key_pair(setting)
-
-    @property
-    def public_key_integration_document(self):
-        """Serve a document with the sitewide public key."""
-        site_id = ConfigurationSetting.sitewide(
-            self._db, Configuration.BASE_URL_KEY
-        ).value
-        document = dict(id=site_id)
-
-        public, private = self.sitewide_key_pair
-        document["public_key"] = dict(type="RSA", value=public)
-        return json.dumps(document)
 
 
 class CirculationManagerController(BaseCirculationManagerController):
@@ -901,8 +838,10 @@ class IndexController(CirculationManagerController):
         library_short_name = flask.request.library.short_name
         if not self.has_root_lanes():
             return redirect(
-                self.cdn_url_for(
-                    "acquisition_groups", library_short_name=library_short_name
+                url_for(
+                    "acquisition_groups",
+                    library_short_name=library_short_name,
+                    _external=True,
                 )
             )
 
@@ -943,26 +882,20 @@ class IndexController(CirculationManagerController):
             return root_lane
         if root_lane is None:
             return redirect(
-                self.cdn_url_for(
+                url_for(
                     "acquisition_groups",
                     library_short_name=library_short_name,
+                    _external=True,
                 )
             )
 
         return redirect(
-            self.cdn_url_for(
+            url_for(
                 "acquisition_groups",
                 library_short_name=library_short_name,
                 lane_identifier=root_lane.id,
+                _external=True,
             )
-        )
-
-    def public_key_document(self):
-        """Serves a sitewide public key document"""
-        return Response(
-            self.manager.public_key_integration_document,
-            200,
-            {"Content-Type": "application/opds+json"},
         )
 
 
@@ -985,7 +918,7 @@ class OPDSFeedController(CirculationManagerController):
             patron = self.request_patron
             if patron is not None and patron.root_lane:
                 return redirect(
-                    self.cdn_url_for(
+                    url_for(
                         "acquisition_groups",
                         library_short_name=library.short_name,
                         lane_identifier=patron.root_lane.id,
@@ -1019,11 +952,11 @@ class OPDSFeedController(CirculationManagerController):
         if isinstance(search_engine, ProblemDetail):
             return search_engine
 
-        url = self.cdn_url_for(
+        url = url_for(
             "acquisition_groups",
             lane_identifier=lane_identifier,
             library_short_name=library.short_name,
-            _facets=facets,
+            _external=True,
         )
 
         annotator = self.manager.annotator(lane, facets)
@@ -1059,11 +992,11 @@ class OPDSFeedController(CirculationManagerController):
             return search_engine
 
         library_short_name = flask.request.library.short_name
-        url = self.cdn_url_for(
+        url = url_for(
             "feed",
             lane_identifier=lane_identifier,
             library_short_name=library_short_name,
-            _facets=facets,
+            _external=True,
         )
 
         annotator = self.manager.annotator(lane, facets=facets)
@@ -1086,10 +1019,11 @@ class OPDSFeedController(CirculationManagerController):
             return lane
         library = flask.request.library
         library_short_name = library.short_name
-        url = self.cdn_url_for(
+        url = url_for(
             "navigation_feed",
             lane_identifier=lane_identifier,
             library_short_name=library_short_name,
+            _external=True,
         )
 
         title = lane.display_name
@@ -1111,9 +1045,10 @@ class OPDSFeedController(CirculationManagerController):
         request library.
         """
         library = flask.request.library
-        url = self.cdn_url_for(
+        url = url_for(
             "crawlable_library_feed",
             library_short_name=library.short_name,
+            _external=True,
         )
         title = library.name
         lane = CrawlableCollectionBasedLane()
@@ -1128,8 +1063,8 @@ class OPDSFeedController(CirculationManagerController):
         if not collection:
             return NO_SUCH_COLLECTION
         title = collection.name
-        url = self.cdn_url_for(
-            "crawlable_collection_feed", collection_name=collection.name
+        url = url_for(
+            "crawlable_collection_feed", collection_name=collection.name, _external=True
         )
         lane = CrawlableCollectionBasedLane()
         lane.initialize([collection])
@@ -1155,10 +1090,11 @@ class OPDSFeedController(CirculationManagerController):
             return NO_SUCH_LIST
         library_short_name = library.short_name
         title = list.name
-        url = self.cdn_url_for(
+        url = url_for(
             "crawlable_list_feed",
             list_name=list.name,
             library_short_name=library_short_name,
+            _external=True,
         )
         lane = CrawlableCustomListBasedLane()
         lane.initialize(library, list)
@@ -1255,10 +1191,11 @@ class OPDSFeedController(CirculationManagerController):
         # request arguments, and another way if there is a query
         # string.
         make_url_kwargs = dict(list(facets.items()))
-        make_url = lambda: self.url_for(
+        make_url = lambda: url_for(
             "lane_search",
             lane_identifier=lane_identifier,
             library_short_name=library_short_name,
+            _external=True,
             **make_url_kwargs,
         )
         if not query:
@@ -1310,9 +1247,8 @@ class OPDSFeedController(CirculationManagerController):
         if isinstance(search_engine, ProblemDetail):
             return search_engine
 
-        url = self.url_for(
-            controller_name,
-            library_short_name=library.short_name,
+        url = url_for(
+            controller_name, library_short_name=library.short_name, _external=True
         )
 
         facets = load_facets_from_request(
@@ -2542,8 +2478,10 @@ class SharedCollectionController(CirculationManagerController):
         if not collection:
             return NO_SUCH_COLLECTION
 
-        register_url = self.url_for(
-            "shared_collection_register", collection_name=collection_name
+        register_url = url_for(
+            "shared_collection_register",
+            collection_name=collection_name,
+            _external=True,
         )
         register_link = dict(href=register_url, rel="register")
         content = json.dumps(dict(links=[register_link]))

@@ -1,6 +1,7 @@
 # Palace Manager
 
 [![Test & Build](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml/badge.svg)](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml)
+[![codecov](https://codecov.io/github/thepalaceproject/circulation/branch/main/graph/badge.svg?token=T09QW6DLH6)](https://codecov.io/github/thepalaceproject/circulation)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
@@ -34,6 +35,18 @@ August 2021, development will be done in the `main` branch and the `python2` bra
 absolutely necessary.
 
 ## Set Up
+
+### Docker Compose
+
+In order to help quickly set up a development environment, we include a [docker-compose.yml](./docker-compose.yml)
+file. This docker-compose file, will build the webapp and scripts containers from your local repository, and start
+those containers as well as all the necessary service containers.
+
+You can give this a try by running the following command:
+
+```shell
+docker-compose up --build
+```
 
 ### Python Set Up
 
@@ -542,6 +555,22 @@ Only run the `test_google_analytics_provider` tests with Python 3.8 using docker
 
 ```sh
 tox -e "py38-api-docker" -- tests/api/test_google_analytics_provider.py
+```
+
+### Coverage Reports
+
+Code coverage is automatically tracked with [`pytest-cov`](https://pypi.org/project/pytest-cov/) when tests are run.
+When the tests are run with github actions, the coverage report is automatically uploaded to
+[codecov](https://about.codecov.io/) and the results are added to the relevant pull request.
+
+When running locally, the results from each individual run can be collected and combined into an HTML report using
+the `report` tox environment. This can be run on its own after running the tests, or as part of the tox environment
+selection.
+
+```shell
+# Run core and api tests under Python 3.8, using docker
+# containers for dependencies, and generate code coverage report
+tox -e "py38-{core,api}-docker,report"
 ```
 
 ## Usage with Docker

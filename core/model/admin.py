@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import bcrypt
 from flask_babel import lazy_gettext as _
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -25,6 +27,9 @@ from core.util.problem_detail import ProblemDetail
 from . import Base, get_one, get_one_or_create
 from .hassessioncache import HasSessionCache
 
+if TYPE_CHECKING:
+    from core.model.library import Library  # noqa: autoflake
+
 
 class Admin(Base, HasSessionCache):
 
@@ -40,7 +45,9 @@ class Admin(Base, HasSessionCache):
     password_hashed = Column(Unicode, index=True)
 
     # An Admin may have many roles.
-    roles = relationship("AdminRole", backref="admin", cascade="all, delete-orphan")
+    roles = relationship(
+        "AdminRole", backref="admin", cascade="all, delete-orphan", uselist=True
+    )
 
     # Token age is max 30 minutes, in seconds
     RESET_PASSWORD_TOKEN_MAX_AGE = 1800
@@ -157,7 +164,7 @@ class Admin(Base, HasSessionCache):
         # First check if the admin is a manager of _all_ libraries.
         if self.is_sitewide_library_manager():
             return True
-        # If not, they could stil be a manager of _this_ library.
+        # If not, they could still be a manager of _this_ library.
         def lookup_hook():
             return (
                 get_one(
@@ -274,6 +281,7 @@ class AdminRole(Base, HasSessionCache):
     id = Column(Integer, primary_key=True)
     admin_id = Column(Integer, ForeignKey("admins.id"), nullable=False, index=True)
     library_id = Column(Integer, ForeignKey("libraries.id"), nullable=True, index=True)
+    library = relationship("Library", back_populates="adminroles")
     role = Column(Unicode, nullable=False, index=True)
 
     __table_args__ = (UniqueConstraint("admin_id", "library_id", "role"),)

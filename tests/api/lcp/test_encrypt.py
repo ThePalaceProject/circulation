@@ -1,9 +1,9 @@
 from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
-from parameterized import parameterized
 from pyfakefs.fake_filesystem_unittest import Patcher
 
+from api.lcp.collection import LCPAPI
 from api.lcp.encrypt import (
     LCPEncryptionConfiguration,
     LCPEncryptionException,
@@ -14,92 +14,119 @@ from core.model import Identifier
 from core.model.configuration import (
     ConfigurationFactory,
     ConfigurationStorage,
+    ExternalIntegration,
     HasExternalIntegration,
 )
-from tests.api.lcp import fixtures
-from tests.api.lcp.database_test import DatabaseTest
+from tests.api.lcp import lcp_strings
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestLCPEncryptor(DatabaseTest):
-    @parameterized.expand(
+class LCPEncryptFixture:
+    db: DatabaseTransactionFixture
+    integration: ExternalIntegration
+
+    def __init__(self, db: DatabaseTransactionFixture):
+        self.db = db
+        self.integration = self.db.external_integration(
+            protocol=LCPAPI.NAME, goal=ExternalIntegration.LICENSE_GOAL
+        )
+
+
+@pytest.fixture(scope="function")
+def lcp_encrypt_fixture(db: DatabaseTransactionFixture) -> LCPEncryptFixture:
+    return LCPEncryptFixture(db)
+
+
+class TestLCPEncryptor:
+    @pytest.mark.parametrize(
+        "_, file_path, lcpencrypt_output, expected_result, expected_exception, create_file",
         [
             (
                 "non_existing_directory",
-                fixtures.NOT_EXISTING_BOOK_FILE_PATH,
-                fixtures.LCPENCRYPT_NOT_EXISTING_DIRECTORY_RESULT,
+                lcp_strings.NOT_EXISTING_BOOK_FILE_PATH,
+                lcp_strings.LCPENCRYPT_NOT_EXISTING_DIRECTORY_RESULT,
                 None,
                 LCPEncryptionException(
-                    fixtures.LCPENCRYPT_NOT_EXISTING_DIRECTORY_RESULT.strip()
+                    lcp_strings.LCPENCRYPT_NOT_EXISTING_DIRECTORY_RESULT.strip()
                 ),
                 False,
             ),
             (
                 "failed_encryption",
-                fixtures.NOT_EXISTING_BOOK_FILE_PATH,
-                fixtures.LCPENCRYPT_FAILED_ENCRYPTION_RESULT,
+                lcp_strings.NOT_EXISTING_BOOK_FILE_PATH,
+                lcp_strings.LCPENCRYPT_FAILED_ENCRYPTION_RESULT,
                 None,
                 LCPEncryptionException("Encryption failed"),
+                True,
             ),
             (
                 "successful_encryption",
-                fixtures.EXISTING_BOOK_FILE_PATH,
-                fixtures.LCPENCRYPT_SUCCESSFUL_ENCRYPTION_RESULT,
+                lcp_strings.EXISTING_BOOK_FILE_PATH,
+                lcp_strings.LCPENCRYPT_SUCCESSFUL_ENCRYPTION_RESULT,
                 LCPEncryptionResult(
-                    content_id=fixtures.BOOK_IDENTIFIER,
-                    content_encryption_key=fixtures.CONTENT_ENCRYPTION_KEY,
-                    protected_content_location=fixtures.PROTECTED_CONTENT_LOCATION,
-                    protected_content_disposition=fixtures.PROTECTED_CONTENT_DISPOSITION,
-                    protected_content_type=fixtures.PROTECTED_CONTENT_TYPE,
-                    protected_content_length=fixtures.PROTECTED_CONTENT_LENGTH,
-                    protected_content_sha256=fixtures.PROTECTED_CONTENT_SHA256,
+                    content_id=lcp_strings.BOOK_IDENTIFIER,
+                    content_encryption_key=lcp_strings.CONTENT_ENCRYPTION_KEY,
+                    protected_content_location=lcp_strings.PROTECTED_CONTENT_LOCATION,
+                    protected_content_disposition=lcp_strings.PROTECTED_CONTENT_DISPOSITION,
+                    protected_content_type=lcp_strings.PROTECTED_CONTENT_TYPE,
+                    protected_content_length=lcp_strings.PROTECTED_CONTENT_LENGTH,
+                    protected_content_sha256=lcp_strings.PROTECTED_CONTENT_SHA256,
                 ),
+                None,
+                True,
             ),
             (
                 "failed_lcp_server_notification",
-                fixtures.EXISTING_BOOK_FILE_PATH,
-                fixtures.LCPENCRYPT_FAILED_LCPSERVER_NOTIFICATION,
+                lcp_strings.EXISTING_BOOK_FILE_PATH,
+                lcp_strings.LCPENCRYPT_FAILED_LCPSERVER_NOTIFICATION,
                 None,
                 LCPEncryptionException(
-                    fixtures.LCPENCRYPT_FAILED_LCPSERVER_NOTIFICATION.strip()
+                    lcp_strings.LCPENCRYPT_FAILED_LCPSERVER_NOTIFICATION.strip()
                 ),
+                True,
             ),
             (
                 "successful_lcp_server_notification",
-                fixtures.EXISTING_BOOK_FILE_PATH,
-                fixtures.LCPENCRYPT_SUCCESSFUL_NOTIFICATION_RESULT,
+                lcp_strings.EXISTING_BOOK_FILE_PATH,
+                lcp_strings.LCPENCRYPT_SUCCESSFUL_NOTIFICATION_RESULT,
                 LCPEncryptionResult(
-                    content_id=fixtures.BOOK_IDENTIFIER,
-                    content_encryption_key=fixtures.CONTENT_ENCRYPTION_KEY,
-                    protected_content_location=fixtures.PROTECTED_CONTENT_LOCATION,
-                    protected_content_disposition=fixtures.PROTECTED_CONTENT_DISPOSITION,
-                    protected_content_type=fixtures.PROTECTED_CONTENT_TYPE,
-                    protected_content_length=fixtures.PROTECTED_CONTENT_LENGTH,
-                    protected_content_sha256=fixtures.PROTECTED_CONTENT_SHA256,
+                    content_id=lcp_strings.BOOK_IDENTIFIER,
+                    content_encryption_key=lcp_strings.CONTENT_ENCRYPTION_KEY,
+                    protected_content_location=lcp_strings.PROTECTED_CONTENT_LOCATION,
+                    protected_content_disposition=lcp_strings.PROTECTED_CONTENT_DISPOSITION,
+                    protected_content_type=lcp_strings.PROTECTED_CONTENT_TYPE,
+                    protected_content_length=lcp_strings.PROTECTED_CONTENT_LENGTH,
+                    protected_content_sha256=lcp_strings.PROTECTED_CONTENT_SHA256,
                 ),
+                None,
+                True,
             ),
-        ]
+        ],
     )
     def test_local_lcpencrypt(
         self,
+        lcp_encrypt_fixture,
         _,
         file_path,
         lcpencrypt_output,
         expected_result,
-        expected_exception=None,
-        create_file=True,
+        expected_exception,
+        create_file,
     ):
         # Arrange
         integration_owner = create_autospec(spec=HasExternalIntegration)
         integration_owner.external_integration = MagicMock(
-            return_value=self._integration
+            return_value=lcp_encrypt_fixture.integration
         )
         configuration_storage = ConfigurationStorage(integration_owner)
         configuration_factory = ConfigurationFactory()
         encryptor = LCPEncryptor(configuration_storage, configuration_factory)
-        identifier = Identifier(identifier=fixtures.BOOK_IDENTIFIER)
+        identifier = Identifier(identifier=lcp_strings.BOOK_IDENTIFIER)
 
         with configuration_factory.create(
-            configuration_storage, self._db, LCPEncryptionConfiguration
+            configuration_storage,
+            lcp_encrypt_fixture.db.session,
+            LCPEncryptionConfiguration,
         ) as configuration:
             configuration.lcpencrypt_location = (
                 LCPEncryptionConfiguration.DEFAULT_LCPENCRYPT_LOCATION
@@ -121,7 +148,9 @@ class TestLCPEncryptor(DatabaseTest):
                             expected_exception.__class__
                         ) as exception_metadata:
                             encryptor.encrypt(
-                                self._db, file_path, identifier.identifier
+                                lcp_encrypt_fixture.db.session,
+                                file_path,
+                                identifier.identifier,
                             )
 
                         # Assert
@@ -129,6 +158,8 @@ class TestLCPEncryptor(DatabaseTest):
                     else:
                         # Assert
                         result = encryptor.encrypt(
-                            self._db, file_path, identifier.identifier
+                            lcp_encrypt_fixture.db.session,
+                            file_path,
+                            identifier.identifier,
                         )
                         assert result == expected_result

@@ -130,7 +130,7 @@ class Work(Base):
     )
 
     # A Work takes its presentation metadata from a single Edition.
-    # But this Edition is a composite of provider, metadata wrangler, admin interface, etc.-derived Editions.
+    # But this Edition is a composite of provider, admin interface, etc.-derived Editions.
     presentation_edition_id = Column(Integer, ForeignKey("editions.id"), index=True)
 
     # One Work may have many associated WorkCoverageRecords.

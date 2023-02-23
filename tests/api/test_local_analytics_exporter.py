@@ -3,18 +3,18 @@ from datetime import date, datetime, timedelta
 
 from api.local_analytics_exporter import LocalAnalyticsExporter
 from core.model import CirculationEvent, Genre, WorkGenre, get_one_or_create
-from core.testing import DatabaseTest
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestLocalAnalyticsExporter(DatabaseTest):
+class TestLocalAnalyticsExporter:
     """Tests the local analytics exporter."""
 
-    def test_export(self):
+    def test_export(self, db: DatabaseTransactionFixture):
         exporter = LocalAnalyticsExporter()
-        c1 = self._collection(name="c1")
-        c2 = self._collection(name="c2")
-        w1 = self._work(with_open_access_download=True)
-        w2 = self._work(with_open_access_download=True)
+        c1 = db.collection(name="c1")
+        c2 = db.collection(name="c2")
+        w1 = db.work(with_open_access_download=True)
+        w2 = db.work(with_open_access_download=True)
         [lp1] = w1.license_pools
         [lp2] = w2.license_pools
         lp1.collection = c1
@@ -27,16 +27,16 @@ class TestLocalAnalyticsExporter(DatabaseTest):
         edition2 = w2.presentation_edition
         identifier1 = w1.presentation_edition.primary_identifier
         identifier2 = w2.presentation_edition.primary_identifier
-        genres = self._db.query(Genre).order_by(Genre.name).all()
-        get_one_or_create(self._db, WorkGenre, work=w1, genre=genres[0], affinity=0.2)
-        get_one_or_create(self._db, WorkGenre, work=w1, genre=genres[1], affinity=0.3)
-        get_one_or_create(self._db, WorkGenre, work=w1, genre=genres[2], affinity=0.5)
+        genres = db.session.query(Genre).order_by(Genre.name).all()
+        get_one_or_create(db.session, WorkGenre, work=w1, genre=genres[0], affinity=0.2)
+        get_one_or_create(db.session, WorkGenre, work=w1, genre=genres[1], affinity=0.3)
+        get_one_or_create(db.session, WorkGenre, work=w1, genre=genres[2], affinity=0.5)
 
         # We expect the genre with the highest affinity to be put first.
         ordered_genre_string = ",".join(
             [genres[2].name, genres[1].name, genres[0].name]
         )
-        get_one_or_create(self._db, WorkGenre, work=w2, genre=genres[1], affinity=0.5)
+        get_one_or_create(db.session, WorkGenre, work=w2, genre=genres[1], affinity=0.5)
         types = [
             CirculationEvent.DISTRIBUTOR_CHECKIN,
             CirculationEvent.DISTRIBUTOR_CHECKOUT,
@@ -51,7 +51,7 @@ class TestLocalAnalyticsExporter(DatabaseTest):
         # all with the same .location.
         for type in types:
             get_one_or_create(
-                self._db,
+                db.session,
                 CirculationEvent,
                 license_pool=lp1,
                 type=type,
@@ -64,7 +64,7 @@ class TestLocalAnalyticsExporter(DatabaseTest):
         # Create a circulation event for a different book,
         # with no .location.
         get_one_or_create(
-            self._db,
+            db.session,
             CirculationEvent,
             license_pool=lp2,
             type=types[3],
@@ -74,7 +74,7 @@ class TestLocalAnalyticsExporter(DatabaseTest):
 
         # Run a query that excludes the last event created.
         today = date.today() - timedelta(days=1)
-        output = exporter.export(self._db, today, time)
+        output = exporter.export(db.session, today, time)
         reader = csv.reader(
             [row for row in output.split("\r\n") if row], dialect=csv.excel
         )
@@ -114,7 +114,7 @@ class TestLocalAnalyticsExporter(DatabaseTest):
             assert constant == row[2:]
 
         # Now run a query that includes the last event created.
-        output = exporter.export(self._db, today, time + timedelta(minutes=1))
+        output = exporter.export(db.session, today, time + timedelta(minutes=1))
         reader = csv.reader(
             [row for row in output.split("\r\n") if row], dialect=csv.excel
         )
@@ -153,7 +153,7 @@ class TestLocalAnalyticsExporter(DatabaseTest):
             lp2.data_source.name,
         ] == rows[-1][1:]
 
-        output = exporter.export(self._db, today, today)
+        output = exporter.export(db.session, today, today)
         reader = csv.reader(
             [row for row in output.split("\r\n") if row], dialect=csv.excel
         )
@@ -165,12 +165,12 @@ class TestLocalAnalyticsExporter(DatabaseTest):
         library_name = "Library1"
         library_short_name = "LIB1"
 
-        library = self._library(name=library_name, short_name=library_short_name)
-        library2 = self._library()
+        library = db.library(name=library_name, short_name=library_short_name)
+        library2 = db.library()
         time = datetime.now() - timedelta(minutes=num)
         for type in types:
             get_one_or_create(
-                self._db,
+                db.session,
                 CirculationEvent,
                 license_pool=lp1,
                 type=type,
@@ -182,7 +182,7 @@ class TestLocalAnalyticsExporter(DatabaseTest):
             time += timedelta(minutes=1)
 
         today = date.today() - timedelta(days=1)
-        output = exporter.export(self._db, today, time)
+        output = exporter.export(db.session, today, time)
         reader = csv.reader(
             [row for row in output.split("\r\n") if row], dialect=csv.excel
         )
@@ -194,7 +194,7 @@ class TestLocalAnalyticsExporter(DatabaseTest):
 
         # Pass in the library ID.
         today = date.today() - timedelta(days=1)
-        output = exporter.export(self._db, today, time, library=library)
+        output = exporter.export(db.session, today, time, library=library)
         reader = csv.reader(
             [row for row in output.split("\r\n") if row], dialect=csv.excel
         )
@@ -215,7 +215,7 @@ class TestLocalAnalyticsExporter(DatabaseTest):
         # should be no events associated with this library.
         time = datetime.now() - timedelta(minutes=num)
         today = date.today() - timedelta(days=1)
-        output = exporter.export(self._db, today, time, library=library2)
+        output = exporter.export(db.session, today, time, library=library2)
         reader = csv.reader(
             [row for row in output.split("\r\n") if row], dialect=csv.excel
         )
@@ -240,7 +240,7 @@ class TestLocalAnalyticsExporter(DatabaseTest):
         time = datetime.now() - timedelta(minutes=num)
         for type in new_types:
             get_one_or_create(
-                self._db,
+                db.session,
                 CirculationEvent,
                 license_pool=lp1,
                 type=type,
@@ -250,7 +250,7 @@ class TestLocalAnalyticsExporter(DatabaseTest):
             time += timedelta(minutes=1)
 
         output = exporter.export(
-            self._db, today, time + timedelta(minutes=1), user_added_locations
+            db.session, today, time + timedelta(minutes=1), user_added_locations
         )
         reader = csv.reader(
             [row for row in output.split("\r\n") if row], dialect=csv.excel
@@ -262,7 +262,7 @@ class TestLocalAnalyticsExporter(DatabaseTest):
 
         for type in new_types:
             get_one_or_create(
-                self._db,
+                db.session,
                 CirculationEvent,
                 license_pool=lp1,
                 type=type,
@@ -273,7 +273,7 @@ class TestLocalAnalyticsExporter(DatabaseTest):
             time += timedelta(minutes=1)
 
         output = exporter.export(
-            self._db, today, time + timedelta(minutes=1), user_added_locations
+            db.session, today, time + timedelta(minutes=1), user_added_locations
         )
         reader = csv.reader(
             [row for row in output.split("\r\n") if row], dialect=csv.excel
@@ -285,7 +285,7 @@ class TestLocalAnalyticsExporter(DatabaseTest):
 
         for type in new_types:
             get_one_or_create(
-                self._db,
+                db.session,
                 CirculationEvent,
                 license_pool=lp1,
                 type=type,
@@ -296,7 +296,7 @@ class TestLocalAnalyticsExporter(DatabaseTest):
             time += timedelta(minutes=1)
 
         output = exporter.export(
-            self._db, today, time + timedelta(minutes=1), user_added_locations
+            db.session, today, time + timedelta(minutes=1), user_added_locations
         )
         reader = csv.reader(
             [row for row in output.split("\r\n") if row], dialect=csv.excel

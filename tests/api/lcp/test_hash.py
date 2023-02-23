@@ -33,7 +33,6 @@ class TestHasherFactory:
         ]
     )
     def test_create(self, _, hashing_algorithm, value, expected_value):
-        #
         hasher_factory = HasherFactory()
         hasher = hasher_factory.create(hashing_algorithm)
 

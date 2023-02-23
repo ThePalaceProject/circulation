@@ -2,7 +2,6 @@ import json
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlencode
 
-from core.cdn import cdnify
 from core.external_search import ExternalSearchIndex
 from core.lane import Facets, Pagination, WorkList
 from core.model.cachedfeed import CachedFeed
@@ -178,7 +177,7 @@ class OPDS2Annotator:
     def feed_links(self):
         """Create links for a publication feed"""
         links = [
-            {"href": cdnify(self.url), "rel": "self", "type": self.OPDS2_TYPE},
+            {"href": self.url, "rel": "self", "type": self.OPDS2_TYPE},
         ]
         # If another page is present, then add the next link
         if self.pagination.has_next_page:
@@ -190,9 +189,7 @@ class OPDS2Annotator:
                 doseq=True,
             )
             next_url = self.url.split("?", 1)[0] + "?" + next_query_string
-            links.append(
-                {"href": cdnify(next_url), "rel": "next", "type": self.OPDS2_TYPE}
-            )
+            links.append({"href": next_url, "rel": "next", "type": self.OPDS2_TYPE})
 
         return links
 

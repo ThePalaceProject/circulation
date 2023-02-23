@@ -51,6 +51,7 @@ from core.model import (
 from core.model.devicetokens import DeviceToken
 from core.model.licensing import License, LicensePoolDeliveryMechanism, LicenseStatus
 from core.util.datetime_helpers import utc_now
+from tests.fixtures.api_config import KeyPairFixture
 
 
 class ApplicationFixture:
@@ -126,11 +127,6 @@ class DatabaseFixture:
         DatabaseFixture._load_core_model_classes()
         engine, connection = DatabaseFixture._get_database_connection()
 
-        # Avoid CannotLoadConfiguration errors related to CDN integrations.
-        Configuration.instance[Configuration.INTEGRATIONS] = Configuration.instance.get(
-            Configuration.INTEGRATIONS, {}
-        )
-        Configuration.instance[Configuration.INTEGRATIONS][ExternalIntegration.CDN] = {}
         return DatabaseFixture(engine, connection)
 
     def close(self):
@@ -211,14 +207,8 @@ class DatabaseTransactionFixture:
         # Reset the Analytics singleton between tests.
         Analytics._reset_singleton_instance()
 
-        # Also roll back any record of those changes in the
-        # Configuration instance.
-        for key in [
-            Configuration.SITE_CONFIGURATION_LAST_UPDATE,
-            Configuration.LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE,
-        ]:
-            if key in Configuration.instance:
-                del Configuration.instance[key]
+        Configuration.SITE_CONFIGURATION_LAST_UPDATE = None
+        Configuration.LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE = None
 
     @property
     def database(self) -> DatabaseFixture:
@@ -912,7 +902,6 @@ class TemporaryDirectoryConfigurationFixture:
         fix = TemporaryDirectoryConfigurationFixture()
         fix._directory = tempfile.mkdtemp(dir="/tmp")
         assert isinstance(fix._directory, str)
-        Configuration.instance[Configuration.DATA_DIRECTORY] = fix._directory
         return fix
 
     def close(self):
@@ -938,7 +927,7 @@ def temporary_directory_configuration() -> Iterable[
 
 
 @pytest.fixture(scope="session")
-def application() -> Iterable[ApplicationFixture]:
+def application(mock_config_key_pair: KeyPairFixture) -> Iterable[ApplicationFixture]:
     app = ApplicationFixture.create()
     yield app
     app.close()

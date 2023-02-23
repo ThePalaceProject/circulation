@@ -5,21 +5,21 @@ import pytest
 from api.authenticator import PatronData
 from api.config import CannotLoadConfiguration
 from api.simple_authentication import SimpleAuthenticationProvider
-from core.testing import DatabaseTest
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestSimpleAuth(DatabaseTest):
-    def test_simple(self):
+class TestSimpleAuth:
+    def test_simple(self, db: DatabaseTransactionFixture):
         p = SimpleAuthenticationProvider
-        integration = self._external_integration(self._str)
+        integration = db.external_integration(db.fresh_str())
 
         with pytest.raises(CannotLoadConfiguration) as excinfo:
-            p(self._default_library, integration)
+            p(db.default_library(), integration)
         assert "Test identifier and password not set." in str(excinfo.value)
 
         integration.setting(p.TEST_IDENTIFIER).value = "barcode"
         integration.setting(p.TEST_PASSWORD).value = "pass"
-        provider = p(self._default_library, integration)
+        provider = p(db.default_library(), integration)
 
         assert None == provider.remote_authenticate("user", "wrongpass")
         assert None == provider.remote_authenticate("user", None)
@@ -33,23 +33,23 @@ class TestSimpleAuth(DatabaseTest):
 
         # For the next test, set the test neighborhood.
         integration.setting(p.TEST_NEIGHBORHOOD).value = "neighborhood"
-        provider = p(self._default_library, integration)
+        provider = p(db.default_library(), integration)
 
         # User can also authenticate by their 'username'
         user2 = provider.remote_authenticate("barcode_username", "pass")
         assert "barcode" == user2.authorization_identifier
         assert "neighborhood" == user2.neighborhood
 
-    def test_no_password_authentication(self):
+    def test_no_password_authentication(self, db: DatabaseTransactionFixture):
         """The SimpleAuthenticationProvider can be made even
         simpler by having it authenticate solely based on username.
         """
         p = SimpleAuthenticationProvider
-        integration = self._external_integration(self._str)
+        integration = db.external_integration(db.fresh_str())
         integration.setting(p.TEST_IDENTIFIER).value = "barcode"
         integration.setting(p.TEST_PASSWORD).value = "pass"
         integration.setting(p.PASSWORD_KEYBOARD).value = p.NULL_KEYBOARD
-        provider = p(self._default_library, integration)
+        provider = p(db.default_library(), integration)
 
         # If you don't provide a password, you're in.
         user = provider.remote_authenticate("barcode", None)
@@ -61,12 +61,12 @@ class TestSimpleAuth(DatabaseTest):
         # If you provide any password, you're out.
         assert None == provider.remote_authenticate("barcode", "pass")
 
-    def test_additional_identifiers(self):
+    def test_additional_identifiers(self, db: DatabaseTransactionFixture):
         p = SimpleAuthenticationProvider
-        integration = self._external_integration(self._str)
+        integration = db.external_integration(db.fresh_str())
 
         with pytest.raises(CannotLoadConfiguration) as excinfo:
-            p(self._default_library, integration)
+            p(db.default_library(), integration)
         assert "Test identifier and password not set." in str(excinfo.value)
 
         integration.setting(p.TEST_IDENTIFIER).value = "barcode"
@@ -74,7 +74,7 @@ class TestSimpleAuth(DatabaseTest):
         integration.setting(p.ADDITIONAL_TEST_IDENTIFIERS).value = json.dumps(
             ["a", "b", "c"]
         )
-        provider = p(self._default_library, integration)
+        provider = p(db.default_library(), integration)
 
         assert None == provider.remote_authenticate("a", None)
         assert None == provider.remote_authenticate(None, "pass")
@@ -102,8 +102,7 @@ class TestSimpleAuth(DatabaseTest):
         user5 = provider.remote_authenticate("barcode", "pass")
         assert "barcode" == user5.authorization_identifier
 
-    def test_generate_patrondata(self):
-
+    def test_generate_patrondata(self, db: DatabaseTransactionFixture):
         m = SimpleAuthenticationProvider.generate_patrondata
 
         # Pass in numeric barcode as identifier
@@ -126,15 +125,15 @@ class TestSimpleAuth(DatabaseTest):
         result = m("1234", "Echo Park")
         assert result.neighborhood == "Echo Park"
 
-    def test__remote_patron_lookup(self):
+    def test__remote_patron_lookup(self, db: DatabaseTransactionFixture):
         p = SimpleAuthenticationProvider
-        integration = self._external_integration(self._str)
+        integration = db.external_integration(db.fresh_str())
         integration.setting(p.TEST_IDENTIFIER).value = "barcode"
         integration.setting(p.TEST_PASSWORD).value = "pass"
         integration.setting(p.PASSWORD_KEYBOARD).value = p.NULL_KEYBOARD
-        provider = p(self._default_library, integration)
+        provider = p(db.default_library(), integration)
         patron_data = PatronData(authorization_identifier="barcode")
-        patron = self._patron()
+        patron = db.patron()
         patron.authorization_identifier = "barcode"
 
         # Returns None if nothing is passed in

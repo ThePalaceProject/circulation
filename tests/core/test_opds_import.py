@@ -1,8 +1,6 @@
-import datetime
 import random
 from io import StringIO
 from unittest.mock import MagicMock, create_autospec, patch
-from urllib.parse import quote
 
 import pytest
 import requests_mock
@@ -22,7 +20,6 @@ from core.config import IntegrationException
 from core.coverage import CoverageFailure
 from core.metadata_layer import CirculationData, LinkData, Metadata
 from core.model import (
-    Collection,
     Contributor,
     CoverageRecord,
     DataSource,
@@ -46,18 +43,15 @@ from core.model.configuration import (
     HasExternalIntegration,
 )
 from core.opds_import import (
-    AccessNotAuthenticated,
-    MetadataWranglerOPDSLookup,
     OPDSImporter,
     OPDSImporterConfiguration,
     OPDSImportMonitor,
     OPDSXMLParser,
 )
 from core.s3 import MockS3Uploader, S3Uploader, S3UploaderConfiguration
-from core.selftest import SelfTestResult
-from core.testing import DummyHTTPClient, MockRequestsRequest, MockRequestsResponse
+from core.testing import DummyHTTPClient
 from core.util import first_or_default
-from core.util.datetime_helpers import datetime_utc, utc_now
+from core.util.datetime_helpers import datetime_utc
 from core.util.http import BadResponseException
 from core.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -85,396 +79,6 @@ class DoomedWorkOPDSImporter(OPDSImporter):
         else:
             # Any other import fails.
             raise Exception("Utter work failure!")
-
-
-class MetadataWranglerOPDSLookupFixture:
-    transaction: DatabaseTransactionFixture
-    integration: ExternalIntegration
-    collection: Collection
-
-
-@pytest.fixture()
-def wrangler_opds_lookup_fixture(
-    db: DatabaseTransactionFixture,
-) -> MetadataWranglerOPDSLookupFixture:
-    data = MetadataWranglerOPDSLookupFixture()
-    data.transaction = db
-    data.integration = db.external_integration(
-        ExternalIntegration.METADATA_WRANGLER,
-        goal=ExternalIntegration.METADATA_GOAL,
-        password="secret",
-        url="http://metadata.in",
-    )
-    data.collection = db.collection(
-        protocol=ExternalIntegration.OVERDRIVE, external_account_id="library"
-    )
-    return data
-
-
-class TestMetadataWranglerOPDSLookup:
-    def test_authenticates_wrangler_requests(
-        self, wrangler_opds_lookup_fixture: MetadataWranglerOPDSLookupFixture
-    ):
-        """Authenticated details are set for Metadata Wrangler requests
-        when they configured for the ExternalIntegration
-        """
-        data, transaction, session = (
-            wrangler_opds_lookup_fixture,
-            wrangler_opds_lookup_fixture.transaction,
-            wrangler_opds_lookup_fixture.transaction.session,
-        )
-
-        lookup = MetadataWranglerOPDSLookup.from_config(session)
-        assert "secret" == lookup.shared_secret
-        assert True == lookup.authenticated
-
-        # The details are None if client configuration isn't set at all.
-        data.integration.password = None
-        lookup = MetadataWranglerOPDSLookup.from_config(session)
-        assert None == lookup.shared_secret
-        assert False == lookup.authenticated
-
-    def test_add_args(
-        self, wrangler_opds_lookup_fixture: MetadataWranglerOPDSLookupFixture
-    ):
-        data, transaction, session = (
-            wrangler_opds_lookup_fixture,
-            wrangler_opds_lookup_fixture.transaction,
-            wrangler_opds_lookup_fixture.transaction.session,
-        )
-
-        lookup = MetadataWranglerOPDSLookup.from_config(session)
-        args = "greeting=hello"
-
-        # If the base url doesn't have any arguments, args are created.
-        base_url = transaction.fresh_url()
-        assert base_url + "?" + args == lookup.add_args(base_url, args)
-
-        # If the base url has an argument already, additional args are appended.
-        base_url = transaction.fresh_url() + "?data_source=banana"
-        assert base_url + "&" + args == lookup.add_args(base_url, args)
-
-    def test_get_collection_url(
-        self, wrangler_opds_lookup_fixture: MetadataWranglerOPDSLookupFixture
-    ):
-        data, transaction, session = (
-            wrangler_opds_lookup_fixture,
-            wrangler_opds_lookup_fixture.transaction,
-            wrangler_opds_lookup_fixture.transaction.session,
-        )
-        lookup = MetadataWranglerOPDSLookup.from_config(session)
-
-        # If the lookup client doesn't have a Collection, an error is
-        # raised.
-        pytest.raises(ValueError, lookup.get_collection_url, "banana")
-
-        # If the lookup client isn't authenticated, an error is raised.
-        lookup.collection = data.collection
-        lookup.shared_secret = None
-        pytest.raises(AccessNotAuthenticated, lookup.get_collection_url, "banana")
-
-        # With both authentication and a specific Collection,
-        # a URL is returned.
-        lookup.shared_secret = "secret"
-        expected = "{}{}/banana".format(
-            lookup.base_url,
-            data.collection.metadata_identifier,
-        )
-        assert expected == lookup.get_collection_url("banana")
-
-        # With an OPDS_IMPORT collection, a data source is included
-        opds = transaction.collection(
-            protocol=ExternalIntegration.OPDS_IMPORT,
-            external_account_id=transaction.fresh_url(),
-            data_source_name=DataSource.OA_CONTENT_SERVER,
-        )
-        lookup.collection = opds
-        data_source_args = "?data_source=%s" % quote(opds.data_source.name)
-        assert lookup.get_collection_url("banana").endswith(data_source_args)
-
-    def test_lookup_endpoint(
-        self, wrangler_opds_lookup_fixture: MetadataWranglerOPDSLookupFixture
-    ):
-        data, transaction, session = (
-            wrangler_opds_lookup_fixture,
-            wrangler_opds_lookup_fixture.transaction,
-            wrangler_opds_lookup_fixture.transaction.session,
-        )
-        # A Collection-specific endpoint is returned if authentication
-        # and a Collection is available.
-        lookup = MetadataWranglerOPDSLookup.from_config(
-            session, collection=data.collection
-        )
-
-        expected = data.collection.metadata_identifier + "/lookup"
-        assert expected == lookup.lookup_endpoint
-
-        # Without a collection, an unspecific endpoint is returned.
-        lookup.collection = None
-        assert "lookup" == lookup.lookup_endpoint
-
-        # Without authentication, an unspecific endpoint is returned.
-        lookup.shared_secret = None
-        lookup.collection = data.collection
-        assert "lookup" == lookup.lookup_endpoint
-
-        # With authentication and a collection, a specific endpoint is returned.
-        lookup.shared_secret = "secret"
-        expected = "%s/lookup" % data.collection.metadata_identifier
-        assert expected == lookup.lookup_endpoint
-
-    # Tests of the self-test framework.
-
-    def test__run_self_tests(
-        self, wrangler_opds_lookup_fixture: MetadataWranglerOPDSLookupFixture
-    ):
-        data, transaction, session = (
-            wrangler_opds_lookup_fixture,
-            wrangler_opds_lookup_fixture.transaction,
-            wrangler_opds_lookup_fixture.transaction.session,
-        )
-        # MetadataWranglerOPDSLookup.run_self_tests() finds all the
-        # collections with a metadata identifier, recursively
-        # instantates a MetadataWranglerOPDSLookup for each, and calls
-        # _run_self_tests_on_one_collection() on each.
-
-        # Ensure there are two collections: one with a metadata
-        # identifier and one without.
-        no_unique_id = transaction.default_collection()
-        with_unique_id = data.collection
-        with_unique_id.external_account_id = "unique id"
-
-        # Here, we'll define a Mock class to take the place of the
-        # recursively-instantiated MetadataWranglerOPDSLookup.
-        class Mock(MetadataWranglerOPDSLookup):
-            instances = []
-
-            @classmethod
-            def from_config(cls, _db, collection):
-                lookup = Mock("http://mock-url/")
-                cls.instances.append(lookup)
-                lookup._db = _db
-                lookup.collection = collection
-                lookup.called = False
-                return lookup
-
-            def _run_collection_self_tests(self):
-                self.called = True
-                yield "Some self-test results for %s" % self.collection.name
-
-        lookup = MetadataWranglerOPDSLookup("http://url/")
-
-        # Running the self tests with no specific collection caused
-        # them to be run on the one Collection we could find that has
-        # a metadata identifier.
-
-        # _run_self_tests returns a single test result
-        [result] = lookup._run_self_tests(session, lookup_class=Mock)
-
-        # That Collection is keyed to a list containing a single test
-        # result, obtained by calling Mock._run_collection_self_tests().
-        assert "Some self-test results for %s" % with_unique_id.name == result
-
-        # Here's the Mock object whose _run_collection_self_tests()
-        # was called. Let's make sure it was instantiated properly.
-        [mock_lookup] = Mock.instances
-        assert session == mock_lookup._db
-        assert with_unique_id == mock_lookup.collection
-        assert True == mock_lookup.called
-
-    def test__run_collection_self_tests(
-        self, wrangler_opds_lookup_fixture: MetadataWranglerOPDSLookupFixture
-    ):
-        data, transaction, session = (
-            wrangler_opds_lookup_fixture,
-            wrangler_opds_lookup_fixture.transaction,
-            wrangler_opds_lookup_fixture.transaction.session,
-        )
-        # Verify that calling _run_collection_self_tests calls
-        # _feed_self_test a couple of times, and yields a
-        # SelfTestResult for each call.
-
-        class Mock(MetadataWranglerOPDSLookup):
-            feed_self_tests = []
-
-            def _feed_self_test(self, title, method, *args):
-                self.feed_self_tests.append((title, method, args))
-                return "A feed self-test for {}: {}".format(
-                    self.collection.unique_account_id,
-                    title,
-                )
-
-        # If there is no associated collection, _run_collection_self_tests()
-        # does nothing.
-        no_collection = Mock("http://url/")
-        assert [] == list(no_collection._run_collection_self_tests())
-
-        # Same if there is an associated collection but it has no
-        # metadata identifier.
-        with_collection = Mock(
-            "http://url/", collection=transaction.default_collection()
-        )
-        assert [] == list(with_collection._run_collection_self_tests())
-
-        # If there is a metadata identifier, our mocked
-        # _feed_self_test is called twice. Here are the results.
-        transaction.default_collection().external_account_id = "unique-id"
-        [r1, r2] = with_collection._run_collection_self_tests()
-
-        assert "A feed self-test for unique-id: Metadata updates in last 24 hours" == r1
-        assert (
-            "A feed self-test for unique-id: Titles where we could (but haven't) provide information to the metadata wrangler"
-            == r2
-        )
-
-        # Let's make sure _feed_self_test() was called with the right
-        # arguments.
-        call1, call2 = with_collection.feed_self_tests
-
-        # The first self-test wants to count updates for the last 24
-        # hours.
-        title1, method1, args1 = call1
-        assert "Metadata updates in last 24 hours" == title1
-        assert with_collection.updates == method1
-        [timestamp] = args1
-        one_day_ago = utc_now() - datetime.timedelta(hours=24)
-        assert (one_day_ago - timestamp).total_seconds() < 1
-
-        # The second self-test wants to count work that the metadata
-        # wrangler needs done but hasn't been done yet.
-        title2, method2, args2 = call2
-        assert (
-            "Titles where we could (but haven't) provide information to the metadata wrangler"
-            == title2
-        )
-        assert with_collection.metadata_needed == method2
-        assert () == args2
-
-    def test__feed_self_test(
-        self, wrangler_opds_lookup_fixture: MetadataWranglerOPDSLookupFixture
-    ):
-        data, transaction, session = (
-            wrangler_opds_lookup_fixture,
-            wrangler_opds_lookup_fixture.transaction,
-            wrangler_opds_lookup_fixture.transaction.session,
-        )
-        # Test the _feed_self_test helper method. It grabs a
-        # feed from the metadata wrangler, calls
-        # _summarize_feed_response on the response object, and returns
-        # a SelfTestResult explaining what happened.
-        class Mock(MetadataWranglerOPDSLookup):
-            requests = []
-            annotated_responses = []
-
-            @classmethod
-            def _annotate_feed_response(cls, result, response):
-                cls.annotated_responses.append((result, response))
-                result.success = True
-                result.result = ["I summarized", "the response"]
-
-            def make_some_request(self, *args, **kwargs):
-                self.requests.append((args, kwargs))
-                return "A fake response"
-
-        lookup = Mock("http://base-url/", collection=transaction.default_collection())
-        request_method = lookup.make_some_request
-        result = lookup._feed_self_test("Some test", request_method, 1, 2)
-
-        # We got back a SelfTestResult associated with the Mock
-        # object's collection.
-        assert isinstance(result, SelfTestResult)
-        assert transaction.default_collection() == result.collection
-
-        # It indicates some request was made, and the response
-        # annotated using our mock _annotate_feed_response.
-        assert "Some test" == result.name
-        assert result.duration < 1
-        assert True == result.success
-        assert ["I summarized", "the response"] == result.result
-
-        # But what request was made, exactly?
-
-        # Here we see that Mock.make_some_request was called
-        # with the positional arguments passed into _feed_self_test,
-        # and a keyword argument indicating that 5xx responses should
-        # be processed normally and not used as a reason to raise an
-        # exception.
-        assert [
-            ((1, 2), {"allowed_response_codes": ["1xx", "2xx", "3xx", "4xx", "5xx"]})
-        ] == lookup.requests
-
-        # That method returned "A fake response", which was passed
-        # into _annotate_feed_response, along with the
-        # SelfTestResult in progress.
-        [(used_result, response)] = lookup.annotated_responses
-        assert result == used_result
-        assert "A fake response" == response
-
-    def test__annotate_feed_response(
-        self,
-        opds_files_fixture: OPDSFilesFixture,
-        wrangler_opds_lookup_fixture: MetadataWranglerOPDSLookupFixture,
-    ):
-        data, transaction, session = (
-            wrangler_opds_lookup_fixture,
-            wrangler_opds_lookup_fixture.transaction,
-            wrangler_opds_lookup_fixture.transaction.session,
-        )
-        # Test the _annotate_feed_response class helper method.
-        m = MetadataWranglerOPDSLookup._annotate_feed_response
-
-        def mock_response(url, authorization, response_code, content):
-            request = MockRequestsRequest(
-                url, headers=dict(Authorization=authorization)
-            )
-            response = MockRequestsResponse(
-                response_code, content=content, request=request
-            )
-            return response
-
-        # First, test success.
-        url = ("http://metadata-wrangler/",)
-        auth = "auth"
-        test_result = SelfTestResult("success")
-        response = mock_response(
-            url,
-            auth,
-            200,
-            opds_files_fixture.sample_data("metadata_wrangler_overdrive.opds"),
-        )
-        results = m(test_result, response)
-        assert [
-            "Request URL: %s" % url,
-            "Request authorization: %s" % auth,
-            "Status code: 200",
-            "Total identifiers registered with this collection: 201",
-            "Entries on this page: 1",
-            " The Green Mouse",
-        ] == test_result.result
-        assert True == test_result.success
-
-        # Next, test failure.
-        response = mock_response(url, auth, 401, "An error message.")
-        test_result = SelfTestResult("failure")
-        assert False == test_result.success
-        m(test_result, response)
-        assert [
-            "Request URL: %s" % url,
-            "Request authorization: %s" % auth,
-            "Status code: 401",
-        ] == test_result.result
-
-    def test_external_integration(
-        self, wrangler_opds_lookup_fixture: MetadataWranglerOPDSLookupFixture
-    ):
-        data, transaction, session = (
-            wrangler_opds_lookup_fixture,
-            wrangler_opds_lookup_fixture.transaction,
-            wrangler_opds_lookup_fixture.transaction.session,
-        )
-        result = MetadataWranglerOPDSLookup.external_integration(session)
-        assert result.protocol == ExternalIntegration.METADATA_WRANGLER
-        assert result.goal == ExternalIntegration.METADATA_GOAL
 
 
 class OPDSImporterFixture:
@@ -507,13 +111,6 @@ def opds_importer_fixture(
         "data_source"
     ).value = DataSource.OA_CONTENT_SERVER
 
-    # Set an ExternalIntegration for the metadata_client used
-    # in the OPDSImporter.
-    data.service = db.external_integration(
-        ExternalIntegration.METADATA_WRANGLER,
-        goal=ExternalIntegration.METADATA_GOAL,
-        url="http://localhost",
-    )
     return data
 
 
@@ -2965,12 +2562,6 @@ class TestOPDSImportMonitor:
         # ...unless the feed updates.
         record.timestamp = datetime_utc(1970, 1, 1, 1, 1, 1)
         assert True == monitor.feed_contains_new_data(feed)
-
-    def http_with_feed(self, feed, content_type=OPDSFeed.ACQUISITION_FEED_TYPE):
-        """Helper method to make a DummyHTTPClient with a
-        successful OPDS feed response queued.
-        """
-        return http
 
     def test_follow_one_link(self, opds_importer_fixture: OPDSImporterFixture):
         data, transaction, session = (
