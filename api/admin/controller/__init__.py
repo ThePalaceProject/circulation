@@ -2416,7 +2416,7 @@ class AdminSearchController(AdminController):
     # 1 hour in-memory cache
     @memoize(ttls=3600)
     def _search_field_values_cached(self, collection_ids: List[int]) -> dict:
-        def _unzip(values: List[tuple[str, int]]) -> dict:
+        def _unzip(values: List[Tuple[str, int]]) -> dict:
             """Covert a list of tuples to a {value0: value1} dictionary"""
             return {a[0]: a[1] for a in values if type(a[0]) is str}
 
