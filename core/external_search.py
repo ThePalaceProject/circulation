@@ -2129,8 +2129,8 @@ class JSONQuery(Query):
         def language(value: str) -> str:
             """Transform a possibly english language name to an alpha3 code"""
             transformed = LanguageNames.name_to_codes.get(value.lower(), {value})
-            transformed = list(transformed)[0] if len(transformed) > 0 else value
-            return transformed
+            value = list(transformed)[0] if len(transformed) > 0 else value
+            return value
 
     VALUE_TRANSORMS = {
         "data_source": ValueTransforms.data_source,

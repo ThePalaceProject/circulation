@@ -7,7 +7,6 @@ import sys
 import urllib.parse
 from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, TypeVar, Union
-from urllib.parse import quote, urlparse, urlunparse
 
 import flask
 from flask import Request, Response, redirect, url_for
@@ -2417,7 +2416,7 @@ class AdminSearchController(AdminController):
     # 1 hour in-memory cache
     @memoize(ttls=3600)
     def _search_field_values_cached(self, collection_ids: List[int]) -> dict:
-        def _unzip(values: List[tuple]) -> dict:
+        def _unzip(values: List[tuple[str, int]]) -> dict:
             """Covert a list of tuples to a {value0: value1} dictionary"""
             return {a[0]: a[1] for a in values if type(a[0]) is str}
 
@@ -2474,9 +2473,9 @@ class AdminSearchController(AdminController):
         converted_languages_list = []
         # We want full english names, not codes
         for name, num in languages_list:
-            full_name = LanguageCodes.english_names.get(name, [name])
+            full_name_set = LanguageCodes.english_names.get(name, [name])
             # Language codes are an array of multiple choices, we only want one
-            full_name = full_name[0] if len(full_name) > 0 else name
+            full_name = full_name_set[0] if len(full_name_set) > 0 else name
             converted_languages_list.append((full_name, num))
         languages = _unzip(converted_languages_list)
 
