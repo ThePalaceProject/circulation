@@ -89,6 +89,7 @@ from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
 from core.util.cache import memoize
 from core.util.flask_util import OPDSFeedResponse
+from core.util.languages import LanguageCodes, LanguageNames
 from core.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:
@@ -2470,7 +2471,14 @@ class AdminSearchController(AdminController):
                 func.distinct(Edition.language), func.count(Edition.language)
             )
         )
-        languages = _unzip(languages_list)
+        converted_languages_list = []
+        # We want full english names, not codes
+        for name, num in languages_list:
+            full_name = LanguageCodes.english_names.get(name, [name])
+            # Language codes are an array of multiple choices, we only want one
+            full_name = full_name[0] if len(full_name) > 0 else name
+            converted_languages_list.append((full_name, num))
+        languages = _unzip(converted_languages_list)
 
         publishers_list = list(
             editions_query.group_by(Edition.publisher).values(

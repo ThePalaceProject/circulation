@@ -59,6 +59,7 @@ from core.model import (
 from core.model.classification import Subject
 from core.model.work import Work
 from core.problem_details import INVALID_INPUT
+from core.util.cache import CachedData
 from core.util.datetime_helpers import datetime_utc, from_timestamp
 from tests.fixtures.database import (
     DatabaseTransactionFixture,
@@ -5299,6 +5300,9 @@ class TestJSONQuery:
         }
 
     def test_value_transforms(self, db: DatabaseTransactionFixture):
+        # If we're running this unit test alone, we must intialize the data first
+        CachedData.initialize(db.session)
+
         gutenberg = (
             db.session.query(DataSource)
             .filter(DataSource.name == DataSource.GUTENBERG)
@@ -5333,6 +5337,18 @@ class TestJSONQuery:
             assert (
                 "Could not parse 'published' value '1990-01-x1'. Only use 'YYYY-MM-DD'"
             )
+
+        # Test language code transformations
+        q = self._jq(self._leaf("language", "EngliSH"))
+        assert q.elasticsearch_query.to_dict() == {"term": {"language": "eng"}}
+
+        # Nothing found, stay the same
+        q = self._jq(self._leaf("language", "NoLanguage"))
+        assert q.elasticsearch_query.to_dict() == {"term": {"language": "NoLanguage"}}
+
+        # Already a language code
+        q = self._jq(self._leaf("language", "eng"))
+        assert q.elasticsearch_query.to_dict() == {"term": {"language": "eng"}}
 
     def test_operator_restrictions(self):
         q = self._jq(self._leaf("data_source", DataSource.GUTENBERG, "gt"))
@@ -5391,9 +5407,9 @@ class TestExternalSearchJSONQuery:
 
         result.random_works = []
         specifics = [
-            dict(language="Spanish", authors=["charlie"]),
-            dict(language="Spanish", authors=["alpha"]),
-            dict(language="German", authors=["beta"]),
+            dict(language="spa", authors=["charlie"]),
+            dict(language="spa", authors=["alpha"]),
+            dict(language="ger", authors=["beta"]),
             dict(
                 with_open_access_download=False,
                 with_license_pool=True,

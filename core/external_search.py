@@ -30,6 +30,7 @@ from flask_babel import lazy_gettext as _
 from spellchecker import SpellChecker
 
 from core.util import Values
+from core.util.languages import LanguageNames
 
 from .classifier import (
     AgeClassifier,
@@ -2052,7 +2053,9 @@ class JSONQuery(Query):
         "identifiers.identifier": dict(path="identifiers"),
         "identifiers.type": dict(path="identifiers"),
         "imprint": _KEYWORD_ONLY,
-        "language": dict(),
+        "language": dict(
+            type="_text"
+        ),  # Made up keyword type, because we don't want text fuzzyness on this
         "licensepools.available": dict(path="licensepools", **_BOOL_TYPE),
         "licensepools.availability_time": dict(path="licensepools", **_LONG_TYPE),
         "licensepools.collection_id": dict(path="licensepools", **_LONG_TYPE),
@@ -2122,9 +2125,17 @@ class JSONQuery(Query):
                     detail=f"Could not parse 'published' value '{value}'. Only use 'YYYY-MM-DD'"
                 )
 
+        @staticmethod
+        def language(value: str) -> str:
+            """Transform a possibly english language name to an alpha3 code"""
+            transformed = LanguageNames.name_to_codes.get(value.lower(), {value})
+            transformed = list(transformed)[0] if len(transformed) > 0 else value
+            return transformed
+
     VALUE_TRANSORMS = {
         "data_source": ValueTransforms.data_source,
         "published": ValueTransforms.published,
+        "language": ValueTransforms.language,
     }
 
     def __init__(self, query: Union[str, Dict], filter=None):
