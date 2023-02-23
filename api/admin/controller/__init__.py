@@ -698,7 +698,7 @@ class ResetPasswordController(AdminController):
 
         admin = self.authenticated_admin_from_request()
 
-        admin_view_redirect = redirect(self.url_for("admin_view"))
+        admin_view_redirect = redirect(url_for("admin_view"))
 
         if isinstance(admin, Admin):
             return admin_view_redirect
@@ -720,7 +720,7 @@ class ResetPasswordController(AdminController):
         if not admin:
             return self._response_with_message_and_redirect_button(
                 INVALID_ADMIN_CREDENTIALS.detail,
-                self.url_for("admin_forgot_password"),
+                url_for("admin_forgot_password"),
                 "Try again",
                 is_error=True,
                 status_code=INVALID_ADMIN_CREDENTIALS.status_code,
@@ -732,7 +732,7 @@ class ResetPasswordController(AdminController):
 
         return self._response_with_message_and_redirect_button(
             "Email successfully sent! Please check your inbox.",
-            self.url_for("admin_sign_in"),
+            url_for("admin_sign_in"),
             "Sign in",
         )
 
@@ -748,7 +748,7 @@ class ResetPasswordController(AdminController):
     ) -> str:
         reset_password_token = auth.generate_reset_password_token(admin, self._db)
 
-        reset_password_url = self.url_for(
+        reset_password_url = url_for(
             "admin_reset_password",
             reset_password_token=reset_password_token,
             _external=True,
@@ -762,7 +762,7 @@ class ResetPasswordController(AdminController):
         if not auth:
             return self._response_with_message_and_redirect_button(
                 ADMIN_AUTH_MECHANISM_NOT_CONFIGURED.detail,
-                self.url_for("admin_sign_in"),
+                url_for("admin_sign_in"),
                 "Sign in",
                 is_error=True,
                 status_code=ADMIN_AUTH_MECHANISM_NOT_CONFIGURED.status_code,
@@ -770,7 +770,7 @@ class ResetPasswordController(AdminController):
 
         logged_in_admin = self.authenticated_admin_from_request()
 
-        admin_view_redirect = redirect(self.url_for("admin_view"))
+        admin_view_redirect = redirect(url_for("admin_view"))
 
         # If the admin is logged in we redirect it since in that case the logged in change password option can be used
         if isinstance(logged_in_admin, Admin):
@@ -783,7 +783,7 @@ class ResetPasswordController(AdminController):
         if isinstance(admin_from_token, ProblemDetail):
             return self._response_with_message_and_redirect_button(
                 admin_from_token.detail,
-                self.url_for("admin_forgot_password"),
+                url_for("admin_forgot_password"),
                 "Try again",
                 is_error=True,
                 status_code=admin_from_token.status_code,
@@ -817,7 +817,7 @@ class ResetPasswordController(AdminController):
 
                 return self._response_with_message_and_redirect_button(
                     problem_detail.detail,
-                    self.url_for(
+                    url_for(
                         "admin_reset_password",
                         reset_password_token=reset_password_token,
                     ),
@@ -828,7 +828,7 @@ class ResetPasswordController(AdminController):
 
             return self._response_with_message_and_redirect_button(
                 "Password successfully changed!",
-                self.url_for("admin_sign_in"),
+                url_for("admin_sign_in"),
                 "Sign in",
             )
 

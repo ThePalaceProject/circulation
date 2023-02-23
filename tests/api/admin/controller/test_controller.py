@@ -840,7 +840,7 @@ class TestResetPasswordController(AdminControllerTest):
                 call_args, call_kwargs = mock_email_manager.send_email.call_args_list[0]
 
                 # Check that the email is sent to the right admin
-                _, _, receivers, _, _ = call_args
+                _, receivers = call_args
 
                 assert len(receivers) == 1
                 assert receivers[0] == self.admin.email
@@ -919,7 +919,7 @@ class TestResetPasswordController(AdminControllerTest):
                 assert response.status_code == 200
 
                 call_args, call_kwargs = mock_email_manager.send_email.call_args_list[0]
-                _, _, _, mail_text, _ = call_args
+                mail_text = call_kwargs["text"]
 
                 token = self._extract_reset_pass_token_from_mail_text(mail_text)
 
@@ -953,7 +953,7 @@ class TestResetPasswordController(AdminControllerTest):
                 assert response.status_code == 200
 
                 call_args, call_kwargs = mock_email_manager.send_email.call_args_list[0]
-                _, _, _, mail_text, _ = call_args
+                mail_text = call_kwargs["text"]
 
                 token = self._extract_reset_pass_token_from_mail_text(mail_text)
 

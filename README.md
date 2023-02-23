@@ -191,6 +191,7 @@ export SIMPLIFIED_MAIL_SERVER=example.smtp.com
 export SIMPLIFIED_MAIL_PORT=465
 export SIMPLIFIED_MAIL_USERNAME=username
 export SIMPLIFIED_MAIL_PASSWORD=password
+export SIMPLIFIED_MAIL_SENDER=sender@example.com
 ```
 
 ### Running the Application

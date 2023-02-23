@@ -93,7 +93,6 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider):
 
     def send_reset_password_email(self, admin: Admin, reset_password_url: str) -> None:
         subject = f"{AdminClientConfig.APP_NAME} - Reset password email"
-        sender = f"{AdminClientConfig.APP_NAME} <do-not-reply@thepalaceproject.org>"
         receivers = [admin.email]
 
         mail_text = render_template_string(
@@ -107,7 +106,7 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider):
             reset_password_url=reset_password_url,
         )
 
-        EmailManager.send_email(subject, sender, receivers, mail_text, mail_html)
+        EmailManager.send_email(subject, receivers, text=mail_text, html=mail_html)
 
     def validate_token_and_extract_admin(
         self, reset_password_token: str, _db: Session
