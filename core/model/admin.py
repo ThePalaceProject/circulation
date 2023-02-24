@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import bcrypt
+from flask_babel import lazy_gettext as _
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy import (
     Column,
     ForeignKey,
@@ -19,6 +21,8 @@ from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 
 from core.model.hybrid import hybrid_property
+from core.problem_details import INVALID_RESET_PASSWORD_TOKEN
+from core.util.problem_detail import ProblemDetail
 
 from . import Base, get_one, get_one_or_create
 from .hassessioncache import HasSessionCache
@@ -44,6 +48,9 @@ class Admin(Base, HasSessionCache):
     roles = relationship(
         "AdminRole", backref="admin", cascade="all, delete-orphan", uselist=True
     )
+
+    # Token age is max 30 minutes, in seconds
+    RESET_PASSWORD_TOKEN_MAX_AGE = 1800
 
     def cache_key(self):
         return self.email
@@ -225,6 +232,43 @@ class Admin(Base, HasSessionCache):
         role = get_one(_db, AdminRole, admin=self, role=role, library=library)
         if role:
             _db.delete(role)
+
+    def generate_reset_password_token(self, secret_key: str) -> str:
+        serializer = URLSafeTimedSerializer(secret_key)
+
+        return serializer.dumps(self.email, salt=self.password_hashed)
+
+    @staticmethod
+    def validate_reset_password_token_and_fetch_admin(
+        token: str, _db: Session, secret_key: str
+    ) -> ProblemDetail | Admin:
+        serializer = URLSafeTimedSerializer(secret_key)
+
+        # We first load token without any checks and try to fetch admin from the database
+        is_safe, payload = serializer.loads_unsafe(token)
+
+        possible_admin = get_one(_db, Admin, email=payload)
+
+        if possible_admin is None:
+            return INVALID_RESET_PASSWORD_TOKEN
+
+        # If there exists an admin that matches the email from the token we check for the validity of the token.
+        # We use the existing password hash as a salt to invalidate token if the user has already used the same
+        # token and already changed the password
+        try:
+            serializer.loads(
+                token,
+                max_age=Admin.RESET_PASSWORD_TOKEN_MAX_AGE,
+                salt=possible_admin.password_hashed,
+            )
+        except SignatureExpired:
+            return INVALID_RESET_PASSWORD_TOKEN.detailed(
+                _("Reset password token has expired.")
+            )
+        except BadSignature:
+            return INVALID_RESET_PASSWORD_TOKEN
+
+        return possible_admin
 
     def __repr__(self):
         return "<Admin: email=%s>" % self.email
