@@ -25,6 +25,8 @@ if TYPE_CHECKING:
 class SirsiBlockReasons:
     NOT_APPROVED = _("Patron has not yet been approved")
     EXPIRED = _("Patron membership has expired")
+    INCORRECT_LOCATION = _("Patron is not a member of this library location")
+    PATRON_BLOCKED = _("Patron has been blocked.")
 
 
 class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
@@ -79,7 +81,6 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             "type": ConfigurationAttributeType.LIST.value,
             "label": _("Disallowed Patron Suffixes"),
             "description": _(
-                "This will only work if a Library Prefix has been provided. "
                 "Any patron type ending in this suffix will remain unauthenticated. "
                 "Eg. A patronType of 'cls' and Library Prefix of 'c' will result in a suffix of 'ls'. "
                 "If 'ls' is a disallowed suffix then the patron will not be authenticated."
@@ -104,7 +105,7 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
                 "This is used to match a member of the Library to their member branch location."
                 " Should be a prefix letter, eg. 'p' or 'co' etc..."
             ),
-            "required": False,
+            "required": True,
         },
     ]
 
@@ -174,11 +175,29 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
 
         fields: dict = data["fields"]
         patrondata.personal_name = fields.get("displayName")
-        patrondata.external_type = fields["patronType"].get("key")
+        patron_type: str = fields["patronType"].get("key", "")
+
+        patrondata.external_type = patron_type
 
         # Basic block reasons
+
+        # Does the patron type start with the library prefix
+        # This ensures the patron is a member of the library
+        # they are interacting with
+        if not patron_type.startswith(self.sirsi_library_prefix):
+            patrondata.block_reason = SirsiBlockReasons.INCORRECT_LOCATION
+            return patrondata
+
         if not fields.get("approved", False):
             patrondata.block_reason = SirsiBlockReasons.NOT_APPROVED
+            return patrondata
+
+        # Remove the library prefix from the patron type
+        # we are left with the patron "suffix"
+        # This suffix can be part of the blocked patron types list
+        patron_suffix = patron_type[len(self.sirsi_library_prefix) :]
+        if patron_suffix in self.sirsi_disallowed_prefixes:
+            patrondata.block_reason = SirsiBlockReasons.PATRON_BLOCKED
             return patrondata
 
         # Get patron "fines" information
@@ -214,26 +233,6 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
         if patrondata.block_reason is None:
             patrondata.block_reason = PatronData.NO_VALUE
         patrondata.complete = True
-        return patrondata
-
-    def enforce_library_identifier_restriction(
-        self, identifier: str, patrondata: PatronData
-    ) -> Literal[False] | PatronData:
-        if patrondata.external_type and self.sirsi_library_prefix:
-            patron_type = patrondata.external_type
-            # Does the patron type start with the library prefix
-            # This ensures the patron is a member of the library
-            # they are interacting with
-            if not patron_type.startswith(self.sirsi_library_prefix):
-                return False
-
-            # Remove the library prefix from the patron type
-            # we are left with the patron "suffix"
-            # This suffix can be part of the blocked patron types list
-            patron_suffix = patron_type[len(self.sirsi_library_prefix) :]
-            if patron_suffix in self.sirsi_disallowed_prefixes:
-                return False
-
         return patrondata
 
     ###

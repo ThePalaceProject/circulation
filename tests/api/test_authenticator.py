@@ -3468,7 +3468,7 @@ class TestSirsiDynixAuthenticationProvider:
         patrondata = sirsi_fixture.api.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
-        assert patrondata == False
+        assert patrondata.block_reason == SirsiBlockReasons.INCORRECT_LOCATION
 
         # Test blocked patron types
         bad_prefix_patron_resp = {
@@ -3481,7 +3481,7 @@ class TestSirsiDynixAuthenticationProvider:
         patrondata = sirsi_fixture.api.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
-        assert patrondata == False
+        assert patrondata.block_reason == SirsiBlockReasons.PATRON_BLOCKED
 
         # Test bad patron status info
         sirsi_fixture.api.api_read_patron_data.return_value = ok_patron_resp
@@ -3490,37 +3490,6 @@ class TestSirsiDynixAuthenticationProvider:
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
         assert patrondata == None
-
-    def test_enforce_library_identifier_restrictions(
-        self, sirsi_fixture: SirsiDynixAuthenticatorFixture
-    ):
-        # Assert valid value
-        allowed = sirsi_fixture.api.enforce_library_identifier_restriction(
-            "identifier", SirsiDynixPatronData(external_type="testad")
-        )
-        assert isinstance(allowed, SirsiDynixPatronData)
-
-        # A patron indentifier is disallowed
-        sirsi_fixture.api.sirsi_disallowed_prefixes = ["ad"]
-        allowed = sirsi_fixture.api.enforce_library_identifier_restriction(
-            "identifier", SirsiDynixPatronData(external_type="testad")
-        )
-        assert allowed == False
-
-        # Patron is of an incorrect library
-        sirsi_fixture.api.sirsi_disallowed_prefixes = []
-        allowed = sirsi_fixture.api.enforce_library_identifier_restriction(
-            "identifier", SirsiDynixPatronData(external_type="ntestad")
-        )
-        assert allowed == False
-
-        # No library prefix is provided, so no enforcement happens
-        sirsi_fixture.api.sirsi_disallowed_prefixes = ["ad"]
-        sirsi_fixture.api.sirsi_library_prefix = None
-        allowed = sirsi_fixture.api.enforce_library_identifier_restriction(
-            "identifier", SirsiDynixPatronData(external_type="ntestad")
-        )
-        assert isinstance(allowed, SirsiDynixPatronData)
 
     def test__request(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
         # Leading slash on the path is not allowed, as it overwrites the urljoin prefix
