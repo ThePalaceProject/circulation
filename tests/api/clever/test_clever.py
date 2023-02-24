@@ -1,7 +1,10 @@
-import datetime
-import os
+from __future__ import annotations
 
-from flask import request, url_for
+import datetime
+from typing import TYPE_CHECKING
+
+import pytest
+from flask import Flask, request, url_for
 
 from api.clever import (
     CLEVER_NOT_ELIGIBLE,
@@ -12,9 +15,12 @@ from api.clever import (
 )
 from api.problem_details import INVALID_CREDENTIALS
 from core.model import ExternalIntegration
-from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
 from core.util.problem_detail import ProblemDetail
+from tests.fixtures.database import DatabaseTransactionFixture
+
+if TYPE_CHECKING:
+    from core.model.library import Library
 
 
 class MockAPI(CleverAuthenticationAPI):
@@ -67,20 +73,22 @@ class TestClever:
             assert external_type_from_clever_grade(none_grade) is None
 
 
-class TestCleverAuthenticationAPI(DatabaseTest):
-    def setup_method(self):
-        super().setup_method()
-        self.api = MockAPI(self._default_library, self.mock_integration)
-        os.environ["AUTOINITIALIZE"] = "False"
+class CleverAuthenticationFixture:
+    db: DatabaseTransactionFixture
+    api: MockAPI
+    app: Flask
+
+    def __init__(self, db: DatabaseTransactionFixture):
+        self.db = db
+        self.api = MockAPI(db.default_library(), self.mock_integration())
+
         from api.app import app
 
-        del os.environ["AUTOINITIALIZE"]
         self.app = app
 
-    @property
     def mock_integration(self):
         """Make a fake ExternalIntegration that can be used to configure a CleverAuthenticationAPI"""
-        integration = self._external_integration(
+        integration = self.db.external_integration(
             protocol="OAuth",
             goal=ExternalIntegration.PATRON_AUTH_GOAL,
             username="fake_client_id",
@@ -89,190 +97,242 @@ class TestCleverAuthenticationAPI(DatabaseTest):
         integration.setting(MockAPI.OAUTH_TOKEN_EXPIRATION_DAYS).value = 20
         return integration
 
-    def test_authenticated_patron(self):
+
+@pytest.fixture(scope="function")
+def clever_fixture(
+    db: DatabaseTransactionFixture, monkeypatch: pytest.MonkeyPatch
+) -> CleverAuthenticationFixture:
+    monkeypatch.setenv("AUTOINITIALIZE", "False")
+
+    return CleverAuthenticationFixture(db)
+
+
+class TestCleverAuthenticationAPI:
+    def test_authenticated_patron(self, clever_fixture: CleverAuthenticationFixture):
         """An end-to-end test of authenticated_patron()."""
-        assert self.api.authenticated_patron(self._db, "not a valid token") is None
+        assert (
+            clever_fixture.api.authenticated_patron(
+                clever_fixture.db.session, "not a valid token"
+            )
+            is None
+        )
 
         # This patron has a valid clever token.
-        patron = self._patron()
-        (credential, _) = self.api.create_token(self._db, patron, "test")
-        assert patron == self.api.authenticated_patron(self._db, "test")
+        patron = clever_fixture.db.patron()
+        (credential, _) = clever_fixture.api.create_token(
+            clever_fixture.db.session, patron, "test"
+        )
+        assert patron == clever_fixture.api.authenticated_patron(
+            clever_fixture.db.session, "test"
+        )
 
         # If the token is expired, the patron has to log in again.
         credential.expires = utc_now() - datetime.timedelta(days=1)
-        assert self.api.authenticated_patron(self._db, "test") is None
+        assert (
+            clever_fixture.api.authenticated_patron(clever_fixture.db.session, "test")
+            is None
+        )
 
-    def test_remote_exchange_code_for_bearer_token(self):
+    def test_remote_exchange_code_for_bearer_token(
+        self, clever_fixture: CleverAuthenticationFixture
+    ):
         # Test success.
-        self.api.queue_response(dict(access_token="a token"))
-        with self.app.test_request_context("/"):
+        clever_fixture.api.queue_response(dict(access_token="a token"))
+        with clever_fixture.app.test_request_context("/"):
             assert (
-                self.api.remote_exchange_code_for_bearer_token(self._db, "code")
+                clever_fixture.api.remote_exchange_code_for_bearer_token(
+                    clever_fixture.db.session, "code"
+                )
                 == "a token"
             )
 
         # Test failure.
-        self.api.queue_response(None)
-        with self.app.test_request_context("/"):
-            problem = self.api.remote_exchange_code_for_bearer_token(self._db, "code")
+        clever_fixture.api.queue_response(None)
+        with clever_fixture.app.test_request_context("/"):
+            problem = clever_fixture.api.remote_exchange_code_for_bearer_token(
+                clever_fixture.db.session, "code"
+            )
         assert INVALID_CREDENTIALS.uri == problem.uri
 
-        self.api.queue_response(dict(something_else="not a token"))
-        with self.app.test_request_context("/"):
-            problem = self.api.remote_exchange_code_for_bearer_token(self._db, "code")
+        clever_fixture.api.queue_response(dict(something_else="not a token"))
+        with clever_fixture.app.test_request_context("/"):
+            problem = clever_fixture.api.remote_exchange_code_for_bearer_token(
+                clever_fixture.db.session, "code"
+            )
         assert INVALID_CREDENTIALS.uri == problem.uri
 
-    def test_remote_exchange_payload(self):
+    def test_remote_exchange_payload(self, clever_fixture: CleverAuthenticationFixture):
         """Test the content of the document sent to Clever when exchanging tokens"""
-        with self.app.test_request_context("/"):
-            payload = self.api._remote_exchange_payload(self._db, "a code")
+        with clever_fixture.app.test_request_context("/"):
+            payload = clever_fixture.api._remote_exchange_payload(
+                clever_fixture.db.session, "a code"
+            )
 
             expect_uri = url_for(
                 "oauth_callback",
-                library_short_name=self._default_library.name,
+                library_short_name=clever_fixture.db.default_library().name,
                 _external=True,
             )
             assert "authorization_code" == payload["grant_type"]
             assert expect_uri == payload["redirect_uri"]
             assert "a code" == payload["code"]
 
-    def test_remote_patron_lookup_unsupported_user_type(self):
-        self.api.queue_response(dict(type="district_admin", data=dict(id="1234")))
-        token = self.api.remote_patron_lookup("token")
+    def test_remote_patron_lookup_unsupported_user_type(
+        self, clever_fixture: CleverAuthenticationFixture
+    ):
+        clever_fixture.api.queue_response(
+            dict(type="district_admin", data=dict(id="1234"))
+        )
+        token = clever_fixture.api.remote_patron_lookup("token")
         assert UNSUPPORTED_CLEVER_USER_TYPE == token
 
-    def test_remote_patron_lookup_ineligible(self):
-        self.api.queue_response(
+    def test_remote_patron_lookup_ineligible(
+        self, clever_fixture: CleverAuthenticationFixture
+    ):
+        clever_fixture.api.queue_response(
             dict(
                 type="student",
                 data=dict(id="1234"),
                 links=[dict(rel="canonical", uri="test")],
             )
         )
-        self.api.queue_response(dict(data=dict(school="1234", district="1234")))
-        self.api.queue_response(dict(data=dict(nces_id="I am not Title I")))
+        clever_fixture.api.queue_response(
+            dict(data=dict(school="1234", district="1234"))
+        )
+        clever_fixture.api.queue_response(dict(data=dict(nces_id="I am not Title I")))
 
-        token = self.api.remote_patron_lookup("")
+        token = clever_fixture.api.remote_patron_lookup("")
         assert CLEVER_NOT_ELIGIBLE == token
 
-    def test_remote_patron_lookup_missing_nces_id(self):
-        self.api.queue_response(
+    def test_remote_patron_lookup_missing_nces_id(
+        self, clever_fixture: CleverAuthenticationFixture
+    ):
+        clever_fixture.api.queue_response(
             dict(
                 type="student",
                 data=dict(id="1234"),
                 links=[dict(rel="canonical", uri="test")],
             )
         )
-        self.api.queue_response(dict(data=dict(school="1234", district="1234")))
-        self.api.queue_response(dict(data=dict()))
+        clever_fixture.api.queue_response(
+            dict(data=dict(school="1234", district="1234"))
+        )
+        clever_fixture.api.queue_response(dict(data=dict()))
 
-        token = self.api.remote_patron_lookup("")
+        token = clever_fixture.api.remote_patron_lookup("")
         assert CLEVER_UNKNOWN_SCHOOL == token
 
-    def test_remote_patron_unknown_student_grade(self):
-        self.api.queue_response(
+    def test_remote_patron_unknown_student_grade(
+        self, clever_fixture: CleverAuthenticationFixture
+    ):
+        clever_fixture.api.queue_response(
             dict(
                 type="student",
                 data=dict(id="2"),
                 links=[dict(rel="canonical", uri="test")],
             )
         )
-        self.api.queue_response(
+        clever_fixture.api.queue_response(
             dict(data=dict(school="1234", district="1234", name="Abcd", grade=""))
         )
-        self.api.queue_response(dict(data=dict(nces_id="44270647")))
+        clever_fixture.api.queue_response(dict(data=dict(nces_id="44270647")))
 
-        patrondata = self.api.remote_patron_lookup("token")
+        patrondata = clever_fixture.api.remote_patron_lookup("token")
         assert patrondata.external_type is None
 
-    def test_remote_patron_lookup_title_i(self):
-        self.api.queue_response(
+    def test_remote_patron_lookup_title_i(
+        self, clever_fixture: CleverAuthenticationFixture
+    ):
+        clever_fixture.api.queue_response(
             dict(
                 type="student",
                 data=dict(id="5678"),
                 links=[dict(rel="canonical", uri="test")],
             )
         )
-        self.api.queue_response(
+        clever_fixture.api.queue_response(
             dict(data=dict(school="1234", district="1234", name="Abcd", grade="10"))
         )
-        self.api.queue_response(dict(data=dict(nces_id="44270647")))
+        clever_fixture.api.queue_response(dict(data=dict(nces_id="44270647")))
 
-        patrondata = self.api.remote_patron_lookup("token")
+        patrondata = clever_fixture.api.remote_patron_lookup("token")
         assert patrondata.personal_name is None
         assert "5678" == patrondata.permanent_id
         assert "5678" == patrondata.authorization_identifier
 
-    def test_remote_patron_lookup_free_lunch_status(self):
-        pass
-
-    def test_remote_patron_lookup_external_type(self):
+    def test_remote_patron_lookup_external_type(
+        self, clever_fixture: CleverAuthenticationFixture
+    ):
         # Teachers have an external type of 'A' indicating all access.
-        self.api.queue_response(
+        clever_fixture.api.queue_response(
             dict(
                 type="teacher",
                 data=dict(id="1"),
                 links=[dict(rel="canonical", uri="test")],
             )
         )
-        self.api.queue_response(
+        clever_fixture.api.queue_response(
             dict(data=dict(school="1234", district="1234", name="Abcd"))
         )
-        self.api.queue_response(dict(data=dict(nces_id="44270647")))
+        clever_fixture.api.queue_response(dict(data=dict(nces_id="44270647")))
 
-        patrondata = self.api.remote_patron_lookup("teacher token")
+        patrondata = clever_fixture.api.remote_patron_lookup("teacher token")
         assert "A" == patrondata.external_type
 
         # Student type is based on grade
         def queue_student(grade):
-            self.api.queue_response(
+            clever_fixture.api.queue_response(
                 dict(
                     type="student",
                     data=dict(id="2"),
                     links=[dict(rel="canonical", uri="test")],
                 )
             )
-            self.api.queue_response(
+            clever_fixture.api.queue_response(
                 dict(
                     data=dict(school="1234", district="1234", name="Abcd", grade=grade)
                 )
             )
-            self.api.queue_response(dict(data=dict(nces_id="44270647")))
+            clever_fixture.api.queue_response(dict(data=dict(nces_id="44270647")))
 
         queue_student(grade="1")
-        patrondata = self.api.remote_patron_lookup("token")
+        patrondata = clever_fixture.api.remote_patron_lookup("token")
         assert "E" == patrondata.external_type
 
         queue_student(grade="6")
-        patrondata = self.api.remote_patron_lookup("token")
+        patrondata = clever_fixture.api.remote_patron_lookup("token")
         assert "M" == patrondata.external_type
 
         queue_student(grade="9")
-        patrondata = self.api.remote_patron_lookup("token")
+        patrondata = clever_fixture.api.remote_patron_lookup("token")
         assert "H" == patrondata.external_type
 
-    def test_oauth_callback_creates_patron(self):
+    def test_oauth_callback_creates_patron(
+        self, clever_fixture: CleverAuthenticationFixture
+    ):
         """Test a successful run of oauth_callback."""
-        self.api.queue_response(dict(access_token="bearer token"))
-        self.api.queue_response(
+        clever_fixture.api.queue_response(dict(access_token="bearer token"))
+        clever_fixture.api.queue_response(
             dict(
                 type="teacher",
                 data=dict(id="1"),
                 links=[dict(rel="canonical", uri="test")],
             )
         )
-        self.api.queue_response(
+        clever_fixture.api.queue_response(
             dict(data=dict(school="1234", district="1234", name="Abcd"))
         )
-        self.api.queue_response(dict(data=dict(nces_id="44270647")))
+        clever_fixture.api.queue_response(dict(data=dict(nces_id="44270647")))
 
-        with self.app.test_request_context("/"):
-            response = self.api.oauth_callback(self._db, dict(code="teacher code"))
+        with clever_fixture.app.test_request_context("/"):
+            response = clever_fixture.api.oauth_callback(
+                clever_fixture.db.session, dict(code="teacher code")
+            )
             credential, patron, patrondata = response
 
         # The bearer token was turned into a Credential.
-        expect_credential, ignore = self.api.create_token(
-            self._db, patron, "bearer token"
+        expect_credential, ignore = clever_fixture.api.create_token(
+            clever_fixture.db.session, patron, "bearer token"
         )
         assert credential == expect_credential
 
@@ -282,34 +342,48 @@ class TestCleverAuthenticationAPI(DatabaseTest):
         # Clever provided personal name information, but we don't include it in the PatronData.
         assert patrondata.personal_name is None
 
-    def test_oauth_callback_problem_detail_if_bad_token(self):
-        self.api.queue_response(dict(something_else="not a token"))
-        with self.app.test_request_context("/"):
-            response = self.api.oauth_callback(self._db, dict(code="teacher code"))
+    def test_oauth_callback_problem_detail_if_bad_token(
+        self, clever_fixture: CleverAuthenticationFixture
+    ):
+        clever_fixture.api.queue_response(dict(something_else="not a token"))
+        with clever_fixture.app.test_request_context("/"):
+            response = clever_fixture.api.oauth_callback(
+                clever_fixture.db.session, dict(code="teacher code")
+            )
         assert isinstance(response, ProblemDetail)
         assert INVALID_CREDENTIALS.uri == response.uri
 
-    def test_oauth_callback_problem_detail_if_remote_patron_lookup_fails(self):
-        self.api.queue_response(dict(access_token="token"))
-        self.api.queue_response(dict())
+    def test_oauth_callback_problem_detail_if_remote_patron_lookup_fails(
+        self, clever_fixture: CleverAuthenticationFixture
+    ):
+        clever_fixture.api.queue_response(dict(access_token="token"))
+        clever_fixture.api.queue_response(dict())
 
-        with self.app.test_request_context("/"):
-            response = self.api.oauth_callback(self._db, dict(code="teacher code"))
+        with clever_fixture.app.test_request_context("/"):
+            response = clever_fixture.api.oauth_callback(
+                clever_fixture.db.session, dict(code="teacher code")
+            )
 
         assert isinstance(response, ProblemDetail)
         assert INVALID_CREDENTIALS.uri == response.uri
 
-    def test_external_authenticate_url(self):
+    def test_external_authenticate_url(
+        self, clever_fixture: CleverAuthenticationFixture
+    ):
         """Verify that external_authenticate_url is generated properly"""
         # We're about to call url_for, so we must create an application context.
-        my_api = CleverAuthenticationAPI(self._default_library, self.mock_integration)
+        my_api = CleverAuthenticationAPI(
+            clever_fixture.db.default_library(), clever_fixture.mock_integration()
+        )
 
-        with self.app.test_request_context("/"):
-            request.library = self._default_library
-            params = my_api.external_authenticate_url("state", self._db)
+        with clever_fixture.app.test_request_context("/"):
+            request.library: Library = clever_fixture.db.default_library()  # type: ignore
+            params = my_api.external_authenticate_url(
+                "state", clever_fixture.db.session
+            )
             expected_redirect_uri = url_for(
                 "oauth_callback",
-                library_short_name=self._default_library.short_name,
+                library_short_name=clever_fixture.db.default_library().short_name,
                 _external=True,
             )
             expected = (

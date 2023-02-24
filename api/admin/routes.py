@@ -133,6 +133,20 @@ def admin_change_password():
     return app.manager.admin_sign_in_controller.change_password()
 
 
+@app.route("/admin/forgot_password", methods=["GET", "POST"])
+@returns_problem_detail
+def admin_forgot_password():
+    return app.manager.admin_reset_password_controller.forgot_password()
+
+
+@app.route("/admin/reset_password/<reset_password_token>", methods=["GET", "POST"])
+@returns_problem_detail
+def admin_reset_password(reset_password_token):
+    return app.manager.admin_reset_password_controller.reset_password(
+        reset_password_token
+    )
+
+
 @library_route("/admin/works/<identifier_type>/<path:identifier>", methods=["GET"])
 @has_library
 @returns_problem_detail
