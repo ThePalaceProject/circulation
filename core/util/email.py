@@ -1,5 +1,4 @@
 import os
-from typing import Optional
 
 from redmail import EmailSender
 
@@ -12,14 +11,7 @@ class EmailManager:
     MAIL_SENDER = os.environ.get("SIMPLIFIED_MAIL_SENDER")
 
     @classmethod
-    def send_email(
-        cls,
-        subject: str,
-        receivers: list[str],
-        sender: Optional[str] = MAIL_SENDER,
-        text: Optional[str] = None,
-        html: Optional[str] = None,
-    ):
+    def send_email(cls, subject, receivers, sender=MAIL_SENDER, text=None, html=None):
         email_sender = EmailSender(
             host=cls.MAIL_SERVER,
             port=cls.MAIL_PORT,

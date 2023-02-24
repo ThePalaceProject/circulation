@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from sqlalchemy.sql.expression import and_, desc, distinct, join, nullslast, select
+from werkzeug.wrappers import Response as werkzeug_response
 
 from api.admin.config import Configuration as AdminClientConfig
 from api.admin.exceptions import *
@@ -686,7 +687,7 @@ class ResetPasswordController(AdminController):
         )
     )
 
-    def forgot_password(self) -> Union[ProblemDetail, Response]:
+    def forgot_password(self) -> Union[ProblemDetail, werkzeug_response]:
         """Shows forgot password page or starts off forgot password workflow"""
 
         if not self.admin_auth_providers:
@@ -756,7 +757,7 @@ class ResetPasswordController(AdminController):
 
         return reset_password_url
 
-    def reset_password(self, reset_password_token: str) -> Response:
+    def reset_password(self, reset_password_token: str) -> Optional[werkzeug_response]:
         """Shows reset password page or process the reset password request"""
         auth = self.admin_auth_provider(PasswordAdminAuthenticationProvider.NAME)
         if not auth:
@@ -831,6 +832,8 @@ class ResetPasswordController(AdminController):
                 url_for("admin_sign_in"),
                 "Sign in",
             )
+
+        return None
 
     def _response_with_message_and_redirect_button(
         self,
