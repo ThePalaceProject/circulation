@@ -26,7 +26,7 @@ class DeviceToken(Base):
     id = Column("id", Integer, primary_key=True)
     patron_id = Column(
         Integer,
-        ForeignKey("patrons.id", ondelete="CASCADE"),
+        ForeignKey("patrons.id", ondelete="CASCADE", name="devicetokens_patron_fkey"),
         index=True,
         nullable=False,
     )

@@ -2,7 +2,6 @@ import pytest
 from flask import url_for
 
 from api.adobe_vendor_id import AuthdataUtility
-from api.config import Configuration, temp_config
 from api.problem_details import INVALID_CREDENTIALS
 from core.model import DataSource
 from core.util.problem_detail import ProblemDetail
@@ -189,12 +188,8 @@ class TestDeviceManagementProtocolController:
 
     def test_device_id_handler_bad_auth(self, device_fixture: DeviceManagementFixture):
         with device_fixture.request_context_with_library("/", method="DELETE"):
-            with temp_config() as config:
-                config[Configuration.INTEGRATIONS] = {
-                    "Circulation Manager": {"url": "http://foo/"}
-                }
-                patron = device_fixture.controller.authenticated_patron_from_request()
-                response = device_fixture.controller.device_id_handler("device")
+            patron = device_fixture.controller.authenticated_patron_from_request()
+            response = device_fixture.controller.device_id_handler("device")
             assert isinstance(response, ProblemDetail)
             assert 401 == response.status_code
 

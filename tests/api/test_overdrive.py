@@ -13,7 +13,7 @@ from sqlalchemy.orm.exc import StaleDataError
 from api.authenticator import BasicAuthenticationProvider
 from api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
 from api.circulation_exceptions import *
-from api.config import Configuration, temp_config
+from api.config import Configuration
 from api.overdrive import (
     MockOverdriveAPI,
     NewTitlesOverdriveCollectionMonitor,
@@ -967,11 +967,9 @@ class TestOverdriveAPI:
 
         overdrive_api_fixture.api.queue_response(200, content=patron_with_email)
         overdrive_api_fixture.api.queue_response(200, content=successful_hold)
-        with temp_config() as config:
-            config["default_notification_email_address"] = "notifications@example.com"
-            hold = overdrive_api_fixture.api.place_hold(
-                db.patron(), "pin", pool, notification_email_address=None
-            )
+        hold = overdrive_api_fixture.api.place_hold(
+            db.patron(), "pin", pool, notification_email_address=None
+        )
 
         # The book was placed on hold.
         assert 1 == hold.hold_position
