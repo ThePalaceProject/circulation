@@ -182,8 +182,8 @@ version = "0"  # Version number is managed with tags in git
 [tool.poetry.dependencies]
 alembic = {extras = ["tz"], version = "^1.8.1"}
 aws-xray-sdk = "~2.11"
-boto3 = "~1.18"
-botocore = "~1.21"
+boto3 = "~1.26.79"
+botocore = "~1.29.79"
 certifi = "*"
 click = "7.1.2"
 contextlib2 = "21.6.0"
