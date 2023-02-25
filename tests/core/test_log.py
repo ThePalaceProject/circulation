@@ -11,8 +11,6 @@ from core.log import (
     CloudwatchLogs,
     JSONFormatter,
     LogConfiguration,
-    Loggly,
-    LogglyHandler,
     StringFormatter,
     SysLogger,
 )
@@ -78,22 +76,6 @@ class TestJSONFormatter:
 
 
 class TestLogConfiguration:
-    def test_configuration(self):
-        """Loggly.NAME must equal ExternalIntegration.LOGGLY.
-        Enforcing this with code would create an import loop,
-        but we can enforce it with a test.
-        """
-        assert Loggly.NAME == ExternalIntegration.LOGGLY
-
-    def loggly_integration(self, database_transaction: DatabaseTransactionFixture):
-        """Create an ExternalIntegration for a Loggly account."""
-        integration = database_transaction.external_integration(
-            protocol=ExternalIntegration.LOGGLY, goal=ExternalIntegration.LOGGING_GOAL
-        )
-        integration.url = "http://example.com/%s/"
-        integration.password = "a_token"
-        return integration
-
     def cloudwatch_integration(self, database_transaction: DatabaseTransactionFixture):
         """Create an ExternalIntegration for a Cloudwatch account."""
         integration = database_transaction.external_integration(
@@ -129,7 +111,6 @@ class TestLogConfiguration:
         assert isinstance(handler.formatter, JSONFormatter)
 
         # Let's set up a integrations and change the defaults.
-        self.loggly_integration(db)
         self.cloudwatch_integration(db)
         internal = db.external_integration(
             protocol=ExternalIntegration.INTERNAL_LOGGING,
@@ -151,9 +132,6 @@ class TestLogConfiguration:
         assert cls.ERROR == internal_log_level
         assert cls.DEBUG == database_log_level
         assert len(errors) == 0
-        [loggly_handler] = [x for x in handlers if isinstance(x, LogglyHandler)]
-        assert "http://example.com/a_token/" == loggly_handler.url
-        assert "test app" == loggly_handler.formatter.app_name
 
         [cloudwatch_handler] = [
             x for x in handlers if isinstance(x, CloudWatchLogHandler)
@@ -221,28 +199,6 @@ class TestLogConfiguration:
         # because JSONFormatter overrides the format() method.
         assert "%(message)s" == formatter._fmt
 
-        # Configure a handler for output to Loggly. In this case
-        # the format and template are irrelevant.
-        handler = LogglyHandler("no-such-url")
-        Loggly.set_formatter(handler, "some app")
-        formatter = handler.formatter
-        assert isinstance(formatter, JSONFormatter)
-        assert "some app" == formatter.app_name
-
-    def test_loggly_handler(self, db: DatabaseTransactionFixture):
-        """Turn an appropriate ExternalIntegration into a LogglyHandler."""
-
-        integration = self.loggly_integration(db)
-        handler = Loggly.loggly_handler(integration)
-        assert isinstance(handler, LogglyHandler)
-        assert "http://example.com/a_token/" == handler.url
-
-        # Remove the loggly handler's .url, and the default URL will
-        # be used.
-        integration.url = None
-        handler = Loggly.loggly_handler(integration)
-        assert Loggly.DEFAULT_LOGGLY_URL % dict(token="a_token") == handler.url
-
     def test_cloudwatch_handler(self, db: DatabaseTransactionFixture):
         """Turn an appropriate ExternalIntegration into a CloudWatchLogHandler."""
 
@@ -265,23 +221,6 @@ class TestLogConfiguration:
         pytest.raises(
             CannotLoadConfiguration, CloudwatchLogs.get_handler, integration, True
         )
-
-    def test_interpolate_loggly_url(self):
-        m = Loggly._interpolate_loggly_url
-
-        # We support two string interpolation techniques for combining
-        # a token with a URL.
-        assert "http://foo/token/bar/" == m("http://foo/%s/bar/", "token")
-        assert "http://foo/token/bar/" == m("http://foo/%(token)s/bar/", "token")
-
-        # If the URL contains no string interpolation, we assume the token's
-        # already in there.
-        assert "http://foo/othertoken/bar/" == m("http://foo/othertoken/bar/", "token")
-
-        # Anything that doesn't fall under one of these cases will raise an
-        # exception.
-        pytest.raises(TypeError, m, "http://%s/%s", "token")
-        pytest.raises(KeyError, m, "http://%(atoken)s/", "token")
 
     def test_cloudwatch_initialization_exception(self, db: DatabaseTransactionFixture):
         # Make sure if an exception is thrown during initalization its caught.
