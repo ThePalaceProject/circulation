@@ -521,14 +521,14 @@ crt = ["awscrt (==0.12.5)"]
 
 [[package]]
 name = "botocore-stubs"
-version = "1.29.71"
+version = "1.29.79"
 description = "Type annotations and code completion for botocore"
 category = "dev"
 optional = false
 python-versions = ">=3.7,<4.0"
 files = [
-    {file = "botocore_stubs-1.29.71-py3-none-any.whl", hash = "sha256:1a3628b68961e35df39d3274a3a8ae59dd9830f0980b70db2710c9bc7d236330"},
-    {file = "botocore_stubs-1.29.71.tar.gz", hash = "sha256:146a5292aac76c740205a8b35405835f3d98326b0533d43ac800024bb3f9d4fc"},
+    {file = "botocore_stubs-1.29.79-py3-none-any.whl", hash = "sha256:d6f16d27cd3e2edafe72b6d3aa1fc8fe687feae1337753a67ceafc9a40670bc8"},
+    {file = "botocore_stubs-1.29.79.tar.gz", hash = "sha256:14ddd9c2d3368db7dcec01864dff04d93d26881d5d1368e4b6493f6a2e77f023"},
 ]
 
 [package.dependencies]
@@ -3936,4 +3936,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "8aa4fde710e2ee14fd83eadbc8f729a368a47e6ce914ed8486b24d628aae1b41"
+content-hash = "b3d8c1ccf53295157eeb15b6332359121b1a2a50c34742e3febe41434f578067"
