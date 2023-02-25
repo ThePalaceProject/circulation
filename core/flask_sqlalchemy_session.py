@@ -54,7 +54,7 @@ class flask_scoped_session(scoped_session):
         try:
             from greenlet import getcurrent as scopefunc
         except ImportError:
-            scopefunc = None  # let sqlalchemy use default threading
+            from threading import get_ident as scopefunc
         super().__init__(session_factory, scopefunc=scopefunc)
         if app is not None:
             self.init_app(app)
