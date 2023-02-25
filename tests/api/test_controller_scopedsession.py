@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 
 import flask
-from flask_sqlalchemy_session import current_session
+from core.flask_sqlalchemy_session import current_session
 from sqlalchemy.orm import Session
 
 import api

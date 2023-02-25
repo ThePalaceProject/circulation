@@ -7,7 +7,7 @@ import string
 from collections import Counter
 from typing import Any, Iterable, Optional
 
-import flask_sqlalchemy_session
+import core.flask_sqlalchemy_session
 import sqlalchemy
 from money import Money
 from sqlalchemy import distinct
@@ -554,7 +554,7 @@ def is_session(value: object) -> bool:
     """
     return isinstance(
         value,
-        (sqlalchemy.orm.session.Session, flask_sqlalchemy_session.flask_scoped_session),
+        (sqlalchemy.orm.session.Session, core.flask_sqlalchemy_session.flask_scoped_session),
     )
 
 

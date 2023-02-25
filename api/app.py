@@ -5,7 +5,7 @@ import urllib.parse
 from flask import Flask
 from flask_babel import Babel
 from flask_pydantic_spec import FlaskPydanticSpec
-from flask_sqlalchemy_session import flask_scoped_session
+from core.flask_sqlalchemy_session import flask_scoped_session
 
 from api.config import Configuration
 from core.log import LogConfiguration
