@@ -1,10 +1,10 @@
 from contextlib import contextmanager
 
 import flask
-from core.flask_sqlalchemy_session import current_session
 from sqlalchemy.orm import Session
 
 import api
+from core.flask_sqlalchemy_session import current_session
 from core.model import (
     Collection,
     DataSource,

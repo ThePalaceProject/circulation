@@ -1,12 +1,11 @@
-import pytest
-
-
 from unittest import mock
 
+import pytest
 from flask import Flask
-from core.flask_sqlalchemy_session import current_session, flask_scoped_session
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
+
+from core.flask_sqlalchemy_session import current_session, flask_scoped_session
 
 
 @pytest.fixture
