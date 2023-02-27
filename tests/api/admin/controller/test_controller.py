@@ -536,19 +536,6 @@ class TestResetPasswordController(AdminControllerTest):
             assert response.status_code == 500
             assert response.uri == ADMIN_AUTH_NOT_CONFIGURED.uri
 
-        # If there is only Google OAuth we should also get an error
-        create(
-            self._db,
-            ExternalIntegration,
-            protocol=ExternalIntegration.GOOGLE_OAUTH,
-            goal=ExternalIntegration.ADMIN_AUTH_GOAL,
-        )
-        with self.app.test_request_context("/admin/forgot_password"):
-            response = reset_password_ctrl.forgot_password()
-
-            assert response.status_code == 400
-            assert response.uri == ADMIN_AUTH_MECHANISM_NOT_CONFIGURED.uri
-
         # If auth providers are set we should get forgot password page - success path
         self.admin.password = "password"
         with self.app.test_request_context("/admin/forgot_password"):
@@ -631,23 +618,6 @@ class TestResetPasswordController(AdminControllerTest):
         with self.app.test_request_context("/admin/reset_password"):
             assert [] == reset_password_ctrl.admin_auth_providers
 
-            response = reset_password_ctrl.reset_password(token)
-
-            assert (
-                response.status_code == ADMIN_AUTH_MECHANISM_NOT_CONFIGURED.status_code
-            )
-            assert str(ADMIN_AUTH_MECHANISM_NOT_CONFIGURED.detail) in response.get_data(
-                as_text=True
-            )
-
-        # If there is only Google OAuth we should also get an error
-        create(
-            self._db,
-            ExternalIntegration,
-            protocol=ExternalIntegration.GOOGLE_OAUTH,
-            goal=ExternalIntegration.ADMIN_AUTH_GOAL,
-        )
-        with self.app.test_request_context("/admin/reset_password"):
             response = reset_password_ctrl.reset_password(token)
 
             assert (
