@@ -365,7 +365,7 @@ class Contributor(Base):
 
     # Regular expressions used by default_names().
     PARENTHETICAL = re.compile(r"\([^)]*\)")
-    ALPHABETIC = re.compile("[a-zA-z]")
+    ALPHABETIC = re.compile("[a-zA-Z]")
     NUMBERS = re.compile("[0-9]")
 
     DATE_RES = [
