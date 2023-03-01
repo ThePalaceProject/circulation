@@ -248,7 +248,6 @@ class ExternalIntegration(Base):
 
     # Integrations with LOGGING_GOAL
     INTERNAL_LOGGING = "Internal logging"
-    LOGGLY = "Loggly"
     CLOUDWATCH = "AWS Cloudwatch Logs"
 
     # Integrations with CATALOG_GOAL
