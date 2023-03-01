@@ -6,7 +6,7 @@ import pytest
 from freezegun import freeze_time
 from parameterized import parameterized
 
-import tests.api.saml.fixtures as fixtures
+import tests.api.saml.saml_strings as fixtures
 from api.saml.metadata.federations import incommon
 from api.saml.metadata.federations.model import SAMLFederation
 from api.saml.metadata.federations.validator import (
