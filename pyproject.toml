@@ -99,7 +99,6 @@ exclude = [
     'tests/core/test_overdrive\.py',
     'tests/core/test_s3\.py',
     'tests/core/test_scripts\.py',
-    'tests/core/test_selftest\.py',
 ]
 files = ["."]
 plugins = ["sqlmypy"]

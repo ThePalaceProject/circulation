@@ -6,7 +6,9 @@ configured, not that the code is correct.
 """
 
 import datetime
+from typing import Optional
 
+from core.model import ExternalIntegration
 from core.selftest import HasSelfTests, SelfTestResult
 from core.util.datetime_helpers import utc_now
 from core.util.http import IntegrationException
@@ -95,6 +97,8 @@ class TestHasSelfTests:
         """
 
         class Tester(HasSelfTests):
+            integration: Optional[ExternalIntegration]
+
             def __init__(self, extra_arg=None):
                 """This constructor works."""
                 self.invoked_with = extra_arg
