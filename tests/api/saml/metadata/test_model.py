@@ -9,7 +9,7 @@ from api.saml.metadata.model import (
     SAMLSubject,
     SAMLSubjectPatronIDExtractor,
 )
-from tests.api.saml import fixtures
+from tests.api.saml import saml_strings
 
 
 class TestAttributeStatement:
@@ -265,7 +265,7 @@ class TestSAMLSubjectPatronIDExtractor:
                     SAMLAttributeType.eduPersonPrincipalName.name,
                     SAMLAttributeType.mail.name,
                 ],
-                fixtures.PATRON_ID_REGULAR_EXPRESSION_ORG,
+                saml_strings.PATRON_ID_REGULAR_EXPRESSION_ORG,
             ),
             (
                 "patron_id_regular_expression_matching_second_saml_attribute",
@@ -295,7 +295,7 @@ class TestSAMLSubjectPatronIDExtractor:
                     SAMLAttributeType.eduPersonPrincipalName.name,
                     SAMLAttributeType.mail.name,
                 ],
-                fixtures.PATRON_ID_REGULAR_EXPRESSION_ORG,
+                saml_strings.PATRON_ID_REGULAR_EXPRESSION_ORG,
             ),
             (
                 "unicode_patron_id_regular_expression_matching_saml_subject",
@@ -324,7 +324,7 @@ class TestSAMLSubjectPatronIDExtractor:
                     SAMLAttributeType.eduPersonPrincipalName.name,
                     SAMLAttributeType.mail.name,
                 ],
-                fixtures.PATRON_ID_REGULAR_EXPRESSION_ORG,
+                saml_strings.PATRON_ID_REGULAR_EXPRESSION_ORG,
             ),
             (
                 "patron_id_regular_expression_not_matching_saml_subject",
@@ -353,7 +353,7 @@ class TestSAMLSubjectPatronIDExtractor:
                     SAMLAttributeType.eduPersonPrincipalName.name,
                     SAMLAttributeType.mail.name,
                 ],
-                fixtures.PATRON_ID_REGULAR_EXPRESSION_COM,
+                saml_strings.PATRON_ID_REGULAR_EXPRESSION_COM,
             ),
             (
                 "patron_id_regular_expression_not_matching_saml_attributes_but_matching_name_id",
@@ -384,7 +384,7 @@ class TestSAMLSubjectPatronIDExtractor:
                     SAMLAttributeType.eduPersonPrincipalName.name,
                     SAMLAttributeType.mail.name,
                 ],
-                fixtures.PATRON_ID_REGULAR_EXPRESSION_COM,
+                saml_strings.PATRON_ID_REGULAR_EXPRESSION_COM,
             ),
         ]
     )
