@@ -1227,14 +1227,14 @@ files = [
 
 [[package]]
 name = "isbnlib"
-version = "3.10.12"
+version = "3.10.13"
 description = "Extract, clean, transform, hyphenate and metadata for ISBNs (International Standard Book Number)."
 category = "main"
 optional = false
 python-versions = "*"
 files = [
-    {file = "isbnlib-3.10.12-py2.py3-none-any.whl", hash = "sha256:ad6f2164c3d2e025c099e8f0b457593899ff18ce1b7723a7dfc8abe6304300d8"},
-    {file = "isbnlib-3.10.12.tar.gz", hash = "sha256:14e64db192bc3d33c984ad01bc64223ea0abf1abb7af01ec8c4ddd08a586b433"},
+    {file = "isbnlib-3.10.13-py2.py3-none-any.whl", hash = "sha256:b6d25850d15d40f6a86a6e138ce06757b3b10f30caf0a6fe5b4bec2f568f9e9b"},
+    {file = "isbnlib-3.10.13.tar.gz", hash = "sha256:4679341f56a0df91c635e838a222ce7f10755cb5bcc9548e3f7a8aff5674d3d4"},
 ]
 
 [[package]]
@@ -3908,4 +3908,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "284c05c25a066ee5a08d2c073ab8402f59a5cfb4d2bf4c6d36324566d83063ce"
+content-hash = "9e956b18837e665f768f21ac70575d0144ece619385eeebc151ec40fec5477d4"
