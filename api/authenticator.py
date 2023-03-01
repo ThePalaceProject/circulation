@@ -8,7 +8,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from abc import ABCMeta
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Union
 
 import flask
 import jwt
@@ -1669,7 +1669,9 @@ class AuthenticationProvider(OPDSAuthenticationFlow):
         """
         return None
 
-    def remote_patron_lookup(self, patron_or_patrondata):
+    def remote_patron_lookup(
+        self, patron_or_patrondata
+    ) -> Union[PatronData, Patron, None]:
         """Ask the remote for detailed information about a patron's account.
 
         This may be called in the course of authenticating a patron,
@@ -1687,23 +1689,7 @@ class AuthenticationProvider(OPDSAuthenticationFlow):
         :return: An updated PatronData object.
 
         """
-        if not patron_or_patrondata:
-            return None
-        if isinstance(patron_or_patrondata, PatronData) or isinstance(
-            patron_or_patrondata, Patron
-        ):
-
-            return patron_or_patrondata
-        raise ValueError(
-            "Unexpected object %r passed into remote_patron_lookup."
-            % patron_or_patrondata
-        )
-
-    # BasicAuthenticationProvider defines remote_patron_lookup to call this
-    # method and then do something additional; by default, we want the core
-    # lookup mechanism to work the same way as AuthenticationProvider.remote_patron_lookup.
-
-    _remote_patron_lookup = remote_patron_lookup
+        raise NotImplementedError()
 
     def _authentication_flow_document(self, _db):
         """Create a Authentication Flow object for use in an Authentication for
@@ -2006,9 +1992,26 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests):
             or self.DEFAULT_PASSWORD_LABEL
         )
 
-    def remote_patron_lookup(self, patron_or_patrondata):
+    def _remote_patron_lookup(
+        self, patron_or_patrondata
+    ) -> Union[PatronData, Patron, None]:
+        if not patron_or_patrondata:
+            return None
+        if isinstance(patron_or_patrondata, PatronData) or isinstance(
+            patron_or_patrondata, Patron
+        ):
+
+            return patron_or_patrondata
+        raise ValueError(
+            "Unexpected object %r passed into remote_patron_lookup."
+            % patron_or_patrondata
+        )
+
+    def remote_patron_lookup(
+        self, patron_or_patrondata
+    ) -> Union[PatronData, Patron, None]:
         """Ask the remote for information about this patron, and then make sure
-        the patron belongs to the library associated with thie BasicAuthenticationProvider."""
+        the patron belongs to the library associated with this BasicAuthenticationProvider."""
 
         patron_info = self._remote_patron_lookup(patron_or_patrondata)
         if patron_info:
