@@ -1,13 +1,13 @@
 import json
 from datetime import datetime
-from typing import Union
+from typing import Optional, Union
 
 from flask_babel import lazy_gettext as _
 
 from api.authenticator import BasicAuthenticationProvider, PatronData
 from api.sip.client import SIPClient
 from api.sip.dialect import Dialect as Sip2Dialect
-from core.model import ExternalIntegration
+from core.model import ExternalIntegration, Patron
 from core.util import MoneyUtility
 from core.util.http import RemoteIntegrationException
 
@@ -238,7 +238,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
         except OSError as e:
             raise RemoteIntegrationException(self.server or "unknown server", str(e))
 
-    def _remote_patron_lookup(self, patron_or_patrondata):
+    def _remote_patron_lookup(self, patron_or_patrondata) -> Union[None, PatronData]:
         info = self.patron_information(
             patron_or_patrondata.authorization_identifier, None
         )
@@ -305,7 +305,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
                     ("Raw test patron information"), raw_patron_information
                 )
 
-    def info_to_patrondata(self, info, validate_password=True):
+    def info_to_patrondata(self, info, validate_password=True) -> Optional[PatronData]:
 
         """Convert the SIP-specific dictionary obtained from
         SIPClient.patron_information() to an abstract,

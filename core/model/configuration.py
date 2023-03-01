@@ -329,6 +329,7 @@ class ExternalIntegration(Base):
         "Library",
         back_populates="integrations",
         secondary=lambda: externalintegrations_libraries,
+        uselist=True,
     )
 
     def __repr__(self):

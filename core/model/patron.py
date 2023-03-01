@@ -3,7 +3,7 @@
 import datetime
 import logging
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from psycopg2.extras import NumericRange
 from sqlalchemy import (
@@ -175,6 +175,10 @@ class Patron(Base):
     # metadata synced with their ILS record at intervals no greater
     # than this time.
     MAX_SYNC_TIME = datetime.timedelta(hours=12)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.neighborhood: Optional[str] = None
 
     def __repr__(self):
         def date(d):

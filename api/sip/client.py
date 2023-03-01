@@ -454,7 +454,7 @@ class SIPClient(Constants):
         retries = 0
         while not parsed:
             if retries >= self.MAXIMUM_RETRIES:
-                # Only retry MAXIMUM_RETRIES times in case we we are sending
+                # Only retry MAXIMUM_RETRIES times in case we are sending
                 # a message the ILS doesn't like, so we don't retry forever
                 raise OSError("Maximum SIP retries reached")
             self.send(message_with_checksum)

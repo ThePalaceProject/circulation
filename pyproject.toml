@@ -158,8 +158,6 @@ module = [
 follow_imports = "skip"
 module = [
     "core.classifier.*",
-    "tests.api.admin.controller.*",
-    "tests.fixtures.*",
 ]
 
 [[tool.mypy.overrides]]

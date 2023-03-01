@@ -102,7 +102,7 @@ class ControllerFixture:
         base_url.value = "http://test-circulation-manager/"
 
     def circulation_manager_setup_with_session(
-        self, session: Session, overrides: ControllerFixtureSetupOverrides = None
+        self, session: Session, overrides: ControllerFixtureSetupOverrides | None = None
     ) -> CirculationManager:
         """Set up initial Library arrangements for this test.
 
@@ -154,8 +154,8 @@ class ControllerFixture:
 
         # Set CirculationAPI and top-level lane for the default
         # library, for convenience in tests.
-        self.manager.d_circulation = self.manager.circulation_apis[self.library.id]
-        self.manager.d_top_level_lane = self.manager.top_level_lanes[self.library.id]
+        self.manager.d_circulation = self.manager.circulation_apis[self.library.id]  # type: ignore
+        self.manager.d_top_level_lane = self.manager.top_level_lanes[self.library.id]  # type: ignore
         self.controller = CirculationManagerController(self.manager)
 
         # Set a convenient default lane.
@@ -168,7 +168,7 @@ class ControllerFixture:
         return self.manager
 
     def circulation_manager_setup(
-        self, overrides: ControllerFixtureSetupOverrides = None
+        self, overrides: ControllerFixtureSetupOverrides | None = None
     ) -> CirculationManager:
         return self.circulation_manager_setup_with_session(self.db.session, overrides)
 
