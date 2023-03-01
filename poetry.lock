@@ -1554,21 +1554,6 @@ files = [
 rapidfuzz = ">=2.3.0,<3.0.0"
 
 [[package]]
-name = "loggly-python-handler"
-version = "1.0.1"
-description = "Python logging handler that sends messages to Loggly"
-category = "main"
-optional = false
-python-versions = "*"
-files = [
-    {file = "loggly-python-handler-1.0.1.tar.gz", hash = "sha256:adce302d21fbc5b9647a01067243fb549e9992bfe5ab09807b8fad56c9411995"},
-    {file = "loggly_python_handler-1.0.1-py3-none-any.whl", hash = "sha256:0a4a826adb31ffeb76dac7ca116ccb032ed923254244160e70ddd2c3e88df4fd"},
-]
-
-[package.dependencies]
-requests-futures = ">=1.0.0"
-
-[[package]]
 name = "lxml"
 version = "4.9.2"
 description = "Powerful and Pythonic XML processing library combining libxml2/libxslt with the ElementTree API."
@@ -3087,21 +3072,6 @@ socks = ["PySocks (>=1.5.6,!=1.5.7)"]
 use-chardet-on-py3 = ["chardet (>=3.0.2,<6)"]
 
 [[package]]
-name = "requests-futures"
-version = "1.0.0"
-description = "Asynchronous Python HTTP for Humans."
-category = "main"
-optional = false
-python-versions = "*"
-files = [
-    {file = "requests-futures-1.0.0.tar.gz", hash = "sha256:35547502bf1958044716a03a2f47092a89efe8f9789ab0c4c528d9c9c30bc148"},
-    {file = "requests_futures-1.0.0-py2.py3-none-any.whl", hash = "sha256:633804c773b960cef009efe2a5585483443c6eac3c39cc64beba2884013bcdd9"},
-]
-
-[package.dependencies]
-requests = ">=1.2.0"
-
-[[package]]
 name = "requests-mock"
 version = "1.10.0"
 description = "Mock out responses from the requests package"
@@ -3936,4 +3906,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "8aa4fde710e2ee14fd83eadbc8f729a368a47e6ce914ed8486b24d628aae1b41"
+content-hash = "4fc8d5f6a5f918fc77c0b84f660cc2f9ff0e0af2d10cce51bddc6751c4f8d741"

@@ -4,7 +4,6 @@ import socket
 
 from boto3 import client as AwsClient
 from flask_babel import lazy_gettext as _
-from loggly.handlers import HTTPSHandler as LogglyHandler
 from watchtower import CloudWatchLogHandler
 
 from .config import CannotLoadConfiguration, Configuration
@@ -175,83 +174,6 @@ class SysLogger(Logger):
             app_name=app_name,
         )
         return handler
-
-
-class Loggly(Logger):
-
-    NAME = "Loggly"
-    DEFAULT_LOGGLY_URL = "https://logs-01.loggly.com/inputs/%(token)s/tag/python/"
-
-    USER = "user"
-    PASSWORD = "password"
-    URL = "url"
-
-    SETTINGS = [
-        {"key": USER, "label": _("Username"), "required": True},
-        {"key": PASSWORD, "label": _("Password"), "required": True},
-        {"key": URL, "label": _("URL"), "required": True, "format": "url"},
-    ]
-
-    SITEWIDE = True
-
-    @classmethod
-    def from_configuration(cls, _db, testing=False):
-        loggly = None
-        from .model import ConfigurationSetting, ExternalIntegration
-
-        app_name = cls.DEFAULT_APP_NAME
-        if _db and not testing:
-            goal = ExternalIntegration.LOGGING_GOAL
-            loggly = ExternalIntegration.lookup(_db, ExternalIntegration.LOGGLY, goal)
-            app_name = (
-                ConfigurationSetting.sitewide(_db, Configuration.LOG_APP_NAME).value
-                or app_name
-            )
-
-        if loggly:
-            loggly = Loggly.loggly_handler(loggly)
-            cls.set_formatter(loggly, app_name)
-
-        return loggly
-
-    @classmethod
-    def loggly_handler(cls, externalintegration):
-        """Turn a Loggly ExternalIntegration into a log handler."""
-        token = externalintegration.password
-        url = externalintegration.url or cls.DEFAULT_LOGGLY_URL
-        if not url:
-            raise CannotLoadConfiguration(
-                "Loggly integration configured but no URL provided."
-            )
-        try:
-            url = cls._interpolate_loggly_url(url, token)
-        except (TypeError, KeyError) as e:
-            raise CannotLoadConfiguration(
-                "Cannot interpolate token %s into loggly URL %s"
-                % (
-                    token,
-                    url,
-                )
-            )
-        return LogglyHandler(url)
-
-    @classmethod
-    def _interpolate_loggly_url(cls, url, token):
-        if "%s" in url:
-            return url % token
-        if "%(" in url:
-            return url % dict(token=token)
-
-        # Assume the token is already in the URL.
-        return url
-
-    @classmethod
-    def set_formatter(cls, handler, app_name):
-        """Tell the given `handler` to format its log messages in a
-        certain way.
-        """
-        formatter = JSONFormatter(app_name)
-        handler.setFormatter(formatter)
 
 
 class CloudwatchLogs(Logger):
@@ -483,7 +405,7 @@ class LogConfiguration:
 
         # These loggers can cause infinite loops if they're set to
         # DEBUG, because their log is triggered during the process of
-        # logging something to Loggly. These loggers will never have their
+        # logging something to Cloudwatch. These loggers will never have their
         # log level set lower than WARN.
         if database_log_level == cls.ERROR:
             loop_prevention_log_level = cls.ERROR
@@ -533,7 +455,7 @@ class LogConfiguration:
                 or database_log_level
             )
 
-        loggers = [SysLogger, Loggly, CloudwatchLogs]
+        loggers = [SysLogger, CloudwatchLogs]
         handlers = []
         errors = []
 
