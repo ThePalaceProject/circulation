@@ -1730,7 +1730,9 @@ class TestAuthenticationProvider:
             == provider.external_integration(db.session)
         )
 
-    def test_remote_patron_lookup(self, authenticator_fixture: AuthenticatorFixture):
+    def test_private_remote_patron_lookup(
+        self, authenticator_fixture: AuthenticatorFixture
+    ):
         provider = authenticator_fixture.mock_basic(patrondata=None)
 
         # Passing a type other than Patron or PatronData to _remote_patron_lookup
