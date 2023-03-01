@@ -100,10 +100,6 @@ exclude = [
     'tests/core/test_s3\.py',
     'tests/core/test_scripts\.py',
     'tests/core/test_selftest\.py',
-    'tests/fixtures/api_config\.py',
-    'tests/fixtures/api_controller\.py',
-    'tests/fixtures/database\.py',
-    'tests/fixtures/odl\.py',
 ]
 files = ["."]
 plugins = ["sqlmypy"]
