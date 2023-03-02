@@ -1210,14 +1210,14 @@ files = [
 
 [[package]]
 name = "isbnlib"
-version = "3.10.12"
+version = "3.10.13"
 description = "Extract, clean, transform, hyphenate and metadata for ISBNs (International Standard Book Number)."
 category = "main"
 optional = false
 python-versions = "*"
 files = [
-    {file = "isbnlib-3.10.12-py2.py3-none-any.whl", hash = "sha256:ad6f2164c3d2e025c099e8f0b457593899ff18ce1b7723a7dfc8abe6304300d8"},
-    {file = "isbnlib-3.10.12.tar.gz", hash = "sha256:14e64db192bc3d33c984ad01bc64223ea0abf1abb7af01ec8c4ddd08a586b433"},
+    {file = "isbnlib-3.10.13-py2.py3-none-any.whl", hash = "sha256:b6d25850d15d40f6a86a6e138ce06757b3b10f30caf0a6fe5b4bec2f568f9e9b"},
+    {file = "isbnlib-3.10.13.tar.gz", hash = "sha256:4679341f56a0df91c635e838a222ce7f10755cb5bcc9548e3f7a8aff5674d3d4"},
 ]
 
 [[package]]
@@ -3433,14 +3433,14 @@ files = [
 
 [[package]]
 name = "types-mock"
-version = "4.0.15.2"
+version = "5.0.0.5"
 description = "Typing stubs for mock"
 category = "dev"
 optional = false
 python-versions = "*"
 files = [
-    {file = "types-mock-4.0.15.2.tar.gz", hash = "sha256:83fe479741adb92210c3c92f006fe058297d5051e93c2cec36f1a9e0bae16e9e"},
-    {file = "types_mock-4.0.15.2-py3-none-any.whl", hash = "sha256:39d489b6d9361b75448677680a3087701c0cfab61260363cfc0f646d2bf0a8b2"},
+    {file = "types-mock-5.0.0.5.tar.gz", hash = "sha256:171e6618583db52cfa72386538022892e2d341b2b5bc47c07cba90c96d0e8735"},
+    {file = "types_mock-5.0.0.5-py3-none-any.whl", hash = "sha256:03790888cd33d9fef408f0391aa20803d44d4c21b021dd8a08de8763ffdd2c91"},
 ]
 
 [[package]]
@@ -3457,38 +3457,38 @@ files = [
 
 [[package]]
 name = "types-psycopg2"
-version = "2.9.21.4"
+version = "2.9.21.8"
 description = "Typing stubs for psycopg2"
 category = "dev"
 optional = false
 python-versions = "*"
 files = [
-    {file = "types-psycopg2-2.9.21.4.tar.gz", hash = "sha256:d43dda166a70d073ddac40718e06539836b5844c99b58ef8d4489a8df2edf5c0"},
-    {file = "types_psycopg2-2.9.21.4-py3-none-any.whl", hash = "sha256:6a05dca0856996aa37d7abe436751803bf47ec006cabbefea092e057f23bc95d"},
+    {file = "types-psycopg2-2.9.21.8.tar.gz", hash = "sha256:b629440ffcfdebd742fab07f777ff69aefdd19394a138c18e921a1964c3cf5f6"},
+    {file = "types_psycopg2-2.9.21.8-py3-none-any.whl", hash = "sha256:e747fbec6e0e2502b625bc7686d13cc62fc170e8ae920e5ba27fac946778eeb9"},
 ]
 
 [[package]]
 name = "types-python-dateutil"
-version = "2.8.19.6"
+version = "2.8.19.10"
 description = "Typing stubs for python-dateutil"
 category = "dev"
 optional = false
 python-versions = "*"
 files = [
-    {file = "types-python-dateutil-2.8.19.6.tar.gz", hash = "sha256:4a6f4cc19ce4ba1a08670871e297bf3802f55d4f129e6aa2443f540b6cf803d2"},
-    {file = "types_python_dateutil-2.8.19.6-py3-none-any.whl", hash = "sha256:cfb7d31021c6bce6f3362c69af6e3abb48fe3e08854f02487e844ff910deec2a"},
+    {file = "types-python-dateutil-2.8.19.10.tar.gz", hash = "sha256:c640f2eb71b4b94a9d3bfda4c04250d29a24e51b8bad6e12fddec0cf6e96f7a3"},
+    {file = "types_python_dateutil-2.8.19.10-py3-none-any.whl", hash = "sha256:fbecd02c19cac383bf4a16248d45ffcff17c93a04c0794be5f95d42c6aa5de39"},
 ]
 
 [[package]]
 name = "types-pytz"
-version = "2022.7.1.0"
+version = "2022.7.1.2"
 description = "Typing stubs for pytz"
 category = "dev"
 optional = false
 python-versions = "*"
 files = [
-    {file = "types-pytz-2022.7.1.0.tar.gz", hash = "sha256:918f9c3e7a950ba7e7d6f84b18a7cacabc8886cb7125fb1927ff1c752b4b59de"},
-    {file = "types_pytz-2022.7.1.0-py3-none-any.whl", hash = "sha256:10ec7d009a02340f1cecd654ac03f0c29b6088a03b63d164401fc52df45936b2"},
+    {file = "types-pytz-2022.7.1.2.tar.gz", hash = "sha256:487d3e8e9f4071eec8081746d53fa982bbc05812e719dcbf2ebf3d55a1a4cd28"},
+    {file = "types_pytz-2022.7.1.2-py3-none-any.whl", hash = "sha256:40ca448a928d566f7d44ddfde0066e384f7ffbd4da2778e42a4570eaca572446"},
 ]
 
 [[package]]
@@ -3828,4 +3828,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "c7b7e3db8c4dccb028d71ea05eac9ea1f6b5d245d2b84cab1628e6d28e2167f9"
+content-hash = "6272bdf6a23ddbcad20a3f9248c456fbff6fc895d635417a3c739368f335b46f"
