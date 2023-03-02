@@ -266,7 +266,6 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             headers["x-sirs-sessionToken"] = session_token
 
         url = urljoin(self.server_url, path)
-        # Adding a long timeout because /patronStatusInfo would fail often
         return HTTP.request_with_timeout(method, url, headers=headers, json=json)
 
     def api_patron_login(self, username: str, password: str) -> Literal[False] | dict:
