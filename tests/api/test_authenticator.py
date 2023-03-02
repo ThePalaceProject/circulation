@@ -3474,7 +3474,7 @@ class TestSirsiDynixAuthenticationProvider:
         bad_prefix_patron_resp = {
             "fields": {"approved": True, "patronType": {"key": "testblocked"}}
         }
-        sirsi_fixture.api.sirsi_disallowed_prefixes = ["blocked"]
+        sirsi_fixture.api.sirsi_disallowed_suffixes = ["blocked"]
         sirsi_fixture.api.api_read_patron_data = MagicMock(
             return_value=bad_prefix_patron_resp
         )

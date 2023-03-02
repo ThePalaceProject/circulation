@@ -118,21 +118,25 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             "/" if not self.server_url.endswith("/") else ""
         )
 
+        _db = object_session(library)
+
         self.sirsi_client_id = integration.setting(self.Keys.CLIENT_ID).value
         self.sirsi_app_id = os.environ.get(
             Configuration.SIRSI_DYNIX_APP_ID, default=self.DEFAULT_APP_ID
         )
-        self.sirsi_disallowed_prefixes = integration.setting(
-            self.Keys.LIBRARY_DISALLOWED_SUFFIXES
-        ).value_or_default([])
+        self.sirsi_disallowed_suffixes = (
+            ConfigurationSetting.for_library_and_externalintegration(
+                _db, self.Keys.LIBRARY_DISALLOWED_SUFFIXES, library, integration
+            ).value_or_default([])
+        )
         self.sirsi_library_id = (
             ConfigurationSetting.for_library_and_externalintegration(
-                object_session(library), self.Keys.LIBRARY_ID, library, integration
+                _db, self.Keys.LIBRARY_ID, library, integration
             ).value
         )
         self.sirsi_library_prefix = (
             ConfigurationSetting.for_library_and_externalintegration(
-                object_session(library), self.Keys.LIBRARY_PREFIX, library, integration
+                _db, self.Keys.LIBRARY_PREFIX, library, integration
             ).value
         )
 
@@ -197,7 +201,7 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
         # we are left with the patron "suffix"
         # This suffix can be part of the blocked patron types list
         patron_suffix = patron_type[len(self.sirsi_library_prefix) :]
-        if patron_suffix in self.sirsi_disallowed_prefixes:
+        if patron_suffix in self.sirsi_disallowed_suffixes:
             patrondata.block_reason = SirsiBlockReasons.PATRON_BLOCKED
             return patrondata
 
