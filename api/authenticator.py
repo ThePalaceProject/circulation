@@ -2011,7 +2011,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests):
         the patron belongs to the library associated with thie BasicAuthenticationProvider."""
 
         patron_info = self._remote_patron_lookup(patron_or_patrondata)
-        if patron_info:
+        if patron_info and not isinstance(patron_info, ProblemDetail):
             return self.enforce_library_identifier_restriction(
                 patron_info.authorization_identifier, patron_info
             )

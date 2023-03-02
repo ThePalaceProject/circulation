@@ -8,6 +8,7 @@ from urllib.parse import urljoin
 from sqlalchemy.orm import object_session
 
 from api.authenticator import BasicAuthenticationProvider, PatronData
+from api.problem_details import INVALID_CREDENTIALS
 from core.config import Configuration
 from core.model.configuration import (
     ConfigurationAttributeType,
@@ -185,8 +186,8 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
         # This ensures the patron is a member of the library
         # they are interacting with
         if not patron_type.startswith(self.sirsi_library_prefix):
-            patrondata.block_reason = SirsiBlockReasons.INCORRECT_LOCATION
-            return patrondata
+            # We respond with a problem detail, stopping the upstream authentication immediately
+            return INVALID_CREDENTIALS
 
         if not fields.get("approved", False):
             patrondata.block_reason = SirsiBlockReasons.NOT_APPROVED

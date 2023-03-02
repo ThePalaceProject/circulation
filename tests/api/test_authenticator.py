@@ -3468,7 +3468,7 @@ class TestSirsiDynixAuthenticationProvider:
         patrondata = sirsi_fixture.api.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
-        assert patrondata.block_reason == SirsiBlockReasons.INCORRECT_LOCATION
+        assert patrondata == INVALID_CREDENTIALS
 
         # Test blocked patron types
         bad_prefix_patron_resp = {
