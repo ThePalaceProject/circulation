@@ -66,7 +66,7 @@ class TestSIPClient:
             self.context = Mock(spec=ssl.SSLContext)
             return self.context
 
-        target_server = object()
+        target_server = "www.example.com"
         insecure = SIPClient(
             target_server, 999, use_ssl=False, ssl_contexts=create_context
         )
@@ -86,7 +86,7 @@ class TestSIPClient:
             self.context_without = MagicMock(ssl.SSLContext)
             return self.context_without
 
-        target_server = object()
+        target_server = "www.example.com"
         no_cert = SIPClient(
             target_server, 999, use_ssl=True, ssl_contexts=create_context
         )
@@ -101,6 +101,10 @@ class TestSIPClient:
         self.context_without.load_cert_chain.assert_not_called()
         self.context_without.wrap_socket.assert_called_once()
 
+        # Check that the right things were passed to wrap_socket
+        wrap_called = self.context_without.wrap_socket.call_args
+        assert wrap_called.kwargs["server_hostname"] == target_server
+
     def test_secure_connect_with_cert(self, monkeypatch: MonkeyPatch):
         self.context_with: MagicMock = MagicMock()
 
@@ -109,7 +113,7 @@ class TestSIPClient:
             self.context_with = MagicMock(ssl.SSLContext)
             return self.context_with
 
-        target_server = object()
+        target_server = "www.example.com"
         with_cert = SIPClient(
             target_server,
             999,
@@ -139,6 +143,10 @@ class TestSIPClient:
         assert self.context_with.minimum_version == ssl.TLSVersion.TLSv1_2
         self.context_with.load_cert_chain.assert_called_once()
         self.context_with.wrap_socket.assert_called_once()
+
+        # Check that the right things were passed to wrap_socket
+        wrap_called = self.context_with.wrap_socket.call_args
+        assert wrap_called.kwargs["server_hostname"] == target_server
 
         # Check that the certificate and key were copied to temporary files
         assert len(self.temporary_files) == 2

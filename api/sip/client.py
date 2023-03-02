@@ -433,7 +433,9 @@ class SIPClient(Constants):
                 certfile=tmp_ssl_cert_path, keyfile=tmp_ssl_key_path
             )
 
-        connection = context.wrap_socket(insecure_connection)
+        connection = context.wrap_socket(
+            insecure_connection, server_hostname=self.target_server
+        )
 
         # Now that the connection has been established, the temporary
         # files are no longer needed. Remove them.
