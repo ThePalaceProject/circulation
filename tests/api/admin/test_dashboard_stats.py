@@ -14,22 +14,41 @@ if TYPE_CHECKING:
     from tests.fixtures.database import DatabaseTransactionFixture
 
 
+class AdminStatisticsSessionFixture:
+    admin: Admin
+    db: DatabaseTransactionFixture
+
+    def __init__(self, admin: Admin, db: DatabaseTransactionFixture):
+        self.admin = admin
+        self.db = db
+
+    def get_statistics(self):
+        # Avoid flaky tests by ensuring that the DB session is flushed
+        # before we generate statistics from the database.
+        self.db.session.flush()
+        return generate_statistics(self.admin, self.db.session)
+
+
 @pytest.fixture
-def admin(db: DatabaseTransactionFixture) -> Admin:
-    admin, ignore = create(db.session, Admin, email="example@nypl.org")
+def admin_statistics_session(
+    db: DatabaseTransactionFixture,
+) -> AdminStatisticsSessionFixture:
+    admin, _ = create(db.session, Admin, email="example@nypl.org")
     admin.password = "password"
-    return admin
+    return AdminStatisticsSessionFixture(admin, db)
 
 
-def test_stats_patrons(admin: Admin, db: DatabaseTransactionFixture):
-    db_session = db.session
+def test_stats_patrons(admin_statistics_session: AdminStatisticsSessionFixture):
+    session = admin_statistics_session
+    admin = session.admin
+    db = session.db
 
     admin.add_role(AdminRole.SYSTEM_ADMIN)
 
     default_library = db.library("Default Library", "default")
 
     # At first, there are no patrons in the database.
-    response = generate_statistics(admin, db_session)
+    response = session.get_statistics()
     library_data = response.get(default_library.short_name)
     total_data = response.get("total")
     for data in [library_data, total_data]:
@@ -56,7 +75,7 @@ def test_stats_patrons(admin: Admin, db: DatabaseTransactionFixture):
     patron3 = db.patron()
     open_access_pool.loan_to(patron3)
 
-    response = generate_statistics(admin, db_session)
+    response = session.get_statistics()
     library_data = response.get(default_library.short_name)
     total_data = response.get("total")
     for data in [library_data, total_data]:
@@ -75,7 +94,7 @@ def test_stats_patrons(admin: Admin, db: DatabaseTransactionFixture):
     patron5 = db.patron(library=l2)
     pool.on_hold_to(patron5)
 
-    response = generate_statistics(admin, db_session)
+    response = session.get_statistics()
     library_data = response.get(default_library.short_name)
     total_data = response.get("total")
     assert 3 == library_data.get("patrons").get("total")
@@ -94,7 +113,7 @@ def test_stats_patrons(admin: Admin, db: DatabaseTransactionFixture):
     admin.remove_role(AdminRole.SYSTEM_ADMIN)
     admin.add_role(AdminRole.LIBRARIAN, default_library)
 
-    response = generate_statistics(admin, db_session)
+    response = session.get_statistics()
     library_data = response.get(default_library.short_name)
     total_data = response.get("total")
     assert 3 == library_data.get("patrons").get("total")
@@ -109,15 +128,17 @@ def test_stats_patrons(admin: Admin, db: DatabaseTransactionFixture):
     assert 1 == total_data.get("patrons").get("holds")
 
 
-def test_stats_inventory(admin: Admin, db: DatabaseTransactionFixture):
-    db_session = db.session
+def test_stats_inventory(admin_statistics_session: AdminStatisticsSessionFixture):
+    session = admin_statistics_session
+    admin = session.admin
+    db = session.db
 
     admin.add_role(AdminRole.SYSTEM_ADMIN)
 
     default_library = db.library("Default Library", "default")
 
     # At first, there are no titles in the database.
-    response = generate_statistics(admin, db_session)
+    response = session.get_statistics()
     library_data = response.get(default_library.short_name)
     total_data = response.get("total")
     for data in [library_data, total_data]:
@@ -148,7 +169,7 @@ def test_stats_inventory(admin: Admin, db: DatabaseTransactionFixture):
     pool3.licenses_owned = 5
     pool3.licenses_available = 4
 
-    response = generate_statistics(admin, db_session)
+    response = session.get_statistics()
     library_data = response.get(default_library.short_name)
     total_data = response.get("total")
     for data in [library_data, total_data]:
@@ -165,7 +186,7 @@ def test_stats_inventory(admin: Admin, db: DatabaseTransactionFixture):
     pool4.licenses_owned = 2
     pool4.licenses_available = 2
 
-    response = generate_statistics(admin, db_session)
+    response = session.get_statistics()
     library_data = response.get(default_library.short_name)
     total_data = response.get("total")
     assert 2 == library_data.get("inventory").get("titles")
@@ -180,7 +201,7 @@ def test_stats_inventory(admin: Admin, db: DatabaseTransactionFixture):
 
     # The admin can no longer see the other collection, so it's not
     # counted in the totals.
-    response = generate_statistics(admin, db_session)
+    response = session.get_statistics()
     library_data = response.get(default_library.short_name)
     total_data = response.get("total")
     for data in [library_data, total_data]:
@@ -190,8 +211,10 @@ def test_stats_inventory(admin: Admin, db: DatabaseTransactionFixture):
         assert 4 == inventory_data.get("available_licenses")
 
 
-def test_stats_collections(admin: Admin, db: DatabaseTransactionFixture):
-    db_session = db.session
+def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixture):
+    session = admin_statistics_session
+    admin = session.admin
+    db = session.db
 
     admin.add_role(AdminRole.SYSTEM_ADMIN)
 
@@ -206,7 +229,7 @@ def test_stats_collections(admin: Admin, db: DatabaseTransactionFixture):
 
     # At first, there is 1 open access title in the database,
     # created in CirculationControllerTest.setup.
-    response = generate_statistics(admin, db_session)
+    response = session.get_statistics()
     library_data = response.get(default_library.short_name)
     total_data = response.get("total")
     for data in [library_data, total_data]:
@@ -261,7 +284,7 @@ def test_stats_collections(admin: Admin, db: DatabaseTransactionFixture):
     pool4.licenses_owned = 5
     pool4.licenses_available = 5
 
-    response = generate_statistics(admin, db_session)
+    response = session.get_statistics()
     library_data = response.get(default_library.short_name)
     total_data = response.get("total")
     library_collections_data = library_data.get("collections")
@@ -293,7 +316,7 @@ def test_stats_collections(admin: Admin, db: DatabaseTransactionFixture):
 
     # c2 is no longer included in the totals since the admin's library does
     # not use it.
-    response = generate_statistics(admin, db_session)
+    response = session.get_statistics()
     library_data = response.get(default_library.short_name)
     total_data = response.get("total")
     for data in [library_data, total_data]:
@@ -315,9 +338,14 @@ def test_stats_collections(admin: Admin, db: DatabaseTransactionFixture):
 
 
 def test_stats_parent_collection_permissions(
-    admin: Admin, db: DatabaseTransactionFixture
+    admin_statistics_session: AdminStatisticsSessionFixture,
 ):
     """A parent collection may be dissociated from a library"""
+
+    session = admin_statistics_session
+    admin = session.admin
+    db = session.db
+
     parent: Collection = db.collection()
     child: Collection = db.collection()
     child.parent = parent
@@ -325,7 +353,7 @@ def test_stats_parent_collection_permissions(
     child.libraries.append(library)
     admin.add_role(AdminRole.LIBRARIAN, library)
 
-    response = generate_statistics(admin, db.session)
+    response = session.get_statistics()
     stats = response["total"]["collections"]
 
     # Child is in stats, but parent is not
