@@ -33,13 +33,6 @@ ADMIN_NOT_AUTHORIZED = pd(
     _("Your admin account is not authorized to make this request."),
 )
 
-GOOGLE_OAUTH_FAILURE = pd(
-    "http://librarysimplified.org/terms/problem/google-oauth-failure",
-    400,
-    _("Google OAuth Error"),
-    _("There was an error connecting with Google OAuth."),
-)
-
 INVALID_CSRF_TOKEN = pd(
     "http://librarysimplified.org/terms/problem/invalid-csrf-token",
     400,

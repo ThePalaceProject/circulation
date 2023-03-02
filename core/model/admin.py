@@ -38,9 +38,6 @@ class Admin(Base, HasSessionCache):
     id = Column(Integer, primary_key=True)
     email = Column(Unicode, unique=True, nullable=False)
 
-    # Admins who log in with OAuth will have a credential.
-    credential = Column(Unicode)
-
     # Admins can also log in with a local password.
     password_hashed = Column(Unicode, index=True)
 
@@ -54,11 +51,6 @@ class Admin(Base, HasSessionCache):
 
     def cache_key(self):
         return self.email
-
-    def update_credentials(self, _db, credential=None):
-        if credential:
-            self.credential = credential
-        _db.commit()
 
     @validates("email")
     def validate_email(self, key, address):

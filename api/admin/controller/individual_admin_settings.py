@@ -98,6 +98,104 @@ class IndividualAdminSettingsController(SettingsController):
             individualAdmins=admins,
         )
 
+    def process_post_create_first_admin(self, email: str):
+        """Create the first admin in the system."""
+
+        # Passwords are always required, so check presence and validity up front.
+        password: Optional[str] = flask.request.form.get("password")
+        if not self.is_acceptable_password(password):
+            return self.unacceptable_password()
+
+        success = False
+        try:
+            admin, _ = get_one_or_create(self._db, Admin, email=email)
+            self.check_permissions(admin, settingUp=True)
+
+            # Update the roles, if requested.
+            roles = flask.request.form.get("roles")
+            if roles:
+                roles = json.loads(roles)
+            else:
+                roles = []
+
+            roles_error = self.handle_roles(admin, roles, settingUp=True)
+            if roles_error:
+                return roles_error
+
+            # Update the password, if requested.
+            self.handle_password(password, admin, is_new=True, settingUp=True)
+
+            success = True
+            return self.response(admin, is_new=True)
+        finally:
+            if not success:
+                self._db.rollback()
+
+    def process_post_create_new_admin(self, email: str):
+        """Create a new admin (not the first admin in the system)."""
+
+        # Passwords are always required, so check presence and validity up front.
+        password: Optional[str] = flask.request.form.get("password")
+        if not self.is_acceptable_password(password):
+            return self.unacceptable_password()
+
+        success = False
+        try:
+            admin, _ = get_one_or_create(self._db, Admin, email=email)
+            self.check_permissions(admin, settingUp=False)
+
+            # Update the roles, if requested.
+            roles = flask.request.form.get("roles")
+            if roles:
+                roles = json.loads(roles)
+            else:
+                roles = []
+
+            roles_error = self.handle_roles(admin, roles, settingUp=False)
+            if roles_error:
+                return roles_error
+
+            # Update the password, if requested.
+            self.handle_password(password, admin, is_new=True, settingUp=False)
+            success = True
+            return self.response(admin, is_new=True)
+        finally:
+            if not success:
+                self._db.rollback()
+
+    def process_post_update_existing_admin(self, admin: Admin):
+        """Update an existing admin."""
+        password: Optional[str] = flask.request.form.get("password")
+
+        success = False
+        try:
+            self.check_permissions(admin, settingUp=False)
+
+            # If a password is provided, it must be valid.
+            if password:
+                if not self.is_acceptable_password(password):
+                    return self.unacceptable_password()
+
+            # Update the roles, if requested.
+            roles = flask.request.form.get("roles")
+            if roles:
+                roles = json.loads(roles)
+            else:
+                roles = []
+
+            roles_error = self.handle_roles(admin, roles, settingUp=False)
+            if roles_error:
+                return roles_error
+
+            # Update the password, if requested.
+            self.handle_password(password, admin, is_new=False, settingUp=False)
+
+            success = True
+            return self.response(admin, is_new=False)
+        finally:
+            if not success:
+                self._db.rollback()
+
     def process_post(self):
         # There are three possible paths through this method:
         #
@@ -115,36 +213,39 @@ class IndividualAdminSettingsController(SettingsController):
             return error
 
         # If there are no admins yet, anyone can create the first system admin.
-        settingUp = self._db.query(Admin).count() == 0
+        creating_first_admin = self._db.query(Admin).count() == 0
+        if creating_first_admin:
+            return self.process_post_create_first_admin(email)
 
         highest_role = self._highest_authorized_role()
-        if not settingUp and not highest_role:
+        if not highest_role:
             raise AdminNotAuthorized()
 
-        password = flask.request.form.get("password")
-        admin, is_new = get_one_or_create(self._db, Admin, email=email)
-        if settingUp or is_new:
-            if not password:
-                return INCOMPLETE_CONFIGURATION.detailed(
-                    _("The password field cannot be blank.")
-                )
+        # Otherwise, check to see if the admin exists.
+        existing_admin = get_one(self._db, Admin, email=email)
+        if existing_admin is None:
+            return self.process_post_create_new_admin(email)
 
-        self.check_permissions(admin, settingUp)
+        # The admin exists. We might just be updating the password or roles.
+        return self.process_post_update_existing_admin(existing_admin)
 
-        roles = flask.request.form.get("roles")
-        if roles:
-            roles = json.loads(roles)
-        else:
-            roles = []
+    @staticmethod
+    def unacceptable_password():
+        return INCOMPLETE_CONFIGURATION.detailed(
+            _("The password field cannot be blank.")
+        )
 
-        roles_error = self.handle_roles(admin, roles, settingUp)
-        if roles_error:
-            return roles_error
+    @staticmethod
+    def is_acceptable_password(password: Optional[str]) -> bool:
+        # Forbid missing passwords.
+        if not password:
+            return False
 
-        if password:
-            self.handle_password(password, admin, is_new, settingUp)
+        # Forbid passwords that are empty after leading/trailing whitespace stripping.
+        if len(password.strip()) == 0:
+            return False
 
-        return self.response(admin, is_new)
+        return True
 
     def check_permissions(self, admin, settingUp):
         """Before going any further, check that the user actually has permission

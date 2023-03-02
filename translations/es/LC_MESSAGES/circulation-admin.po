@@ -19,12 +19,6 @@ msgid "A valid library staff email is required."
 msgstr ""
 "Se requiere un correo electrónico válido del personal de la biblioteca"
 
-msgid "Google OAuth Error"
-msgstr "Google OAuth Error"
-
-msgid "There was an error connecting with Google OAuth"
-msgstr "Se ha producido un error al conectar con Google OAuth."
-
 msgid "Invalid CSRF token"
 msgstr "Ficha CSRF no válida"
 

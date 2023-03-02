@@ -210,10 +210,6 @@ class TestAdminSignIn(AdminRouteTest):
 
     CONTROLLER_NAME = "admin_sign_in_controller"
 
-    def test_google_auth_callback(self):
-        url = "/admin/GoogleAuth/callback"
-        self.assert_request_calls(url, self.controller.redirect_after_google_sign_in)
-
     def test_sign_in_with_password(self):
         url = "/admin/sign_in_with_password"
         self.assert_request_calls(
@@ -456,25 +452,6 @@ class TestAdminCollectionLibraryRegistrations(AdminRouteTest):
             url, self.controller.process_collection_library_registrations
         )
         self.assert_supported_methods(url, "GET", "POST")
-
-
-class TestAdminAuthServices(AdminRouteTest):
-
-    CONTROLLER_NAME = "admin_auth_services_controller"
-
-    def test_process_admin_auth_services(self):
-        url = "/admin/admin_auth_services"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_admin_auth_services
-        )
-        self.assert_supported_methods(url, "GET", "POST")
-
-    def test_process_delete(self):
-        url = "/admin/admin_auth_service/<protocol>"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_delete, "<protocol>", http_method="DELETE"
-        )
-        self.assert_supported_methods(url, "DELETE")
 
 
 class TestAdminIndividualAdminSettings(AdminRouteTest):
