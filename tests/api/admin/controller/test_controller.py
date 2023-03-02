@@ -82,7 +82,11 @@ class AdminControllerTest(CirculationControllerTest):
             Admin,
             email="example@nypl.org",
         )
-        self.admin.password = "password"
+        # This is a hash for 'password', we use the hash directly to avoid the cost
+        # of doing the password hashing during test setup.
+        self.admin.password_hashed = (
+            "$2a$12$Dw74btoAgh49.vtOB56xPuumtcOY9HCZKS3RYImR42lR5IiT7PIOW"
+        )
 
     @contextmanager
     def request_context_with_admin(self, route, *args, **kwargs):
