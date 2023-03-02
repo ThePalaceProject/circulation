@@ -22,9 +22,6 @@ from api.admin.controller import (
     setup_admin_controllers,
 )
 from api.admin.exceptions import *
-from api.admin.google_oauth_admin_authentication_provider import (
-    GoogleOAuthAdminAuthenticationProvider,
-)
 from api.admin.password_admin_authentication_provider import (
     PasswordAdminAuthenticationProvider,
 )
@@ -328,18 +325,6 @@ class TestAdminCirculationManagerController(AdminControllerTest):
 class TestSignInController(AdminControllerTest):
     def setup_method(self):
         super().setup_method()
-        self.admin.credential = json.dumps(
-            {
-                "access_token": "abc123",
-                "client_id": "",
-                "client_secret": "",
-                "refresh_token": "",
-                "token_expiry": "",
-                "token_uri": "",
-                "user_agent": "",
-                "invalid": "",
-            }
-        )
         self.admin.password_hashed = None
 
     def test_admin_auth_providers(self):
@@ -350,61 +335,30 @@ class TestSignInController(AdminControllerTest):
             # no auth service set up.
             assert [] == ctrl.admin_auth_providers
 
-            # The auth service exists.
-            create(
-                self._db,
-                ExternalIntegration,
-                protocol=ExternalIntegration.GOOGLE_OAUTH,
-                goal=ExternalIntegration.ADMIN_AUTH_GOAL,
-            )
-            assert 1 == len(ctrl.admin_auth_providers)
-            assert (
-                GoogleOAuthAdminAuthenticationProvider.NAME
-                == ctrl.admin_auth_providers[0].NAME
-            )
-
-            # Here's another admin with a password.
+            # Here's an admin with a password.
             pw_admin, ignore = create(self._db, Admin, email="pw@nypl.org")
             pw_admin.password = "password"
-            assert 2 == len(ctrl.admin_auth_providers)
-            assert {
-                GoogleOAuthAdminAuthenticationProvider.NAME,
-                PasswordAdminAuthenticationProvider.NAME,
-            } == {provider.NAME for provider in ctrl.admin_auth_providers}
-
-            # Only an admin with a password.
-            self._db.delete(self.admin)
-            assert 2 == len(ctrl.admin_auth_providers)
-            assert {
-                GoogleOAuthAdminAuthenticationProvider.NAME,
-                PasswordAdminAuthenticationProvider.NAME,
-            } == {provider.NAME for provider in ctrl.admin_auth_providers}
-
-            # No admins. Someone new could still log in with google if domains are
-            # configured.
-            self._db.delete(pw_admin)
             assert 1 == len(ctrl.admin_auth_providers)
-            assert (
-                GoogleOAuthAdminAuthenticationProvider.NAME
-                == ctrl.admin_auth_providers[0].NAME
-            )
+            assert {
+                PasswordAdminAuthenticationProvider.NAME,
+            } == {provider.NAME for provider in ctrl.admin_auth_providers}
+
+            # Only an admin with a password is left.
+            self._db.delete(self.admin)
+            assert 1 == len(ctrl.admin_auth_providers)
+            assert {
+                PasswordAdminAuthenticationProvider.NAME,
+            } == {provider.NAME for provider in ctrl.admin_auth_providers}
+
+            # No admins. No one can log in anymore
+            self._db.delete(pw_admin)
+            assert 0 == len(ctrl.admin_auth_providers)
 
     def test_admin_auth_provider(self):
         with self.app.test_request_context("/admin"):
             ctrl = self.manager.admin_sign_in_controller
 
-            create(
-                self._db,
-                ExternalIntegration,
-                protocol=ExternalIntegration.GOOGLE_OAUTH,
-                goal=ExternalIntegration.ADMIN_AUTH_GOAL,
-            )
-
-            # We can find a google auth provider.
-            auth = ctrl.admin_auth_provider(GoogleOAuthAdminAuthenticationProvider.NAME)
-            assert isinstance(auth, GoogleOAuthAdminAuthenticationProvider)
-
-            # But not a password auth provider, since no admin has a password.
+            # We can't find a password auth provider, since no admin has a password.
             auth = ctrl.admin_auth_provider(PasswordAdminAuthenticationProvider.NAME)
             assert None == auth
 
@@ -412,49 +366,33 @@ class TestSignInController(AdminControllerTest):
             pw_admin, ignore = create(self._db, Admin, email="pw@nypl.org")
             pw_admin.password = "password"
 
-            # Now we can find both auth providers.
-            auth = ctrl.admin_auth_provider(GoogleOAuthAdminAuthenticationProvider.NAME)
-            assert isinstance(auth, GoogleOAuthAdminAuthenticationProvider)
+            # Now we can find an auth provider.
             auth = ctrl.admin_auth_provider(PasswordAdminAuthenticationProvider.NAME)
             assert isinstance(auth, PasswordAdminAuthenticationProvider)
 
     def test_authenticated_admin_from_request(self):
-        # Returns an error if there's no admin auth service.
-        with self.app.test_request_context("/admin"):
-            flask.session["admin_email"] = self.admin.email
-            flask.session["auth_type"] = GoogleOAuthAdminAuthenticationProvider.NAME
-            response = (
-                self.manager.admin_sign_in_controller.authenticated_admin_from_request()
-            )
-            assert ADMIN_AUTH_NOT_CONFIGURED == response
-
-        # Works once the admin auth service exists.
-        create(
-            self._db,
-            ExternalIntegration,
-            protocol=ExternalIntegration.GOOGLE_OAUTH,
-            goal=ExternalIntegration.ADMIN_AUTH_GOAL,
-        )
-        with self.app.test_request_context("/admin"):
-            flask.session["admin_email"] = self.admin.email
-            flask.session["auth_type"] = GoogleOAuthAdminAuthenticationProvider.NAME
-            response = (
-                self.manager.admin_sign_in_controller.authenticated_admin_from_request()
-            )
-            assert self.admin == response
-
-        # Returns an error if you aren't authenticated.
+        # Returns an error if there is no admin auth providers.
         with self.app.test_request_context("/admin"):
             # You get back a problem detail when you're not authenticated.
             response = (
                 self.manager.admin_sign_in_controller.authenticated_admin_from_request()
             )
-            assert 401 == response.status_code
-            assert INVALID_ADMIN_CREDENTIALS.detail == response.detail
+            assert 500 == response.status_code
+            assert ADMIN_AUTH_NOT_CONFIGURED.detail == response.detail
+
+        # Works once the admin auth service exists.
+        self.admin.password = "password"
+        with self.app.test_request_context("/admin"):
+            flask.session["admin_email"] = self.admin.email
+            flask.session["auth_type"] = PasswordAdminAuthenticationProvider.NAME
+            response = (
+                self.manager.admin_sign_in_controller.authenticated_admin_from_request()
+            )
+            assert self.admin == response
 
         # Returns an error if the admin email or auth type is missing from the session.
         with self.app.test_request_context("/admin"):
-            flask.session["auth_type"] = GoogleOAuthAdminAuthenticationProvider.NAME
+            flask.session["auth_type"] = PasswordAdminAuthenticationProvider.NAME
             response = (
                 self.manager.admin_sign_in_controller.authenticated_admin_from_request()
             )
@@ -472,82 +410,12 @@ class TestSignInController(AdminControllerTest):
         # Returns an error if the admin authentication type isn't configured.
         with self.app.test_request_context("/admin"):
             flask.session["admin_email"] = self.admin.email
-            flask.session["auth_type"] = PasswordAdminAuthenticationProvider.NAME
+            flask.session["auth_type"] = "unknown"
             response = (
                 self.manager.admin_sign_in_controller.authenticated_admin_from_request()
             )
             assert 400 == response.status_code
             assert ADMIN_AUTH_MECHANISM_NOT_CONFIGURED.detail == response.detail
-
-    def test_authenticated_admin(self):
-
-        # Unset the base URL -- it will be set automatically when we
-        # successfully authenticate as an admin.
-        base_url = ConfigurationSetting.sitewide(self._db, Configuration.BASE_URL_KEY)
-        base_url.value = None
-        assert None == base_url.value
-
-        # Creates a new admin with fresh details.
-        new_admin_details = {
-            "email": "admin@nypl.org",
-            "credentials": "gnarly",
-            "type": GoogleOAuthAdminAuthenticationProvider.NAME,
-            "roles": [
-                {
-                    "role": AdminRole.LIBRARY_MANAGER,
-                    "library": self._default_library.short_name,
-                }
-            ],
-        }
-        with self.app.test_request_context("/admin/sign_in?redirect=foo"):
-            flask.request.url = "http://chosen-hostname/admin/sign_in?redirect=foo"
-            admin = self.manager.admin_sign_in_controller.authenticated_admin(
-                new_admin_details
-            )
-            assert "admin@nypl.org" == admin.email
-            assert "gnarly" == admin.credential
-            [role] = admin.roles
-            assert AdminRole.LIBRARY_MANAGER == role.role
-            assert self._default_library == role.library
-
-            # Also sets up the admin's flask session.
-            assert "admin@nypl.org" == flask.session["admin_email"]
-            assert (
-                GoogleOAuthAdminAuthenticationProvider.NAME
-                == flask.session["auth_type"]
-            )
-            assert True == flask.session.permanent
-
-        # The first successfully authenticated admin user automatically
-        # sets the site's base URL.
-        assert "http://chosen-hostname/" == base_url.value
-
-        # Or overwrites credentials for an existing admin.
-        existing_admin_details = {
-            "email": "example@nypl.org",
-            "credentials": "b-a-n-a-n-a-s",
-            "type": GoogleOAuthAdminAuthenticationProvider.NAME,
-            "roles": [
-                {
-                    "role": AdminRole.LIBRARY_MANAGER,
-                    "library": self._default_library.short_name,
-                }
-            ],
-        }
-        with self.app.test_request_context("/admin/sign_in?redirect=foo"):
-            flask.request.url = "http://a-different-hostname/"
-            admin = self.manager.admin_sign_in_controller.authenticated_admin(
-                existing_admin_details
-            )
-            assert self.admin.id == admin.id
-            assert "b-a-n-a-n-a-s" == self.admin.credential
-            # No roles were created since the admin already existed.
-            assert [] == admin.roles
-
-        # We already set the site's base URL, and it doesn't get set
-        # to a different value just because someone authenticated
-        # through a different hostname.
-        assert "http://chosen-hostname/" == base_url.value
 
     def test_admin_signin(self):
         # Returns an error if there's no admin auth service.
@@ -555,33 +423,13 @@ class TestSignInController(AdminControllerTest):
             response = self.manager.admin_sign_in_controller.sign_in()
             assert ADMIN_AUTH_NOT_CONFIGURED == response
 
-        create(
-            self._db,
-            ExternalIntegration,
-            protocol=ExternalIntegration.GOOGLE_OAUTH,
-            goal=ExternalIntegration.ADMIN_AUTH_GOAL,
-        )
-
         # Shows the login page if there's an auth service
         # but no signed in admin.
-        with self.app.test_request_context("/admin/sign_in?redirect=foo"):
-            response = self.manager.admin_sign_in_controller.sign_in()
-            assert 200 == response.status_code
-            response_data = response.get_data(as_text=True)
-            assert "GOOGLE REDIRECT" in response_data
-            assert "Sign in with Google" in response_data
-            assert "Email" not in response_data
-            assert "Password" not in response_data
-
-        # If there are multiple auth providers, the login page
-        # shows them all.
         self.admin.password = "password"
         with self.app.test_request_context("/admin/sign_in?redirect=foo"):
             response = self.manager.admin_sign_in_controller.sign_in()
             assert 200 == response.status_code
             response_data = response.get_data(as_text=True)
-            assert "GOOGLE REDIRECT" in response_data
-            assert "Sign in with Google" in response_data
             assert "Email" in response_data
             assert "Password" in response_data
 
@@ -593,83 +441,12 @@ class TestSignInController(AdminControllerTest):
             assert 302 == response.status_code
             assert "foo" == response.headers["Location"]
 
-    def test_redirect_after_google_sign_in(self):
-        self._db.delete(self.admin)
-
-        # Returns an error if there's no admin auth service.
-        with self.app.test_request_context("/admin/GoogleOAuth/callback"):
-            response = (
-                self.manager.admin_sign_in_controller.redirect_after_google_sign_in()
-            )
-            assert ADMIN_AUTH_NOT_CONFIGURED == response
-
-        # Returns an error if the admin auth service isn't google.
-        admin, ignore = create(self._db, Admin, email="admin@nypl.org")
-        admin.password = "password"
-        with self.app.test_request_context("/admin/GoogleOAuth/callback"):
-            response = (
-                self.manager.admin_sign_in_controller.redirect_after_google_sign_in()
-            )
-            assert ADMIN_AUTH_MECHANISM_NOT_CONFIGURED == response
-
-        self._db.delete(admin)
-        auth_integration, ignore = create(
-            self._db,
-            ExternalIntegration,
-            protocol=ExternalIntegration.GOOGLE_OAUTH,
-            goal=ExternalIntegration.ADMIN_AUTH_GOAL,
-        )
-        auth_integration.libraries += [self._default_library]
-        setting = ConfigurationSetting.for_library_and_externalintegration(
-            self._db, "domains", self._default_library, auth_integration
-        )
-
-        # Returns an error if google oauth fails..
-        with self.app.test_request_context("/admin/GoogleOAuth/callback?error=foo"):
-            response = (
-                self.manager.admin_sign_in_controller.redirect_after_google_sign_in()
-            )
-            assert 400 == response.status_code
-
-        # Returns an error if the admin email isn't a staff email.
-        setting.value = json.dumps(["alibrary.org"])
-        with self.app.test_request_context(
-            "/admin/GoogleOAuth/callback?code=1234&state=foo"
-        ):
-            response = (
-                self.manager.admin_sign_in_controller.redirect_after_google_sign_in()
-            )
-            assert 401 == response.status_code
-
-        # Redirects to the state parameter if the admin email is valid.
-        setting.value = json.dumps(["nypl.org"])
-        with self.app.test_request_context(
-            "/admin/GoogleOAuth/callback?code=1234&state=foo"
-        ):
-            response = (
-                self.manager.admin_sign_in_controller.redirect_after_google_sign_in()
-            )
-            assert 302 == response.status_code
-            assert "foo" == response.headers["Location"]
-
     def test_password_sign_in(self):
         # Returns an error if there's no admin auth service and no admins.
         with self.app.test_request_context("/admin/sign_in_with_password"):
             response = self.manager.admin_sign_in_controller.password_sign_in()
             assert ADMIN_AUTH_NOT_CONFIGURED == response
 
-        # Returns an error if the admin auth service isn't password auth.
-        auth_integration, ignore = create(
-            self._db,
-            ExternalIntegration,
-            protocol=ExternalIntegration.GOOGLE_OAUTH,
-            goal=ExternalIntegration.ADMIN_AUTH_GOAL,
-        )
-        with self.app.test_request_context("/admin/sign_in_with_password"):
-            response = self.manager.admin_sign_in_controller.password_sign_in()
-            assert ADMIN_AUTH_MECHANISM_NOT_CONFIGURED == response
-
-        self._db.delete(auth_integration)
         admin, ignore = create(self._db, Admin, email="admin@nypl.org")
         admin.password = "password"
 
@@ -759,19 +536,6 @@ class TestResetPasswordController(AdminControllerTest):
             assert response.status_code == 500
             assert response.uri == ADMIN_AUTH_NOT_CONFIGURED.uri
 
-        # If there is only Google OAuth we should also get an error
-        create(
-            self._db,
-            ExternalIntegration,
-            protocol=ExternalIntegration.GOOGLE_OAUTH,
-            goal=ExternalIntegration.ADMIN_AUTH_GOAL,
-        )
-        with self.app.test_request_context("/admin/forgot_password"):
-            response = reset_password_ctrl.forgot_password()
-
-            assert response.status_code == 400
-            assert response.uri == ADMIN_AUTH_MECHANISM_NOT_CONFIGURED.uri
-
         # If auth providers are set we should get forgot password page - success path
         self.admin.password = "password"
         with self.app.test_request_context("/admin/forgot_password"):
@@ -854,23 +618,6 @@ class TestResetPasswordController(AdminControllerTest):
         with self.app.test_request_context("/admin/reset_password"):
             assert [] == reset_password_ctrl.admin_auth_providers
 
-            response = reset_password_ctrl.reset_password(token)
-
-            assert (
-                response.status_code == ADMIN_AUTH_MECHANISM_NOT_CONFIGURED.status_code
-            )
-            assert str(ADMIN_AUTH_MECHANISM_NOT_CONFIGURED.detail) in response.get_data(
-                as_text=True
-            )
-
-        # If there is only Google OAuth we should also get an error
-        create(
-            self._db,
-            ExternalIntegration,
-            protocol=ExternalIntegration.GOOGLE_OAUTH,
-            goal=ExternalIntegration.ADMIN_AUTH_GOAL,
-        )
-        with self.app.test_request_context("/admin/reset_password"):
             response = reset_password_ctrl.reset_password(token)
 
             assert (

@@ -107,12 +107,6 @@ def returns_json_or_response_or_problem_detail(f):
     return decorated
 
 
-@app.route("/admin/GoogleAuth/callback")
-@returns_problem_detail
-def google_auth_callback():
-    return app.manager.admin_sign_in_controller.redirect_after_google_sign_in()
-
-
 @app.route("/admin/sign_in_with_password", methods=["POST"])
 @returns_problem_detail
 def password_auth():
@@ -408,22 +402,6 @@ def collection_library_registrations():
     return (
         app.manager.admin_collection_library_registrations_controller.process_collection_library_registrations()
     )
-
-
-@app.route("/admin/admin_auth_services", methods=["GET", "POST"])
-@returns_json_or_response_or_problem_detail
-@requires_admin
-@requires_csrf_token
-def admin_auth_services():
-    return app.manager.admin_auth_services_controller.process_admin_auth_services()
-
-
-@app.route("/admin/admin_auth_service/<protocol>", methods=["DELETE"])
-@returns_json_or_response_or_problem_detail
-@requires_admin
-@requires_csrf_token
-def admin_auth_service(protocol):
-    return app.manager.admin_auth_services_controller.process_delete(protocol)
 
 
 @app.route("/admin/individual_admins", methods=["GET", "POST"])

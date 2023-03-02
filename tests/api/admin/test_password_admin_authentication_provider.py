@@ -8,7 +8,7 @@ from core.testing import DatabaseTest
 
 class TestPasswordAdminAuthenticationProvider(DatabaseTest):
     def test_sign_in(self):
-        password_auth = PasswordAdminAuthenticationProvider(None)
+        password_auth = PasswordAdminAuthenticationProvider()
 
         # There are two admins with passwords.
         admin1, ignore = create(self._db, Admin, email="admin1@example.org")
@@ -74,7 +74,7 @@ class TestPasswordAdminAuthenticationProvider(DatabaseTest):
             assert redirect == "/admin/web"
 
     def test_sign_in_case_insensitive(self):
-        password_auth = PasswordAdminAuthenticationProvider(None)
+        password_auth = PasswordAdminAuthenticationProvider()
 
         # There are two admins with passwords.
         admin1, ignore = create(self._db, Admin, email="admin1@example.org")
