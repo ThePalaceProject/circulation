@@ -389,9 +389,14 @@ class ViewController(AdminController):
             admin = self.authenticated_admin_from_request()
             if isinstance(admin, ProblemDetail):
                 url = urlparse(flask.request.url)
-                path = quote(url.path)
                 redirect_url = url_unparse(
-                    (url.scheme, url.netloc, path, url.query, url.fragment)
+                    (
+                        url.scheme,
+                        url.netloc,
+                        quote(url.path),
+                        quote(url.query),
+                        quote(url.fragment),
+                    )
                 )
                 if collection:
                     quoted_collection = urllib.parse.quote(collection)
