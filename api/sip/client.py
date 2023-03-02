@@ -34,6 +34,8 @@ import tempfile
 from ssl import _SSLMethod
 from typing import Callable, Optional
 
+import certifi
+
 from api.sip.dialect import GenericILS
 from core.util.datetime_helpers import utc_now
 
@@ -424,6 +426,8 @@ class SIPClient(Constants):
 
         context = self.ssl_contexts(ssl.PROTOCOL_TLS_CLIENT)
         context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context.load_default_certs(purpose=ssl.Purpose.SERVER_AUTH)
+        context.load_verify_locations(cafile=certifi.where())
 
         # If the certificate path is provided, the certificate will be loaded.
         # The private key is dependent on the certificate, so can't be loaded if
