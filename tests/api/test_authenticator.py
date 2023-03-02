@@ -10,7 +10,7 @@ import urllib.parse
 import urllib.request
 from decimal import Decimal
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import flask
 import pytest
@@ -1729,6 +1729,16 @@ class TestAuthenticationProvider:
             authenticator_fixture.mock_basic_integration
             == provider.external_integration(db.session)
         )
+
+    def test_private_remote_patron_lookup(
+        self, authenticator_fixture: AuthenticatorFixture
+    ):
+        provider = authenticator_fixture.mock_basic(patrondata=None)
+
+        # Passing a type other than Patron or PatronData to _remote_patron_lookup
+        # will raise a ValueError.
+        with pytest.raises(ValueError):
+            provider._remote_patron_lookup(MagicMock())
 
     def test_authenticated_patron_passes_on_none(
         self, authenticator_fixture: AuthenticatorFixture
