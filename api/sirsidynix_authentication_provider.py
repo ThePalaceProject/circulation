@@ -26,7 +26,6 @@ if TYPE_CHECKING:
 class SirsiBlockReasons:
     NOT_APPROVED = _("Patron has not yet been approved")
     EXPIRED = _("Patron membership has expired")
-    INCORRECT_LOCATION = _("Patron is not a member of this library location")
     PATRON_BLOCKED = _("Patron has been blocked.")
 
 
@@ -50,7 +49,7 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
         CLIENT_ID = "CLIENT_ID"
         LIBRARY_ID = "LIBRARY_ID"
         LIBRARY_PREFIX = "LIBRARY_PREFIX"
-        DISALLOWED_SUFFIXES = "DISALLOWED_SUFFIXES"
+        LIBRARY_DISALLOWED_SUFFIXES = "LIBRARY_DISALLOWED_SUFFIXES"
 
     SETTINGS = [
         {
@@ -77,17 +76,6 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             "label": _("Test Password"),
             "description": BasicAuthenticationProvider.TEST_PASSWORD_DESCRIPTION_OPTIONAL,
         },
-        {
-            "key": Keys.DISALLOWED_SUFFIXES,
-            "type": ConfigurationAttributeType.LIST.value,
-            "label": _("Disallowed Patron Suffixes"),
-            "description": _(
-                "Any patron type ending in this suffix will remain unauthenticated. "
-                "Eg. A patronType of 'cls' and Library Prefix of 'c' will result in a suffix of 'ls'. "
-                "If 'ls' is a disallowed suffix then the patron will not be authenticated."
-            ),
-            "required": False,
-        },
     ]
 
     LIBRARY_SETTINGS = [
@@ -108,6 +96,17 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             ),
             "required": True,
         },
+        {
+            "key": Keys.LIBRARY_DISALLOWED_SUFFIXES,
+            "type": ConfigurationAttributeType.LIST.value,
+            "label": _("Disallowed Patron Suffixes"),
+            "description": _(
+                "Any patron type ending in this suffix will remain unauthenticated. "
+                "Eg. A patronType of 'cls' and Library Prefix of 'c' will result in a suffix of 'ls'. "
+                "If 'ls' is a disallowed suffix then the patron will not be authenticated."
+            ),
+            "required": False,
+        },
     ]
 
     def __init__(self, library, integration: ExternalIntegration, analytics=None):
@@ -123,7 +122,7 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             Configuration.SIRSI_DYNIX_APP_ID, default=self.DEFAULT_APP_ID
         )
         self.sirsi_disallowed_prefixes = integration.setting(
-            self.Keys.DISALLOWED_SUFFIXES
+            self.Keys.LIBRARY_DISALLOWED_SUFFIXES
         ).value_or_default([])
         self.sirsi_library_id = (
             ConfigurationSetting.for_library_and_externalintegration(
