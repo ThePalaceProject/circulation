@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from requests import Response
 
     from core.model.patron import Patron
+    from core.util.problem_detail import ProblemDetail
 
 
 class SirsiBlockReasons:
@@ -153,7 +154,7 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
     # we have to exclude it from type checking, because mypy gets confused with the inheritance
     def _remote_patron_lookup(  # type: ignore
         self, patron_or_patrondata: Patron | SirsiDynixPatronData
-    ) -> None | SirsiDynixPatronData:
+    ) -> None | SirsiDynixPatronData | ProblemDetail:
         """Do a remote patron lookup, this method can only lookup a patron with a patrondata object
         with a session_token already setup within it.
         This method also checks all the reasons that a patron may be blocked for.
