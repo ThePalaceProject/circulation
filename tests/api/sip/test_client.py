@@ -1,9 +1,12 @@
 """Standalone tests of the SIP2 client."""
-import os
 import socket
 import ssl
+import tempfile
+from typing import List, Optional
+from unittest.mock import MagicMock, Mock
 
 import pytest
+from _pytest.monkeypatch import MonkeyPatch
 
 from api.sip.client import MockSIPClient, SIPClient
 from api.sip.dialect import AutoGraphicsVerso, GenericILS
@@ -34,15 +37,6 @@ class MockSocket:
         return block
 
 
-class MockWrapSocket:
-    def __init__(self):
-        self.called_with = None
-
-    def __call__(self, connection, **kwargs):
-        self.called_with = (connection, kwargs)
-        return connection
-
-
 class TestSIPClient:
     """Test the real SIPClient class without allowing it to make
     network connections.
@@ -65,58 +59,92 @@ class TestSIPClient:
             # Un-mock the socket.socket function
             socket.socket = old_socket
 
-    def test_secure_connect(self):
+    def test_secure_connect_insecure(self, monkeypatch: MonkeyPatch):
+        self.context: Optional[MagicMock] = None
+
+        def create_context(protocol):
+            self.context = Mock(spec=ssl.SSLContext)
+            return self.context
 
         target_server = object()
-        insecure = SIPClient(target_server, 999, use_ssl=False)
-        no_cert = SIPClient(target_server, 999, use_ssl=True)
-        with_cert = SIPClient(target_server, 999, ssl_cert="cert", ssl_key="key")
+        insecure = SIPClient(
+            target_server, 999, use_ssl=False, ssl_contexts=create_context
+        )
 
-        # Mock the socket.socket function.
-        old_socket = socket.socket
-        socket.socket = MockSocket
+        # Patch the socket method so that we don't create a real network socket.
+        monkeypatch.setattr("socket.socket", lambda x, y: MockSocket())
 
-        # Mock the ssl.wrap_socket function
-        old_wrap_socket = ssl.wrap_socket
-        wrap_socket = MockWrapSocket()
-        ssl.wrap_socket = wrap_socket
+        # When an insecure connection is created, no context is created.
+        insecure.connect()
+        assert self.context is None
 
-        try:
-            # When an insecure connection is created, wrap_socket is
-            # not called.
-            insecure.connect()
-            assert None == wrap_socket.called_with
+    def test_secure_connect_without_cert(self, monkeypatch: MonkeyPatch):
+        self.context_without: MagicMock = MagicMock()
 
-            # When a secure connection is created with no SSL
-            # certificate, wrap_socket() is called on the connection
-            # (in this case, a MockSocket), but no other arguments are
-            # passed in to wrap_socket().
-            no_cert.connect()
-            connection, kwargs = wrap_socket.called_with
-            assert isinstance(connection, MockSocket)
-            assert dict(keyfile=None, certfile=None) == kwargs
+        def create_context(protocol):
+            assert protocol == ssl.PROTOCOL_TLS_CLIENT
+            self.context_without = MagicMock(ssl.SSLContext)
+            return self.context_without
 
-            # When a secure connection is created with an SSL
-            # certificate, the certificate and key are written to
-            # temporary files, and the paths to those files are passed
-            # in along with the collection to wrap_socket().
-            wrap_socket.called_with = None
-            with_cert.connect()
-            connection, kwargs = wrap_socket.called_with
-            assert isinstance(connection, MockSocket)
-            assert {"keyfile", "certfile"} == set(kwargs.keys())
-            for tmpfile in list(kwargs.values()):
-                tmpfile = os.path.abspath(tmpfile)
-                assert os.path.basename(tmpfile).startswith("tmp")
-                # By the time the SSL socket has been wrapped, the
-                # temporary file has already been removed.  Because of
-                # that we can't verify from within a unit test that the
-                # correct contents were written to the file.
-                assert not os.path.exists(tmpfile)
-        finally:
-            # Un-mock the old functions.
-            socket.socket = old_socket
-            ssl.wrap_socket = old_wrap_socket
+        target_server = object()
+        no_cert = SIPClient(
+            target_server, 999, use_ssl=True, ssl_contexts=create_context
+        )
+
+        # Patch the socket method so that we don't create a real network socket.
+        monkeypatch.setattr("socket.socket", lambda x, y: MockSocket())
+
+        # When a secure connection is created with no SSL
+        # certificate, a context is created and the right methods are called.
+        no_cert.connect()
+        assert self.context_without.minimum_version == ssl.TLSVersion.TLSv1_2
+        self.context_without.load_cert_chain.assert_not_called()
+        self.context_without.wrap_socket.assert_called_once()
+
+    def test_secure_connect_with_cert(self, monkeypatch: MonkeyPatch):
+        self.context_with: MagicMock = MagicMock()
+
+        def create_context(protocol):
+            assert protocol == ssl.PROTOCOL_TLS_CLIENT
+            self.context_with = MagicMock(ssl.SSLContext)
+            return self.context_with
+
+        target_server = object()
+        with_cert = SIPClient(
+            target_server,
+            999,
+            ssl_cert="cert",
+            ssl_key="key",
+            ssl_contexts=create_context,
+        )
+
+        # Patch the socket method so that we don't create a real network socket.
+        monkeypatch.setattr("socket.socket", lambda x, y: MockSocket())
+
+        # Record the temporary files created.
+        self.old_mkstemp = tempfile.mkstemp
+        self.temporary_files: List[str] = []
+
+        def create_temporary_file():
+            (fd, name) = self.old_mkstemp()
+            self.temporary_files.append(name)
+            return fd, name
+
+        # Patch the temporary file creation methods.
+        monkeypatch.setattr("tempfile.mkstemp", create_temporary_file)
+
+        # When a secure connection is created with SSL certificates,
+        # a context is created and the right methods are called.
+        with_cert.connect()
+        assert self.context_with.minimum_version == ssl.TLSVersion.TLSv1_2
+        self.context_with.load_cert_chain.assert_called_once()
+        self.context_with.wrap_socket.assert_called_once()
+
+        # Check that the certificate and key were copied to temporary files
+        assert len(self.temporary_files) == 2
+        called = self.context_with.load_cert_chain.call_args
+        assert called.kwargs["certfile"] == self.temporary_files[0]
+        assert called.kwargs["keyfile"] == self.temporary_files[1]
 
     def test_read_message(self):
         target_server = object()

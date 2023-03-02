@@ -31,7 +31,8 @@ import re
 import socket
 import ssl
 import tempfile
-from typing import Optional
+from ssl import _SSLMethod
+from typing import Callable, Optional
 
 from api.sip.dialect import GenericILS
 from core.util.datetime_helpers import utc_now
@@ -283,6 +284,7 @@ class SIPClient(Constants):
         use_ssl=False,
         ssl_cert=None,
         ssl_key=None,
+        ssl_contexts: Callable[[_SSLMethod], ssl.SSLContext] = ssl.SSLContext,
         encoding=Constants.DEFAULT_ENCODING,
         dialect=GenericILS,
     ):
@@ -310,6 +312,7 @@ class SIPClient(Constants):
         self.use_ssl = use_ssl or ssl_cert or ssl_key
         self.ssl_cert = ssl_cert
         self.ssl_key = ssl_key
+        self.ssl_contexts = ssl_contexts
         self.encoding = encoding
 
         # Turn the separator string into a regular expression that splits
@@ -417,10 +420,20 @@ class SIPClient(Constants):
             fd, tmp_ssl_key_path = tempfile.mkstemp()
             os.write(fd, self.ssl_key.encode("utf-8"))
             os.close(fd)
-        connection = self.make_insecure_connection()
-        connection = ssl.wrap_socket(
-            connection, certfile=tmp_ssl_cert_path, keyfile=tmp_ssl_key_path
-        )
+        insecure_connection = self.make_insecure_connection()
+
+        context = self.ssl_contexts(ssl.PROTOCOL_TLS_CLIENT)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+
+        # If the certificate path is provided, the certificate will be loaded.
+        # The private key is dependent on the certificate, so can't be loaded if
+        # there's no certificate present.
+        if tmp_ssl_cert_path:
+            context.load_cert_chain(
+                certfile=tmp_ssl_cert_path, keyfile=tmp_ssl_key_path
+            )
+
+        connection = context.wrap_socket(insecure_connection)
 
         # Now that the connection has been established, the temporary
         # files are no longer needed. Remove them.
