@@ -2,8 +2,8 @@ import datetime
 import json
 from unittest.mock import MagicMock, create_autospec, patch
 
+import pytest
 from freezegun import freeze_time
-from parameterized import parameterized
 
 from api.authenticator import PatronData
 from api.saml.auth import SAMLAuthenticationManager, SAMLAuthenticationManagerFactory
@@ -30,100 +30,123 @@ from api.saml.metadata.model import (
 )
 from api.saml.metadata.parser import SAMLMetadataParser, SAMLSubjectParser
 from api.saml.provider import SAML_INVALID_SUBJECT, SAMLWebSSOAuthenticationProvider
-from core.model.configuration import ConfigurationStorage, HasExternalIntegration
+from core.model.configuration import (
+    ConfigurationStorage,
+    ExternalIntegration,
+    HasExternalIntegration,
+)
 from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvaluator
 from core.python_expression_dsl.parser import DSLParser
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.problem_detail import ProblemDetail
-from tests.api.saml import fixtures
-from tests.api.saml.controller_test import ControllerTest
+from tests.api.saml import saml_strings
+from tests.fixtures.api_controller import ControllerFixture
 
 SERVICE_PROVIDER = SAMLServiceProviderMetadata(
-    fixtures.SP_ENTITY_ID,
+    saml_strings.SP_ENTITY_ID,
     SAMLUIInfo(),
     SAMLOrganization(),
     SAMLNameIDFormat.UNSPECIFIED.value,
-    SAMLService(fixtures.SP_ACS_URL, fixtures.SP_ACS_BINDING),
+    SAMLService(saml_strings.SP_ACS_URL, saml_strings.SP_ACS_BINDING),
 )
 
 IDENTITY_PROVIDER_WITH_DISPLAY_NAME = SAMLIdentityProviderMetadata(
-    fixtures.IDP_2_ENTITY_ID,
+    saml_strings.IDP_2_ENTITY_ID,
     SAMLUIInfo(
         display_names=[
-            SAMLLocalizedMetadataItem(fixtures.IDP_1_UI_INFO_EN_DISPLAY_NAME, "en"),
-            SAMLLocalizedMetadataItem(fixtures.IDP_1_UI_INFO_ES_DISPLAY_NAME, "es"),
+            SAMLLocalizedMetadataItem(saml_strings.IDP_1_UI_INFO_EN_DISPLAY_NAME, "en"),
+            SAMLLocalizedMetadataItem(saml_strings.IDP_1_UI_INFO_ES_DISPLAY_NAME, "es"),
         ],
         descriptions=[
-            SAMLLocalizedMetadataItem(fixtures.IDP_1_UI_INFO_DESCRIPTION, "en"),
-            SAMLLocalizedMetadataItem(fixtures.IDP_1_UI_INFO_DESCRIPTION, "es"),
+            SAMLLocalizedMetadataItem(saml_strings.IDP_1_UI_INFO_DESCRIPTION, "en"),
+            SAMLLocalizedMetadataItem(saml_strings.IDP_1_UI_INFO_DESCRIPTION, "es"),
         ],
         information_urls=[
-            SAMLLocalizedMetadataItem(fixtures.IDP_1_UI_INFO_INFORMATION_URL, "en"),
-            SAMLLocalizedMetadataItem(fixtures.IDP_1_UI_INFO_INFORMATION_URL, "es"),
+            SAMLLocalizedMetadataItem(saml_strings.IDP_1_UI_INFO_INFORMATION_URL, "en"),
+            SAMLLocalizedMetadataItem(saml_strings.IDP_1_UI_INFO_INFORMATION_URL, "es"),
         ],
         privacy_statement_urls=[
             SAMLLocalizedMetadataItem(
-                fixtures.IDP_1_UI_INFO_PRIVACY_STATEMENT_URL, "en"
+                saml_strings.IDP_1_UI_INFO_PRIVACY_STATEMENT_URL, "en"
             ),
             SAMLLocalizedMetadataItem(
-                fixtures.IDP_1_UI_INFO_PRIVACY_STATEMENT_URL, "es"
+                saml_strings.IDP_1_UI_INFO_PRIVACY_STATEMENT_URL, "es"
             ),
         ],
         logo_urls=[
-            SAMLLocalizedMetadataItem(fixtures.IDP_1_UI_INFO_LOGO_URL, "en"),
-            SAMLLocalizedMetadataItem(fixtures.IDP_1_UI_INFO_LOGO_URL, "es"),
+            SAMLLocalizedMetadataItem(saml_strings.IDP_1_UI_INFO_LOGO_URL, "en"),
+            SAMLLocalizedMetadataItem(saml_strings.IDP_1_UI_INFO_LOGO_URL, "es"),
         ],
     ),
     SAMLOrganization(),
     SAMLNameIDFormat.UNSPECIFIED.value,
-    SAMLService(fixtures.IDP_2_SSO_URL, fixtures.IDP_2_SSO_BINDING),
+    SAMLService(saml_strings.IDP_2_SSO_URL, saml_strings.IDP_2_SSO_BINDING),
 )
 
 IDENTITY_PROVIDER_WITH_ORGANIZATION_DISPLAY_NAME = SAMLIdentityProviderMetadata(
-    fixtures.IDP_2_ENTITY_ID,
+    saml_strings.IDP_2_ENTITY_ID,
     SAMLUIInfo(),
     SAMLOrganization(
         organization_display_names=[
             SAMLLocalizedMetadataItem(
-                fixtures.IDP_1_ORGANIZATION_EN_ORGANIZATION_DISPLAY_NAME, "en"
+                saml_strings.IDP_1_ORGANIZATION_EN_ORGANIZATION_DISPLAY_NAME, "en"
             ),
             SAMLLocalizedMetadataItem(
-                fixtures.IDP_1_ORGANIZATION_ES_ORGANIZATION_DISPLAY_NAME, "es"
+                saml_strings.IDP_1_ORGANIZATION_ES_ORGANIZATION_DISPLAY_NAME, "es"
             ),
         ]
     ),
     SAMLNameIDFormat.UNSPECIFIED.value,
-    SAMLService(fixtures.IDP_2_SSO_URL, fixtures.IDP_2_SSO_BINDING),
+    SAMLService(saml_strings.IDP_2_SSO_URL, saml_strings.IDP_2_SSO_BINDING),
 )
 
 IDENTITY_PROVIDER_WITHOUT_DISPLAY_NAMES = SAMLIdentityProviderMetadata(
-    fixtures.IDP_1_ENTITY_ID,
+    saml_strings.IDP_1_ENTITY_ID,
     SAMLUIInfo(),
     SAMLOrganization(),
     SAMLNameIDFormat.UNSPECIFIED.value,
-    SAMLService(fixtures.IDP_1_SSO_URL, fixtures.IDP_1_SSO_BINDING),
+    SAMLService(saml_strings.IDP_1_SSO_URL, saml_strings.IDP_1_SSO_BINDING),
 )
 
 
-class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
-    def setup_method(self, _db=None, set_up_circulation_manager=True):
-        super().setup_method()
+class SAMLProviderFixture:
+    controller_fixture: ControllerFixture
+    integration: ExternalIntegration
+    external_integration_association: MagicMock
+    configuration_storage: ConfigurationStorage
+    configuration_factory: SAMLConfigurationFactory
+
+    def __init__(self, controller_fixture: ControllerFixture):
+        self.controller_fixture = controller_fixture
+
+        self.integration = self.controller_fixture.db.external_integration(
+            protocol=SAMLWebSSOAuthenticationProvider.NAME,
+            goal=ExternalIntegration.PATRON_AUTH_GOAL,
+        )
 
         metadata_parser = SAMLMetadataParser()
 
-        self._external_integration_association = create_autospec(
+        self.external_integration_association = create_autospec(
             spec=HasExternalIntegration
         )
-        self._external_integration_association.external_integration = MagicMock(
-            return_value=self._integration
+        self.external_integration_association.external_integration = MagicMock(
+            return_value=self.integration
         )
 
-        self._configuration_storage = ConfigurationStorage(
-            self._external_integration_association
+        self.configuration_storage = ConfigurationStorage(
+            self.external_integration_association
         )
-        self._configuration_factory = SAMLConfigurationFactory(metadata_parser)
+        self.configuration_factory = SAMLConfigurationFactory(metadata_parser)
 
-    @parameterized.expand(
+
+@pytest.fixture(scope="function")
+def saml_provider_fixture(controller_fixture: ControllerFixture) -> SAMLProviderFixture:
+    return SAMLProviderFixture(controller_fixture)
+
+
+class TestSAMLWebSSOAuthenticationProvider:
+    @pytest.mark.parametrize(
+        "_, identity_providers, expected_result",
         [
             (
                 "identity_provider_with_display_name",
@@ -137,51 +160,51 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
                             "href": "http://localhost/default/saml_authenticate?provider=SAML+2.0+Web+SSO&idp_entity_id=http%3A%2F%2Fidp2.hilbertteam.net%2Fidp%2Fshibboleth",
                             "display_names": [
                                 {
-                                    "value": fixtures.IDP_1_UI_INFO_EN_DISPLAY_NAME,
+                                    "value": saml_strings.IDP_1_UI_INFO_EN_DISPLAY_NAME,
                                     "language": "en",
                                 },
                                 {
-                                    "value": fixtures.IDP_1_UI_INFO_ES_DISPLAY_NAME,
+                                    "value": saml_strings.IDP_1_UI_INFO_ES_DISPLAY_NAME,
                                     "language": "es",
                                 },
                             ],
                             "descriptions": [
                                 {
-                                    "value": fixtures.IDP_1_UI_INFO_DESCRIPTION,
+                                    "value": saml_strings.IDP_1_UI_INFO_DESCRIPTION,
                                     "language": "en",
                                 },
                                 {
-                                    "value": fixtures.IDP_1_UI_INFO_DESCRIPTION,
+                                    "value": saml_strings.IDP_1_UI_INFO_DESCRIPTION,
                                     "language": "es",
                                 },
                             ],
                             "information_urls": [
                                 {
-                                    "value": fixtures.IDP_1_UI_INFO_INFORMATION_URL,
+                                    "value": saml_strings.IDP_1_UI_INFO_INFORMATION_URL,
                                     "language": "en",
                                 },
                                 {
-                                    "value": fixtures.IDP_1_UI_INFO_INFORMATION_URL,
+                                    "value": saml_strings.IDP_1_UI_INFO_INFORMATION_URL,
                                     "language": "es",
                                 },
                             ],
                             "privacy_statement_urls": [
                                 {
-                                    "value": fixtures.IDP_1_UI_INFO_PRIVACY_STATEMENT_URL,
+                                    "value": saml_strings.IDP_1_UI_INFO_PRIVACY_STATEMENT_URL,
                                     "language": "en",
                                 },
                                 {
-                                    "value": fixtures.IDP_1_UI_INFO_PRIVACY_STATEMENT_URL,
+                                    "value": saml_strings.IDP_1_UI_INFO_PRIVACY_STATEMENT_URL,
                                     "language": "es",
                                 },
                             ],
                             "logo_urls": [
                                 {
-                                    "value": fixtures.IDP_1_UI_INFO_LOGO_URL,
+                                    "value": saml_strings.IDP_1_UI_INFO_LOGO_URL,
                                     "language": "en",
                                 },
                                 {
-                                    "value": fixtures.IDP_1_UI_INFO_LOGO_URL,
+                                    "value": saml_strings.IDP_1_UI_INFO_LOGO_URL,
                                     "language": "es",
                                 },
                             ],
@@ -201,11 +224,11 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
                             "href": "http://localhost/default/saml_authenticate?provider=SAML+2.0+Web+SSO&idp_entity_id=http%3A%2F%2Fidp2.hilbertteam.net%2Fidp%2Fshibboleth",
                             "display_names": [
                                 {
-                                    "value": fixtures.IDP_1_ORGANIZATION_EN_ORGANIZATION_DISPLAY_NAME,
+                                    "value": saml_strings.IDP_1_ORGANIZATION_EN_ORGANIZATION_DISPLAY_NAME,
                                     "language": "en",
                                 },
                                 {
-                                    "value": fixtures.IDP_1_ORGANIZATION_ES_ORGANIZATION_DISPLAY_NAME,
+                                    "value": saml_strings.IDP_1_ORGANIZATION_ES_ORGANIZATION_DISPLAY_NAME,
                                     "language": "es",
                                 },
                             ],
@@ -262,9 +285,11 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
                     ],
                 },
             ),
-        ]
+        ],
     )
-    def test_authentication_document(self, _, identity_providers, expected_result):
+    def test_authentication_document(
+        self, saml_provider_fixture, _, identity_providers, expected_result
+    ):
         # Arrange
         configuration = create_autospec(spec=SAMLConfiguration)
         configuration.get_service_provider = MagicMock(return_value=SERVICE_PROVIDER)
@@ -314,29 +339,48 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
 
             # Act
             provider = SAMLWebSSOAuthenticationProvider(
-                self._default_library, self._integration
+                saml_provider_fixture.controller_fixture.db.default_library(),
+                saml_provider_fixture.integration,
             )
 
-            self.app.config["SERVER_NAME"] = "localhost"
+            saml_provider_fixture.controller_fixture.app.config[
+                "SERVER_NAME"
+            ] = "localhost"
 
-            with self.app.test_request_context("/"):
-                result = provider.authentication_flow_document(self._db)
+            with saml_provider_fixture.controller_fixture.app.test_request_context("/"):
+                result = provider.authentication_flow_document(
+                    saml_provider_fixture.controller_fixture.db.session
+                )
 
             # Assert
             assert expected_result == result
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_, subject, expected_result, patron_id_use_name_id, patron_id_attributes, patron_id_regular_expression",
         [
-            ("empty_subject", None, SAML_INVALID_SUBJECT.detailed("Subject is empty")),
+            (
+                "empty_subject",
+                None,
+                SAML_INVALID_SUBJECT.detailed("Subject is empty"),
+                None,
+                None,
+                None,
+            ),
             (
                 "subject_is_patron_data",
                 PatronData(permanent_id=12345),
                 PatronData(permanent_id=12345),
+                None,
+                None,
+                None,
             ),
             (
                 "subject_does_not_have_unique_id",
                 SAMLSubject("http://idp.example.com", None, None),
                 SAML_INVALID_SUBJECT.detailed("Subject does not have a unique ID"),
+                None,
+                None,
+                None,
             ),
             (
                 "subject_has_unique_id",
@@ -358,6 +402,9 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
                     external_type="A",
                     complete=True,
                 ),
+                None,
+                None,
+                None,
             ),
             (
                 "subject_has_unique_name_id_but_use_of_name_id_is_switched_off_using_integer_literal",
@@ -368,6 +415,8 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
                 ),
                 SAML_INVALID_SUBJECT.detailed("Subject does not have a unique ID"),
                 0,
+                None,
+                None,
             ),
             (
                 "subject_has_unique_name_id_but_use_of_name_id_is_switched_off_using_string_literal",
@@ -378,6 +427,8 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
                 ),
                 SAML_INVALID_SUBJECT.detailed("Subject does not have a unique ID"),
                 "false",
+                None,
+                None,
             ),
             (
                 "subject_has_unique_name_id_and_use_of_name_id_is_switched_on_using_string_literal_true",
@@ -393,6 +444,8 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
                     complete=True,
                 ),
                 "true",
+                None,
+                None,
             ),
             (
                 "subject_has_unique_id_matching_the_regular_expression",
@@ -416,7 +469,7 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
                 ),
                 False,
                 [SAMLAttributeType.eduPersonPrincipalName.name],
-                fixtures.PATRON_ID_REGULAR_EXPRESSION_ORG,
+                saml_strings.PATRON_ID_REGULAR_EXPRESSION_ORG,
             ),
             (
                 "subject_has_unique_id_not_matching_the_regular_expression",
@@ -435,22 +488,25 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
                 SAML_INVALID_SUBJECT.detailed("Subject does not have a unique ID"),
                 False,
                 [SAMLAttributeType.eduPersonPrincipalName.name],
-                fixtures.PATRON_ID_REGULAR_EXPRESSION_ORG,
+                saml_strings.PATRON_ID_REGULAR_EXPRESSION_ORG,
             ),
-        ]
+        ],
     )
     def test_remote_patron_lookup(
         self,
+        saml_provider_fixture: SAMLProviderFixture,
         _,
         subject,
         expected_result,
-        patron_id_use_name_id=None,
-        patron_id_attributes=None,
-        patron_id_regular_expression=None,
+        patron_id_use_name_id,
+        patron_id_attributes,
+        patron_id_regular_expression,
     ):
         # Arrange
-        with self._configuration_factory.create(
-            self._configuration_storage, self._db, SAMLConfiguration
+        with saml_provider_fixture.configuration_factory.create(
+            saml_provider_fixture.configuration_storage,
+            saml_provider_fixture.controller_fixture.db.session,
+            SAMLConfiguration,
         ) as configuration:
             if patron_id_use_name_id is not None:
                 configuration.patron_id_use_name_id = patron_id_use_name_id
@@ -462,7 +518,8 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
                 )
 
         provider = SAMLWebSSOAuthenticationProvider(
-            self._default_library, self._integration
+            saml_provider_fixture.controller_fixture.db.default_library(),
+            saml_provider_fixture.integration,
         )
 
         # Act
@@ -474,13 +531,24 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
         else:
             assert result == expected_result
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_, subject, expected_patron_data, expected_credential, expected_expiration_time, cm_session_lifetime",
         [
-            ("empty_subject", None, SAML_INVALID_SUBJECT.detailed("Subject is empty")),
+            (
+                "empty_subject",
+                None,
+                SAML_INVALID_SUBJECT.detailed("Subject is empty"),
+                None,
+                None,
+                None,
+            ),
             (
                 "subject_does_not_have_unique_id",
                 SAMLSubject("http://idp.example.com", None, None),
                 SAML_INVALID_SUBJECT.detailed("Subject does not have a unique ID"),
+                None,
+                None,
+                None,
             ),
             (
                 "subject_has_unique_id",
@@ -502,6 +570,9 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
                     external_type="A",
                     complete=True,
                 ),
+                None,
+                None,
+                None,
             ),
             (
                 "subject_has_unique_id_and_persistent_name_id",
@@ -528,6 +599,8 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
                     external_type="A",
                     complete=True,
                 ),
+                None,
+                None,
                 None,
             ),
             (
@@ -556,6 +629,8 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
                     complete=True,
                 ),
                 '{"idp": "http://idp.example.com", "attributes": {"eduPersonUniqueId": ["12345"]}}',
+                None,
+                None,
             ),
             (
                 "subject_has_unique_id_and_custom_session_lifetime",
@@ -626,6 +701,9 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
                     external_type="A",
                     complete=True,
                 ),
+                None,
+                None,
+                None,
             ),
             (
                 "subject_has_unique_id_non_default_expiration_timeout_and_custom_session_lifetime",
@@ -677,24 +755,26 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
                 None,
                 "",
             ),
-        ]
+        ],
     )
     @freeze_time("2020-01-01 00:00:00")
     def test_saml_callback(
         self,
+        saml_provider_fixture,
         _,
         subject,
         expected_patron_data,
-        expected_credential=None,
-        expected_expiration_time=None,
-        cm_session_lifetime=None,
+        expected_credential,
+        expected_expiration_time,
+        cm_session_lifetime,
     ):
         # This test makes sure that SAMLWebSSOAuthenticationProvider.saml_callback
         # correctly processes a SAML subject and returns right PatronData.
 
         # Arrange
         provider = SAMLWebSSOAuthenticationProvider(
-            self._default_library, self._integration
+            saml_provider_fixture.controller_fixture.db.default_library(),
+            saml_provider_fixture.integration,
         )
 
         if expected_credential is None:
@@ -704,13 +784,17 @@ class TestSAMLWebSSOAuthenticationProvider(ControllerTest):
             expected_expiration_time = utc_now() + subject.valid_till
 
         if cm_session_lifetime is not None:
-            with self._configuration_factory.create(
-                self._configuration_storage, self._db, SAMLConfiguration
+            with saml_provider_fixture.configuration_factory.create(
+                saml_provider_fixture.configuration_storage,
+                saml_provider_fixture.controller_fixture.db.session,
+                SAMLConfiguration,
             ) as configuration:
                 configuration.session_lifetime = cm_session_lifetime
 
         # Act
-        result = provider.saml_callback(self._db, subject)
+        result = provider.saml_callback(
+            saml_provider_fixture.controller_fixture.db.session, subject
+        )
 
         # Assert
         if isinstance(result, ProblemDetail):

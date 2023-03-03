@@ -27,14 +27,14 @@ from api.saml.metadata.parser import (
     SAMLMetadataParsingResult,
     SAMLSubjectParser,
 )
-from tests.api.saml import fixtures
+from tests.api.saml import saml_strings
 
 
 class TestSAMLMetadataParser:
     @parameterized.expand(
         [
-            ("incorrect_xml_str_type", fixtures.INCORRECT_XML),
-            ("incorrect_xml_bytes_type", fixtures.INCORRECT_XML.encode()),
+            ("incorrect_xml_str_type", saml_strings.INCORRECT_XML),
+            ("incorrect_xml_bytes_type", saml_strings.INCORRECT_XML.encode()),
         ]
     )
     def test_parse_raises_exception_when_xml_metadata_has_incorrect_format(
@@ -51,11 +51,11 @@ class TestSAMLMetadataParser:
         [
             (
                 "incorrect_xml_with_one_idp_metadata_without_sso_service_str_type",
-                fixtures.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_SSO_SERVICE,
+                saml_strings.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_SSO_SERVICE,
             ),
             (
                 "incorrect_xml_with_one_idp_metadata_without_sso_service_bytes_type",
-                fixtures.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_SSO_SERVICE.encode(),
+                saml_strings.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_SSO_SERVICE.encode(),
             ),
         ]
     )
@@ -77,11 +77,11 @@ class TestSAMLMetadataParser:
         [
             (
                 "incorrect_xml_with_one_idp_metadata_with_sso_service_with_wrong_binding_str_type",
-                fixtures.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITH_SSO_SERVICE_WITH_WRONG_BINDING,
+                saml_strings.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITH_SSO_SERVICE_WITH_WRONG_BINDING,
             ),
             (
                 "incorrect_xml_with_one_idp_metadata_with_sso_service_with_wrong_binding_bytes_type",
-                fixtures.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITH_SSO_SERVICE_WITH_WRONG_BINDING.encode(),
+                saml_strings.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITH_SSO_SERVICE_WITH_WRONG_BINDING.encode(),
             ),
         ]
     )
@@ -105,11 +105,11 @@ class TestSAMLMetadataParser:
         [
             (
                 "correct_xml_with_one_idp_metadata_without_display_names_str_type",
-                fixtures.CORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_DISPLAY_NAMES,
+                saml_strings.CORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_DISPLAY_NAMES,
             ),
             (
                 "correct_xml_with_one_idp_metadata_without_display_names_bytes_type",
-                fixtures.CORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_DISPLAY_NAMES.encode(),
+                saml_strings.CORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_DISPLAY_NAMES.encode(),
             ),
         ]
     )
@@ -137,19 +137,19 @@ class TestSAMLMetadataParser:
         )
         assert (
             SAMLIdentityProviderMetadata(
-                entity_id=fixtures.IDP_1_ENTITY_ID,
+                entity_id=saml_strings.IDP_1_ENTITY_ID,
                 ui_info=SAMLUIInfo(),
                 organization=SAMLOrganization(),
-                name_id_format=fixtures.NAME_ID_FORMAT_1,
+                name_id_format=saml_strings.NAME_ID_FORMAT_1,
                 sso_service=SAMLService(
-                    fixtures.IDP_1_SSO_URL, fixtures.IDP_1_SSO_BINDING
+                    saml_strings.IDP_1_SSO_URL, saml_strings.IDP_1_SSO_BINDING
                 ),
                 want_authn_requests_signed=False,
                 signing_certificates=[
-                    fixtures.strip_certificate(fixtures.SIGNING_CERTIFICATE)
+                    saml_strings.strip_certificate(saml_strings.SIGNING_CERTIFICATE)
                 ],
                 encryption_certificates=[
-                    fixtures.strip_certificate(fixtures.ENCRYPTION_CERTIFICATE)
+                    saml_strings.strip_certificate(saml_strings.ENCRYPTION_CERTIFICATE)
                 ],
             )
             == parsing_result.provider
@@ -157,10 +157,10 @@ class TestSAMLMetadataParser:
 
     @parameterized.expand(
         [
-            ("correct_xml_with_idp_1_str_type", fixtures.CORRECT_XML_WITH_IDP_1),
+            ("correct_xml_with_idp_1_str_type", saml_strings.CORRECT_XML_WITH_IDP_1),
             (
                 "correct_xml_with_idp_1_bytes_type",
-                fixtures.CORRECT_XML_WITH_IDP_1.encode(),
+                saml_strings.CORRECT_XML_WITH_IDP_1.encode(),
             ),
         ]
     )
@@ -184,71 +184,75 @@ class TestSAMLMetadataParser:
         )
         assert (
             SAMLIdentityProviderMetadata(
-                entity_id=fixtures.IDP_1_ENTITY_ID,
+                entity_id=saml_strings.IDP_1_ENTITY_ID,
                 ui_info=SAMLUIInfo(
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_UI_INFO_EN_DISPLAY_NAME, "en"
+                            saml_strings.IDP_1_UI_INFO_EN_DISPLAY_NAME, "en"
                         ),
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_UI_INFO_ES_DISPLAY_NAME, "es"
+                            saml_strings.IDP_1_UI_INFO_ES_DISPLAY_NAME, "es"
                         ),
                     ],
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_UI_INFO_DESCRIPTION, "en"
+                            saml_strings.IDP_1_UI_INFO_DESCRIPTION, "en"
                         )
                     ],
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_UI_INFO_INFORMATION_URL, "en"
+                            saml_strings.IDP_1_UI_INFO_INFORMATION_URL, "en"
                         )
                     ],
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_UI_INFO_PRIVACY_STATEMENT_URL, "en"
+                            saml_strings.IDP_1_UI_INFO_PRIVACY_STATEMENT_URL, "en"
                         )
                     ],
-                    [SAMLLocalizedMetadataItem(fixtures.IDP_1_UI_INFO_LOGO_URL, "en")],
+                    [
+                        SAMLLocalizedMetadataItem(
+                            saml_strings.IDP_1_UI_INFO_LOGO_URL, "en"
+                        )
+                    ],
                 ),
                 organization=SAMLOrganization(
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_EN_ORGANIZATION_NAME, "en"
+                            saml_strings.IDP_1_ORGANIZATION_EN_ORGANIZATION_NAME, "en"
                         ),
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_ES_ORGANIZATION_NAME, "es"
+                            saml_strings.IDP_1_ORGANIZATION_ES_ORGANIZATION_NAME, "es"
                         ),
                     ],
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_EN_ORGANIZATION_DISPLAY_NAME,
+                            saml_strings.IDP_1_ORGANIZATION_EN_ORGANIZATION_DISPLAY_NAME,
                             "en",
                         ),
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_ES_ORGANIZATION_DISPLAY_NAME,
+                            saml_strings.IDP_1_ORGANIZATION_ES_ORGANIZATION_DISPLAY_NAME,
                             "es",
                         ),
                     ],
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_EN_ORGANIZATION_URL, "en"
+                            saml_strings.IDP_1_ORGANIZATION_EN_ORGANIZATION_URL, "en"
                         ),
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_ES_ORGANIZATION_URL, "es"
+                            saml_strings.IDP_1_ORGANIZATION_ES_ORGANIZATION_URL, "es"
                         ),
                     ],
                 ),
-                name_id_format=fixtures.NAME_ID_FORMAT_1,
+                name_id_format=saml_strings.NAME_ID_FORMAT_1,
                 sso_service=SAMLService(
-                    fixtures.IDP_1_SSO_URL, fixtures.IDP_1_SSO_BINDING
+                    saml_strings.IDP_1_SSO_URL, saml_strings.IDP_1_SSO_BINDING
                 ),
                 want_authn_requests_signed=False,
                 signing_certificates=[
-                    fixtures.strip_certificate(fixtures.SIGNING_CERTIFICATE)
+                    saml_strings.strip_certificate(saml_strings.SIGNING_CERTIFICATE)
                 ],
                 encryption_certificates=[
-                    fixtures.strip_certificate(fixtures.ENCRYPTION_CERTIFICATE)
+                    saml_strings.strip_certificate(saml_strings.ENCRYPTION_CERTIFICATE)
                 ],
             )
             == parsing_result.provider
@@ -256,10 +260,10 @@ class TestSAMLMetadataParser:
 
     @parameterized.expand(
         [
-            ("correct_xml_with_idp_1_str_type", fixtures.CORRECT_XML_WITH_IDP_1),
+            ("correct_xml_with_idp_1_str_type", saml_strings.CORRECT_XML_WITH_IDP_1),
             (
                 "correct_xml_with_idp_1_bytes_type",
-                fixtures.CORRECT_XML_WITH_IDP_1.encode(),
+                saml_strings.CORRECT_XML_WITH_IDP_1.encode(),
             ),
         ]
     )
@@ -283,71 +287,75 @@ class TestSAMLMetadataParser:
         )
         assert (
             SAMLIdentityProviderMetadata(
-                entity_id=fixtures.IDP_1_ENTITY_ID,
+                entity_id=saml_strings.IDP_1_ENTITY_ID,
                 ui_info=SAMLUIInfo(
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_UI_INFO_EN_DISPLAY_NAME, "en"
+                            saml_strings.IDP_1_UI_INFO_EN_DISPLAY_NAME, "en"
                         ),
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_UI_INFO_ES_DISPLAY_NAME, "es"
+                            saml_strings.IDP_1_UI_INFO_ES_DISPLAY_NAME, "es"
                         ),
                     ],
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_UI_INFO_DESCRIPTION, "en"
+                            saml_strings.IDP_1_UI_INFO_DESCRIPTION, "en"
                         )
                     ],
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_UI_INFO_INFORMATION_URL, "en"
+                            saml_strings.IDP_1_UI_INFO_INFORMATION_URL, "en"
                         )
                     ],
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_UI_INFO_PRIVACY_STATEMENT_URL, "en"
+                            saml_strings.IDP_1_UI_INFO_PRIVACY_STATEMENT_URL, "en"
                         )
                     ],
-                    [SAMLLocalizedMetadataItem(fixtures.IDP_1_UI_INFO_LOGO_URL, "en")],
+                    [
+                        SAMLLocalizedMetadataItem(
+                            saml_strings.IDP_1_UI_INFO_LOGO_URL, "en"
+                        )
+                    ],
                 ),
                 organization=SAMLOrganization(
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_EN_ORGANIZATION_NAME, "en"
+                            saml_strings.IDP_1_ORGANIZATION_EN_ORGANIZATION_NAME, "en"
                         ),
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_ES_ORGANIZATION_NAME, "es"
+                            saml_strings.IDP_1_ORGANIZATION_ES_ORGANIZATION_NAME, "es"
                         ),
                     ],
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_EN_ORGANIZATION_DISPLAY_NAME,
+                            saml_strings.IDP_1_ORGANIZATION_EN_ORGANIZATION_DISPLAY_NAME,
                             "en",
                         ),
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_ES_ORGANIZATION_DISPLAY_NAME,
+                            saml_strings.IDP_1_ORGANIZATION_ES_ORGANIZATION_DISPLAY_NAME,
                             "es",
                         ),
                     ],
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_EN_ORGANIZATION_URL, "en"
+                            saml_strings.IDP_1_ORGANIZATION_EN_ORGANIZATION_URL, "en"
                         ),
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_ES_ORGANIZATION_URL, "es"
+                            saml_strings.IDP_1_ORGANIZATION_ES_ORGANIZATION_URL, "es"
                         ),
                     ],
                 ),
-                name_id_format=fixtures.NAME_ID_FORMAT_1,
+                name_id_format=saml_strings.NAME_ID_FORMAT_1,
                 sso_service=SAMLService(
-                    fixtures.IDP_1_SSO_URL, fixtures.IDP_1_SSO_BINDING
+                    saml_strings.IDP_1_SSO_URL, saml_strings.IDP_1_SSO_BINDING
                 ),
                 want_authn_requests_signed=False,
                 signing_certificates=[
-                    fixtures.strip_certificate(fixtures.SIGNING_CERTIFICATE)
+                    saml_strings.strip_certificate(saml_strings.SIGNING_CERTIFICATE)
                 ],
                 encryption_certificates=[
-                    fixtures.strip_certificate(fixtures.ENCRYPTION_CERTIFICATE)
+                    saml_strings.strip_certificate(saml_strings.ENCRYPTION_CERTIFICATE)
                 ],
             )
             == parsing_result.provider
@@ -357,11 +365,11 @@ class TestSAMLMetadataParser:
         [
             (
                 "correct_xml_with_one_idp_metadata_with_one_certificate_str_type",
-                fixtures.CORRECT_XML_WITH_ONE_IDP_METADATA_WITH_ONE_CERTIFICATE,
+                saml_strings.CORRECT_XML_WITH_ONE_IDP_METADATA_WITH_ONE_CERTIFICATE,
             ),
             (
                 "correct_xml_with_one_idp_metadata_with_one_certificate_bytes_type",
-                fixtures.CORRECT_XML_WITH_ONE_IDP_METADATA_WITH_ONE_CERTIFICATE.encode(),
+                saml_strings.CORRECT_XML_WITH_ONE_IDP_METADATA_WITH_ONE_CERTIFICATE.encode(),
             ),
         ]
     )
@@ -389,71 +397,75 @@ class TestSAMLMetadataParser:
         )
         assert (
             SAMLIdentityProviderMetadata(
-                entity_id=fixtures.IDP_1_ENTITY_ID,
+                entity_id=saml_strings.IDP_1_ENTITY_ID,
                 ui_info=SAMLUIInfo(
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_UI_INFO_EN_DISPLAY_NAME, "en"
+                            saml_strings.IDP_1_UI_INFO_EN_DISPLAY_NAME, "en"
                         ),
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_UI_INFO_ES_DISPLAY_NAME, "es"
+                            saml_strings.IDP_1_UI_INFO_ES_DISPLAY_NAME, "es"
                         ),
                     ],
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_UI_INFO_DESCRIPTION, "en"
+                            saml_strings.IDP_1_UI_INFO_DESCRIPTION, "en"
                         )
                     ],
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_UI_INFO_INFORMATION_URL, "en"
+                            saml_strings.IDP_1_UI_INFO_INFORMATION_URL, "en"
                         )
                     ],
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_UI_INFO_PRIVACY_STATEMENT_URL, "en"
+                            saml_strings.IDP_1_UI_INFO_PRIVACY_STATEMENT_URL, "en"
                         )
                     ],
-                    [SAMLLocalizedMetadataItem(fixtures.IDP_1_UI_INFO_LOGO_URL, "en")],
+                    [
+                        SAMLLocalizedMetadataItem(
+                            saml_strings.IDP_1_UI_INFO_LOGO_URL, "en"
+                        )
+                    ],
                 ),
                 organization=SAMLOrganization(
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_EN_ORGANIZATION_NAME, "en"
+                            saml_strings.IDP_1_ORGANIZATION_EN_ORGANIZATION_NAME, "en"
                         ),
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_ES_ORGANIZATION_NAME, "es"
+                            saml_strings.IDP_1_ORGANIZATION_ES_ORGANIZATION_NAME, "es"
                         ),
                     ],
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_EN_ORGANIZATION_DISPLAY_NAME,
+                            saml_strings.IDP_1_ORGANIZATION_EN_ORGANIZATION_DISPLAY_NAME,
                             "en",
                         ),
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_ES_ORGANIZATION_DISPLAY_NAME,
+                            saml_strings.IDP_1_ORGANIZATION_ES_ORGANIZATION_DISPLAY_NAME,
                             "es",
                         ),
                     ],
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_EN_ORGANIZATION_URL, "en"
+                            saml_strings.IDP_1_ORGANIZATION_EN_ORGANIZATION_URL, "en"
                         ),
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_ES_ORGANIZATION_URL, "es"
+                            saml_strings.IDP_1_ORGANIZATION_ES_ORGANIZATION_URL, "es"
                         ),
                     ],
                 ),
-                name_id_format=fixtures.NAME_ID_FORMAT_1,
+                name_id_format=saml_strings.NAME_ID_FORMAT_1,
                 sso_service=SAMLService(
-                    fixtures.IDP_1_SSO_URL, fixtures.IDP_1_SSO_BINDING
+                    saml_strings.IDP_1_SSO_URL, saml_strings.IDP_1_SSO_BINDING
                 ),
                 want_authn_requests_signed=False,
                 signing_certificates=[
-                    fixtures.strip_certificate(fixtures.SIGNING_CERTIFICATE)
+                    saml_strings.strip_certificate(saml_strings.SIGNING_CERTIFICATE)
                 ],
                 encryption_certificates=[
-                    fixtures.strip_certificate(fixtures.SIGNING_CERTIFICATE)
+                    saml_strings.strip_certificate(saml_strings.SIGNING_CERTIFICATE)
                 ],
             )
             == parsing_result.provider
@@ -463,11 +475,11 @@ class TestSAMLMetadataParser:
         [
             (
                 "correct_xml_with_multiple_idps_str_type",
-                fixtures.CORRECT_XML_WITH_MULTIPLE_IDPS,
+                saml_strings.CORRECT_XML_WITH_MULTIPLE_IDPS,
             ),
             (
                 "correct_xml_with_multiple_idps_bytes_type",
-                fixtures.CORRECT_XML_WITH_MULTIPLE_IDPS.encode(),
+                saml_strings.CORRECT_XML_WITH_MULTIPLE_IDPS.encode(),
             ),
         ]
     )
@@ -491,55 +503,55 @@ class TestSAMLMetadataParser:
         )
         assert (
             SAMLIdentityProviderMetadata(
-                entity_id=fixtures.IDP_1_ENTITY_ID,
+                entity_id=saml_strings.IDP_1_ENTITY_ID,
                 ui_info=SAMLUIInfo(
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_UI_INFO_EN_DISPLAY_NAME, "en"
+                            saml_strings.IDP_1_UI_INFO_EN_DISPLAY_NAME, "en"
                         ),
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_UI_INFO_ES_DISPLAY_NAME, "es"
+                            saml_strings.IDP_1_UI_INFO_ES_DISPLAY_NAME, "es"
                         ),
                     ]
                 ),
                 organization=SAMLOrganization(
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_EN_ORGANIZATION_NAME, "en"
+                            saml_strings.IDP_1_ORGANIZATION_EN_ORGANIZATION_NAME, "en"
                         ),
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_ES_ORGANIZATION_NAME, "es"
+                            saml_strings.IDP_1_ORGANIZATION_ES_ORGANIZATION_NAME, "es"
                         ),
                     ],
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_EN_ORGANIZATION_DISPLAY_NAME,
+                            saml_strings.IDP_1_ORGANIZATION_EN_ORGANIZATION_DISPLAY_NAME,
                             "en",
                         ),
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_ES_ORGANIZATION_DISPLAY_NAME,
+                            saml_strings.IDP_1_ORGANIZATION_ES_ORGANIZATION_DISPLAY_NAME,
                             "es",
                         ),
                     ],
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_EN_ORGANIZATION_URL, "en"
+                            saml_strings.IDP_1_ORGANIZATION_EN_ORGANIZATION_URL, "en"
                         ),
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_1_ORGANIZATION_ES_ORGANIZATION_URL, "es"
+                            saml_strings.IDP_1_ORGANIZATION_ES_ORGANIZATION_URL, "es"
                         ),
                     ],
                 ),
-                name_id_format=fixtures.NAME_ID_FORMAT_1,
+                name_id_format=saml_strings.NAME_ID_FORMAT_1,
                 sso_service=SAMLService(
-                    fixtures.IDP_1_SSO_URL, fixtures.IDP_1_SSO_BINDING
+                    saml_strings.IDP_1_SSO_URL, saml_strings.IDP_1_SSO_BINDING
                 ),
                 want_authn_requests_signed=False,
                 signing_certificates=[
-                    fixtures.strip_certificate(fixtures.SIGNING_CERTIFICATE)
+                    saml_strings.strip_certificate(saml_strings.SIGNING_CERTIFICATE)
                 ],
                 encryption_certificates=[
-                    fixtures.strip_certificate(fixtures.ENCRYPTION_CERTIFICATE)
+                    saml_strings.strip_certificate(saml_strings.ENCRYPTION_CERTIFICATE)
                 ],
             )
             == parsing_results[0].provider
@@ -554,55 +566,55 @@ class TestSAMLMetadataParser:
         )
         assert (
             SAMLIdentityProviderMetadata(
-                entity_id=fixtures.IDP_2_ENTITY_ID,
+                entity_id=saml_strings.IDP_2_ENTITY_ID,
                 ui_info=SAMLUIInfo(
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_2_UI_INFO_EN_DISPLAY_NAME, "en"
+                            saml_strings.IDP_2_UI_INFO_EN_DISPLAY_NAME, "en"
                         ),
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_2_UI_INFO_ES_DISPLAY_NAME, "es"
+                            saml_strings.IDP_2_UI_INFO_ES_DISPLAY_NAME, "es"
                         ),
                     ]
                 ),
                 organization=SAMLOrganization(
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_2_ORGANIZATION_EN_ORGANIZATION_NAME, "en"
+                            saml_strings.IDP_2_ORGANIZATION_EN_ORGANIZATION_NAME, "en"
                         ),
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_2_ORGANIZATION_ES_ORGANIZATION_NAME, "es"
+                            saml_strings.IDP_2_ORGANIZATION_ES_ORGANIZATION_NAME, "es"
                         ),
                     ],
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_2_ORGANIZATION_EN_ORGANIZATION_DISPLAY_NAME,
+                            saml_strings.IDP_2_ORGANIZATION_EN_ORGANIZATION_DISPLAY_NAME,
                             "en",
                         ),
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_2_ORGANIZATION_ES_ORGANIZATION_DISPLAY_NAME,
+                            saml_strings.IDP_2_ORGANIZATION_ES_ORGANIZATION_DISPLAY_NAME,
                             "es",
                         ),
                     ],
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_2_ORGANIZATION_EN_ORGANIZATION_URL, "en"
+                            saml_strings.IDP_2_ORGANIZATION_EN_ORGANIZATION_URL, "en"
                         ),
                         SAMLLocalizedMetadataItem(
-                            fixtures.IDP_2_ORGANIZATION_ES_ORGANIZATION_URL, "es"
+                            saml_strings.IDP_2_ORGANIZATION_ES_ORGANIZATION_URL, "es"
                         ),
                     ],
                 ),
-                name_id_format=fixtures.NAME_ID_FORMAT_1,
+                name_id_format=saml_strings.NAME_ID_FORMAT_1,
                 sso_service=SAMLService(
-                    fixtures.IDP_2_SSO_URL, fixtures.IDP_2_SSO_BINDING
+                    saml_strings.IDP_2_SSO_URL, saml_strings.IDP_2_SSO_BINDING
                 ),
                 want_authn_requests_signed=False,
                 signing_certificates=[
-                    fixtures.strip_certificate(fixtures.SIGNING_CERTIFICATE)
+                    saml_strings.strip_certificate(saml_strings.SIGNING_CERTIFICATE)
                 ],
                 encryption_certificates=[
-                    fixtures.strip_certificate(fixtures.ENCRYPTION_CERTIFICATE)
+                    saml_strings.strip_certificate(saml_strings.ENCRYPTION_CERTIFICATE)
                 ],
             )
             == parsing_results[1].provider
@@ -612,11 +624,11 @@ class TestSAMLMetadataParser:
         [
             (
                 "incorrect_xml_with_one_sp_metadata_without_acs_service_str_type",
-                fixtures.INCORRECT_XML_WITH_ONE_SP_METADATA_WITHOUT_ACS_SERVICE,
+                saml_strings.INCORRECT_XML_WITH_ONE_SP_METADATA_WITHOUT_ACS_SERVICE,
             ),
             (
                 "incorrect_xml_with_one_sp_metadata_without_acs_service_bytes_type",
-                fixtures.INCORRECT_XML_WITH_ONE_SP_METADATA_WITHOUT_ACS_SERVICE.encode(),
+                saml_strings.INCORRECT_XML_WITH_ONE_SP_METADATA_WITHOUT_ACS_SERVICE.encode(),
             ),
         ]
     )
@@ -636,10 +648,10 @@ class TestSAMLMetadataParser:
 
     @parameterized.expand(
         [
-            ("correct_xml_with_one_sp_str_type", fixtures.CORRECT_XML_WITH_ONE_SP),
+            ("correct_xml_with_one_sp_str_type", saml_strings.CORRECT_XML_WITH_ONE_SP),
             (
                 "correct_xml_with_one_sp_bytes_type",
-                fixtures.CORRECT_XML_WITH_ONE_SP.encode(),
+                saml_strings.CORRECT_XML_WITH_ONE_SP.encode(),
             ),
         ]
     )
@@ -664,60 +676,70 @@ class TestSAMLMetadataParser:
 
         assert (
             SAMLServiceProviderMetadata(
-                entity_id=fixtures.SP_ENTITY_ID,
+                entity_id=saml_strings.SP_ENTITY_ID,
                 ui_info=SAMLUIInfo(
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.SP_UI_INFO_EN_DISPLAY_NAME, "en"
+                            saml_strings.SP_UI_INFO_EN_DISPLAY_NAME, "en"
                         ),
                         SAMLLocalizedMetadataItem(
-                            fixtures.SP_UI_INFO_ES_DISPLAY_NAME, "es"
+                            saml_strings.SP_UI_INFO_ES_DISPLAY_NAME, "es"
                         ),
                     ],
-                    [SAMLLocalizedMetadataItem(fixtures.SP_UI_INFO_DESCRIPTION, "en")],
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.SP_UI_INFO_INFORMATION_URL, "en"
+                            saml_strings.SP_UI_INFO_DESCRIPTION, "en"
                         )
                     ],
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.SP_UI_INFO_PRIVACY_STATEMENT_URL, "en"
+                            saml_strings.SP_UI_INFO_INFORMATION_URL, "en"
                         )
                     ],
-                    [SAMLLocalizedMetadataItem(fixtures.SP_UI_INFO_LOGO_URL)],
+                    [
+                        SAMLLocalizedMetadataItem(
+                            saml_strings.SP_UI_INFO_PRIVACY_STATEMENT_URL, "en"
+                        )
+                    ],
+                    [SAMLLocalizedMetadataItem(saml_strings.SP_UI_INFO_LOGO_URL)],
                 ),
                 organization=SAMLOrganization(
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.SP_ORGANIZATION_EN_ORGANIZATION_NAME, "en"
+                            saml_strings.SP_ORGANIZATION_EN_ORGANIZATION_NAME, "en"
                         ),
                         SAMLLocalizedMetadataItem(
-                            fixtures.SP_ORGANIZATION_ES_ORGANIZATION_NAME, "es"
-                        ),
-                    ],
-                    [
-                        SAMLLocalizedMetadataItem(
-                            fixtures.SP_ORGANIZATION_EN_ORGANIZATION_DISPLAY_NAME, "en"
-                        ),
-                        SAMLLocalizedMetadataItem(
-                            fixtures.SP_ORGANIZATION_ES_ORGANIZATION_DISPLAY_NAME, "es"
+                            saml_strings.SP_ORGANIZATION_ES_ORGANIZATION_NAME, "es"
                         ),
                     ],
                     [
                         SAMLLocalizedMetadataItem(
-                            fixtures.SP_ORGANIZATION_EN_ORGANIZATION_URL, "en"
+                            saml_strings.SP_ORGANIZATION_EN_ORGANIZATION_DISPLAY_NAME,
+                            "en",
                         ),
                         SAMLLocalizedMetadataItem(
-                            fixtures.SP_ORGANIZATION_ES_ORGANIZATION_URL, "es"
+                            saml_strings.SP_ORGANIZATION_ES_ORGANIZATION_DISPLAY_NAME,
+                            "es",
+                        ),
+                    ],
+                    [
+                        SAMLLocalizedMetadataItem(
+                            saml_strings.SP_ORGANIZATION_EN_ORGANIZATION_URL, "en"
+                        ),
+                        SAMLLocalizedMetadataItem(
+                            saml_strings.SP_ORGANIZATION_ES_ORGANIZATION_URL, "es"
                         ),
                     ],
                 ),
                 name_id_format=SAMLNameIDFormat.UNSPECIFIED.value,
-                acs_service=SAMLService(fixtures.SP_ACS_URL, fixtures.SP_ACS_BINDING),
+                acs_service=SAMLService(
+                    saml_strings.SP_ACS_URL, saml_strings.SP_ACS_BINDING
+                ),
                 authn_requests_signed=False,
                 want_assertions_signed=False,
-                certificate=fixtures.strip_certificate(fixtures.SIGNING_CERTIFICATE),
+                certificate=saml_strings.strip_certificate(
+                    saml_strings.SIGNING_CERTIFICATE
+                ),
             )
             == parsing_result.provider
         )
@@ -730,16 +752,16 @@ class TestSAMLSubjectParser:
                 "name_id_and_attributes",
                 "http://idp.example.com",
                 SAMLNameIDFormat.TRANSIENT.value,
-                fixtures.IDP_1_ENTITY_ID,
-                fixtures.SP_ENTITY_ID,
+                saml_strings.IDP_1_ENTITY_ID,
+                saml_strings.SP_ENTITY_ID,
                 "12345",
                 {SAMLAttributeType.eduPersonUniqueId.value: ["12345"]},
                 SAMLSubject(
                     "http://idp.example.com",
                     SAMLNameID(
                         SAMLNameIDFormat.TRANSIENT.value,
-                        fixtures.IDP_1_ENTITY_ID,
-                        fixtures.SP_ENTITY_ID,
+                        saml_strings.IDP_1_ENTITY_ID,
+                        saml_strings.SP_ENTITY_ID,
                         "12345",
                     ),
                     SAMLAttributeStatement(
@@ -763,7 +785,7 @@ class TestSAMLSubjectParser:
                         {
                             "NameID": {
                                 "Format": SAMLNameIDFormat.PERSISTENT.value,
-                                "NameQualifier": fixtures.IDP_1_ENTITY_ID,
+                                "NameQualifier": saml_strings.IDP_1_ENTITY_ID,
                                 "value": "12345",
                             }
                         }
@@ -773,7 +795,7 @@ class TestSAMLSubjectParser:
                     "http://idp.example.com",
                     SAMLNameID(
                         SAMLNameIDFormat.PERSISTENT.value,
-                        fixtures.IDP_1_ENTITY_ID,
+                        saml_strings.IDP_1_ENTITY_ID,
                         None,
                         "12345",
                     ),
@@ -798,7 +820,7 @@ class TestSAMLSubjectParser:
                         {
                             "NameID": {
                                 "Format": SAMLNameIDFormat.PERSISTENT.value,
-                                "NameQualifier": fixtures.IDP_1_ENTITY_ID,
+                                "NameQualifier": saml_strings.IDP_1_ENTITY_ID,
                                 "value": "12345",
                             }
                         }
@@ -809,7 +831,7 @@ class TestSAMLSubjectParser:
                     "http://idp.example.com",
                     SAMLNameID(
                         SAMLNameIDFormat.PERSISTENT.value,
-                        fixtures.IDP_1_ENTITY_ID,
+                        saml_strings.IDP_1_ENTITY_ID,
                         None,
                         "12345",
                     ),
@@ -837,7 +859,7 @@ class TestSAMLSubjectParser:
                         {
                             "NameID": {
                                 "Format": SAMLNameIDFormat.PERSISTENT.value,
-                                "NameQualifier": fixtures.IDP_1_ENTITY_ID,
+                                "NameQualifier": saml_strings.IDP_1_ENTITY_ID,
                                 "value": "12345",
                             }
                         }
@@ -847,7 +869,7 @@ class TestSAMLSubjectParser:
                     "http://idp.example.com",
                     SAMLNameID(
                         SAMLNameIDFormat.PERSISTENT.value,
-                        fixtures.IDP_1_ENTITY_ID,
+                        saml_strings.IDP_1_ENTITY_ID,
                         None,
                         "12345",
                     ),
