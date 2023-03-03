@@ -27,6 +27,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
     USE_SSL = "use_ssl"
     SSL_CERTIFICATE = "ssl_certificate"
     SSL_KEY = "ssl_key"
+    SSL_NO_VERIFICATION = "ssl_no_verification"
     ILS = "ils"
     PATRON_STATUS_BLOCK = "patron status block"
 
@@ -62,6 +63,26 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
             ],
             "default": "false",
             "required": True,
+        },
+        {
+            "key": SSL_NO_VERIFICATION,
+            "label": _("Do not perform SSL certificate verification."),
+            "description": _(
+                "Strict certificate verification may be optionally turned off for hosts that have misconfigured or untrusted certificates."
+            ),
+            "type": "select",
+            "options": [
+                {
+                    "key": "true",
+                    "label": _("Do not perform SSL certificate verification."),
+                },
+                {
+                    "key": "false",
+                    "label": _("Perform the normal SSL certificate verification."),
+                },
+            ],
+            "default": "false",
+            "required": False,
         },
         {
             "key": ILS,
@@ -182,6 +203,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
         self.use_ssl = integration.setting(self.USE_SSL).json_value
         self.ssl_cert = integration.setting(self.SSL_CERTIFICATE).value
         self.ssl_key = integration.setting(self.SSL_KEY).value
+        self.ssl_no_verification = integration.setting(self.SSL_NO_VERIFICATION).value
         self.dialect = Sip2Dialect.load_dialect(integration.setting(self.ILS).value)
         self.client = client
 
@@ -221,6 +243,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
             use_ssl=self.use_ssl,
             ssl_cert=self.ssl_cert,
             ssl_key=self.ssl_key,
+            ssl_no_verification=self.ssl_no_verification,
             encoding=self.encoding.lower(),
             dialect=self.dialect,
         )
