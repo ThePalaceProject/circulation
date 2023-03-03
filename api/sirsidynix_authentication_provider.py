@@ -8,7 +8,7 @@ from urllib.parse import urljoin
 from sqlalchemy.orm import object_session
 
 from api.authenticator import BasicAuthenticationProvider, PatronData
-from api.problem_details import INVALID_CREDENTIALS
+from api.problem_details import PATRON_OF_ANOTHER_LIBRARY
 from core.config import Configuration
 from core.model.configuration import (
     ConfigurationAttributeType,
@@ -154,9 +154,7 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             complete=False,
         )
 
-    # Because of the odd way in which this method is written in AuthenticationProvider
-    # we have to exclude it from type checking, because mypy gets confused with the inheritance
-    def _remote_patron_lookup(  # type: ignore
+    def _remote_patron_lookup(
         self, patron_or_patrondata: Patron | SirsiDynixPatronData
     ) -> None | SirsiDynixPatronData | ProblemDetail:
         """Do a remote patron lookup, this method can only lookup a patron with a patrondata object
@@ -191,7 +189,7 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
         # they are interacting with
         if not patron_type.startswith(self.sirsi_library_prefix):
             # We respond with a problem detail, stopping the upstream authentication immediately
-            return INVALID_CREDENTIALS
+            return PATRON_OF_ANOTHER_LIBRARY
 
         if not fields.get("approved", False):
             patrondata.block_reason = SirsiBlockReasons.NOT_APPROVED

@@ -1671,7 +1671,7 @@ class AuthenticationProvider(OPDSAuthenticationFlow):
 
     def remote_patron_lookup(
         self, patron_or_patrondata
-    ) -> Union[PatronData, Patron, None]:
+    ) -> Union[ProblemDetail, PatronData, Patron, None]:
         """Ask the remote for detailed information about a patron's account.
 
         This may be called in the course of authenticating a patron,
@@ -1994,7 +1994,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests):
 
     def _remote_patron_lookup(
         self, patron_or_patrondata
-    ) -> Union[PatronData, Patron, None]:
+    ) -> Union[ProblemDetail, PatronData, Patron, None]:
         if not patron_or_patrondata:
             return None
         if isinstance(patron_or_patrondata, PatronData) or isinstance(
@@ -2009,7 +2009,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests):
 
     def remote_patron_lookup(
         self, patron_or_patrondata
-    ) -> Union[PatronData, Patron, None]:
+    ) -> Union[ProblemDetail, PatronData, Patron, None]:
         """Ask the remote for information about this patron, and then make sure
         the patron belongs to the library associated with this BasicAuthenticationProvider."""
 

@@ -3478,7 +3478,7 @@ class TestSirsiDynixAuthenticationProvider:
         patrondata = sirsi_fixture.api.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
-        assert patrondata == INVALID_CREDENTIALS
+        assert patrondata == PATRON_OF_ANOTHER_LIBRARY
 
         # Test blocked patron types
         bad_prefix_patron_resp = {
