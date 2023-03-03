@@ -23,9 +23,6 @@ class AdminStatisticsSessionFixture:
         self.db = db
 
     def get_statistics(self):
-        # Avoid flaky tests by ensuring that the DB session is flushed
-        # before we generate statistics from the database.
-        self.db.session.flush()
         return generate_statistics(self.admin, self.db.session)
 
 
@@ -235,11 +232,14 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
     for data in [library_data, total_data]:
         collections_data = data.get("collections")
         assert 1 == len(collections_data)
-        collection_data = collections_data.get(default_collection.name)
-        assert 0 == collection_data.get("licensed_titles")
-        assert 1 == collection_data.get("open_access_titles")
-        assert 0 == collection_data.get("licenses")
-        assert 0 == collection_data.get("available_licenses")
+        assert 0 == collections_data.get(default_collection.name).get("licensed_titles")
+        assert 1 == collections_data.get(default_collection.name).get(
+            "open_access_titles"
+        )
+        assert 0 == collections_data.get(default_collection.name).get("licenses")
+        assert 0 == collections_data.get(default_collection.name).get(
+            "available_licenses"
+        )
 
     c2 = db.collection()
     c3 = db.collection()
@@ -269,6 +269,7 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
         with_license_pool=True,
         with_open_access_download=False,
         data_source_name=DataSource.BIBLIOTHECA,
+        collection=default_collection,
     )
     pool3.open_access = False
     pool3.licenses_owned = 3
@@ -292,17 +293,15 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
     assert 2 == len(library_collections_data)
     assert 3 == len(total_collections_data)
     for data in [library_collections_data, total_collections_data]:
-        c1_data = data.get(default_collection.name)
-        assert 1 == c1_data.get("licensed_titles")
-        assert 1 == c1_data.get("open_access_titles")
-        assert 3 == c1_data.get("licenses")
-        assert 0 == c1_data.get("available_licenses")
+        assert 1 == data.get(default_collection.name).get("licensed_titles")
+        assert 1 == data.get(default_collection.name).get("open_access_titles")
+        assert 3 == data.get(default_collection.name).get("licenses")
+        assert 0 == data.get(default_collection.name).get("available_licenses")
 
-        c3_data = data.get(c3.name)
-        assert 0 == c3_data.get("licensed_titles")
-        assert 0 == c3_data.get("open_access_titles")
-        assert 0 == c3_data.get("licenses")
-        assert 0 == c3_data.get("available_licenses")
+        assert 0 == data.get(c3.name).get("licensed_titles")
+        assert 0 == data.get(c3.name).get("open_access_titles")
+        assert 0 == data.get(c3.name).get("licenses")
+        assert 0 == data.get(c3.name).get("available_licenses")
 
     assert None == library_collections_data.get(c2.name)
     c2_data = total_collections_data.get(c2.name)
@@ -322,19 +321,21 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
     for data in [library_data, total_data]:
         collections_data = data.get("collections")
         assert 2 == len(collections_data)
-        assert None == collections_data.get(c2.name)
+        assert collections_data.get(c2.name) is None
 
-        c1_data = collections_data.get(default_collection.name)
-        assert 1 == c1_data.get("licensed_titles")
-        assert 1 == c1_data.get("open_access_titles")
-        assert 3 == c1_data.get("licenses")
-        assert 0 == c1_data.get("available_licenses")
+        assert 1 == collections_data.get(default_collection.name).get("licensed_titles")
+        assert 1 == collections_data.get(default_collection.name).get(
+            "open_access_titles"
+        )
+        assert 3 == collections_data.get(default_collection.name).get("licenses")
+        assert 0 == collections_data.get(default_collection.name).get(
+            "available_licenses"
+        )
 
-        c3_data = collections_data.get(c3.name)
-        assert 0 == c3_data.get("licensed_titles")
-        assert 0 == c3_data.get("open_access_titles")
-        assert 0 == c3_data.get("licenses")
-        assert 0 == c3_data.get("available_licenses")
+        assert 0 == collections_data.get(c3.name).get("licensed_titles")
+        assert 0 == collections_data.get(c3.name).get("open_access_titles")
+        assert 0 == collections_data.get(c3.name).get("licenses")
+        assert 0 == collections_data.get(c3.name).get("available_licenses")
 
 
 def test_stats_parent_collection_permissions(
