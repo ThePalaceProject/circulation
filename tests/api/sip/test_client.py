@@ -10,6 +10,7 @@ from _pytest.monkeypatch import MonkeyPatch
 
 from api.sip.client import MockSIPClient, SIPClient
 from api.sip.dialect import AutoGraphicsVerso, GenericILS
+from tests.fixtures.tls_server import TLSServerFixture
 
 
 class MockSocket:
@@ -35,6 +36,104 @@ class MockSocket:
         block = self.data[:size]
         self.data = self.data[size:]
         return block
+
+
+class TestSIPClientTLS:
+    """Test the real SIPClient class against a local TLS server."""
+
+    def test_connect_trusted(self, tls_server: TLSServerFixture):
+        """Connecting to a server that returns a trusted certificate works."""
+
+        def create_context(protocol):
+            self.context = ssl.SSLContext()
+            self.context.load_verify_locations(tls_server.ca_cert_file)
+            return self.context
+
+        c = SIPClient(
+            "localhost", tls_server.port, use_ssl=True, ssl_contexts=create_context
+        )
+        c.connect()
+
+    def test_connect_trusted_ignored(self, tls_server: TLSServerFixture):
+        """Connecting to a server that returns a trusted certificate works if we ignore certificates."""
+
+        def create_context(protocol):
+            self.context = ssl.SSLContext()
+            return self.context
+
+        c = SIPClient(
+            "localhost",
+            tls_server.port,
+            use_ssl=True,
+            ssl_contexts=create_context,
+            ssl_no_verification=True,
+        )
+        c.connect()
+
+    def test_connect_untrusted(self, tls_server: TLSServerFixture):
+        """Connecting to a server that returns an untrusted certificate fails."""
+
+        def create_context(protocol):
+            self.context = ssl.SSLContext()
+            return self.context
+
+        c = SIPClient(
+            "localhost", tls_server.port, use_ssl=True, ssl_contexts=create_context
+        )
+        with pytest.raises(Exception) as e:
+            c.connect()
+        assert "CERTIFICATE_VERIFY_FAILED" in str(e)
+
+    def test_connect_untrusted_ignored(self, tls_server: TLSServerFixture):
+        """Connecting to a server that returns an untrusted certificate works if we ignore certificates."""
+
+        def create_context(protocol):
+            self.context = ssl.SSLContext()
+            return self.context
+
+        c = SIPClient(
+            "localhost",
+            tls_server.port,
+            use_ssl=True,
+            ssl_contexts=create_context,
+            ssl_no_verification=True,
+        )
+        c.connect()
+
+    def test_connect_invalid_untrusted(self, tls_server_wrong_cert: TLSServerFixture):
+        """Connecting to a server that returns an invalid certificate fails."""
+
+        def create_context(protocol):
+            self.context = ssl.SSLContext()
+            self.context.load_verify_locations(tls_server_wrong_cert.ca_cert_file)
+            return self.context
+
+        c = SIPClient(
+            "localhost",
+            tls_server_wrong_cert.port,
+            use_ssl=True,
+            ssl_contexts=create_context,
+        )
+        with pytest.raises(Exception) as e:
+            c.connect()
+        assert "CERTIFICATE_VERIFY_FAILED" in str(e)
+
+    def test_connect_invalid_ignored(self, tls_server_wrong_cert: TLSServerFixture):
+        """Connecting to a server that returns an invalid certificate works if we ignore certificates."""
+
+        def create_context(protocol):
+            self.context = ssl.SSLContext()
+            self.context.load_verify_locations(tls_server_wrong_cert.ca_cert_file)
+            return self.context
+
+        c = SIPClient(
+            "localhost",
+            tls_server_wrong_cert.port,
+            use_ssl=True,
+            ssl_contexts=create_context,
+            ssl_no_verification=True,
+        )
+        c.connect()
 
 
 class TestSIPClient:

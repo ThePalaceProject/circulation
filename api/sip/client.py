@@ -439,8 +439,10 @@ class SIPClient(Constants):
             )
 
         if self.ssl_no_verification:
+            context.check_hostname = False
             context.verify_mode = ssl.CERT_NONE
         else:
+            context.check_hostname = True
             context.verify_mode = ssl.CERT_REQUIRED
 
         connection = context.wrap_socket(
