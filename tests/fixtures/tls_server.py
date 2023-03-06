@@ -27,8 +27,7 @@ class TLSServerFixture:
         ca_cert: str,
     ):
         self._sock = socket(family=AF_INET, type=SOCK_STREAM)
-        self._executor = ThreadPoolExecutor(max_workers=1)
-        self._open = True
+        self._executor = ThreadPoolExecutor(max_workers=3)
         self._context = context
         self._server_key = server_key
         self._server_cert = server_cert
@@ -37,6 +36,7 @@ class TLSServerFixture:
         self._ca_cert = ca_cert
         self._tls_socket = None
         self._address = None
+        self._open = True
         self._responses = deque()
 
     def start(self):
@@ -72,7 +72,8 @@ class TLSServerFixture:
         logging.debug("server: closing")
         self._open = False
         self._sock.close()
-        self._executor.shutdown()
+        self._tls_socket.close()
+        self._executor.shutdown(wait=True)
         logging.debug("server: closed")
 
     @property
