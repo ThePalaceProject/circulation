@@ -31,7 +31,6 @@ import re
 import socket
 import ssl
 import tempfile
-from ssl import _SSLMethod
 from typing import Callable, Optional
 
 import certifi
@@ -287,7 +286,7 @@ class SIPClient(Constants):
         ssl_cert=None,
         ssl_key=None,
         ssl_no_verification=False,
-        ssl_contexts: Callable[[_SSLMethod], ssl.SSLContext] = ssl.SSLContext,
+        ssl_contexts: Callable[[ssl._SSLMethod], ssl.SSLContext] = ssl.SSLContext,
         encoding=Constants.DEFAULT_ENCODING,
         dialect=GenericILS,
     ):
