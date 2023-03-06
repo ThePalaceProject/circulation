@@ -143,8 +143,8 @@ class TestViewController(AdminControllerTest):
             location = response.headers.get("Location")
             assert "sign_in" in location
             assert "admin%2Fweb" in location
-            assert "collection%2Fa%252F%2528b%2529" in location
-            assert "book%2Fc%252F%2528d%2529" in location
+            assert "collection%2Fa%252F(b)" in location
+            assert "book%2Fc%252F(d)" in location
 
     def test_redirect_to_library(self):
         # If the admin doesn't have access to any libraries, they get a message
