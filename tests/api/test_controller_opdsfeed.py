@@ -38,11 +38,6 @@ class TestOPDSFeedController:
     page_called_with: Any
     called_with: Any
 
-    def __init__(self):
-        self.groups_called_with = None
-        self.page_called_with = None
-        self.called_with = None
-
     def test_feed(self, circulation_fixture: CirculationControllerFixture):
         circulation_fixture.add_works(self._EXTRA_BOOKS)
 
@@ -420,7 +415,7 @@ class TestOPDSFeedController:
         # into it.
         old_navigation = NavigationFeed.navigation
 
-        def mock_navigation(cls, *args, **kwargs):
+        def mock_navigation(*args, **kwargs):
             self.called_with = (args, kwargs)
             return old_navigation(*args, **kwargs)
 
@@ -745,7 +740,7 @@ class TestOPDSFeedController:
 
         # For the most part, we're verifying that the expected values
         # are passed in to _qa_feed.
-        assert AcquisitionFeed.groups == kwargs.pop("feed_method")  # type: ignore
+        assert AcquisitionFeed.groups == kwargs.pop("feed_factory")  # type: ignore
         assert JackpotFacets == kwargs.pop("facet_class")  # type: ignore
         assert "qa_feed" == kwargs.pop("controller_name")  # type: ignore
         assert "QA test feed" == kwargs.pop("feed_title")  # type: ignore

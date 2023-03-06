@@ -46,7 +46,7 @@ class MockAPI(MilleniumPatronAPI):
         return self.files.sample_data(filename)
 
 
-class TestMilleniumPatronFixture:
+class MilleniumPatronFixture:
 
     db: DatabaseTransactionFixture
     files: MilleniumFilesFixture
@@ -117,12 +117,12 @@ class TestMilleniumPatronFixture:
 def millenium_fixture(
     db: DatabaseTransactionFixture,
     api_millenium_patron_files_fixture: MilleniumFilesFixture,
-) -> TestMilleniumPatronFixture:
-    return TestMilleniumPatronFixture(db, api_millenium_patron_files_fixture)
+) -> MilleniumPatronFixture:
+    return MilleniumPatronFixture(db, api_millenium_patron_files_fixture)
 
 
 class TestMilleniumPatronAPI:
-    def test_constructor(self, millenium_fixture: TestMilleniumPatronFixture):
+    def test_constructor(self, millenium_fixture: MilleniumPatronFixture):
         api = millenium_fixture.mock_api("http://example.com/", ["a", "b"])
         assert "http://example.com/" == api.root
         assert ["a", "b"] == [x.pattern for x in api.blacklist]
@@ -134,14 +134,14 @@ class TestMilleniumPatronAPI:
         )
 
     def test__remote_patron_lookup_no_such_patron(
-        self, millenium_fixture: TestMilleniumPatronFixture
+        self, millenium_fixture: MilleniumPatronFixture
     ):
         millenium_fixture.api.enqueue("dump.no such barcode.html")
         patrondata = PatronData(authorization_identifier="bad barcode")
         assert None == millenium_fixture.api._remote_patron_lookup(patrondata)
 
     def test__remote_patron_lookup_success(
-        self, millenium_fixture: TestMilleniumPatronFixture
+        self, millenium_fixture: MilleniumPatronFixture
     ):
         millenium_fixture.api.enqueue("dump.success.html")
         patrondata = PatronData(authorization_identifier="good barcode")
@@ -161,7 +161,7 @@ class TestMilleniumPatronAPI:
         assert PatronData.NO_VALUE == patrondata.block_reason
 
     def test__remote_patron_lookup_success_nonsensical_labels(
-        self, millenium_fixture: TestMilleniumPatronFixture
+        self, millenium_fixture: MilleniumPatronFixture
     ):
         millenium_fixture.api.enqueue("dump.success_nonsensical_labels.html")
         patrondata = PatronData(authorization_identifier="good barcode")
@@ -180,7 +180,7 @@ class TestMilleniumPatronAPI:
         assert PatronData.NO_VALUE == patrondata.block_reason
 
     def test__remote_patron_lookup_success_alternative_identifier(
-        self, millenium_fixture: TestMilleniumPatronFixture
+        self, millenium_fixture: MilleniumPatronFixture
     ):
         millenium_fixture.api = millenium_fixture.mock_api(
             field_used_as_patron_identifier="pu"
@@ -200,7 +200,7 @@ class TestMilleniumPatronAPI:
         assert PatronData.NO_VALUE == patrondata.block_reason
 
     def test__remote_patron_lookup_barcode_spaces(
-        self, millenium_fixture: TestMilleniumPatronFixture
+        self, millenium_fixture: MilleniumPatronFixture
     ):
         millenium_fixture.api.enqueue("dump.success_barcode_spaces.html")
         patrondata = PatronData(authorization_identifier="44444444444447")
@@ -212,7 +212,7 @@ class TestMilleniumPatronAPI:
         ] == patrondata.authorization_identifiers
 
     def test__remote_patron_lookup_block_rules(
-        self, millenium_fixture: TestMilleniumPatronFixture
+        self, millenium_fixture: MilleniumPatronFixture
     ):
         """This patron has a value of "m" in MBLOCK[56], which generally
         means they are blocked.
@@ -239,9 +239,7 @@ class TestMilleniumPatronAPI:
         patrondata = api._remote_patron_lookup(patrondata)
         assert PatronData.UNKNOWN_BLOCK == patrondata.block_reason
 
-    def test_parse_poorly_behaved_dump(
-        self, millenium_fixture: TestMilleniumPatronFixture
-    ):
+    def test_parse_poorly_behaved_dump(self, millenium_fixture: MilleniumPatronFixture):
         """The HTML parser is able to handle HTML embedded in
         field values.
         """
@@ -251,7 +249,7 @@ class TestMilleniumPatronAPI:
         assert "abcd" == patrondata.authorization_identifier
 
     def test_incoming_authorization_identifier_retained(
-        self, millenium_fixture: TestMilleniumPatronFixture
+        self, millenium_fixture: MilleniumPatronFixture
     ):
         # This patron has two barcodes.
         dump = millenium_fixture.files.sample_data("dump.two_barcodes.html")
@@ -280,7 +278,7 @@ class TestMilleniumPatronAPI:
         assert "SECOND-barcode" == patrondata.authorization_identifier
 
     def test_remote_authenticate_no_such_barcode(
-        self, millenium_fixture: TestMilleniumPatronFixture
+        self, millenium_fixture: MilleniumPatronFixture
     ):
         millenium_fixture.api.enqueue("pintest.no such barcode.html")
         assert False == millenium_fixture.api.remote_authenticate(
@@ -288,7 +286,7 @@ class TestMilleniumPatronAPI:
         )
 
     def test_remote_authenticate_wrong_pin(
-        self, millenium_fixture: TestMilleniumPatronFixture
+        self, millenium_fixture: MilleniumPatronFixture
     ):
         millenium_fixture.api.enqueue("pintest.bad.html")
         assert False == millenium_fixture.api.remote_authenticate(
@@ -296,7 +294,7 @@ class TestMilleniumPatronAPI:
         )
 
     def test_remote_authenticate_correct_pin(
-        self, millenium_fixture: TestMilleniumPatronFixture
+        self, millenium_fixture: MilleniumPatronFixture
     ):
         millenium_fixture.api.enqueue("pintest.good.html")
         barcode = "barcode1234567!"
@@ -319,7 +317,7 @@ class TestMilleniumPatronAPI:
         assert "%2F" in url
 
     def test_authentication_updates_patron_authorization_identifier(
-        self, millenium_fixture: TestMilleniumPatronFixture
+        self, millenium_fixture: MilleniumPatronFixture
     ):
         """Verify that Patron.authorization_identifier is updated when
         necessary and left alone when not necessary.
@@ -425,7 +423,7 @@ class TestMilleniumPatronAPI:
         assert "SECOND-barcode" == p.authorization_identifier
 
     def test_authenticated_patron_success(
-        self, millenium_fixture: TestMilleniumPatronFixture
+        self, millenium_fixture: MilleniumPatronFixture
     ):
         """This test can probably be removed -- it mostly tests functionality
         from BasicAuthAuthenticator.
@@ -465,7 +463,7 @@ class TestMilleniumPatronAPI:
         assert "alice" == alice.username
 
     def test_authenticated_patron_renewed_card(
-        self, millenium_fixture: TestMilleniumPatronFixture
+        self, millenium_fixture: MilleniumPatronFixture
     ):
         """This test can be removed -- authenticated_patron is
         tested in test_authenticator.py.
@@ -512,7 +510,7 @@ class TestMilleniumPatronAPI:
         assert expiration == p.authorization_expires
 
     def test_authentication_patron_invalid_expiration_date(
-        self, millenium_fixture: TestMilleniumPatronFixture
+        self, millenium_fixture: MilleniumPatronFixture
     ):
         p = millenium_fixture.db.patron()
         p.authorization_identifier = "44444444444447"
@@ -526,7 +524,7 @@ class TestMilleniumPatronAPI:
         assert None == p.authorization_expires
 
     def test_authentication_patron_invalid_fine_amount(
-        self, millenium_fixture: TestMilleniumPatronFixture
+        self, millenium_fixture: MilleniumPatronFixture
     ):
         p = millenium_fixture.db.patron()
         p.authorization_identifier = "44444444444447"
@@ -539,9 +537,7 @@ class TestMilleniumPatronAPI:
         assert p2 == p
         assert 0 == p.fines
 
-    def test_patron_dump_to_patrondata(
-        self, millenium_fixture: TestMilleniumPatronFixture
-    ):
+    def test_patron_dump_to_patrondata(self, millenium_fixture: MilleniumPatronFixture):
         content = millenium_fixture.files.sample_data("dump.success.html")
         patrondata = millenium_fixture.api.patron_dump_to_patrondata("alice", content)
         assert "44444444444447" == patrondata.authorization_identifier
@@ -549,7 +545,7 @@ class TestMilleniumPatronAPI:
         assert None == patrondata.library_identifier
 
     def test_patron_dump_to_patrondata_restriction_field(
-        self, millenium_fixture: TestMilleniumPatronFixture
+        self, millenium_fixture: MilleniumPatronFixture
     ):
         api = millenium_fixture.mock_api(library_identifier_field="HOME LIBR[p53]")
         content = api.sample_data("dump.success.html")
@@ -560,7 +556,7 @@ class TestMilleniumPatronAPI:
         patrondata = api.patron_dump_to_patrondata("alice", content)
         assert "10" == patrondata.library_identifier
 
-    def test_neighborhood(self, millenium_fixture: TestMilleniumPatronFixture):
+    def test_neighborhood(self, millenium_fixture: MilleniumPatronFixture):
         # The value of PatronData.neighborhood depends on the 'neighborhood mode' setting.
 
         # Default behavior is not to gather neighborhood information at all.
@@ -585,7 +581,7 @@ class TestMilleniumPatronAPI:
         assert "10001" == patrondata.neighborhood
 
     def test_authorization_identifier_blacklist(
-        self, millenium_fixture: TestMilleniumPatronFixture
+        self, millenium_fixture: MilleniumPatronFixture
     ):
         """A patron has two authorization identifiers. Ordinarily the second
         one (which would normally be preferred), but it contains a
@@ -600,7 +596,7 @@ class TestMilleniumPatronAPI:
         assert "FIRST-barcode" == patrondata.authorization_identifier
 
     def test_blacklist_may_remove_every_authorization_identifier(
-        self, millenium_fixture: TestMilleniumPatronFixture
+        self, millenium_fixture: MilleniumPatronFixture
     ):
         """A patron may end up with no authorization identifier whatsoever
         because they're all blacklisted.
@@ -611,7 +607,7 @@ class TestMilleniumPatronAPI:
         assert patrondata.NO_VALUE == patrondata.authorization_identifier
         assert [] == patrondata.authorization_identifiers
 
-    def test_verify_certificate(self, millenium_fixture: TestMilleniumPatronFixture):
+    def test_verify_certificate(self, millenium_fixture: MilleniumPatronFixture):
         """Test the ability to bypass verification of the Millenium Patron API
         server's SSL certificate.
         """
@@ -665,7 +661,7 @@ class TestMilleniumPatronAPI:
         assert True == m("caroline janice cherryh", "cherryh")
 
     def test_misconfigured_authentication_mode(
-        self, millenium_fixture: TestMilleniumPatronFixture
+        self, millenium_fixture: MilleniumPatronFixture
     ):
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             millenium_fixture.mock_api(auth_mode="nosuchauthmode")
@@ -675,7 +671,7 @@ class TestMilleniumPatronAPI:
         )
 
     def test_authorization_without_password(
-        self, millenium_fixture: TestMilleniumPatronFixture
+        self, millenium_fixture: MilleniumPatronFixture
     ):
         """Test authorization when no password is required, only
         patron identifier.
@@ -696,7 +692,7 @@ class TestMilleniumPatronAPI:
         assert False == patrondata
 
     def test_authorization_family_name_success(
-        self, millenium_fixture: TestMilleniumPatronFixture
+        self, millenium_fixture: MilleniumPatronFixture
     ):
         """Test authenticating against the patron's family name, given the
         correct name (case insensitive)
@@ -713,7 +709,7 @@ class TestMilleniumPatronAPI:
         assert True == patrondata.complete
 
     def test_authorization_family_name_failure(
-        self, millenium_fixture: TestMilleniumPatronFixture
+        self, millenium_fixture: MilleniumPatronFixture
     ):
         """Test authenticating against the patron's family name, given the
         incorrect name
@@ -725,7 +721,7 @@ class TestMilleniumPatronAPI:
         )
 
     def test_authorization_family_name_no_such_patron(
-        self, millenium_fixture: TestMilleniumPatronFixture
+        self, millenium_fixture: MilleniumPatronFixture
     ):
         """If no patron is found, authorization based on family name cannot
         proceed.
