@@ -57,6 +57,9 @@ class Configuration(ConfigurationConstants):
     OD_FULFILLMENT_CLIENT_KEY_SUFFIX = "OVERDRIVE_FULFILLMENT_CLIENT_KEY"
     OD_FULFILLMENT_CLIENT_SECRET_SUFFIX = "OVERDRIVE_FULFILLMENT_CLIENT_SECRET"
 
+    # Environment variable for SirsiDynix Auth
+    SIRSI_DYNIX_APP_ID = "SIMPLIFIED_SIRSI_DYNIX_APP_ID"
+
     # ConfigurationSetting key for the base url of the app.
     BASE_URL_KEY = "base_url"
 
