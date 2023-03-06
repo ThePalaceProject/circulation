@@ -1243,11 +1243,9 @@ class TestLibraryAnnotator:
         # last_loan_activity_sync is tracked at the millisecond level
         # and Last-Modified is tracked at the second level.)
 
-        # Putting the last loan activity sync into an Flask Response
-        # strips timezone information from it,
-        # so to verify we have the right value we must do the same.
-        last_sync_naive = patron.last_loan_activity_sync.replace(tzinfo=None)
-        assert (last_sync_naive - response.last_modified).total_seconds() < 1
+        assert (
+            patron.last_loan_activity_sync - response.last_modified
+        ).total_seconds() < 1
 
         # No entries in the feed...
         raw = str(response)
